@@ -46,6 +46,7 @@ reimplementing it. A row is `INTEGRATED` only when the GoIDEA product
 | Editor: text, selections, line numbers | INTEGRATED | every open tab |
 | Editor tabs: pin, close others/all/left/right/unmodified | INTEGRATED | pinned group at the left with a pin glyph, OpenIDEA's tab context menu and guarded closes that stop on cancel; `internal/app/tabs.go`, `internal/app/tabs_test.go` |
 | Editor: completion, hover, go-to-definition | INTEGRATED | callbacks wired to backend RPC |
+| Editor lines: comment, duplicate, delete, join, move | INTEGRATED | IntelliJ macOS keys from `src/platform/keymaps/intellij-macos.ts` via `editor.State.Bindings`, the same commands in the **Code** menu and registry; statement moves run on whole lines; `internal/app/editor_keys.go`, `internal/app/editor_keys_test.go` |
 | Editor: increment search, multi-caret | DETECTED | upstream exists; not yet exposed in GoIDEA |
 | Editor: IME and grapheme handling | INTEGRATED | inherited from mygo |
 | `mygo build` packaging and icons | INTEGRATED | release pipeline |

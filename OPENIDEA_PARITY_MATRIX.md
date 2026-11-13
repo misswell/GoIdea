@@ -27,7 +27,7 @@ new action, tool window, page or command appears automatically.
 | Kind | Items | Integrated | Partial | Engine | Blocked | Missing |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Feature folders | 43 | 0 | 11 | 0 | 0 | 32 |
-| Actions | 647 | 24 | 62 | 0 | 1 | 560 |
+| Actions | 647 | 31 | 64 | 0 | 1 | 551 |
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
 | Tool windows | 30 | 8 | 5 | 0 | 0 | 17 |
 | Overlays | 56 | 1 | 0 | 0 | 0 | 55 |
@@ -755,14 +755,14 @@ expected to come from a plugin or a hidden registration.
 | `code.autoIndentLines` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
 | `code.collapseBlock` | eclipse-macos, intellij-macos, intellij-windows, vscode-macos | missing |
 | `code.collapseRecursively` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `code.commentBlock` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
-| `code.commentLine` | intellij-macos, intellij-windows, vscode-macos | missing |
+| `code.commentBlock` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | integrated - internal/app/editor_keys.go intellijEditorBindings Cmd+Alt+/ and Ctrl+Shift+/; internal/app/editor_keys_test.go |
+| `code.commentLine` | intellij-macos, intellij-windows, vscode-macos | integrated - internal/app/editor_keys.go intellijEditorBindings Cmd+/ and code.commentLine in internal/app/commands.go and the Code menu; internal/app/editor_keys_test.go |
 | `code.completeStatement` | intellij-macos, intellij-windows, vscode-macos | missing |
 | `code.completion` | intellij-macos, intellij-windows, vscode-macos | missing |
 | `code.cyclicExpandWord` | eclipse-macos, intellij-macos, intellij-windows, vscode-macos, vscode-windows | missing |
 | `code.cyclicExpandWordBackward` | eclipse-macos, intellij-macos, intellij-windows, vscode-macos, vscode-windows | missing |
-| `code.deleteLine` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
-| `code.duplicateLine` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
+| `code.deleteLine` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | integrated - internal/app/editor_keys.go intellijEditorBindings Cmd+Backspace to editor.DeleteLine; internal/app/editor_keys_test.go |
+| `code.duplicateLine` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | integrated - internal/app/editor_keys.go intellijEditorBindings Cmd+D to editor.DuplicateSelection (line when nothing is selected); internal/app/editor_keys_test.go |
 | `code.expandAllToLevel1` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
 | `code.expandAllToLevel2` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
 | `code.expandAllToLevel3` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
@@ -781,13 +781,13 @@ expected to come from a plugin or a hidden registration.
 | `code.foldSelection` | eclipse-macos, intellij-macos, intellij-windows, vscode-macos | missing |
 | `code.generate` | intellij-macos, intellij-windows, vscode-macos | missing |
 | `code.implementMethods` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos, vscode-windows | missing |
-| `code.joinLines` | intellij-macos, intellij-windows, vscode-macos, vscode-windows | missing |
+| `code.joinLines` | intellij-macos, intellij-windows, vscode-macos, vscode-windows | integrated - internal/app/editor_keys.go Ctrl+Shift+J to editor.JoinLines; internal/app/editor_keys_test.go |
 | `code.moveElementLeft` | eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
 | `code.moveElementRight` | eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
-| `code.moveLineDown` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
-| `code.moveLineUp` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
-| `code.moveStatementDown` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
-| `code.moveStatementUp` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
+| `code.moveLineDown` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | integrated - internal/app/editor_keys.go Alt+Shift+Down to editor.MoveLinesDown; internal/app/editor_keys_test.go |
+| `code.moveLineUp` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | integrated - internal/app/editor_keys.go Alt+Shift+Up to editor.MoveLinesUp; internal/app/editor_keys_test.go |
+| `code.moveStatementDown` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | partial - internal/app/editor_keys.go Cmd+Shift+Down runs editor.MoveLinesDown; moves whole lines, not the statement tree IntelliJ parses |
+| `code.moveStatementUp` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | partial - internal/app/editor_keys.go Cmd+Shift+Up runs editor.MoveLinesUp; moves whole lines, not the statement tree IntelliJ parses |
 | `code.optimizeImports` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
 | `code.overrideMethods` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos, vscode-windows | missing |
 | `code.parameterInfo` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |

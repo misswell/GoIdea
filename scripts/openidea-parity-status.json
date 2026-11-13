@@ -456,6 +456,42 @@
     "action:editor.closeOtherTabs": {
       "status": "partial",
       "evidence": "internal/app/tabs.go CloseOtherTabs, CloseTabsToLeft/Right and CloseUnmodifiedTabs; internal/app/workbench.go tabMenu; internal/app/tabs_test.go"
+    },
+    "action:code.commentLine": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_keys.go intellijEditorBindings Cmd+/ and code.commentLine in internal/app/commands.go and the Code menu; internal/app/editor_keys_test.go"
+    },
+    "action:code.commentBlock": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_keys.go intellijEditorBindings Cmd+Alt+/ and Ctrl+Shift+/; internal/app/editor_keys_test.go"
+    },
+    "action:code.duplicateLine": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_keys.go intellijEditorBindings Cmd+D to editor.DuplicateSelection (line when nothing is selected); internal/app/editor_keys_test.go"
+    },
+    "action:code.deleteLine": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_keys.go intellijEditorBindings Cmd+Backspace to editor.DeleteLine; internal/app/editor_keys_test.go"
+    },
+    "action:code.moveLineUp": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_keys.go Alt+Shift+Up to editor.MoveLinesUp; internal/app/editor_keys_test.go"
+    },
+    "action:code.moveLineDown": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_keys.go Alt+Shift+Down to editor.MoveLinesDown; internal/app/editor_keys_test.go"
+    },
+    "action:code.moveStatementUp": {
+      "status": "partial",
+      "evidence": "internal/app/editor_keys.go Cmd+Shift+Up runs editor.MoveLinesUp; moves whole lines, not the statement tree IntelliJ parses"
+    },
+    "action:code.moveStatementDown": {
+      "status": "partial",
+      "evidence": "internal/app/editor_keys.go Cmd+Shift+Down runs editor.MoveLinesDown; moves whole lines, not the statement tree IntelliJ parses"
+    },
+    "action:code.joinLines": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_keys.go Ctrl+Shift+J to editor.JoinLines; internal/app/editor_keys_test.go"
     }
   }
 }

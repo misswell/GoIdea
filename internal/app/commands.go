@@ -6,6 +6,7 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/editor"
 )
 
 // appCommand is one entry of the command palette. keywords widen what the
@@ -97,6 +98,15 @@ func commands() []appCommand {
 		{"code.undoRefactor", "撤销重构", "重构", "Cmd+Alt+Z", "undo refactor", func(m *Model) { m.UndoRefactor() }},
 		{"code.redoRefactor", "重做重构", "重构", "Cmd+Alt+Shift+Z", "redo refactor", func(m *Model) { m.RedoRefactor() }},
 		{"code.format", "格式化代码", "代码", "Cmd+Alt+L", "format code", func(m *Model) { m.FormatActive() }},
+		{"code.commentLine", "注释行", "代码", "Cmd+/", "comment line toggle", func(m *Model) { m.runEditorCommand(editor.ToggleComment) }},
+		{"code.commentBlock", "块注释", "代码", "Cmd+Alt+/", "comment block toggle", func(m *Model) { m.runEditorCommand(editor.ToggleBlockComment) }},
+		{"code.duplicateLine", "复制行或选区", "代码", "Cmd+D", "duplicate line selection", func(m *Model) { m.runEditorCommand(editor.DuplicateSelection) }},
+		{"code.deleteLine", "删除行", "代码", "Cmd+Backspace", "delete line", func(m *Model) { m.runEditorCommand(editor.DeleteLine) }},
+		{"code.moveLineUp", "上移行", "代码", "Alt+Shift+Up", "move line up", func(m *Model) { m.runEditorCommand(editor.MoveLinesUp) }},
+		{"code.moveLineDown", "下移行", "代码", "Alt+Shift+Down", "move line down", func(m *Model) { m.runEditorCommand(editor.MoveLinesDown) }},
+		{"code.moveStatementUp", "上移语句", "代码", "Cmd+Shift+Up", "move statement up", func(m *Model) { m.runEditorCommand(editor.MoveLinesUp) }},
+		{"code.moveStatementDown", "下移语句", "代码", "Cmd+Shift+Down", "move statement down", func(m *Model) { m.runEditorCommand(editor.MoveLinesDown) }},
+		{"code.joinLines", "合并行", "代码", "Ctrl+Shift+J", "join lines", func(m *Model) { m.runEditorCommand(editor.JoinLines) }},
 		{"run.start", "运行", "运行", "F5", "run main class", func(m *Model) { m.Run() }},
 		{"run.debug", "调试", "运行", "F9", "debug session", func(m *Model) { m.Debug() }},
 		{"run.stop", "停止", "运行", "Shift+F5", "stop terminate", func(m *Model) { m.StopRun(); m.StopDebug() }},

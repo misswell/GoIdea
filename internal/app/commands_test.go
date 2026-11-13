@@ -27,7 +27,7 @@ func TestCommandMatches(t *testing.T) {
 }
 
 func TestRefreshKeepsSelectionInRange(t *testing.T) {
-	p := &commandPicker{sel: 100}
+	p := &commandPicker{sel: len(commands()) + 5}
 	p.refresh()
 	if len(p.items) != len(commands()) {
 		t.Fatalf("empty query listed %d commands, want %d", len(p.items), len(commands()))

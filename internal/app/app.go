@@ -813,8 +813,12 @@ func (m *Model) newTab(doc *docbridge.Document) *Tab {
 	v := doc.Buffer().Version()
 	path := doc.Path()
 	t := &Tab{
-		doc:    doc,
-		state:  &editor.State{Buffer: doc.Buffer(), LineHeight: 1.45},
+		doc: doc,
+		state: &editor.State{
+			Buffer:     doc.Buffer(),
+			LineHeight: 1.45,
+			Bindings:   intellijEditorBindings(),
+		},
 		synced: v,
 		seen:   v,
 	}
