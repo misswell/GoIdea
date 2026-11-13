@@ -41,6 +41,7 @@ func (m *Model) ShowLog() {
 		return
 	}
 	m.log.visible = true
+	m.tool = "log"
 	m.invalidate()
 	m.RefreshLog()
 }

@@ -73,6 +73,13 @@ Problems tool window, which shows the active file or the whole project, groups
 by file with files that have errors first, filters by severity, and jumps to a
 row's line and column (`problems.go`).
 
+`Cmd+6` opens the window and a second press from the editor closes it. The
+tool-window actions follow OpenIDEA's keymap: `Shift+Escape` hides the active
+window, `Cmd+Shift+F12` hides every window and a second press restores the ones
+that were visible, `F12` reopens the last window used, even after it was hidden,
+and `Cmd+0` opens Commit (`toolwindow.go`). `Cmd+Alt+Down` and `Cmd+Alt+Up`
+step through the problem rows and wrap at both ends.
+
 ## Features wired to the editor
 
 | Feature | Where |

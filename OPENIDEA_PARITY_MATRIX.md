@@ -27,7 +27,7 @@ new action, tool window, page or command appears automatically.
 | Kind | Items | Integrated | Partial | Engine | Blocked | Missing |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Feature folders | 43 | 0 | 10 | 0 | 0 | 33 |
-| Actions | 647 | 8 | 4 | 0 | 1 | 634 |
+| Actions | 647 | 14 | 11 | 0 | 1 | 621 |
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
 | Tool windows | 30 | 5 | 7 | 0 | 0 | 18 |
 | Overlays | 56 | 0 | 0 | 0 | 0 | 56 |
@@ -723,16 +723,16 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `navigate.lastEditLocation` | Last Edit Location | `src/editor/core/actions.ts` | missing |
 | `navigate.navigationBar` | Jump to Navigation Bar | `src/editor/core/actions.ts` | missing |
 | `navigate.nextEditLocation` | Next Edit Location | `src/editor/core/actions.ts` | missing |
-| `navigate.nextOccurrence` | Next Occurrence | `src/workbench/toolwindows/actions.ts` | missing |
-| `navigate.prevOccurrence` | Previous Occurrence | `src/workbench/toolwindows/actions.ts` | missing |
+| `navigate.nextOccurrence` | Next Occurrence | `src/workbench/toolwindows/actions.ts` | integrated - internal/app/problems.go StepProblem; internal/app/toolwindow_test.go |
+| `navigate.prevOccurrence` | Previous Occurrence | `src/workbench/toolwindows/actions.ts` | integrated - internal/app/problems.go StepProblem; internal/app/toolwindow_test.go |
 | `refactor.thisMenu` | Refactor This… | `src/editor/lsp/actions.ts` | missing |
 | `toolbar.customize` | Customize Main Toolbar… | `src/workbench/shellActions.ts` | missing |
 | `toolwindow.${id}` |  | `src/workbench/toolwindows/actions.ts` | missing |
 | `toolwindow.closeContent` | Close Tool Window Tab | `src/workbench/toolwindows/actions.ts` | missing |
 | `toolwindow.focusEditor` | Focus Editor | `src/workbench/toolwindows/actions.ts` | missing |
-| `toolwindow.hideActive` | Hide Active Tool Window | `src/workbench/toolwindows/actions.ts` | missing |
-| `toolwindow.hideAll` | Hide All Tool Windows | `src/workbench/toolwindows/actions.ts` | missing |
-| `toolwindow.jumpToLast` | Jump to Last Tool Window | `src/workbench/toolwindows/actions.ts` | missing |
+| `toolwindow.hideActive` | Hide Active Tool Window | `src/workbench/toolwindows/actions.ts` | integrated - internal/app/toolwindow.go HideActiveToolWindow; internal/app/toolwindow_test.go |
+| `toolwindow.hideAll` | Hide All Tool Windows | `src/workbench/toolwindows/actions.ts` | integrated - internal/app/toolwindow.go HideAllToolWindows; internal/app/toolwindow_test.go |
+| `toolwindow.jumpToLast` | Jump to Last Tool Window | `src/workbench/toolwindows/actions.ts` | integrated - internal/app/toolwindow.go JumpToLastToolWindow; internal/app/toolwindow_test.go |
 | `toolwindow.maximize` | Maximize Tool Window | `src/workbench/toolwindows/actions.ts` | missing |
 | `toolwindow.resize${dir[0]!.toUpperCase()}${dir.slice(1)}` |  | `src/workbench/toolwindows/actions.ts` | missing |
 | `view.backgroundTasks` | Background Tasks | `src/workbench/shellActions.ts` | missing |
@@ -897,20 +897,20 @@ expected to come from a plugin or a hidden registration.
 | `refactor.rename` | eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
 | `refactor.safeDelete` | eclipse-macos, intellij-macos, intellij-windows, vscode-macos | missing |
 | `toolwindow.bookmarks` | eclipse-macos, intellij-macos, intellij-windows, vscode-macos | missing |
-| `toolwindow.commit` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `toolwindow.debug` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `toolwindow.find` | eclipse-macos, intellij-macos, intellij-windows, vscode-macos | missing |
-| `toolwindow.git` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `toolwindow.problems` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `toolwindow.project` | eclipse-macos, intellij-macos, intellij-windows, vscode-macos | missing |
+| `toolwindow.commit` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/commit.go OpenCommit; Cmd+0 in cmd/goidea/main.go |
+| `toolwindow.debug` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/debug.go ShowDebug; cmd/goidea/main.go 视图 menu |
+| `toolwindow.find` | eclipse-macos, intellij-macos, intellij-windows, vscode-macos | partial - internal/app/search.go ShowSearch; cmd/goidea/main.go 视图 menu |
+| `toolwindow.git` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/vcs.go ShowVCS; cmd/goidea/main.go 视图 menu |
+| `toolwindow.problems` | intellij-macos, intellij-windows, vscode-macos | integrated - internal/app/problems.go ToggleProblems; lsp.problems.visible |
+| `toolwindow.project` | eclipse-macos, intellij-macos, intellij-windows, vscode-macos | partial - internal/app/app.go ShowProject; cmd/goidea/main.go 视图 menu |
 | `toolwindow.resizeDown` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
 | `toolwindow.resizeLeft` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
 | `toolwindow.resizeRight` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
 | `toolwindow.resizeUp` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
-| `toolwindow.run` | intellij-macos, intellij-windows, vscode-macos | missing |
+| `toolwindow.run` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/run.go ShowRun; cmd/goidea/main.go 视图 menu |
 | `toolwindow.services` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
 | `toolwindow.structure` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `toolwindow.terminal` | intellij-macos, intellij-windows, vscode-macos | missing |
+| `toolwindow.terminal` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/term.go ShowTerm; UPSTREAM_FEATURE_MATRIX.md Terminal |
 | `vcs.addToVcs` | intellij-macos, intellij-windows, vscode-macos | missing |
 | `vcs.annotate` | intellij-macos, intellij-windows, vscode-macos | missing |
 | `vcs.branches` | intellij-macos, intellij-windows, vscode-macos | missing |

@@ -35,20 +35,60 @@ type ProblemsPane struct {
 
 func (m *Model) resetProblems() {
 	m.problems = ProblemsPane{showErr: true, showWarn: true, showInfo: true}
+	// -1 is "no row visited yet", so the first Cmd+Alt+Down lands on the first.
+	m.problemStep = -1
 }
 
-// ShowProblems opens the Problems tool window on the current file, as
-// OpenIDEA's File tab does.
+// ShowProblems opens the Problems tool window on the scope it last showed,
+// the current file the first time, as OpenIDEA's window keeps its tab.
 func (m *Model) ShowProblems() {
 	m.problems.visible = true
-	m.problems.project = false
+	m.tool = "problems"
 	m.invalidate()
+}
+
+// ToggleProblems is Cmd+6: the window opens, and a second press from the
+// editor closes it, as OpenIDEA's activateToolWindow does.
+func (m *Model) ToggleProblems() {
+	if m.problems.visible {
+		m.CloseProblems()
+		return
+	}
+	m.ShowProblems()
 }
 
 // CloseProblems hides the tool window.
 func (m *Model) CloseProblems() {
 	m.problems.visible = false
 	m.invalidate()
+}
+
+// problemRows flattens the window's rows in the order it draws them.
+func (m *Model) problemRows() []Problem {
+	groups := m.problemList()
+	rows := make([]Problem, 0, 8)
+	for _, items := range groups {
+		rows = append(rows, items...)
+	}
+	return rows
+}
+
+// nextProblem advances the step and returns the row, wrapping at both ends.
+func (m *Model) nextProblem(dir int) (Problem, bool) {
+	rows := m.problemRows()
+	if len(rows) == 0 {
+		return Problem{}, false
+	}
+	m.problemStep = (m.problemStep + dir + len(rows)) % len(rows)
+	return rows[m.problemStep], true
+}
+
+// StepProblem is OpenIDEA's navigate.nextOccurrence / prevOccurrence for the
+// Problems window: Cmd+Alt+Down and Up walk its rows and put the caret there.
+func (m *Model) StepProblem(dir int) {
+	if r, ok := m.nextProblem(dir); ok {
+		m.revealAt(r.Path, r.Line, r.Col)
+	}
 }
 
 // problemSeverity normalizes a protocol severity; an unknown one is an error,

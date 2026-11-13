@@ -400,6 +400,9 @@ func (m *Model) nextRequest() uint32 { return m.reqSeq.Add(1) }
 // ShowDebug toggles the Debug tool window.
 func (m *Model) ShowDebug() {
 	m.debug.visible = !m.debug.visible
+	if m.debug.visible {
+		m.tool = "debug"
+	}
 	m.invalidate()
 }
 
@@ -407,6 +410,7 @@ func (m *Model) ShowDebug() {
 func (m *Model) Debug() {
 	root := m.Root()
 	m.debug.visible = true
+	m.tool = "debug"
 	if root == "" || m.busy {
 		m.invalidate()
 		return
@@ -633,6 +637,7 @@ func (m *Model) acceptDebugEvent(session uint32, raw json.RawMessage) {
 	switch e.Kind {
 	case "started":
 		d.visible = true
+		m.tool = "debug"
 		d.ended = false
 		if e.Name != "" {
 			d.config = e.Name
@@ -990,6 +995,7 @@ func (m *Model) SmokeDebug(ctx context.Context) (map[string]any, error) {
 	}
 	m.post(func() {
 		m.debug.visible = true
+		m.tool = "debug"
 		m.debug.starting = true
 		m.debug.status = "smoke：正在构建…"
 		if m.debug.bps == nil {

@@ -16,8 +16,9 @@ func diag(line, col uint32, severity, message string) openidea.Diagnostic {
 
 func problemsModel(files map[string]map[string][]openidea.Diagnostic) *Model {
 	return &Model{
-		diags:    files,
-		problems: ProblemsPane{showErr: true, showWarn: true, showInfo: true},
+		diags:       files,
+		problems:    ProblemsPane{showErr: true, showWarn: true, showInfo: true},
+		problemStep: -1,
 	}
 }
 

@@ -167,6 +167,13 @@ type Model struct {
 	problems ProblemsPane
 	search   SearchPane
 	usages   UsagesPane
+
+	// tool is the bottom tool window the shortcuts last opened, "" once it
+	// closed; toolStash is what Hide All hid, restored by the next press.
+	tool      string
+	toolStash map[string]bool
+	// problemStep is the row Cmd+Alt+Down last revealed.
+	problemStep int
 	// reveal is the caret position a search hit asked for; it applies once the
 	// file is the active tab.
 	reveal  *revealPos
@@ -521,6 +528,8 @@ func (m *Model) openProject(dir string, files []string) {
 	m.resetVCS()
 	m.resetLog()
 	m.resetProblems()
+	m.tool = ""
+	m.toolStash = nil
 	m.commit = nil
 	m.cancelSearch()
 	m.resetSearch()
@@ -1075,6 +1084,13 @@ func (m *Model) ShowProject() {
 	m.invalidate()
 }
 
+// overlayOpen reports whether a sheet owns the keyboard, so a shortcut that
+// would also act in the background leaves it alone.
+func (m *Model) overlayOpen() bool {
+	return m.rename != nil || m.symbols != nil || m.intents != nil || m.files != nil ||
+		m.diff != nil || m.palette != nil || m.commit != nil
+}
+
 // QuitImmediately closes the backend and quits without asking about changes,
 // for the offscreen smoke run. Call it on the main thread.
 func (m *Model) QuitImmediately() { m.finishQuit(false) }
@@ -1194,13 +1210,35 @@ func (m *Model) shortcuts(c *ui.Context) {
 		m.ShowDebug()
 	}
 	if c.Shortcut(ui.Cmd, ui.Key6) {
-		m.ShowProblems()
+		if !m.overlayOpen() {
+			m.ToggleProblems()
+		}
 	}
 	if c.Shortcut(ui.Cmd, ui.Key9) {
 		m.ShowVCS()
 	}
+	if c.Shortcut(ui.Cmd, ui.Key0) {
+		if !m.overlayOpen() {
+			m.OpenCommit()
+		}
+	}
 	if c.Shortcut(ui.Alt, ui.KeyF12) {
 		m.ShowTerm()
+	}
+	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyF12) {
+		m.HideAllToolWindows()
+	}
+	if c.Shortcut(ui.Shift, ui.KeyEscape) && !m.overlayOpen() {
+		m.HideActiveToolWindow()
+	}
+	if c.Shortcut(ui.Modifiers(0), ui.KeyF12) {
+		m.JumpToLastToolWindow()
+	}
+	if c.Shortcut(ui.Cmd|ui.Alt, ui.KeyDown) {
+		m.StepProblem(1)
+	}
+	if c.Shortcut(ui.Cmd|ui.Alt, ui.KeyUp) {
+		m.StepProblem(-1)
 	}
 	if n := len(m.tabs); n > 0 {
 		if c.Shortcut(ui.Ctrl, ui.KeyRight) || c.Shortcut(ui.Cmd|ui.Shift, ui.KeyBracketRight) {

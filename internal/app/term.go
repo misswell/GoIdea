@@ -39,6 +39,9 @@ func (m *Model) resetTerm() { m.term = TermPane{} }
 // ShowTerm toggles the terminal; opening it starts the shell on first use.
 func (m *Model) ShowTerm() {
 	m.term.visible = !m.term.visible
+	if m.term.visible {
+		m.tool = "term"
+	}
 	if m.term.visible && m.term.id == 0 && !m.term.starting {
 		m.SpawnTerm()
 	}
@@ -222,6 +225,7 @@ func (m *Model) SmokeTerm(ctx context.Context) (map[string]any, error) {
 	ch := m.nextChannel()
 	m.post(func() {
 		m.term.visible = true
+		m.tool = "term"
 		m.term.channel = ch
 		m.term.lines = nil
 		m.invalidate()

@@ -148,6 +148,58 @@
     "toolwindow:build": {
       "status": "partial",
       "evidence": "base.build.console, base.build.lines; internal/app/view.go buildPanel"
+    },
+    "action:toolwindow.problems": {
+      "status": "integrated",
+      "evidence": "internal/app/problems.go ToggleProblems; lsp.problems.visible"
+    },
+    "action:toolwindow.hideActive": {
+      "status": "integrated",
+      "evidence": "internal/app/toolwindow.go HideActiveToolWindow; internal/app/toolwindow_test.go"
+    },
+    "action:toolwindow.hideAll": {
+      "status": "integrated",
+      "evidence": "internal/app/toolwindow.go HideAllToolWindows; internal/app/toolwindow_test.go"
+    },
+    "action:toolwindow.jumpToLast": {
+      "status": "integrated",
+      "evidence": "internal/app/toolwindow.go JumpToLastToolWindow; internal/app/toolwindow_test.go"
+    },
+    "action:navigate.nextOccurrence": {
+      "status": "integrated",
+      "evidence": "internal/app/problems.go StepProblem; internal/app/toolwindow_test.go"
+    },
+    "action:navigate.prevOccurrence": {
+      "status": "integrated",
+      "evidence": "internal/app/problems.go StepProblem; internal/app/toolwindow_test.go"
+    },
+    "action:toolwindow.project": {
+      "status": "partial",
+      "evidence": "internal/app/app.go ShowProject; cmd/goidea/main.go 视图 menu"
+    },
+    "action:toolwindow.find": {
+      "status": "partial",
+      "evidence": "internal/app/search.go ShowSearch; cmd/goidea/main.go 视图 menu"
+    },
+    "action:toolwindow.run": {
+      "status": "partial",
+      "evidence": "internal/app/run.go ShowRun; cmd/goidea/main.go 视图 menu"
+    },
+    "action:toolwindow.debug": {
+      "status": "partial",
+      "evidence": "internal/app/debug.go ShowDebug; cmd/goidea/main.go 视图 menu"
+    },
+    "action:toolwindow.git": {
+      "status": "partial",
+      "evidence": "internal/app/vcs.go ShowVCS; cmd/goidea/main.go 视图 menu"
+    },
+    "action:toolwindow.terminal": {
+      "status": "partial",
+      "evidence": "internal/app/term.go ShowTerm; UPSTREAM_FEATURE_MATRIX.md Terminal"
+    },
+    "action:toolwindow.commit": {
+      "status": "partial",
+      "evidence": "internal/app/commit.go OpenCommit; Cmd+0 in cmd/goidea/main.go"
     }
   }
 }
