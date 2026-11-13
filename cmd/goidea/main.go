@@ -372,6 +372,15 @@ func smoke(m *app.Model) {
 			fields["vcsError"] = vcsErr.Error()
 		}
 	}
+	if os.Getenv("GOIDEA_SMOKE_BRANCH") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		branch, branchErr := m.SmokeBranch(ctx)
+		cancel()
+		fields["branch"] = branch
+		if branchErr != nil {
+			fields["branchError"] = branchErr.Error()
+		}
+	}
 	if os.Getenv("GOIDEA_SMOKE_LOG") == "1" && root != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		logInfo, logErr := m.SmokeLog(ctx)

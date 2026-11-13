@@ -77,7 +77,7 @@ GoIDEA can rely on it; code that calls it must check `commands` first.
 | Syntax trees | `syntax` | 9 | 0 | 0 |
 | Terminal | `term` | 8 | 0 | 4 |
 | Toolchains | `tools` | 7 | 0 | 3 |
-| Version control | `vcs` | 82 | 0 | 7 |
+| Version control | `vcs` | 82 | 0 | 12 |
 | Web preview | `web` | 0 | 3 | 0 |
 | Window and menu | `window` | 0 | 33 | 0 |
 | Window drag | `window_drag` | 0 | 1 | 0 |
@@ -88,7 +88,7 @@ GoIDEA can rely on it; code that calls it must check `commands` first.
 ## Served by `openidea-server --stdio`
 
 446 commands. `GoIDEA` marks the ones a non-test Go source invokes today
-(68 of 446).
+(73 of 446).
 
 | Command | Domain | Arguments | GoIDEA |
 | --- | --- | --- | --- |
@@ -459,11 +459,11 @@ GoIDEA can rely on it; code that calls it must check `commands` first.
 | `vcs_apply_patch` | Version control | `patch`, `repo` | — |
 | `vcs_blame` | Version control | `path`, `revision`, `text` | — |
 | `vcs_block_history` | Version control | `lines`, `path`, `request`, `text` | — |
-| `vcs_branch_info` | Version control | `repo` | — |
-| `vcs_branches` | Version control | `repo` | — |
+| `vcs_branch_info` | Version control | `repo` | yes |
+| `vcs_branches` | Version control | `repo` | yes |
 | `vcs_changelists_load` | Version control | — | — |
 | `vcs_changelists_save` | Version control | `changelists` | — |
-| `vcs_checkout` | Version control | `branch`, `create`, `options`, `repo` | — |
+| `vcs_checkout` | Version control | `branch`, `create`, `options`, `repo` | yes |
 | `vcs_clone` | Version control | `depth`, `dest`, `onOutput`, `request`, `url` | — |
 | `vcs_commit` | Version control | `message`, `options`, `repo` | yes |
 | `vcs_commit_files` | Version control | `commit`, `repo` | — |
@@ -472,10 +472,10 @@ GoIDEA can rely on it; code that calls it must check `commands` first.
 | `vcs_compare_scope` | Version control | `paths` | — |
 | `vcs_config_get` | Version control | `key`, `repo` | — |
 | `vcs_conflict_versions` | Version control | `path` | — |
-| `vcs_create_branch` | Version control | `checkout`, `name`, `overwrite`, `repo`, `start` | — |
+| `vcs_create_branch` | Version control | `checkout`, `name`, `overwrite`, `repo`, `start` | yes |
 | `vcs_create_patch` | Version control | `repo`, `source` | — |
 | `vcs_create_tag` | Version control | `commit`, `force`, `message`, `name`, `repo` | — |
-| `vcs_delete_branch` | Version control | `branch`, `repo` | — |
+| `vcs_delete_branch` | Version control | `branch`, `repo` | yes |
 | `vcs_delete_tag` | Version control | `name`, `repo` | — |
 | `vcs_detected_git` | Version control | — | — |
 | `vcs_diff_hunks` | Version control | `newText`, `oldText` | yes |
@@ -738,7 +738,7 @@ GoIDEA needs to do for each:
 
 ## What this means for GoIDEA
 
-446 remote commands are available today; GoIDEA uses 68. The parity work is
+446 remote commands are available today; GoIDEA uses 73. The parity work is
 first to cover the remote surface OpenIDEA's own frontend uses, then to move
 `shared-op`/`host`/`crate` commands onto stdio through the OpenIDEA fork
 (a submodule bump and a server release), and to implement `desktop` commands

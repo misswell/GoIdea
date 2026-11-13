@@ -17,6 +17,9 @@ func (m *Model) toolbar(c *ui.Context, p *ui.Theme) {
 		Children(func() {
 			ui.Text(c, "GoIDEA").FontSize(14).Bold().TextColor(p.Text)
 			ui.Button(c, "打开项目").OnClick(func() { m.chooseProject() })
+			if label := m.branchLabel(); label != "" {
+				ui.Button(c, label).OnClick(func() { m.ToggleBranches() })
+			}
 			debugLabel := "调试"
 			if m.debug.session != 0 && !m.debug.ended {
 				if m.debug.paused {

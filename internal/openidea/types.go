@@ -437,6 +437,31 @@ type RevisionChange struct {
 	OldPath *string `json:"oldPath"`
 }
 
+// BranchInfo is the current head `vcs_branch_info` reports: the branch name
+// (absent on a detached head), its tip, its upstream and how far it is from
+// it, and a merge, rebase or cherry-pick in progress.
+type BranchInfo struct {
+	Head       *string `json:"head"`
+	HeadCommit *string `json:"headCommit"`
+	Upstream   *string `json:"upstream"`
+	Ahead      int     `json:"ahead"`
+	Behind     int     `json:"behind"`
+	Operation  *string `json:"operation"`
+}
+
+// Branch is one row of `vcs_branches`: a local or remote branch, whether it
+// is the head, and how far it is from its upstream.
+type Branch struct {
+	Name         string  `json:"name"`
+	Remote       bool    `json:"remote"`
+	Current      bool    `json:"current"`
+	Upstream     *string `json:"upstream"`
+	Ahead        int     `json:"ahead"`
+	Behind       int     `json:"behind"`
+	LastCommitMs float64 `json:"lastCommitMs"`
+	Commit       *string `json:"commit"`
+}
+
 // TerminalInfo is an integrated terminal the server started: its id, title
 // and process id (absent for shells without a direct child).
 type TerminalInfo struct {

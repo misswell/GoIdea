@@ -163,6 +163,7 @@ type Model struct {
 	build     BuildPane
 	term      TermPane
 	vcs       VCSPane
+	branch    BranchPane
 	log       LogPane
 	problems  ProblemsPane
 	search    SearchPane
@@ -537,6 +538,7 @@ func (m *Model) openProject(dir string, files []string) {
 	m.resetBuild()
 	m.resetTerm()
 	m.resetVCS()
+	m.resetBranch()
 	m.resetLog()
 	m.resetProblems()
 	m.structure = StructurePane{}
@@ -620,6 +622,7 @@ func (m *Model) openProject(dir string, files []string) {
 			m.saveSession()
 			m.checkTrust(dir)
 			m.RefreshVCS()
+			m.RefreshBranch()
 			m.invalidate()
 		})
 	}()
@@ -1105,7 +1108,7 @@ func (m *Model) ShowProject() {
 // would also act in the background leaves it alone.
 func (m *Model) overlayOpen() bool {
 	return m.rename != nil || m.symbols != nil || m.intents != nil || m.files != nil ||
-		m.diff != nil || m.palette != nil || m.commit != nil
+		m.diff != nil || m.palette != nil || m.commit != nil || m.branch.open
 }
 
 // QuitImmediately closes the backend and quits without asking about changes,
@@ -1151,6 +1154,7 @@ func (m *Model) View(c *ui.Context) {
 	m.symbolsDialog(c, p)
 	m.intentionsDialog(c, p)
 	m.filesDialog(c, p)
+	m.branchesDialog(c, p)
 	m.commandsDialog(c, p)
 	m.diffDialog(c, p)
 	m.dbDialog(c, p)

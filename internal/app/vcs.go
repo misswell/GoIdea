@@ -62,6 +62,7 @@ func (m *Model) RefreshVCS() {
 func (m *Model) ShowVCS() {
 	m.sideMode = "vcs"
 	m.RefreshVCS()
+	m.RefreshBranch()
 	m.invalidate()
 }
 
