@@ -62,6 +62,7 @@ func commands() []appCommand {
 		{"bookmarks.prev", "上一个书签", "导航", "", "previous bookmark navigate", func(m *Model) { m.PrevBookmark() }},
 		{"bookmarks.mnemonic", "添加助记符书签…", "导航", "Alt+F3", "bookmark mnemonic key", func(m *Model) { m.OpenBookmarkMnemonics() }},
 		{"bookmarks.window", "书签工具窗口", "导航", "Cmd+2", "bookmarks tool window", func(m *Model) { m.ToggleBookmarksWindow() }},
+		{"bookmarks.file", "切换文件书签", "导航", "", "file bookmark", func(m *Model) { m.ToggleFileBookmark() }},
 		{"code.rename", "重命名符号", "重构", "Shift+F6", "rename symbol refactor", func(m *Model) { m.RenameActive() }},
 		{"code.undoRefactor", "撤销重构", "重构", "Cmd+Alt+Z", "undo refactor", func(m *Model) { m.UndoRefactor() }},
 		{"code.redoRefactor", "重做重构", "重构", "Cmd+Alt+Shift+Z", "redo refactor", func(m *Model) { m.RedoRefactor() }},

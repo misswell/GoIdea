@@ -161,9 +161,11 @@ type Model struct {
 	// rollback is the open confirmation for discarding a change, or nil.
 	rollback *rollbackState
 
-	// bookmarks are the marked lines of the open project, bookmarksView is the
-	// Bookmarks popup, and mnemonics is the Alt+F3 chooser, or nil.
+	// bookmarks are the marked lines of the open project, pathBookmarks its
+	// bookmarked files, bookmarksView the Bookmarks popup, and mnemonics the
+	// Alt+F3 chooser, or nil.
 	bookmarks     []Bookmark
+	pathBookmarks []PathBookmark
 	bookmarksView *bookmarksPane
 	mnemonics     *mnemonicPicker
 
@@ -552,6 +554,7 @@ func (m *Model) openProject(dir string, files []string) {
 	m.bookmarksView = nil
 	m.mnemonics = nil
 	m.bookmarks = bookmarksInProject(m.session().Bookmarks, dir)
+	m.pathBookmarks = pathBookmarksInProject(m.session().PathBookmarks, dir)
 	m.resetLog()
 	m.resetProblems()
 	m.structure = StructurePane{}
@@ -1043,7 +1046,8 @@ func (m *Model) saveSession() {
 	if t := m.tab(); t != nil {
 		focus = t.doc.Path()
 	}
-	s := Session{Root: root, Files: normalizeFiles(files), Focus: focus, Bookmarks: m.bookmarks}
+	s := Session{Root: root, Files: normalizeFiles(files), Focus: focus,
+		Bookmarks: m.bookmarks, PathBookmarks: m.pathBookmarks}
 	path := m.cfg.SessionPath
 	go func() { _ = s.Save(path) }()
 }

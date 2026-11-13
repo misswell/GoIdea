@@ -16,6 +16,8 @@ type Session struct {
 	Files     []string   `json:"files,omitempty"`
 	Focus     string     `json:"focus,omitempty"`
 	Bookmarks []Bookmark `json:"bookmarks,omitempty"`
+	// PathBookmarks are the files marked with Toggle File Bookmark.
+	PathBookmarks []PathBookmark `json:"pathBookmarks,omitempty"`
 }
 
 // LoadSession reads the session at path; a missing or unreadable file is an

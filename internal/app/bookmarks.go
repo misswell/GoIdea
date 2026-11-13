@@ -150,6 +150,55 @@ func toggleBookmark(list []Bookmark, add Bookmark) ([]Bookmark, bool) {
 	return out, true
 }
 
+// PathBookmark is a bookmarked file, as OpenIDEA's Toggle File Bookmark marks
+// the project view or editor tab selection.
+type PathBookmark struct {
+	Path string `json:"path"`
+}
+
+// togglePathBookmark adds the file's bookmark, or removes it when present,
+// reporting whether it was added.
+func togglePathBookmark(list []PathBookmark, path string) ([]PathBookmark, bool) {
+	for i, pb := range list {
+		if pb.Path == path {
+			out := append(append([]PathBookmark(nil), list[:i]...), list[i+1:]...)
+			return out, false
+		}
+	}
+	out := append(append([]PathBookmark(nil), list...), PathBookmark{Path: path})
+	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
+	return out, true
+}
+
+// pathBookmarksInProject keeps the file bookmarks inside root that still exist.
+func pathBookmarksInProject(list []PathBookmark, root string) []PathBookmark {
+	out := make([]PathBookmark, 0, len(list))
+	seen := make(map[string]bool, len(list))
+	for _, pb := range list {
+		if pb.Path == "" || !inProject(root, pb.Path) || seen[pb.Path] {
+			continue
+		}
+		if st, err := os.Stat(pb.Path); err != nil || st.IsDir() {
+			continue
+		}
+		seen[pb.Path] = true
+		out = append(out, pb)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
+	return out
+}
+
+// pathBookmarkLabel is the file's path relative to the project root.
+func pathBookmarkLabel(root, path string) string {
+	if root == "" {
+		return path
+	}
+	if rel, err := filepath.Rel(root, path); err == nil && !strings.HasPrefix(rel, "..") {
+		return rel
+	}
+	return path
+}
+
 // stepBookmark returns the bookmark delta steps from the caret, wrapping around
 // the ends the way OpenIDEA's Next and Previous Bookmark do.
 func stepBookmark(list []Bookmark, path string, line, delta int) (Bookmark, bool) {
@@ -384,6 +433,41 @@ func (m *Model) ShowBookmarksWindow() {
 	m.invalidate()
 }
 
+// ToggleFileBookmark marks or unmarks the active editor's file, which is the
+// target OpenIDEA's Toggle File Bookmark uses when no project view selection
+// is given.
+func (m *Model) ToggleFileBookmark() {
+	t := m.tab()
+	if t == nil {
+		m.status = "先打开一个文件"
+		m.invalidate()
+		return
+	}
+	path := t.doc.Path()
+	var added bool
+	m.pathBookmarks, added = togglePathBookmark(m.pathBookmarks, path)
+	if added {
+		m.status = "已添加文件书签 " + filepath.Base(path)
+	} else {
+		m.status = "已移除文件书签 " + filepath.Base(path)
+	}
+	m.saveSession()
+	m.invalidate()
+}
+
+// removePathBookmarkAt drops one file bookmark from the tool window.
+func (m *Model) removePathBookmarkAt(i int) {
+	if i < 0 || i >= len(m.pathBookmarks) {
+		return
+	}
+	b := m.pathBookmarks[i]
+	m.pathBookmarks = append(append([]PathBookmark(nil), m.pathBookmarks[:i]...),
+		m.pathBookmarks[i+1:]...)
+	m.status = "已移除文件书签 " + filepath.Base(b.Path)
+	m.saveSession()
+	m.invalidate()
+}
+
 // ToggleBookmarksWindow hides the tool window when it is already showing.
 func (m *Model) ToggleBookmarksWindow() {
 	if m.sideMode == "bookmarks" {
@@ -398,7 +482,7 @@ func (m *Model) ToggleBookmarksWindow() {
 func (m *Model) bookmarkWindowRows(c *ui.Context, p *ui.Theme) {
 	list := append([]Bookmark(nil), m.bookmarks...)
 	sortBookmarks(list)
-	if len(list) == 0 {
+	if len(list) == 0 && len(m.pathBookmarks) == 0 {
 		ui.Row(c).Padding(10, 8).Children(func() {
 			ui.Text(c, "还没有书签；在编辑器中按 F3 标记当前行。").FontSize(11).
 				TextColor(p.TextMuted)
@@ -406,6 +490,26 @@ func (m *Model) bookmarkWindowRows(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	root := m.Root()
+	pathJump, pathRemove := -1, -1
+	for i, pb := range m.pathBookmarks {
+		i, pb := i, pb
+		r := ui.Row(c.Key(fmt.Sprintf("bookmark-window:path:%d", i))).Height(22).
+			Padding(0, 8).Gap(6).AlignItems(ui.Center)
+		if r.Hovered() {
+			r.Background(p.SurfaceHover)
+		}
+		r.Children(func() {
+			ui.Text(c, pathBookmarkLabel(root, pb.Path)).FontSize(11.5).TextColor(p.Text).
+				SingleLine().Ellipsis("…")
+			ui.Spacer(c)
+			if m.rowChip(c, p, fmt.Sprintf("bookmark-window:pathDel:%d", i), "删除") {
+				pathRemove = i
+			}
+		})
+		if r.Clicked() {
+			pathJump = i
+		}
+	}
 	jump, remove := -1, -1
 	for i, b := range list {
 		i, b := i, b
@@ -437,6 +541,11 @@ func (m *Model) bookmarkWindowRows(c *ui.Context, p *ui.Theme) {
 		})
 	}
 	switch {
+	case pathRemove >= 0:
+		m.removePathBookmarkAt(pathRemove)
+	case pathJump >= 0:
+		m.openFile(m.pathBookmarks[pathJump].Path)
+		m.invalidate()
 	case remove >= 0:
 		m.removeBookmarkAt(remove)
 	case jump >= 0:
@@ -718,6 +827,10 @@ func (m *Model) SmokeBookmark(ctx context.Context) (map[string]any, error) {
 		out["windowMode"] = m.sideMode
 		out["windowRows"] = len(m.bookmarks)
 		m.ShowProject()
+		m.ToggleFileBookmark()
+		out["fileMarked"] = len(m.pathBookmarks)
+		m.ToggleFileBookmark()
+		out["fileCleared"] = len(m.pathBookmarks)
 		t.state.GoTo(editor.Pos{Line: 0, Col: 0})
 		m.NextBookmark()
 		out["nextFirst"] = m.tab().state.CursorPos().Line

@@ -137,6 +137,41 @@ func TestBookmarkByMnemonic(t *testing.T) {
 	}
 }
 
+func TestTogglePathBookmarkAddsAndRemoves(t *testing.T) {
+	list, added := togglePathBookmark(nil, "/p/b.java")
+	if !added || len(list) != 1 {
+		t.Fatalf("add = %v, %v; want one file", list, added)
+	}
+	list, added = togglePathBookmark(list, "/p/a.java")
+	if !added || len(list) != 2 || list[0].Path != "/p/a.java" {
+		t.Fatalf("sorted = %v, want a.java first", list)
+	}
+	list, added = togglePathBookmark(list, "/p/b.java")
+	if added || len(list) != 1 || list[0].Path != "/p/a.java" {
+		t.Fatalf("remove = %v, %v; want only a.java", list, added)
+	}
+}
+
+func TestPathBookmarksInProjectDropsMissingAndOutside(t *testing.T) {
+	root := t.TempDir()
+	inside := filepath.Join(root, "A.java")
+	if err := os.WriteFile(inside, []byte("class A {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(t.TempDir(), "B.java")
+	if err := os.WriteFile(outside, []byte("class B {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	list := []PathBookmark{
+		{Path: inside}, {Path: outside},
+		{Path: filepath.Join(root, "gone.java")}, {Path: inside},
+	}
+	got := pathBookmarksInProject(list, root)
+	if len(got) != 1 || got[0].Path != inside {
+		t.Fatalf("pathBookmarksInProject = %v, want only %s", got, inside)
+	}
+}
+
 func TestSessionRoundTripsBookmarks(t *testing.T) {
 	root := t.TempDir()
 	file := filepath.Join(root, "A.java")
@@ -145,11 +180,15 @@ func TestSessionRoundTripsBookmarks(t *testing.T) {
 	}
 	path := filepath.Join(root, "session.json")
 	want := Bookmark{Path: file, Line: 0, Text: "class A {}", Description: "the class"}
-	if err := (Session{Root: root, Bookmarks: []Bookmark{want}}).Save(path); err != nil {
+	if err := (Session{Root: root, Bookmarks: []Bookmark{want},
+		PathBookmarks: []PathBookmark{{Path: file}}}).Save(path); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
 	got := LoadSession(path)
 	if got.Root != root || len(got.Bookmarks) != 1 || got.Bookmarks[0] != want {
 		t.Fatalf("LoadSession = %+v, want bookmark %+v", got, want)
+	}
+	if len(got.PathBookmarks) != 1 || got.PathBookmarks[0].Path != file {
+		t.Fatalf("LoadSession path bookmarks = %+v, want %s", got.PathBookmarks, file)
 	}
 }
