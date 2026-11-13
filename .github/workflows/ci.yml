@@ -13,12 +13,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-14]
+        # GitHub hosted macOS runners are not available to this account: the
+        # job is cancelled before a runner is assigned. Set the ENABLE_MACOS_CI
+        # repository variable once they are.
+        os: ${{ fromJSON(vars.ENABLE_MACOS_CI == 'true' && '["ubuntu-latest","macos-14"]' || '["ubuntu-latest"]') }}
     runs-on: ${{ matrix.os }}
-    # GitHub hosted macOS runners are not available to this account: the job is
-    # cancelled before a runner is assigned. Enable it by setting the
-    # ENABLE_MACOS_CI repository variable once they are.
-    if: matrix.os != 'macos-14' || vars.ENABLE_MACOS_CI == 'true'
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
