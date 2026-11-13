@@ -544,11 +544,11 @@ func setBookmarkDescription(list []Bookmark, path string, line int, text string)
 	return list, false
 }
 
-// ShowBookmarksWindow reveals the Bookmarks tool window in the sidebar, the
-// window OpenIDEA binds to Cmd+2.
+// ShowBookmarksWindow reveals the Bookmarks tool window in the left side's
+// split area, the slot OpenIDEA gives it below the Project window (Cmd+2).
 func (m *Model) ShowBookmarksWindow() {
 	m.structure.visible = false
-	m.sideMode = "bookmarks"
+	m.leftSplit = "bookmarks"
 	m.leftHidden = false
 	m.rememberLayout()
 	m.invalidate()
@@ -1007,8 +1007,10 @@ func (m *Model) deleteListDialog(c *ui.Context, p *ui.Theme) {
 
 // ToggleBookmarksWindow hides the tool window when it is already showing.
 func (m *Model) ToggleBookmarksWindow() {
-	if m.sideMode == "bookmarks" {
-		m.ShowProject()
+	if m.leftSplit == "bookmarks" {
+		m.leftSplit = ""
+		m.rememberLayout()
+		m.invalidate()
 		return
 	}
 	m.ShowBookmarksWindow()
@@ -1687,7 +1689,7 @@ func (m *Model) SmokeBookmark(ctx context.Context) (map[string]any, error) {
 		}
 		out["listAssigned"] = assigned
 		m.ShowBookmarksWindow()
-		out["windowMode"] = m.sideMode
+		out["windowMode"] = m.leftSplit
 		out["windowRows"] = len(m.bookmarks)
 		m.ShowProject()
 		m.ToggleFileBookmark()

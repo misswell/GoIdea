@@ -155,10 +155,15 @@ type Model struct {
 	refactor     *refactorEdit
 	redoRefactor *refactorEdit
 
-	// sideMode picks what the sidebar shows: "tree" ("" also means tree, the
-	// default), "vcs", "search", "usages", "structure" or "bookmarks".
+	// sideMode picks what the left primary area shows: the project tree (""),
+	// or "vcs" for the changes view.
 	sideMode string
-	// leftHidden hides the left tool window island; the stripe stays.
+	// leftSplit is the window in the left side's split area, which OpenIDEA
+	// shows below the primary one: "structure", "bookmarks", or "" for none.
+	// One window at a time, as each area shows.
+	leftSplit string
+	// leftHidden hides the left primary area; its split area and the stripe
+	// stay, as OpenIDEA hides one area without the other.
 	leftHidden bool
 	// showingWelcome puts the Welcome screen up while a project stays loaded,
 	// as OpenIDEA's project menu leaves it.

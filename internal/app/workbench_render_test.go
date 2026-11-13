@@ -87,9 +87,17 @@ func TestWorkbenchStripeTogglesTheIsland(t *testing.T) {
 }
 
 func TestWorkbenchToolWindowTitles(t *testing.T) {
-	m := &Model{sideMode: "structure"}
+	m := &Model{leftSplit: "structure"}
 	tt := workbenchTester(t, m)
-	if r, ok := tt.Find("Structure"); !ok || r.X < 40 || r.X >= 46+oiLeftWidth {
+	project, ok := tt.Find("Project")
+	if !ok {
+		t.Fatalf("the Project island is missing: %q", tt.Texts())
+	}
+	r, ok := tt.Find("Structure")
+	if !ok || r.X < 40 || r.X >= 46+oiLeftWidth {
 		t.Fatalf("Structure is not the left island title: %+v, %v", r, ok)
+	}
+	if r.Y <= project.Y {
+		t.Fatalf("Structure is not below the Project island: %+v vs %+v", r, project)
 	}
 }

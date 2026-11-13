@@ -89,11 +89,11 @@ func TestStructureCollapseHidesTheDescendants(t *testing.T) {
 func TestToggleStructureClosesBackToTheTree(t *testing.T) {
 	m := &Model{}
 	m.ToggleStructure()
-	if !m.structure.visible || m.sideMode != "structure" {
-		t.Fatalf("first Cmd+7: visible=%v side=%q", m.structure.visible, m.sideMode)
+	if !m.structure.visible || m.leftSplit != "structure" {
+		t.Fatalf("first Cmd+7: visible=%v split=%q", m.structure.visible, m.leftSplit)
 	}
 	m.ToggleStructure()
-	if m.structure.visible || m.sideMode != "" {
-		t.Fatalf("second Cmd+7: visible=%v side=%q", m.structure.visible, m.sideMode)
+	if m.structure.visible || m.leftSplit != "" {
+		t.Fatalf("second Cmd+7: visible=%v split=%q", m.structure.visible, m.leftSplit)
 	}
 }

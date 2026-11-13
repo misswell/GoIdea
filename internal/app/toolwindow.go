@@ -100,6 +100,7 @@ func (m *Model) holdLayout() func() {
 func (m *Model) currentLayout() Layout {
 	l := Layout{
 		Side:         m.sideMode,
+		LeftTool:     m.leftSplit,
 		LeftHidden:   m.leftHidden,
 		Tool:         m.tool,
 		BottomHeight: m.bottomHeight,
@@ -151,15 +152,18 @@ func (m *Model) applyLayout(root string) {
 	release := m.holdLayout()
 	defer release()
 	m.structure.visible = false
+	m.leftSplit = ""
 	switch l.Side {
 	case "vcs":
 		m.sideMode = "vcs"
+	default:
+		m.sideMode = ""
+	}
+	switch l.LeftTool {
 	case "structure":
 		m.ShowStructure()
 	case "bookmarks":
 		m.ShowBookmarksWindow()
-	default:
-		m.sideMode = ""
 	}
 	m.leftHidden = l.LeftHidden
 	m.bottomHeight = l.BottomHeight

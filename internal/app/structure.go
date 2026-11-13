@@ -38,21 +38,22 @@ type StructureRow struct {
 	Collapsed bool
 }
 
-// ShowStructure opens the Structure window on the active file.
+// ShowStructure opens the Structure window in the left side's split area, the
+// slot OpenIDEA gives it below the Project window.
 func (m *Model) ShowStructure() {
 	m.structure.visible = true
-	m.sideMode = "structure"
+	m.leftSplit = "structure"
 	m.leftHidden = false
 	m.refreshStructure()
 	m.rememberLayout()
 	m.invalidate()
 }
 
-// ToggleStructure is Cmd+7: a second press closes the window and the sidebar
-// returns to the project tree, as OpenIDEA's activateToolWindow hides a window
-// that already has the slot.
+// ToggleStructure is Cmd+7: a second press closes the window and the split area
+// goes with it, leaving the window above it alone, as OpenIDEA's
+// activateToolWindow hides a window that already has the slot.
 func (m *Model) ToggleStructure() {
-	if m.structure.visible && m.sideMode == "structure" {
+	if m.structure.visible && m.leftSplit == "structure" {
 		m.CloseStructure()
 		return
 	}
@@ -62,10 +63,11 @@ func (m *Model) ToggleStructure() {
 // CloseStructure hides the window; the filter and collapsed symbols stay for
 // the next open.
 func (m *Model) CloseStructure() {
-	m.structure.visible = false
-	if m.sideMode == "structure" {
-		m.sideMode = ""
+	if m.leftSplit != "structure" {
+		return
 	}
+	m.structure.visible = false
+	m.leftSplit = ""
 	m.rememberLayout()
 	m.invalidate()
 }

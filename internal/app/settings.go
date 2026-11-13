@@ -41,9 +41,12 @@ type Session struct {
 // bottom area was. A maximized window is a moment, not a layout, so it is not
 // kept.
 type Layout struct {
-	// Side is the window the left area showed: "" for Project, or "vcs",
-	// "structure" or "bookmarks".
+	// Side is the window the left primary area showed: "" for Project or
+	// "vcs" for the Commit window.
 	Side string `json:"side,omitempty"`
+	// LeftTool is the window in the left side's split area below the primary
+	// one: "structure", "bookmarks", or "" for none.
+	LeftTool string `json:"leftTool,omitempty"`
 	// LeftHidden is the left area closed, which IDEA keeps as a null slot.
 	LeftHidden bool `json:"leftHidden,omitempty"`
 	// Bottom are the bottom windows that were showing, and Tool the one the
@@ -74,12 +77,24 @@ func (l Layout) clone() Layout {
 // window, bottom windows that are not tool windows, a height no resize
 // reaches. The zero Layout is the default arrangement.
 func normalizeLayout(l Layout) Layout {
+	// Sessions from before the left split stored Structure and Bookmarks in
+	// Side; they belong to the split area now.
 	switch l.Side {
-	case "", "vcs", "structure", "bookmarks":
+	case "structure", "bookmarks":
+		if l.LeftTool == "" {
+			l.LeftTool = l.Side
+		}
+		l.Side = ""
+	case "", "vcs":
 	default:
 		l.Side = ""
 	}
-	out := Layout{Side: l.Side, LeftHidden: l.LeftHidden}
+	switch l.LeftTool {
+	case "", "structure", "bookmarks":
+	default:
+		l.LeftTool = ""
+	}
+	out := Layout{Side: l.Side, LeftTool: l.LeftTool, LeftHidden: l.LeftHidden}
 	if isToolWindow(l.Tool) {
 		out.Tool = l.Tool
 	}

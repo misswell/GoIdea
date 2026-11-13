@@ -176,9 +176,7 @@ func (m *Model) workbench(c *ui.Context, p *ui.Theme) {
 			ui.Row(c).Grow(1).MinHeight(0).MinWidth(0).Gap(oiIslandGap).
 				AlignItems(ui.Stretch).Padding(0, 6, 0, 6).Children(func() {
 				m.toolStripe(c, p, oi)
-				if !m.leftHidden {
-					m.leftIsland(c, p, oi)
-				}
+				m.leftSide(c, p, oi)
 				m.editorIsland(c, p)
 			})
 			if bottom != "" {
@@ -201,21 +199,23 @@ func (m *Model) showWelcome() {
 }
 
 // toolStripe is the left stripe of tool window buttons, icons only, 40px
-// wide, its buttons repeating at the title bar's rhythm.
+// wide, its buttons repeating at the title bar's rhythm. Structure and
+// Bookmarks belong to the side's split area, as OpenIDEA registers them
+// below the Project window.
 func (m *Model) toolStripe(c *ui.Context, p *ui.Theme, oi oiColors) {
 	ui.Column(c).Width(oiStripeWidth).Shrink(0).Padding(5, 0, 6, 4).
 		Gap(oiStripeGap).Children(func() {
-		m.stripeButton(c, p, oi, "project", iconWelcomeFolder, "Project", m.sideMode == "", func() {
+		m.stripeButton(c, p, oi, "project", iconWelcomeFolder, "Project", m.sideMode == "" && !m.leftHidden, func() {
 			m.modeClick("")
 		})
-		m.stripeButton(c, p, oi, "vcs", iconWelcomeBranch, "Commit", m.sideMode == "vcs", func() {
+		m.stripeButton(c, p, oi, "vcs", iconWelcomeBranch, "Commit", m.sideMode == "vcs" && !m.leftHidden, func() {
 			m.modeClick("vcs")
 		})
-		m.stripeButton(c, p, oi, "structure", iconStructure, "Structure", m.sideMode == "structure", func() {
-			m.modeClick("structure")
+		m.stripeButton(c, p, oi, "structure", iconStructure, "Structure", m.leftSplit == "structure", func() {
+			m.splitClick("structure")
 		})
-		m.stripeButton(c, p, oi, "bookmarks", iconBookmark, "Bookmarks", m.sideMode == "bookmarks", func() {
-			m.modeClick("bookmarks")
+		m.stripeButton(c, p, oi, "bookmarks", iconBookmark, "Bookmarks", m.leftSplit == "bookmarks", func() {
+			m.splitClick("bookmarks")
 		})
 		ui.Spacer(c)
 		m.stripeButton(c, p, oi, "commands", iconWelcomeSearch, "Search Everywhere", false, func() {
@@ -224,7 +224,8 @@ func (m *Model) toolStripe(c *ui.Context, p *ui.Theme, oi oiColors) {
 	})
 }
 
-// modeClick shows a tool window in the left area, or hides the one showing.
+// modeClick shows a window in the left primary area, or hides that area. The
+// split area stays as it was, as OpenIDEA hides one area at a time.
 func (m *Model) modeClick(mode string) {
 	if m.sideMode == mode && !m.leftHidden {
 		m.leftHidden = true
@@ -237,14 +238,32 @@ func (m *Model) modeClick(mode string) {
 	switch mode {
 	case "":
 		m.structure.visible = false
-	case "structure":
-		m.ShowStructure()
 	case "vcs":
 		m.RefreshVCS()
 		m.RefreshBranch()
 	}
 	m.rememberLayout()
 	m.invalidate()
+}
+
+// splitClick shows a window in the left split area, or closes it. Showing one
+// takes the area from the other, as each area shows a single window.
+func (m *Model) splitClick(mode string) {
+	if m.leftSplit == mode {
+		m.leftSplit = ""
+		if mode == "structure" {
+			m.structure.visible = false
+		}
+		m.rememberLayout()
+		m.invalidate()
+		return
+	}
+	switch mode {
+	case "structure":
+		m.ShowStructure()
+	case "bookmarks":
+		m.ShowBookmarksWindow()
+	}
 }
 
 func (m *Model) stripeButton(c *ui.Context, p *ui.Theme, oi oiColors, key string, icon *ui.SVG, tip string, active bool, onClick func()) {
@@ -267,69 +286,100 @@ func (m *Model) stripeButton(c *ui.Context, p *ui.Theme, oi oiColors, key string
 	}
 }
 
-// leftIsland is the tool window showing in the left area: its header with the
-// actions of the window, then its body.
+// leftSide is the left side's two areas: the primary island and, below it,
+// the split island. A lone island takes the whole side, as OpenIDEA's
+// SidePanel does, and hiding both closes the side.
+func (m *Model) leftSide(c *ui.Context, p *ui.Theme, oi oiColors) {
+	if m.leftHidden && m.leftSplit == "" {
+		return
+	}
+	ui.Column(c).Width(oiLeftWidth).Shrink(0).MinHeight(0).Gap(oiIslandGap).
+		AlignItems(ui.Stretch).Children(func() {
+		if !m.leftHidden {
+			m.leftIsland(c, p, oi)
+		}
+		if m.leftSplit != "" {
+			m.leftSplitIsland(c, p, oi)
+		}
+	})
+}
+
+// leftIsland is the tool window showing in the left primary area: its header
+// with the actions of the window, then its body.
 func (m *Model) leftIsland(c *ui.Context, p *ui.Theme, oi oiColors) {
 	title := "Project"
-	switch m.sideMode {
-	case "vcs":
+	if m.sideMode == "vcs" {
 		title = "Commit"
 		if n := len(m.vcs.files); n > 0 {
 			title = fmt.Sprintf("Commit · %d", n)
 		}
-	case "structure":
-		title = "Structure"
-	case "bookmarks":
-		title = "Bookmarks"
 	}
-	ui.Column(c).Width(oiLeftWidth).Shrink(0).MinHeight(0).Background(oi.island).
+	ui.Column(c).Grow(1).MinHeight(0).Background(oi.island).
 		Radius(oiIslandRadius).Children(func() {
 		ui.Row(c).Height(oiHeaderHeight).Shrink(0).Padding(0, 6, 0, 8).
 			Gap(6).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, title).FontSize(13).TextColor(oi.textStrong).SingleLine().Ellipsis("…")
 			ui.Spacer(c)
-			switch m.sideMode {
-			case "":
-				if m.tree != nil {
-					m.headerIcon(c, p, oi, "tree-expand", "Expand All", iconExpandAll, func() {
-						m.tree.ExpandAll(m.Root())
-						m.invalidate()
-					})
-					m.headerIcon(c, p, oi, "tree-collapse", "Collapse All", iconCollapseAll, func() {
-						m.tree.CollapseAll()
-						m.invalidate()
-					})
-				}
-			case "vcs":
+			if m.sideMode == "vcs" {
 				label := "Refresh"
 				if m.vcs.loading {
 					label = "Loading…"
 				}
 				ui.Button(c, label).OnClick(func() { m.RefreshVCS() })
-			default:
-				m.headerIcon(c, p, oi, "hide", "Hide", iconClose, func() {
-					m.leftHidden = true
-					m.rememberLayout()
+			} else if m.tree != nil {
+				m.headerIcon(c, p, oi, "tree-expand", "Expand All", iconExpandAll, func() {
+					m.tree.ExpandAll(m.Root())
+					m.invalidate()
+				})
+				m.headerIcon(c, p, oi, "tree-collapse", "Collapse All", iconCollapseAll, func() {
+					m.tree.CollapseAll()
 					m.invalidate()
 				})
 			}
 		})
 		ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
-			switch m.sideMode {
-			case "vcs":
+			if m.sideMode == "vcs" {
 				m.vcsRows(c, p)
-			case "structure":
-				m.structureRowsUI(c, p)
-			case "bookmarks":
-				m.bookmarkWindowRows(c, p)
-			default:
-				if m.tree == nil {
-					return
-				}
-				for _, row := range m.tree.Rows() {
-					m.treeRow(c, p, row)
-				}
+				return
 			}
+			if m.tree == nil {
+				return
+			}
+			for _, row := range m.tree.Rows() {
+				m.treeRow(c, p, row)
+			}
+		})
+	})
+}
+
+// leftSplitIsland is the tool window in the left split area, below the primary
+// one: Structure or Bookmarks, with a hide action in its header.
+func (m *Model) leftSplitIsland(c *ui.Context, p *ui.Theme, oi oiColors) {
+	title := "Structure"
+	if m.leftSplit == "bookmarks" {
+		title = "Bookmarks"
+	}
+	ui.Column(c).Grow(1).MinHeight(0).Background(oi.island).
+		Radius(oiIslandRadius).Children(func() {
+		ui.Row(c).Height(oiHeaderHeight).Shrink(0).Padding(0, 6, 0, 8).
+			Gap(6).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, title).FontSize(13).TextColor(oi.textStrong).SingleLine().Ellipsis("…")
+			ui.Spacer(c)
+			m.headerIcon(c, p, oi, "split-hide", "Hide", iconClose, func() {
+				if m.leftSplit == "structure" {
+					m.structure.visible = false
+				}
+				m.leftSplit = ""
+				m.rememberLayout()
+				m.invalidate()
+			})
+		})
+		ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
+			if m.leftSplit == "bookmarks" {
+				m.bookmarkWindowRows(c, p)
+				return
+			}
+			m.structureRowsUI(c, p)
 		})
 	})
 }

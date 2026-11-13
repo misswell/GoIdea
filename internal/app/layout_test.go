@@ -109,6 +109,7 @@ func TestClosingTheLastWindowIsPartOfTheLayout(t *testing.T) {
 func TestStoredLayoutDropsWhatItCannotMean(t *testing.T) {
 	l := normalizeLayout(Layout{
 		Side:         "nope",
+		LeftTool:     "nope",
 		LeftHidden:   true,
 		Bottom:       []string{"run", "run", "nope", "problems"},
 		Tool:         "nope",
@@ -117,6 +118,9 @@ func TestStoredLayoutDropsWhatItCannotMean(t *testing.T) {
 	})
 	if l.Side != "" {
 		t.Fatalf("side = %q, want the default", l.Side)
+	}
+	if l.LeftTool != "" {
+		t.Fatalf("left tool = %q, want none", l.LeftTool)
 	}
 	if len(l.Bottom) != 2 || l.Bottom[0] != "run" || l.Bottom[1] != "problems" {
 		t.Fatalf("bottom = %v", l.Bottom)
@@ -132,6 +136,33 @@ func TestStoredLayoutDropsWhatItCannotMean(t *testing.T) {
 	}
 	if !l.LeftHidden {
 		t.Fatal("a closed left area is a layout a project can keep")
+	}
+}
+
+func TestStoredLeftToolsMigrateToTheSplitArea(t *testing.T) {
+	for _, side := range []string{"structure", "bookmarks"} {
+		l := normalizeLayout(Layout{Side: side})
+		if l.Side != "" || l.LeftTool != side {
+			t.Fatalf("side %q became side=%q tool=%q", side, l.Side, l.LeftTool)
+		}
+	}
+}
+
+func TestLeftSplitShowsOneWindowAtATime(t *testing.T) {
+	m, _ := layoutModel(t)
+	m.ShowStructure()
+	if m.leftSplit != "structure" || !m.structure.visible || m.leftHidden {
+		t.Fatalf("structure did not take the split: split=%q visible=%v hidden=%v",
+			m.leftSplit, m.structure.visible, m.leftHidden)
+	}
+	m.ShowBookmarksWindow()
+	if m.leftSplit != "bookmarks" || m.structure.visible {
+		t.Fatalf("bookmarks did not take the split: split=%q structure=%v",
+			m.leftSplit, m.structure.visible)
+	}
+	m.ToggleBookmarksWindow()
+	if m.leftSplit != "" {
+		t.Fatalf("bookmarks did not close: split=%q", m.leftSplit)
 	}
 }
 
