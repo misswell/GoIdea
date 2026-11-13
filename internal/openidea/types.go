@@ -277,6 +277,40 @@ type DebugEvent struct {
 	Message           string `json:"message"`
 }
 
+// OutlinePos is a 0-based line and UTF-16 column of an outline range.
+type OutlinePos struct {
+	Line uint32 `json:"line"`
+	Col  uint32 `json:"col"`
+}
+
+// OutlineRange is a half-open range of an outline item.
+type OutlineRange struct {
+	Start OutlinePos `json:"start"`
+	End   OutlinePos `json:"end"`
+}
+
+// OutlineItem is a node of a document's outline, for breadcrumbs and the
+// structure view.
+type OutlineItem struct {
+	Name           string        `json:"name"`
+	Detail         *string       `json:"detail"`
+	Kind           string        `json:"kind"`
+	Range          OutlineRange  `json:"range"`
+	SelectionRange OutlineRange  `json:"selection_range"`
+	Children       []OutlineItem `json:"children"`
+}
+
+// LineHunk is one line-level change between two texts (0-based lines): start
+// and lines index the new text, oldStart and oldLines the original.
+type LineHunk struct {
+	Kind     string `json:"kind"`
+	Start    uint32 `json:"start"`
+	Lines    uint32 `json:"lines"`
+	OldStart uint32 `json:"oldStart"`
+	OldLines uint32 `json:"oldLines"`
+	OldText  string `json:"oldText"`
+}
+
 // FileStatus is one changed file of a Git repository: the two change kinds
 // are staged (index) and unstaged (working tree), either may be absent.
 type FileStatus struct {

@@ -166,6 +166,15 @@ func smoke(m *app.Model) {
 			fields["termError"] = termErr.Error()
 		}
 	}
+	if os.Getenv("GOIDEA_SMOKE_CODEINTEL") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		intel, intelErr := m.SmokeCodeIntel(ctx)
+		cancel()
+		fields["codeIntel"] = intel
+		if intelErr != nil {
+			fields["codeIntelError"] = intelErr.Error()
+		}
+	}
 	if root != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		count, sample, vcsErr := m.SmokeVCS(ctx)

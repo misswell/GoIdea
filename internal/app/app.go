@@ -47,6 +47,22 @@ type Tab struct {
 	edited  time.Time
 	syncing bool
 	saving  bool
+
+	// gitMarks are the gutter marks of the buffer version gitVersion, read
+	// against HEAD; gitOff stays set when Git cannot answer for this file.
+	gitMarks   []editor.GutterMark
+	gitVersion uint64
+	gitPath    string
+	gitLoading bool
+	gitOff     bool
+
+	// outline is the document's symbols for breadcrumbs; outlineGen drops
+	// replies that a newer request has superseded.
+	outline        []openidea.OutlineItem
+	outlineDoc     uint32
+	outlineVersion uint64
+	outlineGen     uint64
+	outlineLoading bool
 }
 
 // Model is the app's state.
@@ -659,6 +675,7 @@ func (m *Model) syncPump(now time.Time) {
 			t.seen = v
 			t.edited = now
 		}
+		m.kickCodeIntel(t, now)
 		if t.syncing || t.saving || v == t.synced {
 			continue
 		}

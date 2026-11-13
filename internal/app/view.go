@@ -287,8 +287,40 @@ func (m *Model) editorArea(c *ui.Context, p *ui.Theme) {
 	}
 	ui.Column(c.Key("editor:" + t.doc.Path())).Grow(1).MinHeight(0).MinWidth(0).
 		Background(p.Background).Children(func() {
+		m.breadcrumbs(c, p, t)
 		editor.View(c, t.state).Grow(1).MinHeight(0)
 	})
+}
+
+// breadcrumbs is the file and symbol chain the caret sits in; a symbol jumps
+// to its declaration.
+func (m *Model) breadcrumbs(c *ui.Context, p *ui.Theme, t *Tab) {
+	pos := t.state.CursorPos()
+	chain := outlinePath(t.outline, pos.Line)
+	ui.Row(c).Height(26).Shrink(0).Padding(0, 10).Gap(4).AlignItems(ui.Center).
+		Children(func() {
+			ui.Text(c, filepath.Base(t.doc.Path())).FontSize(11.5).
+				TextColor(p.TextMuted).SingleLine()
+			for i, it := range chain {
+				it := it
+				ui.Text(c, "›").FontSize(11).TextColor(p.TextMuted)
+				chip := ui.Row(c.Key(fmt.Sprintf("bc:%d:%s", i, it.Name))).Padding(2, 4).
+					AlignItems(ui.Center)
+				if chip.Hovered() {
+					chip.Background(p.SurfaceHover)
+				}
+				chip.Children(func() {
+					ui.Text(c, it.Name).FontSize(11.5).TextColor(p.Text).SingleLine()
+				})
+				if chip.Clicked() {
+					t.state.GoTo(editor.Pos{
+						Line: int(it.SelectionRange.Start.Line),
+						Col:  int(it.SelectionRange.Start.Col),
+					})
+					m.invalidate()
+				}
+			}
+		})
 }
 
 func (m *Model) runPanel(c *ui.Context, p *ui.Theme) {
