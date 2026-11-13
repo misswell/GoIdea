@@ -1,18 +1,18 @@
 package app
 
 import (
-	"os"
 	"path/filepath"
-	"sort"
 	"strings"
+
+	"mayoi/internal/workspace"
 )
 
-// hiddenDirs are the folders the tree leaves out: build output, caches and
-// tool state that a Java project never wants to browse.
+// hiddenDirs are the folders the tree leaves out on top of what Mayoi's
+// workspace hides: build output, caches and tool state that a Java project
+// never wants to browse.
 var hiddenDirs = map[string]bool{
-	".git": true, ".idea": true, ".gradle": true, ".mvn": true,
-	"target": true, "build": true, "out": true, "bin": true,
-	"node_modules": true, ".DS_Store": true, ".qoder": true,
+	".idea": true, ".mvn": true, "target": true, ".gradle": true,
+	"build": true, "out": true, "bin": true, "node_modules": true, ".qoder": true,
 }
 
 // treeNode is one row of the file tree: a folder whose children load when it
@@ -23,27 +23,57 @@ type treeNode struct {
 	dir      bool
 	depth    int
 	expanded bool
-	loaded   bool
-	children []*treeNode
 }
 
-// Tree is the project's file tree, with the rows visible in it. It is used on
-// the main thread only.
+// Tree is the project's file tree, with the rows visible in it. It is a view
+// over Mayoi's workspace.Tree, which reads a directory at a time off the main
+// thread and follows changes on disk. It is used on the main thread only.
 type Tree struct {
+	ws   *workspace.Tree
 	root *treeNode
 	rows []*treeNode
+	open map[string]bool // folders expanded, by path
 }
 
-// NewTree returns the tree of the folder root, with the root open.
-func NewTree(root string) *Tree {
-	t := &Tree{}
-	if root == "" {
+// NewTree returns the tree of the folder root, with the root open. post runs a
+// function on the main thread, as the workspace does; changed draws the window
+// again after files change on disk.
+func NewTree(root string, post func(func()), changed func()) *Tree {
+	t := &Tree{open: map[string]bool{}}
+	if root == "" || post == nil {
 		return t
 	}
 	t.root = &treeNode{path: root, name: filepath.Base(root), dir: true, expanded: true}
-	t.load(t.root)
+	t.open[root] = true
+	// Children arrive through post after a background read: rebuild and
+	// redraw then, or the rows of a folder read late would wait for the
+	// next click.
+	t.ws = workspace.NewTree(root, func(fn func()) {
+		post(func() {
+			fn()
+			t.rebuild()
+			if changed != nil {
+				changed()
+			}
+		})
+	})
+	t.ws.OnChange = func(_, _ []string) {
+		t.rebuild()
+		if changed != nil {
+			changed()
+		}
+	}
+	t.ws.Load(root)
 	t.rebuild()
 	return t
+}
+
+// Close stops the tree watching the folder.
+func (t *Tree) Close() {
+	if t.ws != nil {
+		t.ws.Close()
+		t.ws = nil
+	}
 }
 
 // Rows are the visible rows, each already flattened to its depth.
@@ -51,115 +81,72 @@ func (t *Tree) Rows() []*treeNode { return t.rows }
 
 // Toggle opens or closes the folder at path.
 func (t *Tree) Toggle(path string) {
-	n := t.find(path)
-	if n == nil || !n.dir {
+	if t.ws == nil || !t.ws.IsDir(path) {
 		return
 	}
-	n.expanded = !n.expanded
-	if n.expanded && !n.loaded {
-		t.load(n)
+	if t.open[path] {
+		delete(t.open, path)
+	} else {
+		t.open[path] = true
+		t.ws.Load(path)
 	}
 	t.rebuild()
 }
 
 // reveal opens the folders leading to path, as a file opened from elsewhere.
 func (t *Tree) reveal(path string) {
-	if t.root == nil || !strings.HasPrefix(path, t.root.path+string(filepath.Separator)) {
+	if t.ws == nil || t.root == nil {
 		return
 	}
 	rel, err := filepath.Rel(t.root.path, path)
-	if err != nil {
+	if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
 		return
 	}
-	parts := strings.Split(rel, string(filepath.Separator))
-	cur := t.root
-	for i, part := range parts {
-		if i == len(parts)-1 {
+	dir := t.root.path
+	for _, part := range strings.Split(rel, string(filepath.Separator)) {
+		dir = filepath.Join(dir, part)
+		if dir == path {
 			break
 		}
-		var next *treeNode
-		for _, c := range cur.children {
-			if c.name == part {
-				next = c
-				break
-			}
-		}
-		if next == nil || !next.dir {
-			return
-		}
-		if !next.loaded {
-			t.load(next)
-		}
-		next.expanded = true
-		cur = next
+		// A folder the workspace has not read yet is not known to be
+		// one; it opens here and its rows arrive when it is read.
+		t.open[dir] = true
+		t.ws.Load(dir)
 	}
+	t.open[t.root.path] = true
 	t.rebuild()
 }
 
-func (t *Tree) find(path string) *treeNode {
-	var walk func(n *treeNode) *treeNode
-	walk = func(n *treeNode) *treeNode {
-		if n.path == path {
-			return n
-		}
-		for _, c := range n.children {
-			if found := walk(c); found != nil {
-				return found
-			}
-		}
-		return nil
-	}
-	if t.root == nil {
-		return nil
-	}
-	return walk(t.root)
-}
-
-// load reads the direct children of an open folder.
-func (t *Tree) load(n *treeNode) {
-	n.loaded = true
-	entries, err := os.ReadDir(n.path)
-	if err != nil {
-		return
-	}
-	for _, e := range entries {
-		name := e.Name()
-		if strings.HasPrefix(name, ".") {
-			continue
-		}
-		dir := e.IsDir()
-		if dir && hiddenDirs[name] {
-			continue
-		}
-		n.children = append(n.children, &treeNode{
-			path:  filepath.Join(n.path, name),
-			name:  name,
-			dir:   dir,
-			depth: n.depth + 1,
-		})
-	}
-	sort.Slice(n.children, func(i, j int) bool {
-		a, b := n.children[i], n.children[j]
-		if a.dir != b.dir {
-			return a.dir
-		}
-		return strings.ToLower(a.name) < strings.ToLower(b.name)
-	})
-}
-
+// rebuild flattens the open folders into rows, skipping what hidden reports.
 func (t *Tree) rebuild() {
 	t.rows = t.rows[:0]
+	if t.root == nil {
+		return
+	}
 	var walk func(n *treeNode)
 	walk = func(n *treeNode) {
 		t.rows = append(t.rows, n)
-		if !n.dir || !n.expanded {
+		if !n.dir || !t.open[n.path] || t.ws == nil {
 			return
 		}
-		for _, c := range n.children {
-			walk(c)
+		t.ws.Load(n.path)
+		for _, p := range t.ws.Children(n.path) {
+			name := filepath.Base(p)
+			dir := t.ws.IsDir(p)
+			if hidden(name, dir) {
+				continue
+			}
+			walk(&treeNode{path: p, name: name, dir: dir, depth: n.depth + 1, expanded: t.open[p]})
 		}
 	}
-	if t.root != nil {
-		walk(t.root)
+	walk(t.root)
+}
+
+// hidden reports whether the tree leaves a name out: tool folders and their
+// caches, and the dot files an editor or the system writes.
+func hidden(name string, dir bool) bool {
+	if strings.HasPrefix(name, ".") {
+		return true
 	}
+	return dir && hiddenDirs[name]
 }

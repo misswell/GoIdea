@@ -520,7 +520,10 @@ func (m *Model) openProject(dir string, files []string) {
 					m.active = i
 				}
 			}
-			m.tree = NewTree(dir)
+			if m.tree != nil {
+				m.tree.Close()
+			}
+			m.tree = NewTree(dir, m.post, m.invalidate)
 			m.busy = false
 			m.status = fmt.Sprintf("%s · %d 个文件已打开", filepath.Base(dir), len(m.tabs))
 			if len(failed) > 0 {
@@ -982,6 +985,10 @@ func (m *Model) requestQuit(prevent func()) {
 
 func (m *Model) finishQuit(save bool) {
 	m.saveSession()
+	if m.tree != nil {
+		m.tree.Close()
+		m.tree = nil
+	}
 	tabs := append([]*Tab(nil), m.tabs...)
 	m.forceQuit = true
 	go func() {

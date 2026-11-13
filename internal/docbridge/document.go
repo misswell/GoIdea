@@ -104,6 +104,9 @@ func Open(ctx context.Context, backend Backend, window, path string) (*Document,
 func newDocument(backend Backend, window string, info openidea.DocInfo) *Document {
 	text := lf(info.Text)
 	buf := editor.NewBuffer(text)
+	// The language colors the text and drives comments, auto-close and
+	// indentation; MyGo knows the file by its name.
+	buf.SetLanguage(editor.LanguageFor(info.Path))
 	d := &Document{
 		backend: backend,
 		window:  window,

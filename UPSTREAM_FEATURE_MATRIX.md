@@ -21,12 +21,13 @@ reimplementing it. A row is `INTEGRATED` only when the GoIDEA product
 | --- | --- | --- |
 | Native window, menus, dialogs, theme | INTEGRATED | `mygo` app + `cmd/goidea` menu |
 | Editor buffer, selections, undo/redo | INTEGRATED | `ui/editor` state per tab; `internal/docbridge` syncs it |
-| Syntax highlighting | INTEGRATED | mygo editor over the backend's grammar |
+| Syntax highlighting | INTEGRATED | mygo editor's language for the file, set per document in `internal/docbridge` (Java, Kotlin, XML, YAML…) |
 | Quick-open files (Cmd+P) | INTEGRATED | `internal/app/quickopen.go` |
 | Command palette | INTEGRATED | `internal/app/commands.go` |
 | Project-wide search UI | INTEGRATED | `internal/app/search.go` |
 | Settings sheet and stored preferences | INTEGRATED | `internal/app/settings_ui.go` |
 | mygo bundling (`.app`, dmg, signing) | INTEGRATED | `mygo.json`, `scripts/release.sh` |
+| Workspace file tree: lazy reads, live disk updates | INTEGRATED | `internal/workspace` under `internal/app/tree.go`; tests in `tree_test.go` |
 | Sticky scroll | DETECTED | source in `cmd/mayoi`; not wired into `cmd/goidea` |
 | Vim mode | DETECTED | source in `cmd/mayoi`; not wired into `cmd/goidea` |
 | Terminal UI and PTY lifecycle | DETECTED | Mayoi's terminal is in-tree; GoIDEA uses the backend terminal |

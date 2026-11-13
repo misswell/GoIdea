@@ -14,10 +14,11 @@ and no JPS: the Java ecosystem is not reimplemented here.
 ## Status
 
 Version 0.1.0. Working today: document bridge with UTF-16 mapping and
-undo/redo, Java diagnostics/completion/hover/definition, intentions, rename,
-usages, symbols, format, project search, Maven/Gradle build and run, DAP
-debugging, Git changes and diff, terminal, database console, themes and font
-settings, command palette and quick open.
+undo/redo, Java syntax highlighting, diagnostics, completion, hover,
+definitions, intentions, rename, usages, symbols, format, project search, a
+project tree that follows the disk (Mayoi's `internal/workspace`),
+Maven/Gradle build and run, DAP debugging, Git changes and diff, terminal,
+database console, themes and font settings, command palette and quick open.
 
 Later increments: table editing and DDL/history/explain in the database sheet,
 HTTP client, agent panel, plugin management, remote development, benchmarks,
