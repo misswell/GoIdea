@@ -143,10 +143,14 @@ func settingsSectionTitle(c *ui.Context, oi oiColors, title string) {
 	ui.Text(c, title).FontSize(12).TextColor(oi.textStrong).Padding(0, 0, 6, 0).SingleLine()
 }
 
-// settingsEditorAppearanceBody is Editor › General › Appearance: the gutter
-// and whitespace switches, then the distraction free text width, in the order
-// general.tsx lists them.
+// settingsEditorAppearanceBody is Editor › General › Appearance: the caret,
+// gutter and whitespace switches, then the distraction free text width, in the
+// order general.tsx lists them.
 func (m *Model) settingsEditorAppearanceBody(c *ui.Context, oi oiColors) {
+	blockCaret := m.settingsDraft.blockCaret
+	if ui.Checkbox(c, &blockCaret, "Use block caret").Changed() {
+		m.settingsSetBlockCaret(blockCaret)
+	}
 	lineNumbers := m.settingsDraft.lineNumbers
 	if ui.Checkbox(c, &lineNumbers, "Show line numbers").Changed() {
 		m.settingsSetLineNumbers(lineNumbers)

@@ -323,6 +323,51 @@ func TestSettingsAppearanceSwitchesReachTheEditor(t *testing.T) {
 	}
 }
 
+func TestSettingsBlockCaretReachesTheEditor(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	tab := &Tab{state: &editor.State{}}
+	m := &Model{cfg: Config{SettingsPath: path}, tabs: []*Tab{tab}}
+	m.applyPreferences()
+	if tab.state.CursorShape != editor.CursorBar {
+		t.Fatalf("defaults draw a block caret")
+	}
+
+	m.OpenSettingsPage(settingsPageEditorAppearance)
+	m.settingsSetBlockCaret(true)
+	if m.prefs.Editor.BlockCaret {
+		t.Fatalf("staging wrote the prefs")
+	}
+	if tab.state.CursorShape != editor.CursorBlock {
+		t.Fatalf("staged block caret not previewed")
+	}
+	if !m.settingsDirtyPage(settingsPageEditorAppearance) {
+		t.Fatalf("staged block caret did not dirty its page")
+	}
+	m.closeSettings()
+	if tab.state.CursorShape != editor.CursorBar {
+		t.Fatalf("cancel kept the block caret")
+	}
+
+	m.OpenSettingsPage(settingsPageEditorAppearance)
+	m.settingsSetBlockCaret(true)
+	m.applySettings()
+	if !m.prefs.Editor.BlockCaret || !LoadPreferences(path).Editor.BlockCaret {
+		t.Fatalf("stored block caret = %+v", LoadPreferences(path).Editor)
+	}
+	if tab.state.CursorShape != editor.CursorBlock {
+		t.Fatalf("applied block caret not on the editor")
+	}
+
+	m.settingsSelectPage(settingsPageEditorAppearance)
+	m.settingsResetPage()
+	if m.settingsDraft.blockCaret {
+		t.Fatalf("reset kept the block caret")
+	}
+	if tab.state.CursorShape != editor.CursorBar {
+		t.Fatalf("reset preview kept the block caret")
+	}
+}
+
 func TestSettingsCodeFoldingStagesAndApplies(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")
 	tab := &Tab{state: &editor.State{}}

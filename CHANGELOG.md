@@ -9,6 +9,7 @@ needs a `## <version>` section here, or its build fails.
 - 设置窗底部是 **Cancel** / **Apply** / **OK**，改动会先预览，**Apply** 和 **OK** 才写入，**Cancel** 恢复原样。
 - 设置页按 OpenIDEA 分组：**Appearance**、**Keymap**、**Editor > Appearance / Font**、**Languages & Frameworks > Java**。
 - **Editor > Appearance** 的 **Show line numbers**、**Show whitespaces** 和 **Show indent guides** 会立即作用到所有打开的编辑器并保存。
+- **Editor > Appearance** 新增 **Use block caret**，光标可选方块形并随设置保存。
 - 新增 **Editor > Breadcrumbs** 设置页，**Show breadcrumbs** 和 **Top/Bottom** 控制编辑器的面包屑并保存。
 - 新增 **Editor > General** 设置页，**Soft-wrap files** 和虚拟空间开关直接作用于编辑器并保存。
 - 新增 **Editor > Editor Tabs** 设置页，标签栏可放在顶部、底部或隐藏。

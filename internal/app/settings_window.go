@@ -53,6 +53,7 @@ type settingsDraft struct {
 	fontSize       float32
 	zenWidth       int
 	lineNumbers    bool
+	blockCaret     bool
 	showWhitespace bool
 	indentGuides   bool
 	showFolding    bool
@@ -87,6 +88,7 @@ func (d settingsDraft) appearance() EditorAppearance {
 	}
 	return EditorAppearance{
 		NoLineNumbers:  !d.lineNumbers,
+		BlockCaret:     d.blockCaret,
 		ShowWhitespace: d.showWhitespace,
 		NoIndentGuides: !d.indentGuides,
 		NoFolding:      !d.showFolding,
@@ -191,7 +193,7 @@ func settingsPages() []settingsPageSpec {
 			keywords: []string{
 				"caret", "line numbers", "whitespace", "indent guides", "distraction free", "zen",
 			},
-			labels:  []string{"Distraction free mode text width:"},
+			labels:  []string{"Use block caret", "Distraction free mode text width:"},
 			section: "editorAppearance",
 		},
 		{
@@ -645,6 +647,7 @@ func (m *Model) settingsDraftFromPrefs() settingsDraft {
 		fontSize:                  m.prefs.fontSize(),
 		zenWidth:                  m.prefs.zenWidth(),
 		lineNumbers:               !m.prefs.Editor.NoLineNumbers,
+		blockCaret:                m.prefs.Editor.BlockCaret,
 		showWhitespace:            m.prefs.Editor.ShowWhitespace,
 		indentGuides:              !m.prefs.Editor.NoIndentGuides,
 		showFolding:               !m.prefs.Editor.NoFolding,
@@ -707,6 +710,15 @@ func (m *Model) settingsSetLineNumbers(on bool) {
 		return
 	}
 	m.settingsDraft.lineNumbers = on
+	m.settingsPreview()
+}
+
+// settingsSetBlockCaret stages the Use block caret switch.
+func (m *Model) settingsSetBlockCaret(on bool) {
+	if m.settingsDraft.blockCaret == on {
+		return
+	}
+	m.settingsDraft.blockCaret = on
 	m.settingsPreview()
 }
 
@@ -929,6 +941,7 @@ func (m *Model) settingsDirtyPage(key string) bool {
 		a := m.settingsDraft.appearance()
 		return m.settingsDraft.zenWidth != m.prefs.zenWidth() ||
 			a.NoLineNumbers != m.prefs.Editor.NoLineNumbers ||
+			a.BlockCaret != m.prefs.Editor.BlockCaret ||
 			a.ShowWhitespace != m.prefs.Editor.ShowWhitespace ||
 			a.NoIndentGuides != m.prefs.Editor.NoIndentGuides
 	case settingsPageCodeFolding:
@@ -956,6 +969,7 @@ func (m *Model) settingsResetPage() {
 	case settingsPageEditorAppearance:
 		m.settingsDraft.zenWidth = defaultZenWidth
 		m.settingsDraft.lineNumbers = true
+		m.settingsDraft.blockCaret = false
 		m.settingsDraft.showWhitespace = false
 		m.settingsDraft.indentGuides = true
 	case settingsPageCodeFolding:

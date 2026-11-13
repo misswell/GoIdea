@@ -96,6 +96,10 @@ func (m *Model) applyTabAppearance(t *Tab, a EditorAppearance) {
 	if t.doc != nil {
 		t.state.SoftWrap = a.WrapsFile(t.doc.Path())
 	}
+	t.state.CursorShape = editor.CursorBar
+	if a.BlockCaret {
+		t.state.CursorShape = editor.CursorBlock
+	}
 	t.state.NoScrollPastEnd = !a.ScrollPastEnd
 	if a.ShowWhitespace {
 		t.state.Whitespace = editor.WhitespaceAll

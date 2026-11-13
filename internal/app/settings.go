@@ -344,6 +344,9 @@ type EditorAppearance struct {
 	ShowWhitespace bool `json:"showWhitespace,omitempty"`
 	NoIndentGuides bool `json:"noIndentGuides,omitempty"`
 	NoFolding      bool `json:"noFolding,omitempty"`
+	// BlockCaret draws the carets as blocks over the next character rather
+	// than bars before it, as editor.appearance.blockCaret does.
+	BlockCaret bool `json:"blockCaret,omitempty"`
 	// SoftWrap wraps the files SoftWrapFiles matches, and ScrollPastEnd
 	// scrolls past the last line; OpenIDEA defaults both off.
 	SoftWrap      bool   `json:"softWrap,omitempty"`
