@@ -83,7 +83,7 @@ func (m *Model) sidebar(c *ui.Context, p *ui.Theme) {
 			ui.Row(c).Height(30).Padding(0, 6).Gap(4).AlignItems(ui.Center).
 				BorderWidth(0, 0, 1, 0).BorderColor(p.Border).
 				Children(func() {
-					m.sidebarTab(c, p, "项目", m.sideMode != "vcs", func() {
+					m.sidebarTab(c, p, "项目", m.sideMode != "vcs" && m.sideMode != "search" && m.sideMode != "usages", func() {
 						m.sideMode = ""
 						m.invalidate()
 					})
@@ -97,6 +97,16 @@ func (m *Model) sidebar(c *ui.Context, p *ui.Theme) {
 						results = fmt.Sprintf("搜索 %d", m.search.matches)
 					}
 					m.sidebarTab(c, p, results, m.sideMode == "search", m.ShowSearch)
+					if m.usages.symbol != "" {
+						label := "用法"
+						if n := len(m.usages.locs); n > 0 {
+							label = fmt.Sprintf("用法 %d", n)
+						}
+						m.sidebarTab(c, p, label, m.sideMode == "usages", func() {
+							m.sideMode = "usages"
+							m.invalidate()
+						})
+					}
 					ui.Spacer(c)
 					if m.sideMode == "vcs" {
 						label := "刷新"
@@ -113,6 +123,10 @@ func (m *Model) sidebar(c *ui.Context, p *ui.Theme) {
 				}
 				if m.sideMode == "search" {
 					m.searchRows(c, p)
+					return
+				}
+				if m.sideMode == "usages" {
+					m.usagesRows(c, p)
 					return
 				}
 				if m.tree == nil {

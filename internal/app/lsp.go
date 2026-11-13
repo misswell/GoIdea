@@ -518,6 +518,9 @@ func (m *Model) SmokeLSP(ctx context.Context) (map[string]any, error) {
 	// A rename goes through the backend's workspace edit, which reaches open
 	// documents as backend changes.
 	out["rename"] = m.smokeRename(ctx, t)
+
+	// Usages stream back while the server searches, and land in the sidebar.
+	out["references"] = m.smokeReferences(ctx, t)
 	return out, nil
 }
 
@@ -645,6 +648,62 @@ func (m *Model) smokeRename(ctx context.Context, t *Tab) any {
 			return map[string]any{
 				"timeout": "apply", "status": m.smokeStatus(), "err": errText,
 				"busy": busy, "files": files, "elapsedMillis": time.Since(start).Milliseconds(),
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return map[string]any{"error": ctx.Err().Error()}
+		case <-time.After(200 * time.Millisecond):
+		}
+	}
+}
+
+// smokeReferences adds a class whose method is called twice, finds the usages
+// of that method through the sidebar's path, and waits for the streamed answer
+// to settle.
+func (m *Model) smokeReferences(ctx context.Context, t *Tab) any {
+	text := t.doc.Text()
+	const helper = "\nclass SmokeUsages { static int smokeCall() { return 1; } int run() { return smokeCall() + smokeCall(); } }\n"
+	if err := t.doc.ApplyEdits(ctx, editor.Edit{Start: len(text), End: len(text), Text: helper}); err != nil {
+		return map[string]any{"error": err.Error()}
+	}
+	defer func() {
+		_ = t.doc.ApplyEdits(context.Background(), editor.Edit{Start: 0, End: len(t.doc.Text()), Text: text})
+	}()
+	at := strings.Index(t.doc.Text(), "smokeCall")
+	if at < 0 {
+		return map[string]any{"error": "fixture"}
+	}
+	start := time.Now()
+	mygo.RunOnMain(func() {
+		t.state.Select(at+2, at+2)
+		m.FindUsages()
+	})
+	deadline := time.Now().Add(120 * time.Second)
+	for {
+		var symbol, status, incomplete, errText string
+		var count int
+		var running, done bool
+		mygo.RunOnMain(func() {
+			symbol, count, running, done = m.usages.symbol, len(m.usages.locs), m.usages.running, m.usages.done
+			incomplete, errText = m.usages.incomplete, m.usages.err
+			status = m.status
+		})
+		if done || (!running && symbol == "") {
+			out := map[string]any{
+				"symbol": symbol, "count": count, "done": done,
+				"incomplete": incomplete, "status": status,
+				"elapsedMillis": time.Since(start).Milliseconds(),
+			}
+			if errText != "" {
+				out["error"] = errText
+			}
+			return out
+		}
+		if time.Now().After(deadline) {
+			return map[string]any{
+				"timeout": true, "symbol": symbol, "count": count,
+				"status": status, "elapsedMillis": time.Since(start).Milliseconds(),
 			}
 		}
 		select {

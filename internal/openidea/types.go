@@ -444,6 +444,15 @@ type Renamed struct {
 	Incomplete *string         `json:"incomplete"`
 }
 
+// References is lsp_references' answer: where the symbol is used. A streaming
+// reply replaces Locations as the search moves on, and Incomplete names what
+// the query may have missed.
+type References struct {
+	Locations        []Location `json:"locations"`
+	Incomplete       *string    `json:"incomplete"`
+	LibrariesSkipped bool       `json:"librariesSkipped"`
+}
+
 // WorkspaceEditInfo is the part of a workspace edit the UI previews: which
 // files it edits, and for renamed or deleted ones, which paths it moves.
 type WorkspaceEditInfo struct {

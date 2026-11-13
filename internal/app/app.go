@@ -102,7 +102,7 @@ type Model struct {
 	rename *renameState
 
 	// sideMode picks what the sidebar shows: "tree" ("" also means tree, the
-	// default), "vcs" or "search".
+	// default), "vcs", "search" or "usages".
 	sideMode string
 
 	run    RunPane
@@ -110,6 +110,7 @@ type Model struct {
 	term   TermPane
 	vcs    VCSPane
 	search SearchPane
+	usages UsagesPane
 	// reveal is the caret position a search hit asked for; it applies once the
 	// file is the active tab.
 	reveal  *revealPos
@@ -406,6 +407,7 @@ func (m *Model) openProject(dir string, files []string) {
 	m.resetVCS()
 	m.cancelSearch()
 	m.resetSearch()
+	m.resetUsages()
 	m.busy = true
 	m.status = "正在打开 " + filepath.Base(dir) + "…"
 	m.setRoot(dir)
