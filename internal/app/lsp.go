@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -521,6 +522,9 @@ func (m *Model) SmokeLSP(ctx context.Context) (map[string]any, error) {
 
 	// Usages stream back while the server searches, and land in the sidebar.
 	out["references"] = m.smokeReferences(ctx, t)
+
+	// The symbol picker searches the whole project and opens what it finds.
+	out["symbols"] = m.smokeSymbols(ctx, t)
 	return out, nil
 }
 
@@ -742,6 +746,85 @@ func (m *Model) smokeReferences(ctx context.Context, t *Tab) any {
 		case <-ctx.Done():
 			return map[string]any{"error": ctx.Err().Error()}
 		case <-time.After(200 * time.Millisecond):
+		}
+	}
+}
+
+// smokeSamePath compares paths whose only difference may be a symlinked
+// prefix: /tmp and /private/tmp name the same file.
+func smokeSamePath(a, b string) bool {
+	if a == b {
+		return true
+	}
+	ra, erra := filepath.EvalSymlinks(a)
+	rb, errb := filepath.EvalSymlinks(b)
+	return erra == nil && errb == nil && ra == rb
+}
+
+// smokeSymbols adds a class without saving it, searches the project for its
+// name through the picker, and opens the hit Enter would.
+func (m *Model) smokeSymbols(ctx context.Context, t *Tab) any {
+	text := t.doc.Text()
+	const helper = "\nclass SmokeSymbolTarget { int smokeField; }\n"
+	if err := t.doc.ApplyEdits(ctx, editor.Edit{Start: len(text), End: len(text), Text: helper}); err != nil {
+		return map[string]any{"error": err.Error()}
+	}
+	defer func() {
+		_ = t.doc.ApplyEdits(context.Background(), editor.Edit{Start: 0, End: len(t.doc.Text()), Text: text})
+	}()
+	start := time.Now()
+	mygo.RunOnMain(func() {
+		m.OpenSymbols()
+		if m.symbols != nil {
+			m.symbols.query = "SmokeSymbolTarget"
+			m.querySymbols()
+		}
+	})
+	deadline := time.Now().Add(120 * time.Second)
+	for {
+		var count int
+		var busy bool
+		var errText, name, path string
+		var line int
+		mygo.RunOnMain(func() {
+			if s := m.symbols; s != nil {
+				count, busy, errText = len(s.items), s.busy, s.err
+				if len(s.items) > 0 {
+					name = s.items[0].Name
+					path = s.items[0].Location.Path
+					line = int(s.items[0].Location.Range.Start.Line)
+				}
+			}
+		})
+		if count > 0 || (!busy && errText != "") {
+			out := map[string]any{
+				"count": count, "name": name, "busy": busy, "err": errText,
+				"path": path, "line": line,
+				"elapsedMillis": time.Since(start).Milliseconds(),
+			}
+			if count > 0 {
+				mygo.RunOnMain(func() { m.openSelectedSymbol() })
+				var tabPath string
+				var cursorLine int
+				mygo.RunOnMain(func() {
+					if at := m.tab(); at != nil {
+						tabPath = at.doc.Path()
+						cursorLine, _ = at.doc.BytePos(line, 0)
+					}
+				})
+				out["opened"] = smokeSamePath(tabPath, path)
+				out["tabPath"] = tabPath
+				out["cursorLine"] = cursorLine
+			}
+			return out
+		}
+		if time.Now().After(deadline) {
+			return map[string]any{"timeout": true, "busy": busy, "err": errText}
+		}
+		select {
+		case <-ctx.Done():
+			return map[string]any{"error": ctx.Err().Error()}
+		case <-time.After(300 * time.Millisecond):
 		}
 	}
 }

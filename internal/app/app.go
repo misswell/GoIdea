@@ -101,6 +101,9 @@ type Model struct {
 	// rename is the open rename prompt, or nil.
 	rename *renameState
 
+	// symbols is the open Go to Symbol picker, or nil.
+	symbols *symbolPicker
+
 	// refactor is the newest backend workspace edit, which UndoRefactor rolls
 	// back; redoRefactor is what the last undo can reapply.
 	refactor     *refactorEdit
@@ -413,6 +416,7 @@ func (m *Model) openProject(dir string, files []string) {
 	m.cancelSearch()
 	m.resetSearch()
 	m.resetUsages()
+	m.closeSymbols()
 	m.refactor, m.redoRefactor = nil, nil
 	m.busy = true
 	m.status = "正在打开 " + filepath.Base(dir) + "…"
@@ -969,6 +973,7 @@ func (m *Model) View(c *ui.Context) {
 		m.statusBar(c, p)
 	})
 	m.renameDialog(c, p)
+	m.symbolsDialog(c, p)
 }
 
 func (m *Model) shortcuts(c *ui.Context) {

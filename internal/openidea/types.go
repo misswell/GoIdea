@@ -473,3 +473,12 @@ type FileEditInfo struct {
 	From string `json:"from"`
 	To   string `json:"to"`
 }
+
+// WorkspaceSymbol is one hit of lsp_workspace_symbols: a named declaration and
+// where it lives.
+type WorkspaceSymbol struct {
+	Name      string   `json:"name"`
+	Kind      string   `json:"kind"`
+	Container *string  `json:"container"`
+	Location  Location `json:"location"`
+}

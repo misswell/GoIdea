@@ -89,6 +89,7 @@ func menu(m *app.Model) *mygo.Menu {
 		}},
 		{Role: mygo.RoleEditMenu},
 		{Label: "代码", Submenu: []*mygo.MenuItem{
+			{Label: "转到符号…", Accelerator: "CmdOrCtrl+Shift+O", Click: func(*mygo.MenuItem, *mygo.Window) { m.OpenSymbols() }},
 			{Label: "查找用法", Accelerator: "Alt+F7", Click: func(*mygo.MenuItem, *mygo.Window) { m.FindUsages() }},
 			{Label: "重命名符号", Accelerator: "Shift+F6", Click: func(*mygo.MenuItem, *mygo.Window) { m.RenameActive() }},
 			mygo.Separator(),
