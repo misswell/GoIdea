@@ -139,9 +139,13 @@ func (m *Model) SmokeShots(ctx context.Context, dir string) (map[string]any, err
 	shot("popup-quick-files")
 	m.post(func() { m.closeQuickFiles() })
 
-	// Welcome: empty, Customize and Plugins.
+	// Welcome: empty, then with recents, Customize and Plugins.
 	m.post(func() { m.showWelcome() })
 	wait(func() bool { return m.showingWelcome }, 30*time.Second)
+	var recents []string
+	m.post(func() { recents = m.recents; m.recents = nil })
+	shot("welcome-empty")
+	m.post(func() { m.recents = recents })
 	shot("welcome")
 	m.post(func() { m.welcomePage = "customize" })
 	shot("welcome-customize")

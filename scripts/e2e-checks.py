@@ -22,6 +22,15 @@ def get(data, dotted, default=None):
     return cur
 
 
+# The states every run renders; the right-hierarchy shot needs the language
+# server, so only the online phases add it.
+SHOT_STATES = {
+    "workbench", "editor", "bottom-todo", "split", "settings", "palette",
+    "popup-quick-files", "welcome-empty", "welcome", "welcome-customize",
+    "welcome-plugins",
+}
+
+
 def absent(key, where=""):
     return f"{where}{key} is absent", lambda d: (key not in d, d.get(key))
 
@@ -30,6 +39,10 @@ CHECKS = {
     "shots": [
         ("count", "every visual-regression state was rendered", lambda d: (len(get(d, "shots") or {}) >= 10, sorted((get(d, "shots") or {}).keys()))),
         ("bytes", "each PNG is a real capture", lambda d: (all(v >= 15000 for v in (get(d, "shots") or {}).values()), {k: v for k, v in (get(d, "shots") or {}).items() if v < 15000})),
+        ("states", "the baseline names every expected state", lambda d: (
+            sorted(SHOT_STATES - set((get(d, "shots") or {}).keys())) == [],
+            sorted(SHOT_STATES - set((get(d, "shots") or {}).keys())),
+        )),
         ("errors", "no shot failed", lambda d: (get(d, "shotErrors") is None and get(d, "shotsError") is None, {"errors": get(d, "shotErrors"), "error": get(d, "shotsError")})),
     ],
     "base": [
