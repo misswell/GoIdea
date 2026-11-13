@@ -139,6 +139,19 @@ func (m *Model) SmokeShots(ctx context.Context, dir string) (map[string]any, err
 	shot("popup-quick-files")
 	m.post(func() { m.closeQuickFiles() })
 
+	// Search Everywhere over the real index.
+	m.post(func() {
+		m.OpenSearchEverywhere()
+		if m.se != nil {
+			m.se.query = "App"
+			m.refreshSearchEverywhere()
+			m.clampSESelection()
+		}
+	})
+	wait(func() bool { return m.se != nil && len(m.se.files) > 0 }, 60*time.Second)
+	shot("search-everywhere")
+	m.post(func() { m.CloseSearchEverywhere() })
+
 	// Welcome: empty, then with recents, Customize and Plugins.
 	m.post(func() { m.showWelcome() })
 	wait(func() bool { return m.showingWelcome }, 30*time.Second)

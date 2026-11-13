@@ -5,6 +5,14 @@
       "status": "integrated",
       "evidence": "internal/app/commands.go navigate.callHierarchy Ctrl+Alt+H; internal/app/hierarchy.go OpenCallHierarchy over lsp_call_hierarchy; Navigate menu Call Hierarchy"
     },
+    "action:navigate.searchEverywhere": {
+      "status": "integrated",
+      "evidence": "internal/app/se.go OpenSearchEverywhere; internal/app/commands.go navigate.searchEverywhere; Navigate menu and the title bar search button; e2e searchEverywhere.files/symbols/actions/text/allSections; internal/app/se_test.go"
+    },
+    "action:navigate.findAction": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go app.commandPalette Find Action… Cmd+Shift+A; internal/app/menu.go Navigate; internal/app/commands_test.go"
+    },
     "action:navigate.typeHierarchy": {
       "status": "integrated",
       "evidence": "internal/app/commands.go navigate.typeHierarchy Ctrl+H; internal/app/hierarchy.go OpenTypeHierarchy over lsp_type_hierarchy; Navigate menu Type Hierarchy"
@@ -191,7 +199,7 @@
     },
     "feature:search": {
       "status": "partial",
-      "evidence": "base.search.done, base.search.files, base.search.matches"
+      "evidence": "base.search.done, base.search.files, base.search.matches; internal/app/se.go Search Everywhere: All/Classes/Files/Symbols/Actions/Text, section order and limits, Recent Files/Recent Actions on an empty query, Tab/Shift+Tab cycling; e2e searchEverywhere.*; still missing the per-tab filter funnel, search history, the Endpoints section and the double-Shift binding (MyGo exposes no modifier-only key event)"
     },
     "feature:project-tree": {
       "status": "partial",

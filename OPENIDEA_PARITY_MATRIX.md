@@ -27,7 +27,7 @@ new action, tool window, page or command appears automatically.
 | Kind | Items | Integrated | Partial | Engine | Blocked | Missing |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Feature folders | 43 | 0 | 12 | 0 | 0 | 31 |
-| Actions | 647 | 42 | 87 | 0 | 1 | 517 |
+| Actions | 647 | 43 | 87 | 0 | 1 | 516 |
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
 | Tool windows | 30 | 10 | 5 | 0 | 0 | 15 |
 | Overlays | 56 | 1 | 0 | 0 | 0 | 55 |
@@ -80,7 +80,7 @@ directory registers.
 | `run` | 27 | 1 | 5 | 2 | 0 | partial - base.run.config, base.run.exit, base.run.build |
 | `run-anything` | 1 | 0 | 1 | 0 | 0 | partial - internal/app/run_anything.go Run Anything popup with Recent and Run Configurations sections, Clear History, per-project history and shell command lines; gear menu action:runAnything.show; Ctrl Ctrl keymap deferred, MyGo has no KeyControl constant; internal/app/run_anything_test.go |
 | `scratch` | 1 | 0 | 1 | 0 | 0 | missing |
-| `search` | 24 | 3 | 6 | 2 | 0 | partial - base.search.done, base.search.files, base.search.matches |
+| `search` | 24 | 3 | 6 | 2 | 0 | partial - base.search.done, base.search.files, base.search.matches; internal/app/se.go Search Everywhere: All/Classes/Files/Symbols/Actions/Text, section order and limits, Recent Files/Recent Actions on an empty query, Tab/Shift+Tab cycling; e2e searchEverywhere.*; still missing the per-tab filter funnel, search history, the Endpoints section and the double-Shift binding (MyGo exposes no modifier-only key event) |
 | `services` | 20 | 1 | 1 | 2 | 0 | missing |
 | `settings` | 11 | 0 | 3 | 0 | 74 | partial - internal/app/settings_window.go; OpenIDEA's 980 DIP sheet: page tree built like model/pages.ts with group folders, search filtering with ancestors, breadcrumbs, Back/Forward history, Reset and Cancel/Apply/OK staging; internal/app/settings_test.go |
 | `ssh` | 2 | 0 | 1 | 0 | 0 | missing |
@@ -498,7 +498,7 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `navigate.prevBookmark` | Previous Bookmark | `src/features/search/index.ts` | partial - internal/app/bookmarks.go PrevBookmark and stepBookmark wrap; base.bookmark.prev; internal/app/bookmarks_test.go |
 | `navigate.recentFiles` | Recent Files | `src/features/search/index.ts` | missing |
 | `navigate.recentLocations` | Recent Locations | `src/features/search/index.ts` | missing |
-| `navigate.searchEverywhere` | Search Everywhere | `src/features/search/index.ts` | missing |
+| `navigate.searchEverywhere` | Search Everywhere | `src/features/search/index.ts` | integrated - internal/app/se.go OpenSearchEverywhere; internal/app/commands.go navigate.searchEverywhere; Navigate menu and the title bar search button; e2e searchEverywhere.files/symbols/actions/text/allSections; internal/app/se_test.go |
 | `navigate.searchText` | Search Text Everywhere | `src/features/search/index.ts` | integrated - base.search.done, base.search.files, base.search.matches |
 | `navigate.showBookmarks` | Show Bookmarks | `src/features/search/index.ts` | partial - internal/app/bookmarks.go ShowBookmarks popup groups files and lines by list with jump and delete; base.bookmark.popup; Cmd+F3 in internal/app/app.go; internal/app/bookmarks_test.go |
 | `navigate.switcher` | Switcher | `src/features/search/index.ts` | missing |

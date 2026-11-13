@@ -290,6 +290,12 @@ func smoke(m *app.Model) {
 			fields["hierarchyError"] = hierarchyErr.Error()
 		}
 	}
+	if os.Getenv("GOIDEA_SMOKE_SE") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		se := m.SmokeSearchEverywhere(ctx, "App")
+		cancel()
+		fields["searchEverywhere"] = se
+	}
 	if os.Getenv("GOIDEA_SMOKE_DIFF") == "1" && root != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		diff, diffErr := m.SmokeDiff(ctx)

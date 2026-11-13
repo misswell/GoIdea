@@ -29,7 +29,8 @@ func commands() []appCommand {
 		{"file.newScratchFile", "New Scratch File…", "文件", "Cmd+Shift+N", "scratch temporary buffer new file language", func(m *Model) { m.OpenScratchChooser() }},
 		{"project.open", "打开项目…", "文件", "Cmd+O", "open project folder", func(m *Model) { m.ChooseProject() }},
 		{"welcome.manageProjects", "管理项目…", "文件", "", "manage projects welcome recent", func(m *Model) { m.showWelcome() }},
-		{"app.commandPalette", "搜索所有位置", "文件", "Cmd+Shift+A", "search everywhere command palette find action", func(m *Model) { m.OpenCommands() }},
+		{"navigate.searchEverywhere", "Search Everywhere", "导航", "Shift Shift", "search everywhere find class file symbol action text", func(m *Model) { m.OpenSearchEverywhere() }},
+		{"app.commandPalette", "Find Action…", "导航", "Cmd+Shift+A", "find action command palette search", func(m *Model) { m.OpenCommands() }},
 		{"runAnything.show", "Run Anything…", "运行", "", "command shell execute npm mvn gradle goal", func(m *Model) { m.OpenRunAnything() }},
 		{"plugins.settings", "Plugins…", "文件", "", "plugins settings marketplace", func(m *Model) { m.openPlugins() }},
 		{"file.quickOpen", "快速打开…", "文件", "Cmd+P", "quick open file goto recent", func(m *Model) { m.OpenQuickFiles() }},
@@ -183,6 +184,7 @@ func (m *Model) RunCommand(id string) bool {
 	if !ok {
 		return false
 	}
+	m.rememberRecentAction(id)
 	cmd.run(m)
 	return true
 }

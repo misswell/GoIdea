@@ -63,6 +63,7 @@ needs a `## <version>` section here, or its build fails.
 - **视图** 菜单新增 **F12** 跳转到上一个工具窗口，**Cmd+0** 打开提交窗口。
 - **下一个问题**（Cmd+Alt+↓）和 **上一个问题**（Cmd+Alt+↑）在问题列表中循环跳转。
 - 底部主区和右侧副区各显示一个工具窗口，**移动到底部右侧**让两个窗口并排，被换下的窗口内容保留。
+- **Navigate › Search Everywhere** 打开搜索窗，All/Classes/Files/Symbols/Actions/Text 页签分段列出结果。
 - **Navigate > Call Hierarchy**（`Ctrl+Alt+H`）和 **Type Hierarchy**（`Ctrl+H`）在右侧列出调用链，可逐级展开。
 - **查找**（`Cmd+3`）和**查找用法**（`Alt+F7`）的结果改在底部工具窗口显示，不再占用侧边栏。
 - **结构**窗口（`Cmd+7`）在侧边栏列出当前文件的成员，可过滤、折叠，点击跳到声明。

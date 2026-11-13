@@ -16,7 +16,7 @@ const (
 	toolbarVCS          = "vcs.branch"
 	toolbarRun          = "run"
 	toolbarActionPrefix = "action:"
-	toolbarSearch       = toolbarActionPrefix + "app.commandPalette"
+	toolbarSearch       = toolbarActionPrefix + "navigate.searchEverywhere"
 	toolbarTerminal     = toolbarActionPrefix + "view.terminal"
 )
 

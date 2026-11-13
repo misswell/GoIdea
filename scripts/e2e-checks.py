@@ -26,8 +26,8 @@ def get(data, dotted, default=None):
 # server, so only the online phases add it.
 SHOT_STATES = {
     "workbench", "editor", "bottom-todo", "split", "settings", "palette",
-    "popup-quick-files", "welcome-empty", "welcome", "welcome-customize",
-    "welcome-plugins",
+    "popup-quick-files", "search-everywhere", "welcome-empty", "welcome",
+    "welcome-customize", "welcome-plugins",
 }
 
 
@@ -161,6 +161,11 @@ CHECKS = {
         ("hierarchy.rows", "call hierarchy listed a level", lambda d: ((get(d, "hierarchy.rows") or 0) >= 1, get(d, "hierarchy.rows"))),
         ("hierarchy.visible", "the hierarchy window showed on the right", lambda d: (get(d, "hierarchy.visible") is True and get(d, "hierarchy.mode") == "call", {"visible": get(d, "hierarchy.visible"), "mode": get(d, "hierarchy.mode")})),
         ("hierarchyError", *absent("hierarchyError")),
+        ("se.files", "Search Everywhere listed files", lambda d: ((get(d, "searchEverywhere.files") or 0) >= 1, get(d, "searchEverywhere.files"))),
+        ("se.symbols", "Search Everywhere listed symbols from the language server", lambda d: ((get(d, "searchEverywhere.symbols") or 0) >= 1, get(d, "searchEverywhere.symbols"))),
+        ("se.actions", "Search Everywhere listed actions", lambda d: ((get(d, "searchEverywhere.actions") or 0) >= 1, get(d, "searchEverywhere.actions"))),
+        ("se.text", "Search Everywhere listed text matches", lambda d: ((get(d, "searchEverywhere.text") or 0) >= 1, get(d, "searchEverywhere.text"))),
+        ("se.sections", "the All tab carried the OpenIDEA sections", lambda d: (all(s in (get(d, "searchEverywhere.allSections") or []) for s in ("files", "symbols", "actions", "text")), get(d, "searchEverywhere.allSections"))),
     ],
     "debug": [
         ("debugError", *absent("debugError")),

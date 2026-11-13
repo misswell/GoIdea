@@ -106,7 +106,7 @@ else
 
     say "阶段 3/4：JDT 补全、悬停、跳转、格式化、用法、重命名、诊断"
     LSP="$WORK/lsp.json"
-    smoke "$LSP" GOIDEA_SMOKE_LSP=1 GOIDEA_SMOKE_HIERARCHY=1
+    smoke "$LSP" GOIDEA_SMOKE_LSP=1 GOIDEA_SMOKE_HIERARCHY=1 GOIDEA_SMOKE_SE=1
     python3 "$CHECKS" lsp "$LSP"
 
     say "阶段 4/4：断点、变量、求值、步过、运行结束"

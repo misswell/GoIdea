@@ -173,6 +173,11 @@ type Model struct {
 	// palette is the open command palette, or nil.
 	palette *commandPicker
 
+	// se is Search Everywhere while it is open; recentActions is the commands
+	// it lists on an empty query, newest first.
+	se            *sePane
+	recentActions []string
+
 	// runAnything is the open Run Anything popup, or nil.
 	runAnything *runAnythingState
 
@@ -1603,7 +1608,8 @@ func (m *Model) overlayOpen() bool {
 		m.diff != nil || m.palette != nil || m.runAnything != nil || m.commit != nil || m.branch.open ||
 		m.rollback != nil || m.bookmarksView != nil || m.mnemonics != nil || m.newList != nil ||
 		m.deleteList != nil || m.move != nil || m.editDesc != nil || m.treeOp != nil ||
-		m.history != nil || m.dirCompare != nil || m.invalidateDlg != nil || m.scratch != nil
+		m.history != nil || m.dirCompare != nil || m.invalidateDlg != nil || m.scratch != nil ||
+		m.se != nil
 }
 
 // QuitImmediately closes the backend and quits without asking about changes,
@@ -1665,6 +1671,7 @@ func (m *Model) View(c *ui.Context) {
 	m.historyDialog(c, p)
 	m.dirCompareDialog(c, p)
 	m.commandsDialog(c, p)
+	m.searchEverywhereDialog(c, p)
 	m.runAnythingDialog(c, p)
 	m.diffDialog(c, p)
 	m.annotateDialog(c, p)

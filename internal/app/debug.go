@@ -1141,12 +1141,17 @@ func (m *Model) SmokeDebug(ctx context.Context) (map[string]any, error) {
 
 	// Step over the println: the frame moves and the session pauses again.
 	stopThread := int64(0)
-	m.post(func() { stopThread = m.debug.stopThread })
+	beforeStep := -1
+	m.post(func() { stopThread, beforeStep = m.debug.stopThread, m.debug.stopLine })
 	if stopThread != 0 {
 		if _, err := m.mgr.Invoke(ctx, Window, "debug_step", map[string]any{
 			"session": session, "threadId": stopThread, "kind": "over",
 		}); err == nil {
-			m.waitDebug(ctx, func(d *DebugPane) bool { return d.paused || d.ended }, 60*time.Second)
+			// The breakpoint still marks paused, so wait for the step's own
+			// stop: a different line, or the session ending.
+			m.waitDebug(ctx, func(d *DebugPane) bool {
+				return d.ended || (d.paused && d.stopLine != beforeStep)
+			}, 60*time.Second)
 			m.post(func() {
 				out["afterStepPaused"] = m.debug.paused
 				out["afterStepLine"] = m.debug.stopLine + 1
