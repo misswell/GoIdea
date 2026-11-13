@@ -392,6 +392,12 @@ func (m *Model) watchBackend(ctx context.Context) {
 					}
 					session, raw := d.Session, d.Event
 					m.post(func() { m.acceptDebugEvent(session, raw) })
+				case "workspaceEditApplied":
+					var e openidea.WorkspaceEditAppliedEvent
+					if json.Unmarshal(env.Event, &e) != nil {
+						continue
+					}
+					m.post(func() { m.acceptWorkspaceEdit(e) })
 				}
 			}
 		}

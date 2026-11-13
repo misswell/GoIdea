@@ -101,6 +101,11 @@ type Model struct {
 	// rename is the open rename prompt, or nil.
 	rename *renameState
 
+	// refactor is the newest backend workspace edit, which UndoRefactor rolls
+	// back; redoRefactor is what the last undo can reapply.
+	refactor     *refactorEdit
+	redoRefactor *refactorEdit
+
 	// sideMode picks what the sidebar shows: "tree" ("" also means tree, the
 	// default), "vcs", "search" or "usages".
 	sideMode string
@@ -408,6 +413,7 @@ func (m *Model) openProject(dir string, files []string) {
 	m.cancelSearch()
 	m.resetSearch()
 	m.resetUsages()
+	m.refactor, m.redoRefactor = nil, nil
 	m.busy = true
 	m.status = "正在打开 " + filepath.Base(dir) + "…"
 	m.setRoot(dir)

@@ -444,6 +444,13 @@ type Renamed struct {
 	Incomplete *string         `json:"incomplete"`
 }
 
+// WorkspaceEditAppliedEvent is the `workspaceEditApplied` window event: the id
+// undo_workspace_edit takes, and the files the edit touched.
+type WorkspaceEditAppliedEvent struct {
+	ID    uint32   `json:"id"`
+	Paths []string `json:"paths"`
+}
+
 // References is lsp_references' answer: where the symbol is used. A streaming
 // reply replaces Locations as the search moves on, and Incomplete names what
 // the query may have missed.

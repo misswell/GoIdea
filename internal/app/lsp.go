@@ -616,13 +616,19 @@ func (m *Model) smokeRename(ctx context.Context, t *Tab) any {
 	for {
 		cur := t.doc.Text()
 		if strings.Contains(cur, "smokeNumber") {
-			tail := cur
+			// The backend reports the applied edit's id; undo must roll the
+			// whole refactor back through it.
+			undone := m.smokeRefactorUndo(ctx, t, func(text string) bool {
+				return strings.Contains(text, "smokeValue") && !strings.Contains(text, "smokeNumber")
+			})
+			tail := t.doc.Text()
 			if len(tail) > 120 {
 				tail = tail[len(tail)-120:]
 			}
 			return map[string]any{
 				"old":           old,
 				"status":        m.smokeStatus(),
+				"undone":        undone,
 				"tail":          tail,
 				"elapsedMillis": time.Since(start).Milliseconds(),
 			}
@@ -653,6 +659,32 @@ func (m *Model) smokeRename(ctx context.Context, t *Tab) any {
 		select {
 		case <-ctx.Done():
 			return map[string]any{"error": ctx.Err().Error()}
+		case <-time.After(200 * time.Millisecond):
+		}
+	}
+}
+
+// smokeRefactorUndo waits for the backend's applied edit, rolls it back through
+// the id it reported, and waits for the buffer to show the rollback.
+func (m *Model) smokeRefactorUndo(ctx context.Context, t *Tab, want func(string) bool) bool {
+	deadline := time.Now().Add(60 * time.Second)
+	started := false
+	for {
+		if want(t.doc.Text()) {
+			return true
+		}
+		mygo.RunOnMain(func() {
+			if m.refactor != nil && !started {
+				started = true
+				m.UndoRefactor()
+			}
+		})
+		if time.Now().After(deadline) {
+			return false
+		}
+		select {
+		case <-ctx.Done():
+			return false
 		case <-time.After(200 * time.Millisecond):
 		}
 	}
