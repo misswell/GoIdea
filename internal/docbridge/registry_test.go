@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"goidea/internal/openidea"
-	"goidea/internal/position"
+	"mayoi/internal/openidea"
+	"mayoi/internal/position"
 )
 
 func eventNotification(t *testing.T, window string, event any) openidea.Notification {

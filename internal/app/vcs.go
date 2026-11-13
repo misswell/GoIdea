@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"goidea/internal/openidea"
+	"mayoi/internal/openidea"
 )
 
 // VCSPane is the sidebar's Git view: the changes `git status` reports for every

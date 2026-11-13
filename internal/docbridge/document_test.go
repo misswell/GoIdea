@@ -9,8 +9,8 @@ import (
 
 	"github.com/egoist/mygo/ui/editor"
 
-	"goidea/internal/openidea"
-	"goidea/internal/position"
+	"mayoi/internal/openidea"
+	"mayoi/internal/position"
 )
 
 type fakeDoc struct {

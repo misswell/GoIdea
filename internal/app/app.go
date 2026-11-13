@@ -22,8 +22,8 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
 
-	"goidea/internal/docbridge"
-	"goidea/internal/openidea"
+	"mayoi/internal/docbridge"
+	"mayoi/internal/openidea"
 )
 
 // Window is the backend window string GoIDEA opens its documents in.

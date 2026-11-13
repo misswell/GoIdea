@@ -13,7 +13,7 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui/editor"
 
-	"goidea/internal/openidea"
+	"mayoi/internal/openidea"
 )
 
 // lspTimeout bounds one language-server request; JDT LS may take seconds on a

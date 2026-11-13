@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"goidea/internal/openidea"
+	"mayoi/internal/openidea"
 )
 
 func TestClampSymbolSel(t *testing.T) {

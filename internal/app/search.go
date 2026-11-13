@@ -10,7 +10,7 @@ import (
 
 	"github.com/egoist/mygo/ui/editor"
 
-	"goidea/internal/openidea"
+	"mayoi/internal/openidea"
 )
 
 // SearchPane is the sidebar's project search: the query, the files the backend

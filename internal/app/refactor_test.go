@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"goidea/internal/openidea"
+	"mayoi/internal/openidea"
 )
 
 func TestAcceptWorkspaceEditReplacesRedo(t *testing.T) {

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"goidea/internal/openidea"
+	"mayoi/internal/openidea"
 )
 
 func TestJavaTargetForMavenLayout(t *testing.T) {

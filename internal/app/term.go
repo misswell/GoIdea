@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"goidea/internal/openidea"
+	"mayoi/internal/openidea"
 )
 
 // TermPane is the integrated terminal: a login shell in a PTY owned by

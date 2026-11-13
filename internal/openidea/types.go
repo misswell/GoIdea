@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"goidea/internal/position"
+	"mayoi/internal/position"
 )
 
 // ServerInfo is the reply to initialize.

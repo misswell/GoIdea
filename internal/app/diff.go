@@ -13,8 +13,8 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
-	"goidea/internal/openidea"
-	"goidea/internal/textdiff"
+	"mayoi/internal/openidea"
+	"mayoi/internal/textdiff"
 )
 
 // diffContext is how many unchanged lines the compare view keeps around a

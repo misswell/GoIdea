@@ -6,7 +6,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"goidea/internal/position"
+	"mayoi/internal/position"
 )
 
 func TestDiffRebuildsNewText(t *testing.T) {

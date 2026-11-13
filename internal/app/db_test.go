@@ -3,7 +3,7 @@ package app
 import (
 	"testing"
 
-	"goidea/internal/openidea"
+	"mayoi/internal/openidea"
 )
 
 func TestUTF16Len(t *testing.T) {

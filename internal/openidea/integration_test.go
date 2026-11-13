@@ -11,9 +11,9 @@ import (
 
 	"github.com/egoist/mygo/ui/editor"
 
-	"goidea/internal/docbridge"
-	"goidea/internal/openidea"
-	"goidea/internal/position"
+	"mayoi/internal/docbridge"
+	"mayoi/internal/openidea"
+	"mayoi/internal/position"
 )
 
 // These tests drive a real openidea-server. Point GOIDEA_SERVER at the binary

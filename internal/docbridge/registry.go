@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"goidea/internal/openidea"
+	"mayoi/internal/openidea"
 )
 
 // Registry owns the open documents of one backend window: one Document per

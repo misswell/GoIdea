@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"goidea/internal/openidea"
+	"mayoi/internal/openidea"
 )
 
 // FormatActive reformats the active document through its language server, as

@@ -11,7 +11,7 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
-	"goidea/internal/openidea"
+	"mayoi/internal/openidea"
 )
 
 const (

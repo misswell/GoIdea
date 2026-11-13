@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"goidea/internal/openidea"
+	"mayoi/internal/openidea"
 )
 
 // refactorEdit is a workspace edit the backend keeps in its undo history: the

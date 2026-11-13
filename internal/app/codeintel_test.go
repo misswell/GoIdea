@@ -5,7 +5,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"goidea/internal/openidea"
+	"mayoi/internal/openidea"
 )
 
 func TestHunkMarks(t *testing.T) {

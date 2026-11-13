@@ -15,8 +15,8 @@ import (
 	"sync"
 
 	"github.com/egoist/mygo/ui/editor"
-	"goidea/internal/openidea"
-	"goidea/internal/position"
+	"mayoi/internal/openidea"
+	"mayoi/internal/position"
 )
 
 // Backend is the document half of the OpenIDEA protocol.

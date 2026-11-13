@@ -12,7 +12,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
 
-	"goidea/internal/openidea"
+	"mayoi/internal/openidea"
 )
 
 // Gutter colours follow IDEA: green additions, blue modifications, red

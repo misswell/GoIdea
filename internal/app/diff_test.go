@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"goidea/internal/openidea"
-	"goidea/internal/textdiff"
+	"mayoi/internal/openidea"
+	"mayoi/internal/textdiff"
 )
 
 func TestShowDiffNeedsAProject(t *testing.T) {

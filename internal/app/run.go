@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"goidea/internal/openidea"
+	"mayoi/internal/openidea"
 )
 
 // RunPane is the Run tool window: the project's configurations, the output of

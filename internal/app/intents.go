@@ -9,7 +9,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"goidea/internal/openidea"
+	"mayoi/internal/openidea"
 )
 
 // intentTimeout bounds one code action query or apply; a quickfix resolves

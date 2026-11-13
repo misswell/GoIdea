@@ -5,8 +5,8 @@ import (
 	"sort"
 	"strings"
 
-	"goidea/internal/docbridge"
-	"goidea/internal/openidea"
+	"mayoi/internal/docbridge"
+	"mayoi/internal/openidea"
 
 	"github.com/egoist/mygo/ui/editor"
 )

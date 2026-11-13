@@ -3,7 +3,7 @@ package app
 import (
 	"testing"
 
-	"goidea/internal/openidea"
+	"mayoi/internal/openidea"
 )
 
 func str(s string) *string { return &s }

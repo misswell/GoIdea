@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"goidea/internal/openidea"
+	"mayoi/internal/openidea"
 )
 
 func TestRenameEditInfo(t *testing.T) {

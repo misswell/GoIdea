@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
-	"goidea/internal/position"
+	"mayoi/internal/position"
 )
 
 // Docs is a docbridge.Backend over one manager and window: documents live in

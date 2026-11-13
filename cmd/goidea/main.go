@@ -15,7 +15,7 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
-	"goidea/internal/app"
+	"mayoi/internal/app"
 )
 
 func main() {
