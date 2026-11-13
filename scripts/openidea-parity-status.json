@@ -1,6 +1,14 @@
 {
   "about": "The only place a GoIDEA status is raised in OPENIDEA_PARITY_MATRIX.md. Keys are kind:id; a non-missing status must carry evidence (a regression check id from REGRESSION_INDEX.json, a document, or a source path). Everything absent here is reported as missing. Start conservative: `partial` when only part of the OpenIDEA surface is proven, `integrated` when a gate check exercises it.",
   "items": {
+    "action:navigate.callHierarchy": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go navigate.callHierarchy Ctrl+Alt+H; internal/app/hierarchy.go OpenCallHierarchy over lsp_call_hierarchy; Navigate menu Call Hierarchy"
+    },
+    "action:navigate.typeHierarchy": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go navigate.typeHierarchy Ctrl+H; internal/app/hierarchy.go OpenTypeHierarchy over lsp_type_hierarchy; Navigate menu Type Hierarchy"
+    },
     "action:navigate.toggleBookmarkWithMnemonic": {
       "status": "partial",
       "evidence": "internal/app/bookmarks.go OpenBookmarkMnemonics Alt+F3 chooser over digits and A-Z; internal/app/app.go shortcut; internal/app/bookmarks_test.go"
@@ -144,6 +152,10 @@
     "toolwindow:structure": {
       "status": "integrated",
       "evidence": "internal/app/structure.go structureRowsUI; lsp.structure.rows, lsp.structure.first, lsp.structure.visible; internal/app/structure_test.go"
+    },
+    "toolwindow:hierarchy": {
+      "status": "integrated",
+      "evidence": "internal/app/hierarchy.go hierarchyRightView: right-anchored window with Call/Type direction tabs, lazy children per node and recursion leaves; lsp_call_hierarchy, lsp_type_hierarchy; e2e hierarchy.rows, hierarchy.visible, hierarchyError; internal/app/hierarchy_test.go; internal/app/workbench_render_test.go TestWorkbenchHierarchyRightWindowRenders"
     },
     "toolwindow:bookmarks": {
       "status": "integrated",

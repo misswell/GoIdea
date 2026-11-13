@@ -145,6 +145,9 @@ CHECKS = {
         ("structure.rows", "structure view built rows", lambda d: ((get(d, "lsp.structure.rows") or 0) > 0, get(d, "lsp.structure.rows"))),
         ("structure.first", "structure view named the first symbol", lambda d: (bool(get(d, "lsp.structure.first")), get(d, "lsp.structure.first"))),
         ("structure.visible", "structure tool window opened", lambda d: (get(d, "lsp.structure.visible") is True, get(d, "lsp.structure.visible"))),
+        ("hierarchy.rows", "call hierarchy listed a level", lambda d: ((get(d, "hierarchy.rows") or 0) >= 1, get(d, "hierarchy.rows"))),
+        ("hierarchy.visible", "the hierarchy window showed on the right", lambda d: (get(d, "hierarchy.visible") is True and get(d, "hierarchy.mode") == "call", {"visible": get(d, "hierarchy.visible"), "mode": get(d, "hierarchy.mode")})),
+        ("hierarchyError", *absent("hierarchyError")),
     ],
     "debug": [
         ("debugError", *absent("debugError")),

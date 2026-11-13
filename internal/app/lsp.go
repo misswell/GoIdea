@@ -1135,7 +1135,17 @@ func (m *Model) smokeDiagnostics(ctx context.Context, t *Tab) any {
 	for {
 		var ds []editor.Diagnostic
 		mygo.RunOnMain(func() { ds = t.state.Diagnostics() })
-		if len(ds) > 0 {
+		// The fixture already carries TODO task tags, which JDT publishes as
+		// info diagnostics, so only an error proves the broken text reached
+		// the server and came back.
+		failed := false
+		for _, d := range ds {
+			if d.Severity == editor.SeverityError {
+				failed = true
+				break
+			}
+		}
+		if failed {
 			list := make([]smokeDiagnostic, 0, len(ds))
 			for i, d := range ds {
 				if i == 20 {

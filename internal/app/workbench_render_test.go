@@ -254,3 +254,29 @@ func TestWorkbenchBottomGapDragPastTheMinimumClosesTheWindows(t *testing.T) {
 		t.Fatalf("a closed area kept a height: %d", m.bottomSize())
 	}
 }
+
+func TestWorkbenchHierarchyRightWindowRenders(t *testing.T) {
+	root := t.TempDir()
+	m := &Model{}
+	m.setRoot(root)
+	m.hierarchy = hierarchyPane{
+		mode: "call", direction: "incoming",
+		rootName: "main", rootPath: "/p/App.java", rootLine: 4, rootCol: 20,
+		children: map[string][]hierarchyNode{
+			hierarchyRoot: {{id: hierarchyRoot + "/a", parent: hierarchyRoot,
+				item: hierarchyItem{Name: "callerA", Path: "/p/App.java"}}},
+		},
+		expanded: map[string]bool{}, loading: map[string]bool{}, failed: map[string]string{},
+	}
+	m.rightTool = "hierarchy"
+	tt := workbenchTester(t, m)
+	for _, text := range []string{"Hierarchy", "Callers", "Callees", "callerA"} {
+		if !tt.HasText(text) {
+			t.Fatalf("%q is not in the right window: %q", text, tt.Texts())
+		}
+	}
+	// The window sits at the right edge, beside the editor and its stripe.
+	if r, ok := tt.Find("Hierarchy"); !ok || r.X < 1000 {
+		t.Fatalf("Hierarchy is not on the right: %+v, %v", r, ok)
+	}
+}

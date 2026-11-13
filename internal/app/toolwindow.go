@@ -110,6 +110,9 @@ func (m *Model) currentLayout() Layout {
 		LeftWidth:    int(m.leftWidth + 0.5),
 		Tool:         m.tool,
 		BottomHeight: m.bottomHeight,
+		Right:        m.rightTool,
+		RightHidden:  m.rightHidden || m.rightTool == "",
+		RightWidth:   int(m.rightWidth + 0.5),
 	}
 	for _, name := range toolWindows {
 		if m.toolVisible(name) {
@@ -195,6 +198,10 @@ func (m *Model) applyLayout(root string) {
 		m.activateTool(name)
 	}
 	m.tool = l.Tool
+	m.rightTool = l.Right
+	m.rightHidden = l.Right == "" || l.RightHidden
+	m.rightWidth = float32(l.RightWidth)
+	m.rightWidthDragging = false
 	m.invalidate()
 }
 
@@ -319,6 +326,9 @@ func (m *Model) activateTool(name string) {
 // shortcuts last showed goes away and the editor keeps the keyboard.
 func (m *Model) HideActiveToolWindow() {
 	if m.tool == "" || !m.toolVisible(m.tool) {
+		if m.rightShown() {
+			m.CloseHierarchyWindow()
+		}
 		return
 	}
 	m.hideTool(m.tool)
@@ -329,7 +339,7 @@ func (m *Model) HideActiveToolWindow() {
 // window, and a second press brings back exactly what it hid, maximized again
 // if it was.
 func (m *Model) HideAllToolWindows() {
-	any := false
+	any := m.rightShown()
 	for _, name := range toolWindows {
 		if m.toolVisible(name) {
 			any = true
@@ -339,13 +349,17 @@ func (m *Model) HideAllToolWindows() {
 	if any {
 		m.toolStash = make(map[string]bool, len(toolWindows))
 		m.toolStashMax = m.maximized
+		m.rightStash = m.rightShown()
 		release := m.holdLayout()
 		for _, name := range toolWindows {
 			m.toolStash[name] = m.toolVisible(name)
 			m.hideTool(name)
 		}
+		if m.rightStash {
+			m.rightHidden = true
+		}
 		release()
-	} else if m.toolStash != nil {
+	} else if m.toolStash != nil || m.rightStash {
 		stash := m.toolStash
 		m.toolStash = nil
 		release := m.holdLayout()
@@ -353,6 +367,10 @@ func (m *Model) HideAllToolWindows() {
 			if stash[name] {
 				m.activateTool(name)
 			}
+		}
+		if m.rightStash {
+			m.rightHidden = false
+			m.rightStash = false
 		}
 		release()
 		m.maximized = m.toolStashMax

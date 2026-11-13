@@ -281,6 +281,15 @@ func smoke(m *app.Model) {
 			fields["lspError"] = lspErr.Error()
 		}
 	}
+	if os.Getenv("GOIDEA_SMOKE_HIERARCHY") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		hierarchy, hierarchyErr := m.SmokeHierarchy(ctx)
+		cancel()
+		fields["hierarchy"] = hierarchy
+		if hierarchyErr != nil {
+			fields["hierarchyError"] = hierarchyErr.Error()
+		}
+	}
 	if os.Getenv("GOIDEA_SMOKE_DIFF") == "1" && root != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		diff, diffErr := m.SmokeDiff(ctx)

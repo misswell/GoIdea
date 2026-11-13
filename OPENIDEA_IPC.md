@@ -60,7 +60,7 @@ GoIDEA can rely on it; code that calls it must check `commands` first.
 | Local history | `history` | 3 | 0 | 3 |
 | HTTP client | `http` | 0 | 10 | 0 |
 | Java | `java` | 3 | 0 | 2 |
-| Language services | `lsp` | 43 | 1 | 14 |
+| Language services | `lsp` | 43 | 1 | 16 |
 | MCP | `mcp` | 3 | 3 | 0 |
 | Navigation and index | `nav` | 15 | 1 | 2 |
 | Notebooks | `notebook` | 11 | 0 | 0 |
@@ -88,7 +88,7 @@ GoIDEA can rely on it; code that calls it must check `commands` first.
 ## Served by `openidea-server --stdio`
 
 446 commands. `GoIDEA` marks the ones a non-test Go source invokes today
-(87 of 446).
+(89 of 446).
 
 | Command | Domain | Arguments | GoIDEA |
 | --- | --- | --- | --- |
@@ -265,7 +265,7 @@ GoIDEA can rely on it; code that calls it must check `commands` first.
 | `jdk_download_vendors` | Toolchains | — | — |
 | `jvm_file_presentations` | Syntax trees | `paths` | — |
 | `lsp_apply_code_action` | Language services | `action`, `doc` | yes |
-| `lsp_call_hierarchy` | Language services | `direction`, `doc`, `pos`, `request` | — |
+| `lsp_call_hierarchy` | Language services | `direction`, `doc`, `pos`, `request` | yes |
 | `lsp_can_download_sources` | Language services | `uri` | — |
 | `lsp_code_action_query` | Language services | `doc`, `only`, `range`, `request` | yes |
 | `lsp_code_actions` | Language services | `doc`, `only`, `range` | — |
@@ -297,7 +297,7 @@ GoIDEA can rely on it; code that calls it must check `commands` first.
 | `lsp_semantic_tokens` | Language services | `doc` | — |
 | `lsp_servers` | Language services | — | yes |
 | `lsp_signature_help` | Language services | `doc`, `pos` | — |
-| `lsp_type_hierarchy` | Language services | `direction`, `doc`, `pos` | — |
+| `lsp_type_hierarchy` | Language services | `direction`, `doc`, `pos` | yes |
 | `lsp_virtual_document` | Language services | `uri` | — |
 | `lsp_workspace_symbols` | Language services | `query`, `request` | yes |
 | `mark_recent` | Navigation and index | `path` | yes |
@@ -738,7 +738,7 @@ GoIDEA needs to do for each:
 
 ## What this means for GoIDEA
 
-446 remote commands are available today; GoIDEA uses 87. The parity work is
+446 remote commands are available today; GoIDEA uses 89. The parity work is
 first to cover the remote surface OpenIDEA's own frontend uses, then to move
 `shared-op`/`host`/`crate` commands onto stdio through the OpenIDEA fork
 (a submodule bump and a server release), and to implement `desktop` commands

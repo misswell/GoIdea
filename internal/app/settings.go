@@ -74,6 +74,11 @@ type Layout struct {
 	Split map[string]bool `json:"split,omitempty"`
 	// BottomHeight is the bottom area's height in DIPs.
 	BottomHeight int `json:"bottomHeight,omitempty"`
+	// Right is the right area's window ("hierarchy"), RightHidden whether it
+	// was closed, and RightWidth its width in DIPs.
+	Right       string `json:"right,omitempty"`
+	RightHidden bool   `json:"rightHidden,omitempty"`
+	RightWidth  int    `json:"rightWidth,omitempty"`
 }
 
 // clone copies a layout, so a saved snapshot never shares maps with the one
@@ -141,6 +146,14 @@ func normalizeLayout(l Layout) Layout {
 	}
 	if l.BottomHeight >= bottomMin && l.BottomHeight <= maxBottomHeight {
 		out.BottomHeight = l.BottomHeight
+	}
+	switch l.Right {
+	case "hierarchy":
+		out.Right = l.Right
+		out.RightHidden = l.RightHidden
+	}
+	if l.RightWidth >= rightWidthStoredMin && l.RightWidth <= rightWidthStoredMax {
+		out.RightWidth = l.RightWidth
 	}
 	return out
 }

@@ -22,12 +22,17 @@ const (
 	oiIslandGap       float32 = 6
 	oiIslandRadius    float32 = 10
 	oiLeftWidth       float32 = 240
-	oiHeaderHeight    float32 = 40
-	oiTabBarHeight    float32 = 40
-	oiTabHeight       float32 = 28
-	oiTabColumnMin    float32 = 140 // OpenIDEA's vertical strip is 140..260 wide
-	oiTabColumnMax    float32 = 260
-	oiTabColumnTab    float32 = 24
+	// rightWidthDefault and its stored range are the right area's width, as
+	// OpenIDEA's sizes.right.
+	rightWidthDefault   float32 = 300
+	rightWidthStoredMin         = 200
+	rightWidthStoredMax         = 600
+	oiHeaderHeight      float32 = 40
+	oiTabBarHeight      float32 = 40
+	oiTabHeight         float32 = 28
+	oiTabColumnMin      float32 = 140 // OpenIDEA's vertical strip is 140..260 wide
+	oiTabColumnMax      float32 = 260
+	oiTabColumnTab      float32 = 24
 )
 
 // titleBar is OpenIDEA's compact header: the project widget, the VCS widget,
@@ -254,6 +259,11 @@ func (m *Model) workbench(c *ui.Context, p *ui.Theme) {
 						})
 					}
 				})
+				if m.rightShown() {
+					m.rightWidthHandle(c, oi)
+					m.rightSide(c, p, oi)
+				}
+				m.rightStripe(c, p, oi)
 			})
 		}
 		m.statusBar(c, p)
@@ -464,6 +474,62 @@ func (m *Model) leftWidthHandle(c *ui.Context, oi oiColors) {
 	m.leftDragWidth += dx
 	m.leftDragCollapse = m.leftDragWidth < leftWidthDragMin/2
 	m.invalidate()
+}
+
+// rightSideWidth is the right area's width in DIPs, as drawn: a drag in
+// progress, the stored width, or OpenIDEA's default.
+func (m *Model) rightSideWidth() float32 {
+	if m.rightWidthDragging {
+		return m.rightDragWidth
+	}
+	if m.rightWidth < rightWidthStoredMin {
+		return rightWidthDefault
+	}
+	return m.rightWidth
+}
+
+// rightWidthHandle drags the gap between the editor and the right area. The
+// pointer's left widens the right area, mirroring the left side's handle.
+func (m *Model) rightWidthHandle(c *ui.Context, oi oiColors) {
+	h := ui.Row(c).Key("right:width-handle").Width(oiIslandGap).Shrink(0).
+		Cursor(ui.CursorResizeColumn)
+	dx, _, held := h.Dragged()
+	if !held {
+		if m.rightWidthDragging {
+			m.rightWidthDragging = false
+			m.rightWidth = float32(int(m.rightDragWidth + 0.5))
+			m.rememberLayout()
+		}
+		return
+	}
+	if !m.rightWidthDragging {
+		m.rightWidthDragging = true
+		m.rightDragWidth = m.rightSideWidth()
+	}
+	m.rightDragWidth = max(rightWidthStoredMin, min(m.rightDragWidth-dx, rightWidthStoredMax))
+	m.invalidate()
+}
+
+// rightSide is the right area's island, showing its window.
+func (m *Model) rightSide(c *ui.Context, p *ui.Theme, oi oiColors) {
+	ui.Column(c).Key("right:side").Width(m.rightSideWidth()).Shrink(0).
+		MinHeight(0).AlignItems(ui.Stretch).Children(func() {
+		m.hierarchyRightView(c, p, oi)
+	})
+}
+
+// rightStripe is the right edge's stripe of tool window buttons, mirroring the
+// left one. Hierarchy joins it on use, as OpenIDEA registers that window with
+// stripe: "onUse"; its button stays while the window has a tree.
+func (m *Model) rightStripe(c *ui.Context, p *ui.Theme, oi oiColors) {
+	ui.Column(c).Width(oiStripeWidth).Shrink(0).Padding(5, oiIslandGap, 6, 4).
+		Gap(oiStripeGap).Children(func() {
+		ui.Spacer(c)
+		if m.hierarchy.active() || m.rightTool == "hierarchy" {
+			m.stripeButton(c, p, oi, "hierarchy", iconStructure, "Hierarchy",
+				m.rightShown() && m.rightTool == "hierarchy", m.ToggleHierarchyWindow)
+		}
+	})
 }
 
 // hideLeftSide closes both of the left side's areas, which a drag of its gap

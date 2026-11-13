@@ -111,6 +111,18 @@ func (m *Model) SmokeShots(ctx context.Context, dir string) (map[string]any, err
 	shot("split")
 	m.post(func() { m.Unsplit() })
 
+	// The right area, when a hierarchy was run in this phase.
+	var hasHierarchy bool
+	m.post(func() { hasHierarchy = m.hierarchy.active() })
+	if hasHierarchy {
+		m.post(func() {
+			m.rightTool = "hierarchy"
+			m.rightHidden = false
+		})
+		shot("right-hierarchy")
+		m.post(func() { m.rightHidden = true })
+	}
+
 	// Settings as a dialog.
 	m.post(func() { m.OpenSettingsPage(settingsPageAppearance) })
 	wait(func() bool { return m.settingsOpen }, 30*time.Second)

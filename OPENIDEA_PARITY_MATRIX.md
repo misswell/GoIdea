@@ -27,9 +27,9 @@ new action, tool window, page or command appears automatically.
 | Kind | Items | Integrated | Partial | Engine | Blocked | Missing |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Feature folders | 43 | 0 | 12 | 0 | 0 | 31 |
-| Actions | 647 | 40 | 87 | 0 | 1 | 519 |
+| Actions | 647 | 42 | 87 | 0 | 1 | 517 |
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
-| Tool windows | 30 | 9 | 5 | 0 | 0 | 16 |
+| Tool windows | 30 | 10 | 5 | 0 | 0 | 15 |
 | Overlays | 56 | 1 | 0 | 0 | 0 | 55 |
 | Editor contributions | 35 | 0 | 1 | 0 | 0 | 34 |
 | Editor kinds | 4 | 0 | 0 | 0 | 0 | 4 |
@@ -176,8 +176,8 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `find.showUsageResults` | Show Usage Results | `src/features/code-insight/index.ts` | missing |
 | `find.showUsages` | Show Usages | `src/features/code-insight/index.ts` | missing |
 | `find.usages` | Find Usages | `src/features/code-insight/index.ts` | integrated - lsp.references.count, lsp.references.done |
-| `navigate.callHierarchy` | Call Hierarchy | `src/features/code-insight/index.ts` | missing |
-| `navigate.typeHierarchy` | Type Hierarchy | `src/features/code-insight/index.ts` | missing |
+| `navigate.callHierarchy` | Call Hierarchy | `src/features/code-insight/index.ts` | integrated - internal/app/commands.go navigate.callHierarchy Ctrl+Alt+H; internal/app/hierarchy.go OpenCallHierarchy over lsp_call_hierarchy; Navigate menu Call Hierarchy |
+| `navigate.typeHierarchy` | Type Hierarchy | `src/features/code-insight/index.ts` | integrated - internal/app/commands.go navigate.typeHierarchy Ctrl+H; internal/app/hierarchy.go OpenTypeHierarchy over lsp_type_hierarchy; Navigate menu Type Hierarchy |
 | `usages.rerun` | Rerun Find Usages | `src/features/code-insight/index.ts` | missing |
 
 ### coverage
@@ -976,7 +976,7 @@ same bindings until a check records it.
 | `find` | Find | bottom | `src/features/search/index.ts` | integrated - base.search.done, base.search.files, base.search.matches; internal/app/search.go searchPanel; bottom anchor in internal/app/anchor_test.go |
 | `git` | Git | bottom | `src/features/vcs/index.ts` | partial - base.vcs.changes, base.diff.rows, internal/app/log.go logPanel, base.log.commits, base.log.details, base.log.changes; internal/app/branch.go branchLabel, base.branch.head, base.branch.list, base.branch.checkout; internal/app/vcs.go vcsRows staging groups, StageChange, UnstageChange, AskRollback, base.stage.roundtrip, base.stage.discard |
 | `gradle` | Gradle | right | `src/features/build-tools/index.ts` | missing |
-| `hierarchy` | Hierarchy | right | `src/features/code-insight/index.ts` | missing |
+| `hierarchy` | Hierarchy | right | `src/features/code-insight/index.ts` | integrated - internal/app/hierarchy.go hierarchyRightView: right-anchored window with Call/Type direction tabs, lazy children per node and recursion leaves; lsp_call_hierarchy, lsp_type_hierarchy; e2e hierarchy.rows, hierarchy.visible, hierarchyError; internal/app/hierarchy_test.go; internal/app/workbench_render_test.go TestWorkbenchHierarchyRightWindowRenders |
 | `inspection` | Inspection Results | bottom | `src/features/analysis/index.ts` | missing |
 | `logcat` | Logcat | bottom | `src/features/logcat/index.ts` | missing |
 | `maven` | Maven | right | `src/features/build-tools/index.ts` | missing |
@@ -1997,7 +1997,7 @@ Local-only commands and the per-command argument lists are in
 | `light_edit_open` | app | no |  | missing |
 | `log_frontend` | app | no |  | missing |
 | `lsp_apply_code_action` | lsp | yes | yes | missing |
-| `lsp_call_hierarchy` | lsp | yes |  | missing |
+| `lsp_call_hierarchy` | lsp | yes | yes | missing |
 | `lsp_can_download_sources` | lsp | yes |  | missing |
 | `lsp_code_action_query` | lsp | yes | yes | missing |
 | `lsp_code_actions` | lsp | yes |  | missing |
@@ -2030,7 +2030,7 @@ Local-only commands and the per-command argument lists are in
 | `lsp_semantic_tokens` | lsp | yes |  | missing |
 | `lsp_servers` | lsp | yes | yes | missing |
 | `lsp_signature_help` | lsp | yes |  | missing |
-| `lsp_type_hierarchy` | lsp | yes |  | missing |
+| `lsp_type_hierarchy` | lsp | yes | yes | missing |
 | `lsp_virtual_document` | lsp | yes |  | missing |
 | `lsp_workspace_symbols` | lsp | yes | yes | missing |
 | `mark_recent` | nav | yes | yes | missing |
@@ -2380,7 +2380,7 @@ Local-only commands and the per-command argument lists are in
 | `wsl_distros` | wsl | no |  | missing |
 | `wsl_resolve` | wsl | no |  | missing |
 
-446 commands are served over stdio and 87 are called by GoIDEA today. A command
+446 commands are served over stdio and 89 are called by GoIDEA today. A command
 that is registered only in the desktop shell needs an `ops` module before stdio
 can serve it; a GoIDEA check counts only when the UI path works end to end.
 

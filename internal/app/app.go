@@ -284,6 +284,21 @@ type Model struct {
 	// is going on, and the room the areas shared when it began.
 	leftDragging  bool
 	leftDragTotal float32
+	// rightTool is the right area's window: "" for none or "hierarchy", as
+	// OpenIDEA anchors the Hierarchy window on the right.
+	rightTool string
+	// rightHidden hides the right area without forgetting its window.
+	rightHidden bool
+	// rightStash is what Hide All left the right area showing, so a second
+	// press brings it back as the bottom windows do.
+	rightStash bool
+	// rightWidth is the right area's width in DIPs, as OpenIDEA's sizes.right.
+	rightWidth float32
+	// rightWidthDragging and rightDragWidth carry a drag of the gap beside it.
+	rightWidthDragging bool
+	rightDragWidth     float32
+	// hierarchy is the call/type hierarchy the right window shows.
+	hierarchy hierarchyPane
 	// showingWelcome puts the Welcome screen up while a project stays loaded,
 	// as OpenIDEA's project menu leaves it.
 	showingWelcome bool
@@ -808,6 +823,7 @@ func (m *Model) openProject(dir string, files []string) {
 	m.resetSearch()
 	m.resetUsages()
 	m.resetTodo()
+	m.resetHierarchy()
 	m.closeSymbols()
 	m.closeIntents()
 	m.closeQuickFiles()
@@ -1716,6 +1732,16 @@ func (m *Model) shortcuts(c *ui.Context) {
 	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyN) {
 		if !m.overlayOpen() {
 			m.OpenScratchChooser()
+		}
+	}
+	if c.Shortcut(ui.Ctrl|ui.Alt, ui.KeyH) {
+		if !m.overlayOpen() {
+			m.OpenCallHierarchy()
+		}
+	}
+	if c.Shortcut(ui.Ctrl, ui.KeyH) {
+		if !m.overlayOpen() {
+			m.OpenTypeHierarchy()
 		}
 	}
 	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyP) {
