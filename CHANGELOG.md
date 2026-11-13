@@ -17,6 +17,8 @@ needs a `## <version>` section here, or its build fails.
 - 新增 **Editor > Editor Tabs** 设置页，标签栏可放在顶部、底部或隐藏。
 - 标签页可显示扩展名、所在目录、修改标记和完整路径提示，还能按字母排序、新标签排在末尾。
 - **Tab limit** 限制未固定标签页的数量，最久未用的先关闭，有未保存内容的标签不会关闭。
+- **Editor > Editor Tabs** 的 **Show tabs in** 可选单行滚动、单行压缩或多行换行，切换标签页会滚到可见处。
+- 标签页可显示文件图标，**Show file icon** 可关掉它。
 - **Editor > Editor Tabs** 可选择关闭当前标签页后激活哪个：左边的、右边的或最近打开的。
 - 单击 **Problems**、**Find**、**Find Usages** 的结果在斜体预览标签中打开，下一次单击原位替换它。
 - 编辑、固定或双击结果会把预览标签转为普通标签；**Editor > Editor Tabs** 的 **Opening Policy** 可关掉预览标签。

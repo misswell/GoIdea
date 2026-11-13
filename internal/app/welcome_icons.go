@@ -23,6 +23,9 @@ var (
 	// Workbench chrome: the chevrons of its widgets, the stripe's tool windows
 	// and the title bar's run controls.
 	iconChevronDown = welcomeIcon(`<path d="m6 9 6 6 6-6"/>`)
+	// iconFile stands in for OpenIDEA's per-file-type tab icons, which this
+	// build has no presentation map for.
+	iconFile        = welcomeIcon(`<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/>`)
 	iconStructure   = welcomeIcon(`<line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/>`)
 	iconBookmark    = welcomeIcon(`<path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/>`)
 	iconTerminal    = welcomeIcon(`<polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/>`)

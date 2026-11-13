@@ -225,10 +225,9 @@ func (m *Model) settingsBreadcrumbsBody(c *ui.Context, oi oiColors) {
 }
 
 // settingsEditorTabsBody is Editor › General › Editor Tabs: the strip's
-// placement and what a tab shows, then the tab order, the preview tab, the
-// closing limit and the tab a close activates, in general.tsx's order. "Show
-// tabs in", the file icon and the closing-policy radios name behaviour this
-// build does not carry, so they are not drawn.
+// placement, its overflow and what a tab shows, then the tab order, the
+// preview tab, the closing limit and the tab a close activates, in
+// general.tsx's order.
 func (m *Model) settingsEditorTabsBody(c *ui.Context, oi oiColors) {
 	settingsSectionTitle(c, oi, "Appearance")
 	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).PaddingStart(20).Children(func() {
@@ -239,9 +238,32 @@ func (m *Model) settingsEditorTabsBody(c *ui.Context, oi oiColors) {
 			m.settingsSetTabPlacement(tabPlacementValue(shown))
 		}
 	})
+	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).PaddingStart(20).Children(func() {
+		settingsFormLabel(c, oi, "Show tabs in:", 220)
+	})
+	oneRow := !m.settingsDraft.multipleRows
+	ui.RadioGroup(c, func() {
+		ui.Radio(c, &oneRow, true, "One row, and if tabs don't fit:")
+		ui.Radio(c, &oneRow, false, "Multiple rows")
+	}).PaddingStart(20)
+	if oneRow != !m.settingsDraft.multipleRows {
+		m.settingsSetMultipleRows(!oneRow)
+	}
+	squeeze := m.settingsDraft.squeezeTabs
+	ui.RadioGroup(c, func() {
+		ui.Radio(c, &squeeze, false, "Scroll the tabs panel")
+		ui.Radio(c, &squeeze, true, "Squeeze tabs")
+	}).PaddingStart(48).Disabled(!oneRow)
+	if squeeze != m.settingsDraft.squeezeTabs {
+		m.settingsSetSqueezeTabs(squeeze)
+	}
 	pinnedRow := m.settingsDraft.pinnedSeparateRow
 	if ui.Checkbox(c, &pinnedRow, "Show pinned tabs in a separate row").Changed() {
 		m.settingsSetPinnedSeparateRow(pinnedRow)
+	}
+	fileIcon := m.settingsDraft.showFileIcon
+	if ui.Checkbox(c, &fileIcon, "Show file icon").Changed() {
+		m.settingsSetShowFileIcon(fileIcon)
 	}
 	extension := m.settingsDraft.showExtension
 	if ui.Checkbox(c, &extension, "Show file extension").Changed() {

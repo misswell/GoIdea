@@ -525,6 +525,49 @@ func TestSettingsEditorTabsStageAndApply(t *testing.T) {
 	}
 }
 
+func TestSettingsTabOverflowAndFileIconStageAndApply(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	m := &Model{cfg: Config{SettingsPath: path}}
+	m.applyPreferences()
+	if d := m.settingsDraftFromPrefs(); d.multipleRows || d.squeezeTabs || !d.showFileIcon {
+		t.Fatalf("defaults = %+v", d)
+	}
+
+	m.OpenSettingsPage(settingsPageEditorTabs)
+	m.settingsSetMultipleRows(true)
+	m.settingsSetSqueezeTabs(true)
+	m.settingsSetShowFileIcon(false)
+	if m.prefs.Tabs != (TabPrefs{}) {
+		t.Fatalf("staging wrote the prefs: %+v", m.prefs.Tabs)
+	}
+	if !m.tabPrefs.MultipleRows || !m.tabPrefs.SqueezeTabs || !m.tabPrefs.HideFileIcon {
+		t.Fatalf("staged strip = %+v", m.tabPrefs)
+	}
+	m.closeSettings()
+	if m.tabPrefs != (TabPrefs{}) {
+		t.Fatalf("cancel kept the staged strip: %+v", m.tabPrefs)
+	}
+
+	m.OpenSettingsPage(settingsPageEditorTabs)
+	m.settingsSetMultipleRows(true)
+	m.settingsSetSqueezeTabs(true)
+	m.settingsSetShowFileIcon(false)
+	m.applySettings()
+	want := TabPrefs{MultipleRows: true, SqueezeTabs: true, HideFileIcon: true}
+	if m.prefs.Tabs != want || LoadPreferences(path).Tabs != want {
+		t.Fatalf("stored tabs = %+v / %+v", m.prefs.Tabs, LoadPreferences(path).Tabs)
+	}
+	if m.tabPrefs != want {
+		t.Fatalf("applied strip = %+v", m.tabPrefs)
+	}
+
+	m.settingsSelectPage(settingsPageEditorTabs)
+	m.settingsResetPage()
+	if d := m.settingsDraft; d.multipleRows || d.squeezeTabs || !d.showFileIcon {
+		t.Fatalf("reset tabs = %+v", d)
+	}
+}
+
 func TestSettingsGeneralWrapsAndVirtualSpace(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")
 	tab := &Tab{state: &editor.State{}}

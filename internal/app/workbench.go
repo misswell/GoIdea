@@ -758,71 +758,112 @@ func (m *Model) editorTabs(c *ui.Context, p *ui.Theme, oi oiColors) {
 	m.tabStrip(c, p, oi, m.tabs, 0)
 }
 
-// tabStrip is one row of tabs with the island's bottom border; offset is the
-// row's first tab in the strip.
+// tabStrip is the tab bar with the island's bottom border; offset is the
+// row's first tab in the strip. Show tabs in decides how tabs that don't fit
+// go: one row scrolls sideways or squeezes them, multiple rows wrap.
 func (m *Model) tabStrip(c *ui.Context, p *ui.Theme, oi oiColors, tabs []*Tab, offset int) {
-	ui.Row(c).Height(oiTabBarHeight).Shrink(0).Padding(0, 4).
-		BorderWidth(0, 0, 1, 0).BorderColor(oi.border).Children(func() {
-		ui.Row(c).Gap(2).AlignItems(ui.Center).Children(func() {
-			for j, t := range tabs {
-				i, t := offset+j, t
-				tab := ui.Row(c.Key(fmt.Sprintf("tab:%d", i))).Height(oiTabHeight).
-					Padding(0, 10).Gap(6).Radius(6).AlignItems(ui.Center)
-				if i == m.active {
-					tab.Background(oi.tabSelected).
-						BorderWidth(0, 0, 2, 0).BorderColor(oi.accent)
-				} else if tab.Hovered() {
-					tab.Background(oi.toolbarHover)
+	reveal := m.tabsShown != m.active
+	m.tabsShown = m.active
+	strip := ui.Row(c).Shrink(0).Padding(0, 4).
+		BorderWidth(0, 0, 1, 0).BorderColor(oi.border)
+	if m.tabPrefs.MultipleRows {
+		strip.MinHeight(oiTabBarHeight)
+	} else {
+		strip.Height(oiTabBarHeight)
+	}
+	strip.Children(func() {
+		switch {
+		case m.tabPrefs.MultipleRows:
+			ui.Row(c).Grow(1).MinWidth(0).Wrap().Gap(2).Padding(3, 0).
+				AlignItems(ui.Center).AlignContent(ui.Center).Children(func() {
+				m.tabButtons(c, p, oi, tabs, offset, reveal)
+			})
+		case m.tabPrefs.SqueezeTabs:
+			ui.Row(c).Gap(2).AlignItems(ui.Center).Children(func() {
+				m.tabButtons(c, p, oi, tabs, offset, reveal)
+			})
+		default:
+			ui.ScrollHorizontal(c).Grow(1).MinWidth(0).Gap(2).
+				AlignItems(ui.Center).TrackScroll(&m.tabsScroll).Children(func() {
+				m.tabButtons(c, p, oi, tabs, offset, reveal)
+			})
+		}
+	})
+}
+
+// tabButtons draws tabs in a row, offset being the first tab's index in the
+// strip. A squeezed strip lets the labels ellipsize down to the tab's fixed
+// parts, and a change of active tab scrolls the new one into view.
+func (m *Model) tabButtons(c *ui.Context, p *ui.Theme, oi oiColors, tabs []*Tab, offset int, reveal bool) {
+	squeeze := m.tabPrefs.SqueezeTabs
+	for j, t := range tabs {
+		i, t := offset+j, t
+		tab := ui.Row(c.Key(fmt.Sprintf("tab:%d", i))).Height(oiTabHeight).
+			Padding(0, 10).Gap(6).Radius(6).AlignItems(ui.Center)
+		if i == m.active {
+			if reveal {
+				tab.ScrollIntoView()
+			}
+			tab.Background(oi.tabSelected).
+				BorderWidth(0, 0, 2, 0).BorderColor(oi.accent)
+		} else if tab.Hovered() {
+			tab.Background(oi.toolbarHover)
+		}
+		if !m.tabPrefs.HideFullPathOnHover {
+			if path := tabPath(t); path != "" {
+				tab.Tooltip(path)
+			}
+		}
+		name, dir := m.tabLabel(t)
+		tab.Children(func() {
+			closeButton := func() {
+				close := ui.Row(c).Size(20, 20).Radius(4).
+					AlignItems(ui.Center).Justify(ui.Center)
+				if close.Hovered() {
+					close.Background(oi.hover)
 				}
-				if !m.tabPrefs.HideFullPathOnHover {
-					if path := tabPath(t); path != "" {
-						tab.Tooltip(path)
-					}
-				}
-				name, dir := m.tabLabel(t)
-				tab.Children(func() {
-					closeButton := func() {
-						close := ui.Row(c).Size(20, 20).Radius(4).
-							AlignItems(ui.Center).Justify(ui.Center)
-						if close.Hovered() {
-							close.Background(oi.hover)
-						}
-						close.Children(func() {
-							ui.Icon(c, iconClose).Size(14, 14).TextColor(oi.textMuted)
-						})
-						if close.Clicked() {
-							m.closeTab(i)
-						}
-					}
-					if !m.tabPrefs.NoCloseButton && m.tabPrefs.CloseButtonLeft {
-						closeButton()
-					}
-					if t.dirty() {
-						ui.Text(c, "●").FontSize(9).TextColor(oi.accent)
-					}
-					label := ui.Text(c, name).FontSize(13).TextColor(oi.text).SingleLine()
-					if t.preview {
-						label = label.Italic()
-					}
-					if dir != "" {
-						ui.Text(c, dir).FontSize(13).TextColor(oi.textFaint).
-							PaddingStart(4).SingleLine()
-					}
-					if t.pinned {
-						ui.Icon(c, iconPin).Size(11, 11).TextColor(oi.textMuted)
-					}
-					if !m.tabPrefs.NoCloseButton && !m.tabPrefs.CloseButtonLeft {
-						closeButton()
-					}
+				close.Children(func() {
+					ui.Icon(c, iconClose).Size(14, 14).TextColor(oi.textMuted)
 				})
-				tab.ContextMenu(func(menu *ui.Menu) { m.tabMenu(menu, t) })
-				if tab.Clicked() {
-					m.activate(i)
+				if close.Clicked() {
+					m.closeTab(i)
 				}
 			}
+			if !m.tabPrefs.NoCloseButton && m.tabPrefs.CloseButtonLeft {
+				closeButton()
+			}
+			if !m.tabPrefs.HideFileIcon {
+				ui.Icon(c, iconFile).Size(14, 14).TextColor(oi.textMuted)
+			}
+			if t.dirty() {
+				ui.Text(c, "●").FontSize(9).TextColor(oi.accent)
+			}
+			label := ui.Text(c, name).FontSize(13).TextColor(oi.text).SingleLine()
+			if squeeze {
+				label = label.MinWidth(0).Ellipsis("…")
+			}
+			if t.preview {
+				label = label.Italic()
+			}
+			if dir != "" {
+				dirText := ui.Text(c, dir).FontSize(13).TextColor(oi.textFaint).
+					PaddingStart(4).SingleLine()
+				if squeeze {
+					dirText.MinWidth(0).Ellipsis("…")
+				}
+			}
+			if t.pinned {
+				ui.Icon(c, iconPin).Size(11, 11).TextColor(oi.textMuted)
+			}
+			if !m.tabPrefs.NoCloseButton && !m.tabPrefs.CloseButtonLeft {
+				closeButton()
+			}
 		})
-		ui.Row(c).Grow(1)
-	})
+		tab.ContextMenu(func(menu *ui.Menu) { m.tabMenu(menu, t) })
+		if tab.Clicked() {
+			m.activate(i)
+		}
+	}
 }
 
 // emptyEditor is IDEA's empty editor: navigation hints on the left of their

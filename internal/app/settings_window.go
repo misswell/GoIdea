@@ -87,6 +87,11 @@ type settingsDraft struct {
 	activateOnClose           string
 	// noPreviewTab is Opening Policy's "Enable preview tab" turned off.
 	noPreviewTab bool
+	// multipleRows, squeezeTabs and showFileIcon are Appearance's "Show tabs in"
+	// choice and the file icon switch.
+	multipleRows bool
+	squeezeTabs  bool
+	showFileIcon bool
 }
 
 // appearance is the staged switches as the editor stores them.
@@ -129,6 +134,9 @@ func (d settingsDraft) tabPrefs() TabPrefs {
 		SortAlphabetically:      d.sortAlphabetically,
 		OpenAtEnd:               d.openAtEnd,
 		NoPreviewTab:            d.noPreviewTab,
+		MultipleRows:            d.multipleRows,
+		SqueezeTabs:             d.squeezeTabs,
+		HideFileIcon:            !d.showFileIcon,
 	}
 	if d.tabPlacement != "top" {
 		t.Placement = d.tabPlacement
@@ -703,6 +711,9 @@ func (m *Model) settingsDraftFromPrefs() settingsDraft {
 		tabLimit:                  m.prefs.Tabs.limit(),
 		activateOnClose:           m.prefs.Tabs.activation(),
 		noPreviewTab:              m.prefs.Tabs.NoPreviewTab,
+		multipleRows:              m.prefs.Tabs.MultipleRows,
+		squeezeTabs:               m.prefs.Tabs.SqueezeTabs,
+		showFileIcon:              !m.prefs.Tabs.HideFileIcon,
 	}
 }
 
@@ -885,6 +896,35 @@ func (m *Model) settingsSetTabPlacement(place string) {
 		return
 	}
 	m.settingsDraft.tabPlacement = place
+	m.settingsPreview()
+}
+
+// settingsSetMultipleRows stages "Show tabs in": multiple rows wraps tabs that
+// don't fit, one row scrolls or squeezes them.
+func (m *Model) settingsSetMultipleRows(on bool) {
+	if m.settingsDraft.multipleRows == on {
+		return
+	}
+	m.settingsDraft.multipleRows = on
+	m.settingsPreview()
+}
+
+// settingsSetSqueezeTabs stages the one row's overflow: squeeze tabs that
+// don't fit rather than scrolling the strip.
+func (m *Model) settingsSetSqueezeTabs(on bool) {
+	if m.settingsDraft.squeezeTabs == on {
+		return
+	}
+	m.settingsDraft.squeezeTabs = on
+	m.settingsPreview()
+}
+
+// settingsSetShowFileIcon stages the Show file icon switch.
+func (m *Model) settingsSetShowFileIcon(on bool) {
+	if m.settingsDraft.showFileIcon == on {
+		return
+	}
+	m.settingsDraft.showFileIcon = on
 	m.settingsPreview()
 }
 
@@ -1100,6 +1140,9 @@ func (m *Model) settingsResetPage() {
 		m.settingsDraft.tabLimit = defaultTabLimit
 		m.settingsDraft.activateOnClose = "left"
 		m.settingsDraft.noPreviewTab = false
+		m.settingsDraft.multipleRows = false
+		m.settingsDraft.squeezeTabs = false
+		m.settingsDraft.showFileIcon = true
 	default:
 		return
 	}

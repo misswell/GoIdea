@@ -444,6 +444,14 @@ type TabPrefs struct {
 	// NoPreviewTab turns off OpenIDEA's preview tab, where a click in a results
 	// list reuses one italic tab instead of adding a tab.
 	NoPreviewTab bool `json:"noPreviewTab,omitempty"`
+	// MultipleRows wraps tabs that don't fit into more rows instead of keeping
+	// one row, as editor.tabs.multipleRows does.
+	MultipleRows bool `json:"multipleRows,omitempty"`
+	// SqueezeTabs narrows tabs that don't fit instead of scrolling one row, as
+	// editor.tabs.oneRowOverflow "squeeze" does.
+	SqueezeTabs bool `json:"squeezeTabs,omitempty"`
+	// HideFileIcon leaves the file icon off each tab.
+	HideFileIcon bool `json:"hideFileIcon,omitempty"`
 }
 
 // defaultTabLimit is where editor.tabs.tabLimit starts.
