@@ -88,6 +88,7 @@ func mainMenuGroups() []menuEntry {
 	return []menuEntry{
 		submenu("File",
 			action("New Project…", "project.new", ""),
+			action("New Scratch File…", "file.newScratchFile", "CmdOrCtrl+Shift+N"),
 			action("Open Project…", "project.open", "CmdOrCtrl+O"),
 			action("Open File…", "file.quickOpen", "CmdOrCtrl+P"),
 			rule(),

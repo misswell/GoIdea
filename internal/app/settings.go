@@ -341,6 +341,9 @@ type Preferences struct {
 	// Todo are Settings › Editor › TODO, nil until the page is applied, which
 	// keeps OpenIDEA's built-in patterns.
 	Todo *TodoPrefs `json:"todo,omitempty"`
+	// ScratchRecent are the languages New Scratch File lists first, most
+	// recent first.
+	ScratchRecent []string `json:"scratchRecent,omitempty"`
 	// MainToolbar is the title bar's saved layout, nil for the default one.
 	MainToolbar *toolbarLayout `json:"mainToolbar,omitempty"`
 	// Plugins are each plugin's settings, by name, under the same "plugins"

@@ -8,8 +8,11 @@ package app
 // without invalidating anything.
 
 import (
-	"context"
-	"time"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 
 	"github.com/egoist/mygo/ui"
 )
@@ -35,7 +38,6 @@ type invalidatePane struct {
 	localHistory    bool
 	languageServers bool
 	buildCaches     bool
-	busy            bool
 	err             string
 }
 
@@ -72,49 +74,87 @@ func (m *Model) InvalidateAndRestart() {
 // RestartIDE is File › Restart IDE: it schedules no invalidation and restarts.
 func (m *Model) RestartIDE() { m.scheduleInvalidation(nil) }
 
-// invalidateParams is the payload caches_schedule_invalidation takes: the
-// options, or nil for a plain restart.
-func invalidateParams(opts *InvalidateOptions) map[string]any {
-	if opts == nil {
-		return map[string]any{"options": nil}
-	}
-	return map[string]any{"options": *opts}
+// invalidationSchedule is the choice File › Invalidate Caches… wrote for the
+// next start to apply.
+type invalidationSchedule struct {
+	LocalHistory    bool `json:"localHistory,omitempty"`
+	LanguageServers bool `json:"languageServers,omitempty"`
+	BuildCaches     bool `json:"buildCaches,omitempty"`
 }
 
-// scheduleInvalidation asks the backend to delete the caches at the next start
-// and then quits, which relaunches the app once the quit flow finishes. A
-// failed schedule keeps the dialog open, as OpenIDEA reports it instead of
-// restarting.
-func (m *Model) scheduleInvalidation(opts *InvalidateOptions) {
-	v := m.invalidateDlg
-	if v != nil {
-		if v.busy {
-			return
-		}
-		v.busy = true
-		v.err = ""
+// invalidationMarker is the file in the data directory that tells the next
+// start what to delete; the caches themselves are in use until then.
+func invalidationMarker(dataDir string) string {
+	return filepath.Join(dataDir, "invalidate.json")
+}
+
+// writeInvalidationSchedule records the choice for the next start. A nil
+// options is Just Restart: nothing is deleted, but the marker still names the
+// restart.
+func writeInvalidationSchedule(dataDir string, opts *InvalidateOptions) error {
+	if dataDir == "" {
+		return errors.New("没有可用的数据目录")
 	}
+	plan := invalidationSchedule{}
+	if opts != nil {
+		plan = invalidationSchedule(*opts)
+	}
+	raw, err := json.MarshalIndent(plan, "", "  ")
+	if err != nil {
+		return err
+	}
+	return writeFileAtomic(invalidationMarker(dataDir), raw)
+}
+
+// ApplyPendingInvalidation deletes the caches a previous Invalidate Caches…
+// scheduled, before the backend starts and takes them into use. The paths are
+// the ones the openidea-server owns under its home: Local History, the
+// language server workspaces and the build tool caches.
+func ApplyPendingInvalidation(cfg Config) {
+	dataDir := filepath.Dir(cfg.SettingsPath)
+	if cfg.SettingsPath == "" {
+		return
+	}
+	raw, err := os.ReadFile(invalidationMarker(dataDir))
+	if err != nil {
+		return
+	}
+	var plan invalidationSchedule
+	if err := json.Unmarshal(raw, &plan); err != nil {
+		return
+	}
+	caches := make([]string, 0, 3)
+	if plan.LocalHistory {
+		caches = append(caches, filepath.Join(cfg.Home, "data", "history"))
+	}
+	if plan.LanguageServers {
+		caches = append(caches, filepath.Join(cfg.Home, "data", "lsp", "jdtls"))
+	}
+	if plan.BuildCaches {
+		caches = append(caches, filepath.Join(cfg.Home, "data", "cache"))
+	}
+	for _, dir := range caches {
+		if err := os.RemoveAll(dir); err != nil && cfg.Log != nil {
+			fmt.Fprintf(cfg.Log, "goidea: invalidate %s: %v\n", dir, err)
+		}
+	}
+	_ = os.Remove(invalidationMarker(dataDir))
+}
+
+// scheduleInvalidation records the invalidation for the next start and quits,
+// which relaunches the app once the quit flow finishes.
+func (m *Model) scheduleInvalidation(opts *InvalidateOptions) {
+	if err := writeInvalidationSchedule(filepath.Dir(m.cfg.SettingsPath), opts); err != nil {
+		if v := m.invalidateDlg; v != nil {
+			v.err = "无法安排清除缓存：" + err.Error()
+		}
+		m.invalidate()
+		return
+	}
+	m.invalidateDlg = nil
+	m.restartPending = true
 	m.invalidate()
-	params := invalidateParams(opts)
-	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
-		defer cancel()
-		_, err := m.mgr.Invoke(ctx, Window, "caches_schedule_invalidation", params)
-		m.post(func() {
-			if err != nil {
-				if v != nil {
-					v.busy = false
-					v.err = "清除缓存失败：" + err.Error()
-				}
-				m.invalidate()
-				return
-			}
-			m.invalidateDlg = nil
-			m.restartPending = true
-			m.invalidate()
-			m.requestQuit(func() {})
-		})
-	}()
+	m.requestQuit(func() {})
 }
 
 // invalidateCachesDialog draws the dialog: what is always rebuilt, the
@@ -152,13 +192,13 @@ func (m *Model) invalidateCachesDialog(c *ui.Context, p *ui.Theme) {
 					SingleLine().Ellipsis("…")
 			}
 			ui.Row(c).Gap(8).Children(func() {
-				ui.Button(c, "清除并重启").Disabled(v.busy).OnClick(m.InvalidateAndRestart)
-				ui.Button(c, "仅重启").Disabled(v.busy).OnClick(m.RestartIDE)
-				ui.Button(c, "取消").Disabled(v.busy).OnClick(m.closeInvalidateCaches)
+				ui.Button(c, "清除并重启").OnClick(m.InvalidateAndRestart)
+				ui.Button(c, "仅重启").OnClick(m.RestartIDE)
+				ui.Button(c, "取消").OnClick(m.closeInvalidateCaches)
 			})
 		})
 	})
-	if (d.Dismissed() || !open) && !v.busy {
+	if d.Dismissed() || !open {
 		m.closeInvalidateCaches()
 	}
 }

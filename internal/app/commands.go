@@ -26,6 +26,7 @@ type appCommand struct {
 func commands() []appCommand {
 	return []appCommand{
 		{"project.new", "新建项目…", "文件", "Cmd+N", "new project create", func(m *Model) { m.NewProject() }},
+		{"file.newScratchFile", "New Scratch File…", "文件", "Cmd+Shift+N", "scratch temporary buffer new file language", func(m *Model) { m.OpenScratchChooser() }},
 		{"project.open", "打开项目…", "文件", "Cmd+O", "open project folder", func(m *Model) { m.ChooseProject() }},
 		{"welcome.manageProjects", "管理项目…", "文件", "", "manage projects welcome recent", func(m *Model) { m.showWelcome() }},
 		{"app.commandPalette", "搜索所有位置", "文件", "Cmd+Shift+A", "search everywhere command palette find action", func(m *Model) { m.OpenCommands() }},
@@ -358,7 +359,6 @@ func (m *Model) SmokeCommands() map[string]any {
 		out["invalidateStaged"] = m.invalidateDlg.languageServers
 		m.closeInvalidateCaches()
 		out["invalidateClosed"] = m.invalidateDlg == nil
-		out["restartParamsNil"] = invalidateParams(nil)["options"] == nil
 	})
 	return out
 }

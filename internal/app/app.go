@@ -234,6 +234,8 @@ type Model struct {
 	// restartPending relaunches the app once the quit flow finishes.
 	invalidateDlg  *invalidatePane
 	restartPending bool
+	// scratch is the New Scratch File chooser while it is open.
+	scratch *scratchChooser
 
 	// javaTools is the Java language server / debugger state the settings
 	// sheet shows; toolsBusy names the install in progress, whose events
@@ -1585,7 +1587,7 @@ func (m *Model) overlayOpen() bool {
 		m.diff != nil || m.palette != nil || m.runAnything != nil || m.commit != nil || m.branch.open ||
 		m.rollback != nil || m.bookmarksView != nil || m.mnemonics != nil || m.newList != nil ||
 		m.deleteList != nil || m.move != nil || m.editDesc != nil || m.treeOp != nil ||
-		m.history != nil || m.dirCompare != nil || m.invalidateDlg != nil
+		m.history != nil || m.dirCompare != nil || m.invalidateDlg != nil || m.scratch != nil
 }
 
 // QuitImmediately closes the backend and quits without asking about changes,
@@ -1656,9 +1658,23 @@ func (m *Model) View(c *ui.Context) {
 	m.toolbarCustomizeDialog(c, p)
 	m.updateDialog(c, p)
 	m.invalidateCachesDialog(c, p)
+	m.scratchChooserDialog(c, p)
 }
 
 func (m *Model) shortcuts(c *ui.Context) {
+	// The scratch chooser steps its rows with the arrow keys.
+	if m.scratch != nil {
+		if c.Shortcut(ui.Modifiers(0), ui.KeyDown) {
+			m.stepScratch(1)
+		}
+		if c.Shortcut(ui.Modifiers(0), ui.KeyUp) {
+			m.stepScratch(-1)
+		}
+		if c.Shortcut(ui.Modifiers(0), ui.KeyEnter) {
+			m.CreateScratchSelected()
+		}
+		return
+	}
 	// A modal sheet owns the keyboard; only its own dismiss keys apply.
 	if m.settingsOpen || m.toolbarCustomize || m.update.Open || m.invalidateDlg != nil || (m.db != nil && m.db.open) {
 		return
@@ -1695,6 +1711,11 @@ func (m *Model) shortcuts(c *ui.Context) {
 	if c.Shortcut(ui.Cmd, ui.KeyP) {
 		if m.rename == nil && m.symbols == nil && m.intents == nil && m.files == nil {
 			m.OpenQuickFiles()
+		}
+	}
+	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyN) {
+		if !m.overlayOpen() {
+			m.OpenScratchChooser()
 		}
 	}
 	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyP) {

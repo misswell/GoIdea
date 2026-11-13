@@ -27,7 +27,7 @@ new action, tool window, page or command appears automatically.
 | Kind | Items | Integrated | Partial | Engine | Blocked | Missing |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Feature folders | 43 | 0 | 12 | 0 | 0 | 31 |
-| Actions | 647 | 40 | 86 | 0 | 1 | 520 |
+| Actions | 647 | 40 | 87 | 0 | 1 | 519 |
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
 | Tool windows | 30 | 9 | 5 | 0 | 0 | 16 |
 | Overlays | 56 | 1 | 0 | 0 | 0 | 55 |
@@ -129,8 +129,8 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 
 | Action | Title | Source | Status |
 | --- | --- | --- | --- |
-| `app.restart` | Restart IDE | `src/features/app/InvalidateCaches.tsx` | integrated - internal/app/commands.go app.restart -> internal/app/invalidate.go RestartIDE with invalidateParams(nil) scheduling caches_schedule_invalidation {options: nil} and restarting through the quit flow, so unsaved buffers still prompt; File menu Restart IDE; internal/app/invalidate_test.go |
-| `file.invalidateCaches` | Invalidate Caches… | `src/features/app/InvalidateCaches.tsx` | integrated - internal/app/commands.go file.invalidateCaches -> internal/app/invalidate.go OpenInvalidateCaches, the dialog with the three optional caches (file system and Local History, language server workspaces, build tool caches) and Invalidate and Restart / Just Restart / Cancel; it schedules caches_schedule_invalidation with {options} and restarts through the quit flow (mygo App.Relaunch), reporting a failed schedule in the dialog; internal/app/invalidate_test.go; base.commands.invalidate |
+| `app.restart` | Restart IDE | `src/features/app/InvalidateCaches.tsx` | integrated - internal/app/commands.go app.restart -> internal/app/invalidate.go RestartIDE, which writes an empty invalidation marker and restarts through the quit flow, so unsaved buffers still prompt; ApplyPendingInvalidation deletes nothing for it; File menu Restart IDE; internal/app/invalidate_test.go TestRestartScheduleDeletesNothing |
+| `file.invalidateCaches` | Invalidate Caches… | `src/features/app/InvalidateCaches.tsx` | integrated - internal/app/commands.go file.invalidateCaches -> internal/app/invalidate.go OpenInvalidateCaches, the dialog with the three optional caches (Local History, language server workspaces, build tool caches) and Invalidate and Restart / Just Restart / Cancel; it writes <data>/invalidate.json and restarts through the quit flow (mygo App.Relaunch), and ApplyPendingInvalidation deletes the chosen openidea-server caches (data/history, data/lsp/jdtls, data/cache) before the next server start, logging a failed deletion; internal/app/invalidate_test.go TestInvalidationScheduleAppliesAtStart, TestRestartScheduleDeletesNothing; base.commands.invalidate |
 
 ### build
 
@@ -477,7 +477,7 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 
 | Action | Title | Source | Status |
 | --- | --- | --- | --- |
-| `file.newScratchFile` | New Scratch File… | `src/features/scratch/index.ts` | missing |
+| `file.newScratchFile` | New Scratch File… | `src/features/scratch/index.ts` | partial - internal/app/commands.go file.newScratchFile, Cmd+Shift+N, -> internal/app/scratch.go OpenScratchChooser: the New Scratch File popup lists the languages this editor highlights (Chroma's lexers with their first plain extension), recent first and filtered by name/prefix/subsequence/extension; CreateScratchLanguage writes scratch[_n].<ext> into <data>/scratches, places the caret from the template's $END$ when one exists, opens it and remembers the language in Preferences.ScratchRecent; internal/app/scratch_test.go; base.scratch.languages, base.scratch.opened; the backend's desktop-only languages list (and with it the per-language scratch templates) is not reachable over RPC, so templates are empty, and the Scratches project view root and New popup menu group are not ported |
 
 ### search
 

@@ -41,13 +41,17 @@ func main() {
 	serverPath, serverErr := resolveServer()
 	logFile := openLog(filepath.Join(dataDir, "openidea-server.log"))
 
-	model := app.New(app.Config{
+	cfg := app.Config{
 		ServerPath:   serverPath,
 		Home:         home,
 		SessionPath:  filepath.Join(dataDir, "session.json"),
 		SettingsPath: filepath.Join(dataDir, "settings.json"),
 		Log:          logFile,
-	})
+	}
+	// File › Invalidate Caches… scheduled what the backend must forget; the
+	// caches go before the server starts and takes them into use.
+	app.ApplyPendingInvalidation(cfg)
+	model := app.New(cfg)
 	if serverErr != nil {
 		model.Notify(serverErr.Error())
 	}
@@ -239,6 +243,15 @@ func smoke(m *app.Model) {
 		fields["todo"] = todo
 		if todoErr != nil {
 			fields["todoError"] = todoErr.Error()
+		}
+	}
+	if os.Getenv("GOIDEA_SMOKE_SCRATCH") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+		scratch, scratchErr := m.SmokeScratch(ctx)
+		cancel()
+		fields["scratch"] = scratch
+		if scratchErr != nil {
+			fields["scratchError"] = scratchErr.Error()
 		}
 	}
 	if os.Getenv("GOIDEA_SMOKE_TERM") == "1" && root != "" {
