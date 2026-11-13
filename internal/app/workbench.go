@@ -239,17 +239,22 @@ func (m *Model) workbench(c *ui.Context, p *ui.Theme) {
 				} else {
 					ui.Box(c).Width(oiIslandGap).Shrink(0)
 				}
-				m.editorIsland(c, p)
-			})
-			if bottom != "" {
-				ui.Column(c).Shrink(0).Padding(0, 6, 0, 6).
-					Height(float32(m.bottomDrawHeight()) + oiIslandGap).Children(func() {
-					// The gap above the bottom island takes the pointer, as
-					// OpenIDEA's GapHandle does.
-					m.bottomSizeHandle(c)
-					m.bottomSlot(c, p)
+				// The bottom windows share the centre column with the editor,
+				// so the side's islands run the workbench's full height as
+				// OpenIDEA's Islands layout draws them.
+				ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Children(func() {
+					m.editorIsland(c, p)
+					if bottom != "" {
+						ui.Column(c).Shrink(0).Padding(0, 6, 0, 6).
+							Height(float32(m.bottomDrawHeight()) + oiIslandGap).Children(func() {
+							// The gap above the bottom island takes the pointer,
+							// as OpenIDEA's GapHandle does.
+							m.bottomSizeHandle(c)
+							m.bottomSlot(c, p)
+						})
+					}
 				})
-			}
+			})
 		}
 		m.statusBar(c, p)
 	})

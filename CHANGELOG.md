@@ -44,6 +44,7 @@ needs a `## <version>` section here, or its build fails.
 - 命令面板新增 **Reopen Closed Tab**，最多记住 50 个关闭的标签页，重开时回到原来位置并保留固定状态。
 - 齿轮菜单新增 **Run Anything…**：搜索最近命令和运行配置，回车在项目目录执行或在运行窗口启动配置。
 - 工作台改用 OpenIDEA Islands 布局：顶部标题栏、左侧图标条、独立面板和 34px 状态栏。
+- 底部工具窗口现在只占编辑器下方，左侧项目岛保持从标题栏到状态栏的整高。
 - 左侧图标条再次点击当前面板会折叠它，再点一次恢复，**Search Everywhere** 固定在底部。
 - 没有打开文件时，编辑器居中显示 **Search Everywhere** 和 **Go to File** 提示，可直接点击。
 - Welcome 按 OpenIDEA 原页面重做：左侧品牌栏和 Projects、Customize、Plugins 页面，右侧项目搜索、操作和最近项目。
