@@ -1,7 +1,9 @@
 # GoIDEA
 
-A native Java and Spring Boot IDE. The window and every control are drawn by
-[MyGo](https://github.com/egoist/mygo) (Go, GPU); the Java project model, JDT
+A native Java and Spring Boot IDE. GoIDEA is built as a fork of
+[Mayoi](https://github.com/sorrycc/Mayoi), so Mayoi's application source and
+Git history are part of this repository: the window and every control are drawn
+by [MyGo](https://github.com/egoist/mygo) (Go, GPU); the Java project model, JDT
 language server, Maven/Gradle, run, debug, VCS, terminal, database and agent
 services come from [OpenIDEA](https://github.com/l0ng-ai/openidea)'s Rust
 backend, reached over JSON-RPC on `openidea-server --stdio`.
@@ -71,7 +73,7 @@ from them:
 
 | Upstream | Use | Pin |
 | --- | --- | --- |
-| [Mayoi](https://github.com/sorrycc/Mayoi) | native-app patterns, editor conventions | `UPSTREAMS.yml` |
+| [Mayoi](https://github.com/sorrycc/Mayoi) (fork [misswell/Mayoi](https://github.com/misswell/Mayoi)) | repository base; app, editor, terminal, Git, plugins | merged history, `UPSTREAMS.yml` |
 | [MyGo](https://github.com/egoist/mygo) (fork [sorrycc/mygo](https://github.com/sorrycc/mygo)) | native UI framework and editor | `go.mod` + `UPSTREAMS.yml` |
 | [OpenIDEA](https://github.com/l0ng-ai/openidea) | Rust backend and `openidea-server` | `UPSTREAMS.yml` |
 
@@ -83,6 +85,7 @@ integrated it — code adopted is not the same as a feature working here.
 
 ## Licenses
 
-GoIDEA's code is MIT (`LICENSE`). The shipped server is OpenIDEA's Apache-2.0
-build, redistributed unmodified with its `NOTICE`; the UI framework is MIT.
-See `THIRD_PARTY_LICENSES.md`; `scripts/check-licenses.sh` enforces it.
+GoIDEA's own code is MIT (`LICENSE`), and the fork keeps Mayoi's MIT copyright
+because Mayoi's source is included. The shipped server is OpenIDEA's
+Apache-2.0 build, redistributed unmodified with its `NOTICE`; the UI framework
+is MIT. See `THIRD_PARTY_LICENSES.md`; `scripts/check-licenses.sh` enforces it.

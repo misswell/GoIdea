@@ -10,7 +10,12 @@ sync; the status words are fixed:
 
 Last reviewed: 2026-11-13, against the pins in `UPSTREAMS.yml`.
 
-## Mayoi (application patterns, editor, mygo tooling)
+## Mayoi (repository base: application, editor, terminal, Git, plugins)
+
+Mayoi's source and Git history are merged into this repository (see
+`UPSTREAMS.yml`), so every row below can be adopted by porting code rather than
+reimplementing it. A row is `INTEGRATED` only when the GoIDEA product
+(`cmd/goidea`) exposes it; Mayoi's own window (`cmd/mayoi`) does not count.
 
 | Feature | Status | Where in GoIDEA |
 | --- | --- | --- |
@@ -21,9 +26,12 @@ Last reviewed: 2026-11-13, against the pins in `UPSTREAMS.yml`.
 | Command palette | INTEGRATED | `internal/app/commands.go` |
 | Project-wide search UI | INTEGRATED | `internal/app/search.go` |
 | Settings sheet and stored preferences | INTEGRATED | `internal/app/settings_ui.go` |
-| Sticky scroll | NOT_AVAILABLE | planned |
-| Vim mode | NOT_AVAILABLE | planned |
 | mygo bundling (`.app`, dmg, signing) | INTEGRATED | `mygo.json`, `scripts/release.sh` |
+| Sticky scroll | DETECTED | source in `cmd/mayoi`; not wired into `cmd/goidea` |
+| Vim mode | DETECTED | source in `cmd/mayoi`; not wired into `cmd/goidea` |
+| Terminal UI and PTY lifecycle | DETECTED | Mayoi's terminal is in-tree; GoIDEA uses the backend terminal |
+| Git changes/history UI | DETECTED | Mayoi's SCM is in-tree; GoIDEA uses the backend VCS |
+| JS/TS plugin engine (moejs) | DETECTED | source and plugin runtime in-tree; GoIDEA does not load plugins yet |
 | Signed updates (mygo.Updater) | NOT_AVAILABLE | updates need the updater key; defer |
 
 ## MyGo (native UI framework and editor component)

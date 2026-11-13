@@ -10,9 +10,10 @@ openidea-server-macos-aarch64.gz), verified against that release's SHA-256.
 It is distributed here under the Apache License 2.0; see
 THIRD_PARTY_LICENSES.md for the full attribution.
 
-This product also includes software developed by the Mayoi and MyGo projects
-(https://github.com/sorrycc/Mayoi, https://github.com/egoist/mygo and the fork
-https://github.com/sorrycc/mygo), both licensed under the MIT License.
+This product is built from the Mayoi fork https://github.com/misswell/Mayoi
+and includes Mayoi's source code and Git history; see third_party/mayoi and
+UPSTREAMS.yml. It also includes MyGo (https://github.com/egoist/mygo and the
+fork https://github.com/sorrycc/mygo), both licensed under the MIT License.
 
 The full texts of these licenses are in THIRD_PARTY_LICENSES.md and in the
 upstream repositories.

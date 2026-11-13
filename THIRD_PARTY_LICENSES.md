@@ -63,17 +63,67 @@ it. GoIDEA does not reimplement them.
 - Modification: none
 - Attribution: `third_party/x-text/LICENSE`
 
+### golang.org/x/sys v0.48.0 — BSD-3-Clause
+
+- System calls through mygo and Mayoi
+- Modification: none
+- Attribution: `third_party/x-sys/LICENSE`, `third_party/x-sys/PATENTS`
+
+### github.com/MoeForge/moejs v0.1.0 — Apache-2.0
+
+- The JavaScript runtime behind Mayoi's JS/TS plugin engine
+- Modification: none
+- Attribution: `third_party/moejs/LICENSE`
+
+### github.com/MoeForge/moego v0.1.0-alpha.1 — MIT
+
+- Shared Go support for moejs
+- Modification: none
+- Attribution: `third_party/moego/LICENSE`
+
+### github.com/alecthomas/chroma/v2 v2.27.0 — MIT
+
+- Syntax highlighting in Mayoi's previews and diff views
+- Modification: none
+- Attribution: `third_party/chroma/COPYING`
+
+### github.com/dlclark/regexp2/v2 v2.8.1 — MIT
+
+- JavaScript-compatible regular expressions for moejs
+- Modification: none
+- Attribution: `third_party/regexp2/LICENSE`
+
+### github.com/fsnotify/fsnotify v1.10.1 — BSD-3-Clause
+
+- File watching through Mayoi's workspace
+- Modification: none
+- Attribution: `third_party/fsnotify/LICENSE`
+
+### github.com/yuin/goldmark v1.7.13 — MIT
+
+- Markdown rendering in Mayoi's previews
+- Modification: none
+- Attribution: `third_party/goldmark/LICENSE`
+
 ## Upstreams GoIDEA follows but does not copy code from
 
-### Mayoi v0.19.3 — MIT
+None left: Mayoi is part of this repository (below) and OpenIDEA is a pinned
+submodule plus its prebuilt server.
+
+## Mayoi — MIT
 
 - Project: https://github.com/sorrycc/Mayoi
-- Fork: https://github.com/misswell/Mayoi (kept in sync, not modified by GoIDEA)
-- GoIDEA follows Mayoi's native-app patterns (menus, sheets, editor wiring,
-  mygo tooling conventions). No Mayoi source file is copied into this
-  repository; the app code is written here.
-- If a future change does copy Mayoi code, the file must carry Mayoi's MIT
-  notice and this table gains a row for it.
+- Fork: https://github.com/misswell/Mayoi, commit `89bc891` (v0.19.3)
+- Component: the application source, editor integration, terminal, Git,
+  settings and plugin engine, included with Mayoi's Git history by merging the
+  fork into this repository; `cmd/mayoi` still builds.
+- Modification: GoIDEA adds `cmd/goidea` and
+  `internal/{app,openidea,docbridge,position,textdiff}`. Inherited Mayoi files
+  are unmodified; the two upstream workflows that need Mayoi's Cloudflare and
+  Homebrew secrets were removed, and the root `README.md`, `LICENSE`,
+  `mygo.json` are GoIDEA's.
+- Attribution: the root `LICENSE` carries Mayoi's copyright, and
+  `third_party/mayoi/LICENSE` is the original text.
 
 ## Icons, fonts and other assets
 

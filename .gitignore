@@ -1,6 +1,15 @@
 # Builds and downloaded upstream binaries.
 build/
 dist/
+.mygo/
+mygo_windows_*.syso
+/mayoi
+/cmd/mayoi/mayoi
+*.test
+/.agents/
+/.claude/worktrees/
+/.qoder/worktrees/
+/.lavish/
 resources/openidea-server
 resources/openidea-server-*.gz
 resources/openidea-server-*.sha256

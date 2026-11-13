@@ -19,6 +19,7 @@ profile="${GOIDEA_NOTARY_PROFILE:-octoshrink-notary}"
 
 [[ -f resources/icon.png ]] || { echo "resources/icon.png is missing" >&2; exit 1; }
 [[ -x resources/openidea-server ]] || scripts/fetch-server.sh
+scripts/check-licenses.sh
 
 cp mygo.json mygo.json.release-backup
 restore() {

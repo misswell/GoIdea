@@ -11,17 +11,20 @@ upstreams:
   mayoi:
     url: https://github.com/sorrycc/Mayoi
     fork: https://github.com/misswell/Mayoi
+    # The fork is this repository's base: its history is merged into main
+    # through the `mayoi` remote, so upstream commits arrive with git merge.
+    remote: mayoi
     default_branch: main
-    # The commit this project's behaviour was last checked against.
     commit: 89bc891e74cb2b759eaf0ef087401b021313859b
     version: 0.19.3
     synced_at: 2026-11-13
     license: MIT
-    sync: reference
-    # GoIDEA is not a git fork of Mayoi. Its native-UI app patterns, the
-    # editor integration and the mygo tooling conventions follow Mayoi; the
-    # application code lives here.
-    local_changes: none-to-upstream
+    sync: fork-merge
+    local_changes:
+      - added cmd/goidea and internal/app, internal/openidea, internal/docbridge, internal/position, internal/textdiff
+      - the Go module path is mayoi, the same the fork uses, so inherited imports are untouched
+      - root README.md, LICENSE, NOTICE, mygo.json, .gitignore and .github/workflows/ci.yml are GoIDEA's
+      - removed .github/workflows/test.yml and website.yml: they need Mayoi's CI matrix and Cloudflare secrets
     watch:
       - commit
       - release
