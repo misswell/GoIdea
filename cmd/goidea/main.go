@@ -88,6 +88,9 @@ func menu(m *app.Model) *mygo.Menu {
 			{Label: "退出 GoIDEA", Accelerator: "CmdOrCtrl+Q", Click: func(*mygo.MenuItem, *mygo.Window) { m.Quit() }},
 		}},
 		{Role: mygo.RoleEditMenu},
+		{Label: "代码", Submenu: []*mygo.MenuItem{
+			{Label: "格式化代码", Accelerator: "Alt+CmdOrCtrl+L", Click: func(*mygo.MenuItem, *mygo.Window) { m.FormatActive() }},
+		}},
 		{Label: "运行", Submenu: []*mygo.MenuItem{
 			{Label: "运行", Accelerator: "F5", Click: func(*mygo.MenuItem, *mygo.Window) { m.Run() }},
 			{Label: "调试", Accelerator: "F9", Click: func(*mygo.MenuItem, *mygo.Window) { m.Debug() }},

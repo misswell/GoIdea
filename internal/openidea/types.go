@@ -428,3 +428,9 @@ type Diagnostic struct {
 	Code     *string      `json:"code"`
 	Server   *string      `json:"server"`
 }
+
+// TextEdit replaces a range of a file's text, in UTF-16 coordinates.
+type TextEdit struct {
+	Range   OutlineRange `json:"range"`
+	NewText string       `json:"new_text"`
+}

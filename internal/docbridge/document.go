@@ -216,6 +216,25 @@ func (d *Document) ByteRange(r openidea.OutlineRange) (start, end int) {
 	})
 }
 
+// ByteEdits converts server text edits, whose ranges are UTF-16 positions of
+// the current text, to buffer byte edits, so a server's formatting can be
+// applied with ApplyEdits as one undo step.
+func (d *Document) ByteEdits(edits []openidea.TextEdit) []editor.Edit {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	cur := d.buf.Snapshot()
+	d.catchUpLocked(cur)
+	out := make([]editor.Edit, 0, len(edits))
+	for _, e := range edits {
+		start, end := d.mapper.RangeToByteOffsets(snapText{cur}, position.Range{
+			Start: position.Position{Line: e.Range.Start.Line, Character: e.Range.Start.Col},
+			End:   position.Position{Line: e.Range.End.Line, Character: e.Range.End.Col},
+		})
+		out = append(out, editor.Edit{Start: start, End: end, Text: e.NewText})
+	}
+	return out
+}
+
 // catchUpLocked moves the mapper to the buffer's text when a widget edited the
 // shared buffer since the mapper last moved. The mapper describes the base in
 // that state (every other path moves it with the buffer as it edits), so the

@@ -324,6 +324,45 @@ func TestMultiEditOneUndoStep(t *testing.T) {
 	requireMapper(t, doc)
 }
 
+// Server text edits carry UTF-16 columns; applying them through ByteEdits must
+// land on the right bytes even after text the editor and protocol count
+// differently (an astral emoji is two UTF-16 units, four bytes).
+func TestServerTextEditsConvertFromUTF16(t *testing.T) {
+	_, doc, id := openSample(t)
+	ctx := context.Background()
+	text := doc.Text()
+	// Line 3 is "\tString s = "😀";".
+	edits := []openidea.TextEdit{
+		{Range: openidea.OutlineRange{
+			Start: openidea.OutlinePos{Line: 3, Col: 8},
+			End:   openidea.OutlinePos{Line: 3, Col: 9},
+		}, NewText: "name"},
+		{Range: openidea.OutlineRange{
+			Start: openidea.OutlinePos{Line: 3, Col: 15},
+			End:   openidea.OutlinePos{Line: 3, Col: 15},
+		}, NewText: "!"},
+	}
+	be := doc.ByteEdits(edits)
+	if len(be) != 2 {
+		t.Fatalf("byte edits %d, want 2", len(be))
+	}
+	if err := doc.ApplyEdits(ctx, be...); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	want := strings.Replace(text, `String s = "😀";`, `String name = "😀!";`, 1)
+	if got := doc.Text(); got != want {
+		t.Fatalf("buffer:\n%q\nwant\n%q", got, want)
+	}
+	if ok, err := doc.Undo(ctx); !ok || err != nil {
+		t.Fatalf("undo: %v %v", ok, err)
+	}
+	if got := doc.Text(); got != text {
+		t.Fatalf("undo text:\n%q\nwant\n%q", got, text)
+	}
+	requireMapper(t, doc)
+	_ = id
+}
+
 func TestPatchAppliesAndUndoes(t *testing.T) {
 	b, doc, id := openSample(t)
 	ctx := context.Background()

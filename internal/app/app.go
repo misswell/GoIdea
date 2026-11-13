@@ -48,6 +48,10 @@ type Tab struct {
 	syncing bool
 	saving  bool
 
+	// formatting marks a reformat request in flight, so a second one does not
+	// apply the first one's edits twice.
+	formatting bool
+
 	// gitMarks are the gutter marks of the buffer version gitVersion, read
 	// against HEAD; gitOff stays set when Git cannot answer for this file.
 	gitMarks   []editor.GutterMark

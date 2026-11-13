@@ -511,7 +511,49 @@ func (m *Model) SmokeLSP(ctx context.Context) (map[string]any, error) {
 	// What the server finds wrong with the text must reach the editor as a
 	// squiggle. Breaking the text in memory is not saved.
 	out["diagnostics"] = m.smokeDiagnostics(ctx, t)
+
+	// Reformatting goes the other way: the server's edits reach the buffer.
+	out["format"] = m.smokeFormat(ctx, t)
 	return out, nil
+}
+
+// smokeFormat adds a misformatted snippet to the tab's text without saving it,
+// asks the model to reformat, and waits for the formatted text.
+func (m *Model) smokeFormat(ctx context.Context, t *Tab) any {
+	text := t.doc.Text()
+	const ugly = "\nclass SmokeFormat{int    x=1;}\n"
+	if err := t.doc.ApplyEdits(ctx, editor.Edit{Start: len(text), End: len(text), Text: ugly}); err != nil {
+		return map[string]any{"error": err.Error()}
+	}
+	defer func() {
+		_ = t.doc.ApplyEdits(context.Background(), editor.Edit{Start: 0, End: len(t.doc.Text()), Text: text})
+	}()
+	start := time.Now()
+	mygo.RunOnMain(func() { m.formatTab(t) })
+	deadline := time.Now().Add(90 * time.Second)
+	for {
+		cur := t.doc.Text()
+		if !strings.Contains(cur, "int    x") {
+			tail := cur
+			if len(tail) > 120 {
+				tail = tail[len(tail)-120:]
+			}
+			return map[string]any{
+				"changed":       cur != text+ugly,
+				"spacedEquals":  strings.Contains(cur, "x = 1"),
+				"tail":          tail,
+				"elapsedMillis": time.Since(start).Milliseconds(),
+			}
+		}
+		if time.Now().After(deadline) {
+			return map[string]any{"timeout": true, "elapsedMillis": time.Since(start).Milliseconds()}
+		}
+		select {
+		case <-ctx.Done():
+			return map[string]any{"error": ctx.Err().Error()}
+		case <-time.After(200 * time.Millisecond):
+		}
+	}
 }
 
 // smokeDiagnostic is one diagnostic the smoke found shown in the editor.
