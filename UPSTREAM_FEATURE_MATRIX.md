@@ -55,6 +55,7 @@ reimplementing it. A row is `INTEGRATED` only when the GoIDEA product
 | UTF-16 position mapping | INTEGRATED | `internal/position`, unit + bridge tests |
 | Java analysis (JDT LS) | INTEGRATED | diagnostics, completion, hover, definition |
 | Problems tool window (File / Project) | INTEGRATED | `internal/app/problems.go`; per-file diagnostics, status-bar counts, `lsp.problems.*` in the release e2e |
+| Structure tool window (Cmd+7) | INTEGRATED | `internal/app/structure.go`; filter, collapse, click-to-jump, `lsp.structure.*` in the release e2e |
 | Intentions and quick fixes | INTEGRATED | Alt+Enter sheet |
 | Rename, usages, symbols, format | INTEGRATED | code menu and pickers |
 | Find/replace in project | INTEGRATED | search view |

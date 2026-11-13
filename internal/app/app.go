@@ -152,21 +152,22 @@ type Model struct {
 	redoRefactor *refactorEdit
 
 	// sideMode picks what the sidebar shows: "tree" ("" also means tree, the
-	// default), "vcs", "search" or "usages".
+	// default), "vcs", "search", "usages" or "structure".
 	sideMode string
 
 	// commit is the open Commit dialog, or nil.
 	commit *commitState
 
-	run      RunPane
-	debug    DebugPane
-	build    BuildPane
-	term     TermPane
-	vcs      VCSPane
-	log      LogPane
-	problems ProblemsPane
-	search   SearchPane
-	usages   UsagesPane
+	run       RunPane
+	debug     DebugPane
+	build     BuildPane
+	term      TermPane
+	vcs       VCSPane
+	log       LogPane
+	problems  ProblemsPane
+	search    SearchPane
+	usages    UsagesPane
+	structure StructurePane
 
 	// tool is the bottom tool window the shortcuts last opened, "" once it
 	// closed; toolStash is what Hide All hid, restored by the next press.
@@ -528,6 +529,7 @@ func (m *Model) openProject(dir string, files []string) {
 	m.resetVCS()
 	m.resetLog()
 	m.resetProblems()
+	m.structure = StructurePane{}
 	m.tool = ""
 	m.toolStash = nil
 	m.commit = nil
@@ -1196,6 +1198,11 @@ func (m *Model) shortcuts(c *ui.Context) {
 	if c.Shortcut(ui.Cmd, ui.Key6) {
 		if !m.overlayOpen() {
 			m.ToggleProblems()
+		}
+	}
+	if c.Shortcut(ui.Cmd, ui.Key7) {
+		if !m.overlayOpen() {
+			m.ToggleStructure()
 		}
 	}
 	if c.Shortcut(ui.Cmd, ui.Key9) {

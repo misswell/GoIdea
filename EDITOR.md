@@ -85,6 +85,17 @@ takes the area from the Run output, and the replaced window keeps its contents,
 so the terminal's shell and a run's output are still there when it comes back
 (`occupyBottom` in `toolwindow.go`, `bottomSlot` in `view.go`).
 
+## Structure
+
+`Cmd+7` opens OpenIDEA's Structure window in the sidebar: the active file's
+outline from `doc_outline`, indented by depth, with the symbol kind on the
+right and a click that jumps to the declaration. The filter keeps a symbol that
+matches or has a matching descendant, and containers it only keeps to reach a
+match are dimmed. The caret collapses a container; a filter expands a collapsed
+container so its matches stay visible (`structure.go`). The window shares the
+outline the breadcrumbs already load, so opening it after a file has been open
+does not ask the server again.
+
 ## Features wired to the editor
 
 | Feature | Where |
@@ -92,6 +103,7 @@ so the terminal's shell and a run's output are still there when it comes back
 | Syntax highlighting | MyGo language chosen per document in `docbridge` |
 | Diagnostics, gutter marks | `internal/app/diagnostics.go`, `codeintel.go` |
 | Problems tool window, status-bar counts | `internal/app/problems.go` |
+| Structure tool window (Cmd+7) | `internal/app/structure.go` |
 | Completion, hover, definition popups | MyGo callbacks → `internal/app/lsp.go` |
 | Intentions / quick fixes (Alt+Enter) | `internal/app/intents.go` |
 | Rename (Shift+F6) with undo | `internal/app/rename.go` |

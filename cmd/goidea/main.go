@@ -151,6 +151,7 @@ func menu(m *app.Model) *mygo.Menu {
 			{Label: "显示运行窗口", Accelerator: "CmdOrCtrl+4", Click: func(*mygo.MenuItem, *mygo.Window) { m.ShowRun() }},
 			{Label: "显示调试窗口", Accelerator: "CmdOrCtrl+5", Click: func(*mygo.MenuItem, *mygo.Window) { m.ShowDebug() }},
 			{Label: "显示问题", Accelerator: "CmdOrCtrl+6", Click: func(*mygo.MenuItem, *mygo.Window) { m.ShowProblems() }},
+			{Label: "显示结构", Accelerator: "CmdOrCtrl+7", Click: func(*mygo.MenuItem, *mygo.Window) { m.ShowStructure() }},
 			{Label: "下一个问题", Accelerator: "CmdOrCtrl+Alt+Down", Click: func(*mygo.MenuItem, *mygo.Window) { m.StepProblem(1) }},
 			{Label: "上一个问题", Accelerator: "CmdOrCtrl+Alt+Up", Click: func(*mygo.MenuItem, *mygo.Window) { m.StepProblem(-1) }},
 			mygo.Separator(),

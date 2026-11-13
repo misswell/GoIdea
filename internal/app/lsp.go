@@ -526,6 +526,24 @@ func (m *Model) SmokeLSP(ctx context.Context) (map[string]any, error) {
 	// The symbol picker searches the whole project and opens what it finds.
 	out["symbols"] = m.smokeSymbols(ctx, t)
 
+	// The Structure window shows the outline the same server reports.
+	deadline = time.Now().Add(30 * time.Second)
+	for {
+		var loaded bool
+		mygo.RunOnMain(func() { loaded = len(t.outline) > 0 })
+		if loaded || time.Now().After(deadline) {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(200 * time.Millisecond):
+		}
+	}
+	var structure map[string]any
+	mygo.RunOnMain(func() { structure = m.structureReport() })
+	out["structure"] = structure
+
 	// Quick Open lists recent files for an empty query and the fuzzy match
 	// otherwise, and opening its choice activates that file.
 	out["files"] = m.smokeFiles(ctx)

@@ -22,8 +22,8 @@
       "evidence": "debug.paused, debug.vars, debug.step.paused, debug.watch"
     },
     "toolwindow:structure": {
-      "status": "partial",
-      "evidence": "base.outline"
+      "status": "integrated",
+      "evidence": "internal/app/structure.go structureRowsUI; lsp.structure.rows, lsp.structure.first, lsp.structure.visible; internal/app/structure_test.go"
     },
     "toolwindow:git": {
       "status": "partial",
@@ -152,6 +152,10 @@
     "action:toolwindow.problems": {
       "status": "integrated",
       "evidence": "internal/app/problems.go ToggleProblems; lsp.problems.visible"
+    },
+    "action:toolwindow.structure": {
+      "status": "integrated",
+      "evidence": "internal/app/structure.go ToggleStructure; lsp.structure.visible; internal/app/structure_test.go"
     },
     "action:toolwindow.hideActive": {
       "status": "integrated",

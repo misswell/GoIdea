@@ -27,9 +27,9 @@ new action, tool window, page or command appears automatically.
 | Kind | Items | Integrated | Partial | Engine | Blocked | Missing |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Feature folders | 43 | 0 | 10 | 0 | 0 | 33 |
-| Actions | 647 | 14 | 11 | 0 | 1 | 621 |
+| Actions | 647 | 15 | 11 | 0 | 1 | 620 |
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
-| Tool windows | 30 | 5 | 7 | 0 | 0 | 18 |
+| Tool windows | 30 | 6 | 6 | 0 | 0 | 18 |
 | Overlays | 56 | 0 | 0 | 0 | 0 | 56 |
 | Editor contributions | 35 | 0 | 0 | 0 | 0 | 35 |
 | Editor kinds | 4 | 0 | 0 | 0 | 0 | 4 |
@@ -909,7 +909,7 @@ expected to come from a plugin or a hidden registration.
 | `toolwindow.resizeUp` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
 | `toolwindow.run` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/run.go ShowRun; cmd/goidea/main.go 视图 menu |
 | `toolwindow.services` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
-| `toolwindow.structure` | intellij-macos, intellij-windows, vscode-macos | missing |
+| `toolwindow.structure` | intellij-macos, intellij-windows, vscode-macos | integrated - internal/app/structure.go ToggleStructure; lsp.structure.visible; internal/app/structure_test.go |
 | `toolwindow.terminal` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/term.go ShowTerm; UPSTREAM_FEATURE_MATRIX.md Terminal |
 | `vcs.addToVcs` | intellij-macos, intellij-windows, vscode-macos | missing |
 | `vcs.annotate` | intellij-macos, intellij-windows, vscode-macos | missing |
@@ -989,7 +989,7 @@ same bindings until a check records it.
 | `remoteHost` | Remote Host | right | `src/features/deployment/index.ts` | missing |
 | `run` | Run | bottom | `src/features/run/index.ts` | integrated - base.run.config, base.run.exit, base.run.build |
 | `services` | Services | bottom | `src/features/services/index.ts` | missing |
-| `structure` | Structure | left | `src/features/search/index.ts` | partial - base.outline |
+| `structure` | Structure | left | `src/features/search/index.ts` | integrated - internal/app/structure.go structureRowsUI; lsp.structure.rows, lsp.structure.first, lsp.structure.visible; internal/app/structure_test.go |
 | `terminal` | Terminal | bottom | `src/features/terminal/index.ts` | partial - internal/app/term.go; UPSTREAM_FEATURE_MATRIX.md Terminal |
 | `todo` | TODO | bottom | `src/features/todo/index.ts` | missing |
 | `usages` | Find Usages | bottom | `src/features/code-insight/index.ts` | partial - internal/app/usages.go usagesRows; lsp.references.count, lsp.references.done |

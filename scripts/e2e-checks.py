@@ -83,6 +83,9 @@ CHECKS = {
         ("problems.errors", "problems view counted the error", lambda d: ((get(d, "lsp.diagnostics.problems.errors") or 0) >= 1, get(d, "lsp.diagnostics.problems.errors"))),
         ("problems.rows", "problems view built a row", lambda d: ((get(d, "lsp.diagnostics.problems.rows") or 0) >= 1, get(d, "lsp.diagnostics.problems.rows"))),
         ("problems.visible", "problems tool window opened", lambda d: (get(d, "lsp.diagnostics.problems.visible") is True, get(d, "lsp.diagnostics.problems.visible"))),
+        ("structure.rows", "structure view built rows", lambda d: ((get(d, "lsp.structure.rows") or 0) > 0, get(d, "lsp.structure.rows"))),
+        ("structure.first", "structure view named the first symbol", lambda d: (bool(get(d, "lsp.structure.first")), get(d, "lsp.structure.first"))),
+        ("structure.visible", "structure tool window opened", lambda d: (get(d, "lsp.structure.visible") is True, get(d, "lsp.structure.visible"))),
     ],
     "debug": [
         ("debugError", *absent("debugError")),

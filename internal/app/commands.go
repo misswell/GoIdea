@@ -38,6 +38,7 @@ func commands() []appCommand {
 		{"view.run", "显示运行窗口", "视图", "Cmd+4", "run output console", func(m *Model) { m.ShowRun() }},
 		{"view.debug", "显示调试窗口", "视图", "Cmd+5", "debug variables frames", func(m *Model) { m.ShowDebug() }},
 		{"view.problems", "显示问题", "视图", "Cmd+6", "problems diagnostics errors warnings inspections", func(m *Model) { m.ShowProblems() }},
+		{"view.structure", "显示结构", "视图", "Cmd+7", "structure outline symbols members file", func(m *Model) { m.ShowStructure() }},
 		{"view.hideActive", "隐藏当前工具窗口", "视图", "Shift+Escape", "hide tool window active", func(m *Model) { m.HideActiveToolWindow() }},
 		{"view.hideAll", "隐藏全部工具窗口", "视图", "Cmd+Shift+F12", "hide all tool windows restore", func(m *Model) { m.HideAllToolWindows() }},
 		{"view.jumpLast", "跳转到上一个工具窗口", "视图", "F12", "jump last tool window", func(m *Model) { m.JumpToLastToolWindow() }},
