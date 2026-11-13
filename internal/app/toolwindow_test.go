@@ -11,9 +11,6 @@ func toolModel() *Model {
 		problems:    ProblemsPane{showErr: true, showWarn: true, showInfo: true},
 		problemStep: -1,
 	}
-	// The terminal's toggle starts a shell on first use; the window
-	// bookkeeping tests never get that far.
-	m.term.starting = true
 	return m
 }
 

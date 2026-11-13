@@ -679,28 +679,53 @@ func (p *RunPane) renderText() string {
 	return b.String()
 }
 
-// termPanel is the integrated terminal: scrollback above, one input line that
-// sends Enter-terminated text to the shell.
+// termPanel is the integrated terminal: one tab per shell, scrollback above,
+// one input line that sends Enter-terminated text to the active shell.
 func (m *Model) termPanel(c *ui.Context, p *ui.Theme) {
 	t := &m.term
 	col := ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Background(p.Surface).
 		BorderWidth(1, 0, 0, 0).BorderColor(p.Border)
 	col.Children(func() {
-		ui.Row(c).Height(30).Shrink(0).Padding(0, 8).Gap(8).AlignItems(ui.Center).
+		ui.Row(c).Height(30).Shrink(0).Padding(0, 8).Gap(6).AlignItems(ui.Center).
 			BorderWidth(0, 0, 1, 0).BorderColor(p.Border).Children(func() {
 			ui.Text(c, "终端").FontSize(12).Bold().TextColor(p.Text)
-			shell := t.shell
-			switch {
-			case t.starting:
-				shell = "正在启动…"
-			case t.id == 0 && shell == "":
-				shell = "未运行"
-			case t.id == 0:
-				shell += "（已结束）"
+			for i := range t.sessions {
+				s := &t.sessions[i]
+				label := s.shell
+				if label == "" {
+					label = fmt.Sprintf("终端 %d", i+1)
+				}
+				switch {
+				case s.starting:
+					label = "正在启动…"
+				case s.id == 0 && s.ended:
+					label += "（已结束）"
+				}
+				tabColor := p.TextMuted
+				if i == t.active {
+					tabColor = p.Text
+				}
+				tab := ui.Row(c.Key(fmt.Sprintf("termTab:%d", s.channel))).
+					Height(22).Padding(0, 6).Gap(2).AlignItems(ui.Center)
+				if i == t.active {
+					tab.Background(p.SurfacePressed)
+				}
+				tab.Children(func() {
+					ui.Text(c, label).FontSize(11.5).TextColor(tabColor).
+						SingleLine().Ellipsis("…")
+					ui.Button(c, "×").OnClick(func() { m.CloseTermTab(i) })
+				})
+				if tab.Clicked() && i != t.active {
+					t.active = i
+					m.invalidate()
+				}
 			}
-			ui.Text(c, shell).FontSize(11.5).TextColor(p.TextMuted).
-				SingleLine().Ellipsis("…").Grow(1)
-			if t.id == 0 && !t.starting {
+			if len(t.sessions) == 0 {
+				ui.Text(c, "未运行").FontSize(11.5).TextColor(p.TextMuted)
+			}
+			ui.Spacer(c)
+			ui.Button(c, "新建").OnClick(func() { m.OpenTermTab() })
+			if s := t.current(); s == nil || (s.id == 0 && !s.starting) {
 				ui.Button(c, "启动").OnClick(func() { m.SpawnTerm() })
 			} else {
 				ui.Button(c, "结束").OnClick(func() { m.KillTerm() })
@@ -720,19 +745,20 @@ func (m *Model) termPanel(c *ui.Context, p *ui.Theme) {
 		}
 		ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
 			ui.Column(c).Padding(8, 10).Children(func() {
-				if len(t.lines) == 0 {
+				s := t.current()
+				if s == nil || len(s.lines) == 0 {
 					hint := "终端输出显示在这里。Enter 发送这一行。"
-					if t.id == 0 && !t.starting {
-						hint = "点“启动”打开登录 shell。"
+					if s == nil || (s.id == 0 && !s.starting) {
+						hint = "点“新建”打开一个登录 shell。"
 					}
 					ui.Text(c, hint).FontSize(11.5).TextColor(p.TextMuted)
 					return
 				}
-				if t.truncated {
+				if s.truncated {
 					ui.Text(c, "（输出过长，已省略较早的行）").
 						FontSize(11).TextColor(p.TextMuted)
 				}
-				ui.Text(c, t.render()).FontSize(11.5).TextColor(p.Text)
+				ui.Text(c, s.render()).FontSize(11.5).TextColor(p.Text)
 			})
 		})
 		ui.Row(c).Height(30).Shrink(0).Padding(3, 8).Gap(6).AlignItems(ui.Center).
@@ -747,7 +773,7 @@ func (m *Model) termPanel(c *ui.Context, p *ui.Theme) {
 }
 
 // render is the scrollback as one string; empty lines keep their height.
-func (p *TermPane) render() string {
+func (p *termSession) render() string {
 	var b strings.Builder
 	for i, line := range p.lines {
 		if i > 0 {

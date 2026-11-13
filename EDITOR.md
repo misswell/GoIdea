@@ -102,6 +102,14 @@ anchors them, so their results no longer take the sidebar
 (`searchPanel`, `usagesPanel` in `view.go`). The sidebar keeps the windows
 OpenIDEA anchors on the left: Project, Commit's changes and Structure.
 
+**终端** (`Alt+F12`) is a bottom window as well. It runs the login shell in a
+PTY owned by `openidea-server` (`term_spawn`, with output on a streaming
+channel) and renders that text with ANSI colours removed, so full-screen
+programs stay out of scope. Each tab is its own shell: `Cmd+T` or **新建**
+opens one, the tab strip switches between them, and the tab's **×** ends that
+shell; closing the last tab hides the window, as OpenIDEA's Close Terminal
+Session does (`term.go`, `termPanel` in `view.go`).
+
 ## Structure
 
 `Cmd+7` opens OpenIDEA's Structure window in the sidebar: the active file's

@@ -279,10 +279,12 @@ func New(cfg Config) *Model {
 			if m.debug.visible {
 				m.debug.err = "后端已重启，调试已中断"
 			}
-			m.term.id = 0
-			m.term.pid = nil
-			m.term.starting = false
-			m.term.ended = true
+			for i := range m.term.sessions {
+				m.term.sessions[i].id = 0
+				m.term.sessions[i].pid = nil
+				m.term.sessions[i].starting = false
+				m.term.sessions[i].ended = true
+			}
 			if m.term.visible {
 				m.term.err = "后端已重启，终端已关闭"
 			}
@@ -550,7 +552,12 @@ func (m *Model) openProject(dir string, files []string) {
 	old := append([]*Tab(nil), m.tabs...)
 	oldRun := m.run.runID
 	oldDebug := m.debug.session
-	oldTerm := m.term.id
+	var oldTerms []uint32
+	for i := range m.term.sessions {
+		if id := m.term.sessions[i].id; id != 0 {
+			oldTerms = append(oldTerms, id)
+		}
+	}
 	m.tabs, m.active = nil, 0
 	m.banner, m.bannerPath = "", ""
 	m.resetRun()
@@ -604,8 +611,8 @@ func (m *Model) openProject(dir string, files []string) {
 		if oldDebug != 0 {
 			_, _ = m.mgr.Invoke(ctx, Window, "debug_stop", map[string]any{"session": oldDebug})
 		}
-		if oldTerm != 0 {
-			_, _ = m.mgr.Invoke(ctx, Window, "term_kill", map[string]any{"id": oldTerm})
+		for _, id := range oldTerms {
+			_, _ = m.mgr.Invoke(ctx, Window, "term_kill", map[string]any{"id": id})
 		}
 		for _, t := range old {
 			_ = m.reg.Close(ctx, t.doc.Path())
@@ -1312,6 +1319,11 @@ func (m *Model) shortcuts(c *ui.Context) {
 	}
 	if c.Shortcut(ui.Alt, ui.KeyF12) {
 		m.ShowTerm()
+	}
+	// OpenIDEA's terminal.new; ⌘T is otherwise unbound here, so it opens a tab
+	// from anywhere rather than only while the terminal has focus.
+	if c.Shortcut(ui.Cmd, ui.KeyT) && !m.overlayOpen() {
+		m.OpenTermTab()
 	}
 	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyF12) {
 		m.HideAllToolWindows()
