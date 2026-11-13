@@ -172,6 +172,37 @@ func TestPathBookmarksInProjectDropsMissingAndOutside(t *testing.T) {
 	}
 }
 
+func TestAddBookmarkList(t *testing.T) {
+	lists := normalizeBookmarkLists(nil)
+	if len(lists) != 1 || lists[0].ID != bookmarkDefaultList {
+		t.Fatalf("normalize(nil) = %v, want only the default list", lists)
+	}
+	lists, id, err := addBookmarkList(lists, " Work ")
+	if err != "" || id != "list2" || len(lists) != 2 || lists[1].Name != "Work" {
+		t.Fatalf("add = %v, %q, %q; want Work as list2", lists, id, err)
+	}
+	if _, _, err := addBookmarkList(lists, "Work"); err == "" {
+		t.Fatal("a duplicate name was accepted")
+	}
+	if _, _, err := addBookmarkList(lists, "  "); err == "" {
+		t.Fatal("an empty name was accepted")
+	}
+}
+
+func TestBookmarksInList(t *testing.T) {
+	list := []Bookmark{
+		{Path: "/p/a.java", Line: 1},
+		{Path: "/p/a.java", Line: 2, List: "list2"},
+		{Path: "/p/a.java", Line: 3, List: bookmarkDefaultList},
+	}
+	if got := bookmarksInList(list, bookmarkDefaultList); len(got) != 2 {
+		t.Fatalf("default list = %v, want the two unlisted bookmarks", got)
+	}
+	if got := bookmarksInList(list, "list2"); len(got) != 1 || got[0].Line != 2 {
+		t.Fatalf("list2 = %v, want line 2", got)
+	}
+}
+
 func TestSessionRoundTripsBookmarks(t *testing.T) {
 	root := t.TempDir()
 	file := filepath.Join(root, "A.java")
@@ -181,7 +212,8 @@ func TestSessionRoundTripsBookmarks(t *testing.T) {
 	path := filepath.Join(root, "session.json")
 	want := Bookmark{Path: file, Line: 0, Text: "class A {}", Description: "the class"}
 	if err := (Session{Root: root, Bookmarks: []Bookmark{want},
-		PathBookmarks: []PathBookmark{{Path: file}}}).Save(path); err != nil {
+		PathBookmarks: []PathBookmark{{Path: file}},
+		BookmarkLists: []BookmarkList{{ID: "list2", Name: "Work"}}, DefaultList: "list2"}).Save(path); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
 	got := LoadSession(path)
@@ -190,5 +222,9 @@ func TestSessionRoundTripsBookmarks(t *testing.T) {
 	}
 	if len(got.PathBookmarks) != 1 || got.PathBookmarks[0].Path != file {
 		t.Fatalf("LoadSession path bookmarks = %+v, want %s", got.PathBookmarks, file)
+	}
+	if len(got.BookmarkLists) != 1 || got.BookmarkLists[0].Name != "Work" ||
+		got.DefaultList != "list2" {
+		t.Fatalf("LoadSession lists = %+v, default %q; want Work", got.BookmarkLists, got.DefaultList)
 	}
 }

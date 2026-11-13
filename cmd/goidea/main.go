@@ -125,6 +125,7 @@ func menu(m *app.Model) *mygo.Menu {
 			{Label: "转到符号…", Accelerator: "CmdOrCtrl+Shift+O", Click: func(*mygo.MenuItem, *mygo.Window) { m.OpenSymbols() }},
 			{Label: "切换书签", Accelerator: "F3", Click: func(*mygo.MenuItem, *mygo.Window) { m.ToggleBookmark() }},
 			{Label: "切换文件书签", Click: func(*mygo.MenuItem, *mygo.Window) { m.ToggleFileBookmark() }},
+			{Label: "新建书签列表…", Click: func(*mygo.MenuItem, *mygo.Window) { m.OpenNewBookmarkList() }},
 			{Label: "显示书签", Accelerator: "CmdOrCtrl+F3", Click: func(*mygo.MenuItem, *mygo.Window) { m.ShowBookmarks() }},
 			{Label: "下一个书签", Click: func(*mygo.MenuItem, *mygo.Window) { m.NextBookmark() }},
 			{Label: "上一个书签", Click: func(*mygo.MenuItem, *mygo.Window) { m.PrevBookmark() }},

@@ -135,7 +135,7 @@ does not ask the server again.
 | Git changes and Git log | `internal/app/vcs.go`, `internal/app/log.go`; commit in `commit.go` |
 | Staged and unstaged change groups | `internal/app/vcs.go`; 已暂存/未暂存 split, per-row `vcs_stage` / `vcs_unstage` / `vcs_discard` with a rollback confirmation |
 | Branch widget and Branches popup | `internal/app/branch.go`; title bar `vcs_branch_info`, popup `vcs_branches` / `vcs_checkout` |
-| Line bookmarks | `internal/app/bookmarks.go`; F3 toggles the caret line, Cmd+F3 lists them, next/previous cycle, gutter dots, saved in the session; Alt+F3 assigns a unique mnemonic, Ctrl+Shift+digit toggles and Ctrl+digit jumps; Cmd+2 opens the Bookmarks tool window; Toggle File Bookmark marks the active file |
+| Line bookmarks | `internal/app/bookmarks.go`; F3 toggles the caret line, Cmd+F3 lists them, next/previous cycle, gutter dots, saved in the session; Alt+F3 assigns a unique mnemonic, Ctrl+Shift+digit toggles and Ctrl+digit jumps; Cmd+2 opens the Bookmarks tool window; Toggle File Bookmark marks the active file; named lists group the window |
 | Quick open (Cmd+P) / command palette | `quickopen.go`, `commands.go` |
 | Vim mode, sticky scroll | Mayoi's implementations are in-tree but not wired into `cmd/goidea` (see `UPSTREAM_FEATURE_MATRIX.md`) |
 

@@ -61,6 +61,7 @@ CHECKS = {
         ("bookmark.mnemonicUnique", "assigning a key took it from the other line", lambda d: (get(d, "bookmark.mnemonicMoved") == 5, get(d, "bookmark.mnemonicMoved"))),
         ("bookmark.window", "Cmd+2 shows every bookmark in the sidebar", lambda d: (get(d, "bookmark.windowMode") == "bookmarks" and get(d, "bookmark.windowRows") == 2, {"mode": get(d, "bookmark.windowMode"), "rows": get(d, "bookmark.windowRows")})),
         ("bookmark.file", "Toggle File Bookmark marked and unmarked the file", lambda d: (get(d, "bookmark.fileMarked") == 1 and get(d, "bookmark.fileCleared") == 0, {"marked": get(d, "bookmark.fileMarked"), "cleared": get(d, "bookmark.fileCleared")})),
+        ("bookmark.list", "a new list received the new bookmarks", lambda d: (get(d, "bookmark.lists") == 2 and get(d, "bookmark.listAssigned") == 2, {"lists": get(d, "bookmark.lists"), "assigned": get(d, "bookmark.listAssigned")})),
         ("bookmarkError", *absent("bookmarkError")),
         ("log.commits", "vcs_log returned commits", lambda d: ((get(d, "log.count") or 0) >= 1, get(d, "log.count"))),
         ("log.details", "vcs_log_details returned the message and a branch", lambda d: (bool(get(d, "log.message")) and (get(d, "log.branches") or 0) >= 1, {"message": get(d, "log.message"), "branches": get(d, "log.branches")})),

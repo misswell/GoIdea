@@ -27,7 +27,7 @@ new action, tool window, page or command appears automatically.
 | Kind | Items | Integrated | Partial | Engine | Blocked | Missing |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Feature folders | 43 | 0 | 10 | 0 | 0 | 33 |
-| Actions | 647 | 21 | 39 | 0 | 1 | 586 |
+| Actions | 647 | 21 | 40 | 0 | 1 | 585 |
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
 | Tool windows | 30 | 8 | 5 | 0 | 0 | 17 |
 | Overlays | 56 | 0 | 0 | 0 | 0 | 56 |
@@ -483,7 +483,7 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 
 | Action | Title | Source | Status |
 | --- | --- | --- | --- |
-| `bookmarks.newList` | New Bookmark List… | `src/features/search/index.ts` | missing |
+| `bookmarks.newList` | New Bookmark List… | `src/features/search/index.ts` | partial - internal/app/bookmarks.go addBookmarkList and newListDialog; cmd/goidea/main.go 新建书签列表…; base.bookmark.list; internal/app/bookmarks_test.go |
 | `bookmarks.toggleFileBookmark` | Toggle File Bookmark | `src/features/search/index.ts` | partial - internal/app/bookmarks.go ToggleFileBookmark and pathBookmarkLabel; cmd/goidea/main.go 切换文件书签; base.bookmark.file; internal/app/bookmarks_test.go |
 | `find.inPath` | Find in Files… | `src/features/search/index.ts` | missing |
 | `find.replaceInPath` | Replace in Files… | `src/features/search/index.ts` | missing |

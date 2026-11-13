@@ -18,6 +18,10 @@ type Session struct {
 	Bookmarks []Bookmark `json:"bookmarks,omitempty"`
 	// PathBookmarks are the files marked with Toggle File Bookmark.
 	PathBookmarks []PathBookmark `json:"pathBookmarks,omitempty"`
+	// BookmarkLists are the named groups the tool window shows, and DefaultList
+	// is the one new bookmarks go to.
+	BookmarkLists []BookmarkList `json:"bookmarkLists,omitempty"`
+	DefaultList   string         `json:"defaultList,omitempty"`
 }
 
 // LoadSession reads the session at path; a missing or unreadable file is an

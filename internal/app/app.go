@@ -162,12 +162,16 @@ type Model struct {
 	rollback *rollbackState
 
 	// bookmarks are the marked lines of the open project, pathBookmarks its
-	// bookmarked files, bookmarksView the Bookmarks popup, and mnemonics the
-	// Alt+F3 chooser, or nil.
+	// bookmarked files, and bookmarkLists the named groups they show in.
+	// bookmarksView is the Bookmarks popup, mnemonics the Alt+F3 chooser, and
+	// newList the new-list dialog, or nil.
 	bookmarks     []Bookmark
 	pathBookmarks []PathBookmark
+	bookmarkLists []BookmarkList
+	defaultList   string
 	bookmarksView *bookmarksPane
 	mnemonics     *mnemonicPicker
+	newList       *newListPane
 
 	run       RunPane
 	debug     DebugPane
@@ -555,6 +559,10 @@ func (m *Model) openProject(dir string, files []string) {
 	m.mnemonics = nil
 	m.bookmarks = bookmarksInProject(m.session().Bookmarks, dir)
 	m.pathBookmarks = pathBookmarksInProject(m.session().PathBookmarks, dir)
+	m.bookmarkLists = normalizeBookmarkLists(m.session().BookmarkLists)
+	m.defaultList = m.session().DefaultList
+	m.defaultList = m.defaultBookmarkList()
+	m.newList = nil
 	m.resetLog()
 	m.resetProblems()
 	m.structure = StructurePane{}
@@ -1047,7 +1055,8 @@ func (m *Model) saveSession() {
 		focus = t.doc.Path()
 	}
 	s := Session{Root: root, Files: normalizeFiles(files), Focus: focus,
-		Bookmarks: m.bookmarks, PathBookmarks: m.pathBookmarks}
+		Bookmarks: m.bookmarks, PathBookmarks: m.pathBookmarks,
+		BookmarkLists: m.bookmarkLists, DefaultList: m.defaultList}
 	path := m.cfg.SessionPath
 	go func() { _ = s.Save(path) }()
 }
@@ -1126,7 +1135,7 @@ func (m *Model) ShowProject() {
 func (m *Model) overlayOpen() bool {
 	return m.rename != nil || m.symbols != nil || m.intents != nil || m.files != nil ||
 		m.diff != nil || m.palette != nil || m.commit != nil || m.branch.open ||
-		m.rollback != nil || m.bookmarksView != nil || m.mnemonics != nil
+		m.rollback != nil || m.bookmarksView != nil || m.mnemonics != nil || m.newList != nil
 }
 
 // QuitImmediately closes the backend and quits without asking about changes,
@@ -1176,6 +1185,7 @@ func (m *Model) View(c *ui.Context) {
 	m.rollbackDialog(c, p)
 	m.bookmarksDialog(c, p)
 	m.mnemonicDialog(c, p)
+	m.newListDialog(c, p)
 	m.commandsDialog(c, p)
 	m.diffDialog(c, p)
 	m.dbDialog(c, p)
@@ -1201,8 +1211,8 @@ func (m *Model) shortcuts(c *ui.Context) {
 		}
 		return
 	}
-	// The mnemonic chooser takes clicks and Escape only.
-	if m.mnemonics != nil {
+	// The mnemonic chooser and the new-list dialog take clicks and Escape only.
+	if m.mnemonics != nil || m.newList != nil {
 		return
 	}
 	if c.Shortcut(ui.Cmd, ui.KeyComma) {

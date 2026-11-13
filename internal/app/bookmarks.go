@@ -25,6 +25,17 @@ type Bookmark struct {
 	// Mnemonic is one digit or capital letter, unique across bookmarks, so
 	// Ctrl+digit or the Alt+F3 chooser reaches it.
 	Mnemonic string `json:"mnemonic,omitempty"`
+	// List is the bookmark list it belongs to; empty means the default list.
+	List string `json:"list,omitempty"`
+}
+
+// bookmarkDefaultList is the id of the list new bookmarks go to.
+const bookmarkDefaultList = "default"
+
+// BookmarkList is one named group in the Bookmarks tool window.
+type BookmarkList struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 // bookmarkMnemonics are the keys a bookmark can be reached with.
@@ -47,6 +58,13 @@ type bookmarksPane struct {
 // mnemonicPicker is the open Alt+F3 chooser, or nil.
 type mnemonicPicker struct {
 	open bool
+}
+
+// newListPane is the open New Bookmark List dialog, or nil.
+type newListPane struct {
+	open bool
+	name string
+	err  string
 }
 
 // assignBookmarkMnemonic gives the line's bookmark mnemonic, creating the
@@ -154,6 +172,7 @@ func toggleBookmark(list []Bookmark, add Bookmark) ([]Bookmark, bool) {
 // the project view or editor tab selection.
 type PathBookmark struct {
 	Path string `json:"path"`
+	List string `json:"list,omitempty"`
 }
 
 // togglePathBookmark adds the file's bookmark, or removes it when present,
@@ -269,6 +288,7 @@ func (m *Model) caretBookmark() (Bookmark, bool) {
 		Line:        pos.Line,
 		Text:        bookmarkLineText(t.doc.Text(), pos.Line),
 		Description: clipBookmarkText(t.state.SelectedText()),
+		List:        m.defaultBookmarkList(),
 	}, true
 }
 
@@ -447,6 +467,13 @@ func (m *Model) ToggleFileBookmark() {
 	var added bool
 	m.pathBookmarks, added = togglePathBookmark(m.pathBookmarks, path)
 	if added {
+		for i := range m.pathBookmarks {
+			if m.pathBookmarks[i].Path == path {
+				m.pathBookmarks[i].List = m.defaultBookmarkList()
+			}
+		}
+	}
+	if added {
 		m.status = "已添加文件书签 " + filepath.Base(path)
 	} else {
 		m.status = "已移除文件书签 " + filepath.Base(path)
@@ -455,17 +482,121 @@ func (m *Model) ToggleFileBookmark() {
 	m.invalidate()
 }
 
-// removePathBookmarkAt drops one file bookmark from the tool window.
-func (m *Model) removePathBookmarkAt(i int) {
-	if i < 0 || i >= len(m.pathBookmarks) {
+// removePathBookmark drops the bookmarked file.
+func (m *Model) removePathBookmark(path string) {
+	for i, pb := range m.pathBookmarks {
+		if pb.Path != path {
+			continue
+		}
+		m.pathBookmarks = append(append([]PathBookmark(nil), m.pathBookmarks[:i]...),
+			m.pathBookmarks[i+1:]...)
+		m.status = "已移除文件书签 " + filepath.Base(pb.Path)
+		m.saveSession()
+		m.invalidate()
 		return
 	}
-	b := m.pathBookmarks[i]
-	m.pathBookmarks = append(append([]PathBookmark(nil), m.pathBookmarks[:i]...),
-		m.pathBookmarks[i+1:]...)
-	m.status = "已移除文件书签 " + filepath.Base(b.Path)
+}
+
+// removeBookmark drops the bookmark on one line.
+func (m *Model) removeBookmark(path string, line int) {
+	for i, b := range m.bookmarks {
+		if b.Path != path || b.Line != line {
+			continue
+		}
+		m.removeBookmarkAt(i)
+		return
+	}
+}
+
+// defaultBookmarkList is the list new bookmarks go to, defaulting to the first
+// list when the stored id is gone.
+func (m *Model) defaultBookmarkList() string {
+	lists := normalizeBookmarkLists(m.bookmarkLists)
+	for _, l := range lists {
+		if l.ID == m.defaultList {
+			return l.ID
+		}
+	}
+	return lists[0].ID
+}
+
+// SetDefaultBookmarkList makes a list the destination of new bookmarks.
+func (m *Model) SetDefaultBookmarkList(id string) {
+	for _, l := range normalizeBookmarkLists(m.bookmarkLists) {
+		if l.ID == id {
+			m.defaultList = id
+			m.status = "新书签将加入“" + l.Name + "”"
+			m.saveSession()
+			m.invalidate()
+			return
+		}
+	}
+}
+
+// OpenNewBookmarkList opens the naming dialog for a new bookmark list.
+func (m *Model) OpenNewBookmarkList() {
+	m.newList = &newListPane{open: true}
+	m.invalidate()
+}
+
+// closeNewBookmarkList drops the naming dialog.
+func (m *Model) closeNewBookmarkList() {
+	if m.newList == nil {
+		return
+	}
+	m.newList = nil
+	m.invalidate()
+}
+
+// CreateBookmarkList adds the typed list and sends new bookmarks there.
+func (m *Model) CreateBookmarkList() {
+	v := m.newList
+	if v == nil {
+		return
+	}
+	lists, id, err := addBookmarkList(normalizeBookmarkLists(m.bookmarkLists), v.name)
+	if err != "" {
+		v.err = err
+		m.invalidate()
+		return
+	}
+	m.bookmarkLists = lists
+	m.defaultList = id
+	m.newList = nil
+	m.status = "已新建书签列表“" + strings.TrimSpace(lists[len(lists)-1].Name) + "”"
 	m.saveSession()
 	m.invalidate()
+}
+
+// newListDialog draws the New Bookmark List prompt and creates the list.
+func (m *Model) newListDialog(c *ui.Context, p *ui.Theme) {
+	v := m.newList
+	if v == nil {
+		return
+	}
+	open := v.open
+	d := ui.Modal(c, &open, func() {
+		ui.Column(c).Width(420).Gap(8).Children(func() {
+			ui.Text(c, "新建书签列表").FontSize(13).Bold().TextColor(p.Text).SingleLine()
+			in := ui.TextInput(c, &v.name).AutoFocus()
+			in.OnChange(func() { v.err = "" })
+			if in.Submitted() {
+				m.CreateBookmarkList()
+			}
+			ui.Text(c, "新书签会加入这个列表。").FontSize(10.5).TextColor(p.TextMuted).
+				SingleLine()
+			if v.err != "" {
+				ui.Text(c, v.err).FontSize(11).TextColor(p.Danger).SingleLine().Ellipsis("…")
+			}
+			ui.Row(c).Gap(8).Children(func() {
+				ui.Button(c, "取消").OnClick(func() { m.closeNewBookmarkList() })
+				ui.Button(c, "创建").OnClick(func() { m.CreateBookmarkList() })
+			})
+		})
+	})
+	if d.Dismissed() || !open {
+		m.closeNewBookmarkList()
+	}
 }
 
 // ToggleBookmarksWindow hides the tool window when it is already showing.
@@ -477,79 +608,189 @@ func (m *Model) ToggleBookmarksWindow() {
 	m.ShowBookmarksWindow()
 }
 
-// bookmarkWindowRows draws the Bookmarks tool window: every marked line with
-// its file and line, a click Opening it, and a chip that removes it.
+// bookmarkWindowRows draws the Bookmarks tool window: each list with its
+// bookmarked files and lines, a click Opening one, and a chip that removes it.
+// A list header click makes that list the destination of new bookmarks.
 func (m *Model) bookmarkWindowRows(c *ui.Context, p *ui.Theme) {
-	list := append([]Bookmark(nil), m.bookmarks...)
-	sortBookmarks(list)
-	if len(list) == 0 && len(m.pathBookmarks) == 0 {
+	lists := normalizeBookmarkLists(m.bookmarkLists)
+	root := m.Root()
+	ui.Row(c).Height(26).Padding(0, 8).Gap(6).AlignItems(ui.Center).Children(func() {
+		ui.Text(c, fmt.Sprintf("%d 个书签", len(m.bookmarks)+len(m.pathBookmarks))).
+			FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+		ui.Spacer(c)
+		if m.rowChip(c, p, "bookmark-window:newList", "新建列表") {
+			m.OpenNewBookmarkList()
+		}
+	})
+	empty := len(m.bookmarks) == 0 && len(m.pathBookmarks) == 0
+	if empty {
 		ui.Row(c).Padding(10, 8).Children(func() {
 			ui.Text(c, "还没有书签；在编辑器中按 F3 标记当前行。").FontSize(11).
 				TextColor(p.TextMuted)
 		})
-		return
 	}
-	root := m.Root()
-	pathJump, pathRemove := -1, -1
-	for i, pb := range m.pathBookmarks {
-		i, pb := i, pb
-		r := ui.Row(c.Key(fmt.Sprintf("bookmark-window:path:%d", i))).Height(22).
-			Padding(0, 8).Gap(6).AlignItems(ui.Center)
-		if r.Hovered() {
-			r.Background(p.SurfaceHover)
-		}
-		r.Children(func() {
-			ui.Text(c, pathBookmarkLabel(root, pb.Path)).FontSize(11.5).TextColor(p.Text).
-				SingleLine().Ellipsis("…")
+	var jumpPath, removePath, makeDefault string
+	var jumpLine, removeLine = -1, -1
+	for _, l := range lists {
+		l := l
+		paths := pathBookmarksInList(m.pathBookmarks, l.ID)
+		marks := bookmarksInList(m.bookmarks, l.ID)
+		ui.Row(c).Height(22).Padding(6, 8).Gap(6).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, l.Name).FontSize(10.5).Bold().TextColor(p.TextMuted).SingleLine()
+			ui.Text(c, fmt.Sprintf("%d", len(paths)+len(marks))).FontSize(10).
+				TextColor(p.TextMuted)
 			ui.Spacer(c)
-			if m.rowChip(c, p, fmt.Sprintf("bookmark-window:pathDel:%d", i), "删除") {
-				pathRemove = i
+			if l.ID == m.defaultList {
+				ui.Text(c, "默认").FontSize(9.5).TextColor(p.TextMuted)
+			} else if m.rowChip(c, p, "bookmark-window:default:"+l.ID, "设为默认") {
+				makeDefault = l.ID
 			}
 		})
-		if r.Clicked() {
-			pathJump = i
-		}
-	}
-	jump, remove := -1, -1
-	for i, b := range list {
-		i, b := i, b
-		ui.Column(c).Children(func() {
-			r := ui.Row(c.Key(fmt.Sprintf("bookmark-window:%d", i))).Height(22).
+		for _, pb := range paths {
+			pb := pb
+			r := ui.Row(c.Key("bookmark-window:path:"+l.ID+":"+pb.Path)).Height(22).
 				Padding(0, 8).Gap(6).AlignItems(ui.Center)
 			if r.Hovered() {
 				r.Background(p.SurfaceHover)
 			}
 			r.Children(func() {
-				if b.Mnemonic != "" {
-					ui.Text(c, b.Mnemonic).FontSize(10.5).Bold().TextColor(p.Accent).
-						SingleLine()
-				}
-				ui.Text(c, bookmarkTitle(b)).FontSize(12).TextColor(p.Text).
+				ui.Text(c, pathBookmarkLabel(root, pb.Path)).FontSize(11.5).TextColor(p.Text).
 					SingleLine().Ellipsis("…")
 				ui.Spacer(c)
-				if m.rowChip(c, p, fmt.Sprintf("bookmark-window:del:%d", i), "删除") {
-					remove = i
+				if m.rowChip(c, p, "bookmark-window:pathDel:"+l.ID+":"+pb.Path, "删除") {
+					removePath = pb.Path
 				}
 			})
 			if r.Clicked() {
-				jump = i
+				jumpPath = pb.Path
 			}
-			ui.Row(c).Padding(0, 8).Children(func() {
-				ui.Text(c, symbolWhere(root, b.Path, b.Line)).FontSize(10).
-					TextColor(p.TextMuted).SingleLine().Ellipsis("…")
+		}
+		for _, b := range marks {
+			b := b
+			key := fmt.Sprintf("bookmark-window:%s:%s:%d", l.ID, b.Path, b.Line)
+			ui.Column(c).Children(func() {
+				r := ui.Row(c.Key(key)).Height(22).Padding(0, 8).Gap(6).
+					AlignItems(ui.Center)
+				if r.Hovered() {
+					r.Background(p.SurfaceHover)
+				}
+				r.Children(func() {
+					if b.Mnemonic != "" {
+						ui.Text(c, b.Mnemonic).FontSize(10.5).Bold().TextColor(p.Accent).
+							SingleLine()
+					}
+					ui.Text(c, bookmarkTitle(b)).FontSize(12).TextColor(p.Text).
+						SingleLine().Ellipsis("…")
+					ui.Spacer(c)
+					if m.rowChip(c, p, key+":del", "删除") {
+						removePath, removeLine = b.Path, b.Line
+					}
+				})
+				if r.Clicked() {
+					jumpPath, jumpLine = b.Path, b.Line
+				}
+				ui.Row(c).Padding(0, 8).Children(func() {
+					ui.Text(c, symbolWhere(root, b.Path, b.Line)).FontSize(10).
+						TextColor(p.TextMuted).SingleLine().Ellipsis("…")
+				})
 			})
-		})
+		}
 	}
 	switch {
-	case pathRemove >= 0:
-		m.removePathBookmarkAt(pathRemove)
-	case pathJump >= 0:
-		m.openFile(m.pathBookmarks[pathJump].Path)
+	case makeDefault != "":
+		m.SetDefaultBookmarkList(makeDefault)
+	case removeLine >= 0:
+		m.removeBookmark(removePath, removeLine)
+	case removePath != "":
+		m.removePathBookmark(removePath)
+	case jumpLine >= 0:
+		m.applyBookmark(Bookmark{Path: jumpPath, Line: jumpLine})
+	case jumpPath != "":
+		m.openFile(jumpPath)
 		m.invalidate()
-	case remove >= 0:
-		m.removeBookmarkAt(remove)
-	case jump >= 0:
-		m.applyBookmark(list[jump])
+	}
+}
+
+// bookmarksInList keeps the bookmarks that belong to listID.
+func bookmarksInList(list []Bookmark, listID string) []Bookmark {
+	out := make([]Bookmark, 0, len(list))
+	for _, b := range list {
+		if bookmarkListOf(b.List) == listID {
+			out = append(out, b)
+		}
+	}
+	sortBookmarks(out)
+	return out
+}
+
+// pathBookmarksInList keeps the file bookmarks that belong to listID.
+func pathBookmarksInList(list []PathBookmark, listID string) []PathBookmark {
+	out := make([]PathBookmark, 0, len(list))
+	for _, pb := range list {
+		if bookmarkListOf(pb.List) == listID {
+			out = append(out, pb)
+		}
+	}
+	return out
+}
+
+// bookmarkListOf names the list a bookmark without one belongs to.
+func bookmarkListOf(id string) string {
+	if id == "" {
+		return bookmarkDefaultList
+	}
+	return id
+}
+
+// normalizeBookmarkLists makes the default list exist, drops unnamed or
+// duplicate entries, and puts the default first.
+func normalizeBookmarkLists(lists []BookmarkList) []BookmarkList {
+	var out, rest []BookmarkList
+	seen := make(map[string]bool, len(lists))
+	for _, l := range lists {
+		l.Name = strings.TrimSpace(l.Name)
+		if l.ID == "" || l.Name == "" || seen[l.ID] {
+			continue
+		}
+		seen[l.ID] = true
+		if l.ID == bookmarkDefaultList {
+			out = append(out, l)
+			continue
+		}
+		rest = append(rest, l)
+	}
+	if len(out) == 0 {
+		out = append(out, BookmarkList{ID: bookmarkDefaultList, Name: "书签"})
+	}
+	return append(out, rest...)
+}
+
+// addBookmarkList creates a list with a fresh id; an unusable name comes back
+// as the error text.
+func addBookmarkList(lists []BookmarkList, name string) ([]BookmarkList, string, string) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return lists, "", "列表名称不能为空"
+	}
+	for _, l := range lists {
+		if l.Name == name {
+			return lists, "", "已经有名为“" + name + "”的列表"
+		}
+	}
+	for i := len(lists) + 1; ; i++ {
+		id := fmt.Sprintf("list%d", i)
+		taken := false
+		for _, l := range lists {
+			if l.ID == id {
+				taken = true
+				break
+			}
+		}
+		if taken {
+			continue
+		}
+		out := append(append([]BookmarkList(nil), lists...), BookmarkList{ID: id, Name: name})
+		return out, id, ""
 	}
 }
 
@@ -789,6 +1030,10 @@ func (m *Model) SmokeBookmark(ctx context.Context) (map[string]any, error) {
 			return
 		}
 		first, second := 2, 5
+		m.OpenNewBookmarkList()
+		m.newList.name = "Work"
+		m.CreateBookmarkList()
+		out["lists"] = len(m.bookmarkLists)
 		t.state.GoTo(editor.Pos{Line: first, Col: 0})
 		m.ToggleBookmark()
 		t.state.GoTo(editor.Pos{Line: second, Col: 0})
@@ -823,6 +1068,13 @@ func (m *Model) SmokeBookmark(ctx context.Context) (map[string]any, error) {
 			}
 		}
 		out["mnemonicMoved"] = movedLine
+		assigned := 0
+		for _, b := range m.bookmarks {
+			if m.defaultList != bookmarkDefaultList && b.List == m.defaultList {
+				assigned++
+			}
+		}
+		out["listAssigned"] = assigned
 		m.ShowBookmarksWindow()
 		out["windowMode"] = m.sideMode
 		out["windowRows"] = len(m.bookmarks)

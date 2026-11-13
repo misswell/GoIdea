@@ -97,6 +97,10 @@
       "status": "integrated",
       "evidence": "internal/app/app.go Cmd+2 ToggleBookmarksWindow; cmd/goidea/main.go 显示书签; internal/app/view.go sidebar tab; base.bookmark.window"
     },
+    "action:bookmarks.newList": {
+      "status": "partial",
+      "evidence": "internal/app/bookmarks.go addBookmarkList and newListDialog; cmd/goidea/main.go 新建书签列表…; base.bookmark.list; internal/app/bookmarks_test.go"
+    },
     "action:bookmarks.toggleFileBookmark": {
       "status": "partial",
       "evidence": "internal/app/bookmarks.go ToggleFileBookmark and pathBookmarkLabel; cmd/goidea/main.go 切换文件书签; base.bookmark.file; internal/app/bookmarks_test.go"
