@@ -72,7 +72,8 @@ type settingsDraft struct {
 	dropTrailingBlankLines bool
 	ensureFinalNewline     bool
 	// The tab fields are Editor Tabs' staged strip: where it sits, what a tab
-	// shows, where its close button is, how tabs are ordered and the limit.
+	// shows, where its close button is, how tabs are ordered, the limit and
+	// which tab opens when the current one closes.
 	tabPlacement              string
 	pinnedSeparateRow         bool
 	showExtension             bool
@@ -83,6 +84,7 @@ type settingsDraft struct {
 	sortAlphabetically        bool
 	openAtEnd                 bool
 	tabLimit                  int
+	activateOnClose           string
 }
 
 // appearance is the staged switches as the editor stores them.
@@ -136,6 +138,9 @@ func (d settingsDraft) tabPrefs() TabPrefs {
 	}
 	if d.tabLimit != defaultTabLimit {
 		t.TabLimit = d.tabLimit
+	}
+	if d.activateOnClose != "left" {
+		t.ActivateOnClose = d.activateOnClose
 	}
 	return t
 }
@@ -232,6 +237,7 @@ func settingsPages() []settingsPageSpec {
 			order: 5,
 			keywords: []string{
 				"tab limit", "preview tab", "close button", "pinned", "squeeze", "rows",
+				"activate",
 			},
 			labels: []string{
 				"Tab placement", "Top", "Bottom", "None",
@@ -239,6 +245,8 @@ func settingsPages() []settingsPageSpec {
 				"Show directory for non-unique file names", "Mark modified (*)",
 				"Show full path on mouse hover", "Close button position:", "Right", "Left",
 				"Sort tabs alphabetically", "Open new tabs at the end", "Tab limit",
+				"When the current tab is closed, activate", "The tab on the left",
+				"The tab on the right", "Most recently opened tab",
 			},
 			section: "editorTabs",
 		},
@@ -689,6 +697,7 @@ func (m *Model) settingsDraftFromPrefs() settingsDraft {
 		sortAlphabetically:        m.prefs.Tabs.SortAlphabetically,
 		openAtEnd:                 m.prefs.Tabs.OpenAtEnd,
 		tabLimit:                  m.prefs.Tabs.limit(),
+		activateOnClose:           m.prefs.Tabs.activation(),
 	}
 }
 
@@ -964,6 +973,21 @@ func (m *Model) settingsSetTabLimit(limit int) {
 	m.settingsPreview()
 }
 
+// settingsSetActivateOnClose stages which tab opens when the current one
+// closes, previewed by the next close.
+func (m *Model) settingsSetActivateOnClose(policy string) {
+	switch policy {
+	case "left", "right", "mru":
+	default:
+		return
+	}
+	if m.settingsDraft.activateOnClose == policy {
+		return
+	}
+	m.settingsDraft.activateOnClose = policy
+	m.settingsPreview()
+}
+
 // settingsPreview draws the staged theme, font, editor appearance,
 // breadcrumbs and tab strip in this window.
 func (m *Model) settingsPreview() {
@@ -1059,6 +1083,7 @@ func (m *Model) settingsResetPage() {
 		m.settingsDraft.sortAlphabetically = false
 		m.settingsDraft.openAtEnd = false
 		m.settingsDraft.tabLimit = defaultTabLimit
+		m.settingsDraft.activateOnClose = "left"
 	default:
 		return
 	}

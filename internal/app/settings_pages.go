@@ -225,10 +225,10 @@ func (m *Model) settingsBreadcrumbsBody(c *ui.Context, oi oiColors) {
 }
 
 // settingsEditorTabsBody is Editor › General › Editor Tabs: the strip's
-// placement and what a tab shows, then the tab order and the closing limit, in
-// general.tsx's order. "Show tabs in", the file icon, the preview tab and the
-// closing-policy radios name behaviour this build does not carry, so they are
-// not drawn.
+// placement and what a tab shows, then the tab order, the closing limit and
+// the tab a close activates, in general.tsx's order. "Show tabs in", the file
+// icon, the preview tab and the closing-policy radios name behaviour this
+// build does not carry, so they are not drawn.
 func (m *Model) settingsEditorTabsBody(c *ui.Context, oi oiColors) {
 	settingsSectionTitle(c, oi, "Appearance")
 	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).PaddingStart(20).Children(func() {
@@ -287,6 +287,18 @@ func (m *Model) settingsEditorTabsBody(c *ui.Context, oi oiColors) {
 			m.settingsSetTabLimit(int(math.Round(limit)))
 		}
 	})
+	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).PaddingStart(20).Children(func() {
+		settingsFormLabel(c, oi, "When the current tab is closed, activate", 220)
+	})
+	activate := m.settingsDraft.activateOnClose
+	ui.RadioGroup(c, func() {
+		ui.Radio(c, &activate, "left", "The tab on the left")
+		ui.Radio(c, &activate, "right", "The tab on the right")
+		ui.Radio(c, &activate, "mru", "Most recently opened tab")
+	}).PaddingStart(20)
+	if activate != m.settingsDraft.activateOnClose {
+		m.settingsSetActivateOnClose(activate)
+	}
 	ui.Text(c, "Tabs with unsaved changes are never closed automatically.").
 		FontSize(10.5).TextColor(oi.textMuted).PaddingStart(20).SingleLine().Ellipsis("…")
 }

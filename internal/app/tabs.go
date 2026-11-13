@@ -158,6 +158,32 @@ func (m *Model) enforceTabLimit() {
 	}
 }
 
+// nextActiveAfterClose picks the tab to show after the tab at closeAt closed,
+// from the strip that is left. "right" takes the tab that slid into its place,
+// "mru" the most recently used one, and the default "left" the tab before it,
+// or the new first tab when the closed one was first.
+func nextActiveAfterClose(tabs []*Tab, closeAt int, policy string) int {
+	switch policy {
+	case "right":
+		if closeAt < len(tabs) {
+			return closeAt
+		}
+		return max(len(tabs)-1, 0)
+	case "mru":
+		best := 0
+		for i := 1; i < len(tabs); i++ {
+			if tabs[i].used > tabs[best].used {
+				best = i
+			}
+		}
+		return best
+	}
+	if closeAt > 0 {
+		return closeAt - 1
+	}
+	return 0
+}
+
 // noteTabUse marks t as the most recently used tab, as the mru list ranks
 // tabs for the tab limit.
 func (m *Model) noteTabUse(t *Tab) {

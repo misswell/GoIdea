@@ -17,6 +17,7 @@ needs a `## <version>` section here, or its build fails.
 - 新增 **Editor > Editor Tabs** 设置页，标签栏可放在顶部、底部或隐藏。
 - 标签页可显示扩展名、所在目录、修改标记和完整路径提示，还能按字母排序、新标签排在末尾。
 - **Tab limit** 限制未固定标签页的数量，最久未用的先关闭，有未保存内容的标签不会关闭。
+- **Editor > Editor Tabs** 可选择关闭当前标签页后激活哪个：左边的、右边的或最近打开的。
 - 齿轮菜单新增 **Run Anything…**：搜索最近命令和运行配置，回车在项目目录执行或在运行窗口启动配置。
 - 工作台改用 OpenIDEA Islands 布局：顶部标题栏、左侧图标条、独立面板和 34px 状态栏。
 - 左侧图标条再次点击当前面板会折叠它，再点一次恢复，**Search Everywhere** 固定在底部。

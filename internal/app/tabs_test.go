@@ -146,6 +146,46 @@ func TestSortTabsByTitlePinsFirstAndKeepsTheActiveTab(t *testing.T) {
 	}
 }
 
+func TestNextActiveAfterCloseFollowsThePolicy(t *testing.T) {
+	a, b, c := &Tab{used: 1}, &Tab{used: 3}, &Tab{used: 2}
+	// The strip left after closing b.
+	if got := nextActiveAfterClose(strip(a, c), 1, "left"); got != 0 {
+		t.Fatalf("left of the closed tab = %d", got)
+	}
+	if got := nextActiveAfterClose(strip(a, c), 1, "right"); got != 1 {
+		t.Fatalf("right of the closed tab = %d", got)
+	}
+	if got := nextActiveAfterClose(strip(a, c), 0, "mru"); got != 1 {
+		t.Fatalf("most recently used = %d", got)
+	}
+	if got := nextActiveAfterClose(strip(&Tab{}, &Tab{}), 0, "mru"); got != 0 {
+		t.Fatalf("nothing used yet = %d", got)
+	}
+	// A closed first tab has nothing to its left, so the new first opens.
+	if got := nextActiveAfterClose(strip(b, c), 0, "left"); got != 0 {
+		t.Fatalf("closed first tab = %d", got)
+	}
+	// A closed last tab has nothing to its right, so the last one opens.
+	if got := nextActiveAfterClose(strip(a, b), 2, "right"); got != 1 {
+		t.Fatalf("closed last tab = %d", got)
+	}
+	if got := nextActiveAfterClose(nil, 0, "right"); got != 0 {
+		t.Fatalf("empty strip = %d", got)
+	}
+}
+
+func TestTabActivationDefaultsToTheLeft(t *testing.T) {
+	if got := (TabPrefs{}).activation(); got != "left" {
+		t.Fatalf("default activation = %q", got)
+	}
+	if got := (TabPrefs{ActivateOnClose: "mru"}).activation(); got != "mru" {
+		t.Fatalf("stored activation = %q", got)
+	}
+	if got := (TabPrefs{ActivateOnClose: "bogus"}).activation(); got != "left" {
+		t.Fatalf("unknown activation = %q", got)
+	}
+}
+
 func TestTabLimitCandidatesKeepPinnedActiveAndUnsaved(t *testing.T) {
 	pinned := &Tab{pinned: true, used: 1}
 	saved := &Tab{used: 3}

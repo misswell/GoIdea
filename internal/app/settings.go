@@ -439,6 +439,8 @@ type TabPrefs struct {
 	OpenAtEnd               bool `json:"openAtEnd,omitempty"`
 	// TabLimit is editor.tabs.tabLimit; zero is the default of 30.
 	TabLimit int `json:"tabLimit,omitempty"`
+	// ActivateOnClose is "left", "right" or "mru"; empty is OpenIDEA's left.
+	ActivateOnClose string `json:"activateOnClose,omitempty"`
 }
 
 // defaultTabLimit is where editor.tabs.tabLimit starts.
@@ -458,6 +460,16 @@ func (t TabPrefs) limit() int {
 
 // AtBottom reports whether the strip sits under the editor.
 func (t TabPrefs) AtBottom() bool { return t.Placement == "bottom" }
+
+// activation is which tab opens when the current one closes: the stored
+// policy, or OpenIDEA's default of the tab on the left.
+func (t TabPrefs) activation() string {
+	switch t.ActivateOnClose {
+	case "right", "mru":
+		return t.ActivateOnClose
+	}
+	return "left"
+}
 
 // Hidden reports whether Tab placement is None.
 func (t TabPrefs) Hidden() bool { return t.Placement == "none" }

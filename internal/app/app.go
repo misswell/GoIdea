@@ -972,25 +972,22 @@ func (m *Model) applyActive() {
 func (m *Model) dropTab(i int) { m.removeTab(m.tabs[i]) }
 
 func (m *Model) removeTab(t *Tab) {
-	idx := -1
-	for i, x := range m.tabs {
-		if x == t {
-			idx = i
-			break
-		}
-	}
+	idx := m.tabIndex(t)
 	if idx < 0 {
 		return
 	}
+	wasActive := idx == m.active
 	m.tabs = append(m.tabs[:idx], m.tabs[idx+1:]...)
 	if m.rename != nil && m.rename.tab == t {
 		m.rename = nil
 	}
-	if m.active >= len(m.tabs) {
-		m.active = len(m.tabs) - 1
-	}
-	if m.active < 0 {
+	switch {
+	case len(m.tabs) == 0:
 		m.active = 0
+	case wasActive:
+		m.active = nextActiveAfterClose(m.tabs, idx, m.tabPrefs.activation())
+	case idx < m.active:
+		m.active--
 	}
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
