@@ -241,10 +241,25 @@ type Model struct {
 
 	// recents are the folders the Welcome screen lists, most recent first,
 	// welcomeQuery filters them, and welcomePage is the rail page shown:
-	// "projects" or "plugins".
+	// "" for projects, or "customize" or "plugins".
 	recents      []string
 	welcomeQuery string
 	welcomePage  string
+
+	// The Welcome screen's per-folder and per-dialog state: the branch of
+	// each recent project once read, the gear popup, and the clone and
+	// remove dialogs.
+	welcomeBranches      map[string]string
+	welcomeBranchLoading map[string]bool
+	welcomeGearOpen      bool
+	welcomeCloneOpen     bool
+	welcomeCloneURL      string
+	welcomeCloneDir      string
+	welcomeCloneErr      string
+	welcomeCloneBusy     bool
+	welcomeCloneSeq      int
+	welcomeRemoveOpen    bool
+	welcomeRemovePath    string
 }
 
 // New returns a model; Start opens the last session.
@@ -1194,7 +1209,6 @@ func (m *Model) View(c *ui.Context) {
 				m.bannerRow(c, p)
 			}
 			m.welcome(c, p)
-			m.statusBar(c, p)
 			return
 		}
 		m.toolbar(c, p)

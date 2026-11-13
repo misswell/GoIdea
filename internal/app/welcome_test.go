@@ -81,14 +81,35 @@ func TestOpenideaTokens(t *testing.T) {
 	}
 }
 
-func TestProjectInitial(t *testing.T) {
-	if got := projectInitial("/work/shop"); got != "S" {
-		t.Fatalf("initial = %q, want S", got)
+func TestProjectInitials(t *testing.T) {
+	cases := map[string]string{
+		"shop":      "S",
+		"_demo":     "D",
+		"MyProject": "MP",
+		"py-demo":   "PD",
+		"idea":      "I",
+		"":          "?",
 	}
-	if got := projectInitial("/work/_demo"); got != "D" {
-		t.Fatalf("initial = %q, want D", got)
+	for name, want := range cases {
+		if got := projectInitials(name); got != want {
+			t.Fatalf("projectInitials(%q) = %q, want %q", name, got, want)
+		}
 	}
-	if got := projectInitial("/"); got != "·" {
-		t.Fatalf("initial = %q, want the dot", got)
+}
+
+func TestCloneDirName(t *testing.T) {
+	cases := map[string]string{
+		"https://github.com/user/repo.git":   "repo",
+		"git@github.com:user/repo.git":       "repo",
+		"https://github.com/user/repo/":      "repo",
+		"https://github.com/user/repo?x=1#y": "repo",
+		"https://example.com/a b/c d":        "c-d",
+		"https://example.com/.hidden":        "hidden",
+		"user/repo":                          "repo",
+	}
+	for url, want := range cases {
+		if got := cloneDirName(url); got != want {
+			t.Fatalf("cloneDirName(%q) = %q, want %q", url, got, want)
+		}
 	}
 }

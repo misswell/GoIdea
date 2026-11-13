@@ -44,7 +44,12 @@ func (m *Model) SetThemePref(theme string) {
 // stepFont moves the editor font size by delta, clamped to the readable
 // range, and applies it to the open editors.
 func (m *Model) stepFont(delta int) {
-	size := int(m.prefs.fontSize()) + delta
+	m.setFontSize(int(m.prefs.fontSize()) + delta)
+}
+
+// setFontSize stores an editor font size, clamped to the readable range, and
+// applies it to the open editors.
+func (m *Model) setFontSize(size int) {
 	size = max(minFontSize, min(size, maxFontSize))
 	if float32(size) == m.prefs.fontSize() {
 		return

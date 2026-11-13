@@ -623,6 +623,24 @@ func (r *Repo) Branches() ([]string, error) {
 	return refs.Branches, err
 }
 
+// BranchName is the branch HEAD is on, "" in a detached HEAD.
+func (r *Repo) BranchName() string {
+	out, err := r.run(nil, "symbolic-ref", "--short", "-q", "HEAD")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// Clone clones url into dest, making the folder of dest when it is missing.
+func Clone(url, dest string) error {
+	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+		return err
+	}
+	_, err := run(filepath.Dir(dest), nil, "clone", "--", url, dest)
+	return err
+}
+
 // Branch is a branch, local or of a remote, and its last commit.
 type Branch struct {
 	Name          string // as "main", or "origin/main" for a remote's

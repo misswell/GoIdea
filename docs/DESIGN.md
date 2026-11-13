@@ -70,10 +70,13 @@ And, for review:
 ## Look
 
 - The window wears OpenIDEA's own palette in either appearance, day or night
-  (`internal/app/theme.go`): the editor on `#1e1f22`, chrome on `#2b2d30`, the
-  accent `#3574f0`, 4 DIP corners.
-- With no project open the Welcome screen owns the window: the rail of pages,
-  the actions, and the recent folders, in OpenIDEA's layout (`welcome.go`).
+  (`internal/app/theme.go`): the island `#191a1c`, the rail `#212326`, the
+  accent `#3871e1`, 4 DIP corners.
+- With no project open the Welcome screen owns the window, ported from
+  OpenIDEA's WelcomeView (`welcome.go`): the 240px rail of brand, tagline,
+  Projects, Customize, Plugins and the gear menu; the Projects page with its
+  search, actions and recent projects, or the landing when there are none;
+  and the clone and remove dialogs.
 - A tool window is a glyph over its name on the left rail, and its panel shows
   the header of the window picked (`view.go`).
 - The page is flat: shadows only for what floats (`floating`), no box in a box.
