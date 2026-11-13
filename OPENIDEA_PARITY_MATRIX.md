@@ -27,7 +27,7 @@ new action, tool window, page or command appears automatically.
 | Kind | Items | Integrated | Partial | Engine | Blocked | Missing |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Feature folders | 43 | 0 | 10 | 0 | 0 | 33 |
-| Actions | 647 | 15 | 11 | 0 | 1 | 620 |
+| Actions | 647 | 20 | 11 | 0 | 1 | 615 |
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
 | Tool windows | 30 | 6 | 6 | 0 | 0 | 18 |
 | Overlays | 56 | 0 | 0 | 0 | 0 | 56 |
@@ -733,7 +733,7 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `toolwindow.hideActive` | Hide Active Tool Window | `src/workbench/toolwindows/actions.ts` | integrated - internal/app/toolwindow.go HideActiveToolWindow; internal/app/toolwindow_test.go |
 | `toolwindow.hideAll` | Hide All Tool Windows | `src/workbench/toolwindows/actions.ts` | integrated - internal/app/toolwindow.go HideAllToolWindows; internal/app/toolwindow_test.go |
 | `toolwindow.jumpToLast` | Jump to Last Tool Window | `src/workbench/toolwindows/actions.ts` | integrated - internal/app/toolwindow.go JumpToLastToolWindow; internal/app/toolwindow_test.go |
-| `toolwindow.maximize` | Maximize Tool Window | `src/workbench/toolwindows/actions.ts` | missing |
+| `toolwindow.maximize` | Maximize Tool Window | `src/workbench/toolwindows/actions.ts` | integrated - internal/app/toolwindow.go ToggleMaximizeToolWindow; internal/app/app.go View; internal/app/maximize_test.go |
 | `toolwindow.resize${dir[0]!.toUpperCase()}${dir.slice(1)}` |  | `src/workbench/toolwindows/actions.ts` | missing |
 | `view.backgroundTasks` | Background Tasks | `src/workbench/shellActions.ts` | missing |
 | `view.notifications` | Notifications | `src/workbench/shellActions.ts` | missing |
@@ -903,10 +903,10 @@ expected to come from a plugin or a hidden registration.
 | `toolwindow.git` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/vcs.go ShowVCS; cmd/goidea/main.go 视图 menu |
 | `toolwindow.problems` | intellij-macos, intellij-windows, vscode-macos | integrated - internal/app/problems.go ToggleProblems; lsp.problems.visible |
 | `toolwindow.project` | eclipse-macos, intellij-macos, intellij-windows, vscode-macos | partial - internal/app/app.go ShowProject; cmd/goidea/main.go 视图 menu |
-| `toolwindow.resizeDown` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
-| `toolwindow.resizeLeft` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
-| `toolwindow.resizeRight` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
-| `toolwindow.resizeUp` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
+| `toolwindow.resizeDown` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | integrated - internal/app/toolwindow.go ResizeBottomToolWindow; internal/app/maximize_test.go |
+| `toolwindow.resizeLeft` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | integrated - internal/app/toolwindow.go ResizeBottomToolWindow no-ops sideways on a bottom window; internal/app/maximize_test.go |
+| `toolwindow.resizeRight` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | integrated - internal/app/toolwindow.go ResizeBottomToolWindow no-ops sideways on a bottom window; internal/app/maximize_test.go |
+| `toolwindow.resizeUp` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | integrated - internal/app/toolwindow.go ResizeBottomToolWindow; internal/app/maximize_test.go |
 | `toolwindow.run` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/run.go ShowRun; cmd/goidea/main.go 视图 menu |
 | `toolwindow.services` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
 | `toolwindow.structure` | intellij-macos, intellij-windows, vscode-macos | integrated - internal/app/structure.go ToggleStructure; lsp.structure.visible; internal/app/structure_test.go |

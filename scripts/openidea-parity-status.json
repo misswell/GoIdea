@@ -169,6 +169,26 @@
       "status": "integrated",
       "evidence": "internal/app/toolwindow.go JumpToLastToolWindow; internal/app/toolwindow_test.go"
     },
+    "action:toolwindow.maximize": {
+      "status": "integrated",
+      "evidence": "internal/app/toolwindow.go ToggleMaximizeToolWindow; internal/app/app.go View; internal/app/maximize_test.go"
+    },
+    "action:toolwindow.resizeUp": {
+      "status": "integrated",
+      "evidence": "internal/app/toolwindow.go ResizeBottomToolWindow; internal/app/maximize_test.go"
+    },
+    "action:toolwindow.resizeDown": {
+      "status": "integrated",
+      "evidence": "internal/app/toolwindow.go ResizeBottomToolWindow; internal/app/maximize_test.go"
+    },
+    "action:toolwindow.resizeLeft": {
+      "status": "integrated",
+      "evidence": "internal/app/toolwindow.go ResizeBottomToolWindow no-ops sideways on a bottom window; internal/app/maximize_test.go"
+    },
+    "action:toolwindow.resizeRight": {
+      "status": "integrated",
+      "evidence": "internal/app/toolwindow.go ResizeBottomToolWindow no-ops sideways on a bottom window; internal/app/maximize_test.go"
+    },
     "action:navigate.nextOccurrence": {
       "status": "integrated",
       "evidence": "internal/app/problems.go StepProblem; internal/app/toolwindow_test.go"

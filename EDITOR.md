@@ -85,6 +85,14 @@ takes the area from the Run output, and the replaced window keeps its contents,
 so the terminal's shell and a run's output are still there when it comes back
 (`occupyBottom` in `toolwindow.go`, `bottomSlot` in `view.go`).
 
+`Cmd+Shift+'` maximizes the slot over the workbench and a second press gives
+the editor back; hiding the slot or opening a file also restores it.
+`Ctrl+Alt+Up` and `Ctrl+Alt+Down` move the slot's edge by 24 pixels, no smaller
+than 80 and no taller than the window less 160, and the arrows along the edge
+do nothing, as `resizeDelta` returns 0 for them. The slot keeps one height for
+whichever window it shows, as OpenIDEA keeps one size per side
+(`bottomSize` in `toolwindow.go`).
+
 ## Structure
 
 `Cmd+7` opens OpenIDEA's Structure window in the sidebar: the active file's
@@ -104,6 +112,7 @@ does not ask the server again.
 | Diagnostics, gutter marks | `internal/app/diagnostics.go`, `codeintel.go` |
 | Problems tool window, status-bar counts | `internal/app/problems.go` |
 | Structure tool window (Cmd+7) | `internal/app/structure.go` |
+| Tool window maximize and resize | `internal/app/toolwindow.go`, `maximize_test.go` |
 | Completion, hover, definition popups | MyGo callbacks → `internal/app/lsp.go` |
 | Intentions / quick fixes (Alt+Enter) | `internal/app/intents.go` |
 | Rename (Shift+F6) with undo | `internal/app/rename.go` |

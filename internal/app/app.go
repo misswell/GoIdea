@@ -171,8 +171,15 @@ type Model struct {
 
 	// tool is the bottom tool window the shortcuts last opened, "" once it
 	// closed; toolStash is what Hide All hid, restored by the next press.
-	tool      string
-	toolStash map[string]bool
+	// bottomHeight is the slot's one size, as OpenIDEA keeps a size per
+	// anchor; maximized lets the slot take the workbench and hides the editor.
+	tool         string
+	toolStash    map[string]bool
+	toolStashMax bool
+	bottomHeight int
+	maximized    bool
+	// frameHeight is the last drawn window height, which caps a resize.
+	frameHeight float32
 	// problemStep is the row Cmd+Alt+Down last revealed.
 	problemStep int
 	// reveal is the caret position a search hit asked for; it applies once the
@@ -203,7 +210,7 @@ type Model struct {
 // New returns a model; Start opens the last session.
 func New(cfg Config) *Model {
 	ctx, off := context.WithCancel(context.Background())
-	m := &Model{cfg: cfg, ctx: ctx, off: off}
+	m := &Model{cfg: cfg, ctx: ctx, off: off, bottomHeight: bottomDefaultHeight}
 	m.prefs = LoadPreferences(cfg.SettingsPath)
 	m.applyPreferences()
 	m.mgr = openidea.NewManager(openidea.LaunchConfig{
@@ -680,6 +687,7 @@ func (m *Model) openFile(path string) {
 			}
 			m.tabs = append(m.tabs, m.newTab(doc))
 			m.active = len(m.tabs) - 1
+			m.revealEditor()
 			if m.tree != nil {
 				m.tree.reveal(path)
 			}
@@ -704,6 +712,7 @@ func (m *Model) activate(i int) {
 	if i < 0 || i >= len(m.tabs) || i == m.active {
 		return
 	}
+	m.revealEditor()
 	m.active = i
 	m.applyActive()
 	m.applyReveal(m.tabs[i])
@@ -1105,6 +1114,10 @@ func (m *Model) View(c *ui.Context) {
 	if m.theme != nil {
 		c.SetTheme(m.theme)
 	}
+	if m.maximized && m.visibleTool() == "" {
+		m.maximized = false
+	}
+	_, m.frameHeight = c.Size()
 	m.shortcuts(c)
 	p := c.Theme()
 	ui.Column(c).Fill().Background(p.Background).Children(func() {
@@ -1112,6 +1125,12 @@ func (m *Model) View(c *ui.Context) {
 		ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
 			m.sidebar(c, p)
 			ui.Column(c).Grow(1).MinWidth(0).Children(func() {
+				if m.maximized {
+					// A maximized tool window takes the workbench, as
+					// OpenIDEA hides the editor island over it.
+					m.bottomSlot(c, p)
+					return
+				}
 				m.tabStrip(c, p)
 				if m.banner != "" {
 					m.bannerRow(c, p)
@@ -1218,6 +1237,21 @@ func (m *Model) shortcuts(c *ui.Context) {
 	}
 	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyF12) {
 		m.HideAllToolWindows()
+	}
+	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyQuote) && !m.overlayOpen() {
+		m.ToggleMaximizeToolWindow()
+	}
+	if c.Shortcut(ui.Ctrl|ui.Alt, ui.KeyUp) {
+		m.ResizeBottomToolWindow("up")
+	}
+	if c.Shortcut(ui.Ctrl|ui.Alt, ui.KeyDown) {
+		m.ResizeBottomToolWindow("down")
+	}
+	if c.Shortcut(ui.Ctrl|ui.Alt, ui.KeyLeft) {
+		m.ResizeBottomToolWindow("left")
+	}
+	if c.Shortcut(ui.Ctrl|ui.Alt, ui.KeyRight) {
+		m.ResizeBottomToolWindow("right")
 	}
 	if c.Shortcut(ui.Shift, ui.KeyEscape) && !m.overlayOpen() {
 		m.HideActiveToolWindow()

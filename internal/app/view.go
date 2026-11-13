@@ -451,8 +451,14 @@ func (m *Model) runPanel(c *ui.Context, p *ui.Theme) {
 	if !m.run.visible {
 		return
 	}
-	ui.Column(c).Height(240).Shrink(0).Background(p.Surface).
-		BorderWidth(1, 0, 0, 0).BorderColor(p.Border).Children(func() {
+	col := ui.Column(c).Shrink(0).Background(p.Surface).
+		BorderWidth(1, 0, 0, 0).BorderColor(p.Border)
+	if m.maximized {
+		col.Grow(1)
+	} else {
+		col.Height(float32(m.bottomSize()))
+	}
+	col.Children(func() {
 		m.runHeader(c, p)
 		if m.run.err != "" {
 			ui.Row(c).Height(24).Padding(0, 10).AlignItems(ui.Center).Children(func() {
@@ -489,8 +495,14 @@ func (m *Model) runPanel(c *ui.Context, p *ui.Theme) {
 
 func (m *Model) buildPanel(c *ui.Context, p *ui.Theme) {
 	b := &m.build
-	ui.Column(c).Height(220).Shrink(0).Background(p.Surface).
-		BorderWidth(1, 0, 0, 0).BorderColor(p.Border).Children(func() {
+	col := ui.Column(c).Shrink(0).Background(p.Surface).
+		BorderWidth(1, 0, 0, 0).BorderColor(p.Border)
+	if m.maximized {
+		col.Grow(1)
+	} else {
+		col.Height(float32(m.bottomSize()))
+	}
+	col.Children(func() {
 		m.buildHeader(c, p)
 		if b.err != "" {
 			ui.Row(c).Height(24).Padding(0, 10).AlignItems(ui.Center).Children(func() {
@@ -618,8 +630,14 @@ func (p *RunPane) renderText() string {
 // sends Enter-terminated text to the shell.
 func (m *Model) termPanel(c *ui.Context, p *ui.Theme) {
 	t := &m.term
-	ui.Column(c).Height(220).Shrink(0).MinHeight(0).Background(p.Surface).
-		BorderWidth(1, 0, 0, 0).BorderColor(p.Border).Children(func() {
+	col := ui.Column(c).Shrink(0).MinHeight(0).Background(p.Surface).
+		BorderWidth(1, 0, 0, 0).BorderColor(p.Border)
+	if m.maximized {
+		col.Grow(1)
+	} else {
+		col.Height(float32(m.bottomSize()))
+	}
+	col.Children(func() {
 		ui.Row(c).Height(30).Shrink(0).Padding(0, 8).Gap(8).AlignItems(ui.Center).
 			BorderWidth(0, 0, 1, 0).BorderColor(p.Border).Children(func() {
 			ui.Text(c, "终端").FontSize(12).Bold().TextColor(p.Text)
@@ -697,27 +715,32 @@ func (p *TermPane) render() string {
 }
 
 func (m *Model) debugPanel(c *ui.Context, p *ui.Theme) {
-	ui.Column(c).Height(300).Shrink(0).MinHeight(0).
-		Background(p.Surface).BorderWidth(1, 0, 0, 0).BorderColor(p.Border).
-		Children(func() {
-			m.debugHeader(c, p)
-			if m.debug.err != "" {
-				ui.Row(c).Shrink(0).Padding(4, 10).Gap(8).AlignItems(ui.Center).
-					Background(p.Background).Children(func() {
-					ui.Text(c, m.debug.err).FontSize(11.5).TextColor(p.Danger).
-						SingleLine().Ellipsis("…").Grow(1)
-					ui.Button(c, "关闭").OnClick(func() {
-						m.debug.err = ""
-						m.invalidate()
-					})
+	col := ui.Column(c).Shrink(0).MinHeight(0).
+		Background(p.Surface).BorderWidth(1, 0, 0, 0).BorderColor(p.Border)
+	if m.maximized {
+		col.Grow(1)
+	} else {
+		col.Height(float32(m.bottomSize()))
+	}
+	col.Children(func() {
+		m.debugHeader(c, p)
+		if m.debug.err != "" {
+			ui.Row(c).Shrink(0).Padding(4, 10).Gap(8).AlignItems(ui.Center).
+				Background(p.Background).Children(func() {
+				ui.Text(c, m.debug.err).FontSize(11.5).TextColor(p.Danger).
+					SingleLine().Ellipsis("…").Grow(1)
+				ui.Button(c, "关闭").OnClick(func() {
+					m.debug.err = ""
+					m.invalidate()
 				})
-			}
-			ui.Row(c).Grow(1).MinHeight(0).Children(func() {
-				m.debugFrames(c, p)
-				m.debugVars(c, p)
-				m.debugConsole(c, p)
 			})
+		}
+		ui.Row(c).Grow(1).MinHeight(0).Children(func() {
+			m.debugFrames(c, p)
+			m.debugVars(c, p)
+			m.debugConsole(c, p)
 		})
+	})
 }
 
 func (m *Model) debugHeader(c *ui.Context, p *ui.Theme) {

@@ -321,8 +321,14 @@ func (m *Model) problemsPanel(c *ui.Context, p *ui.Theme) {
 	}
 	errors, warnings, infos := m.problemCounts()
 	groups := m.problemList()
-	ui.Column(c).Height(220).Shrink(0).Background(p.Surface).
-		BorderWidth(1, 0, 0, 0).BorderColor(p.Border).Children(func() {
+	col := ui.Column(c).Shrink(0).Background(p.Surface).
+		BorderWidth(1, 0, 0, 0).BorderColor(p.Border)
+	if m.maximized {
+		col.Grow(1)
+	} else {
+		col.Height(float32(m.bottomSize()))
+	}
+	col.Children(func() {
 		ui.Row(c).Height(30).Padding(0, 8).Gap(10).AlignItems(ui.Center).
 			BorderWidth(0, 0, 1, 0).BorderColor(p.Border).Children(func() {
 			ui.Text(c, "问题").FontSize(12).Bold().TextColor(p.Text)
