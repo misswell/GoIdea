@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/json"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -331,14 +332,55 @@ type Preferences struct {
 	Plugins map[string]json.RawMessage `json:"plugins,omitempty"`
 }
 
-// EditorAppearance is what Settings › Editor › Appearance and Code Folding
-// show, as editor.appearance.* and editor.folding.showOutline are stored. The
-// fields are the off switches, so the zero value is IDEA's default look.
+// EditorAppearance is what Settings › Editor › Appearance, Breadcrumbs,
+// Code Folding and General show, as editor.appearance.*, editor.softWrap and
+// editor.general.scrollPastEnd are stored. The fields are the off switches,
+// so the zero value is IDEA's default look.
 type EditorAppearance struct {
 	NoLineNumbers  bool `json:"noLineNumbers,omitempty"`
 	ShowWhitespace bool `json:"showWhitespace,omitempty"`
 	NoIndentGuides bool `json:"noIndentGuides,omitempty"`
 	NoFolding      bool `json:"noFolding,omitempty"`
+	// SoftWrap wraps the files SoftWrapFiles matches, and ScrollPastEnd
+	// scrolls past the last line; OpenIDEA defaults both off.
+	SoftWrap      bool   `json:"softWrap,omitempty"`
+	SoftWrapFiles string `json:"softWrapFiles,omitempty"`
+	ScrollPastEnd bool   `json:"scrollPastEnd,omitempty"`
+}
+
+// defaultSoftWrapFiles is what editor.general.softWrapFiles defaults to.
+const defaultSoftWrapFiles = "*.md; *.txt; *.rst; *.adoc"
+
+// WrapsFile reports whether Soft-wrap files wraps file: a "*" pattern wraps
+// every file, otherwise the base name must match one of the semicolon
+// separated patterns, and no pattern wraps none.
+func (a EditorAppearance) WrapsFile(file string) bool {
+	if !a.SoftWrap {
+		return false
+	}
+	base := filepath.Base(file)
+	for _, p := range strings.Split(a.softWrapFiles(), ";") {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		if p == "*" {
+			return true
+		}
+		if ok, _ := path.Match(p, base); ok {
+			return true
+		}
+	}
+	return false
+}
+
+// softWrapFiles is the pattern list the page shows: the stored one, or
+// OpenIDEA's default list when none is stored.
+func (a EditorAppearance) softWrapFiles() string {
+	if strings.TrimSpace(a.SoftWrapFiles) == "" {
+		return defaultSoftWrapFiles
+	}
+	return a.SoftWrapFiles
 }
 
 // BreadcrumbPrefs is Settings › Editor › Breadcrumbs. The zero value shows the

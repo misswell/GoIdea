@@ -92,6 +92,11 @@ func (m *Model) applyTabAppearance(t *Tab, a EditorAppearance) {
 	}
 	t.state.NoIndentGuides = a.NoIndentGuides
 	t.state.NoFolding = a.NoFolding || m.zen
+	t.state.SoftWrap = a.SoftWrap
+	if t.doc != nil {
+		t.state.SoftWrap = a.WrapsFile(t.doc.Path())
+	}
+	t.state.NoScrollPastEnd = !a.ScrollPastEnd
 	if a.ShowWhitespace {
 		t.state.Whitespace = editor.WhitespaceAll
 	} else {

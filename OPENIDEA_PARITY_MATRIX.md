@@ -34,7 +34,7 @@ new action, tool window, page or command appears automatically.
 | Editor contributions | 35 | 0 | 0 | 0 | 0 | 35 |
 | Editor kinds | 4 | 0 | 0 | 0 | 0 | 4 |
 | File editor providers | 4 | 0 | 0 | 0 | 0 | 4 |
-| Settings pages | 81 | 0 | 7 | 0 | 0 | 74 |
+| Settings pages | 81 | 0 | 8 | 0 | 0 | 73 |
 | Settings keys | 445 | 0 | 0 | 0 | 0 | 445 |
 | Languages | 80 | 1 | 0 | 0 | 0 | 79 |
 | Backend crates | 38 | 0 | 0 | 31 | 0 | 7 |
@@ -1150,7 +1150,7 @@ The plain text editor is the workbench default and is not registered through
 | `editor.fileTemplates` | File and Code Templates | Editor | `src/features/templates/index.ts` | missing |
 | `editor.files` | File Types |  | `src/features/settings/pages/builtins.tsx` | missing |
 | `editor.font` | Font |  | `src/features/settings/pages/editor/font.tsx` | partial - internal/app/settings_pages.go settingsFontBody Size NumberInput 10.0-24.0 px over Preferences.FontSize; typeface, spacing and ligatures are not ported |
-| `editor.general` | General |  | `src/features/settings/pages/editor/general.tsx` | missing |
+| `editor.general` | General |  | `src/features/settings/pages/editor/general.tsx` | partial - internal/app/settings_pages.go settingsGeneralBody: Soft-wrap files over Preferences.Editor.SoftWrap with the File patterns field matched against each tab's base name by EditorAppearance.WrapsFile (default *.md; *.txt; *.rst; *.adoc, * wraps every file) and Show virtual space at file bottom over Preferences.Editor.ScrollPastEnd feeding the MyGo editor, staged through settingsDraft and proven by settings_test.go TestSettingsGeneralWrapsAndVirtualSpace; Markdown Images, Mouse Control, Scrolling, the soft-wrap indent child and Save Files are not ported |
 | `editor.general.appearance` | Appearance |  | `src/features/settings/pages/editor/general.tsx` | partial - internal/app/settings_pages.go settingsEditorAppearanceBody: Show line numbers, Show whitespaces and Show indent guides checkboxes over Preferences.Editor feeding the MyGo editor gutter and whitespace state, plus Distraction free mode text width 20-500 chars over Preferences.ZenWidth, staged through settingsDraft and proven by settings_test.go TestSettingsAppearanceSwitchesReachTheEditor; caret, method separators, intention bulb and the leading/inner/trailing whitespace children are not ported |
 | `editor.general.autoImport` | Auto Import |  | `src/features/settings/pages/editor/general.tsx` | missing |
 | `editor.general.breadcrumbs` | Breadcrumbs |  | `src/features/settings/pages/editor/general.tsx` | partial - internal/app/settings_pages.go settingsBreadcrumbsBody: Show breadcrumbs checkbox and Top/Bottom placement radios over Preferences.Breadcrumbs feeding the editor's breadcrumb row in internal/app/view.go, staged through settingsDraft and proven by settings_test.go TestSettingsBreadcrumbsStagePlacement; the Show breadcrumbs for languages chooser is not ported |

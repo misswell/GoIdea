@@ -112,21 +112,27 @@ func TestSettingsTreeNestsAndGroups(t *testing.T) {
 	for _, n := range tree {
 		roots = append(roots, n.title)
 	}
-	want := []string{"Appearance & Behavior", "Editor", "Keymap", "Languages & Frameworks"}
+	want := []string{"Appearance & Behavior", "Keymap", "Editor", "Languages & Frameworks"}
 	if !reflect.DeepEqual(roots, want) {
 		t.Fatalf("roots = %v, want %v", roots, want)
 	}
 	editor, ok := settingsFindNode(tree, settingsGroupKey("Editor"))
-	if !ok || len(editor.children) != 4 {
-		t.Fatalf("Editor folder = %+v, want its four pages", editor)
+	if !ok || len(editor.children) != 2 {
+		t.Fatalf("Editor folder = %+v, want General and Font", editor)
 	}
-	if editor.children[0].key != settingsPageEditorAppearance ||
-		editor.children[1].key != settingsPageBreadcrumbs ||
-		editor.children[2].key != settingsPageCodeFolding ||
-		editor.children[3].key != settingsPageEditorFont {
-		t.Fatalf("Editor children = %q, %q, %q, %q",
-			editor.children[0].key, editor.children[1].key,
-			editor.children[2].key, editor.children[3].key)
+	general := editor.children[0]
+	if general.key != settingsPageGeneral || editor.children[1].key != settingsPageEditorFont {
+		t.Fatalf("Editor children = %q, %q", general.key, editor.children[1].key)
+	}
+	if len(general.children) != 3 ||
+		general.children[0].key != settingsPageEditorAppearance ||
+		general.children[1].key != settingsPageBreadcrumbs ||
+		general.children[2].key != settingsPageCodeFolding {
+		t.Fatalf("General children = %+v", general.children)
+	}
+	if got := settingsBreadcrumb(tree, settingsPageBreadcrumbs); !reflect.DeepEqual(got,
+		[]string{"Editor", "General", "Breadcrumbs"}) {
+		t.Fatalf("Breadcrumbs breadcrumb = %v", got)
 	}
 	if got := settingsBreadcrumb(tree, settingsPageJava); !reflect.DeepEqual(got, []string{"Languages & Frameworks", "Java"}) {
 		t.Fatalf("Java breadcrumb = %v", got)
@@ -189,8 +195,8 @@ func TestSettingsCollapseHidesChildren(t *testing.T) {
 	open := len(m.settingsVisibleRows())
 	m.settingsToggleNode(settingsGroupKey("Editor"))
 	closed := len(m.settingsVisibleRows())
-	if closed != open-4 {
-		t.Fatalf("rows open %d, closed %d, want four fewer", open, closed)
+	if closed != open-5 {
+		t.Fatalf("rows open %d, closed %d, want five fewer", open, closed)
 	}
 	if m.settingsNormalizeKey("no.such.page") != "" {
 		t.Fatalf("unknown key normalized to a row")
@@ -392,5 +398,61 @@ func TestSettingsBreadcrumbsStagePlacement(t *testing.T) {
 	m.settingsSetBreadcrumbPlacement("left")
 	if m.settingsDraft.breadcrumbPlacement != "top" {
 		t.Fatalf("an unknown placement was staged")
+	}
+}
+
+func TestSettingsGeneralWrapsAndVirtualSpace(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	tab := &Tab{state: &editor.State{}}
+	m := &Model{cfg: Config{SettingsPath: path}, tabs: []*Tab{tab}}
+	m.applyPreferences()
+	if tab.state.SoftWrap {
+		t.Fatalf("defaults soft-wrap")
+	}
+	if !tab.state.NoScrollPastEnd {
+		t.Fatalf("defaults scroll past the end, OpenIDEA stops at it")
+	}
+
+	if (EditorAppearance{}).WrapsFile("README.md") {
+		t.Fatalf("soft wrap off still wrapped")
+	}
+	wrap := EditorAppearance{SoftWrap: true}
+	if !wrap.WrapsFile("README.md") || wrap.WrapsFile("Main.java") {
+		t.Fatalf("default patterns: md %v java %v", wrap.WrapsFile("README.md"), wrap.WrapsFile("Main.java"))
+	}
+	if !(EditorAppearance{SoftWrap: true, SoftWrapFiles: "*"}).WrapsFile("Main.java") {
+		t.Fatalf("* did not wrap every file")
+	}
+	own := EditorAppearance{SoftWrap: true, SoftWrapFiles: "*.java; *.kt"}
+	if !own.WrapsFile("Main.java") || !own.WrapsFile("App.kt") || own.WrapsFile("a.md") {
+		t.Fatalf("custom patterns: java %v kt %v md %v",
+			own.WrapsFile("Main.java"), own.WrapsFile("App.kt"), own.WrapsFile("a.md"))
+	}
+
+	m.OpenSettingsPage(settingsPageGeneral)
+	m.settingsSetSoftWrap(true)
+	m.settingsSetScrollPastEnd(true)
+	m.settingsSetSoftWrapFiles("*.java")
+	if !tab.state.SoftWrap || tab.state.NoScrollPastEnd {
+		t.Fatalf("staged general not previewed: wrap %v noScroll %v",
+			tab.state.SoftWrap, tab.state.NoScrollPastEnd)
+	}
+	if m.settingsDirtyPage(settingsPageEditorAppearance) {
+		t.Fatalf("a General change dirtied the Appearance page")
+	}
+	if !m.settingsDirtyPage(settingsPageGeneral) || !m.settingsPending() {
+		t.Fatalf("a General change did not enable Apply")
+	}
+	m.applySettings()
+	stored := LoadPreferences(path)
+	if !stored.Editor.SoftWrap || !stored.Editor.ScrollPastEnd || stored.Editor.SoftWrapFiles != "*.java" {
+		t.Fatalf("stored general = %+v", stored.Editor)
+	}
+
+	m.settingsSelectPage(settingsPageGeneral)
+	m.settingsResetPage()
+	d := m.settingsDraft
+	if d.softWrap || d.scrollPastEnd || d.softWrapFiles != defaultSoftWrapFiles {
+		t.Fatalf("reset general = %+v", d)
 	}
 }

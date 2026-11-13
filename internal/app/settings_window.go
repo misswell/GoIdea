@@ -35,6 +35,7 @@ const (
 const (
 	settingsPageKeymap           = "keymap"
 	settingsPageAppearance       = "appearance"
+	settingsPageGeneral          = "editor.general"
 	settingsPageEditorAppearance = "editor.general.appearance"
 	settingsPageBreadcrumbs      = "editor.general.breadcrumbs"
 	settingsPageCodeFolding      = "editor.general.codeFolding"
@@ -58,15 +59,27 @@ type settingsDraft struct {
 	// placement "top" or "bottom" as the page's radios read.
 	showBreadcrumbs     bool
 	breadcrumbPlacement string
+	// softWrap, softWrapFiles and scrollPastEnd are General's Soft Wraps and
+	// Virtual Space switches.
+	softWrap      bool
+	softWrapFiles string
+	scrollPastEnd bool
 }
 
 // appearance is the staged switches as the editor stores them.
 func (d settingsDraft) appearance() EditorAppearance {
+	files := d.softWrapFiles
+	if files == defaultSoftWrapFiles {
+		files = ""
+	}
 	return EditorAppearance{
 		NoLineNumbers:  !d.lineNumbers,
 		ShowWhitespace: d.showWhitespace,
 		NoIndentGuides: !d.indentGuides,
 		NoFolding:      !d.showFolding,
+		SoftWrap:       d.softWrap,
+		SoftWrapFiles:  files,
+		ScrollPastEnd:  d.scrollPastEnd,
 	}
 }
 
@@ -117,6 +130,18 @@ func settingsPages() []settingsPageSpec {
 				"shortcut", "keyboard", "hotkey", "binding", "preset", "vs code", "intellij",
 			},
 			section: "keymap",
+		},
+		{
+			id:       settingsPageGeneral,
+			title:    "General",
+			group:    "Editor",
+			order:    20,
+			keywords: []string{"mouse", "scroll", "wrap", "trailing spaces", "save"},
+			labels: []string{
+				"Soft Wraps", "Soft-wrap files", "File patterns",
+				"Virtual Space", "Show virtual space at file bottom",
+			},
+			section: "general",
 		},
 		{
 			id:    settingsPageEditorAppearance,
@@ -554,6 +579,9 @@ func (m *Model) settingsDraftFromPrefs() settingsDraft {
 		showFolding:         !m.prefs.Editor.NoFolding,
 		showBreadcrumbs:     !m.prefs.Breadcrumbs.Hidden,
 		breadcrumbPlacement: placement,
+		softWrap:            m.prefs.Editor.SoftWrap,
+		softWrapFiles:       m.prefs.Editor.softWrapFiles(),
+		scrollPastEnd:       m.prefs.Editor.ScrollPastEnd,
 	}
 }
 
@@ -651,6 +679,31 @@ func (m *Model) settingsSetBreadcrumbPlacement(place string) {
 	m.settingsPreview()
 }
 
+// settingsSetSoftWrap stages the Soft-wrap files switch.
+func (m *Model) settingsSetSoftWrap(on bool) {
+	if m.settingsDraft.softWrap == on {
+		return
+	}
+	m.settingsDraft.softWrap = on
+	m.settingsPreview()
+}
+
+// settingsSetSoftWrapFiles stages General's File patterns field.
+func (m *Model) settingsSetSoftWrapFiles(patterns string) {
+	m.settingsDraft.softWrapFiles = patterns
+	m.settingsPreview()
+}
+
+// settingsSetScrollPastEnd stages the Show virtual space at file bottom
+// switch.
+func (m *Model) settingsSetScrollPastEnd(on bool) {
+	if m.settingsDraft.scrollPastEnd == on {
+		return
+	}
+	m.settingsDraft.scrollPastEnd = on
+	m.settingsPreview()
+}
+
 // settingsPreview draws the staged theme, font, editor appearance and
 // breadcrumbs in this window.
 func (m *Model) settingsPreview() {
@@ -666,7 +719,7 @@ func (m *Model) settingsPreview() {
 func (m *Model) settingsPending() bool {
 	for _, key := range []string{
 		settingsPageAppearance, settingsPageEditorFont, settingsPageEditorAppearance,
-		settingsPageBreadcrumbs, settingsPageCodeFolding,
+		settingsPageBreadcrumbs, settingsPageCodeFolding, settingsPageGeneral,
 	} {
 		if m.settingsDirtyPage(key) {
 			return true
@@ -693,6 +746,10 @@ func (m *Model) settingsDirtyPage(key string) bool {
 		return !m.settingsDraft.showFolding != m.prefs.Editor.NoFolding
 	case settingsPageBreadcrumbs:
 		return m.settingsDraft.breadcrumbs() != m.prefs.Breadcrumbs
+	case settingsPageGeneral:
+		return m.settingsDraft.softWrap != m.prefs.Editor.SoftWrap ||
+			m.settingsDraft.softWrapFiles != m.prefs.Editor.softWrapFiles() ||
+			m.settingsDraft.scrollPastEnd != m.prefs.Editor.ScrollPastEnd
 	}
 	return false
 }
@@ -715,6 +772,10 @@ func (m *Model) settingsResetPage() {
 	case settingsPageBreadcrumbs:
 		m.settingsDraft.showBreadcrumbs = true
 		m.settingsDraft.breadcrumbPlacement = "top"
+	case settingsPageGeneral:
+		m.settingsDraft.softWrap = false
+		m.settingsDraft.softWrapFiles = defaultSoftWrapFiles
+		m.settingsDraft.scrollPastEnd = false
 	default:
 		return
 	}

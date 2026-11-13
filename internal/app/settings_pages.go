@@ -25,6 +25,8 @@ func (m *Model) settingsPageBody(c *ui.Context, p *ui.Theme, oi oiColors, node s
 		m.settingsAppearanceBody(c, oi)
 	case "editorAppearance":
 		m.settingsEditorAppearanceBody(c, oi)
+	case "general":
+		m.settingsGeneralBody(c, oi)
 	case "breadcrumbs":
 		m.settingsBreadcrumbsBody(c, oi)
 	case "codeFolding":
@@ -103,6 +105,40 @@ func (m *Model) settingsFontBody(c *ui.Context, oi oiColors) {
 		}
 		ui.Text(c, "px").FontSize(12).TextColor(oi.textMuted).SingleLine()
 	})
+}
+
+// settingsGeneralBody is Editor › General: the Soft Wraps section with its
+// file patterns, then Virtual Space, in general.tsx's order. The Markdown
+// Images, Mouse Control, Scrolling and Save Files sections name features this
+// build does not carry, so they are not drawn.
+func (m *Model) settingsGeneralBody(c *ui.Context, oi oiColors) {
+	settingsSectionTitle(c, oi, "Soft Wraps")
+	wrap := m.settingsDraft.softWrap
+	if ui.Checkbox(c, &wrap, "Soft-wrap files").Changed() {
+		m.settingsSetSoftWrap(wrap)
+	}
+	ui.Row(c).MinHeight(28).Gap(8).AlignItems(ui.Center).PaddingStart(20).Children(func() {
+		settingsFormLabel(c, oi, "File patterns", 110)
+		in := ui.TextInput(c, &m.settingsDraft.softWrapFiles).Grow(1).
+			Disabled(!m.settingsDraft.softWrap)
+		if in.Changed() {
+			m.settingsPreview()
+		}
+	})
+	ui.Text(c, "Use ; to separate patterns. * matches every file.").
+		FontSize(10.5).TextColor(oi.textMuted).PaddingStart(20).SingleLine().Ellipsis("…")
+	ui.Row(c).Height(10)
+	settingsSectionTitle(c, oi, "Virtual Space")
+	end := m.settingsDraft.scrollPastEnd
+	if ui.Checkbox(c, &end, "Show virtual space at file bottom").Changed() {
+		m.settingsSetScrollPastEnd(end)
+	}
+}
+
+// settingsSectionTitle is a page section's heading, as the dialog draws the
+// titles above groups of rows.
+func settingsSectionTitle(c *ui.Context, oi oiColors, title string) {
+	ui.Text(c, title).FontSize(12).TextColor(oi.textStrong).Padding(0, 0, 6, 0).SingleLine()
 }
 
 // settingsEditorAppearanceBody is Editor › General › Appearance: the gutter
