@@ -377,6 +377,10 @@
       "status": "partial",
       "evidence": "internal/app/history.go ConfirmHistoryLabel over history_put_label; base.files.historyLabel"
     },
+    "action:diff.compareDirectories": {
+      "status": "partial",
+      "evidence": "internal/app/dircompare.go OpenDirCompare and ConfirmDirCompare over fs_compare_directories with its onProgress channel; base.files.compareDirs; the per-file diff view is missing"
+    },
     "action:project.expandAll": {
       "status": "partial",
       "evidence": "internal/app/tree.go ExpandAll opens each folder as its read arrives; base.files.expand"

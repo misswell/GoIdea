@@ -184,6 +184,8 @@ type Model struct {
 	treeOp   *treeOpState
 	// history is the open Local History sheet, or nil.
 	history *historyState
+	// dirCompare is the open Compare Directories sheet, or nil.
+	dirCompare *dirCompareState
 
 	run       RunPane
 	debug     DebugPane
@@ -1165,7 +1167,7 @@ func (m *Model) overlayOpen() bool {
 		m.diff != nil || m.palette != nil || m.commit != nil || m.branch.open ||
 		m.rollback != nil || m.bookmarksView != nil || m.mnemonics != nil || m.newList != nil ||
 		m.deleteList != nil || m.move != nil || m.editDesc != nil || m.treeOp != nil ||
-		m.history != nil
+		m.history != nil || m.dirCompare != nil
 }
 
 // QuitImmediately closes the backend and quits without asking about changes,
@@ -1221,6 +1223,7 @@ func (m *Model) View(c *ui.Context) {
 	m.bookmarkDescriptionDialog(c, p)
 	m.treeOpDialog(c, p)
 	m.historyDialog(c, p)
+	m.dirCompareDialog(c, p)
 	m.commandsDialog(c, p)
 	m.diffDialog(c, p)
 	m.dbDialog(c, p)

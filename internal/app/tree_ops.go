@@ -49,6 +49,7 @@ const (
 	treeActTerminal
 	treeActShowHistory
 	treeActPutLabel
+	treeActCompareDirs
 )
 
 // treeMenuItem is one row of the project view menu: an action, a separator or
@@ -90,6 +91,7 @@ func treeMenuItems(t treeTarget, clipboard bool) []treeMenuItem {
 			item(treeActShowHistory, "显示历史…", true),
 			item(treeActPutLabel, "标记版本…", true),
 		}},
+		item(treeActCompareDirs, "比较目录…", t.dir),
 		sep,
 		item(treeActRename, "重命名…", !t.root),
 		item(treeActDelete, "删除…", !t.root),
@@ -161,6 +163,8 @@ func (m *Model) runTreeAct(c *ui.Context, it treeMenuItem, t treeTarget) {
 		m.ShowHistory(t.path)
 	case it.Act == treeActPutLabel:
 		m.OpenHistoryLabel()
+	case it.Act == treeActCompareDirs:
+		m.OpenDirCompare(t.path)
 	}
 }
 
@@ -955,6 +959,71 @@ func (m *Model) SmokeFiles(ctx context.Context) (map[string]any, error) {
 			}
 		}
 	})
+	// Compare Directories hashes both folders in the backend: one file differs,
+	// one exists on each side alone and one is identical.
+	left := filepath.Join(base, "compare-a")
+	right := filepath.Join(base, "compare-b")
+	if err := os.MkdirAll(filepath.Join(left, "sub"), 0o755); err != nil {
+		return out, err
+	}
+	if err := os.MkdirAll(right, 0o755); err != nil {
+		return out, err
+	}
+	files := map[string]string{
+		filepath.Join(left, "a.txt"):      "one\n",
+		filepath.Join(right, "a.txt"):     "two\n",
+		filepath.Join(left, "both.txt"):   "same\n",
+		filepath.Join(right, "both.txt"):  "same\n",
+		filepath.Join(left, "onlya.txt"):  "only left\n",
+		filepath.Join(right, "onlyb.txt"): "only right\n",
+	}
+	for path, text := range files {
+		if err := os.WriteFile(path, []byte(text), 0o644); err != nil {
+			return out, err
+		}
+	}
+	run(func() {
+		m.OpenDirCompare(left)
+		m.dirCompare.other = right
+		m.ConfirmDirCompare()
+	})
+	var compareErr string
+	var cmpEntries []dirCompareEntry
+	deadline = time.Now().Add(60 * time.Second)
+	for {
+		var loading bool
+		run(func() {
+			if d := m.dirCompare; d != nil {
+				loading, cmpEntries, compareErr = d.loading, d.entries, d.err
+			}
+		})
+		if compareErr != "" || !loading {
+			break
+		}
+		if time.Now().After(deadline) {
+			return out, errors.New("比较目录超时")
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+	if compareErr != "" {
+		return out, errors.New(compareErr)
+	}
+	counts := dirCompareCounts(cmpEntries)
+	out["compareDiffer"] = counts["different"]
+	out["compareLeft"] = counts["leftOnly"]
+	out["compareRight"] = counts["rightOnly"]
+	out["compareEqual"] = counts["equal"]
+	run(func() { m.closeDirCompare() })
+	if err := os.RemoveAll(left); err != nil {
+		return out, err
+	}
+	if err := os.RemoveAll(right); err != nil {
+		return out, err
+	}
 	two := filepath.Join(base, "two.txt")
 	if err := rename(one, "two.txt"); err != nil {
 		return out, err

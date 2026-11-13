@@ -142,7 +142,8 @@ Project tree rows open OpenIDEA's ProjectViewPopupMenu on right-click: **新建*
 (Absolute Path, File Name, Path From Content Root), **粘贴** while the
 clipboard holds a copied or cut entry, **跳到源码** on a file,
 **在文件夹中查找…** and **在终端中打开** on a folder, **本地历史** (显示历史…,
-标记版本…), **重命名…** and **删除…**. Entries that cannot apply are
+标记版本…), **比较目录…** on a folder, **重命名…** and **删除…**. Entries
+that cannot apply are
 disabled, and the project root itself cannot be cut, renamed or deleted
 (`treeMenuItems` in `tree_ops.go`, tested by `tree_ops_test.go`).
 
@@ -183,6 +184,12 @@ name and records it for the whole project with `history_put_label`; the label
 then lists in every file's history. The palette offers the same two as
 显示本地历史 and 标记版本….
 
+**比较目录…** asks for a second folder, relative paths starting at the project
+root, and runs `fs_compare_directories` over the two (`OpenDirCompare` and
+`ConfirmDirCompare` in `dircompare.go`). The sheet lists every entry as
+仅左侧, 仅右侧, 内容不同 or 相同 with a count per kind; equal files are hidden
+until **显示相同的文件**, and **另一个目录…** asks for another folder.
+
 ## Features wired to the editor
 
 | Feature | Where |
@@ -195,6 +202,7 @@ then lists in every file's history. The palette offers the same two as
 | Bottom split area, Move to Bottom Right | `internal/app/toolwindow.go`, `split_test.go` |
 | Find and Find Usages anchored at the bottom | `internal/app/search.go`, `usages.go`, `anchor_test.go` |
 | Local History sheet, restore and Put Label | `internal/app/history.go` |
+| Compare Directories sheet | `internal/app/dircompare.go` |
 | Completion, hover, definition popups | MyGo callbacks → `internal/app/lsp.go` |
 | Intentions / quick fixes (Alt+Enter) | `internal/app/intents.go` |
 | Rename (Shift+F6) with undo | `internal/app/rename.go` |

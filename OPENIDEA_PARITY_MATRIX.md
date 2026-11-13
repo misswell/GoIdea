@@ -27,7 +27,7 @@ new action, tool window, page or command appears automatically.
 | Kind | Items | Integrated | Partial | Engine | Blocked | Missing |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Feature folders | 43 | 0 | 10 | 0 | 0 | 33 |
-| Actions | 647 | 21 | 59 | 0 | 1 | 566 |
+| Actions | 647 | 21 | 60 | 0 | 1 | 565 |
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
 | Tool windows | 30 | 8 | 5 | 0 | 0 | 17 |
 | Overlays | 56 | 0 | 0 | 0 | 0 | 56 |
@@ -607,7 +607,7 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | --- | --- | --- | --- |
 | `diff.applyLeftSide` | Accept Left Side | `src/features/vcs/compare.tsx` | missing |
 | `diff.applyRightSide` | Accept Right Side | `src/features/vcs/compare.tsx` | missing |
-| `diff.compareDirectories` | Compare Directories | `src/features/vcs/compare.tsx` | missing |
+| `diff.compareDirectories` | Compare Directories | `src/features/vcs/compare.tsx` | partial - internal/app/dircompare.go OpenDirCompare and ConfirmDirCompare over fs_compare_directories with its onProgress channel; base.files.compareDirs; the per-file diff view is missing |
 | `diff.compareFiles` | Compare Files | `src/features/vcs/compare.tsx` | missing |
 | `diff.compareTexts` | Compare Texts | `src/features/vcs/compare.tsx` | missing |
 | `diff.compareWith` | Compare With… | `src/features/vcs/compare.tsx` | missing |
@@ -1916,7 +1916,7 @@ Local-only commands and the per-command argument lists are in
 | `find_files` | nav | yes | yes | missing |
 | `find_files_named` | nav | yes |  | missing |
 | `find_symbols` | nav | yes |  | missing |
-| `fs_compare_directories` | fs | yes |  | missing |
+| `fs_compare_directories` | fs | yes | yes | missing |
 | `fs_copy` | fs | yes | yes | missing |
 | `fs_copy_merge` | fs | yes |  | missing |
 | `fs_create_dir` | fs | yes | yes | missing |
@@ -2362,7 +2362,7 @@ Local-only commands and the per-command argument lists are in
 | `wsl_distros` | wsl | no |  | missing |
 | `wsl_resolve` | wsl | no |  | missing |
 
-446 commands are served over stdio and 84 are called by GoIDEA today. A command
+446 commands are served over stdio and 85 are called by GoIDEA today. A command
 that is registered only in the desktop shell needs an `ops` module before stdio
 can serve it; a GoIDEA check counts only when the UI path works end to end.
 
