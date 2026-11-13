@@ -1,0 +1,113 @@
+{
+  "about": "The only place a GoIDEA status is raised in OPENIDEA_PARITY_MATRIX.md. Keys are kind:id; a non-missing status must carry evidence (a regression check id from REGRESSION_INDEX.json, a document, or a source path). Everything absent here is reported as missing. Start conservative: `partial` when only part of the OpenIDEA surface is proven, `integrated` when a gate check exercises it.",
+  "items": {
+    "language:java": {
+      "status": "integrated",
+      "evidence": "lsp.jdtls.ready, lsp.completion.items, lsp.hover, lsp.rename, debug.paused"
+    },
+    "toolwindow:project": {
+      "status": "integrated",
+      "evidence": "internal/workspace tree tests; base.tabs"
+    },
+    "toolwindow:find": {
+      "status": "integrated",
+      "evidence": "base.search.done, base.search.files, base.search.matches"
+    },
+    "toolwindow:run": {
+      "status": "integrated",
+      "evidence": "base.run.config, base.run.exit, base.run.build"
+    },
+    "toolwindow:debug": {
+      "status": "integrated",
+      "evidence": "debug.paused, debug.vars, debug.step.paused, debug.watch"
+    },
+    "toolwindow:structure": {
+      "status": "partial",
+      "evidence": "base.outline"
+    },
+    "toolwindow:git": {
+      "status": "partial",
+      "evidence": "base.vcs.changes, base.diff.rows"
+    },
+    "toolwindow:problems": {
+      "status": "partial",
+      "evidence": "lsp.diagnostics"
+    },
+    "toolwindow:terminal": {
+      "status": "partial",
+      "evidence": "internal/app/term.go; UPSTREAM_FEATURE_MATRIX.md Terminal"
+    },
+    "toolwindow:database": {
+      "status": "partial",
+      "evidence": "UPSTREAM_FEATURE_MATRIX.md database console; db_* commands"
+    },
+    "feature:search": {
+      "status": "partial",
+      "evidence": "base.search.done, base.search.files, base.search.matches"
+    },
+    "feature:project-tree": {
+      "status": "partial",
+      "evidence": "internal/workspace tree tests; base.tabs"
+    },
+    "feature:code-insight": {
+      "status": "partial",
+      "evidence": "lsp.references.count, lsp.symbols"
+    },
+    "feature:vcs": {
+      "status": "partial",
+      "evidence": "base.vcs.changes, base.diff.rows"
+    },
+    "feature:run": {
+      "status": "partial",
+      "evidence": "base.run.config, base.run.exit, base.run.build"
+    },
+    "feature:debugger": {
+      "status": "partial",
+      "evidence": "debug.paused, debug.step.paused, debug.vars"
+    },
+    "feature:terminal": {
+      "status": "partial",
+      "evidence": "internal/app/term.go; UPSTREAM_FEATURE_MATRIX.md Terminal"
+    },
+    "feature:database": {
+      "status": "partial",
+      "evidence": "UPSTREAM_FEATURE_MATRIX.md database console; db_* commands"
+    },
+    "feature:settings": {
+      "status": "partial",
+      "evidence": "base.settings.opened, base.settings.closed, base.settings.theme"
+    },
+    "feature:tools": {
+      "status": "partial",
+      "evidence": "tools.jdtls, tools.java-debug"
+    },
+    "settings-page:appearance": {
+      "status": "partial",
+      "evidence": "base.settings.theme"
+    },
+    "action:navigate.gotoFile": {
+      "status": "integrated",
+      "evidence": "internal/app/quickopen_test.go"
+    },
+    "action:navigate.findAction": {
+      "status": "integrated",
+      "evidence": "base.commands"
+    },
+    "action:navigate.searchText": {
+      "status": "integrated",
+      "evidence": "base.search.done, base.search.files, base.search.matches"
+    },
+    "action:find.usages": {
+      "status": "integrated",
+      "evidence": "lsp.references.count, lsp.references.done"
+    },
+    "action:run.run": {
+      "status": "integrated",
+      "evidence": "base.run.exit, base.run.build"
+    },
+    "action:run.debug": {
+      "status": "integrated",
+      "evidence": "debug.paused, debug.step.paused"
+    }
+  }
+}

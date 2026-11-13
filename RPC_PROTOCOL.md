@@ -40,8 +40,16 @@ Every feature call is the JSON-RPC method `invoke`:
 ```
 
 `window` is always `"goidea"` (`internal/app/app.go:30`), so the backend never
-shares documents or state with the user's other OpenIDEA windows. The client
-uses these commands (`internal/openidea/*.go`, `internal/app/*.go`):
+shares documents or state with the user's other OpenIDEA windows. This is the
+list GoIDEA uses today, not the list the server offers: the stdio dispatcher
+was built as the remote-development entry, so it answers a subset of the
+desktop shell's IPC. [OPENIDEA_IPC.md](OPENIDEA_IPC.md) is the generated,
+complete inventory — every desktop command, whether stdio serves it, and which
+ones GoIDEA calls. Check it before adding a call: a command that is not in the
+server's `commands` reply cannot be invoked, and a desktop-only command needs
+either native Go work or an OpenIDEA change first.
+
+The client uses these commands (`internal/openidea/*.go`, `internal/app/*.go`):
 
 | Area | Commands |
 | --- | --- |

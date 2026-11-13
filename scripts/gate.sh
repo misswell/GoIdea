@@ -19,13 +19,15 @@ cd "$ROOT"
 say() { printf '\n==> %s\n' "$*"; }
 
 pr_gate() {
-    say "PR gate：格式、静态检查、单元测试、构建、许可证、回归索引"
+    say "PR gate：格式、静态检查、单元测试、构建、许可证、回归索引、OpenIDEA 清单"
     test -z "$(gofmt -l .)" || { gofmt -l .; echo "gofmt: 上面这些文件需要格式化" >&2; exit 1; }
     CGO_ENABLED=0 go vet ./...
     CGO_ENABLED=0 go test ./... -skip TestTerminalMovesToLockedRightColumn
     CGO_ENABLED=0 go build -o build/goidea ./cmd/goidea
     scripts/check-licenses.sh
     python3 scripts/check-regression-index.py
+    python3 scripts/openidea-ipc.py --check
+    python3 scripts/openidea-parity.py --check
 }
 
 main_gate() {

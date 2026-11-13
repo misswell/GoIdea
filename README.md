@@ -31,6 +31,11 @@ v0.2.0 performance bench table.
 - `ARCHITECTURE.md` — processes, packages, threads, restart and startup.
 - `RPC_PROTOCOL.md` — framing, `invoke` commands, channels, cancellation,
   errors, backpressure, timeouts.
+- `OPENIDEA_IPC.md` — every IPC command OpenIDEA registers, which ones
+  `openidea-server` serves, and which ones GoIDEA calls (generated).
+- `OPENIDEA_PARITY_MATRIX.md` — every OpenIDEA feature folder, action, keymap,
+  tool window, overlay, editor type, setting, language, IPC command, event and
+  plugin extension point, mapped to GoIDEA (generated).
 - `EDITOR.md` — documents, ChangeSets, UTF-16 mapping, undo, save, conflicts.
 - `JAVA_SUPPORT.md` — project detection, toolchain install, LSP, fixtures.
 - `BUILD_AND_DEBUG.md` — run configurations, run/stop, DAP pipeline, gaps.
