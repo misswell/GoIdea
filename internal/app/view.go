@@ -218,14 +218,14 @@ func (m *Model) vcsRow(c *ui.Context, p *ui.Theme, side string, i int, f openide
 			SingleLine().Ellipsis("…")
 		ui.Spacer(c)
 		if side == "staged" {
-			if m.vcsChip(c, p, "vcs:unstage:"+f.Path, "取消暂存") {
+			if m.rowChip(c, p, "vcs:unstage:"+f.Path, "取消暂存") {
 				m.UnstageChange(f)
 			}
 		} else {
-			if m.vcsChip(c, p, "vcs:stage:"+f.Path, "暂存") {
+			if m.rowChip(c, p, "vcs:stage:"+f.Path, "暂存") {
 				m.StageChange(f)
 			}
-			if m.vcsChip(c, p, "vcs:rollback:"+f.Path, "回滚") {
+			if m.rowChip(c, p, "vcs:rollback:"+f.Path, "回滚") {
 				m.AskRollback(f)
 			}
 		}
@@ -243,8 +243,8 @@ func (m *Model) vcsRow(c *ui.Context, p *ui.Theme, side string, i int, f openide
 	}
 }
 
-// vcsChip is one small action on a change row; it reports a click.
-func (m *Model) vcsChip(c *ui.Context, p *ui.Theme, key, label string) bool {
+// rowChip is one small action on a list row; it reports a click.
+func (m *Model) rowChip(c *ui.Context, p *ui.Theme, key, label string) bool {
 	chip := ui.Row(c.Key(key)).Height(16).Padding(0, 5).AlignItems(ui.Center)
 	if chip.Hovered() {
 		chip.Background(p.SurfacePressed)

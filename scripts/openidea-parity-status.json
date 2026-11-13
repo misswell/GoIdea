@@ -1,6 +1,22 @@
 {
   "about": "The only place a GoIDEA status is raised in OPENIDEA_PARITY_MATRIX.md. Keys are kind:id; a non-missing status must carry evidence (a regression check id from REGRESSION_INDEX.json, a document, or a source path). Everything absent here is reported as missing. Start conservative: `partial` when only part of the OpenIDEA surface is proven, `integrated` when a gate check exercises it.",
   "items": {
+    "action:navigate.toggleBookmark": {
+      "status": "partial",
+      "evidence": "internal/app/bookmarks.go ToggleBookmark at the caret and gutter dots; F3 in internal/app/app.go; base.bookmark.added, base.bookmark.gutter, base.bookmark.remove; internal/app/bookmarks_test.go"
+    },
+    "action:navigate.showBookmarks": {
+      "status": "partial",
+      "evidence": "internal/app/bookmarks.go ShowBookmarks popup with jump and delete; Cmd+F3 in internal/app/app.go; internal/app/bookmarks_test.go"
+    },
+    "action:navigate.nextBookmark": {
+      "status": "partial",
+      "evidence": "internal/app/bookmarks.go NextBookmark and stepBookmark wrap; base.bookmark.next; internal/app/bookmarks_test.go"
+    },
+    "action:navigate.prevBookmark": {
+      "status": "partial",
+      "evidence": "internal/app/bookmarks.go PrevBookmark and stepBookmark wrap; base.bookmark.prev; internal/app/bookmarks_test.go"
+    },
     "language:java": {
       "status": "integrated",
       "evidence": "lsp.jdtls.ready, lsp.completion.items, lsp.hover, lsp.rename, debug.paused"

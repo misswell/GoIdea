@@ -123,6 +123,10 @@ func menu(m *app.Model) *mygo.Menu {
 		{Label: "代码", Submenu: []*mygo.MenuItem{
 			{Label: "意图操作…", Accelerator: "Alt+Enter", Click: func(*mygo.MenuItem, *mygo.Window) { m.ShowIntentions() }},
 			{Label: "转到符号…", Accelerator: "CmdOrCtrl+Shift+O", Click: func(*mygo.MenuItem, *mygo.Window) { m.OpenSymbols() }},
+			{Label: "切换书签", Accelerator: "F3", Click: func(*mygo.MenuItem, *mygo.Window) { m.ToggleBookmark() }},
+			{Label: "显示书签", Accelerator: "CmdOrCtrl+F3", Click: func(*mygo.MenuItem, *mygo.Window) { m.ShowBookmarks() }},
+			{Label: "下一个书签", Click: func(*mygo.MenuItem, *mygo.Window) { m.NextBookmark() }},
+			{Label: "上一个书签", Click: func(*mygo.MenuItem, *mygo.Window) { m.PrevBookmark() }},
 			{Label: "查找用法", Accelerator: "Alt+F7", Click: func(*mygo.MenuItem, *mygo.Window) { m.FindUsages() }},
 			{Label: "重命名符号", Accelerator: "Shift+F6", Click: func(*mygo.MenuItem, *mygo.Window) { m.RenameActive() }},
 			mygo.Separator(),
@@ -388,6 +392,15 @@ func smoke(m *app.Model) {
 		fields["stage"] = stage
 		if stageErr != nil {
 			fields["stageError"] = stageErr.Error()
+		}
+	}
+	if os.Getenv("GOIDEA_SMOKE_BOOKMARK") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		bookmark, bookmarkErr := m.SmokeBookmark(ctx)
+		cancel()
+		fields["bookmark"] = bookmark
+		if bookmarkErr != nil {
+			fields["bookmarkError"] = bookmarkErr.Error()
 		}
 	}
 	if os.Getenv("GOIDEA_SMOKE_LOG") == "1" && root != "" {

@@ -161,6 +161,11 @@ type Model struct {
 	// rollback is the open confirmation for discarding a change, or nil.
 	rollback *rollbackState
 
+	// bookmarks are the marked lines of the open project, and bookmarksView
+	// is the Bookmarks popup, or nil.
+	bookmarks     []Bookmark
+	bookmarksView *bookmarksPane
+
 	run       RunPane
 	debug     DebugPane
 	build     BuildPane
@@ -543,6 +548,8 @@ func (m *Model) openProject(dir string, files []string) {
 	m.resetVCS()
 	m.resetBranch()
 	m.rollback = nil
+	m.bookmarksView = nil
+	m.bookmarks = bookmarksInProject(m.session().Bookmarks, dir)
 	m.resetLog()
 	m.resetProblems()
 	m.structure = StructurePane{}
@@ -1034,7 +1041,7 @@ func (m *Model) saveSession() {
 	if t := m.tab(); t != nil {
 		focus = t.doc.Path()
 	}
-	s := Session{Root: root, Files: normalizeFiles(files), Focus: focus}
+	s := Session{Root: root, Files: normalizeFiles(files), Focus: focus, Bookmarks: m.bookmarks}
 	path := m.cfg.SessionPath
 	go func() { _ = s.Save(path) }()
 }
@@ -1113,7 +1120,7 @@ func (m *Model) ShowProject() {
 func (m *Model) overlayOpen() bool {
 	return m.rename != nil || m.symbols != nil || m.intents != nil || m.files != nil ||
 		m.diff != nil || m.palette != nil || m.commit != nil || m.branch.open ||
-		m.rollback != nil
+		m.rollback != nil || m.bookmarksView != nil
 }
 
 // QuitImmediately closes the backend and quits without asking about changes,
@@ -1161,6 +1168,7 @@ func (m *Model) View(c *ui.Context) {
 	m.filesDialog(c, p)
 	m.branchesDialog(c, p)
 	m.rollbackDialog(c, p)
+	m.bookmarksDialog(c, p)
 	m.commandsDialog(c, p)
 	m.diffDialog(c, p)
 	m.dbDialog(c, p)
@@ -1171,6 +1179,19 @@ func (m *Model) View(c *ui.Context) {
 func (m *Model) shortcuts(c *ui.Context) {
 	// A modal sheet owns the keyboard; only its own dismiss keys apply.
 	if m.settingsOpen || (m.db != nil && m.db.open) {
+		return
+	}
+	// The Bookmarks popup steps its rows with the arrow keys.
+	if m.bookmarksView != nil {
+		if c.Shortcut(ui.Modifiers(0), ui.KeyDown) {
+			m.stepBookmarkSel(1)
+		}
+		if c.Shortcut(ui.Modifiers(0), ui.KeyUp) {
+			m.stepBookmarkSel(-1)
+		}
+		if c.Shortcut(ui.Modifiers(0), ui.KeyEnter) {
+			m.openSelectedBookmark()
+		}
 		return
 	}
 	if c.Shortcut(ui.Cmd, ui.KeyComma) {
@@ -1304,6 +1325,14 @@ func (m *Model) shortcuts(c *ui.Context) {
 	}
 	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyF9) {
 		m.BuildModule()
+	}
+	// OpenIDEA's IntelliJ keymap marks the caret line with F3 and opens the
+	// Bookmarks popup with Cmd+F3.
+	if c.Shortcut(ui.Modifiers(0), ui.KeyF3) && !m.overlayOpen() {
+		m.ToggleBookmark()
+	}
+	if c.Shortcut(ui.Cmd, ui.KeyF3) && !m.overlayOpen() {
+		m.ShowBookmarks()
 	}
 	if c.Shortcut(ui.Cmd, ui.KeyF8) {
 		m.ToggleBreakpoint()

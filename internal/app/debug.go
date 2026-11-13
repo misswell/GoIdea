@@ -207,11 +207,17 @@ func (m *Model) refreshDecorations() {
 			bps[l] = true
 			marks = append(marks, editor.GutterMark{Line: l, Color: breakpointColor})
 		}
+		seen := make(map[int]bool, len(marks)+len(t.gitMarks))
+		for _, mark := range marks {
+			seen[mark.Line] = true
+		}
 		for _, mark := range t.gitMarks {
-			if !bps[mark.Line] {
+			if !seen[mark.Line] {
 				marks = append(marks, mark)
+				seen[mark.Line] = true
 			}
 		}
+		marks = append(marks, m.bookmarkMarks(path, seen)...)
 		t.state.GutterMarks = marks
 		var bgs []editor.LineBackground
 		if m.debug.paused && m.debug.stopFile == path && m.debug.stopLine >= 0 {

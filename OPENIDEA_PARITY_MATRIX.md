@@ -27,7 +27,7 @@ new action, tool window, page or command appears automatically.
 | Kind | Items | Integrated | Partial | Engine | Blocked | Missing |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Feature folders | 43 | 0 | 10 | 0 | 0 | 33 |
-| Actions | 647 | 20 | 11 | 0 | 1 | 615 |
+| Actions | 647 | 20 | 15 | 0 | 1 | 611 |
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
 | Tool windows | 30 | 7 | 5 | 0 | 0 | 18 |
 | Overlays | 56 | 0 | 0 | 0 | 0 | 56 |
@@ -494,16 +494,16 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `navigate.gotoClass` | Go to Class… | `src/features/search/index.ts` | missing |
 | `navigate.gotoFile` | Go to File… | `src/features/search/index.ts` | integrated - internal/app/quickopen_test.go |
 | `navigate.gotoSymbol` | Go to Symbol… | `src/features/search/index.ts` | missing |
-| `navigate.nextBookmark` | Next Bookmark | `src/features/search/index.ts` | missing |
-| `navigate.prevBookmark` | Previous Bookmark | `src/features/search/index.ts` | missing |
+| `navigate.nextBookmark` | Next Bookmark | `src/features/search/index.ts` | partial - internal/app/bookmarks.go NextBookmark and stepBookmark wrap; base.bookmark.next; internal/app/bookmarks_test.go |
+| `navigate.prevBookmark` | Previous Bookmark | `src/features/search/index.ts` | partial - internal/app/bookmarks.go PrevBookmark and stepBookmark wrap; base.bookmark.prev; internal/app/bookmarks_test.go |
 | `navigate.recentFiles` | Recent Files | `src/features/search/index.ts` | missing |
 | `navigate.recentLocations` | Recent Locations | `src/features/search/index.ts` | missing |
 | `navigate.searchEverywhere` | Search Everywhere | `src/features/search/index.ts` | missing |
 | `navigate.searchText` | Search Text Everywhere | `src/features/search/index.ts` | integrated - base.search.done, base.search.files, base.search.matches |
-| `navigate.showBookmarks` | Show Bookmarks | `src/features/search/index.ts` | missing |
+| `navigate.showBookmarks` | Show Bookmarks | `src/features/search/index.ts` | partial - internal/app/bookmarks.go ShowBookmarks popup with jump and delete; Cmd+F3 in internal/app/app.go; internal/app/bookmarks_test.go |
 | `navigate.switcher` | Switcher | `src/features/search/index.ts` | missing |
 | `navigate.switcherBack` | Switcher (Backward) | `src/features/search/index.ts` | missing |
-| `navigate.toggleBookmark` | Toggle Bookmark | `src/features/search/index.ts` | missing |
+| `navigate.toggleBookmark` | Toggle Bookmark | `src/features/search/index.ts` | partial - internal/app/bookmarks.go ToggleBookmark at the caret and gutter dots; F3 in internal/app/app.go; base.bookmark.added, base.bookmark.gutter, base.bookmark.remove; internal/app/bookmarks_test.go |
 | `navigate.toggleBookmark${d}` |  | `src/features/search/index.ts` | missing |
 | `navigate.toggleBookmarkWithMnemonic` | Toggle Bookmark with Mnemonic | `src/features/search/index.ts` | missing |
 | `search.editScopes` | Edit Scopes… | `src/features/search/index.ts` | missing |

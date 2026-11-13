@@ -10,11 +10,12 @@ import (
 )
 
 // Session is what GoIDEA restores at the next start: the project folder, the
-// files that had tabs, and the one that was showing.
+// files that had tabs, the one that was showing, and its bookmarks.
 type Session struct {
-	Root  string   `json:"root,omitempty"`
-	Files []string `json:"files,omitempty"`
-	Focus string   `json:"focus,omitempty"`
+	Root      string     `json:"root,omitempty"`
+	Files     []string   `json:"files,omitempty"`
+	Focus     string     `json:"focus,omitempty"`
+	Bookmarks []Bookmark `json:"bookmarks,omitempty"`
 }
 
 // LoadSession reads the session at path; a missing or unreadable file is an
