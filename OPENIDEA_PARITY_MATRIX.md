@@ -29,7 +29,7 @@ new action, tool window, page or command appears automatically.
 | Feature folders | 43 | 0 | 10 | 0 | 0 | 33 |
 | Actions | 647 | 20 | 36 | 0 | 1 | 590 |
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
-| Tool windows | 30 | 7 | 5 | 0 | 0 | 18 |
+| Tool windows | 30 | 8 | 5 | 0 | 0 | 17 |
 | Overlays | 56 | 0 | 0 | 0 | 0 | 56 |
 | Editor contributions | 35 | 0 | 0 | 0 | 0 | 35 |
 | Editor kinds | 4 | 0 | 0 | 0 | 0 | 4 |
@@ -963,7 +963,7 @@ same bindings until a check records it.
 
 | Tool window | Title | Anchor | Source | Status |
 | --- | --- | --- | --- | --- |
-| `bookmarks` | Bookmarks | left | `src/features/search/index.ts` | missing |
+| `bookmarks` | Bookmarks | left | `src/features/search/index.ts` | integrated - internal/app/bookmarks.go bookmarkWindowRows, ShowBookmarksWindow Cmd+2; internal/app/view.go sidebar tab; base.bookmark.window |
 | `build` | Build | bottom | `src/features/build/index.ts` | partial - base.build.console, base.build.lines; internal/app/view.go buildPanel |
 | `commit` | Commit | left | `src/features/vcs/index.ts` | partial - internal/app/commit.go commitDialog; base.commit.id |
 | `compare` | Compare | left | `src/features/vcs/compareTool.tsx` | missing |

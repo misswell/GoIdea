@@ -376,6 +376,74 @@ func (m *Model) ShowBookmarks() {
 	m.invalidate()
 }
 
+// ShowBookmarksWindow reveals the Bookmarks tool window in the sidebar, the
+// window OpenIDEA binds to Cmd+2.
+func (m *Model) ShowBookmarksWindow() {
+	m.structure.visible = false
+	m.sideMode = "bookmarks"
+	m.invalidate()
+}
+
+// ToggleBookmarksWindow hides the tool window when it is already showing.
+func (m *Model) ToggleBookmarksWindow() {
+	if m.sideMode == "bookmarks" {
+		m.ShowProject()
+		return
+	}
+	m.ShowBookmarksWindow()
+}
+
+// bookmarkWindowRows draws the Bookmarks tool window: every marked line with
+// its file and line, a click Opening it, and a chip that removes it.
+func (m *Model) bookmarkWindowRows(c *ui.Context, p *ui.Theme) {
+	list := append([]Bookmark(nil), m.bookmarks...)
+	sortBookmarks(list)
+	if len(list) == 0 {
+		ui.Row(c).Padding(10, 8).Children(func() {
+			ui.Text(c, "还没有书签；在编辑器中按 F3 标记当前行。").FontSize(11).
+				TextColor(p.TextMuted)
+		})
+		return
+	}
+	root := m.Root()
+	jump, remove := -1, -1
+	for i, b := range list {
+		i, b := i, b
+		ui.Column(c).Children(func() {
+			r := ui.Row(c.Key(fmt.Sprintf("bookmark-window:%d", i))).Height(22).
+				Padding(0, 8).Gap(6).AlignItems(ui.Center)
+			if r.Hovered() {
+				r.Background(p.SurfaceHover)
+			}
+			r.Children(func() {
+				if b.Mnemonic != "" {
+					ui.Text(c, b.Mnemonic).FontSize(10.5).Bold().TextColor(p.Accent).
+						SingleLine()
+				}
+				ui.Text(c, bookmarkTitle(b)).FontSize(12).TextColor(p.Text).
+					SingleLine().Ellipsis("…")
+				ui.Spacer(c)
+				if m.rowChip(c, p, fmt.Sprintf("bookmark-window:del:%d", i), "删除") {
+					remove = i
+				}
+			})
+			if r.Clicked() {
+				jump = i
+			}
+			ui.Row(c).Padding(0, 8).Children(func() {
+				ui.Text(c, symbolWhere(root, b.Path, b.Line)).FontSize(10).
+					TextColor(p.TextMuted).SingleLine().Ellipsis("…")
+			})
+		})
+	}
+	switch {
+	case remove >= 0:
+		m.removeBookmarkAt(remove)
+	case jump >= 0:
+		m.applyBookmark(list[jump])
+	}
+}
+
 // closeBookmarks drops the Bookmarks popup.
 func (m *Model) closeBookmarks() {
 	if m.bookmarksView == nil {
@@ -646,6 +714,10 @@ func (m *Model) SmokeBookmark(ctx context.Context) (map[string]any, error) {
 			}
 		}
 		out["mnemonicMoved"] = movedLine
+		m.ShowBookmarksWindow()
+		out["windowMode"] = m.sideMode
+		out["windowRows"] = len(m.bookmarks)
+		m.ShowProject()
 		t.state.GoTo(editor.Pos{Line: 0, Col: 0})
 		m.NextBookmark()
 		out["nextFirst"] = m.tab().state.CursorPos().Line

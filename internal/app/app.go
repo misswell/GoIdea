@@ -152,7 +152,7 @@ type Model struct {
 	redoRefactor *refactorEdit
 
 	// sideMode picks what the sidebar shows: "tree" ("" also means tree, the
-	// default), "vcs", "search", "usages" or "structure".
+	// default), "vcs", "search", "usages", "structure" or "bookmarks".
 	sideMode string
 
 	// commit is the open Commit dialog, or nil.
@@ -1248,6 +1248,11 @@ func (m *Model) shortcuts(c *ui.Context) {
 	// toolwindow.*, editor.nextTab).
 	if c.Shortcut(ui.Cmd, ui.Key1) {
 		m.ShowProject()
+	}
+	if c.Shortcut(ui.Cmd, ui.Key2) {
+		if !m.overlayOpen() {
+			m.ToggleBookmarksWindow()
+		}
 	}
 	if c.Shortcut(ui.Cmd, ui.Key3) {
 		m.ShowSearch()

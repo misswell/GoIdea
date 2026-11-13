@@ -67,6 +67,7 @@
     {"id": "base.bookmark.remove", "label": "F3 removed both marks", "feature": "Toggle Bookmark removes an existing mark", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
     {"id": "base.bookmark.mnemonic", "label": "Alt+F3 key reached its line and jumped there", "feature": "Bookmark mnemonics", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
     {"id": "base.bookmark.mnemonicUnique", "label": "assigning a key took it from the other line", "feature": "Bookmark mnemonic uniqueness", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
+    {"id": "base.bookmark.window", "label": "Cmd+2 shows every bookmark in the sidebar", "feature": "Bookmarks tool window", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
     {"id": "base.bookmarkError", "label": "bookmarkError is absent", "feature": "Bookmarks report no error", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
     {"id": "base.log.commits", "label": "vcs_log returned commits", "feature": "Git log through vcs_log", "area": "vcs", "gate": "main", "doc": "RPC_PROTOCOL.md"},
     {"id": "base.log.details", "label": "vcs_log_details returned the message and a branch", "feature": "Commit details in the Git log", "area": "vcs", "gate": "main", "doc": "RPC_PROTOCOL.md"},

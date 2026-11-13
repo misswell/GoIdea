@@ -152,6 +152,7 @@ func menu(m *app.Model) *mygo.Menu {
 		}},
 		{Label: "视图", Submenu: []*mygo.MenuItem{
 			{Label: "显示项目", Accelerator: "CmdOrCtrl+1", Click: func(*mygo.MenuItem, *mygo.Window) { m.ShowProject() }},
+			{Label: "显示书签", Accelerator: "CmdOrCtrl+2", Click: func(*mygo.MenuItem, *mygo.Window) { m.ToggleBookmarksWindow() }},
 			{Label: "在项目中查找", Accelerator: "CmdOrCtrl+3", Click: func(*mygo.MenuItem, *mygo.Window) { m.ShowSearch() }},
 			{Label: "显示运行窗口", Accelerator: "CmdOrCtrl+4", Click: func(*mygo.MenuItem, *mygo.Window) { m.ShowRun() }},
 			{Label: "显示调试窗口", Accelerator: "CmdOrCtrl+5", Click: func(*mygo.MenuItem, *mygo.Window) { m.ShowDebug() }},

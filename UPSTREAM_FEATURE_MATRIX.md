@@ -68,7 +68,7 @@ reimplementing it. A row is `INTEGRATED` only when the GoIDEA product
 | Git log with details and changed files | INTEGRATED | Git log panel → `vcs_log`, `vcs_log_details`, `vcs_commits_changes`; base-phase e2e |
 | Branch widget and Branches popup | INTEGRATED | title bar shows the head with ahead/behind and operation, popup checks out → `vcs_branch_info`, `vcs_branches`, `vcs_checkout`; `internal/app/branch.go`; base-phase e2e |
 | Staged change groups and change actions | INTEGRATED | 已暂存/未暂存 groups, rows stage, unstage and roll back with a confirmation → `vcs_stage`, `vcs_unstage`, `vcs_discard`; `internal/app/vcs.go`; base-phase e2e |
-| Line bookmarks | INTEGRATED | F3 toggles the caret line, Cmd+F3 opens the Bookmarks popup, next/previous cycle with wrap, gutter dots, session persistence, Alt+F3 mnemonic chooser, Ctrl+Shift+digit toggle and Ctrl+digit jump with unique mnemonics; `internal/app/bookmarks.go`; base-phase e2e |
+| Line bookmarks | INTEGRATED | F3 toggles the caret line, Cmd+F3 opens the Bookmarks popup, Cmd+2 opens the Bookmarks tool window, next/previous cycle with wrap, gutter dots, session persistence, Alt+F3 mnemonic chooser, Ctrl+Shift+digit toggle and Ctrl+digit jump with unique mnemonics; `internal/app/bookmarks.go`; base-phase e2e |
 | Terminal | INTEGRATED | terminal panel |
 | Database console | INTEGRATED | database sheet (sources, schemas, tables, SQL, results) |
 | Table editing, DDL view, history, explain | IMPLEMENTED (backend) / ADAPTING (UI) | next UI increment |
