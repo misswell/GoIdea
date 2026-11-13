@@ -424,7 +424,8 @@ type BreadcrumbPrefs struct {
 // extension and directory shown, the full path on hover and a close button on
 // the right.
 type TabPrefs struct {
-	// Placement is "" for the top, "bottom", or "none" to hide the strip.
+	// Placement is "" for the top, "bottom", "left", "right" or "none" to hide
+	// the strip.
 	Placement         string `json:"placement,omitempty"`
 	PinnedSeparateRow bool   `json:"pinnedSeparateRow,omitempty"`
 	HideExtension     bool   `json:"hideExtension,omitempty"`
@@ -487,6 +488,10 @@ func (t TabPrefs) previews() bool { return !t.NoPreviewTab }
 
 // Hidden reports whether Tab placement is None.
 func (t TabPrefs) Hidden() bool { return t.Placement == "none" }
+
+// Vertical reports whether the strip sits on the editor's left or right, as a
+// single scrolling column where Show tabs in does not apply.
+func (t TabPrefs) Vertical() bool { return t.Placement == "left" || t.Placement == "right" }
 
 // AtBottom reports whether the chain sits under the editor rather than above
 // it.

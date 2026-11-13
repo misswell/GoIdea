@@ -25,6 +25,9 @@ const (
 	oiHeaderHeight    float32 = 40
 	oiTabBarHeight    float32 = 40
 	oiTabHeight       float32 = 28
+	oiTabColumnMin    float32 = 140 // OpenIDEA's vertical strip is 140..260 wide
+	oiTabColumnMax    float32 = 260
+	oiTabColumnTab    float32 = 24
 )
 
 // titleBar is OpenIDEA's compact header: the project widget, the VCS widget,
@@ -721,17 +724,36 @@ func (m *Model) editorIsland(c *ui.Context, p *ui.Theme) {
 	m.editorWidth = island.Bounds().W
 	m.editorHeight = island.Bounds().H
 	island.Children(func() {
+		if m.tabPrefs.Vertical() {
+			ui.Row(c).Grow(1).MinWidth(0).MinHeight(0).Children(func() {
+				if m.tabPrefs.Placement != "right" {
+					m.verticalTabs(c, p, oi)
+				}
+				ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Children(func() {
+					m.editorBody(c, p)
+				})
+				if m.tabPrefs.Placement == "right" {
+					m.verticalTabs(c, p, oi)
+				}
+			})
+			return
+		}
 		if !m.tabPrefs.AtBottom() {
 			m.editorTabs(c, p, oi)
 		}
-		if m.banner != "" {
-			m.bannerRow(c, p)
-		}
-		m.editorArea(c, p)
+		m.editorBody(c, p)
 		if m.tabPrefs.AtBottom() {
 			m.editorTabs(c, p, oi)
 		}
 	})
+}
+
+// editorBody is the banner over the editor, which takes the rest of the island.
+func (m *Model) editorBody(c *ui.Context, p *ui.Theme) {
+	if m.banner != "" {
+		m.bannerRow(c, p)
+	}
+	m.editorArea(c, p)
 }
 
 // editorTabs is OpenIDEA's tab bar: 40px high on the island, 28px tabs with
@@ -776,36 +798,86 @@ func (m *Model) tabStrip(c *ui.Context, p *ui.Theme, oi oiColors, tabs []*Tab, o
 		case m.tabPrefs.MultipleRows:
 			ui.Row(c).Grow(1).MinWidth(0).Wrap().Gap(2).Padding(3, 0).
 				AlignItems(ui.Center).AlignContent(ui.Center).Children(func() {
-				m.tabButtons(c, p, oi, tabs, offset, reveal)
+				m.tabButtons(c, p, oi, tabs, offset, reveal, false)
 			})
 		case m.tabPrefs.SqueezeTabs:
 			ui.Row(c).Gap(2).AlignItems(ui.Center).Children(func() {
-				m.tabButtons(c, p, oi, tabs, offset, reveal)
+				m.tabButtons(c, p, oi, tabs, offset, reveal, false)
 			})
 		default:
 			ui.ScrollHorizontal(c).Grow(1).MinWidth(0).Gap(2).
 				AlignItems(ui.Center).TrackScroll(&m.tabsScroll).Children(func() {
-				m.tabButtons(c, p, oi, tabs, offset, reveal)
+				m.tabButtons(c, p, oi, tabs, offset, reveal, false)
 			})
 		}
 	})
 }
 
+// verticalTabs is OpenIDEA's strip on the editor's left or right: a scrolling
+// column of full-width 24px tabs, as wide as its widest tab between 140 and
+// 260, divided from the editor by a border on that side. Show tabs in does not
+// apply: a vertical strip always scrolls.
+func (m *Model) verticalTabs(c *ui.Context, p *ui.Theme, oi oiColors) {
+	if len(m.tabs) == 0 || m.tabPrefs.Hidden() {
+		return
+	}
+	reveal := m.tabsShown != m.active
+	m.tabsShown = m.active
+	strip := ui.Column(c).Shrink(0).MinWidth(oiTabColumnMin).MaxWidth(oiTabColumnMax).
+		Padding(4).Gap(2).BorderColor(oi.border)
+	if m.tabPrefs.Placement == "right" {
+		strip.BorderWidth(0, 0, 0, 1)
+	} else {
+		strip.BorderWidth(0, 1, 0, 0)
+	}
+	pinned := 0
+	for _, t := range m.tabs {
+		if t.pinned {
+			pinned++
+		}
+	}
+	if m.tabPrefs.PinnedSeparateRow && pinned > 0 && pinned < len(m.tabs) {
+		strip.Children(func() {
+			ui.Scroll(c).Shrink(0).MinHeight(0).Gap(2).Children(func() {
+				m.tabButtons(c, p, oi, m.tabs[:pinned], 0, reveal, true)
+			})
+			ui.Scroll(c).Grow(1).MinHeight(0).Gap(2).TrackScroll(&m.tabsSideScroll).
+				Children(func() {
+					m.tabButtons(c, p, oi, m.tabs[pinned:], pinned, reveal, true)
+				})
+		})
+		return
+	}
+	strip.Children(func() {
+		ui.Scroll(c).Grow(1).MinHeight(0).Gap(2).TrackScroll(&m.tabsSideScroll).
+			Children(func() {
+				m.tabButtons(c, p, oi, m.tabs, 0, reveal, true)
+			})
+	})
+}
+
 // tabButtons draws tabs in a row, offset being the first tab's index in the
 // strip. A squeezed strip lets the labels ellipsize down to the tab's fixed
-// parts, and a change of active tab scrolls the new one into view.
-func (m *Model) tabButtons(c *ui.Context, p *ui.Theme, oi oiColors, tabs []*Tab, offset int, reveal bool) {
-	squeeze := m.tabPrefs.SqueezeTabs
+// parts; a vertical strip always ellipsizes, its tabs full width and only 24
+// high. A change of active tab scrolls the new one into view.
+func (m *Model) tabButtons(c *ui.Context, p *ui.Theme, oi oiColors, tabs []*Tab, offset int, reveal, vertical bool) {
+	squeeze := m.tabPrefs.SqueezeTabs || vertical
 	for j, t := range tabs {
 		i, t := offset+j, t
-		tab := ui.Row(c.Key(fmt.Sprintf("tab:%d", i))).Height(oiTabHeight).
+		height := oiTabHeight
+		if vertical {
+			height = oiTabColumnTab
+		}
+		tab := ui.Row(c.Key(fmt.Sprintf("tab:%d", i))).Height(height).
 			Padding(0, 10).Gap(6).Radius(6).AlignItems(ui.Center)
+		if vertical {
+			tab.MinWidth(0)
+		}
 		if i == m.active {
 			if reveal {
 				tab.ScrollIntoView()
 			}
-			tab.Background(oi.tabSelected).
-				BorderWidth(0, 0, 2, 0).BorderColor(oi.accent)
+			tab.Background(oi.tabSelected).BorderWidth(1).BorderColor(oi.tabSelectedBorder)
 		} else if tab.Hovered() {
 			tab.Background(oi.toolbarHover)
 		}

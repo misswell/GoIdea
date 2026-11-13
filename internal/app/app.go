@@ -124,10 +124,12 @@ type Model struct {
 	tabPrefs TabPrefs
 	tabUse   uint64
 
-	// tabsScroll keeps how far the strip scrolls sideways, and tabsShown is
+	// tabsScroll keeps how far the strip scrolls sideways, tabsSideScroll how
+	// far a strip on the editor's left or right scrolls down, and tabsShown is
 	// the active tab the last strip drew, so a change reveals the new one.
-	tabsScroll ui.ScrollState
-	tabsShown  int
+	tabsScroll     ui.ScrollState
+	tabsSideScroll ui.ScrollState
+	tabsShown      int
 
 	// diags is the newest diagnostics per file path and producer, which the
 	// tabs of that file and the Problems tool window show.

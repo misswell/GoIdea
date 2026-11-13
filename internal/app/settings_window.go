@@ -668,11 +668,9 @@ func (m *Model) settingsDraftFromPrefs() settingsDraft {
 		placement = "bottom"
 	}
 	tabPlacement := "top"
-	if m.prefs.Tabs.AtBottom() {
-		tabPlacement = "bottom"
-	}
-	if m.prefs.Tabs.Hidden() {
-		tabPlacement = "none"
+	switch m.prefs.Tabs.Placement {
+	case "bottom", "left", "right", "none":
+		tabPlacement = m.prefs.Tabs.Placement
 	}
 	closePosition := "right"
 	if m.prefs.Tabs.NoCloseButton {
@@ -885,10 +883,10 @@ func (m *Model) settingsSetEnsureFinalNewline(on bool) {
 }
 
 // settingsSetTabPlacement stages the Tab placement select: where the editor
-// strip sits, or none to hide it.
+// strip sits, one of the four edges, or none to hide it.
 func (m *Model) settingsSetTabPlacement(place string) {
 	switch place {
-	case "top", "bottom", "none":
+	case "top", "bottom", "left", "right", "none":
 	default:
 		return
 	}

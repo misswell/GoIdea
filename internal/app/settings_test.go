@@ -515,13 +515,29 @@ func TestSettingsEditorTabsStageAndApply(t *testing.T) {
 		d.activateOnClose != "left" || d.noPreviewTab {
 		t.Fatalf("reset tabs = %+v", d)
 	}
-	// The selects offer three placements each, so anything else is ignored.
+	// The select offers all four edges and None, so anything else is ignored.
 	m.settingsSetTabPlacement("left")
+	if d := m.settingsDraft; d.tabPlacement != "left" || !m.tabPrefs.Vertical() {
+		t.Fatalf("left placement = %+v / %+v", d, m.tabPrefs)
+	}
+	m.settingsSetTabPlacement("right")
+	if d := m.settingsDraft; d.tabPlacement != "right" || !m.tabPrefs.Vertical() {
+		t.Fatalf("right placement = %+v / %+v", d, m.tabPrefs)
+	}
+	m.settingsSetTabPlacement("middle")
 	m.settingsSetClosePosition("middle")
 	m.settingsSetActivateOnClose("middle")
-	if d := m.settingsDraft; d.tabPlacement != "top" || d.closePosition != "right" ||
+	if d := m.settingsDraft; d.tabPlacement != "right" || d.closePosition != "right" ||
 		d.activateOnClose != "left" {
 		t.Fatalf("unknown choices were staged: %+v", d)
+	}
+	m.prefs.Tabs.Placement = "left"
+	if d := m.settingsDraftFromPrefs(); d.tabPlacement != "left" {
+		t.Fatalf("stored left placement = %+v", d)
+	}
+	m.prefs.Tabs.Placement = ""
+	if d := m.settingsDraftFromPrefs(); d.tabPlacement != "top" {
+		t.Fatalf("stored top placement = %+v", d)
 	}
 }
 

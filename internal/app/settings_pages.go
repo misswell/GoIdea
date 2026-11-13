@@ -70,6 +70,13 @@ func settingsFormLabel(c *ui.Context, oi oiColors, label string, width float32) 
 		SingleLine().Ellipsis("…")
 }
 
+// settingsFormLabelDim is a label whose control this state disables, as
+// OpenIDEA dims Show tabs in when Tab placement is left, right or none.
+func settingsFormLabelDim(c *ui.Context, oi oiColors, label string, width float32) {
+	ui.Text(c, label).FontSize(12).TextColor(oi.textMuted).Width(width).
+		SingleLine().Ellipsis("…")
+}
+
 // settingsAppearanceBody is Appearance's Theme row: the theme select and the
 // Sync with OS switch, which follows the system's appearance when it is on.
 func (m *Model) settingsAppearanceBody(c *ui.Context, oi oiColors) {
@@ -233,19 +240,27 @@ func (m *Model) settingsEditorTabsBody(c *ui.Context, oi oiColors) {
 	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).PaddingStart(20).Children(func() {
 		settingsFormLabel(c, oi, "Tab placement", 220)
 		shown := tabPlacementLabel(m.settingsDraft.tabPlacement)
-		sel := ui.Select(c, &shown, []string{"Top", "Bottom", "None"})
+		sel := ui.Select(c, &shown, []string{"Top", "Bottom", "Left", "Right", "None"})
 		if sel.Changed() {
 			m.settingsSetTabPlacement(tabPlacementValue(shown))
 		}
 	})
+	// A strip on the left or right is one scrolling column, as it is in
+	// OpenIDEA, so Show tabs in does not apply to it.
+	overflowOff := m.settingsDraft.tabPlacement == "left" ||
+		m.settingsDraft.tabPlacement == "right" || m.settingsDraft.tabPlacement == "none"
 	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).PaddingStart(20).Children(func() {
-		settingsFormLabel(c, oi, "Show tabs in:", 220)
+		if overflowOff {
+			settingsFormLabelDim(c, oi, "Show tabs in:", 220)
+		} else {
+			settingsFormLabel(c, oi, "Show tabs in:", 220)
+		}
 	})
 	oneRow := !m.settingsDraft.multipleRows
 	ui.RadioGroup(c, func() {
 		ui.Radio(c, &oneRow, true, "One row, and if tabs don't fit:")
 		ui.Radio(c, &oneRow, false, "Multiple rows")
-	}).PaddingStart(20)
+	}).PaddingStart(20).Disabled(overflowOff)
 	if oneRow != !m.settingsDraft.multipleRows {
 		m.settingsSetMultipleRows(!oneRow)
 	}
@@ -253,7 +268,7 @@ func (m *Model) settingsEditorTabsBody(c *ui.Context, oi oiColors) {
 	ui.RadioGroup(c, func() {
 		ui.Radio(c, &squeeze, false, "Scroll the tabs panel")
 		ui.Radio(c, &squeeze, true, "Squeeze tabs")
-	}).PaddingStart(48).Disabled(!oneRow)
+	}).PaddingStart(48).Disabled(overflowOff || !oneRow)
 	if squeeze != m.settingsDraft.squeezeTabs {
 		m.settingsSetSqueezeTabs(squeeze)
 	}
@@ -336,6 +351,10 @@ func tabPlacementLabel(place string) string {
 	switch place {
 	case "bottom":
 		return "Bottom"
+	case "left":
+		return "Left"
+	case "right":
+		return "Right"
 	case "none":
 		return "None"
 	}
@@ -347,6 +366,10 @@ func tabPlacementValue(label string) string {
 	switch label {
 	case "Bottom":
 		return "bottom"
+	case "Left":
+		return "left"
+	case "Right":
+		return "right"
 	case "None":
 		return "none"
 	}
