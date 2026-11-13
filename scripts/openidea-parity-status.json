@@ -99,7 +99,7 @@
     },
     "action:bookmarks.newList": {
       "status": "partial",
-      "evidence": "internal/app/bookmarks.go addBookmarkList and newListDialog; cmd/goidea/main.go 新建书签列表…; base.bookmark.list; internal/app/bookmarks_test.go"
+      "evidence": "internal/app/bookmarks.go addBookmarkList, renameBookmarkList, removeBookmarkList and newListDialog; tool-window chips 重命名/删除; cmd/goidea/main.go 新建书签列表…; base.bookmark.list, base.bookmark.listOps; internal/app/bookmarks_test.go"
     },
     "action:bookmarks.toggleFileBookmark": {
       "status": "partial",

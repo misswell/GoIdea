@@ -60,11 +60,20 @@ type mnemonicPicker struct {
 	open bool
 }
 
-// newListPane is the open New Bookmark List dialog, or nil.
+// newListPane is the open new or rename Bookmark List dialog, or nil.
 type newListPane struct {
-	open bool
-	name string
-	err  string
+	open     bool
+	name     string
+	err      string
+	renameID string
+}
+
+// deleteListPane is the open Delete Bookmark List confirmation, or nil.
+type deleteListPane struct {
+	open  bool
+	id    string
+	name  string
+	count int
 }
 
 // assignBookmarkMnemonic gives the line's bookmark mnemonic, creating the
@@ -533,6 +542,17 @@ func (m *Model) SetDefaultBookmarkList(id string) {
 	}
 }
 
+// OpenRenameBookmarkList opens the naming dialog for an existing list.
+func (m *Model) OpenRenameBookmarkList(id string) {
+	for _, l := range normalizeBookmarkLists(m.bookmarkLists) {
+		if l.ID == id {
+			m.newList = &newListPane{open: true, name: l.Name, renameID: id}
+			m.invalidate()
+			return
+		}
+	}
+}
+
 // OpenNewBookmarkList opens the naming dialog for a new bookmark list.
 func (m *Model) OpenNewBookmarkList() {
 	m.newList = &newListPane{open: true}
@@ -548,10 +568,25 @@ func (m *Model) closeNewBookmarkList() {
 	m.invalidate()
 }
 
-// CreateBookmarkList adds the typed list and sends new bookmarks there.
+// CreateBookmarkList adds the typed list and sends new bookmarks there, or
+// renames the list the dialog was opened for.
 func (m *Model) CreateBookmarkList() {
 	v := m.newList
 	if v == nil {
+		return
+	}
+	if v.renameID != "" {
+		lists, name, err := renameBookmarkList(normalizeBookmarkLists(m.bookmarkLists), v.renameID, v.name)
+		if err != "" {
+			v.err = err
+			m.invalidate()
+			return
+		}
+		m.bookmarkLists = lists
+		m.newList = nil
+		m.status = "已将书签列表重命名为“" + name + "”"
+		m.saveSession()
+		m.invalidate()
 		return
 	}
 	lists, id, err := addBookmarkList(normalizeBookmarkLists(m.bookmarkLists), v.name)
@@ -568,34 +603,119 @@ func (m *Model) CreateBookmarkList() {
 	m.invalidate()
 }
 
-// newListDialog draws the New Bookmark List prompt and creates the list.
+// AskDeleteBookmarkList asks before a list and its bookmarks go; an empty
+// list is dropped without a prompt.
+func (m *Model) AskDeleteBookmarkList(id string) {
+	for _, l := range normalizeBookmarkLists(m.bookmarkLists) {
+		if l.ID != id {
+			continue
+		}
+		n := len(bookmarksInList(m.bookmarks, id)) + len(pathBookmarksInList(m.pathBookmarks, id))
+		if n == 0 {
+			m.deleteBookmarkList(id)
+			return
+		}
+		m.deleteList = &deleteListPane{open: true, id: id, name: l.Name, count: n}
+		m.invalidate()
+		return
+	}
+}
+
+// closeDeleteBookmarkList drops the confirmation.
+func (m *Model) closeDeleteBookmarkList() {
+	if m.deleteList == nil {
+		return
+	}
+	m.deleteList = nil
+	m.invalidate()
+}
+
+// ConfirmDeleteBookmarkList removes the list the confirmation names.
+func (m *Model) ConfirmDeleteBookmarkList() {
+	v := m.deleteList
+	if v == nil {
+		return
+	}
+	m.deleteBookmarkList(v.id)
+}
+
+// deleteBookmarkList drops a list with the bookmarks in it.
+func (m *Model) deleteBookmarkList(id string) {
+	name := ""
+	for _, l := range normalizeBookmarkLists(m.bookmarkLists) {
+		if l.ID == id {
+			name = l.Name
+		}
+	}
+	lists, marks, paths, def := removeBookmarkList(normalizeBookmarkLists(m.bookmarkLists),
+		m.bookmarks, m.pathBookmarks, m.defaultList, id, "书签")
+	m.bookmarkLists = lists
+	m.bookmarks = marks
+	m.pathBookmarks = paths
+	m.defaultList = def
+	m.deleteList = nil
+	m.status = "已删除书签列表“" + name + "”"
+	m.saveSession()
+	m.refreshDecorations()
+	m.invalidate()
+}
+
+// newListDialog draws the New or Rename Bookmark List prompt and applies it.
 func (m *Model) newListDialog(c *ui.Context, p *ui.Theme) {
 	v := m.newList
 	if v == nil {
 		return
 	}
+	renaming := v.renameID != ""
+	title, hint, action := "新建书签列表", "新书签会加入这个列表。", "创建"
+	if renaming {
+		title, hint, action = "重命名书签列表", "列表里的书签会保留。", "重命名"
+	}
 	open := v.open
 	d := ui.Modal(c, &open, func() {
 		ui.Column(c).Width(420).Gap(8).Children(func() {
-			ui.Text(c, "新建书签列表").FontSize(13).Bold().TextColor(p.Text).SingleLine()
+			ui.Text(c, title).FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			in := ui.TextInput(c, &v.name).AutoFocus()
 			in.OnChange(func() { v.err = "" })
 			if in.Submitted() {
 				m.CreateBookmarkList()
 			}
-			ui.Text(c, "新书签会加入这个列表。").FontSize(10.5).TextColor(p.TextMuted).
+			ui.Text(c, hint).FontSize(10.5).TextColor(p.TextMuted).
 				SingleLine()
 			if v.err != "" {
 				ui.Text(c, v.err).FontSize(11).TextColor(p.Danger).SingleLine().Ellipsis("…")
 			}
 			ui.Row(c).Gap(8).Children(func() {
 				ui.Button(c, "取消").OnClick(func() { m.closeNewBookmarkList() })
-				ui.Button(c, "创建").OnClick(func() { m.CreateBookmarkList() })
+				ui.Button(c, action).OnClick(func() { m.CreateBookmarkList() })
 			})
 		})
 	})
 	if d.Dismissed() || !open {
 		m.closeNewBookmarkList()
+	}
+}
+
+// deleteListDialog asks before a list and its bookmarks go.
+func (m *Model) deleteListDialog(c *ui.Context, p *ui.Theme) {
+	v := m.deleteList
+	if v == nil {
+		return
+	}
+	open := v.open
+	d := ui.Modal(c, &open, func() {
+		ui.Column(c).Width(420).Gap(10).Children(func() {
+			ui.Text(c, "删除书签列表").FontSize(13).Bold().TextColor(p.Text).SingleLine()
+			ui.Text(c, fmt.Sprintf("删除列表“%s”？其中的 %d 个书签会一并删除。", v.name, v.count)).
+				FontSize(11.5).TextColor(p.TextMuted)
+			ui.Row(c).Gap(8).Children(func() {
+				ui.Button(c, "删除").OnClick(m.ConfirmDeleteBookmarkList)
+				ui.Button(c, "取消").OnClick(m.closeDeleteBookmarkList)
+			})
+		})
+	})
+	if d.Dismissed() || !open {
+		m.closeDeleteBookmarkList()
 	}
 }
 
@@ -629,7 +749,7 @@ func (m *Model) bookmarkWindowRows(c *ui.Context, p *ui.Theme) {
 				TextColor(p.TextMuted)
 		})
 	}
-	var jumpPath, removePath, makeDefault string
+	var jumpPath, removePath, makeDefault, renameList, deleteList string
 	var jumpLine, removeLine = -1, -1
 	for _, l := range lists {
 		l := l
@@ -644,6 +764,12 @@ func (m *Model) bookmarkWindowRows(c *ui.Context, p *ui.Theme) {
 				ui.Text(c, "默认").FontSize(9.5).TextColor(p.TextMuted)
 			} else if m.rowChip(c, p, "bookmark-window:default:"+l.ID, "设为默认") {
 				makeDefault = l.ID
+			}
+			if m.rowChip(c, p, "bookmark-window:rename:"+l.ID, "重命名") {
+				renameList = l.ID
+			}
+			if m.rowChip(c, p, "bookmark-window:deleteList:"+l.ID, "删除") {
+				deleteList = l.ID
 			}
 		})
 		for _, pb := range paths {
@@ -697,6 +823,10 @@ func (m *Model) bookmarkWindowRows(c *ui.Context, p *ui.Theme) {
 		}
 	}
 	switch {
+	case renameList != "":
+		m.OpenRenameBookmarkList(renameList)
+	case deleteList != "":
+		m.AskDeleteBookmarkList(deleteList)
 	case makeDefault != "":
 		m.SetDefaultBookmarkList(makeDefault)
 	case removeLine >= 0:
@@ -792,6 +922,73 @@ func addBookmarkList(lists []BookmarkList, name string) ([]BookmarkList, string,
 		out := append(append([]BookmarkList(nil), lists...), BookmarkList{ID: id, Name: name})
 		return out, id, ""
 	}
+}
+
+// renameBookmarkList renames one list; a blank, taken or unknown name comes
+// back as the error text.
+func renameBookmarkList(lists []BookmarkList, id, name string) ([]BookmarkList, string, string) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return lists, "", "列表名称不能为空"
+	}
+	found := false
+	for _, l := range lists {
+		if l.ID == id {
+			found = true
+			continue
+		}
+		if l.Name == name {
+			return lists, "", "已经有名为“" + name + "”的列表"
+		}
+	}
+	if !found {
+		return lists, "", "书签列表不存在"
+	}
+	out := append([]BookmarkList(nil), lists...)
+	for i := range out {
+		if out[i].ID == id {
+			out[i].Name = name
+		}
+	}
+	return out, name, ""
+}
+
+// removeBookmarkList drops a list with its bookmarks; the default moves to the
+// first list left, or a fresh default when none is left.
+func removeBookmarkList(lists []BookmarkList, marks []Bookmark, paths []PathBookmark,
+	defaultID, id, fallback string) ([]BookmarkList, []Bookmark, []PathBookmark, string) {
+	out := make([]BookmarkList, 0, len(lists))
+	for _, l := range lists {
+		if l.ID != id {
+			out = append(out, l)
+		}
+	}
+	if len(out) == 0 {
+		out = []BookmarkList{{ID: bookmarkDefaultList, Name: fallback}}
+	}
+	keepMarks := make([]Bookmark, 0, len(marks))
+	for _, b := range marks {
+		if bookmarkListOf(b.List) != id {
+			keepMarks = append(keepMarks, b)
+		}
+	}
+	keepPaths := make([]PathBookmark, 0, len(paths))
+	for _, pb := range paths {
+		if bookmarkListOf(pb.List) != id {
+			keepPaths = append(keepPaths, pb)
+		}
+	}
+	def := defaultID
+	kept := false
+	for _, l := range out {
+		if l.ID == def {
+			kept = true
+		}
+	}
+	if !kept {
+		def = out[0].ID
+	}
+	return out, keepMarks, keepPaths, def
 }
 
 // closeBookmarks drops the Bookmarks popup.
@@ -1030,6 +1227,9 @@ func (m *Model) SmokeBookmark(ctx context.Context) (map[string]any, error) {
 			return
 		}
 		first, second := 2, 5
+		// The e2e run reuses its data directory, so start from one fresh list.
+		m.bookmarkLists = normalizeBookmarkLists(nil)
+		m.defaultList = bookmarkDefaultList
 		m.OpenNewBookmarkList()
 		m.newList.name = "Work"
 		m.CreateBookmarkList()
@@ -1096,6 +1296,26 @@ func (m *Model) SmokeBookmark(ctx context.Context) (map[string]any, error) {
 		t.state.GoTo(editor.Pos{Line: second, Col: 0})
 		m.ToggleBookmark()
 		out["cleared"] = len(m.bookmarks)
+		// A list renames through the same dialog and deletes with its marks.
+		m.OpenNewBookmarkList()
+		m.newList.name = "Temp"
+		m.CreateBookmarkList()
+		t.state.GoTo(editor.Pos{Line: first, Col: 0})
+		m.ToggleBookmark()
+		out["tempMark"] = len(m.bookmarks)
+		m.OpenRenameBookmarkList(m.defaultList)
+		m.newList.name = "Temp 2"
+		m.CreateBookmarkList()
+		for _, l := range m.bookmarkLists {
+			if l.ID == m.defaultList {
+				out["renamed"] = l.Name
+			}
+		}
+		out["listsBeforeDelete"] = len(m.bookmarkLists)
+		m.AskDeleteBookmarkList(m.defaultList)
+		m.ConfirmDeleteBookmarkList()
+		out["listsAfterDelete"] = len(m.bookmarkLists)
+		out["marksAfterDelete"] = len(m.bookmarks)
 	})
 	select {
 	case <-done:

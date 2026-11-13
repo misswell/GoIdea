@@ -163,8 +163,9 @@ type Model struct {
 
 	// bookmarks are the marked lines of the open project, pathBookmarks its
 	// bookmarked files, and bookmarkLists the named groups they show in.
-	// bookmarksView is the Bookmarks popup, mnemonics the Alt+F3 chooser, and
-	// newList the new-list dialog, or nil.
+	// bookmarksView is the Bookmarks popup, mnemonics the Alt+F3 chooser,
+	// newList the new-or-rename list dialog, and deleteList the confirmation
+	// that drops a list, or nil.
 	bookmarks     []Bookmark
 	pathBookmarks []PathBookmark
 	bookmarkLists []BookmarkList
@@ -172,6 +173,7 @@ type Model struct {
 	bookmarksView *bookmarksPane
 	mnemonics     *mnemonicPicker
 	newList       *newListPane
+	deleteList    *deleteListPane
 
 	run       RunPane
 	debug     DebugPane
@@ -563,6 +565,7 @@ func (m *Model) openProject(dir string, files []string) {
 	m.defaultList = m.session().DefaultList
 	m.defaultList = m.defaultBookmarkList()
 	m.newList = nil
+	m.deleteList = nil
 	m.resetLog()
 	m.resetProblems()
 	m.structure = StructurePane{}
@@ -1135,7 +1138,8 @@ func (m *Model) ShowProject() {
 func (m *Model) overlayOpen() bool {
 	return m.rename != nil || m.symbols != nil || m.intents != nil || m.files != nil ||
 		m.diff != nil || m.palette != nil || m.commit != nil || m.branch.open ||
-		m.rollback != nil || m.bookmarksView != nil || m.mnemonics != nil || m.newList != nil
+		m.rollback != nil || m.bookmarksView != nil || m.mnemonics != nil || m.newList != nil ||
+		m.deleteList != nil
 }
 
 // QuitImmediately closes the backend and quits without asking about changes,
@@ -1186,6 +1190,7 @@ func (m *Model) View(c *ui.Context) {
 	m.bookmarksDialog(c, p)
 	m.mnemonicDialog(c, p)
 	m.newListDialog(c, p)
+	m.deleteListDialog(c, p)
 	m.commandsDialog(c, p)
 	m.diffDialog(c, p)
 	m.dbDialog(c, p)
@@ -1211,8 +1216,8 @@ func (m *Model) shortcuts(c *ui.Context) {
 		}
 		return
 	}
-	// The mnemonic chooser and the new-list dialog take clicks and Escape only.
-	if m.mnemonics != nil || m.newList != nil {
+	// The mnemonic chooser and the list dialogs take clicks and Escape only.
+	if m.mnemonics != nil || m.newList != nil || m.deleteList != nil {
 		return
 	}
 	if c.Shortcut(ui.Cmd, ui.KeyComma) {

@@ -203,6 +203,54 @@ func TestBookmarksInList(t *testing.T) {
 	}
 }
 
+func TestRenameBookmarkList(t *testing.T) {
+	lists, _, err := addBookmarkList(normalizeBookmarkLists(nil), "Work")
+	if err != "" {
+		t.Fatal(err)
+	}
+	got, name, err := renameBookmarkList(lists, "list2", " Home ")
+	if err != "" || name != "Home" || got[1].Name != "Home" || got[0].Name != "书签" {
+		t.Fatalf("rename = %v, %q, %q; want list2 as Home", got, name, err)
+	}
+	if _, _, err := renameBookmarkList(lists, "list2", "书签"); err == "" {
+		t.Fatal("a duplicate name was accepted")
+	}
+	if _, _, err := renameBookmarkList(lists, "list2", " "); err == "" {
+		t.Fatal("an empty name was accepted")
+	}
+	if _, _, err := renameBookmarkList(lists, "nope", "Home"); err == "" {
+		t.Fatal("a missing list was renamed")
+	}
+}
+
+func TestRemoveBookmarkList(t *testing.T) {
+	lists, _, err := addBookmarkList(normalizeBookmarkLists(nil), "Work")
+	if err != "" {
+		t.Fatal(err)
+	}
+	marks := []Bookmark{
+		{Path: "/p/a.java", Line: 1, List: "list2"},
+		{Path: "/p/a.java", Line: 2},
+	}
+	paths := []PathBookmark{
+		{Path: "/p/A.java", List: "list2"},
+		{Path: "/p/B.java"},
+	}
+	got, keptMarks, keptPaths, def := removeBookmarkList(lists, marks, paths, "list2", "list2", "书签")
+	if len(got) != 1 || got[0].ID != bookmarkDefaultList || def != bookmarkDefaultList {
+		t.Fatalf("remove list2 = %v default %q, want the default list", got, def)
+	}
+	if len(keptMarks) != 1 || keptMarks[0].Line != 2 || len(keptPaths) != 1 || keptPaths[0].Path != "/p/B.java" {
+		t.Fatalf("marks %v paths %v, want the default list's bookmarks", keptMarks, keptPaths)
+	}
+	// The last list cannot vanish: a fresh default replaces it.
+	got, _, _, def = removeBookmarkList([]BookmarkList{{ID: bookmarkDefaultList, Name: "书签"}},
+		marks[1:], nil, bookmarkDefaultList, bookmarkDefaultList, "书签")
+	if len(got) != 1 || got[0].ID != bookmarkDefaultList || def != bookmarkDefaultList {
+		t.Fatalf("remove the only list = %v default %q, want a fresh default", got, def)
+	}
+}
+
 func TestSessionRoundTripsBookmarks(t *testing.T) {
 	root := t.TempDir()
 	file := filepath.Join(root, "A.java")

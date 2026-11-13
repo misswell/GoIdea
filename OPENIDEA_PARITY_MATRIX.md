@@ -483,7 +483,7 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 
 | Action | Title | Source | Status |
 | --- | --- | --- | --- |
-| `bookmarks.newList` | New Bookmark List… | `src/features/search/index.ts` | partial - internal/app/bookmarks.go addBookmarkList and newListDialog; cmd/goidea/main.go 新建书签列表…; base.bookmark.list; internal/app/bookmarks_test.go |
+| `bookmarks.newList` | New Bookmark List… | `src/features/search/index.ts` | partial - internal/app/bookmarks.go addBookmarkList, renameBookmarkList, removeBookmarkList and newListDialog; tool-window chips 重命名/删除; cmd/goidea/main.go 新建书签列表…; base.bookmark.list, base.bookmark.listOps; internal/app/bookmarks_test.go |
 | `bookmarks.toggleFileBookmark` | Toggle File Bookmark | `src/features/search/index.ts` | partial - internal/app/bookmarks.go ToggleFileBookmark and pathBookmarkLabel; cmd/goidea/main.go 切换文件书签; base.bookmark.file; internal/app/bookmarks_test.go |
 | `find.inPath` | Find in Files… | `src/features/search/index.ts` | missing |
 | `find.replaceInPath` | Replace in Files… | `src/features/search/index.ts` | missing |
