@@ -451,13 +451,8 @@ func (m *Model) runPanel(c *ui.Context, p *ui.Theme) {
 	if !m.run.visible {
 		return
 	}
-	col := ui.Column(c).Shrink(0).Background(p.Surface).
+	col := ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Background(p.Surface).
 		BorderWidth(1, 0, 0, 0).BorderColor(p.Border)
-	if m.maximized {
-		col.Grow(1)
-	} else {
-		col.Height(float32(m.bottomSize()))
-	}
 	col.Children(func() {
 		m.runHeader(c, p)
 		if m.run.err != "" {
@@ -495,13 +490,8 @@ func (m *Model) runPanel(c *ui.Context, p *ui.Theme) {
 
 func (m *Model) buildPanel(c *ui.Context, p *ui.Theme) {
 	b := &m.build
-	col := ui.Column(c).Shrink(0).Background(p.Surface).
+	col := ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Background(p.Surface).
 		BorderWidth(1, 0, 0, 0).BorderColor(p.Border)
-	if m.maximized {
-		col.Grow(1)
-	} else {
-		col.Height(float32(m.bottomSize()))
-	}
 	col.Children(func() {
 		m.buildHeader(c, p)
 		if b.err != "" {
@@ -630,13 +620,8 @@ func (p *RunPane) renderText() string {
 // sends Enter-terminated text to the shell.
 func (m *Model) termPanel(c *ui.Context, p *ui.Theme) {
 	t := &m.term
-	col := ui.Column(c).Shrink(0).MinHeight(0).Background(p.Surface).
+	col := ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Background(p.Surface).
 		BorderWidth(1, 0, 0, 0).BorderColor(p.Border)
-	if m.maximized {
-		col.Grow(1)
-	} else {
-		col.Height(float32(m.bottomSize()))
-	}
 	col.Children(func() {
 		ui.Row(c).Height(30).Shrink(0).Padding(0, 8).Gap(8).AlignItems(ui.Center).
 			BorderWidth(0, 0, 1, 0).BorderColor(p.Border).Children(func() {
@@ -715,13 +700,8 @@ func (p *TermPane) render() string {
 }
 
 func (m *Model) debugPanel(c *ui.Context, p *ui.Theme) {
-	col := ui.Column(c).Shrink(0).MinHeight(0).
+	col := ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).
 		Background(p.Surface).BorderWidth(1, 0, 0, 0).BorderColor(p.Border)
-	if m.maximized {
-		col.Grow(1)
-	} else {
-		col.Height(float32(m.bottomSize()))
-	}
 	col.Children(func() {
 		m.debugHeader(c, p)
 		if m.debug.err != "" {
@@ -923,21 +903,46 @@ func (m *Model) debugConsole(c *ui.Context, p *ui.Theme) {
 	})
 }
 
-// bottomSlot draws the bottom slot's one tool window, as OpenIDEA's bottom
-// slot shows a single window in its primary area.
+// bottomSlot draws the bottom side: the window of its primary area and, when a
+// window was moved there, the split area's window beside it, as OpenIDEA lays
+// out the two areas of a side. The side keeps one height whichever it shows.
 func (m *Model) bottomSlot(c *ui.Context, p *ui.Theme) {
-	switch {
-	case m.run.visible:
+	primary, split := m.primaryTool(), m.splitTool()
+	if primary == "" && split == "" {
+		return
+	}
+	row := ui.Row(c).Shrink(0).AlignItems(ui.Stretch)
+	if m.maximized {
+		row.Grow(1)
+	} else {
+		row.Height(float32(m.bottomSize()))
+	}
+	row.Children(func() {
+		if primary != "" {
+			m.toolPanel(c, p, primary)
+		}
+		if primary != "" && split != "" {
+			ui.Column(c).Width(1).Shrink(0).Background(p.Border)
+		}
+		if split != "" {
+			m.toolPanel(c, p, split)
+		}
+	})
+}
+
+func (m *Model) toolPanel(c *ui.Context, p *ui.Theme, name string) {
+	switch name {
+	case "run":
 		m.runPanel(c, p)
-	case m.debug.visible:
+	case "debug":
 		m.debugPanel(c, p)
-	case m.build.visible:
+	case "build":
 		m.buildPanel(c, p)
-	case m.term.visible:
+	case "term":
 		m.termPanel(c, p)
-	case m.log.visible:
+	case "log":
 		m.logPanel(c, p)
-	case m.problems.visible:
+	case "problems":
 		m.problemsPanel(c, p)
 	}
 }

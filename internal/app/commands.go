@@ -47,6 +47,8 @@ func commands() []appCommand {
 		{"view.resizeDown", "向下拉伸工具窗口", "视图", "Ctrl+Alt+Down", "resize stretch tool window shorter", func(m *Model) { m.ResizeBottomToolWindow("down") }},
 		{"view.resizeLeft", "向左拉伸工具窗口", "视图", "Ctrl+Alt+Left", "resize stretch tool window left", func(m *Model) { m.ResizeBottomToolWindow("left") }},
 		{"view.resizeRight", "向右拉伸工具窗口", "视图", "Ctrl+Alt+Right", "resize stretch tool window right", func(m *Model) { m.ResizeBottomToolWindow("right") }},
+		{"view.moveSplit", "移动到底部右侧", "视图", "", "move tool window split bottom right", func(m *Model) { m.MoveActiveToolWindowToSplit() }},
+		{"view.movePrimary", "移动到底部", "视图", "", "move tool window primary bottom", func(m *Model) { m.MoveActiveToolWindowToBottom() }},
 		{"view.commit", "提交窗口", "视图", "Cmd+0", "commit tool window git", func(m *Model) { m.OpenCommit() }},
 		{"problems.next", "下一个问题", "视图", "Cmd+Alt+Down", "problems next occurrence navigate", func(m *Model) { m.StepProblem(1) }},
 		{"problems.prev", "上一个问题", "视图", "Cmd+Alt+Up", "problems previous occurrence navigate", func(m *Model) { m.StepProblem(-1) }},

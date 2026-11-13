@@ -161,6 +161,8 @@ func menu(m *app.Model) *mygo.Menu {
 			{Label: "最大化工具窗口", Accelerator: "CmdOrCtrl+Shift+'", Click: func(*mygo.MenuItem, *mygo.Window) { m.ToggleMaximizeToolWindow() }},
 			{Label: "向上拉伸工具窗口", Accelerator: "CmdOrCtrl+Alt+Up", Click: func(*mygo.MenuItem, *mygo.Window) { m.ResizeBottomToolWindow("up") }},
 			{Label: "向下拉伸工具窗口", Accelerator: "CmdOrCtrl+Alt+Down", Click: func(*mygo.MenuItem, *mygo.Window) { m.ResizeBottomToolWindow("down") }},
+			{Label: "移动到底部右侧", Click: func(*mygo.MenuItem, *mygo.Window) { m.MoveActiveToolWindowToSplit() }},
+			{Label: "移动到底部", Click: func(*mygo.MenuItem, *mygo.Window) { m.MoveActiveToolWindowToBottom() }},
 			mygo.Separator(),
 			{Label: "提交窗口", Accelerator: "CmdOrCtrl+0", Click: func(*mygo.MenuItem, *mygo.Window) { m.OpenCommit() }},
 			{Label: "显示 Git 更改", Accelerator: "CmdOrCtrl+9", Click: func(*mygo.MenuItem, *mygo.Window) { m.ShowVCS() }},

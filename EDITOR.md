@@ -80,10 +80,14 @@ that were visible, `F12` reopens the last window used, even after it was hidden,
 and `Cmd+0` opens Commit (`toolwindow.go`). `Cmd+Alt+Down` and `Cmd+Alt+Up`
 step through the problem rows and wrap at both ends.
 
-The bottom area is one slot, as OpenIDEA's bottom slot is: opening Problems
-takes the area from the Run output, and the replaced window keeps its contents,
-so the terminal's shell and a run's output are still there when it comes back
-(`occupyBottom` in `toolwindow.go`, `bottomSlot` in `view.go`).
+The bottom side has two areas, as OpenIDEA's does: its primary area and its
+split area sit side by side at half the width each, and each shows one window.
+Opening Problems takes the primary area from the Run output while a window in
+the split area stays, and the replaced window keeps its contents, so the
+terminal's shell and a run's output are still there when it comes back. **视图 ›
+移动到底部右侧** moves the active window into the split area, replacing the
+window shown there, and **移动到底部** moves it back (`occupyBottom`,
+`toolArea` and `moveActiveTool` in `toolwindow.go`, `bottomSlot` in `view.go`).
 
 `Cmd+Shift+'` maximizes the slot over the workbench and a second press gives
 the editor back; hiding the slot or opening a file also restores it.
@@ -113,6 +117,7 @@ does not ask the server again.
 | Problems tool window, status-bar counts | `internal/app/problems.go` |
 | Structure tool window (Cmd+7) | `internal/app/structure.go` |
 | Tool window maximize and resize | `internal/app/toolwindow.go`, `maximize_test.go` |
+| Bottom split area, Move to Bottom Right | `internal/app/toolwindow.go`, `split_test.go` |
 | Completion, hover, definition popups | MyGo callbacks → `internal/app/lsp.go` |
 | Intentions / quick fixes (Alt+Enter) | `internal/app/intents.go` |
 | Rename (Shift+F6) with undo | `internal/app/rename.go` |

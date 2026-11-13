@@ -57,6 +57,7 @@ reimplementing it. A row is `INTEGRATED` only when the GoIDEA product
 | Problems tool window (File / Project) | INTEGRATED | `internal/app/problems.go`; per-file diagnostics, status-bar counts, `lsp.problems.*` in the release e2e |
 | Structure tool window (Cmd+7) | INTEGRATED | `internal/app/structure.go`; filter, collapse, click-to-jump, `lsp.structure.*` in the release e2e |
 | Tool window maximize (Cmd+Shift+'), resize (Ctrl+Alt+arrows) | INTEGRATED | `internal/app/toolwindow.go`; one height per bottom slot, editor restored on navigation; `internal/app/maximize_test.go` |
+| Bottom split area, Move to Bottom Right | INTEGRATED | `internal/app/toolwindow.go`; each area shows one window at half the width; `internal/app/split_test.go` |
 | Intentions and quick fixes | INTEGRATED | Alt+Enter sheet |
 | Rename, usages, symbols, format | INTEGRATED | code menu and pickers |
 | Find/replace in project | INTEGRATED | search view |

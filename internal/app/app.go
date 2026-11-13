@@ -176,6 +176,9 @@ type Model struct {
 	tool         string
 	toolStash    map[string]bool
 	toolStashMax bool
+	// splitNames are the windows the bottom split area holds; the others sit in
+	// the primary area, as OpenIDEA places a window in one of a side's two areas.
+	splitNames   map[string]bool
 	bottomHeight int
 	maximized    bool
 	// frameHeight is the last drawn window height, which caps a resize.
@@ -539,6 +542,9 @@ func (m *Model) openProject(dir string, files []string) {
 	m.structure = StructurePane{}
 	m.tool = ""
 	m.toolStash = nil
+	m.toolStashMax = false
+	m.splitNames = nil
+	m.maximized = false
 	m.commit = nil
 	m.cancelSearch()
 	m.resetSearch()

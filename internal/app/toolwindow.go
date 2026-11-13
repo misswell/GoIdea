@@ -47,17 +47,74 @@ func (m *Model) hideTool(name string) {
 	}
 }
 
-// occupyBottom makes name the bottom slot's window and closes the others: an
-// OpenIDEA slot shows one tool window at a time, so opening a window takes the
-// area from the one that held it. The closed window keeps its contents, as a
-// tab does: the terminal's shell and a run's output are still there.
+// occupyBottom makes name the window its area shows and closes the others in
+// that area: an OpenIDEA area shows one tool window at a time, so opening a
+// window takes the area from the one that held it. The other area keeps its
+// window. The closed window keeps its contents, as a tab does: the terminal's
+// shell and a run's output are still there.
 func (m *Model) occupyBottom(name string) {
+	area := m.toolArea(name)
 	for _, other := range toolWindows {
-		if other != name {
+		if other != name && m.toolArea(other) == area {
 			m.hideTool(other)
 		}
 	}
 	m.tool = name
+}
+
+// toolArea is the bottom side area a window sits in, "primary" or "split".
+func (m *Model) toolArea(name string) string {
+	if m.splitNames[name] {
+		return "split"
+	}
+	return "primary"
+}
+
+// primaryTool is the window the bottom primary area shows, "" when it is empty.
+func (m *Model) primaryTool() string {
+	for _, name := range toolWindows {
+		if m.toolArea(name) == "primary" && m.toolVisible(name) {
+			return name
+		}
+	}
+	return ""
+}
+
+// splitTool is the window the bottom split area shows, "" when it is empty.
+func (m *Model) splitTool() string {
+	for _, name := range toolWindows {
+		if m.toolArea(name) == "split" && m.toolVisible(name) {
+			return name
+		}
+	}
+	return ""
+}
+
+// MoveActiveToolWindowToSplit moves the window the shortcuts last showed into
+// the bottom split area, as OpenIDEA's Move to › Bottom Right does; the primary
+// area keeps its window. MoveActiveToolWindowToBottom moves it back.
+func (m *Model) MoveActiveToolWindowToSplit() { m.moveActiveTool(true) }
+
+// MoveActiveToolWindowToBottom moves the active window to the primary area.
+func (m *Model) MoveActiveToolWindowToBottom() { m.moveActiveTool(false) }
+
+func (m *Model) moveActiveTool(split bool) {
+	if m.tool == "" || !m.toolVisible(m.tool) {
+		return
+	}
+	if m.splitNames[m.tool] == split {
+		return
+	}
+	if split {
+		if m.splitNames == nil {
+			m.splitNames = map[string]bool{}
+		}
+		m.splitNames[m.tool] = true
+	} else {
+		delete(m.splitNames, m.tool)
+	}
+	m.occupyBottom(m.tool)
+	m.invalidate()
 }
 
 // visibleTool is the window the bottom slot shows, "" when the slot is closed.
