@@ -991,6 +991,64 @@ func removeBookmarkList(lists []BookmarkList, marks []Bookmark, paths []PathBook
 	return out, keepMarks, keepPaths, def
 }
 
+// bookmarkPopupItem is a popup row the user can open: a line or a file.
+type bookmarkPopupItem struct {
+	Path string
+	Line int
+	File bool
+}
+
+// bookmarkPopupRow is a list header or an item in the Bookmarks popup.
+type bookmarkPopupRow struct {
+	Header string
+	Item   bookmarkPopupItem
+	IsItem bool
+}
+
+// bookmarkPopupRows groups file and line bookmarks under their list, as the
+// OpenIDEA popup does, leaving out lists with nothing in them.
+func bookmarkPopupRows(lists []BookmarkList, marks []Bookmark, paths []PathBookmark) []bookmarkPopupRow {
+	var rows []bookmarkPopupRow
+	for _, l := range lists {
+		lp := pathBookmarksInList(paths, l.ID)
+		lm := bookmarksInList(marks, l.ID)
+		if len(lp)+len(lm) == 0 {
+			continue
+		}
+		rows = append(rows, bookmarkPopupRow{Header: l.Name})
+		for _, pb := range lp {
+			rows = append(rows, bookmarkPopupRow{IsItem: true,
+				Item: bookmarkPopupItem{Path: pb.Path, File: true}})
+		}
+		for _, b := range lm {
+			rows = append(rows, bookmarkPopupRow{IsItem: true,
+				Item: bookmarkPopupItem{Path: b.Path, Line: b.Line}})
+		}
+	}
+	return rows
+}
+
+// bookmarkPopupItems keeps the rows the popup can select.
+func bookmarkPopupItems(rows []bookmarkPopupRow) []bookmarkPopupItem {
+	out := make([]bookmarkPopupItem, 0, len(rows))
+	for _, r := range rows {
+		if r.IsItem {
+			out = append(out, r.Item)
+		}
+	}
+	return out
+}
+
+// bookmarkPopupRows returns the popup rows for the open project.
+func (m *Model) bookmarkPopupRows() []bookmarkPopupRow {
+	return bookmarkPopupRows(normalizeBookmarkLists(m.bookmarkLists), m.bookmarks, m.pathBookmarks)
+}
+
+// bookmarkPopupItems returns the popup's selectable rows for the open project.
+func (m *Model) bookmarkPopupItems() []bookmarkPopupItem {
+	return bookmarkPopupItems(m.bookmarkPopupRows())
+}
+
 // closeBookmarks drops the Bookmarks popup.
 func (m *Model) closeBookmarks() {
 	if m.bookmarksView == nil {
@@ -1003,22 +1061,29 @@ func (m *Model) closeBookmarks() {
 // stepBookmarkSel moves the popup's highlighted row, stopping at the ends.
 func (m *Model) stepBookmarkSel(delta int) {
 	v := m.bookmarksView
-	if v == nil || len(m.bookmarks) == 0 {
+	if v == nil || len(m.bookmarkPopupItems()) == 0 {
 		return
 	}
-	v.sel = clampSel(v.sel+delta, len(m.bookmarks))
+	items := m.bookmarkPopupItems()
+	v.sel = clampSel(v.sel+delta, len(items))
 	m.invalidate()
 }
 
 // openSelectedBookmark jumps from the popup's highlighted row.
 func (m *Model) openSelectedBookmark() {
 	v := m.bookmarksView
-	if v == nil || len(m.bookmarks) == 0 {
+	if v == nil || len(m.bookmarkPopupItems()) == 0 {
 		return
 	}
-	b := m.bookmarks[clampSel(v.sel, len(m.bookmarks))]
+	items := m.bookmarkPopupItems()
+	it := items[clampSel(v.sel, len(items))]
 	m.closeBookmarks()
-	m.applyBookmark(b)
+	if it.File {
+		m.openFile(it.Path)
+		m.invalidate()
+		return
+	}
+	m.applyBookmark(Bookmark{Path: it.Path, Line: it.Line})
 }
 
 // removeBookmarkAt drops the bookmark the popup row shows and keeps the
@@ -1064,52 +1129,70 @@ func (m *Model) bookmarkMarks(path string, taken map[int]bool) []editor.GutterMa
 	return marks
 }
 
-// bookmarksDialog draws the Bookmarks popup: every marked line, the highlighted
-// one Opening on Enter or a click, and a delete chip per row.
+// bookmarksDialog draws the Bookmarks popup: lists with their files and marked
+// lines, the highlighted one Opening on Enter or a click, and a delete chip per
+// row.
 func (m *Model) bookmarksDialog(c *ui.Context, p *ui.Theme) {
 	v := m.bookmarksView
 	if v == nil {
 		return
 	}
-	list := append([]Bookmark(nil), m.bookmarks...)
-	sortBookmarks(list)
+	rows := m.bookmarkPopupRows()
+	items := bookmarkPopupItems(rows)
 	open := v.open
 	d := ui.Modal(c, &open, func() {
 		ui.Column(c).Width(520).Gap(8).Children(func() {
 			ui.Text(c, "书签").FontSize(13).Bold().TextColor(p.Text).SingleLine()
-			if len(list) == 0 {
+			if len(items) == 0 {
 				ui.Text(c, "还没有书签；在编辑器中按 F3 标记当前行。").FontSize(11).
 					TextColor(p.TextMuted).SingleLine()
 				return
 			}
-			ui.Text(c, fmt.Sprintf("%d 个书签 · Enter 打开 · Cmd+F3 关闭", len(list))).FontSize(10.5).
+			ui.Text(c, fmt.Sprintf("%d 个书签 · Enter 打开 · Cmd+F3 关闭", len(items))).FontSize(10.5).
 				TextColor(p.TextMuted).SingleLine()
 			root := m.Root()
 			var jump, remove = -1, -1
+			item := 0
 			ui.Scroll(c).Height(320).Children(func() {
 				ui.Column(c).Children(func() {
-					for i, b := range list {
-						i, b := i, b
-						r := ui.Row(c.Key(fmt.Sprintf("bookmark:%d", i))).Height(24).Padding(0, 8).
-							Gap(8).AlignItems(ui.Center)
-						if i == v.sel || r.Hovered() {
-							r.Background(p.SurfaceHover)
+					for _, r := range rows {
+						r := r
+						if !r.IsItem {
+							ui.Row(c).Height(22).Padding(6, 8).Children(func() {
+								ui.Text(c, r.Header).FontSize(10.5).Bold().
+									TextColor(p.TextMuted).SingleLine()
+							})
+							continue
 						}
-						r.Children(func() {
-							if b.Mnemonic != "" {
-								ui.Text(c, b.Mnemonic).FontSize(10.5).Bold().
-									TextColor(p.Accent).SingleLine()
+						i := item
+						item++
+						row := ui.Row(c.Key(fmt.Sprintf("bookmark:%d", i))).Height(24).Padding(0, 8).
+							Gap(8).AlignItems(ui.Center)
+						if i == v.sel || row.Hovered() {
+							row.Background(p.SurfaceHover)
+						}
+						row.Children(func() {
+							if r.Item.File {
+								ui.Text(c, pathBookmarkLabel(root, r.Item.Path)).FontSize(12).
+									TextColor(p.Text).SingleLine().Ellipsis("…")
+								ui.Spacer(c)
+							} else {
+								b, _ := bookmarkAt(m.bookmarks, r.Item.Path, r.Item.Line)
+								if b.Mnemonic != "" {
+									ui.Text(c, b.Mnemonic).FontSize(10.5).Bold().
+										TextColor(p.Accent).SingleLine()
+								}
+								ui.Text(c, bookmarkTitle(b)).FontSize(12).TextColor(p.Text).
+									SingleLine().Ellipsis("…")
+								ui.Spacer(c)
+								ui.Text(c, symbolWhere(root, b.Path, b.Line)).FontSize(10.5).
+									TextColor(p.Accent).SingleLine().Ellipsis("…")
 							}
-							ui.Text(c, bookmarkTitle(b)).FontSize(12).TextColor(p.Text).
-								SingleLine().Ellipsis("…")
-							ui.Spacer(c)
-							ui.Text(c, symbolWhere(root, b.Path, b.Line)).FontSize(10.5).
-								TextColor(p.Accent).SingleLine().Ellipsis("…")
 							if m.rowChip(c, p, fmt.Sprintf("bookmark:del:%d", i), "删除") {
 								remove = i
 							}
 						})
-						if r.Clicked() {
+						if row.Clicked() {
 							jump = i
 						}
 					}
@@ -1117,16 +1200,35 @@ func (m *Model) bookmarksDialog(c *ui.Context, p *ui.Theme) {
 			})
 			switch {
 			case remove >= 0:
-				m.removeBookmarkAt(remove)
+				if items[remove].File {
+					m.removePathBookmark(items[remove].Path)
+				} else {
+					m.removeBookmark(items[remove].Path, items[remove].Line)
+				}
 			case jump >= 0:
 				m.closeBookmarks()
-				m.applyBookmark(list[jump])
+				if items[jump].File {
+					m.openFile(items[jump].Path)
+					m.invalidate()
+				} else {
+					m.applyBookmark(Bookmark{Path: items[jump].Path, Line: items[jump].Line})
+				}
 			}
 		})
 	})
 	if d.Dismissed() || !open {
 		m.closeBookmarks()
 	}
+}
+
+// bookmarkAt finds the bookmark on a line.
+func bookmarkAt(list []Bookmark, path string, line int) (Bookmark, bool) {
+	for _, b := range list {
+		if b.Path == path && b.Line == line {
+			return b, true
+		}
+	}
+	return Bookmark{}, false
 }
 
 // mnemonicDialog draws the Alt+F3 chooser: every digit and capital letter, the
@@ -1281,6 +1383,9 @@ func (m *Model) SmokeBookmark(ctx context.Context) (map[string]any, error) {
 		m.ShowProject()
 		m.ToggleFileBookmark()
 		out["fileMarked"] = len(m.pathBookmarks)
+		m.ShowBookmarks()
+		out["popupItems"] = len(m.bookmarkPopupItems())
+		m.closeBookmarks()
 		m.ToggleFileBookmark()
 		out["fileCleared"] = len(m.pathBookmarks)
 		t.state.GoTo(editor.Pos{Line: 0, Col: 0})

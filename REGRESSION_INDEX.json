@@ -71,6 +71,7 @@
     {"id": "base.bookmark.file", "label": "Toggle File Bookmark marked and unmarked the file", "feature": "File bookmarks", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
     {"id": "base.bookmark.list", "label": "a new list received the new bookmarks", "feature": "Bookmark lists", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
     {"id": "base.bookmark.listOps", "label": "a list renamed and its deletion took its bookmarks", "feature": "Bookmark list rename and delete", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
+    {"id": "base.bookmark.popup", "label": "Cmd+F3 lists files and lines by list", "feature": "Bookmarks popup groups files and lines by list", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
     {"id": "base.bookmarkError", "label": "bookmarkError is absent", "feature": "Bookmarks report no error", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
     {"id": "base.log.commits", "label": "vcs_log returned commits", "feature": "Git log through vcs_log", "area": "vcs", "gate": "main", "doc": "RPC_PROTOCOL.md"},
     {"id": "base.log.details", "label": "vcs_log_details returned the message and a branch", "feature": "Commit details in the Git log", "area": "vcs", "gate": "main", "doc": "RPC_PROTOCOL.md"},

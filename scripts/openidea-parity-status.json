@@ -111,7 +111,7 @@
     },
     "action:navigate.showBookmarks": {
       "status": "partial",
-      "evidence": "internal/app/bookmarks.go ShowBookmarks popup with jump and delete; Cmd+F3 in internal/app/app.go; internal/app/bookmarks_test.go"
+      "evidence": "internal/app/bookmarks.go ShowBookmarks popup groups files and lines by list with jump and delete; base.bookmark.popup; Cmd+F3 in internal/app/app.go; internal/app/bookmarks_test.go"
     },
     "action:navigate.nextBookmark": {
       "status": "partial",

@@ -500,7 +500,7 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `navigate.recentLocations` | Recent Locations | `src/features/search/index.ts` | missing |
 | `navigate.searchEverywhere` | Search Everywhere | `src/features/search/index.ts` | missing |
 | `navigate.searchText` | Search Text Everywhere | `src/features/search/index.ts` | integrated - base.search.done, base.search.files, base.search.matches |
-| `navigate.showBookmarks` | Show Bookmarks | `src/features/search/index.ts` | partial - internal/app/bookmarks.go ShowBookmarks popup with jump and delete; Cmd+F3 in internal/app/app.go; internal/app/bookmarks_test.go |
+| `navigate.showBookmarks` | Show Bookmarks | `src/features/search/index.ts` | partial - internal/app/bookmarks.go ShowBookmarks popup groups files and lines by list with jump and delete; base.bookmark.popup; Cmd+F3 in internal/app/app.go; internal/app/bookmarks_test.go |
 | `navigate.switcher` | Switcher | `src/features/search/index.ts` | missing |
 | `navigate.switcherBack` | Switcher (Backward) | `src/features/search/index.ts` | missing |
 | `navigate.toggleBookmark` | Toggle Bookmark | `src/features/search/index.ts` | partial - internal/app/bookmarks.go ToggleBookmark at the caret and gutter dots; F3 in internal/app/app.go; base.bookmark.added, base.bookmark.gutter, base.bookmark.remove; internal/app/bookmarks_test.go |

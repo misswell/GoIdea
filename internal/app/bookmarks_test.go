@@ -251,6 +251,36 @@ func TestRemoveBookmarkList(t *testing.T) {
 	}
 }
 
+func TestBookmarkPopupRows(t *testing.T) {
+	lists := []BookmarkList{{ID: bookmarkDefaultList, Name: "书签"}, {ID: "list2", Name: "Work"}}
+	marks := []Bookmark{
+		{Path: "/p/a.java", Line: 2, List: "list2"},
+		{Path: "/p/a.java", Line: 1},
+	}
+	paths := []PathBookmark{{Path: "/p/A.java", List: "list2"}}
+	rows := bookmarkPopupRows(lists, marks, paths)
+	var headers int
+	for _, r := range rows {
+		if !r.IsItem {
+			headers++
+		}
+	}
+	if headers != 2 {
+		t.Fatalf("headers = %d, want one per non-empty list", headers)
+	}
+	items := bookmarkPopupItems(rows)
+	if len(items) != 3 {
+		t.Fatalf("items = %v, want the file and both lines", items)
+	}
+	if !items[1].File || items[1].Path != "/p/A.java" {
+		t.Fatalf("items = %v, want the file first inside Work", items)
+	}
+	// Empty lists are left out, and nothing is listed without bookmarks.
+	if rows := bookmarkPopupRows([]BookmarkList{{ID: bookmarkDefaultList, Name: "书签"}}, nil, nil); len(rows) != 0 {
+		t.Fatalf("empty rows = %v, want none", rows)
+	}
+}
+
 func TestSessionRoundTripsBookmarks(t *testing.T) {
 	root := t.TempDir()
 	file := filepath.Join(root, "A.java")
