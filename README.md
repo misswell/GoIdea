@@ -42,6 +42,11 @@ CGO_ENABLED=0 go test ./...
 scripts/check-licenses.sh
 ```
 
+CI runs these on `ubuntu-latest`. The `macos-14` job is gated behind the
+`ENABLE_MACOS_CI` repository variable because GitHub hosted macOS runners are
+not available to this account; the release itself was built, signed and
+notarized on macOS with `scripts/release.sh`.
+
 The app reads `GOIDEA_OPEN_PROJECT` to open a folder at startup and
 `GOIDEA_HEADLESS=1` to stay offscreen. `GOIDEA_SMOKE_*` flags drive the
 checks in `cmd/goidea/main.go` (edit round-trip, run, debug, search,
