@@ -38,6 +38,7 @@ func commands() []appCommand {
 		{"view.terminal", "显示终端", "视图", "Cmd+J", "terminal shell", func(m *Model) { m.ShowTerm() }},
 		{"view.run", "显示运行窗口", "视图", "", "run output console", func(m *Model) { m.ShowRun() }},
 		{"view.debug", "显示调试窗口", "视图", "", "debug variables frames", func(m *Model) { m.ShowDebug() }},
+		{"view.database", "数据库…", "视图", "", "database sql sqlite postgres mysql query", func(m *Model) { m.OpenDatabase() }},
 		{"code.intentions", "意图操作…", "代码", "Alt+Enter", "intention action quickfix", func(m *Model) { m.ShowIntentions() }},
 		{"code.symbols", "转到符号…", "代码", "Cmd+Shift+O", "go to symbol navigate", func(m *Model) { m.OpenSymbols() }},
 		{"code.usages", "查找用法", "代码", "Alt+F7", "find usages references", func(m *Model) { m.FindUsages() }},

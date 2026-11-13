@@ -120,6 +120,7 @@ func menu(m *app.Model) *mygo.Menu {
 			{Label: "显示运行窗口", Click: func(*mygo.MenuItem, *mygo.Window) { m.ShowRun() }},
 			{Label: "显示调试窗口", Click: func(*mygo.MenuItem, *mygo.Window) { m.ShowDebug() }},
 			{Label: "终端", Accelerator: "CmdOrCtrl+J", Click: func(*mygo.MenuItem, *mygo.Window) { m.ShowTerm() }},
+			{Label: "数据库…", Click: func(*mygo.MenuItem, *mygo.Window) { m.OpenDatabase() }},
 			{Label: "信任此项目并启用运行", Click: func(*mygo.MenuItem, *mygo.Window) { m.TrustProject() }},
 		}},
 		{Role: mygo.RoleWindowMenu},
@@ -225,6 +226,15 @@ func smoke(m *app.Model) {
 	}
 	if os.Getenv("GOIDEA_SMOKE_SETTINGS") == "1" {
 		fields["settings"] = m.SmokeSettings()
+	}
+	if os.Getenv("GOIDEA_SMOKE_DB") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+		db, dbErr := m.SmokeDatabase(ctx)
+		cancel()
+		fields["database"] = db
+		if dbErr != nil {
+			fields["databaseError"] = dbErr.Error()
+		}
 	}
 	if os.Getenv("GOIDEA_SMOKE_WATCH") == "1" && root != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)

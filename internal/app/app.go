@@ -120,6 +120,9 @@ type Model struct {
 	// diff is the open compare-with-HEAD view, or nil.
 	diff *diffView
 
+	// db is the open database sheet, or nil.
+	db *dbView
+
 	// intents is the open intentions prompt, or nil.
 	intents *intentPane
 
@@ -464,6 +467,7 @@ func (m *Model) openProject(dir string, files []string) {
 	m.closeQuickFiles()
 	m.closeCommands()
 	m.diff = nil
+	m.db = nil
 	m.refactor, m.redoRefactor = nil, nil
 	m.busy = true
 	m.status = "正在打开 " + filepath.Base(dir) + "…"
@@ -1038,12 +1042,13 @@ func (m *Model) View(c *ui.Context) {
 	m.filesDialog(c, p)
 	m.commandsDialog(c, p)
 	m.diffDialog(c, p)
+	m.dbDialog(c, p)
 	m.settingsDialog(c, p)
 }
 
 func (m *Model) shortcuts(c *ui.Context) {
 	// A modal sheet owns the keyboard; only its own dismiss keys apply.
-	if m.settingsOpen {
+	if m.settingsOpen || (m.db != nil && m.db.open) {
 		return
 	}
 	if c.Shortcut(ui.Cmd, ui.KeyComma) {
