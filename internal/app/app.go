@@ -249,8 +249,18 @@ type Model struct {
 	// frameHeight is the last drawn window height, which caps a resize.
 	frameHeight float32
 	// editorWidth is the width the editor island drew at last frame, which
-	// caps a drag of the side beside it.
-	editorWidth float32
+	// caps a drag of the side beside it, and editorHeight the height it drew,
+	// which caps a drag of the bottom area below it.
+	editorWidth  float32
+	editorHeight float32
+	// bottomDragging, bottomDragSize and bottomDragMax carry a drag of the gap
+	// above the bottom area: the height the pointer asks for, and the tallest
+	// it may go with the editor's minimum height kept. bottomDragCollapse
+	// hides every bottom window when the pointer went past half its minimum.
+	bottomDragging     bool
+	bottomDragSize     float32
+	bottomDragMax      float32
+	bottomDragCollapse bool
 	// problemStep is the row Cmd+Alt+Down last revealed.
 	problemStep int
 	// reveal is the caret position a search hit asked for; it applies once the

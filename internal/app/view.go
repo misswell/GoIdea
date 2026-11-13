@@ -919,11 +919,16 @@ func (m *Model) bottomSlot(c *ui.Context, p *ui.Theme) {
 	if primary == "" && split == "" {
 		return
 	}
+	// A drag of the gap below half the smallest height draws no island until
+	// the release closes the windows.
+	if !m.maximized && m.bottomDrawHeight() == 0 {
+		return
+	}
 	row := ui.Row(c).Shrink(0).AlignItems(ui.Stretch)
 	if m.maximized {
 		row.Grow(1)
 	} else {
-		row.Height(float32(m.bottomSize()))
+		row.Height(float32(m.bottomDrawHeight()))
 	}
 	row.Children(func() {
 		if primary != "" {

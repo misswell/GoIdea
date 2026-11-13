@@ -160,6 +160,8 @@ func (m *Model) applyLayout(root string) {
 	m.leftWidth = float32(l.LeftWidth)
 	m.leftWidthDragging = false
 	m.leftDragCollapse = false
+	m.bottomDragging = false
+	m.bottomDragCollapse = false
 	switch l.Side {
 	case "vcs":
 		m.sideMode = "vcs"
@@ -351,6 +353,19 @@ func (m *Model) HideAllToolWindows() {
 	} else {
 		return
 	}
+	m.rememberLayout()
+	m.invalidate()
+}
+
+// hideBottomWindows closes every bottom tool window, which a drag of the gap
+// above the bottom area past half its smallest height does. Unlike Hide All it
+// keeps no stash: the drag is how the side goes away, not a toggle.
+func (m *Model) hideBottomWindows() {
+	release := m.holdLayout()
+	for _, name := range toolWindows {
+		m.hideTool(name)
+	}
+	release()
 	m.rememberLayout()
 	m.invalidate()
 }

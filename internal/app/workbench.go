@@ -188,8 +188,11 @@ func (m *Model) workbench(c *ui.Context, p *ui.Theme) {
 				m.editorIsland(c, p)
 			})
 			if bottom != "" {
-				ui.Row(c).Shrink(0).Padding(6, 6, 0, 6).
-					Height(float32(m.bottomSize()) + oiIslandGap).Children(func() {
+				ui.Column(c).Shrink(0).Padding(0, 6, 0, 6).
+					Height(float32(m.bottomDrawHeight()) + oiIslandGap).Children(func() {
+					// The gap above the bottom island takes the pointer, as
+					// OpenIDEA's GapHandle does.
+					m.bottomSizeHandle(c)
 					m.bottomSlot(c, p)
 				})
 			}
@@ -414,6 +417,81 @@ func (m *Model) hideLeftSide() {
 	m.invalidate()
 }
 
+// The bottom side's sizes, as OpenIDEA's sizes.bottom and its GapHandle: a drag
+// keeps 90 DIPs for the side and 60 for the editor, and half of 90 closes the
+// side on release.
+const (
+	bottomDragMin   = 90
+	editorMinHeight = 60
+)
+
+// bottomDragHeight is the height a running drag of the bottom gap asks for,
+// clamped to the side's smallest height and the room the editor keeps.
+func (m *Model) bottomDragHeight() float32 {
+	h := m.bottomDragSize
+	if h < bottomDragMin {
+		h = bottomDragMin
+	}
+	if h > m.bottomDragMax {
+		h = m.bottomDragMax
+	}
+	return h
+}
+
+// bottomDrawHeight is the height the bottom side draws at: the height it was
+// left with, or the height a drag of its gap has put it at.
+func (m *Model) bottomDrawHeight() int {
+	if !m.bottomDragging {
+		return m.bottomSize()
+	}
+	if m.bottomDragCollapse {
+		return 0
+	}
+	// OpenIDEA stores and draws whole DIPs.
+	return int(m.bottomDragHeight() + 0.5)
+}
+
+// bottomSizeHandle is the gap above the bottom island, which the pointer drags
+// to resize it, as OpenIDEA's GapHandle does. A drag past half the side's
+// smallest height closes every bottom window on release; anything else is kept
+// then.
+func (m *Model) bottomSizeHandle(c *ui.Context) {
+	h := ui.Row(c).Key("bottom:size-handle").Height(oiIslandGap).Shrink(0).
+		Cursor(ui.CursorResizeRow)
+	_, dy, held := h.Dragged()
+	if !held {
+		if m.bottomDragging {
+			size := m.bottomDragHeight()
+			m.bottomDragging = false
+			if m.bottomDragCollapse {
+				m.bottomDragCollapse = false
+				m.hideBottomWindows()
+			} else if int(size+0.5) != m.bottomSize() {
+				m.bottomHeight = int(size + 0.5)
+				m.rememberLayout()
+			}
+		}
+		return
+	}
+	if !m.bottomDragging {
+		// The base is the height drawn now, read before the drag takes over
+		// from it.
+		base := float32(m.bottomSize())
+		m.bottomDragging = true
+		m.bottomDragSize = base
+		m.bottomDragMax = base
+		if spare := m.editorHeight - editorMinHeight; spare > 0 {
+			m.bottomDragMax += spare
+		}
+		m.bottomDragCollapse = false
+	}
+	// Dragging up gives the side more room, as OpenIDEA's sign of -1 for the
+	// bottom anchor does.
+	m.bottomDragSize -= dy
+	m.bottomDragCollapse = m.bottomDragSize < bottomDragMin/2
+	m.invalidate()
+}
+
 // leftRatioMin and leftRatioMax bound the left side's split, as OpenIDEA's
 // MIN_SPLIT and MAX_SPLIT do, and leftSplitMin is the room the smaller area
 // keeps when the side has it, SPLIT_MIN stacked.
@@ -587,8 +665,10 @@ func (m *Model) editorIsland(c *ui.Context, p *ui.Theme) {
 	oi := oiPaletteOf(p)
 	island := ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Background(oi.island).
 		Radius(oiIslandRadius)
-	// The width it drew at last frame caps a drag of the side beside it.
+	// The width it drew at last frame caps a drag of the side beside it, and
+	// the height caps a drag of the bottom area below it.
 	m.editorWidth = island.Bounds().W
+	m.editorHeight = island.Bounds().H
 	island.Children(func() {
 		m.editorTabs(c, p, oi)
 		if m.banner != "" {

@@ -189,3 +189,68 @@ func TestWorkbenchLeftWidthDragPastTheMinimumClosesTheSide(t *testing.T) {
 		t.Fatalf("a closed side kept a width: %v", got)
 	}
 }
+
+// bottomGapY is the middle of the gap above the bottom area at 1440×900, the
+// area at its default height.
+func bottomGapY() float32 {
+	return 900 - oiStatusBarHeight - float32(bottomDefaultHeight) - oiIslandGap/2
+}
+
+func TestWorkbenchBottomGapResizesTheArea(t *testing.T) {
+	m := toolModel()
+	m.ShowProblems()
+	tt := workbenchTester(t, m)
+	y := bottomGapY()
+	tt.Move(700, y)
+	if got := tt.Cursor(); got != ui.CursorResizeRow {
+		t.Fatalf("the gap shows cursor %v, want the row resize cursor", got)
+	}
+	tt.Press(700, y)
+	tt.Move(700, y-100)
+	tt.Release(700, y-100)
+	tt.Frame()
+	if got := m.bottomHeight; got != bottomDefaultHeight+100 {
+		t.Fatalf("the drag set the height to %d, want %d", got, bottomDefaultHeight+100)
+	}
+	if got := m.bottomDrawHeight(); got != bottomDefaultHeight+100 {
+		t.Fatalf("the area draws at %d, want %d", got, bottomDefaultHeight+100)
+	}
+}
+
+func TestWorkbenchBottomGapKeepsTheMinimumHeight(t *testing.T) {
+	m := toolModel()
+	m.ShowProblems()
+	tt := workbenchTester(t, m)
+	y := bottomGapY()
+	// 230 down leaves 50, under the smallest height but above half of it, so
+	// the release keeps the smallest height instead of closing the windows.
+	tt.Press(700, y)
+	tt.Move(700, y+230)
+	tt.Release(700, y+230)
+	tt.Frame()
+	if got := m.bottomHeight; got != bottomDragMin {
+		t.Fatalf("the height = %d, want the smallest %d", got, bottomDragMin)
+	}
+	if m.visibleTool() == "" {
+		t.Fatal("the drag closed the windows without going past half the minimum")
+	}
+}
+
+func TestWorkbenchBottomGapDragPastTheMinimumClosesTheWindows(t *testing.T) {
+	m := toolModel()
+	m.ShowProblems()
+	tt := workbenchTester(t, m)
+	y := bottomGapY()
+	// 250 down leaves 30, under half the smallest height, so the release
+	// closes every bottom window.
+	tt.Press(700, y)
+	tt.Move(700, y+250)
+	tt.Release(700, y+250)
+	tt.Frame()
+	if m.visibleTool() != "" || m.problems.visible {
+		t.Fatalf("the windows stayed: %q", m.visibleTool())
+	}
+	if m.bottomSize() != bottomDefaultHeight {
+		t.Fatalf("a closed area kept a height: %d", m.bottomSize())
+	}
+}
