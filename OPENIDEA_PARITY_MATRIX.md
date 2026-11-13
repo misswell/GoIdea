@@ -27,7 +27,7 @@ new action, tool window, page or command appears automatically.
 | Kind | Items | Integrated | Partial | Engine | Blocked | Missing |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Feature folders | 43 | 0 | 10 | 0 | 0 | 33 |
-| Actions | 647 | 20 | 15 | 0 | 1 | 611 |
+| Actions | 647 | 20 | 36 | 0 | 1 | 590 |
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
 | Tool windows | 30 | 7 | 5 | 0 | 0 | 18 |
 | Overlays | 56 | 0 | 0 | 0 | 0 | 56 |
@@ -505,7 +505,7 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `navigate.switcherBack` | Switcher (Backward) | `src/features/search/index.ts` | missing |
 | `navigate.toggleBookmark` | Toggle Bookmark | `src/features/search/index.ts` | partial - internal/app/bookmarks.go ToggleBookmark at the caret and gutter dots; F3 in internal/app/app.go; base.bookmark.added, base.bookmark.gutter, base.bookmark.remove; internal/app/bookmarks_test.go |
 | `navigate.toggleBookmark${d}` |  | `src/features/search/index.ts` | missing |
-| `navigate.toggleBookmarkWithMnemonic` | Toggle Bookmark with Mnemonic | `src/features/search/index.ts` | missing |
+| `navigate.toggleBookmarkWithMnemonic` | Toggle Bookmark with Mnemonic | `src/features/search/index.ts` | partial - internal/app/bookmarks.go OpenBookmarkMnemonics Alt+F3 chooser over digits and A-Z; internal/app/app.go shortcut; internal/app/bookmarks_test.go |
 | `search.editScopes` | Edit Scopes… | `src/features/search/index.ts` | missing |
 
 ### services
@@ -852,16 +852,16 @@ expected to come from a plugin or a hidden registration.
 | `markdown.previewOnly` | intellij-macos, intellij-windows, vscode-macos, vscode-windows | missing |
 | `navigate.customRegion` | intellij-macos, intellij-windows, vscode-macos | missing |
 | `navigate.declaration` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
-| `navigate.gotoBookmark0` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `navigate.gotoBookmark1` | eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
-| `navigate.gotoBookmark2` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `navigate.gotoBookmark3` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `navigate.gotoBookmark4` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `navigate.gotoBookmark5` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `navigate.gotoBookmark6` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `navigate.gotoBookmark7` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `navigate.gotoBookmark8` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `navigate.gotoBookmark9` | intellij-macos, intellij-windows, vscode-macos | missing |
+| `navigate.gotoBookmark0` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/bookmarks.go JumpBookmarkMnemonic via Ctrl+digit; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go |
+| `navigate.gotoBookmark1` | eclipse-windows, intellij-macos, intellij-windows, vscode-macos | partial - internal/app/bookmarks.go JumpBookmarkMnemonic via Ctrl+digit; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go |
+| `navigate.gotoBookmark2` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/bookmarks.go JumpBookmarkMnemonic via Ctrl+digit; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go |
+| `navigate.gotoBookmark3` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/bookmarks.go JumpBookmarkMnemonic via Ctrl+digit; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go |
+| `navigate.gotoBookmark4` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/bookmarks.go JumpBookmarkMnemonic via Ctrl+digit; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go |
+| `navigate.gotoBookmark5` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/bookmarks.go JumpBookmarkMnemonic via Ctrl+digit; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go |
+| `navigate.gotoBookmark6` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/bookmarks.go JumpBookmarkMnemonic via Ctrl+digit; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go |
+| `navigate.gotoBookmark7` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/bookmarks.go JumpBookmarkMnemonic via Ctrl+digit; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go |
+| `navigate.gotoBookmark8` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/bookmarks.go JumpBookmarkMnemonic via Ctrl+digit; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go |
+| `navigate.gotoBookmark9` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/bookmarks.go JumpBookmarkMnemonic via Ctrl+digit; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go |
 | `navigate.gotoTest` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
 | `navigate.implementation` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
 | `navigate.nextError` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
@@ -872,16 +872,16 @@ expected to come from a plugin or a hidden registration.
 | `navigate.previousMethod` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
 | `navigate.relatedSymbol` | vscode-macos | missing |
 | `navigate.superMethod` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
-| `navigate.toggleBookmark0` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `navigate.toggleBookmark1` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `navigate.toggleBookmark2` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `navigate.toggleBookmark3` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `navigate.toggleBookmark4` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `navigate.toggleBookmark5` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `navigate.toggleBookmark6` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `navigate.toggleBookmark7` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `navigate.toggleBookmark8` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `navigate.toggleBookmark9` | intellij-macos, intellij-windows, vscode-macos | missing |
+| `navigate.toggleBookmark0` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/bookmarks.go ToggleBookmarkMnemonic via Ctrl+Shift+digit; base.bookmark.mnemonic; internal/app/bookmarks_test.go |
+| `navigate.toggleBookmark1` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/bookmarks.go ToggleBookmarkMnemonic via Ctrl+Shift+digit; base.bookmark.mnemonic; internal/app/bookmarks_test.go |
+| `navigate.toggleBookmark2` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/bookmarks.go ToggleBookmarkMnemonic via Ctrl+Shift+digit; base.bookmark.mnemonic; internal/app/bookmarks_test.go |
+| `navigate.toggleBookmark3` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/bookmarks.go ToggleBookmarkMnemonic via Ctrl+Shift+digit; base.bookmark.mnemonic; internal/app/bookmarks_test.go |
+| `navigate.toggleBookmark4` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/bookmarks.go ToggleBookmarkMnemonic via Ctrl+Shift+digit; base.bookmark.mnemonic; internal/app/bookmarks_test.go |
+| `navigate.toggleBookmark5` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/bookmarks.go ToggleBookmarkMnemonic via Ctrl+Shift+digit; base.bookmark.mnemonic; internal/app/bookmarks_test.go |
+| `navigate.toggleBookmark6` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/bookmarks.go ToggleBookmarkMnemonic via Ctrl+Shift+digit; base.bookmark.mnemonic; internal/app/bookmarks_test.go |
+| `navigate.toggleBookmark7` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/bookmarks.go ToggleBookmarkMnemonic via Ctrl+Shift+digit; base.bookmark.mnemonic; internal/app/bookmarks_test.go |
+| `navigate.toggleBookmark8` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/bookmarks.go ToggleBookmarkMnemonic via Ctrl+Shift+digit; base.bookmark.mnemonic; internal/app/bookmarks_test.go |
+| `navigate.toggleBookmark9` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/bookmarks.go ToggleBookmarkMnemonic via Ctrl+Shift+digit; base.bookmark.mnemonic; internal/app/bookmarks_test.go |
 | `navigate.typeDeclaration` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
 | `project.copyAbsolutePath` | intellij-macos, intellij-windows, vscode-macos, vscode-windows | missing |
 | `refactor.changeSignature` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |

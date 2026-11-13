@@ -22,7 +22,13 @@ type Bookmark struct {
 	Line        int    `json:"line"`
 	Text        string `json:"text,omitempty"`
 	Description string `json:"description,omitempty"`
+	// Mnemonic is one digit or capital letter, unique across bookmarks, so
+	// Ctrl+digit or the Alt+F3 chooser reaches it.
+	Mnemonic string `json:"mnemonic,omitempty"`
 }
+
+// bookmarkMnemonics are the keys a bookmark can be reached with.
+const bookmarkMnemonics = "1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 // bookmarkColor paints a bookmark in the gutter, apart from the colors Git
 // changes and breakpoints use.
@@ -36,6 +42,65 @@ const maxBookmarkText = 200
 type bookmarksPane struct {
 	open bool
 	sel  int
+}
+
+// mnemonicPicker is the open Alt+F3 chooser, or nil.
+type mnemonicPicker struct {
+	open bool
+}
+
+// assignBookmarkMnemonic gives the line's bookmark mnemonic, creating the
+// bookmark when needed and taking the key from whichever bookmark had it.
+// An empty mnemonic removes the key and keeps the bookmark.
+func assignBookmarkMnemonic(list []Bookmark, b Bookmark, mnemonic string) []Bookmark {
+	out := make([]Bookmark, 0, len(list)+1)
+	found := false
+	for _, cur := range list {
+		if cur.Path == b.Path && cur.Line == b.Line {
+			found = true
+			cur.Mnemonic = mnemonic
+			if cur.Description == "" {
+				cur.Description = b.Description
+			}
+			if cur.Text == "" {
+				cur.Text = b.Text
+			}
+		} else if cur.Mnemonic == mnemonic {
+			cur.Mnemonic = ""
+		}
+		out = append(out, cur)
+	}
+	if !found {
+		b.Mnemonic = mnemonic
+		out = append(out, b)
+	}
+	sortBookmarks(out)
+	return out
+}
+
+// toggleBookmarkMnemonic sets mnemonic on the line's bookmark, or removes the
+// bookmark when the line already carries that key.
+func toggleBookmarkMnemonic(list []Bookmark, b Bookmark, mnemonic string) ([]Bookmark, bool) {
+	for i, cur := range list {
+		if cur.Path == b.Path && cur.Line == b.Line && cur.Mnemonic == mnemonic {
+			out := append(append([]Bookmark(nil), list[:i]...), list[i+1:]...)
+			return out, false
+		}
+	}
+	return assignBookmarkMnemonic(list, b, mnemonic), true
+}
+
+// bookmarkByMnemonic finds the one bookmark carrying the key.
+func bookmarkByMnemonic(list []Bookmark, mnemonic string) (Bookmark, bool) {
+	if mnemonic == "" {
+		return Bookmark{}, false
+	}
+	for _, b := range list {
+		if b.Mnemonic == mnemonic {
+			return b, true
+		}
+	}
+	return Bookmark{}, false
 }
 
 // bookmarksInProject keeps the bookmarks that belong to root and whose file
@@ -141,20 +206,28 @@ func bookmarkTitle(b Bookmark) string {
 	return filepath.Base(b.Path)
 }
 
-// ToggleBookmark marks or unmarks the caret's line in the active file.
-func (m *Model) ToggleBookmark() {
+// caretBookmark is the active file's caret line as a bookmark.
+func (m *Model) caretBookmark() (Bookmark, bool) {
 	t := m.tab()
 	if t == nil {
 		m.status = "先打开一个文件再添加书签"
 		m.invalidate()
-		return
+		return Bookmark{}, false
 	}
 	pos := t.state.CursorPos()
-	b := Bookmark{
+	return Bookmark{
 		Path:        t.doc.Path(),
 		Line:        pos.Line,
 		Text:        bookmarkLineText(t.doc.Text(), pos.Line),
 		Description: clipBookmarkText(t.state.SelectedText()),
+	}, true
+}
+
+// ToggleBookmark marks or unmarks the caret's line in the active file.
+func (m *Model) ToggleBookmark() {
+	b, ok := m.caretBookmark()
+	if !ok {
+		return
 	}
 	var added bool
 	m.bookmarks, added = toggleBookmark(m.bookmarks, b)
@@ -166,6 +239,102 @@ func (m *Model) ToggleBookmark() {
 	m.saveSession()
 	m.refreshDecorations()
 	m.invalidate()
+}
+
+// OpenBookmarkMnemonics opens the Alt+F3 chooser for the caret's line.
+func (m *Model) OpenBookmarkMnemonics() {
+	if _, ok := m.caretBookmark(); !ok {
+		return
+	}
+	m.bookmarksView = nil
+	m.mnemonics = &mnemonicPicker{open: true}
+	m.invalidate()
+}
+
+// closeBookmarkMnemonics drops the chooser.
+func (m *Model) closeBookmarkMnemonics() {
+	if m.mnemonics == nil {
+		return
+	}
+	m.mnemonics = nil
+	m.invalidate()
+}
+
+// SetBookmarkMnemonic gives the caret's line the key, creating the bookmark
+// first when needed; an empty key clears it.
+func (m *Model) SetBookmarkMnemonic(mnemonic string) {
+	b, ok := m.caretBookmark()
+	if !ok {
+		return
+	}
+	m.bookmarks = assignBookmarkMnemonic(m.bookmarks, b, mnemonic)
+	if mnemonic == "" {
+		m.status = fmt.Sprintf("已清除 %s:%d 的书签助记符", filepath.Base(b.Path), b.Line+1)
+	} else {
+		m.status = fmt.Sprintf("书签助记符 %s → %s:%d", mnemonic, filepath.Base(b.Path), b.Line+1)
+	}
+	m.closeBookmarkMnemonics()
+	m.saveSession()
+	m.refreshDecorations()
+	m.invalidate()
+}
+
+// ToggleBookmarkMnemonic is Ctrl+Shift+digit: the line already carries that
+// key, so the bookmark goes; otherwise the key is assigned to it.
+func (m *Model) ToggleBookmarkMnemonic(mnemonic string) {
+	b, ok := m.caretBookmark()
+	if !ok {
+		return
+	}
+	var added bool
+	m.bookmarks, added = toggleBookmarkMnemonic(m.bookmarks, b, mnemonic)
+	if added {
+		m.status = fmt.Sprintf("书签助记符 %s → %s:%d", mnemonic, filepath.Base(b.Path), b.Line+1)
+	} else {
+		m.status = fmt.Sprintf("已移除书签 %s:%d", filepath.Base(b.Path), b.Line+1)
+	}
+	m.saveSession()
+	m.refreshDecorations()
+	m.invalidate()
+}
+
+// JumpBookmarkMnemonic is Ctrl+digit: go to the bookmark carrying the key.
+func (m *Model) JumpBookmarkMnemonic(mnemonic string) {
+	b, ok := bookmarkByMnemonic(m.bookmarks, mnemonic)
+	if !ok {
+		m.status = fmt.Sprintf("没有助记符为 %s 的书签", mnemonic)
+		m.invalidate()
+		return
+	}
+	m.applyBookmark(b)
+}
+
+// bookmarkDigitShortcuts runs Ctrl+Shift+digit and Ctrl+digit, the two
+// OpenIDEA keys that set and reach bookmarks by mnemonic.
+func (m *Model) bookmarkDigitShortcuts(c *ui.Context) {
+	if m.overlayOpen() {
+		return
+	}
+	digits := []struct {
+		key   ui.Key
+		label string
+	}{
+		{ui.Key1, "1"}, {ui.Key2, "2"}, {ui.Key3, "3"}, {ui.Key4, "4"},
+		{ui.Key5, "5"}, {ui.Key6, "6"}, {ui.Key7, "7"}, {ui.Key8, "8"},
+		{ui.Key9, "9"}, {ui.Key0, "0"},
+	}
+	for _, d := range digits {
+		if c.Shortcut(ui.Ctrl|ui.Shift, d.key) {
+			m.ToggleBookmarkMnemonic(d.label)
+			return
+		}
+	}
+	for _, d := range digits {
+		if c.Shortcut(ui.Ctrl, d.key) {
+			m.JumpBookmarkMnemonic(d.label)
+			return
+		}
+	}
 }
 
 // NextBookmark jumps to the bookmark after the caret, wrapping at the end.
@@ -312,6 +481,10 @@ func (m *Model) bookmarksDialog(c *ui.Context, p *ui.Theme) {
 							r.Background(p.SurfaceHover)
 						}
 						r.Children(func() {
+							if b.Mnemonic != "" {
+								ui.Text(c, b.Mnemonic).FontSize(10.5).Bold().
+									TextColor(p.Accent).SingleLine()
+							}
 							ui.Text(c, bookmarkTitle(b)).FontSize(12).TextColor(p.Text).
 								SingleLine().Ellipsis("…")
 							ui.Spacer(c)
@@ -338,6 +511,78 @@ func (m *Model) bookmarksDialog(c *ui.Context, p *ui.Theme) {
 	})
 	if d.Dismissed() || !open {
 		m.closeBookmarks()
+	}
+}
+
+// mnemonicDialog draws the Alt+F3 chooser: every digit and capital letter, the
+// ones in use in the accent color, and a row that clears the caret's key.
+func (m *Model) mnemonicDialog(c *ui.Context, p *ui.Theme) {
+	v := m.mnemonics
+	if v == nil {
+		return
+	}
+	open := v.open
+	d := ui.Modal(c, &open, func() {
+		ui.Column(c).Width(440).Gap(8).Children(func() {
+			ui.Text(c, "书签助记符").FontSize(13).Bold().TextColor(p.Text).SingleLine()
+			t := m.tab()
+			if t == nil {
+				ui.Text(c, "先打开一个文件。").FontSize(11).TextColor(p.TextMuted).SingleLine()
+				return
+			}
+			pos := t.state.CursorPos()
+			current := ""
+			for _, b := range m.bookmarks {
+				if b.Path == t.doc.Path() && b.Line == pos.Line {
+					current = b.Mnemonic
+				}
+			}
+			ui.Text(c, fmt.Sprintf("%s:%d · 已有该键的书签会失去它", filepath.Base(t.doc.Path()), pos.Line+1)).
+				FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+			clear := false
+			pick := ""
+			for _, group := range []string{"1234567890", "ABCDEFGHI", "JKLMNOPQR", "STUVWXYZ"} {
+				ui.Row(c).Gap(2).Children(func() {
+					for _, r := range group {
+						key := string(r)
+						chip := ui.Row(c.Key("mnemonic:"+key)).Width(28).Height(24).
+							Padding(0, 6).AlignItems(ui.Center)
+						switch {
+						case key == current:
+							chip.Background(p.SurfacePressed)
+						case chip.Hovered():
+							chip.Background(p.SurfaceHover)
+						}
+						taken := false
+						if _, ok := bookmarkByMnemonic(m.bookmarks, key); ok {
+							taken = true
+						}
+						chip.Children(func() {
+							color := p.Text
+							if taken {
+								color = p.Accent
+							}
+							ui.Text(c, key).FontSize(12).Bold().TextColor(color)
+						})
+						if chip.Clicked() {
+							pick = key
+						}
+					}
+				})
+			}
+			if m.rowChip(c, p, "mnemonic:clear", "移除助记符") {
+				clear = true
+			}
+			switch {
+			case pick != "":
+				m.SetBookmarkMnemonic(pick)
+			case clear:
+				m.SetBookmarkMnemonic("")
+			}
+		})
+	})
+	if d.Dismissed() || !open {
+		m.closeBookmarkMnemonics()
 	}
 }
 
@@ -379,6 +624,28 @@ func (m *Model) SmokeBookmark(ctx context.Context) (map[string]any, error) {
 			}
 		}
 		out["gutterMarks"] = dots
+		t.state.GoTo(editor.Pos{Line: first, Col: 0})
+		m.SetBookmarkMnemonic("1")
+		setLine := -1
+		for _, b := range m.bookmarks {
+			if b.Mnemonic == "1" {
+				setLine = b.Line
+			}
+		}
+		out["mnemonicSet"] = setLine
+		t.state.GoTo(editor.Pos{Line: 0, Col: 0})
+		m.JumpBookmarkMnemonic("1")
+		out["mnemonicJump"] = m.tab().state.CursorPos().Line
+		// The key is unique: giving it to the second line takes it from the first.
+		t.state.GoTo(editor.Pos{Line: second, Col: 0})
+		m.SetBookmarkMnemonic("1")
+		movedLine := -1
+		for _, b := range m.bookmarks {
+			if b.Mnemonic == "1" {
+				movedLine = b.Line
+			}
+		}
+		out["mnemonicMoved"] = movedLine
 		t.state.GoTo(editor.Pos{Line: 0, Col: 0})
 		m.NextBookmark()
 		out["nextFirst"] = m.tab().state.CursorPos().Line

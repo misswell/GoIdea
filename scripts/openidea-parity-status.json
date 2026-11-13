@@ -1,6 +1,90 @@
 {
   "about": "The only place a GoIDEA status is raised in OPENIDEA_PARITY_MATRIX.md. Keys are kind:id; a non-missing status must carry evidence (a regression check id from REGRESSION_INDEX.json, a document, or a source path). Everything absent here is reported as missing. Start conservative: `partial` when only part of the OpenIDEA surface is proven, `integrated` when a gate check exercises it.",
   "items": {
+    "action:navigate.toggleBookmarkWithMnemonic": {
+      "status": "partial",
+      "evidence": "internal/app/bookmarks.go OpenBookmarkMnemonics Alt+F3 chooser over digits and A-Z; internal/app/app.go shortcut; internal/app/bookmarks_test.go"
+    },
+    "action:navigate.toggleBookmark0": {
+      "status": "partial",
+      "evidence": "internal/app/bookmarks.go ToggleBookmarkMnemonic via Ctrl+Shift+digit; base.bookmark.mnemonic; internal/app/bookmarks_test.go"
+    },
+    "action:navigate.toggleBookmark1": {
+      "status": "partial",
+      "evidence": "internal/app/bookmarks.go ToggleBookmarkMnemonic via Ctrl+Shift+digit; base.bookmark.mnemonic; internal/app/bookmarks_test.go"
+    },
+    "action:navigate.toggleBookmark2": {
+      "status": "partial",
+      "evidence": "internal/app/bookmarks.go ToggleBookmarkMnemonic via Ctrl+Shift+digit; base.bookmark.mnemonic; internal/app/bookmarks_test.go"
+    },
+    "action:navigate.toggleBookmark3": {
+      "status": "partial",
+      "evidence": "internal/app/bookmarks.go ToggleBookmarkMnemonic via Ctrl+Shift+digit; base.bookmark.mnemonic; internal/app/bookmarks_test.go"
+    },
+    "action:navigate.toggleBookmark4": {
+      "status": "partial",
+      "evidence": "internal/app/bookmarks.go ToggleBookmarkMnemonic via Ctrl+Shift+digit; base.bookmark.mnemonic; internal/app/bookmarks_test.go"
+    },
+    "action:navigate.toggleBookmark5": {
+      "status": "partial",
+      "evidence": "internal/app/bookmarks.go ToggleBookmarkMnemonic via Ctrl+Shift+digit; base.bookmark.mnemonic; internal/app/bookmarks_test.go"
+    },
+    "action:navigate.toggleBookmark6": {
+      "status": "partial",
+      "evidence": "internal/app/bookmarks.go ToggleBookmarkMnemonic via Ctrl+Shift+digit; base.bookmark.mnemonic; internal/app/bookmarks_test.go"
+    },
+    "action:navigate.toggleBookmark7": {
+      "status": "partial",
+      "evidence": "internal/app/bookmarks.go ToggleBookmarkMnemonic via Ctrl+Shift+digit; base.bookmark.mnemonic; internal/app/bookmarks_test.go"
+    },
+    "action:navigate.toggleBookmark8": {
+      "status": "partial",
+      "evidence": "internal/app/bookmarks.go ToggleBookmarkMnemonic via Ctrl+Shift+digit; base.bookmark.mnemonic; internal/app/bookmarks_test.go"
+    },
+    "action:navigate.toggleBookmark9": {
+      "status": "partial",
+      "evidence": "internal/app/bookmarks.go ToggleBookmarkMnemonic via Ctrl+Shift+digit; base.bookmark.mnemonic; internal/app/bookmarks_test.go"
+    },
+    "action:navigate.gotoBookmark0": {
+      "status": "partial",
+      "evidence": "internal/app/bookmarks.go JumpBookmarkMnemonic via Ctrl+digit; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go"
+    },
+    "action:navigate.gotoBookmark1": {
+      "status": "partial",
+      "evidence": "internal/app/bookmarks.go JumpBookmarkMnemonic via Ctrl+digit; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go"
+    },
+    "action:navigate.gotoBookmark2": {
+      "status": "partial",
+      "evidence": "internal/app/bookmarks.go JumpBookmarkMnemonic via Ctrl+digit; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go"
+    },
+    "action:navigate.gotoBookmark3": {
+      "status": "partial",
+      "evidence": "internal/app/bookmarks.go JumpBookmarkMnemonic via Ctrl+digit; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go"
+    },
+    "action:navigate.gotoBookmark4": {
+      "status": "partial",
+      "evidence": "internal/app/bookmarks.go JumpBookmarkMnemonic via Ctrl+digit; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go"
+    },
+    "action:navigate.gotoBookmark5": {
+      "status": "partial",
+      "evidence": "internal/app/bookmarks.go JumpBookmarkMnemonic via Ctrl+digit; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go"
+    },
+    "action:navigate.gotoBookmark6": {
+      "status": "partial",
+      "evidence": "internal/app/bookmarks.go JumpBookmarkMnemonic via Ctrl+digit; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go"
+    },
+    "action:navigate.gotoBookmark7": {
+      "status": "partial",
+      "evidence": "internal/app/bookmarks.go JumpBookmarkMnemonic via Ctrl+digit; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go"
+    },
+    "action:navigate.gotoBookmark8": {
+      "status": "partial",
+      "evidence": "internal/app/bookmarks.go JumpBookmarkMnemonic via Ctrl+digit; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go"
+    },
+    "action:navigate.gotoBookmark9": {
+      "status": "partial",
+      "evidence": "internal/app/bookmarks.go JumpBookmarkMnemonic via Ctrl+digit; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go"
+    },
     "action:navigate.toggleBookmark": {
       "status": "partial",
       "evidence": "internal/app/bookmarks.go ToggleBookmark at the caret and gutter dots; F3 in internal/app/app.go; base.bookmark.added, base.bookmark.gutter, base.bookmark.remove; internal/app/bookmarks_test.go"

@@ -88,6 +88,55 @@ func TestBookmarksInProjectDropsMissingAndOutside(t *testing.T) {
 	}
 }
 
+func TestAssignBookmarkMnemonicTakesTheKey(t *testing.T) {
+	first := Bookmark{Path: "/p/a.java", Line: 1, Text: "one"}
+	second := Bookmark{Path: "/p/a.java", Line: 2, Text: "two"}
+	list := assignBookmarkMnemonic(nil, first, "1")
+	if len(list) != 1 || list[0].Mnemonic != "1" || list[0].Text != "one" {
+		t.Fatalf("assign created %+v, want a.java:1 with key 1", list)
+	}
+	list = assignBookmarkMnemonic(list, second, "1")
+	if len(list) != 2 || list[0].Mnemonic != "" || list[1].Mnemonic != "1" {
+		t.Fatalf("moving key = %+v, want only a.java:2 to keep it", list)
+	}
+	list = assignBookmarkMnemonic(list, second, "")
+	if len(list) != 2 || list[0].Mnemonic != "" || list[1].Mnemonic != "" {
+		t.Fatalf("clear = %+v, want both bookmarks without keys", list)
+	}
+}
+
+func TestToggleBookmarkMnemonic(t *testing.T) {
+	b := Bookmark{Path: "/p/a.java", Line: 3, Text: "three"}
+	list, added := toggleBookmarkMnemonic(nil, b, "A")
+	if !added || len(list) != 1 || list[0].Mnemonic != "A" {
+		t.Fatalf("toggle add = %+v, %v; want a.java:3 with key A", list, added)
+	}
+	list, added = toggleBookmarkMnemonic(list, b, "A")
+	if added || len(list) != 0 {
+		t.Fatalf("toggle same key = %+v, %v; want the bookmark gone", list, added)
+	}
+	list = assignBookmarkMnemonic(list, b, "A")
+	list, added = toggleBookmarkMnemonic(list, b, "B")
+	if !added || len(list) != 1 || list[0].Mnemonic != "B" {
+		t.Fatalf("toggle other key = %+v, %v; want key B", list, added)
+	}
+}
+
+func TestBookmarkByMnemonic(t *testing.T) {
+	list := []Bookmark{
+		{Path: "/p/a.java", Line: 1},
+		{Path: "/p/b.java", Line: 2, Mnemonic: "9"},
+	}
+	if b, ok := bookmarkByMnemonic(list, "9"); !ok || b.Path != "/p/b.java" {
+		t.Fatalf("lookup 9 = %+v, %v; want b.java:2", b, ok)
+	}
+	for _, key := range []string{"", "1", "Z"} {
+		if _, ok := bookmarkByMnemonic(list, key); ok {
+			t.Fatalf("lookup %q found a bookmark", key)
+		}
+	}
+}
+
 func TestSessionRoundTripsBookmarks(t *testing.T) {
 	root := t.TempDir()
 	file := filepath.Join(root, "A.java")
