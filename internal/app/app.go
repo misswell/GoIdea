@@ -107,6 +107,9 @@ type Model struct {
 	// files is the open Quick Open picker, or nil.
 	files *filePicker
 
+	// palette is the open command palette, or nil.
+	palette *commandPicker
+
 	// diff is the open compare-with-HEAD view, or nil.
 	diff *diffView
 
@@ -441,6 +444,7 @@ func (m *Model) openProject(dir string, files []string) {
 	m.closeSymbols()
 	m.closeIntents()
 	m.closeQuickFiles()
+	m.closeCommands()
 	m.diff = nil
 	m.refactor, m.redoRefactor = nil, nil
 	m.busy = true
@@ -1007,6 +1011,7 @@ func (m *Model) View(c *ui.Context) {
 	m.symbolsDialog(c, p)
 	m.intentionsDialog(c, p)
 	m.filesDialog(c, p)
+	m.commandsDialog(c, p)
 	m.diffDialog(c, p)
 }
 
@@ -1020,6 +1025,12 @@ func (m *Model) shortcuts(c *ui.Context) {
 	if c.Shortcut(ui.Cmd, ui.KeyP) {
 		if m.rename == nil && m.symbols == nil && m.intents == nil && m.files == nil {
 			m.OpenQuickFiles()
+		}
+	}
+	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyP) {
+		if m.rename == nil && m.symbols == nil && m.intents == nil && m.files == nil &&
+			m.diff == nil && m.palette == nil {
+			m.OpenCommands()
 		}
 	}
 	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyD) {

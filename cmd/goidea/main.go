@@ -82,6 +82,7 @@ func menu(m *app.Model) *mygo.Menu {
 		{Label: "文件", Submenu: []*mygo.MenuItem{
 			{Label: "打开项目…", Accelerator: "CmdOrCtrl+O", Click: func(*mygo.MenuItem, *mygo.Window) { m.ChooseProject() }},
 			{Label: "快速打开…", Accelerator: "CmdOrCtrl+P", Click: func(*mygo.MenuItem, *mygo.Window) { m.OpenQuickFiles() }},
+			{Label: "命令面板…", Accelerator: "CmdOrCtrl+Shift+P", Click: func(*mygo.MenuItem, *mygo.Window) { m.OpenCommands() }},
 			{Label: "保存", Accelerator: "CmdOrCtrl+S", Click: func(*mygo.MenuItem, *mygo.Window) { m.SaveActive() }},
 			{Label: "显示 Git 更改", Accelerator: "CmdOrCtrl+Shift+G", Click: func(*mygo.MenuItem, *mygo.Window) { m.ShowVCS() }},
 			{Label: "与 HEAD 比较", Accelerator: "CmdOrCtrl+Shift+D", Click: func(*mygo.MenuItem, *mygo.Window) { m.CompareActive() }},
@@ -215,6 +216,9 @@ func smoke(m *app.Model) {
 		if diffErr != nil {
 			fields["diffError"] = diffErr.Error()
 		}
+	}
+	if os.Getenv("GOIDEA_SMOKE_COMMANDS") == "1" {
+		fields["commands"] = m.SmokeCommands()
 	}
 	if root != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
