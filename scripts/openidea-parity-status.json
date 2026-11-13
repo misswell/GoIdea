@@ -147,7 +147,7 @@
     },
     "toolwindow:bookmarks": {
       "status": "integrated",
-      "evidence": "internal/app/bookmarks.go bookmarkWindowRows, ShowBookmarksWindow Cmd+2; internal/app/view.go sidebar tab; base.bookmark.window"
+      "evidence": "internal/app/bookmarks.go bookmarkWindowRows, ShowBookmarksWindow Cmd+2; Cmd+F3 popup edit description (F2) in bookmarksDialog; internal/app/view.go sidebar tab; base.bookmark.window, base.bookmark.popup"
     },
     "toolwindow:git": {
       "status": "partial",

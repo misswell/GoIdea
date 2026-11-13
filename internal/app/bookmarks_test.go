@@ -281,6 +281,20 @@ func TestBookmarkPopupRows(t *testing.T) {
 	}
 }
 
+func TestSetBookmarkDescription(t *testing.T) {
+	list := []Bookmark{{Path: "/p/a.java", Line: 1, Text: "class A {"}}
+	got, ok := setBookmarkDescription(list, "/p/a.java", 1, "  the class  ")
+	if !ok || len(got) != 1 || got[0].Description != "the class" || got[0].Text != "class A {" {
+		t.Fatalf("described = %v, %v; want the trimmed description", got, ok)
+	}
+	if list[0].Description != "" {
+		t.Fatal("the original list was changed")
+	}
+	if _, ok := setBookmarkDescription(list, "/p/a.java", 2, "x"); ok {
+		t.Fatal("a line without a bookmark was described")
+	}
+}
+
 func TestSessionRoundTripsBookmarks(t *testing.T) {
 	root := t.TempDir()
 	file := filepath.Join(root, "A.java")

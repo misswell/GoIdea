@@ -174,6 +174,7 @@ type Model struct {
 	mnemonics     *mnemonicPicker
 	newList       *newListPane
 	deleteList    *deleteListPane
+	editDesc      *descPane
 
 	run       RunPane
 	debug     DebugPane
@@ -566,6 +567,7 @@ func (m *Model) openProject(dir string, files []string) {
 	m.defaultList = m.defaultBookmarkList()
 	m.newList = nil
 	m.deleteList = nil
+	m.editDesc = nil
 	m.resetLog()
 	m.resetProblems()
 	m.structure = StructurePane{}
@@ -1139,7 +1141,7 @@ func (m *Model) overlayOpen() bool {
 	return m.rename != nil || m.symbols != nil || m.intents != nil || m.files != nil ||
 		m.diff != nil || m.palette != nil || m.commit != nil || m.branch.open ||
 		m.rollback != nil || m.bookmarksView != nil || m.mnemonics != nil || m.newList != nil ||
-		m.deleteList != nil
+		m.deleteList != nil || m.editDesc != nil
 }
 
 // QuitImmediately closes the backend and quits without asking about changes,
@@ -1191,6 +1193,7 @@ func (m *Model) View(c *ui.Context) {
 	m.mnemonicDialog(c, p)
 	m.newListDialog(c, p)
 	m.deleteListDialog(c, p)
+	m.bookmarkDescriptionDialog(c, p)
 	m.commandsDialog(c, p)
 	m.diffDialog(c, p)
 	m.dbDialog(c, p)
@@ -1214,10 +1217,13 @@ func (m *Model) shortcuts(c *ui.Context) {
 		if c.Shortcut(ui.Modifiers(0), ui.KeyEnter) {
 			m.openSelectedBookmark()
 		}
+		if c.Shortcut(ui.Modifiers(0), ui.KeyF2) {
+			m.OpenBookmarkDescription()
+		}
 		return
 	}
 	// The mnemonic chooser and the list dialogs take clicks and Escape only.
-	if m.mnemonics != nil || m.newList != nil || m.deleteList != nil {
+	if m.mnemonics != nil || m.newList != nil || m.deleteList != nil || m.editDesc != nil {
 		return
 	}
 	if c.Shortcut(ui.Cmd, ui.KeyComma) {

@@ -963,7 +963,7 @@ same bindings until a check records it.
 
 | Tool window | Title | Anchor | Source | Status |
 | --- | --- | --- | --- | --- |
-| `bookmarks` | Bookmarks | left | `src/features/search/index.ts` | integrated - internal/app/bookmarks.go bookmarkWindowRows, ShowBookmarksWindow Cmd+2; internal/app/view.go sidebar tab; base.bookmark.window |
+| `bookmarks` | Bookmarks | left | `src/features/search/index.ts` | integrated - internal/app/bookmarks.go bookmarkWindowRows, ShowBookmarksWindow Cmd+2; Cmd+F3 popup edit description (F2) in bookmarksDialog; internal/app/view.go sidebar tab; base.bookmark.window, base.bookmark.popup |
 | `build` | Build | bottom | `src/features/build/index.ts` | partial - base.build.console, base.build.lines; internal/app/view.go buildPanel |
 | `commit` | Commit | left | `src/features/vcs/index.ts` | partial - internal/app/commit.go commitDialog; base.commit.id |
 | `compare` | Compare | left | `src/features/vcs/compareTool.tsx` | missing |

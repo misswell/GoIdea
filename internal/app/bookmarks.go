@@ -76,6 +76,14 @@ type deleteListPane struct {
 	count int
 }
 
+// descPane is the open Edit Bookmark Description dialog, or nil.
+type descPane struct {
+	open bool
+	path string
+	line int
+	text string
+}
+
 // assignBookmarkMnemonic gives the line's bookmark mnemonic, creating the
 // bookmark when needed and taking the key from whichever bookmark had it.
 // An empty mnemonic removes the key and keeps the bookmark.
@@ -450,8 +458,74 @@ func (m *Model) ShowBookmarks() {
 		m.bookmarksView = &bookmarksPane{}
 	}
 	m.bookmarksView.open = true
-	m.bookmarksView.sel = clampSel(m.bookmarksView.sel, len(m.bookmarks))
+	m.bookmarksView.sel = clampSel(m.bookmarksView.sel, len(m.bookmarkPopupItems()))
 	m.invalidate()
+}
+
+// OpenBookmarkDescription opens the description dialog for the popup's
+// highlighted line, as OpenIDEA's F2 does in the Bookmarks view.
+func (m *Model) OpenBookmarkDescription() {
+	v := m.bookmarksView
+	if v == nil {
+		return
+	}
+	items := m.bookmarkPopupItems()
+	if len(items) == 0 {
+		return
+	}
+	it := items[clampSel(v.sel, len(items))]
+	if it.File {
+		return
+	}
+	b, _ := bookmarkAt(m.bookmarks, it.Path, it.Line)
+	text := b.Description
+	if text == "" {
+		text = b.Text
+	}
+	m.editDesc = &descPane{open: true, path: it.Path, line: it.Line, text: text}
+	m.invalidate()
+}
+
+// closeBookmarkDescription drops the description dialog.
+func (m *Model) closeBookmarkDescription() {
+	if m.editDesc == nil {
+		return
+	}
+	m.editDesc = nil
+	m.invalidate()
+}
+
+// SaveBookmarkDescription stores the typed description on the bookmark.
+func (m *Model) SaveBookmarkDescription() {
+	v := m.editDesc
+	if v == nil {
+		return
+	}
+	list, ok := setBookmarkDescription(m.bookmarks, v.path, v.line, v.text)
+	if !ok {
+		m.editDesc = nil
+		m.invalidate()
+		return
+	}
+	m.bookmarks = list
+	m.editDesc = nil
+	m.status = "已更新书签描述"
+	m.saveSession()
+	m.invalidate()
+}
+
+// setBookmarkDescription sets the line's description; an empty one falls back
+// to the line text when the popup shows the title.
+func setBookmarkDescription(list []Bookmark, path string, line int, text string) ([]Bookmark, bool) {
+	out := append([]Bookmark(nil), list...)
+	for i := range out {
+		if out[i].Path != path || out[i].Line != line {
+			continue
+		}
+		out[i].Description = strings.TrimSpace(text)
+		return out, true
+	}
+	return list, false
 }
 
 // ShowBookmarksWindow reveals the Bookmarks tool window in the sidebar, the
@@ -693,6 +767,33 @@ func (m *Model) newListDialog(c *ui.Context, p *ui.Theme) {
 	})
 	if d.Dismissed() || !open {
 		m.closeNewBookmarkList()
+	}
+}
+
+// bookmarkDescriptionDialog edits the highlighted popup row's description.
+func (m *Model) bookmarkDescriptionDialog(c *ui.Context, p *ui.Theme) {
+	v := m.editDesc
+	if v == nil {
+		return
+	}
+	open := v.open
+	d := ui.Modal(c, &open, func() {
+		ui.Column(c).Width(420).Gap(8).Children(func() {
+			ui.Text(c, "编辑书签描述").FontSize(13).Bold().TextColor(p.Text).SingleLine()
+			in := ui.TextInput(c, &v.text).AutoFocus()
+			if in.Submitted() {
+				m.SaveBookmarkDescription()
+			}
+			ui.Text(c, "描述显示在书签列表里；留空则显示该行文本。").FontSize(10.5).
+				TextColor(p.TextMuted).SingleLine()
+			ui.Row(c).Gap(8).Children(func() {
+				ui.Button(c, "取消").OnClick(func() { m.closeBookmarkDescription() })
+				ui.Button(c, "确定").OnClick(func() { m.SaveBookmarkDescription() })
+			})
+		})
+	})
+	if d.Dismissed() || !open {
+		m.closeBookmarkDescription()
 	}
 }
 
@@ -1385,6 +1486,15 @@ func (m *Model) SmokeBookmark(ctx context.Context) (map[string]any, error) {
 		out["fileMarked"] = len(m.pathBookmarks)
 		m.ShowBookmarks()
 		out["popupItems"] = len(m.bookmarkPopupItems())
+		m.bookmarksView.sel = 1
+		m.OpenBookmarkDescription()
+		m.editDesc.text = "入口"
+		m.SaveBookmarkDescription()
+		for _, b := range m.bookmarks {
+			if b.Description == "入口" {
+				out["described"] = b.Description
+			}
+		}
 		m.closeBookmarks()
 		m.ToggleFileBookmark()
 		out["fileCleared"] = len(m.pathBookmarks)
