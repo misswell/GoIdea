@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/transfer"
 	"github.com/egoist/mygo/ui"
 
 	"mayoi/internal/openidea"
@@ -32,10 +33,29 @@ type diffView struct {
 	// other is the right-hand file of a two-file compare; empty means the
 	// compare is against HEAD.
 	other string
+	// inline marks a compare whose right side is text rather than a file, as
+	// Compare with Clipboard; label names that side.
+	inline bool
+	label  string
 
 	loading bool
 	err     string
 	message string
+}
+
+// diffRows compares old against cur and counts the added and removed lines.
+func diffRows(old, cur string) ([]textdiff.Row, int, int) {
+	rows := textdiff.Compare(old, cur, diffContext)
+	added, gone := 0, 0
+	for _, r := range rows {
+		switch r.Kind {
+		case textdiff.Add:
+			added++
+		case textdiff.Delete:
+			gone++
+		}
+	}
+	return rows, added, gone
 }
 
 // ShowDiff opens the compare view for a file against its committed version.
@@ -110,7 +130,8 @@ func (m *Model) ShowFileDiff(left, right string) {
 		return
 	}
 	left, right = realPath(left), realPath(right)
-	m.diff = &diffView{open: true, path: left, other: right, loading: true}
+	d := &diffView{open: true, path: left, other: right, loading: true}
+	m.diff = d
 	m.invalidate()
 	go func() {
 		var err error
@@ -128,40 +149,126 @@ func (m *Model) ShowFileDiff(left, right string) {
 		if err == nil {
 			cur = read(right)
 		}
-		var rows []textdiff.Row
-		var added, gone int
-		if err == nil {
-			rows = textdiff.Compare(old, cur, diffContext)
-			for _, r := range rows {
-				switch r.Kind {
-				case textdiff.Add:
-					added++
-				case textdiff.Delete:
-					gone++
+		if err != nil {
+			m.post(func() {
+				if m.diff != d {
+					return
 				}
-			}
-		}
-		m.post(func() {
-			d := m.diff
-			if d == nil || d.path != left || d.other != right {
-				return
-			}
-			d.loading = false
-			if err != nil {
+				d.loading = false
 				d.err = "读取文件失败：" + err.Error()
 				m.invalidate()
-				return
-			}
-			d.added, d.gone = added, gone
-			if added == 0 && gone == 0 {
-				d.message = "两个文件相同"
-				m.invalidate()
-				return
-			}
-			d.rows = rows
-			m.invalidate()
-		})
+			})
+			return
+		}
+		rows, added, gone := diffRows(old, cur)
+		m.finishCompare(d, rows, added, gone, "两个文件相同")
 	}()
+}
+
+// CompareTabWithFile opens the compare view between t's text and another file,
+// as OpenIDEA's Compare With… does: the chosen file on the left, the tab on
+// the right, unsaved text included.
+func (m *Model) CompareTabWithFile(t *Tab, picked string) {
+	if t == nil || t.doc == nil || picked == "" {
+		return
+	}
+	path := t.doc.Path()
+	picked = realPath(picked)
+	if picked == path {
+		return
+	}
+	d := &diffView{open: true, path: path, other: picked, loading: true}
+	m.diff = d
+	m.invalidate()
+	cur := t.doc.Text()
+	go func() {
+		data, err := os.ReadFile(picked)
+		if err != nil {
+			m.post(func() {
+				if m.diff != d {
+					return
+				}
+				d.loading = false
+				d.err = "读取文件失败：" + err.Error()
+				m.invalidate()
+			})
+			return
+		}
+		rows, added, gone := diffRows(string(data), cur)
+		m.finishCompare(d, rows, added, gone, "两个文件相同")
+	}()
+}
+
+// PickCompareFile asks which file to compare t against, as OpenIDEA's
+// Compare With… does, and opens the two-file compare.
+func (m *Model) PickCompareFile(t *Tab) {
+	if t == nil || t.doc == nil {
+		return
+	}
+	parent := m.win
+	start := filepath.Dir(t.doc.Path())
+	go func() {
+		paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
+			Parent: parent, Title: "Compare With", ButtonLabel: "Compare",
+			DefaultPath: start,
+		})
+		if err != nil || len(paths) == 0 {
+			return
+		}
+		m.post(func() { m.CompareTabWithFile(t, paths[0]) })
+	}()
+}
+
+// CompareTabWithClipboard opens the compare view between t's text and the
+// clipboard, as OpenIDEA's Compare with Clipboard does.
+func (m *Model) CompareTabWithClipboard(t *Tab) {
+	if t == nil || t.doc == nil {
+		return
+	}
+	data, err := mygo.Clipboard.Read(transfer.Text)
+	var raw []byte
+	if err == nil {
+		raw, err = data.Read(transfer.Text)
+	}
+	if err != nil {
+		m.status = "剪贴板中没有文本"
+		m.invalidate()
+		return
+	}
+	m.ShowTextCompare(t.doc.Path(), t.doc.Text(), "剪贴板", string(raw))
+}
+
+// ShowTextCompare opens the compare view on a tab's text and a text that is
+// not a file; label names the right-hand side.
+func (m *Model) ShowTextCompare(path, cur, label, text string) {
+	if path == "" {
+		return
+	}
+	d := &diffView{open: true, path: path, inline: true, label: label, loading: true}
+	m.diff = d
+	m.invalidate()
+	go func() {
+		rows, added, gone := diffRows(cur, text)
+		m.finishCompare(d, rows, added, gone, label+"与当前文件相同")
+	}()
+}
+
+// finishCompare posts a computed comparison unless another one replaced it.
+func (m *Model) finishCompare(d *diffView, rows []textdiff.Row, added, gone int, same string) {
+	m.post(func() {
+		if m.diff != d {
+			return
+		}
+		d.loading = false
+		d.added, d.gone = added, gone
+		if added == 0 && gone == 0 {
+			d.message = same
+			m.invalidate()
+			return
+		}
+		d.rows = rows
+		m.invalidate()
+	})
 }
 
 // bufferText returns the text the user sees for path: an open tab's buffer
@@ -211,14 +318,7 @@ func (m *Model) diffDialog(c *ui.Context, p *ui.Theme) {
 	dlg := ui.Modal(c, &open, func() {
 		ui.Column(c).Width(920).Gap(8).Children(func() {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-				title := filepath.Base(d.path) + " · 与 HEAD 比较"
-				if d.other != "" {
-					title = filepath.Base(d.path) + " ↔ " + filepath.Base(d.other)
-				}
-				if d.loading {
-					title = filepath.Base(d.path) + " · 正在比较…"
-				}
-				ui.Text(c, title).FontSize(13).Bold().TextColor(p.Text).SingleLine()
+				ui.Text(c, diffTitle(d)).FontSize(13).Bold().TextColor(p.Text).SingleLine()
 				ui.Spacer(c)
 				if !d.loading && d.err == "" && d.message == "" {
 					ui.Text(c, fmt.Sprintf("+%d  −%d", d.added, d.gone)).
@@ -288,6 +388,20 @@ func (m *Model) diffDialog(c *ui.Context, p *ui.Theme) {
 	if dlg.Dismissed() || !open {
 		m.closeDiff()
 	}
+}
+
+// diffTitle names the compare view in its header.
+func diffTitle(d *diffView) string {
+	name := filepath.Base(d.path)
+	switch {
+	case d.loading:
+		return name + " · 正在比较…"
+	case d.inline:
+		return name + " ↔ " + d.label
+	case d.other != "":
+		return name + " ↔ " + filepath.Base(d.other)
+	}
+	return name + " · 与 HEAD 比较"
 }
 
 func diffSign(k textdiff.Kind) string {

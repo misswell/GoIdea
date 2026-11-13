@@ -31,6 +31,8 @@ needs a `## <version>` section here, or its build fails.
 - **Unsplit**、**Unsplit All** 合并两组，**Change Splitter Orientation** 在并排和上下之间切换。
 - `Alt+Tab` / `Alt+Shift+Tab` 在两组之间切换，点另一组的标签页或面包屑也会把焦点带过去。
 - 两组编辑器随项目保存，重开项目后回到原来的排列和活动标签页。
+- 标签页右键菜单新增 **Compare With…**，可把当前内容（含未保存修改）与另一个文件比较。
+- 标签页右键菜单新增 **Compare with Clipboard**，把当前内容与剪贴板里的文本比较。
 - 编辑器的右键菜单新增 **Show Context Actions**、**Copy / Paste Special**、**Go To**、**Reformat Code** 和 **Rename…**。
 - **Copy Path/Reference** 可复制编辑器的绝对路径、文件名、项目内路径和带行号的路径。
 - **Editor > Editor Tabs** 可选择关闭当前标签页后激活哪个：左边的、右边的或最近打开的。

@@ -1466,6 +1466,7 @@ func (m *Model) tabMenu(menu *ui.Menu, t *Tab) {
 	menu.Separator()
 	if path != "" {
 		m.tabOpenInMenu(menu, path)
+		menu.Separator()
 		menu.Submenu("Local History", func(menu *ui.Menu) {
 			if menu.Item("Show History").Chosen() {
 				m.ShowHistory(path)
@@ -1474,6 +1475,13 @@ func (m *Model) tabMenu(menu *ui.Menu, t *Tab) {
 				m.OpenHistoryLabel()
 			}
 		})
+		menu.Separator()
+		if menu.Item("Compare With…").Chosen() {
+			m.PickCompareFile(t)
+		}
+		if menu.Item("Compare with Clipboard").Chosen() {
+			m.CompareTabWithClipboard(t)
+		}
 		menu.Separator()
 		menu.Submenu("Copy Path/Reference…", func(menu *ui.Menu) {
 			for _, f := range tabPathFlavours(m.Root(), path) {

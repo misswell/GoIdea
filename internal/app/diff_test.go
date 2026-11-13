@@ -44,3 +44,41 @@ func TestDiffRowText(t *testing.T) {
 		t.Fatalf("diffRowText = %q", got)
 	}
 }
+
+func TestDiffRowsCountsBothSides(t *testing.T) {
+	rows, added, gone := diffRows("a\nb\n", "a\nc\n")
+	if len(rows) == 0 || added != 1 || gone != 1 {
+		t.Fatalf("diffRows = %d rows, +%d -%d", len(rows), added, gone)
+	}
+	rows, added, gone = diffRows("same\n", "same\n")
+	if len(rows) != 0 || added != 0 || gone != 0 {
+		t.Fatalf("equal texts = %d rows, +%d -%d", len(rows), added, gone)
+	}
+}
+
+func TestDiffTitleNamesEachCompare(t *testing.T) {
+	cases := []struct {
+		d    diffView
+		want string
+	}{
+		{diffView{path: "/p/Main.java"}, "Main.java · 与 HEAD 比较"},
+		{diffView{path: "/p/Main.java", other: "/p/Util.java"}, "Main.java ↔ Util.java"},
+		{diffView{path: "/p/Main.java", inline: true, label: "剪贴板"}, "Main.java ↔ 剪贴板"},
+		{diffView{path: "/p/Main.java", loading: true}, "Main.java · 正在比较…"},
+	}
+	for _, c := range cases {
+		if got := diffTitle(&c.d); got != c.want {
+			t.Fatalf("diffTitle(%+v) = %q, want %q", c.d, got, c.want)
+		}
+	}
+}
+
+func TestCompareWithoutATabOpensNothing(t *testing.T) {
+	m := &Model{}
+	m.CompareTabWithClipboard(nil)
+	m.PickCompareFile(nil)
+	m.ShowTextCompare("", "a", "剪贴板", "b")
+	if m.diff != nil {
+		t.Fatalf("compare view opened without a tab")
+	}
+}
