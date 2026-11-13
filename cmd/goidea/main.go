@@ -81,6 +81,7 @@ func menu(m *app.Model) *mygo.Menu {
 		{Role: mygo.RoleAppMenu},
 		{Label: "文件", Submenu: []*mygo.MenuItem{
 			{Label: "打开项目…", Accelerator: "CmdOrCtrl+O", Click: func(*mygo.MenuItem, *mygo.Window) { m.ChooseProject() }},
+			{Label: "快速打开…", Accelerator: "CmdOrCtrl+P", Click: func(*mygo.MenuItem, *mygo.Window) { m.OpenQuickFiles() }},
 			{Label: "保存", Accelerator: "CmdOrCtrl+S", Click: func(*mygo.MenuItem, *mygo.Window) { m.SaveActive() }},
 			{Label: "显示 Git 更改", Accelerator: "CmdOrCtrl+Shift+G", Click: func(*mygo.MenuItem, *mygo.Window) { m.ShowVCS() }},
 			{Label: "在项目中查找", Accelerator: "CmdOrCtrl+Shift+F", Click: func(*mygo.MenuItem, *mygo.Window) { m.ShowSearch() }},

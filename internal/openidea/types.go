@@ -490,3 +490,12 @@ type CodeActionQuery struct {
 	Actions         []json.RawMessage `json:"actions"`
 	AdvertisedKinds *[]string         `json:"advertisedKinds"`
 }
+
+// FileMatch is one hit of find_files: an indexed file and how well its relative
+// path matched, with the matched char indices for highlighting.
+type FileMatch struct {
+	Path    string   `json:"path"`
+	RelPath string   `json:"relPath"`
+	Score   uint32   `json:"score"`
+	Indices []uint32 `json:"indices,omitempty"`
+}

@@ -526,6 +526,10 @@ func (m *Model) SmokeLSP(ctx context.Context) (map[string]any, error) {
 	// The symbol picker searches the whole project and opens what it finds.
 	out["symbols"] = m.smokeSymbols(ctx, t)
 
+	// Quick Open lists recent files for an empty query and the fuzzy match
+	// otherwise, and opening its choice activates that file.
+	out["files"] = m.smokeFiles(ctx)
+
 	// Intentions resolve what the server finds wrong at the caret, and the
 	// quickfix's edits reach the buffer through the backend.
 	out["intents"] = m.smokeIntentions(ctx, t)
@@ -955,6 +959,130 @@ func (m *Model) smokeSymbols(ctx context.Context, t *Tab) any {
 		case <-time.After(300 * time.Millisecond):
 		}
 	}
+}
+
+// smokeFiles opens Quick Open on the empty query, which lists recently opened
+// files, then searches by name and opens the match.
+func (m *Model) smokeFiles(ctx context.Context) any {
+	start := time.Now()
+	out := map[string]any{}
+
+	mygo.RunOnMain(func() { m.OpenQuickFiles() })
+	recent, errText, timedOut := m.smokeFileWait(ctx, 30*time.Second, func(f *filePicker) bool {
+		return f.done || (!f.busy && f.err != "")
+	})
+	out["recent"] = recent
+	out["recentErr"] = errText
+	if timedOut {
+		out["recentTimeout"] = true
+	}
+
+	mygo.RunOnMain(func() {
+		if m.files != nil {
+			m.files.query = "Hello"
+			m.queryFiles()
+		}
+	})
+	deadline := time.Now().Add(60 * time.Second)
+	var count int
+	var rels []string
+	var picked string
+	for {
+		var busy, done bool
+		mygo.RunOnMain(func() {
+			if f := m.files; f != nil {
+				busy, done = f.busy, f.done
+				errText = f.err
+				count = len(f.items)
+				rels = rels[:0]
+				for i, fm := range f.items {
+					if i == 10 {
+						break
+					}
+					rels = append(rels, fm.RelPath)
+				}
+			}
+		})
+		if (done && count > 0) || (!busy && errText != "") || time.Now().After(deadline) {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			out["error"] = ctx.Err().Error()
+			return out
+		case <-time.After(300 * time.Millisecond):
+		}
+	}
+	out["count"] = count
+	out["rels"] = rels
+	out["err"] = m.smokeFileErr()
+	if count == 0 {
+		out["elapsedMillis"] = time.Since(start).Milliseconds()
+		mygo.RunOnMain(func() { m.closeQuickFiles() })
+		return out
+	}
+	mygo.RunOnMain(func() {
+		f := m.files
+		if f == nil {
+			return
+		}
+		for i, fm := range f.items {
+			if strings.HasSuffix(fm.RelPath, "Hello.java") {
+				f.sel = i
+				break
+			}
+		}
+		if len(f.items) > 0 {
+			picked = f.items[clampSymbolSel(f.sel, len(f.items))].RelPath
+		}
+		m.openSelectedFile()
+	})
+	out["picked"] = picked
+	var tabPath string
+	mygo.RunOnMain(func() {
+		if at := m.tab(); at != nil {
+			tabPath = at.doc.Path()
+		}
+	})
+	out["tabPath"] = tabPath
+	out["opened"] = strings.HasSuffix(tabPath, picked)
+	out["elapsedMillis"] = time.Since(start).Milliseconds()
+	return out
+}
+
+// smokeFileWait waits for the picker to satisfy done and reports its row count.
+func (m *Model) smokeFileWait(ctx context.Context, timeout time.Duration, done func(*filePicker) bool) (count int, errText string, timedOut bool) {
+	deadline := time.Now().Add(timeout)
+	for {
+		var ready bool
+		mygo.RunOnMain(func() {
+			if f := m.files; f != nil {
+				count, errText = len(f.items), f.err
+				ready = done(f)
+			}
+		})
+		if ready {
+			return count, errText, false
+		}
+		if time.Now().After(deadline) {
+			return count, errText, true
+		}
+		select {
+		case <-ctx.Done():
+			return count, errText, true
+		case <-time.After(200 * time.Millisecond):
+		}
+	}
+}
+
+func (m *Model) smokeFileErr() string {
+	var s string
+	mygo.RunOnMain(func() {
+		if f := m.files; f != nil {
+			s = f.err
+		}
+	})
+	return s
 }
 
 // smokeStatus reads the status line on the main thread, where it is written.

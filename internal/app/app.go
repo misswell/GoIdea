@@ -104,6 +104,9 @@ type Model struct {
 	// symbols is the open Go to Symbol picker, or nil.
 	symbols *symbolPicker
 
+	// files is the open Quick Open picker, or nil.
+	files *filePicker
+
 	// intents is the open intentions prompt, or nil.
 	intents *intentPane
 
@@ -434,6 +437,7 @@ func (m *Model) openProject(dir string, files []string) {
 	m.resetUsages()
 	m.closeSymbols()
 	m.closeIntents()
+	m.closeQuickFiles()
 	m.refactor, m.redoRefactor = nil, nil
 	m.busy = true
 	m.status = "正在打开 " + filepath.Base(dir) + "…"
@@ -536,6 +540,7 @@ func (m *Model) newTab(doc *docbridge.Document) *Tab {
 	t.state.OnHover = func(req editor.HoverRequest) { m.requestHover(t, req) }
 	t.state.OnDefinition = func(off int) { m.gotoDefinition(t, off) }
 	m.showDiagnostics(t)
+	m.markRecent(path)
 	return t
 }
 
@@ -593,6 +598,7 @@ func (m *Model) activate(i int) {
 	m.active = i
 	m.applyActive()
 	m.applyReveal(m.tabs[i])
+	m.markRecent(m.tabs[i].doc.Path())
 	m.saveSession()
 	m.invalidate()
 }
@@ -996,13 +1002,19 @@ func (m *Model) View(c *ui.Context) {
 	m.renameDialog(c, p)
 	m.symbolsDialog(c, p)
 	m.intentionsDialog(c, p)
+	m.filesDialog(c, p)
 }
 
 func (m *Model) shortcuts(c *ui.Context) {
 	if c.Shortcut(ui.Alt, ui.KeyEnter) {
 		// An open prompt keeps the keyboard; the caret's menu waits.
-		if m.rename == nil && m.symbols == nil && m.intents == nil {
+		if m.rename == nil && m.symbols == nil && m.intents == nil && m.files == nil {
 			m.ShowIntentions()
+		}
+	}
+	if c.Shortcut(ui.Cmd, ui.KeyP) {
+		if m.rename == nil && m.symbols == nil && m.intents == nil && m.files == nil {
+			m.OpenQuickFiles()
 		}
 	}
 	if c.Shortcut(ui.Cmd, ui.KeyS) {
