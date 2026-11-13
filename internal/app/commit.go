@@ -27,8 +27,11 @@ type commitState struct {
 	// only keeps a single file in the commit, as the tab menu's Commit File…
 	// asks for.
 	only string
-	busy bool
-	err  string
+	// scope keeps only the changed files under a directory in the commit, as
+	// the project view's Git › Commit… asks for; empty means every change.
+	scope string
+	busy  bool
+	err   string
 }
 
 // commitPlan is what vcs_commit gets: files committed with their working-tree
@@ -62,11 +65,52 @@ func (m *Model) OpenCommitFile(path string) {
 	m.invalidate()
 }
 
+// OpenCommitDir shows the Commit dialog for the changes under a directory, as
+// the project view's Git › Commit… does: every change outside it stays out of
+// the commit, and the project root means all of them.
+func (m *Model) OpenCommitDir(dir string) {
+	if m.Root() == "" || m.commit != nil || dir == "" {
+		return
+	}
+	c := &commitState{runHooks: true, checks: map[string]bool{}}
+	if dir = realPath(dir); dir != m.Root() {
+		c.scope = dir
+	}
+	m.commit = c
+	m.RefreshVCS()
+	m.invalidate()
+}
+
+// commitVisible reports whether the dialog lists a file: the scope of a
+// directory commit keeps every change outside it out of both the list and the
+// plan, and ignored files never show.
+func commitVisible(c *commitState, f openidea.FileStatus) bool {
+	if effectiveVCSKind(f) == "ignored" {
+		return false
+	}
+	return c.scope == "" || underTreePath(f.Path, c.scope)
+}
+
+// commitFiles lists the changes the dialog shows, in the order of the changes
+// view.
+func (m *Model) commitFiles(c *commitState) []openidea.FileStatus {
+	out := make([]openidea.FileStatus, 0, len(m.vcs.files))
+	for _, f := range m.vcs.files {
+		if commitVisible(c, f) {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
 // commitIncluded is a file's inclusion: the user's override, or the initial
 // check OpenIDEA uses — changes are included, unversioned files and conflicts
 // are opt-in, and a partially staged file commits only what is staged. A
 // single-file commit includes only that file, even when it is new.
 func (m *Model) commitIncluded(c *commitState, f openidea.FileStatus) bool {
+	if !commitVisible(c, f) {
+		return false
+	}
 	if c.only != "" {
 		if f.Path != c.only {
 			return false
@@ -153,7 +197,7 @@ func (m *Model) submitCommit() {
 		c.err = "请输入提交信息"
 		m.invalidate()
 		return
-	case len(m.vcs.files) == 0:
+	case len(m.commitFiles(c)) == 0:
 		c.err = "没有可提交的更改"
 		m.invalidate()
 		return
@@ -356,21 +400,19 @@ func (m *Model) commitDialog(c *ui.Context, p *ui.Theme) {
 	}
 	open := true
 	d := ui.Modal(c, &open, func() {
+		files := m.commitFiles(s)
 		ui.Column(c).Width(560).Gap(8).Children(func() {
 			ui.Text(c, "提交更改").FontSize(13).Bold().TextColor(p.Text)
 			ui.TextArea(c, &s.message).Height(84)
 			ui.Text(c, "提交信息，例如：修复登录超时").FontSize(11).TextColor(p.TextMuted)
 			ui.Text(c, fmt.Sprintf("已选择 %d 个文件", len(m.planCommit(s).included))).
 				FontSize(11).TextColor(p.TextMuted)
-			if len(m.vcs.files) == 0 {
+			if len(files) == 0 {
 				ui.Text(c, "没有可提交的更改").FontSize(11.5).TextColor(p.TextMuted)
 			} else {
 				ui.Scroll(c).Height(220).Children(func() {
-					for i, f := range m.vcs.files {
+					for i, f := range files {
 						i, f := i, f
-						if effectiveVCSKind(f) == "ignored" {
-							continue
-						}
 						on := m.commitIncluded(s, f)
 						row := ui.Row(c.Key(fmt.Sprintf("commit:%d", i))).Gap(6).AlignItems(ui.Center)
 						row.Children(func() {
@@ -403,7 +445,7 @@ func (m *Model) commitDialog(c *ui.Context, p *ui.Theme) {
 				if s.amend {
 					ui.Button(c, "修正提交").Disabled(s.busy).OnClick(m.submitCommit)
 				} else {
-					ui.Button(c, "提交").Disabled(s.busy || len(m.vcs.files) == 0).OnClick(m.submitCommit)
+					ui.Button(c, "提交").Disabled(s.busy || len(files) == 0).OnClick(m.submitCommit)
 				}
 				ui.Button(c, "取消").OnClick(func() {
 					m.commit = nil

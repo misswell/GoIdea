@@ -177,6 +177,45 @@ func vcsUnstaged(files []openidea.FileStatus) []openidea.FileStatus {
 // StageChange stages one file from the changes view.
 func (m *Model) StageChange(f openidea.FileStatus) { m.changeOp("vcs_stage", f, "已暂存 ") }
 
+// AddToIgnore adds path to the shared .gitignore or, with destination
+// "localExclude", to .git/info/exclude, as the project view's Git › Add to
+// .gitignore does.
+func (m *Model) AddToIgnore(path, destination string) {
+	if m.Root() == "" || path == "" || m.vcs.busy {
+		return
+	}
+	name := filepath.Base(path)
+	where := ".gitignore"
+	if destination == "localExclude" {
+		where = ".git/info/exclude"
+	}
+	m.vcs.busy = true
+	m.vcs.opErr = ""
+	m.status = "正在把 " + name + " 加入 " + where + "…"
+	m.invalidate()
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, time.Minute)
+		defer cancel()
+		_, err := m.mgr.Invoke(ctx, Window, "vcs_add_to_ignore", map[string]any{
+			"paths": []string{path}, "destination": destination,
+		})
+		m.post(func() {
+			m.vcs.busy = false
+			if m.Root() == "" {
+				return
+			}
+			if err != nil {
+				m.vcs.opErr = "加入忽略失败：" + err.Error()
+				m.invalidate()
+				return
+			}
+			m.status = "已把 " + name + " 加入 " + where
+			m.RefreshVCS()
+			m.invalidate()
+		})
+	}()
+}
+
 // statusFor is the change `git status` reported for path, if the loaded list
 // has one; the tab menu's Git actions read it to enable themselves.
 func (m *Model) statusFor(path string) (openidea.FileStatus, bool) {

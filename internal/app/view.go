@@ -278,8 +278,17 @@ func (m *Model) treeRow(c *ui.Context, p *ui.Theme, row *treeNode) {
 		}
 		m.invalidate()
 	}
-	target := treeTarget{path: row.path, dir: row.dir, root: row.path == m.Root()}
-	r.ContextMenu(func(menu *ui.Menu) { m.treeMenu(c, menu, target) })
+	target := treeTarget{
+		path: row.path, dir: row.dir, root: row.path == m.Root(),
+		git: m.vcs.loaded && m.vcs.err == "",
+	}
+	r.ContextMenu(func(menu *ui.Menu) {
+		if f, ok := m.statusFor(row.path); ok {
+			target.kind = effectiveVCSKind(f)
+			target.rollback = f.Unstaged != nil
+		}
+		m.treeMenu(c, menu, target)
+	})
 }
 
 func (m *Model) bannerRow(c *ui.Context, p *ui.Theme) {

@@ -179,7 +179,7 @@
     },
     "feature:project-tree": {
       "status": "partial",
-      "evidence": "internal/workspace tree tests; base.tabs"
+      "evidence": "internal/workspace tree tests; base.tabs; internal/app/tree_ops.go treeGitMenu ports the Git submenu (Commit…/Commit File…, Add, Add to .gitignore, Annotate, Show Diff, Show History, Rollback…, Branches…) when the project's Git status loads, tree_ops_test.go TestTreeGitSubmenuFollowsTheSelection; limits: the branch/revision compares, push/pull/fetch, merge/rebase, new branch/tag, reset and stash entries have no GoIDEA view and stay out"
     },
     "feature:code-insight": {
       "status": "partial",
@@ -187,7 +187,7 @@
     },
     "feature:vcs": {
       "status": "partial",
-      "evidence": "base.vcs.changes, base.diff.rows, base.commit.id, base.log.commits, base.log.details, base.log.changes; internal/app/branch.go branchLabel and branchesDialog, base.branch.head, base.branch.list, base.branch.checkout; internal/app/vcs.go vcsStaged, vcsUnstaged, StageChange, UnstageChange, AskRollback, base.stage.roundtrip, base.stage.discard"
+      "evidence": "base.vcs.changes, base.diff.rows, base.commit.id, base.log.commits, base.log.details, base.log.changes; internal/app/branch.go branchLabel and branchesDialog, base.branch.head, base.branch.list, base.branch.checkout; internal/app/vcs.go vcsStaged, vcsUnstaged, StageChange, UnstageChange, AskRollback, AddToIgnore over vcs_add_to_ignore with the .gitignore and .git/info/exclude destinations, base.stage.roundtrip, base.stage.discard; the project view's Git submenu, tabGitMenu, changes view and tab menu reach the same functions"
     },
     "feature:run": {
       "status": "partial",
@@ -287,19 +287,19 @@
     },
     "action:vcs.commit": {
       "status": "integrated",
-      "evidence": "base.commit.id, base.commit.staged, base.commit.clean; the tab menu's Commit File… opens the same dialog with commitState.only, which keeps every other change out and includes a new file, proven by commit_test.go TestCommitFileIncludesOnlyItsFile"
+      "evidence": "base.commit.id, base.commit.staged, base.commit.clean; the tab menu's Commit File… opens the same dialog with commitState.only, which keeps every other change out and includes a new file, proven by commit_test.go TestCommitFileIncludesOnlyItsFile; the project view's Git › Commit… opens the dialog with commitState.scope so only changes under the directory are listed and committed, proven by commit_test.go TestCommitDirKeepsChangesUnderTheDirectory"
     },
     "action:vcs.addToVcs": {
       "status": "partial",
-      "evidence": "internal/app/workbench.go tabGitMenu's Add stages the tab's unversioned file through internal/app/vcs.go StageChange over vcs_stage, proven by commit_test.go TestStatusForFindsAChangedFile and the base-phase stage checks; limits: the changes view offers Stage/Unstage rather than a separate Add action elsewhere"
+      "evidence": "internal/app/workbench.go tabGitMenu's Add stages the tab's unversioned file through internal/app/vcs.go StageChange over vcs_stage, and the project view's Git › Add stages the selected unversioned file the same way via statusFor, proven by commit_test.go TestStatusForFindsAChangedFile and the base-phase stage checks; limits: the changes view offers Stage/Unstage rather than a separate Add action elsewhere"
     },
     "action:vcs.annotate": {
       "status": "partial",
-      "evidence": "internal/app/annotate.go ShowAnnotate over vcs_blame with the tab's buffer text, grouping consecutive lines of one commit, opened from the tab menu's Git › Annotate; annotate_test.go covers the grouping and line ranges; limits: the blame is a read-only sheet rather than OpenIDEA's gutter annotations and line hover popup"
+      "evidence": "internal/app/annotate.go ShowAnnotate over vcs_blame with the tab's buffer text, grouping consecutive lines of one commit, opened from the tab menu's Git › Annotate and the project view's Git › Annotate with Git Blame; annotate_test.go covers the grouping and line ranges; limits: the blame is a read-only sheet rather than OpenIDEA's gutter annotations and line hover popup"
     },
     "action:vcs.showDiff": {
       "status": "integrated",
-      "evidence": "internal/app/diff.go ShowDiff over vcs_file_at with the buffer text, opened from the changes view and the tab menu's Git › Show Diff; SmokeDiff"
+      "evidence": "internal/app/diff.go ShowDiff over vcs_file_at with the buffer text, opened from the changes view, the tab menu's Git › Show Diff and the project view's Git › Show Diff; SmokeDiff"
     },
     "action:vcs.localHistory": {
       "status": "partial",
@@ -307,7 +307,7 @@
     },
     "action:vcs.rollback": {
       "status": "integrated",
-      "evidence": "internal/app/vcs.go AskRollback and ConfirmRollback over vcs_discard with a confirmation, from the changes view and the tab menu's Git › Rollback…; SmokeStage"
+      "evidence": "internal/app/vcs.go AskRollback and ConfirmRollback over vcs_discard with a confirmation, from the changes view, the tab menu's Git › Rollback… and the project view's Git › Rollback…; SmokeStage"
     },
     "action:vcs.branches": {
       "status": "partial",

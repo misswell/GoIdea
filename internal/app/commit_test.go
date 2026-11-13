@@ -51,6 +51,29 @@ func TestCommitFileKeepsTheOrdinaryRulesWithoutIt(t *testing.T) {
 	}
 }
 
+func TestCommitDirKeepsChangesUnderTheDirectory(t *testing.T) {
+	m := &Model{vcs: VCSPane{files: []openidea.FileStatus{
+		statusOf("/p/src/a.go", "", "modified"),
+		statusOf("/p/src/deep/b.go", "", "modified"),
+		statusOf("/p/src2/c.go", "", "modified"),
+		statusOf("/p/README.md", "", "modified"),
+	}}}
+	c := &commitState{scope: "/p/src", checks: map[string]bool{}}
+	for _, path := range []string{"/p/src/a.go", "/p/src/deep/b.go"} {
+		if !m.commitIncluded(c, statusOf(path, "", "modified")) {
+			t.Fatalf("%s stayed out of its folder's commit", path)
+		}
+	}
+	for _, path := range []string{"/p/src2/c.go", "/p/README.md"} {
+		if m.commitIncluded(c, statusOf(path, "", "modified")) {
+			t.Fatalf("%s joined a commit of another folder", path)
+		}
+	}
+	if got := len(m.commitFiles(c)); got != 2 {
+		t.Fatalf("the dialog lists %d files, want the 2 under /p/src", got)
+	}
+}
+
 func TestStatusForFindsAChangedFile(t *testing.T) {
 	m := &Model{vcs: VCSPane{files: []openidea.FileStatus{statusOf("/p/a.go", "", "modified")}}}
 	f, ok := m.statusFor("/p/a.go")

@@ -19,6 +19,12 @@ type treeTarget struct {
 	path string
 	dir  bool
 	root bool
+	// git says the project's Git status loaded, which shows the Git submenu;
+	// kind is the change status of a file target, and rollback says its
+	// working-tree side can be discarded.
+	git      bool
+	kind     string
+	rollback bool
 }
 
 // folder is the directory an action works in: the target itself for a
@@ -51,6 +57,15 @@ const (
 	treeActPutLabel
 	treeActCompareDirs
 	treeActReload
+	treeActGitCommit
+	treeActGitAdd
+	treeActGitIgnoreShared
+	treeActGitIgnoreLocal
+	treeActGitAnnotate
+	treeActGitDiff
+	treeActGitHistory
+	treeActGitRollback
+	treeActGitBranches
 )
 
 // treeMenuItem is one row of the project view menu: an action, a separator or
@@ -63,14 +78,15 @@ type treeMenuItem struct {
 }
 
 // treeMenuItems is the menu of target t, as OpenIDEA orders it: New, the
-// clipboard group, Jump to Source, Open in Terminal, then Rename and Delete.
-// Items that cannot apply to the selection are disabled.
+// clipboard group, Jump to Source, Open in Terminal, Local History and the Git
+// group, then Rename and Delete. Items that cannot apply to the selection are
+// disabled.
 func treeMenuItems(t treeTarget, clipboard bool) []treeMenuItem {
 	item := func(act treeAct, label string, on bool) treeMenuItem {
 		return treeMenuItem{Act: act, Label: label, Enabled: on}
 	}
 	sep := treeMenuItem{Act: treeActSeparator}
-	return []treeMenuItem{
+	items := []treeMenuItem{
 		{Label: "新建", Items: []treeMenuItem{
 			item(treeActNewFile, "文件…", true),
 			item(treeActNewDir, "目录…", true),
@@ -92,12 +108,47 @@ func treeMenuItems(t treeTarget, clipboard bool) []treeMenuItem {
 			item(treeActShowHistory, "显示历史…", true),
 			item(treeActPutLabel, "标记版本…", true),
 		}},
+	}
+	if t.git {
+		items = append(items, treeGitMenu(t))
+	}
+	return append(items,
 		item(treeActCompareDirs, "比较目录…", t.dir),
 		item(treeActReload, "从磁盘重新加载", true),
 		sep,
 		item(treeActRename, "重命名…", !t.root),
 		item(treeActDelete, "删除…", !t.root),
+	)
+}
+
+// treeGitMenu is the project view's Git submenu, as OpenIDEA orders it: the
+// commit, Add and ignore entries, then Annotate, Show Diff, Show History,
+// Rollback… and Branches…. The entries whose view GoIDEA has no backend for
+// (the branch and revision compares, push/pull/fetch, merge/rebase, new
+// branch/tag, reset and stash) are left out rather than shown disabled.
+func treeGitMenu(t treeTarget) treeMenuItem {
+	item := func(act treeAct, label string, on bool) treeMenuItem {
+		return treeMenuItem{Act: act, Label: label, Enabled: on}
 	}
+	commit := "提交文件…"
+	if t.dir {
+		commit = "提交…"
+	}
+	return treeMenuItem{Label: "Git", Items: []treeMenuItem{
+		item(treeActGitCommit, commit, t.dir || t.kind != "conflicted"),
+		item(treeActGitAdd, "添加", t.kind == "untracked"),
+		{Label: "添加到 .gitignore", Items: []treeMenuItem{
+			item(treeActGitIgnoreShared, ".gitignore", !t.root),
+			item(treeActGitIgnoreLocal, ".git/info/exclude", !t.root),
+		}},
+		{Act: treeActSeparator},
+		item(treeActGitAnnotate, "使用 Git Blame 注解", !t.dir),
+		item(treeActGitDiff, "显示差异", !t.dir),
+		item(treeActGitHistory, "显示历史", true),
+		item(treeActGitRollback, "回滚…", t.rollback),
+		{Act: treeActSeparator},
+		item(treeActGitBranches, "分支…", true),
+	}}
 }
 
 // treeMenuLabels flattens the menu to its labels, the separators dropped and
@@ -169,6 +220,32 @@ func (m *Model) runTreeAct(c *ui.Context, it treeMenuItem, t treeTarget) {
 		m.OpenDirCompare(t.path)
 	case it.Act == treeActReload:
 		m.ReloadPathFromDisk(t.path)
+	case it.Act == treeActGitCommit:
+		if t.dir {
+			m.OpenCommitDir(t.path)
+		} else {
+			m.OpenCommitFile(t.path)
+		}
+	case it.Act == treeActGitAdd:
+		if f, ok := m.statusFor(realPath(t.path)); ok {
+			m.StageChange(f)
+		}
+	case it.Act == treeActGitIgnoreShared:
+		m.AddToIgnore(t.path, "gitignore")
+	case it.Act == treeActGitIgnoreLocal:
+		m.AddToIgnore(t.path, "localExclude")
+	case it.Act == treeActGitAnnotate:
+		m.ShowAnnotate(t.path)
+	case it.Act == treeActGitDiff:
+		m.ShowDiff(t.path)
+	case it.Act == treeActGitHistory:
+		m.ShowHistory(t.path)
+	case it.Act == treeActGitRollback:
+		if f, ok := m.statusFor(realPath(t.path)); ok {
+			m.AskRollback(f)
+		}
+	case it.Act == treeActGitBranches:
+		m.ShowBranches()
 	}
 }
 

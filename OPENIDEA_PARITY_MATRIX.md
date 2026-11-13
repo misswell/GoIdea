@@ -74,7 +74,7 @@ directory registers.
 | `perf` | 0 | 0 | 1 | 0 | 0 | missing |
 | `plugins` | 10 | 0 | 2 | 5 | 0 | missing |
 | `profiler` | 2 | 1 | 0 | 0 | 0 | missing |
-| `project-tree` | 31 | 1 | 3 | 0 | 0 | partial - internal/workspace tree tests; base.tabs |
+| `project-tree` | 31 | 1 | 3 | 0 | 0 | partial - internal/workspace tree tests; base.tabs; internal/app/tree_ops.go treeGitMenu ports the Git submenu (Commit…/Commit File…, Add, Add to .gitignore, Annotate, Show Diff, Show History, Rollback…, Branches…) when the project's Git status loads, tree_ops_test.go TestTreeGitSubmenuFollowsTheSelection; limits: the branch/revision compares, push/pull/fetch, merge/rebase, new branch/tag, reset and stash entries have no GoIDEA view and stay out |
 | `project-trust` | 5 | 0 | 1 | 0 | 1 | missing |
 | `remote-dev` | 4 | 1 | 1 | 0 | 0 | missing |
 | `run` | 27 | 1 | 5 | 2 | 0 | partial - base.run.config, base.run.exit, base.run.build |
@@ -88,7 +88,7 @@ directory registers.
 | `terminal` | 14 | 1 | 0 | 0 | 0 | partial - internal/app/term.go tab groups over backend PTYs, SplitTerm/UnsplitTerm, ShowTermFind scrollback search, per-tab channel routing and exit by id; base.term.output, base.term.tabs, base.term.split, base.term.find; UPSTREAM_FEATURE_MATRIX.md Terminal |
 | `todo` | 2 | 1 | 0 | 1 | 1 | missing |
 | `tools` | 4 | 0 | 0 | 0 | 0 | partial - tools.jdtls, tools.java-debug |
-| `vcs` | 33 | 3 | 2 | 2 | 1 | partial - base.vcs.changes, base.diff.rows, base.commit.id, base.log.commits, base.log.details, base.log.changes; internal/app/branch.go branchLabel and branchesDialog, base.branch.head, base.branch.list, base.branch.checkout; internal/app/vcs.go vcsStaged, vcsUnstaged, StageChange, UnstageChange, AskRollback, base.stage.roundtrip, base.stage.discard |
+| `vcs` | 33 | 3 | 2 | 2 | 1 | partial - base.vcs.changes, base.diff.rows, base.commit.id, base.log.commits, base.log.details, base.log.changes; internal/app/branch.go branchLabel and branchesDialog, base.branch.head, base.branch.list, base.branch.checkout; internal/app/vcs.go vcsStaged, vcsUnstaged, StageChange, UnstageChange, AskRollback, AddToIgnore over vcs_add_to_ignore with the .gitignore and .git/info/exclude destinations, base.stage.roundtrip, base.stage.discard; the project view's Git submenu, tabGitMenu, changes view and tab menu reach the same functions |
 | `viewers` | 0 | 0 | 0 | 1 | 0 | missing |
 | `vim` | 3 | 0 | 0 | 1 | 0 | missing |
 | `web` | 2 | 0 | 0 | 0 | 0 | missing |
@@ -911,12 +911,12 @@ expected to come from a plugin or a hidden registration.
 | `toolwindow.services` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
 | `toolwindow.structure` | intellij-macos, intellij-windows, vscode-macos | integrated - internal/app/structure.go ToggleStructure; lsp.structure.visible; internal/app/structure_test.go |
 | `toolwindow.terminal` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/term.go ShowTerm; UPSTREAM_FEATURE_MATRIX.md Terminal |
-| `vcs.addToVcs` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/workbench.go tabGitMenu's Add stages the tab's unversioned file through internal/app/vcs.go StageChange over vcs_stage, proven by commit_test.go TestStatusForFindsAChangedFile and the base-phase stage checks; limits: the changes view offers Stage/Unstage rather than a separate Add action elsewhere |
-| `vcs.annotate` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/annotate.go ShowAnnotate over vcs_blame with the tab's buffer text, grouping consecutive lines of one commit, opened from the tab menu's Git › Annotate; annotate_test.go covers the grouping and line ranges; limits: the blame is a read-only sheet rather than OpenIDEA's gutter annotations and line hover popup |
+| `vcs.addToVcs` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/workbench.go tabGitMenu's Add stages the tab's unversioned file through internal/app/vcs.go StageChange over vcs_stage, and the project view's Git › Add stages the selected unversioned file the same way via statusFor, proven by commit_test.go TestStatusForFindsAChangedFile and the base-phase stage checks; limits: the changes view offers Stage/Unstage rather than a separate Add action elsewhere |
+| `vcs.annotate` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/annotate.go ShowAnnotate over vcs_blame with the tab's buffer text, grouping consecutive lines of one commit, opened from the tab menu's Git › Annotate and the project view's Git › Annotate with Git Blame; annotate_test.go covers the grouping and line ranges; limits: the blame is a read-only sheet rather than OpenIDEA's gutter annotations and line hover popup |
 | `vcs.branches` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/branch.go ToggleBranches and ShowBranches over vcs_branch_info/vcs_branches with checkout over vcs_checkout, from the title-bar widget and the tab menu's Git › Branches…; SmokeBranch; limits: branch create/delete/rename inside the popup is not ported |
 | `vcs.changelist.edit` | eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
 | `vcs.changelist.move` | eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
-| `vcs.commit` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | integrated - base.commit.id, base.commit.staged, base.commit.clean; the tab menu's Commit File… opens the same dialog with commitState.only, which keeps every other change out and includes a new file, proven by commit_test.go TestCommitFileIncludesOnlyItsFile |
+| `vcs.commit` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | integrated - base.commit.id, base.commit.staged, base.commit.clean; the tab menu's Commit File… opens the same dialog with commitState.only, which keeps every other change out and includes a new file, proven by commit_test.go TestCommitFileIncludesOnlyItsFile; the project view's Git › Commit… opens the dialog with commitState.scope so only changes under the directory are listed and committed, proven by commit_test.go TestCommitDirKeepsChangesUnderTheDirectory |
 | `vcs.commitAndPush` | intellij-macos, intellij-windows, vscode-macos | missing |
 | `vcs.localHistory` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/history.go ShowHistory over history_list_dir, RestoreHistoryEntry over history_restore and ConfirmHistoryLabel over history_put_label, reachable from the project tree's Local History submenu, the tab menu's Local History submenu and the tab menu's Git › Show History; base.files.historyRestore, base.files.historyLabel; limits: the history list is a picker rather than OpenIDEA's history tool window |
 | `vcs.log.copyRevision` | intellij-macos, intellij-windows, vscode-macos | missing |
@@ -927,9 +927,9 @@ expected to come from a plugin or a hidden registration.
 | `vcs.operations` | intellij-macos, intellij-windows, vscode-macos | missing |
 | `vcs.prevChange` | intellij-macos, intellij-windows, vscode-macos | missing |
 | `vcs.push` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
-| `vcs.rollback` | eclipse-macos, intellij-macos, intellij-windows, vscode-macos | integrated - internal/app/vcs.go AskRollback and ConfirmRollback over vcs_discard with a confirmation, from the changes view and the tab menu's Git › Rollback…; SmokeStage |
+| `vcs.rollback` | eclipse-macos, intellij-macos, intellij-windows, vscode-macos | integrated - internal/app/vcs.go AskRollback and ConfirmRollback over vcs_discard with a confirmation, from the changes view, the tab menu's Git › Rollback… and the project view's Git › Rollback…; SmokeStage |
 | `vcs.shelf.rename` | eclipse-windows | missing |
-| `vcs.showDiff` | intellij-macos, intellij-windows, vscode-macos | integrated - internal/app/diff.go ShowDiff over vcs_file_at with the buffer text, opened from the changes view and the tab menu's Git › Show Diff; SmokeDiff |
+| `vcs.showDiff` | intellij-macos, intellij-windows, vscode-macos | integrated - internal/app/diff.go ShowDiff over vcs_file_at with the buffer text, opened from the changes view, the tab menu's Git › Show Diff and the project view's Git › Show Diff; SmokeDiff |
 | `vcs.showMessageHistory` | intellij-macos, intellij-windows, vscode-macos | missing |
 | `vcs.toggleAmend` | intellij-macos, intellij-windows, vscode-macos | missing |
 | `vcs.update` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
@@ -2258,7 +2258,7 @@ Local-only commands and the per-command argument lists are in
 | `tools_list` | tools | yes | yes | missing |
 | `tools_uninstall` | tools | yes | yes | missing |
 | `undo_workspace_edit` | lsp | yes | yes | missing |
-| `vcs_add_to_ignore` | vcs | yes |  | missing |
+| `vcs_add_to_ignore` | vcs | yes | yes | missing |
 | `vcs_add_worktree` | vcs | yes |  | missing |
 | `vcs_apply_patch` | vcs | yes |  | missing |
 | `vcs_blame` | vcs | yes | yes | missing |
@@ -2380,7 +2380,7 @@ Local-only commands and the per-command argument lists are in
 | `wsl_distros` | wsl | no |  | missing |
 | `wsl_resolve` | wsl | no |  | missing |
 
-446 commands are served over stdio and 86 are called by GoIDEA today. A command
+446 commands are served over stdio and 87 are called by GoIDEA today. A command
 that is registered only in the desktop shell needs an `ops` module before stdio
 can serve it; a GoIDEA check counts only when the UI path works end to end.
 
