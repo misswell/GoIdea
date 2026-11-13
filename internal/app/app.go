@@ -82,13 +82,17 @@ type Model struct {
 	tree   *Tree
 
 	// sideMode picks what the sidebar shows: "tree" ("" also means tree, the
-	// default) or "vcs".
+	// default), "vcs" or "search".
 	sideMode string
 
-	run     RunPane
-	debug   DebugPane
-	term    TermPane
-	vcs     VCSPane
+	run    RunPane
+	debug  DebugPane
+	term   TermPane
+	vcs    VCSPane
+	search SearchPane
+	// reveal is the caret position a search hit asked for; it applies once the
+	// file is the active tab.
+	reveal  *revealPos
 	chanSeq atomic.Uint32
 	reqSeq  atomic.Uint32
 
@@ -377,6 +381,8 @@ func (m *Model) openProject(dir string, files []string) {
 	m.resetDebug()
 	m.resetTerm()
 	m.resetVCS()
+	m.cancelSearch()
+	m.resetSearch()
 	m.busy = true
 	m.status = "正在打开 " + filepath.Base(dir) + "…"
 	m.setRoot(dir)
@@ -501,6 +507,8 @@ func (m *Model) openFile(path string) {
 			if m.tree != nil {
 				m.tree.reveal(path)
 			}
+			m.applyActive()
+			m.applyReveal(m.tabs[m.active])
 			m.status = "已打开 " + filepath.Base(path)
 			m.applyActive()
 			m.saveSession()
@@ -522,6 +530,7 @@ func (m *Model) activate(i int) {
 	}
 	m.active = i
 	m.applyActive()
+	m.applyReveal(m.tabs[i])
 	m.saveSession()
 	m.invalidate()
 }

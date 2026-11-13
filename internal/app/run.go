@@ -398,6 +398,8 @@ func (m *Model) acceptChunk(id uint32, data json.RawMessage) {
 		m.invalidate()
 	case id != 0 && id == m.term.channel:
 		m.acceptTermChunk(data)
+	case id != 0 && id == m.search.channel:
+		m.acceptSearchEvent(data)
 	}
 }
 

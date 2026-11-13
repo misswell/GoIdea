@@ -83,6 +83,7 @@ func menu(m *app.Model) *mygo.Menu {
 			{Label: "打开项目…", Accelerator: "CmdOrCtrl+O", Click: func(*mygo.MenuItem, *mygo.Window) { m.ChooseProject() }},
 			{Label: "保存", Accelerator: "CmdOrCtrl+S", Click: func(*mygo.MenuItem, *mygo.Window) { m.SaveActive() }},
 			{Label: "显示 Git 更改", Accelerator: "CmdOrCtrl+Shift+G", Click: func(*mygo.MenuItem, *mygo.Window) { m.ShowVCS() }},
+			{Label: "在项目中查找", Accelerator: "CmdOrCtrl+Shift+F", Click: func(*mygo.MenuItem, *mygo.Window) { m.ShowSearch() }},
 			mygo.Separator(),
 			{Label: "退出 GoIDEA", Accelerator: "CmdOrCtrl+Q", Click: func(*mygo.MenuItem, *mygo.Window) { m.Quit() }},
 		}},
@@ -155,6 +156,15 @@ func smoke(m *app.Model) {
 		fields["debug"] = debug
 		if debugErr != nil {
 			fields["debugError"] = debugErr.Error()
+		}
+	}
+	if os.Getenv("GOIDEA_SMOKE_SEARCH") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		search, searchErr := m.SmokeSearch(ctx)
+		cancel()
+		fields["search"] = search
+		if searchErr != nil {
+			fields["searchError"] = searchErr.Error()
 		}
 	}
 	if os.Getenv("GOIDEA_SMOKE_TERM") == "1" && root != "" {

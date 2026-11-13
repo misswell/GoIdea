@@ -277,6 +277,39 @@ type DebugEvent struct {
 	Message           string `json:"message"`
 }
 
+// LineMatch is one line a search matched: 0-based line, its text, and the
+// UTF-16 column ranges within that text.
+type LineMatch struct {
+	Line       uint32      `json:"line"`
+	Text       string      `json:"text"`
+	Ranges     [][2]uint32 `json:"ranges"`
+	TextOffset uint32      `json:"textOffset"`
+}
+
+// FileMatches is one file's search hits.
+type FileMatches struct {
+	Path    string      `json:"path"`
+	RelPath string      `json:"relPath"`
+	Matches []LineMatch `json:"matches"`
+}
+
+// SearchSummary ends a search: how much was covered and whether it stopped.
+type SearchSummary struct {
+	Files     uint32  `json:"files"`
+	Matches   uint32  `json:"matches"`
+	LimitHit  bool    `json:"limitHit"`
+	Cancelled bool    `json:"cancelled"`
+	ElapsedMs float64 `json:"elapsedMs"`
+}
+
+// SearchEvent is one channel message of search_start: a file's matches, then
+// the summary.
+type SearchEvent struct {
+	Type    string         `json:"type"`
+	File    *FileMatches   `json:"file"`
+	Summary *SearchSummary `json:"summary"`
+}
+
 // OutlinePos is a 0-based line and UTF-16 column of an outline range.
 type OutlinePos struct {
 	Line uint32 `json:"line"`

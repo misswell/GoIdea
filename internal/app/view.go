@@ -92,6 +92,11 @@ func (m *Model) sidebar(c *ui.Context, p *ui.Theme) {
 						changes = fmt.Sprintf("更改 %d", len(m.vcs.files))
 					}
 					m.sidebarTab(c, p, changes, m.sideMode == "vcs", m.ShowVCS)
+					results := "搜索"
+					if m.search.matches > 0 {
+						results = fmt.Sprintf("搜索 %d", m.search.matches)
+					}
+					m.sidebarTab(c, p, results, m.sideMode == "search", m.ShowSearch)
 					ui.Spacer(c)
 					if m.sideMode == "vcs" {
 						label := "刷新"
@@ -104,6 +109,10 @@ func (m *Model) sidebar(c *ui.Context, p *ui.Theme) {
 			ui.Scroll(c).Grow(1).Children(func() {
 				if m.sideMode == "vcs" {
 					m.vcsRows(c, p)
+					return
+				}
+				if m.sideMode == "search" {
+					m.searchRows(c, p)
 					return
 				}
 				if m.tree == nil {
@@ -182,6 +191,95 @@ func (m *Model) vcsRows(c *ui.Context, p *ui.Theme) {
 		if r.Clicked() {
 			m.openFile(f.Path)
 			m.invalidate()
+		}
+	}
+}
+
+func (m *Model) searchRows(c *ui.Context, p *ui.Theme) {
+	s := &m.search
+	ui.Row(c).Padding(6, 8).Children(func() {
+		in := ui.TextInput(c, &s.query).Grow(1)
+		if in.Submitted() {
+			m.RunSearch()
+		}
+	})
+	ui.Row(c).Padding(0, 8).Gap(6).AlignItems(ui.Center).Children(func() {
+		if s.running {
+			ui.Button(c, "停止").OnClick(func() {
+				m.cancelSearch()
+				m.invalidate()
+			})
+		} else {
+			ui.Button(c, "搜索").OnClick(func() { m.RunSearch() })
+		}
+		ui.Spacer(c)
+		text := s.summary
+		if s.running {
+			text = "搜索中…"
+		}
+		if s.cancelled && text != "" {
+			text = "已停止 · " + text
+		}
+		if text != "" {
+			ui.Text(c, text).FontSize(10.5).TextColor(p.TextMuted).SingleLine().Ellipsis("…")
+		}
+	})
+	if s.err != "" {
+		ui.Row(c).Padding(4, 8).Children(func() {
+			ui.Text(c, s.err).FontSize(11).TextColor(p.Warning)
+		})
+	}
+	if s.truncated {
+		ui.Row(c).Padding(4, 8).Children(func() {
+			ui.Text(c, "结果过多，仅显示前面的部分").FontSize(10.5).TextColor(p.TextMuted)
+		})
+	}
+	if len(s.files) == 0 {
+		hint := "输入关键词后按 Enter"
+		switch {
+		case s.running:
+			hint = "正在遍历项目文件…"
+		case s.done:
+			hint = "没有匹配"
+		}
+		ui.Row(c).Padding(8, 8).Children(func() {
+			ui.Text(c, hint).FontSize(11.5).TextColor(p.TextMuted)
+		})
+		return
+	}
+	shown := 0
+	for fi, f := range s.files {
+		f := f
+		ui.Row(c).Height(22).Padding(0, 8).Gap(6).AlignItems(ui.Center).
+			Children(func() {
+				ui.Text(c, filepath.Base(f.RelPath)).FontSize(11.5).Bold().TextColor(p.Accent).
+					SingleLine().Ellipsis("…")
+				ui.Spacer(c)
+				ui.Text(c, fmt.Sprintf("%d", len(f.Matches))).FontSize(10.5).TextColor(p.TextMuted)
+			})
+		for mi, mm := range f.Matches {
+			if mi >= 40 || shown >= 200 {
+				break
+			}
+			mi, mm := mi, mm
+			shown++
+			r := ui.Row(c.Key(fmt.Sprintf("hit:%d:%d", fi, mi))).Height(20).Padding(0, 8).
+				Gap(6).AlignItems(ui.Center).PaddingStart(14)
+			if r.Hovered() {
+				r.Background(p.SurfaceHover)
+			}
+			r.Children(func() {
+				ui.Text(c, fmt.Sprintf("%d", mm.Line+1)).FontSize(10.5).TextColor(p.TextMuted)
+				ui.Text(c, strings.TrimSpace(mm.Text)).FontSize(11).TextColor(p.Text).
+					SingleLine().Ellipsis("…")
+			})
+			if r.Clicked() {
+				col := 0
+				if len(mm.Ranges) > 0 {
+					col = int(mm.Ranges[0][0])
+				}
+				m.revealAt(f.Path, int(mm.Line), col)
+			}
 		}
 	}
 }
