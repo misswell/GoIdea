@@ -203,6 +203,12 @@ func (m *Model) vcsRows(c *ui.Context, p *ui.Theme) {
 			ui.Text(c, word).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
 		})
 		if r.Clicked() {
+			m.ShowDiff(f.Path)
+		}
+		// A double click takes the row further, to the file itself, as IDEA
+		// does from its changes view.
+		if r.DoubleClicked() {
+			m.closeDiff()
 			m.openFile(f.Path)
 			m.invalidate()
 		}

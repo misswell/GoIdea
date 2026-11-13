@@ -107,6 +107,9 @@ type Model struct {
 	// files is the open Quick Open picker, or nil.
 	files *filePicker
 
+	// diff is the open compare-with-HEAD view, or nil.
+	diff *diffView
+
 	// intents is the open intentions prompt, or nil.
 	intents *intentPane
 
@@ -438,6 +441,7 @@ func (m *Model) openProject(dir string, files []string) {
 	m.closeSymbols()
 	m.closeIntents()
 	m.closeQuickFiles()
+	m.diff = nil
 	m.refactor, m.redoRefactor = nil, nil
 	m.busy = true
 	m.status = "正在打开 " + filepath.Base(dir) + "…"
@@ -1003,6 +1007,7 @@ func (m *Model) View(c *ui.Context) {
 	m.symbolsDialog(c, p)
 	m.intentionsDialog(c, p)
 	m.filesDialog(c, p)
+	m.diffDialog(c, p)
 }
 
 func (m *Model) shortcuts(c *ui.Context) {
@@ -1015,6 +1020,13 @@ func (m *Model) shortcuts(c *ui.Context) {
 	if c.Shortcut(ui.Cmd, ui.KeyP) {
 		if m.rename == nil && m.symbols == nil && m.intents == nil && m.files == nil {
 			m.OpenQuickFiles()
+		}
+	}
+	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyD) {
+		if m.rename == nil && m.symbols == nil && m.intents == nil && m.files == nil && m.diff == nil {
+			if t := m.tab(); t != nil {
+				m.ShowDiff(t.doc.Path())
+			}
 		}
 	}
 	if c.Shortcut(ui.Cmd, ui.KeyS) {

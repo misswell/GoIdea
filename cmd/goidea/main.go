@@ -84,6 +84,7 @@ func menu(m *app.Model) *mygo.Menu {
 			{Label: "快速打开…", Accelerator: "CmdOrCtrl+P", Click: func(*mygo.MenuItem, *mygo.Window) { m.OpenQuickFiles() }},
 			{Label: "保存", Accelerator: "CmdOrCtrl+S", Click: func(*mygo.MenuItem, *mygo.Window) { m.SaveActive() }},
 			{Label: "显示 Git 更改", Accelerator: "CmdOrCtrl+Shift+G", Click: func(*mygo.MenuItem, *mygo.Window) { m.ShowVCS() }},
+			{Label: "与 HEAD 比较", Accelerator: "CmdOrCtrl+Shift+D", Click: func(*mygo.MenuItem, *mygo.Window) { m.CompareActive() }},
 			{Label: "在项目中查找", Accelerator: "CmdOrCtrl+Shift+F", Click: func(*mygo.MenuItem, *mygo.Window) { m.ShowSearch() }},
 			mygo.Separator(),
 			{Label: "退出 GoIDEA", Accelerator: "CmdOrCtrl+Q", Click: func(*mygo.MenuItem, *mygo.Window) { m.Quit() }},
@@ -204,6 +205,15 @@ func smoke(m *app.Model) {
 		fields["lsp"] = lsp
 		if lspErr != nil {
 			fields["lspError"] = lspErr.Error()
+		}
+	}
+	if os.Getenv("GOIDEA_SMOKE_DIFF") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+		diff, diffErr := m.SmokeDiff(ctx)
+		cancel()
+		fields["diff"] = diff
+		if diffErr != nil {
+			fields["diffError"] = diffErr.Error()
 		}
 	}
 	if root != "" {
