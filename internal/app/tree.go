@@ -142,6 +142,16 @@ func (t *Tree) Select(path string) { t.sel = path }
 // Selected is the row Select or reveal last named.
 func (t *Tree) Selected() string { return t.sel }
 
+// IsDir reports whether the named row is a folder among the tree's rows.
+func (t *Tree) IsDir(path string) bool {
+	for _, r := range t.rows {
+		if r.path == path {
+			return r.dir
+		}
+	}
+	return false
+}
+
 // reveal opens the folders leading to path, as a file opened from elsewhere.
 func (t *Tree) reveal(path string) {
 	if t.ws == nil || t.root == nil {

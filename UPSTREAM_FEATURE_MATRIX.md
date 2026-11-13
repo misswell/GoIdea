@@ -61,7 +61,7 @@ reimplementing it. A row is `INTEGRATED` only when the GoIDEA product
 | Intentions and quick fixes | INTEGRATED | Alt+Enter sheet |
 | Rename, usages, symbols, format | INTEGRATED | code menu and pickers; Find Usages is OpenIDEA's bottom window, `internal/app/usages.go` |
 | Find/replace in project | INTEGRATED | search view |
-| Project view menu: New, Cut/Copy/Paste, Copy Path, Jump to Source, Rename, Delete, Open in Terminal | INTEGRATED | right-click menu in `internal/app/tree_ops.go` over `fs_create_file`, `fs_create_dir`, `fs_rename`, `fs_copy`, `fs_delete`, with a prompt sheet and unsaved-tab guards; base-phase e2e `base.files.*` |
+| Project view menu: New, Cut/Copy/Paste, Copy Path, Jump to Source, Find in Folder, Rename, Delete, Open in Terminal | INTEGRATED | right-click menu in `internal/app/tree_ops.go` over `fs_create_file`, `fs_create_dir`, `fs_rename`, `fs_copy`, `fs_delete` and `search_start` with a directory scope, with a prompt sheet and unsaved-tab guards; base-phase e2e `base.files.*` |
 | Project view Expand All (Cmd+=), Collapse All (Cmd+-), Reload from Disk (Cmd+Alt+Y), Select in Project View (Alt+F1) | INTEGRATED | `internal/app/tree.go` opens folders as their reads arrive, `internal/app/tree_ops.go` reveals and selects the active file; base-phase e2e `base.files.expand`, `base.files.select` |
 | Maven/Gradle build and run | INTEGRATED | run window, smoke: `GOIDEA_SMOKE_RUN` |
 | Debugger (DAP) | INTEGRATED | breakpoints, stepping, variables, watch |

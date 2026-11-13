@@ -365,6 +365,10 @@
       "status": "partial",
       "evidence": "internal/app/tree_ops.go deleteTreeEntry over fs_delete after a confirmation; base.files.delete; internal/app/tree_ops_test.go"
     },
+    "action:project.findInFolder": {
+      "status": "partial",
+      "evidence": "internal/app/tree_ops.go treeActFindInFolder -> internal/app/search.go ShowSearchInFolder scopes search_start to the folder; base.files.findInFolder; replace in folder is missing"
+    },
     "action:project.expandAll": {
       "status": "partial",
       "evidence": "internal/app/tree.go ExpandAll opens each folder as its read arrives; base.files.expand"

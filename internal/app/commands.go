@@ -33,6 +33,7 @@ func commands() []appCommand {
 		{"vcs.commit", "提交…", "Git", "Cmd+K", "git commit message stage", func(m *Model) { m.OpenCommit() }},
 		{"vcs.diff", "与 HEAD 比较", "Git", "Cmd+Shift+D", "git diff compare head", func(m *Model) { m.CompareActive() }},
 		{"search.project", "在项目中查找", "搜索", "Cmd+Shift+F", "search find in project", func(m *Model) { m.ShowSearch() }},
+		{"project.findInFolder", "在文件夹中查找…", "搜索", "", "find in folder search directory scope selected", func(m *Model) { m.FindInFolderSelected() }},
 		{"view.project", "显示项目", "视图", "Cmd+1", "project tree files sidebar", func(m *Model) { m.ShowProject() }},
 		{"project.expandAll", "展开全部", "导航", "Cmd+=", "expand all project tree folders", func(m *Model) { m.ExpandProjectAll() }},
 		{"project.collapseAll", "折叠全部", "导航", "Cmd+-", "collapse all project tree folders", func(m *Model) { m.CollapseProjectAll() }},

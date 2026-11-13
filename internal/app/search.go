@@ -24,6 +24,8 @@ type SearchPane struct {
 	// done is set by the summary; cancelled says the user stopped it early.
 	done      bool
 	cancelled bool
+	// scopePath limits the search to one folder; empty means the whole project.
+	scopePath string
 	summary   string
 	files     []openidea.FileMatches
 	matches   int
@@ -41,9 +43,38 @@ func (m *Model) resetSearch() { m.search = SearchPane{} }
 // ShowSearch opens OpenIDEA's Find window in the bottom side: Enter in the
 // query field runs it.
 func (m *Model) ShowSearch() {
+	m.search.scopePath = ""
 	m.search.visible = true
 	m.occupyBottom("find")
 	m.invalidate()
+}
+
+// ShowSearchInFolder opens the Find window limited to dir, as Find/Replace in
+// Folder does.
+func (m *Model) ShowSearchInFolder(dir string) {
+	if dir == "" {
+		return
+	}
+	m.search.scopePath = dir
+	m.search.visible = true
+	m.occupyBottom("find")
+	m.invalidate()
+}
+
+// FindInFolderSelected scopes Find to the folder selected in the project view,
+// or to the project when the selection is not a folder.
+func (m *Model) FindInFolderSelected() {
+	dir := m.Root()
+	if m.tree != nil {
+		if sel := m.tree.Selected(); m.tree.IsDir(sel) {
+			dir = sel
+		}
+	}
+	if dir == m.Root() {
+		m.ShowSearch()
+		return
+	}
+	m.ShowSearchInFolder(dir)
 }
 
 // RunSearch starts a project-wide search, replacing any running one.
@@ -72,6 +103,10 @@ func (m *Model) RunSearch() {
 	m.search.err = ""
 	m.invalidate()
 	root := m.Root()
+	scope := map[string]any{"kind": "project"}
+	if m.search.scopePath != "" {
+		scope = map[string]any{"kind": "directory", "path": m.search.scopePath}
+	}
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 5*time.Minute)
 		defer cancel()
@@ -80,7 +115,7 @@ func (m *Model) RunSearch() {
 			"query": map[string]any{
 				"pattern": pattern, "isRegex": false, "caseSensitive": false,
 				"wholeWord": false, "include": []string{}, "exclude": []string{},
-				"scope": map[string]any{"kind": "project"}, "maxMatches": 0,
+				"scope": scope, "maxMatches": 0,
 			},
 			"onEvent": map[string]any{"$channel": ch},
 		})

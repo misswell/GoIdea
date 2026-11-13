@@ -277,6 +277,11 @@ func (m *Model) searchRows(c *ui.Context, p *ui.Theme) {
 		} else {
 			ui.Button(c, "搜索").OnClick(func() { m.RunSearch() })
 		}
+		if s.scopePath != "" {
+			if rel, err := filepath.Rel(m.Root(), s.scopePath); err == nil {
+				ui.Text(c, "范围："+filepath.ToSlash(rel)).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+			}
+		}
 		ui.Spacer(c)
 		text := s.summary
 		if s.running {

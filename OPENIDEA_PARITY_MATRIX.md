@@ -27,7 +27,7 @@ new action, tool window, page or command appears automatically.
 | Kind | Items | Integrated | Partial | Engine | Blocked | Missing |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Feature folders | 43 | 0 | 10 | 0 | 0 | 33 |
-| Actions | 647 | 21 | 56 | 0 | 1 | 569 |
+| Actions | 647 | 21 | 57 | 0 | 1 | 568 |
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
 | Tool windows | 30 | 8 | 5 | 0 | 0 | 17 |
 | Overlays | 56 | 0 | 0 | 0 | 0 | 56 |
@@ -396,7 +396,7 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `project.cut` | Cut | `src/features/project-tree/actions.ts` | partial - internal/app/tree_ops.go SetTreeClip; base.files.menu, base.files.move; internal/app/tree_ops_test.go |
 | `project.delete` | Delete… | `src/features/project-tree/actions.ts` | partial - internal/app/tree_ops.go deleteTreeEntry over fs_delete after a confirmation; base.files.delete; internal/app/tree_ops_test.go |
 | `project.expandAll` | Expand All | `src/features/project-tree/actions.ts` | partial - internal/app/tree.go ExpandAll opens each folder as its read arrives; base.files.expand |
-| `project.findInFolder` | Find in Folder… | `src/features/project-tree/actions.ts` | missing |
+| `project.findInFolder` | Find in Folder… | `src/features/project-tree/actions.ts` | partial - internal/app/tree_ops.go treeActFindInFolder -> internal/app/search.go ShowSearchInFolder scopes search_start to the folder; base.files.findInFolder; replace in folder is missing |
 | `project.findUsages` | Find Usages of File | `src/features/project-tree/actions.ts` | missing |
 | `project.move` | Move File… | `src/features/project-tree/actions.ts` | missing |
 | `project.newFile` | New File | `src/features/project-tree/actions.ts` | partial - internal/app/tree_ops.go treeMenuItems OpenNewTreeEntry; base.files.menu, base.files.new; internal/app/tree_ops_test.go |

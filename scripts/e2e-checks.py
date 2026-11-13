@@ -81,6 +81,7 @@ CHECKS = {
         ("files.delete", "fs_delete removed the file and the folder", lambda d: (get(d, "files.deletedFile") is True and get(d, "files.deletedDir") is True, {"file": get(d, "files.deletedFile"), "dir": get(d, "files.deletedDir")})),
         ("files.expand", "Collapse All folded the tree and Expand All reopened every folder", lambda d: ((get(d, "files.collapseRows") or 0) >= 1 and (get(d, "files.expandRows") or 0) >= (get(d, "files.collapseRows") or 0) + 2 and (get(d, "files.reloadRows") or 0) >= (get(d, "files.expandRows") or 0), {"collapse": get(d, "files.collapseRows"), "expand": get(d, "files.expandRows"), "reload": get(d, "files.reloadRows")})),
         ("files.select", "Select in Project View marked the active file", lambda d: (get(d, "files.selected") == "one.txt", get(d, "files.selected"))),
+        ("files.findInFolder", "Find in Folder searched only the chosen folder", lambda d: ((get(d, "files.folderFiles") or 0) >= 1 and get(d, "files.folderUnder") == get(d, "files.folderFiles") and get(d, "files.folderEmpty") == 0, {"files": get(d, "files.folderFiles"), "under": get(d, "files.folderUnder"), "emptyFolder": get(d, "files.folderEmpty")})),
         ("filesError", *absent("filesError")),
         ("log.commits", "vcs_log returned commits", lambda d: ((get(d, "log.count") or 0) >= 1, get(d, "log.count"))),
         ("log.details", "vcs_log_details returned the message and a branch", lambda d: (bool(get(d, "log.message")) and (get(d, "log.branches") or 0) >= 1, {"message": get(d, "log.message"), "branches": get(d, "log.branches")})),

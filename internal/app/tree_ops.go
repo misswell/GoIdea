@@ -42,6 +42,7 @@ const (
 	treeActPaste
 	treeActCopyPath
 	treeActJump
+	treeActFindInFolder
 	treeActRename
 	treeActDelete
 	treeActTerminal
@@ -80,6 +81,7 @@ func treeMenuItems(t treeTarget, clipboard bool) []treeMenuItem {
 		item(treeActPaste, "粘贴", clipboard),
 		sep,
 		item(treeActJump, "跳到源码", !t.dir),
+		item(treeActFindInFolder, "在文件夹中查找…", t.dir),
 		item(treeActTerminal, "在终端中打开", t.dir),
 		sep,
 		item(treeActRename, "重命名…", !t.root),
@@ -140,6 +142,8 @@ func (m *Model) runTreeAct(c *ui.Context, it treeMenuItem, t treeTarget) {
 	case it.Act == treeActJump:
 		m.openFile(t.path)
 		m.invalidate()
+	case it.Act == treeActFindInFolder:
+		m.ShowSearchInFolder(t.folder())
 	case it.Act == treeActRename:
 		m.OpenTreeRename(t.path)
 	case it.Act == treeActDelete:
@@ -697,6 +701,55 @@ func (m *Model) SmokeFiles(ctx context.Context) (map[string]any, error) {
 	out["expandRows"] = expanded
 	run(func() { m.ReloadProjectTree() })
 	out["reloadRows"] = rows()
+	// Find in Folder searches only the chosen folder: the fixture's hits come
+	// from src/main/java, and the smoke folder's empty files give none.
+	searchIn := func(dir, query string) (int, []string, error) {
+		var rels []string
+		run(func() {
+			m.ShowSearchInFolder(dir)
+			m.search.query = query
+			m.RunSearch()
+		})
+		deadline := time.Now().Add(90 * time.Second)
+		for {
+			var done, running bool
+			m.post(func() {
+				done, running = m.search.done, m.search.running
+				rels = rels[:0]
+				for _, f := range m.search.files {
+					rels = append(rels, f.RelPath)
+				}
+			})
+			if done || (!running && len(rels) == 0) {
+				return len(rels), rels, nil
+			}
+			if time.Now().After(deadline) {
+				return len(rels), rels, errors.New("在文件夹中查找超时")
+			}
+			select {
+			case <-ctx.Done():
+				return len(rels), rels, ctx.Err()
+			case <-time.After(100 * time.Millisecond):
+			}
+		}
+	}
+	folderFiles, rels, err := searchIn(filepath.Join(root, "src", "main", "java"), "class ")
+	if err != nil {
+		return out, err
+	}
+	under := 0
+	for _, rel := range rels {
+		if strings.HasPrefix(rel, "src/main/java/") {
+			under++
+		}
+	}
+	out["folderFiles"] = folderFiles
+	out["folderUnder"] = under
+	emptyFiles, _, err := searchIn(base, "class ")
+	if err != nil {
+		return out, err
+	}
+	out["folderEmpty"] = emptyFiles
 	two := filepath.Join(base, "two.txt")
 	if err := rename(one, "two.txt"); err != nil {
 		return out, err
