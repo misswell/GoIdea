@@ -279,11 +279,14 @@ func New(cfg Config) *Model {
 			if m.debug.visible {
 				m.debug.err = "后端已重启，调试已中断"
 			}
-			for i := range m.term.sessions {
-				m.term.sessions[i].id = 0
-				m.term.sessions[i].pid = nil
-				m.term.sessions[i].starting = false
-				m.term.sessions[i].ended = true
+			for gi := range m.term.groups {
+				tabs := m.term.groups[gi].tabs
+				for ti := range tabs {
+					tabs[ti].id = 0
+					tabs[ti].pid = nil
+					tabs[ti].starting = false
+					tabs[ti].ended = true
+				}
 			}
 			if m.term.visible {
 				m.term.err = "后端已重启，终端已关闭"
@@ -553,9 +556,12 @@ func (m *Model) openProject(dir string, files []string) {
 	oldRun := m.run.runID
 	oldDebug := m.debug.session
 	var oldTerms []uint32
-	for i := range m.term.sessions {
-		if id := m.term.sessions[i].id; id != 0 {
-			oldTerms = append(oldTerms, id)
+	for gi := range m.term.groups {
+		tabs := m.term.groups[gi].tabs
+		for ti := range tabs {
+			if id := tabs[ti].id; id != 0 {
+				oldTerms = append(oldTerms, id)
+			}
 		}
 	}
 	m.tabs, m.active = nil, 0

@@ -679,8 +679,9 @@ func (p *RunPane) renderText() string {
 	return b.String()
 }
 
-// termPanel is the integrated terminal: one tab per shell, scrollback above,
-// one input line that sends Enter-terminated text to the active shell.
+// termPanel is the integrated terminal. With one group it shows that group's
+// tabs, scrollback and input line; a split shows two groups, side by side for
+// Split Right or stacked for Split Down, as OpenIDEA splits its terminal.
 func (m *Model) termPanel(c *ui.Context, p *ui.Theme) {
 	t := &m.term
 	col := ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Background(p.Surface).
@@ -689,42 +690,17 @@ func (m *Model) termPanel(c *ui.Context, p *ui.Theme) {
 		ui.Row(c).Height(30).Shrink(0).Padding(0, 8).Gap(6).AlignItems(ui.Center).
 			BorderWidth(0, 0, 1, 0).BorderColor(p.Border).Children(func() {
 			ui.Text(c, "终端").FontSize(12).Bold().TextColor(p.Text)
-			for i := range t.sessions {
-				s := &t.sessions[i]
-				label := s.shell
-				if label == "" {
-					label = fmt.Sprintf("终端 %d", i+1)
-				}
-				switch {
-				case s.starting:
-					label = "正在启动…"
-				case s.id == 0 && s.ended:
-					label += "（已结束）"
-				}
-				tabColor := p.TextMuted
-				if i == t.active {
-					tabColor = p.Text
-				}
-				tab := ui.Row(c.Key(fmt.Sprintf("termTab:%d", s.channel))).
-					Height(22).Padding(0, 6).Gap(2).AlignItems(ui.Center)
-				if i == t.active {
-					tab.Background(p.SurfacePressed)
-				}
-				tab.Children(func() {
-					ui.Text(c, label).FontSize(11.5).TextColor(tabColor).
-						SingleLine().Ellipsis("…")
-					ui.Button(c, "×").OnClick(func() { m.CloseTermTab(i) })
-				})
-				if tab.Clicked() && i != t.active {
-					t.active = i
-					m.invalidate()
-				}
-			}
-			if len(t.sessions) == 0 {
-				ui.Text(c, "未运行").FontSize(11.5).TextColor(p.TextMuted)
+			if n := t.total(); n > 0 {
+				ui.Text(c, fmt.Sprintf("%d 个会话", n)).
+					FontSize(11).TextColor(p.TextMuted)
 			}
 			ui.Spacer(c)
 			ui.Button(c, "新建").OnClick(func() { m.OpenTermTab() })
+			ui.Button(c, "拆分").OnClick(func() { m.SplitTermRight() })
+			ui.Button(c, "拆分↓").OnClick(func() { m.SplitTermDown() })
+			if t.split != "" {
+				ui.Button(c, "合并").OnClick(func() { m.UnsplitTerm() })
+			}
 			if s := t.current(); s == nil || (s.id == 0 && !s.starting) {
 				ui.Button(c, "启动").OnClick(func() { m.SpawnTerm() })
 			} else {
@@ -743,9 +719,84 @@ func (m *Model) termPanel(c *ui.Context, p *ui.Theme) {
 				})
 			})
 		}
+		if t.split != "" && len(t.groups) > 1 {
+			if t.split == "down" {
+				ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Children(func() {
+					m.termPaneBody(c, p, 0)
+					ui.Row(c).Height(1).Shrink(0).Background(p.Border)
+					m.termPaneBody(c, p, 1)
+				})
+			} else {
+				ui.Row(c).Grow(1).MinWidth(0).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
+					m.termPaneBody(c, p, 0)
+					ui.Column(c).Width(1).Shrink(0).Background(p.Border)
+					m.termPaneBody(c, p, 1)
+				})
+			}
+			return
+		}
+		m.termPaneBody(c, p, 0)
+	})
+}
+
+// termPaneBody draws one tab group: its own tab strip, its active tab's
+// scrollback, and the input line when this group takes typing.
+func (m *Model) termPaneBody(c *ui.Context, p *ui.Theme, g int) {
+	t := &m.term
+	if g < 0 || g >= len(t.groups) {
+		return
+	}
+	gr := &t.groups[g]
+	pane := ui.Column(c).Grow(1).MinWidth(0).MinHeight(0)
+	pane.Children(func() {
+		ui.Row(c).Height(26).Shrink(0).Padding(0, 6).Gap(6).AlignItems(ui.Center).
+			BorderWidth(0, 0, 1, 0).BorderColor(p.Border).Children(func() {
+			for i := range gr.tabs {
+				s := &gr.tabs[i]
+				label := s.shell
+				if label == "" {
+					label = fmt.Sprintf("终端 %d", i+1)
+				}
+				switch {
+				case s.starting:
+					label = "正在启动…"
+				case s.id == 0 && s.ended:
+					label += "（已结束）"
+				}
+				selected := t.active == g && gr.active == i
+				tabColor := p.TextMuted
+				if selected {
+					tabColor = p.Text
+				}
+				tab := ui.Row(c.Key(fmt.Sprintf("termTab:%d", s.channel))).
+					Height(22).Padding(0, 6).Gap(2).AlignItems(ui.Center)
+				if selected {
+					tab.Background(p.SurfacePressed)
+				}
+				tab.Children(func() {
+					ui.Text(c, label).FontSize(11.5).TextColor(tabColor).
+						SingleLine().Ellipsis("…")
+					ui.Button(c, "×").OnClick(func() { m.CloseTermTab(g, i) })
+				})
+				if tab.Clicked() {
+					t.active = g
+					if i != gr.active {
+						gr.active = i
+					}
+					m.invalidate()
+				}
+			}
+			if len(gr.tabs) == 0 {
+				ui.Text(c, "未运行").FontSize(11.5).TextColor(p.TextMuted)
+			}
+			ui.Spacer(c)
+			if t.split != "" {
+				ui.Button(c, "+").OnClick(func() { m.OpenTermTabIn(g) })
+			}
+		})
 		ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
 			ui.Column(c).Padding(8, 10).Children(func() {
-				s := t.current()
+				s := gr.tab()
 				if s == nil || len(s.lines) == 0 {
 					hint := "终端输出显示在这里。Enter 发送这一行。"
 					if s == nil || (s.id == 0 && !s.starting) {
@@ -761,14 +812,16 @@ func (m *Model) termPanel(c *ui.Context, p *ui.Theme) {
 				ui.Text(c, s.render()).FontSize(11.5).TextColor(p.Text)
 			})
 		})
-		ui.Row(c).Height(30).Shrink(0).Padding(3, 8).Gap(6).AlignItems(ui.Center).
-			BorderWidth(1, 0, 0, 0).BorderColor(p.Border).Children(func() {
-			ui.Text(c, "❯").FontSize(12).TextColor(p.Accent)
-			in := ui.TextInput(c, &t.input).Grow(1)
-			if in.Submitted() {
-				m.SubmitTermInput()
-			}
-		})
+		if t.active == g || len(t.groups) == 1 {
+			ui.Row(c).Height(30).Shrink(0).Padding(3, 8).Gap(6).AlignItems(ui.Center).
+				BorderWidth(1, 0, 0, 0).BorderColor(p.Border).Children(func() {
+				ui.Text(c, "❯").FontSize(12).TextColor(p.Accent)
+				in := ui.TextInput(c, &t.input).Grow(1)
+				if in.Submitted() {
+					m.SubmitTermInput()
+				}
+			})
+		}
 	})
 }
 

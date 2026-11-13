@@ -70,6 +70,7 @@ CHECKS = {
         ("bookmarkError", *absent("bookmarkError")),
         ("term.output", "a real shell ran echo in the terminal", lambda d: ("GOIDEA_TERM_OK" in (get(d, "term.output") or ""), (get(d, "term.output") or "")[-300:])),
         ("term.tabs", "a second terminal tab opened and closed", lambda d: (get(d, "term.tabs") == 2 and get(d, "term.tabsAfterClose") == 1, {"tabs": get(d, "term.tabs"), "afterClose": get(d, "term.tabsAfterClose")})),
+        ("term.split", "split right opened a second shell and unsplit merged it back", lambda d: (get(d, "term.split") == "right" and get(d, "term.splitGroups") == 2 and get(d, "term.splitReady") is True and get(d, "term.unsplitAxis") == "" and get(d, "term.unsplitGroups") == 1 and (get(d, "term.unsplitTabs") or 0) >= 2, {"split": get(d, "term.split"), "groups": get(d, "term.splitGroups"), "ready": get(d, "term.splitReady"), "unsplit": get(d, "term.unsplitGroups"), "tabs": get(d, "term.unsplitTabs")})),
         ("termError", *absent("termError")),
         ("log.commits", "vcs_log returned commits", lambda d: ((get(d, "log.count") or 0) >= 1, get(d, "log.count"))),
         ("log.details", "vcs_log_details returned the message and a branch", lambda d: (bool(get(d, "log.message")) and (get(d, "log.branches") or 0) >= 1, {"message": get(d, "log.message"), "branches": get(d, "log.branches")})),

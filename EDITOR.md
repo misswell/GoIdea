@@ -110,6 +110,13 @@ opens one, the tab strip switches between them, and the tab's **×** ends that
 shell; closing the last tab hides the window, as OpenIDEA's Close Terminal
 Session does (`term.go`, `termPanel` in `view.go`).
 
+**拆分** puts a second tab group beside the active one, as OpenIDEA's Split
+Right does, and **拆分↓** stacks it below; either pane takes typing when its
+tab strip is clicked, keeps its own tabs, and its **+** opens a tab in that
+pane. Splitting again only turns the divider, **合并** folds the second group's
+tabs into the first with their shells running, and emptying a split group in
+the pane merges it away (`SplitTerm`, `UnsplitTerm`, `termPaneBody`).
+
 ## Structure
 
 `Cmd+7` opens OpenIDEA's Structure window in the sidebar: the active file's

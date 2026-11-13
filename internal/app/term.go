@@ -11,15 +11,26 @@ import (
 )
 
 // TermPane is the integrated terminal: one tab per PTY session that
-// openidea-server owns, whose output arrives on a streaming channel. It renders
-// the text stream (ANSI colours removed); full-screen TUI programs are beyond a
-// text pane, and say so rather than showing garbage.
+// openidea-server owns, whose output arrives on a streaming channel. A pane may
+// split into a second tab group, as OpenIDEA splits its terminal; each group
+// keeps its own tabs and active one. It renders the text stream (ANSI colours
+// removed); full-screen TUI programs are beyond a text pane, and say so rather
+// than showing garbage.
 type TermPane struct {
-	visible  bool
-	sessions []termSession
-	active   int
-	input    string
-	err      string
+	visible bool
+	groups  []termGroup
+	// active is the group that takes typing; split is "right" or "down" while
+	// a second group shows, "" with one group.
+	active int
+	split  string
+	input  string
+	err    string
+}
+
+// termGroup is one pane's tabs: the primary group is 0, the split group 1.
+type termGroup struct {
+	tabs   []termSession
+	active int
 }
 
 // termSession is one terminal tab: its PTY, shell and scrollback.
@@ -37,22 +48,52 @@ type termSession struct {
 	exitCode  *int32
 }
 
-// current is the active tab, or nil when no tab is open.
-func (p *TermPane) current() *termSession {
-	if len(p.sessions) == 0 {
+// group returns group g, creating it when it does not exist.
+func (p *TermPane) group(g int) *termGroup {
+	for len(p.groups) <= g {
+		p.groups = append(p.groups, termGroup{})
+	}
+	return &p.groups[g]
+}
+
+// activeGroup is the group that takes typing, or nil before the first tab.
+func (p *TermPane) activeGroup() *termGroup {
+	if len(p.groups) == 0 {
 		return nil
 	}
-	if p.active < 0 || p.active >= len(p.sessions) {
-		p.active = len(p.sessions) - 1
+	if p.active < 0 || p.active >= len(p.groups) {
+		p.active = len(p.groups) - 1
 	}
-	return &p.sessions[p.active]
+	return &p.groups[p.active]
+}
+
+// tab is the group's active tab, nil when the group has none.
+func (g *termGroup) tab() *termSession {
+	if g.active < 0 || g.active >= len(g.tabs) {
+		g.active = len(g.tabs) - 1
+	}
+	if g.active < 0 {
+		return nil
+	}
+	return &g.tabs[g.active]
+}
+
+// current is the active tab of the active group, or nil when none is open.
+func (p *TermPane) current() *termSession {
+	if g := p.activeGroup(); g != nil {
+		return g.tab()
+	}
+	return nil
 }
 
 // byChannel finds the tab a streaming channel belongs to.
 func (p *TermPane) byChannel(ch uint32) *termSession {
-	for i := range p.sessions {
-		if p.sessions[i].channel == ch {
-			return &p.sessions[i]
+	for gi := range p.groups {
+		tabs := p.groups[gi].tabs
+		for ti := range tabs {
+			if tabs[ti].channel == ch {
+				return &tabs[ti]
+			}
 		}
 	}
 	return nil
@@ -60,33 +101,64 @@ func (p *TermPane) byChannel(ch uint32) *termSession {
 
 // byID finds the tab a PTY belongs to.
 func (p *TermPane) byID(id uint32) *termSession {
-	for i := range p.sessions {
-		if p.sessions[i].id == id {
-			return &p.sessions[i]
+	for gi := range p.groups {
+		tabs := p.groups[gi].tabs
+		for ti := range tabs {
+			if tabs[ti].id == id {
+				return &tabs[ti]
+			}
 		}
 	}
 	return nil
 }
 
-// add opens a tab and makes it active.
-func (p *TermPane) add() *termSession {
-	p.sessions = append(p.sessions, termSession{})
-	p.active = len(p.sessions) - 1
-	return &p.sessions[len(p.sessions)-1]
+// add opens a tab in group g and makes it that group's active tab.
+func (p *TermPane) add(g int) *termSession {
+	gr := p.group(g)
+	gr.tabs = append(gr.tabs, termSession{})
+	gr.active = len(gr.tabs) - 1
+	p.active = g
+	return &gr.tabs[gr.active]
 }
 
-// remove drops a tab, keeping the active index in range.
-func (p *TermPane) remove(i int) {
-	if i < 0 || i >= len(p.sessions) {
+// remove drops a tab from group g. A split group left empty merges away, and an
+// emptied pane is only hidden; the caller ends the shell.
+func (p *TermPane) remove(g, ti int) {
+	if g < 0 || g >= len(p.groups) {
 		return
 	}
-	p.sessions = append(p.sessions[:i], p.sessions[i+1:]...)
-	if p.active >= len(p.sessions) {
-		p.active = len(p.sessions) - 1
+	gr := &p.groups[g]
+	if ti < 0 || ti >= len(gr.tabs) {
+		return
+	}
+	gr.tabs = append(gr.tabs[:ti], gr.tabs[ti+1:]...)
+	if gr.active >= len(gr.tabs) {
+		gr.active = len(gr.tabs) - 1
+	}
+	if gr.active < 0 {
+		gr.active = 0
+	}
+	if g == 1 && len(gr.tabs) == 0 {
+		p.groups = p.groups[:1]
+		p.split = ""
+		p.active = 0
+		return
+	}
+	if p.active >= len(p.groups) {
+		p.active = len(p.groups) - 1
 	}
 	if p.active < 0 {
 		p.active = 0
 	}
+}
+
+// total counts the open tabs across groups.
+func (p *TermPane) total() int {
+	n := 0
+	for gi := range p.groups {
+		n += len(p.groups[gi].tabs)
+	}
+	return n
 }
 
 // maxTermLines bounds the scrollback each tab keeps.
@@ -121,11 +193,17 @@ func (m *Model) SpawnTerm() {
 	if s := m.term.current(); s != nil && (s.starting || s.id != 0) {
 		return
 	}
-	m.spawnTermSession(root)
+	m.spawnTermSession(root, m.term.active)
 }
 
-// OpenTermTab opens one more shell tab, as OpenIDEA's New Terminal Tab does.
+// OpenTermTab opens one more shell tab in the active group, as OpenIDEA's New
+// Terminal Tab does.
 func (m *Model) OpenTermTab() {
+	m.OpenTermTabIn(m.term.active)
+}
+
+// OpenTermTabIn opens a tab in group g, as a split pane's own + does.
+func (m *Model) OpenTermTabIn(g int) {
 	root := m.Root()
 	if root == "" {
 		m.term.err = "先打开一个项目，再启动终端"
@@ -136,13 +214,60 @@ func (m *Model) OpenTermTab() {
 		m.term.visible = true
 		m.occupyBottom("term")
 	}
-	m.spawnTermSession(root)
+	m.spawnTermSession(root, g)
 }
 
-// spawnTermSession adds a tab and starts its login shell in the project root.
-func (m *Model) spawnTermSession(root string) {
+// SplitTermRight splits the window and opens a shell beside the active group.
+func (m *Model) SplitTermRight() { m.SplitTerm("right") }
+
+// SplitTermDown splits the window and opens a shell below the active group.
+func (m *Model) SplitTermDown() { m.SplitTerm("down") }
+
+// SplitTerm shows a second tab group in the given direction, as OpenIDEA's
+// Split Right and Split Down do; splitting twice only changes the direction.
+func (m *Model) SplitTerm(axis string) {
+	root := m.Root()
+	if root == "" {
+		m.term.err = "先打开一个项目，再启动终端"
+		m.invalidate()
+		return
+	}
+	if !m.term.visible {
+		m.term.visible = true
+		m.occupyBottom("term")
+	}
+	if m.term.split != "" && len(m.term.groups) > 1 {
+		m.term.split = axis
+		m.invalidate()
+		return
+	}
+	m.term.split = axis
+	m.spawnTermSession(root, 1)
+}
+
+// UnsplitTerm merges the split group's tabs into the primary group, keeping
+// their shells, as OpenIDEA's Unsplit does.
+func (m *Model) UnsplitTerm() {
+	if len(m.term.groups) < 2 {
+		m.term.split = ""
+		m.invalidate()
+		return
+	}
+	primary := &m.term.groups[0]
+	split := &m.term.groups[1]
+	primary.tabs = append(primary.tabs, split.tabs...)
+	primary.active = len(primary.tabs) - 1
+	m.term.groups = m.term.groups[:1]
+	m.term.split = ""
+	m.term.active = 0
+	m.invalidate()
+}
+
+// spawnTermSession adds a tab to group g and starts its login shell in the
+// project root.
+func (m *Model) spawnTermSession(root string, g int) {
 	ch := m.nextChannel()
-	s := m.term.add()
+	s := m.term.add(g)
 	s.starting = true
 	s.channel = ch
 	m.term.err = ""
@@ -243,14 +368,18 @@ func (m *Model) KillTerm() {
 	}()
 }
 
-// CloseTermTab ends a tab's shell and drops the tab; closing the last one hides
-// the window, as OpenIDEA's Close Terminal Session does.
-func (m *Model) CloseTermTab(i int) {
-	if i < 0 || i >= len(m.term.sessions) {
+// CloseTermTab ends a tab's shell and drops the tab; closing a split group's
+// last tab merges the split away, and closing every tab hides the window, as
+// OpenIDEA's Close Terminal Session does.
+func (m *Model) CloseTermTab(g, ti int) {
+	if g < 0 || g >= len(m.term.groups) {
 		return
 	}
-	s := &m.term.sessions[i]
-	id := s.id
+	tabs := m.term.groups[g].tabs
+	if ti < 0 || ti >= len(tabs) {
+		return
+	}
+	id := tabs[ti].id
 	if id != 0 {
 		go func() {
 			ctx, cancel := context.WithTimeout(m.ctx, 10*time.Second)
@@ -258,8 +387,8 @@ func (m *Model) CloseTermTab(i int) {
 			_, _ = m.mgr.Invoke(ctx, Window, "term_kill", map[string]any{"id": id})
 		}()
 	}
-	m.term.remove(i)
-	if len(m.term.sessions) == 0 {
+	m.term.remove(g, ti)
+	if m.term.total() == 0 {
 		m.hideTool("term")
 	}
 	m.invalidate()
@@ -267,10 +396,11 @@ func (m *Model) CloseTermTab(i int) {
 
 // CloseActiveTermTab closes the tab the user is looking at.
 func (m *Model) CloseActiveTermTab() {
-	if len(m.term.sessions) == 0 {
+	gr := m.term.activeGroup()
+	if gr == nil || gr.active < 0 || gr.active >= len(gr.tabs) {
 		return
 	}
-	m.CloseTermTab(m.term.active)
+	m.CloseTermTab(m.term.active, gr.active)
 }
 
 // ClearTerm empties the active tab's scrollback.
@@ -334,8 +464,9 @@ func (m *Model) acceptTermExit(id uint32, code *int32) {
 	m.invalidate()
 }
 
-// SmokeTerm starts a real shell, runs `echo` in it, opens a second tab and
-// closes it, then kills both shells: the offscreen check of the terminal path.
+// SmokeTerm starts a real shell, runs `echo` in it, opens and closes a second
+// tab, splits the pane into a second shell and merges it again, then kills
+// every shell: the offscreen check of the terminal path.
 func (m *Model) SmokeTerm(ctx context.Context) (map[string]any, error) {
 	out := map[string]any{"shell": ""}
 	root := m.Root()
@@ -352,11 +483,9 @@ func (m *Model) SmokeTerm(ctx context.Context) (map[string]any, error) {
 	}
 	ch := m.nextChannel()
 	m.post(func() {
-		m.term.visible = true
+		m.term = TermPane{visible: true}
 		m.occupyBottom("term")
-		m.term.sessions = nil
-		m.term.active = 0
-		s := m.term.add()
+		s := m.term.add(0)
 		s.starting = true
 		s.channel = ch
 		m.invalidate()
@@ -419,13 +548,14 @@ func (m *Model) SmokeTerm(ctx context.Context) (map[string]any, error) {
 	}
 	// A second tab gets its own PTY, and closing it leaves the first one.
 	m.post(func() { m.OpenTermTab() })
-	second := m.waitTermTab(ctx, ch)
-	out["tabs"] = second
-	m.post(func() { m.CloseTermTab(1) })
+	tabs, tabsReady := m.waitTermTabs(ctx, ch, 2)
+	out["tabs"] = tabs
+	out["tabsReady"] = tabsReady
+	m.post(func() { m.CloseTermTab(0, 1) })
 	var left int
 	closeDeadline := time.Now().Add(20 * time.Second)
 	for {
-		m.post(func() { left = len(m.term.sessions) })
+		m.post(func() { left = m.term.total() })
 		if left == 1 || time.Now().After(closeDeadline) {
 			break
 		}
@@ -436,43 +566,104 @@ func (m *Model) SmokeTerm(ctx context.Context) (map[string]any, error) {
 		}
 	}
 	out["tabsAfterClose"] = left
-	if _, err := m.mgr.Invoke(ctx, Window, "term_kill", map[string]any{"id": info.ID}); err != nil {
-		out["killError"] = err.Error()
+	// Split Right puts a new shell in a second group, as OpenIDEA does.
+	var splitCh uint32
+	m.post(func() {
+		m.SplitTermRight()
+		if len(m.term.groups) > 1 && len(m.term.groups[1].tabs) > 0 {
+			splitCh = m.term.groups[1].tabs[0].channel
+		}
+	})
+	groups, splitReady := m.waitTermSplit(ctx, splitCh)
+	var axis string
+	m.post(func() { axis = m.term.split })
+	out["split"] = axis
+	out["splitGroups"] = groups
+	out["splitReady"] = splitReady
+	// Unsplit keeps both shells in one group.
+	m.post(func() { m.UnsplitTerm() })
+	var unsplit string
+	var unsplitGroups, unsplitTabs int
+	m.post(func() {
+		unsplit = m.term.split
+		unsplitGroups = len(m.term.groups)
+		unsplitTabs = m.term.total()
+	})
+	out["unsplitAxis"] = unsplit
+	out["unsplitGroups"] = unsplitGroups
+	out["unsplitTabs"] = unsplitTabs
+	var ids []uint32
+	m.post(func() {
+		for gi := range m.term.groups {
+			for ti := range m.term.groups[gi].tabs {
+				if id := m.term.groups[gi].tabs[ti].id; id != 0 {
+					ids = append(ids, id)
+				}
+			}
+		}
+	})
+	for _, id := range ids {
+		if _, err := m.mgr.Invoke(ctx, Window, "term_kill", map[string]any{"id": id}); err != nil {
+			out["killError"] = err.Error()
+		}
 	}
 	m.post(func() {
-		m.term.sessions = nil
-		m.term.active = 0
+		m.term = TermPane{}
 		m.hideTool("term")
 		m.invalidate()
 	})
 	return out, nil
 }
 
-// waitTermTab waits for the tab after the one on ch to get its PTY and returns
-// the tab count; a timeout records the count as it is.
-func (m *Model) waitTermTab(ctx context.Context, ch uint32) int {
+// waitTermTabs waits until the pane has want tabs and every tab besides the one
+// on skipCh has its PTY; a timeout reports what it saw.
+func (m *Model) waitTermTabs(ctx context.Context, skipCh uint32, want int) (int, bool) {
 	deadline := time.Now().Add(30 * time.Second)
 	var tabs int
+	var ready bool
 	for {
-		var ready bool
 		m.post(func() {
-			tabs = len(m.term.sessions)
-			for i := range m.term.sessions {
-				s := &m.term.sessions[i]
-				if s.channel != ch && s.id != 0 {
-					ready = true
+			tabs = m.term.total()
+			ready = tabs >= want
+			for gi := range m.term.groups {
+				for ti := range m.term.groups[gi].tabs {
+					s := &m.term.groups[gi].tabs[ti]
+					if s.channel != skipCh && s.id == 0 {
+						ready = false
+					}
 				}
 			}
 		})
-		if tabs > 1 && ready {
-			return tabs
-		}
-		if time.Now().After(deadline) {
-			return tabs
+		if ready || time.Now().After(deadline) {
+			return tabs, ready
 		}
 		select {
 		case <-ctx.Done():
-			return tabs
+			return tabs, ready
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+}
+
+// waitTermSplit waits for the group holding ch to exist with its PTY.
+func (m *Model) waitTermSplit(ctx context.Context, ch uint32) (int, bool) {
+	deadline := time.Now().Add(30 * time.Second)
+	var groups int
+	var ready bool
+	for {
+		m.post(func() {
+			groups = len(m.term.groups)
+			ready = ch != 0 && m.term.split != "" && m.term.byChannel(ch) != nil
+			if s := m.term.byChannel(ch); s == nil || s.id == 0 {
+				ready = false
+			}
+		})
+		if ready || time.Now().After(deadline) {
+			return groups, ready
+		}
+		select {
+		case <-ctx.Done():
+			return groups, ready
 		case <-time.After(100 * time.Millisecond):
 		}
 	}
