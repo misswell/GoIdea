@@ -41,6 +41,16 @@ func (m *Model) SetThemePref(theme string) {
 	m.invalidate()
 }
 
+// ToggleTheme switches the window between the dark and the light theme, as
+// OpenIDEA's Toggle Light/Dark Theme action does.
+func (m *Model) ToggleTheme() {
+	if m.prefs.Theme == "light" {
+		m.SetThemePref("dark")
+	} else {
+		m.SetThemePref("light")
+	}
+}
+
 // stepFont moves the editor font size by delta, clamped to the readable
 // range, and applies it to the open editors.
 func (m *Model) stepFont(delta int) {

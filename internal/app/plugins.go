@@ -91,6 +91,14 @@ const (
 	pluginIndexFailed
 )
 
+// openPlugins shows Welcome's Plugins page, where the plugin registry lists,
+// installs and removes plugins, as OpenIDEA's Settings › Plugins does.
+func (m *Model) openPlugins() {
+	m.showingWelcome = true
+	m.welcomePage = "plugins"
+	m.invalidate()
+}
+
 // pluginPage is the state of Welcome › Plugins: the registry over the
 // user's plugin folder, and what the page is showing of it.
 type pluginPage struct {

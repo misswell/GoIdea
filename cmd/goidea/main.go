@@ -83,7 +83,7 @@ func main() {
 			Content:   content,
 		})
 		model.Attach(win)
-		mygo.App.SetMenu(menu(model))
+		mygo.App.SetMenu(model.MainMenu())
 		model.Start()
 		// Benchmark mode owns the window: the smoke driver would quit the app
 		// before an idle sample could be taken.
@@ -101,84 +101,6 @@ func main() {
 	if err := mygo.App.Run(); err != nil {
 		log.Fatal(err)
 	}
-}
-
-// menu is the app's menu bar.
-func menu(m *app.Model) *mygo.Menu {
-	return mygo.NewMenu([]*mygo.MenuItem{
-		{Role: mygo.RoleAppMenu},
-		{Label: "文件", Submenu: []*mygo.MenuItem{
-			{Label: "打开项目…", Accelerator: "CmdOrCtrl+O", Click: func(*mygo.MenuItem, *mygo.Window) { m.ChooseProject() }},
-			{Label: "快速打开…", Accelerator: "CmdOrCtrl+P", Click: func(*mygo.MenuItem, *mygo.Window) { m.OpenQuickFiles() }},
-			{Label: "命令面板…", Accelerator: "CmdOrCtrl+Shift+P", Click: func(*mygo.MenuItem, *mygo.Window) { m.OpenCommands() }},
-			{Label: "保存", Accelerator: "CmdOrCtrl+S", Click: func(*mygo.MenuItem, *mygo.Window) { m.SaveActive() }},
-			{Label: "与 HEAD 比较", Accelerator: "CmdOrCtrl+Shift+D", Click: func(*mygo.MenuItem, *mygo.Window) { m.CompareActive() }},
-			{Label: "在项目中查找", Accelerator: "CmdOrCtrl+Shift+F", Click: func(*mygo.MenuItem, *mygo.Window) { m.ShowSearch() }},
-			mygo.Separator(),
-			{Label: "设置…", Accelerator: "CmdOrCtrl+,", Click: func(*mygo.MenuItem, *mygo.Window) { m.OpenSettings() }},
-			mygo.Separator(),
-			{Label: "退出 GoIDEA", Accelerator: "CmdOrCtrl+Q", Click: func(*mygo.MenuItem, *mygo.Window) { m.Quit() }},
-		}},
-		{Role: mygo.RoleEditMenu},
-		{Label: "代码", Submenu: []*mygo.MenuItem{
-			{Label: "意图操作…", Accelerator: "Alt+Enter", Click: func(*mygo.MenuItem, *mygo.Window) { m.ShowIntentions() }},
-			{Label: "转到符号…", Accelerator: "CmdOrCtrl+Shift+O", Click: func(*mygo.MenuItem, *mygo.Window) { m.OpenSymbols() }},
-			{Label: "切换书签", Accelerator: "F3", Click: func(*mygo.MenuItem, *mygo.Window) { m.ToggleBookmark() }},
-			{Label: "切换文件书签", Click: func(*mygo.MenuItem, *mygo.Window) { m.ToggleFileBookmark() }},
-			{Label: "新建书签列表…", Click: func(*mygo.MenuItem, *mygo.Window) { m.OpenNewBookmarkList() }},
-			{Label: "显示书签", Accelerator: "CmdOrCtrl+F3", Click: func(*mygo.MenuItem, *mygo.Window) { m.ShowBookmarks() }},
-			{Label: "下一个书签", Click: func(*mygo.MenuItem, *mygo.Window) { m.NextBookmark() }},
-			{Label: "上一个书签", Click: func(*mygo.MenuItem, *mygo.Window) { m.PrevBookmark() }},
-			{Label: "添加助记符书签…", Accelerator: "Alt+F3", Click: func(*mygo.MenuItem, *mygo.Window) { m.OpenBookmarkMnemonics() }},
-			{Label: "查找用法", Accelerator: "Alt+F7", Click: func(*mygo.MenuItem, *mygo.Window) { m.FindUsages() }},
-			{Label: "重命名符号", Accelerator: "Shift+F6", Click: func(*mygo.MenuItem, *mygo.Window) { m.RenameActive() }},
-			mygo.Separator(),
-			{Label: "撤销重构", Accelerator: "CmdOrCtrl+Alt+Z", Click: func(*mygo.MenuItem, *mygo.Window) { m.UndoRefactor() }},
-			{Label: "重做重构", Accelerator: "CmdOrCtrl+Alt+Shift+Z", Click: func(*mygo.MenuItem, *mygo.Window) { m.RedoRefactor() }},
-			mygo.Separator(),
-			{Label: "格式化代码", Accelerator: "Alt+CmdOrCtrl+L", Click: func(*mygo.MenuItem, *mygo.Window) { m.FormatActive() }},
-		}},
-		{Label: "运行", Submenu: []*mygo.MenuItem{
-			{Label: "运行", Accelerator: "F5", Click: func(*mygo.MenuItem, *mygo.Window) { m.Run() }},
-			{Label: "调试", Accelerator: "F9", Click: func(*mygo.MenuItem, *mygo.Window) { m.Debug() }},
-			{Label: "停止", Accelerator: "Shift+F5", Click: func(*mygo.MenuItem, *mygo.Window) { m.StopRun(); m.StopDebug() }},
-			mygo.Separator(),
-			{Label: "切换断点", Accelerator: "CmdOrCtrl+F8", Click: func(*mygo.MenuItem, *mygo.Window) { m.ToggleBreakpoint() }},
-			{Label: "步过", Accelerator: "F8", Click: func(*mygo.MenuItem, *mygo.Window) { m.StepOver() }},
-			{Label: "步入", Accelerator: "F7", Click: func(*mygo.MenuItem, *mygo.Window) { m.StepInto() }},
-			{Label: "步出", Accelerator: "Shift+F8", Click: func(*mygo.MenuItem, *mygo.Window) { m.StepOut() }},
-			{Label: "继续", Click: func(*mygo.MenuItem, *mygo.Window) { m.DebugContinue() }},
-			{Label: "暂停", Click: func(*mygo.MenuItem, *mygo.Window) { m.DebugPause() }},
-			mygo.Separator(),
-			{Label: "信任此项目并启用运行", Click: func(*mygo.MenuItem, *mygo.Window) { m.TrustProject() }},
-		}},
-		{Label: "视图", Submenu: []*mygo.MenuItem{
-			{Label: "显示项目", Accelerator: "CmdOrCtrl+1", Click: func(*mygo.MenuItem, *mygo.Window) { m.ShowProject() }},
-			{Label: "显示书签", Accelerator: "CmdOrCtrl+2", Click: func(*mygo.MenuItem, *mygo.Window) { m.ToggleBookmarksWindow() }},
-			{Label: "在项目中查找", Accelerator: "CmdOrCtrl+3", Click: func(*mygo.MenuItem, *mygo.Window) { m.ShowSearch() }},
-			{Label: "显示运行窗口", Accelerator: "CmdOrCtrl+4", Click: func(*mygo.MenuItem, *mygo.Window) { m.ShowRun() }},
-			{Label: "显示调试窗口", Accelerator: "CmdOrCtrl+5", Click: func(*mygo.MenuItem, *mygo.Window) { m.ShowDebug() }},
-			{Label: "显示问题", Accelerator: "CmdOrCtrl+6", Click: func(*mygo.MenuItem, *mygo.Window) { m.ShowProblems() }},
-			{Label: "显示结构", Accelerator: "CmdOrCtrl+7", Click: func(*mygo.MenuItem, *mygo.Window) { m.ShowStructure() }},
-			{Label: "下一个问题", Accelerator: "CmdOrCtrl+Alt+Down", Click: func(*mygo.MenuItem, *mygo.Window) { m.StepProblem(1) }},
-			{Label: "上一个问题", Accelerator: "CmdOrCtrl+Alt+Up", Click: func(*mygo.MenuItem, *mygo.Window) { m.StepProblem(-1) }},
-			mygo.Separator(),
-			{Label: "隐藏当前工具窗口", Accelerator: "Shift+Escape", Click: func(*mygo.MenuItem, *mygo.Window) { m.HideActiveToolWindow() }},
-			{Label: "隐藏全部工具窗口", Accelerator: "CmdOrCtrl+Shift+F12", Click: func(*mygo.MenuItem, *mygo.Window) { m.HideAllToolWindows() }},
-			{Label: "跳转到上一个工具窗口", Accelerator: "F12", Click: func(*mygo.MenuItem, *mygo.Window) { m.JumpToLastToolWindow() }},
-			{Label: "最大化工具窗口", Accelerator: "CmdOrCtrl+Shift+'", Click: func(*mygo.MenuItem, *mygo.Window) { m.ToggleMaximizeToolWindow() }},
-			{Label: "向上拉伸工具窗口", Accelerator: "CmdOrCtrl+Alt+Up", Click: func(*mygo.MenuItem, *mygo.Window) { m.ResizeBottomToolWindow("up") }},
-			{Label: "向下拉伸工具窗口", Accelerator: "CmdOrCtrl+Alt+Down", Click: func(*mygo.MenuItem, *mygo.Window) { m.ResizeBottomToolWindow("down") }},
-			{Label: "移动到底部右侧", Click: func(*mygo.MenuItem, *mygo.Window) { m.MoveActiveToolWindowToSplit() }},
-			{Label: "移动到底部", Click: func(*mygo.MenuItem, *mygo.Window) { m.MoveActiveToolWindowToBottom() }},
-			mygo.Separator(),
-			{Label: "提交窗口", Accelerator: "CmdOrCtrl+0", Click: func(*mygo.MenuItem, *mygo.Window) { m.OpenCommit() }},
-			{Label: "显示 Git 更改", Accelerator: "CmdOrCtrl+9", Click: func(*mygo.MenuItem, *mygo.Window) { m.ShowVCS() }},
-			{Label: "终端", Accelerator: "Alt+F12", Click: func(*mygo.MenuItem, *mygo.Window) { m.ShowTerm() }},
-			{Label: "数据库…", Click: func(*mygo.MenuItem, *mygo.Window) { m.OpenDatabase() }},
-		}},
-		{Role: mygo.RoleWindowMenu},
-	})
 }
 
 // benchIdle is GOIDEA_BENCH_IDLE: keep the hidden window open for that many

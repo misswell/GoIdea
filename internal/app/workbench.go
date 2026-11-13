@@ -36,6 +36,8 @@ func (m *Model) titleBar(c *ui.Context, p *ui.Theme) {
 		m.projectWidget(c, p, oi)
 		if label := m.branchLabel(); label != "" {
 			m.branchWidget(c, p, oi, label)
+		} else {
+			m.vcsFallbackWidget(c, p, oi)
 		}
 		ui.Spacer(c)
 		m.titleTool(c, p, oi, "search", "Search Everywhere", iconWelcomeSearch, func() {
@@ -96,10 +98,10 @@ func (m *Model) projectWidget(c *ui.Context, p *ui.Theme, oi oiColors) {
 	})
 	w.Menu(func(menu *ui.Menu) {
 		if menu.Item("Open…").Chosen() {
-			m.chooseProject()
+			m.RunCommand("project.open")
 		}
-		if menu.Item("Recent Projects").Chosen() {
-			m.showWelcome()
+		if menu.Item("Manage Projects…").Chosen() {
+			m.RunCommand("welcome.manageProjects")
 		}
 	})
 }
@@ -121,6 +123,30 @@ func (m *Model) branchWidget(c *ui.Context, p *ui.Theme, oi oiColors, label stri
 	if w.Clicked() {
 		m.ToggleBranches()
 	}
+}
+
+// vcsFallbackWidget is "Version Control ▾", the title bar's Git menu while the
+// project has no repository, as OpenIDEA shows while its VCS widget is absent.
+func (m *Model) vcsFallbackWidget(c *ui.Context, p *ui.Theme, oi oiColors) {
+	w := ui.ButtonBase(c.Key("title:vcs")).Height(30).Padding(0, 8).Gap(4).
+		Radius(6).AlignItems(ui.Center).Cursor(ui.CursorPointer)
+	if w.Hovered() {
+		w.Background(oi.toolbarHover)
+	}
+	w.Tooltip("Version Control")
+	w.Children(func() {
+		ui.Text(c, "Version Control").FontSize(13).TextColor(oi.textStrong).SingleLine()
+		ui.Icon(c, iconChevronDown).Size(12, 12).TextColor(oi.textSubtle)
+	})
+	w.Menu(func(menu *ui.Menu) {
+		if menu.Item("Clone…").Chosen() {
+			m.showWelcome()
+			m.openCloneDialog()
+		}
+		if menu.Item("Show Git Log").Chosen() {
+			m.RunCommand("vcs.log")
+		}
+	})
 }
 
 // titleTool is one 30px icon control on the right of the title bar.
@@ -151,14 +177,29 @@ func (m *Model) gearButton(c *ui.Context, p *ui.Theme, oi oiColors) {
 		ui.Icon(c, iconWelcomeGear).Size(20, 20).TextColor(oi.textSecondary)
 	})
 	b.Menu(func(menu *ui.Menu) {
-		if menu.Item("Command Palette…").Chosen() {
-			m.OpenCommands()
-		}
-		menu.Separator()
-		if menu.Item("Settings…").Chosen() {
-			m.OpenSettings()
-		}
+		addMenuEntries(menu, m, gearGroup())
 	})
+}
+
+// addMenuEntries fills a MyGo menu with entries of the shared menu model, so
+// the gear, the project widget and the menu bar run the same actions.
+func addMenuEntries(menu *ui.Menu, m *Model, entries []menuEntry) {
+	for _, e := range entries {
+		switch {
+		case e.sep:
+			menu.Separator()
+		case len(e.sub) > 0:
+			menu.Submenu(e.label, func(sub *ui.Menu) { addMenuEntries(sub, m, e.sub) })
+		default:
+			it := menu.Item(e.label)
+			if e.check != nil {
+				it.Checked(e.check(m))
+			}
+			if it.Chosen() && e.command != "" {
+				m.RunCommand(e.command)
+			}
+		}
+	}
 }
 
 // workbench is the Islands frame: title bar, the stripe and islands of the

@@ -24,7 +24,11 @@ type appCommand struct {
 // platform roles while this is where actions are discovered.
 func commands() []appCommand {
 	return []appCommand{
+		{"project.new", "新建项目…", "文件", "Cmd+N", "new project create", func(m *Model) { m.NewProject() }},
 		{"project.open", "打开项目…", "文件", "Cmd+O", "open project folder", func(m *Model) { m.ChooseProject() }},
+		{"welcome.manageProjects", "管理项目…", "文件", "", "manage projects welcome recent", func(m *Model) { m.showWelcome() }},
+		{"app.commandPalette", "搜索所有位置", "文件", "Cmd+Shift+A", "search everywhere command palette find action", func(m *Model) { m.OpenCommands() }},
+		{"app.plugins", "插件…", "文件", "", "plugins settings marketplace", func(m *Model) { m.openPlugins() }},
 		{"file.quickOpen", "快速打开…", "文件", "Cmd+P", "quick open file goto recent", func(m *Model) { m.OpenQuickFiles() }},
 		{"file.save", "保存", "文件", "Cmd+S", "save write", func(m *Model) { m.SaveActive() }},
 		{"file.close", "关闭标签页", "文件", "Cmd+W", "close tab", func(m *Model) { m.closeTab(m.active) }},
@@ -34,9 +38,11 @@ func commands() []appCommand {
 		{"editor.closeAllPinned", "关闭未固定的标签页", "文件", "", "close all but pinned tabs", func(m *Model) { m.CloseAllTabs(true) }},
 		{"vcs.show", "显示 Git 更改", "Git", "Cmd+9", "git vcs changes status", func(m *Model) { m.ShowVCS() }},
 		{"vcs.log", "显示 Git 日志", "Git", "", "git vcs log history commits", func(m *Model) { m.ShowLog() }},
+		{"vcs.branches", "分支…", "Git", "", "git vcs branches checkout", func(m *Model) { m.ToggleBranches() }},
 		{"vcs.commit", "提交…", "Git", "Cmd+K", "git commit message stage", func(m *Model) { m.OpenCommit() }},
 		{"vcs.diff", "与 HEAD 比较", "Git", "Cmd+Shift+D", "git diff compare head", func(m *Model) { m.CompareActive() }},
 		{"search.project", "在项目中查找", "搜索", "Cmd+Shift+F", "search find in project", func(m *Model) { m.ShowSearch() }},
+		{"view.find", "查找", "搜索", "Cmd+3", "find search tool window", func(m *Model) { m.ShowSearch() }},
 		{"project.findInFolder", "在文件夹中查找…", "搜索", "", "find in folder search directory scope selected", func(m *Model) { m.FindInFolderSelected() }},
 		{"view.project", "显示项目", "视图", "Cmd+1", "project tree files sidebar", func(m *Model) { m.ShowProject() }},
 		{"project.expandAll", "展开全部", "导航", "Cmd+=", "expand all project tree folders", func(m *Model) { m.ExpandProjectAll() }},
@@ -77,6 +83,7 @@ func commands() []appCommand {
 		{"code.intentions", "意图操作…", "代码", "Alt+Enter", "intention action quickfix", func(m *Model) { m.ShowIntentions() }},
 		{"code.symbols", "转到符号…", "代码", "Cmd+Shift+O", "go to symbol navigate", func(m *Model) { m.OpenSymbols() }},
 		{"code.usages", "查找用法", "代码", "Alt+F7", "find usages references", func(m *Model) { m.FindUsages() }},
+		{"code.showUsages", "显示用法", "代码", "", "show usages results window", func(m *Model) { m.showUsages() }},
 		{"bookmarks.toggle", "切换书签", "导航", "F3", "bookmark toggle line mark", func(m *Model) { m.ToggleBookmark() }},
 		{"bookmarks.show", "显示书签", "导航", "Cmd+F3", "bookmarks show popup list", func(m *Model) { m.ShowBookmarks() }},
 		{"bookmarks.next", "下一个书签", "导航", "", "next bookmark navigate", func(m *Model) { m.NextBookmark() }},
@@ -99,6 +106,8 @@ func commands() []appCommand {
 		{"run.continue", "继续", "运行", "", "continue resume", func(m *Model) { m.DebugContinue() }},
 		{"run.pause", "暂停", "运行", "", "pause suspend", func(m *Model) { m.DebugPause() }},
 		{"run.trust", "信任此项目并启用运行", "运行", "", "trust project", func(m *Model) { m.TrustProject() }},
+		{"run.configNext", "下一个运行配置", "运行", "", "next run configuration", func(m *Model) { m.CycleRunConfig(1) }},
+		{"run.configPrev", "上一个运行配置", "运行", "", "previous run configuration", func(m *Model) { m.CycleRunConfig(-1) }},
 		{"build.buildProject", "构建项目", "构建", "Cmd+F9", "build project compile make mvn gradle cmake", func(m *Model) { m.BuildProject() }},
 		{"build.buildModule", "构建模块", "构建", "Cmd+Shift+F9", "build module compile file", func(m *Model) { m.BuildModule() }},
 		{"build.rebuildProject", "重新构建项目", "构建", "", "rebuild clean build", func(m *Model) { m.RebuildProject() }},
@@ -107,7 +116,33 @@ func commands() []appCommand {
 		{"view.build", "显示构建窗口", "视图", "", "build output console", func(m *Model) { m.ShowBuild() }},
 		{"java.tools", "安装 Java 语言服务与调试器", "运行", "", "java jdtls language server debugger install toolchain", func(m *Model) { m.InstallJavaToolchain() }},
 		{"app.settings", "设置…", "文件", "Cmd+,", "settings preferences theme font appearance", func(m *Model) { m.OpenSettings() }},
+		{"view.toggleTheme", "切换深色/浅色主题", "视图", "", "theme dark light appearance toggle", func(m *Model) { m.ToggleTheme() }},
+		{"app.themeLight", "浅色", "视图", "", "theme light appearance", func(m *Model) { m.SetThemePref("light") }},
+		{"app.themeDark", "深色", "视图", "", "theme dark appearance", func(m *Model) { m.SetThemePref("dark") }},
+		{"app.themeSystem", "跟随系统设置", "视图", "", "theme system appearance", func(m *Model) { m.SetThemePref("system") }},
 	}
+}
+
+// Command returns the registry's command with id, the one entry the menu, the
+// title bar and the palette run a feature through.
+func Command(id string) (appCommand, bool) {
+	for _, cmd := range commands() {
+		if cmd.id == id {
+			return cmd, true
+		}
+	}
+	return appCommand{}, false
+}
+
+// RunCommand runs the registry command with id and reports whether the
+// registry knew it.
+func (m *Model) RunCommand(id string) bool {
+	cmd, ok := Command(id)
+	if !ok {
+		return false
+	}
+	cmd.run(m)
+	return true
 }
 
 // commandPicker is the open command palette: the query and the commands it

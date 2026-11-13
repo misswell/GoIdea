@@ -58,6 +58,9 @@ needs a `## <version>` section here, or its build fails.
 - **终端**工具窗口可以开多个标签，用 `Cmd+T` 或**新建**打开，每个标签是独立的登录 shell。
 - 终端标签上的 **×** 结束该标签的 shell；关掉最后一个标签时工具窗口收起。
 - 终端可**拆分**成并排或上下的两个窗格，各自带标签和 shell，**合并**把两个窗格收回一个。
+- 菜单栏按 OpenIDEA 重排为 **File**、**Edit**、**View**、**Navigate**、**Code**、**Refactor**、**Build**、**Run**、**Git**、**Tools**、**Window**。
+- 标题栏齿轮菜单改为 OpenIDEA 的 **Settings**、**Plugins**、**Theme** 子菜单和 **Search Everywhere…**。
+- 没有 Git 仓库的项目在标题栏显示 **Version Control** 菜单，可**Clone…** 或打开 **Show Git Log**。
 - 终端里按 **Cmd+F** 打开查找栏，匹配的行会标出，**上一个**/**下一个** 在匹配间循环并滚到该行。
 - 终端输出会自动跟随末尾，向上滚动后停在你查看的位置，回到末尾又继续跟随。
 - 提交窗口先保存打开的文件，再按 OpenIDEA 的规则把选中的改动加入暂存区后提交。
