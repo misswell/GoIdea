@@ -13,9 +13,10 @@ import (
 	"mayoi/internal/openidea"
 )
 
-// SearchPane is the sidebar's project search: the query, the files the backend
-// streamed back, and whether the search is still running.
+// SearchPane is the Find window's project search: the query, the files the
+// backend streamed back, and whether the search is still running.
 type SearchPane struct {
+	visible bool
 	query   string
 	channel uint32
 	request uint32
@@ -37,10 +38,11 @@ const (
 
 func (m *Model) resetSearch() { m.search = SearchPane{} }
 
-// ShowSearch switches the sidebar to search and focuses nothing else: Enter in
-// the query field runs it.
+// ShowSearch opens OpenIDEA's Find window in the bottom side: Enter in the
+// query field runs it.
 func (m *Model) ShowSearch() {
-	m.sideMode = "search"
+	m.search.visible = true
+	m.occupyBottom("find")
 	m.invalidate()
 }
 
@@ -178,6 +180,7 @@ func (m *Model) SmokeSearch(ctx context.Context) (map[string]any, error) {
 	}
 	m.post(func() {
 		m.search.query = "class "
+		m.ShowSearch()
 		m.RunSearch()
 	})
 	deadline := time.Now().Add(90 * time.Second)

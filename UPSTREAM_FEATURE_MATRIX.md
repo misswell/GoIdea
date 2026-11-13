@@ -24,7 +24,7 @@ reimplementing it. A row is `INTEGRATED` only when the GoIDEA product
 | Syntax highlighting | INTEGRATED | mygo editor's language for the file, set per document in `internal/docbridge` (Java, Kotlin, XML, YAML…) |
 | Quick-open files (Cmd+P) | INTEGRATED | `internal/app/quickopen.go` |
 | Command palette | INTEGRATED | `internal/app/commands.go` |
-| Project-wide search UI | INTEGRATED | `internal/app/search.go` |
+| Project-wide search UI | INTEGRATED | `internal/app/search.go`; OpenIDEA's Find window, bottom-anchored |
 | Settings sheet and stored preferences | INTEGRATED | `internal/app/settings_ui.go` |
 | mygo bundling (`.app`, dmg, signing) | INTEGRATED | `mygo.json`, `scripts/release.sh` |
 | Workspace file tree: lazy reads, live disk updates | INTEGRATED | `internal/workspace` under `internal/app/tree.go`; tests in `tree_test.go` |
@@ -59,7 +59,7 @@ reimplementing it. A row is `INTEGRATED` only when the GoIDEA product
 | Tool window maximize (Cmd+Shift+'), resize (Ctrl+Alt+arrows) | INTEGRATED | `internal/app/toolwindow.go`; one height per bottom slot, editor restored on navigation; `internal/app/maximize_test.go` |
 | Bottom split area, Move to Bottom Right | INTEGRATED | `internal/app/toolwindow.go`; each area shows one window at half the width; `internal/app/split_test.go` |
 | Intentions and quick fixes | INTEGRATED | Alt+Enter sheet |
-| Rename, usages, symbols, format | INTEGRATED | code menu and pickers |
+| Rename, usages, symbols, format | INTEGRATED | code menu and pickers; Find Usages is OpenIDEA's bottom window, `internal/app/usages.go` |
 | Find/replace in project | INTEGRATED | search view |
 | Maven/Gradle build and run | INTEGRATED | run window, smoke: `GOIDEA_SMOKE_RUN` |
 | Debugger (DAP) | INTEGRATED | breakpoints, stepping, variables, watch |

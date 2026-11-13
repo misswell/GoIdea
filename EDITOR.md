@@ -97,6 +97,11 @@ do nothing, as `resizeDelta` returns 0 for them. The slot keeps one height for
 whichever window it shows, as OpenIDEA keeps one size per side
 (`bottomSize` in `toolwindow.go`).
 
+Find (`Cmd+3`) and Find Usages (`Alt+F7`) are bottom windows too, as OpenIDEA
+anchors them, so their results no longer take the sidebar
+(`searchPanel`, `usagesPanel` in `view.go`). The sidebar keeps the windows
+OpenIDEA anchors on the left: Project, Commit's changes and Structure.
+
 ## Structure
 
 `Cmd+7` opens OpenIDEA's Structure window in the sidebar: the active file's
@@ -118,6 +123,7 @@ does not ask the server again.
 | Structure tool window (Cmd+7) | `internal/app/structure.go` |
 | Tool window maximize and resize | `internal/app/toolwindow.go`, `maximize_test.go` |
 | Bottom split area, Move to Bottom Right | `internal/app/toolwindow.go`, `split_test.go` |
+| Find and Find Usages anchored at the bottom | `internal/app/search.go`, `usages.go`, `anchor_test.go` |
 | Completion, hover, definition popups | MyGo callbacks → `internal/app/lsp.go` |
 | Intentions / quick fixes (Alt+Enter) | `internal/app/intents.go` |
 | Rename (Shift+F6) with undo | `internal/app/rename.go` |

@@ -83,7 +83,7 @@ func (m *Model) sidebar(c *ui.Context, p *ui.Theme) {
 			ui.Row(c).Height(30).Padding(0, 6).Gap(4).AlignItems(ui.Center).
 				BorderWidth(0, 0, 1, 0).BorderColor(p.Border).
 				Children(func() {
-					m.sidebarTab(c, p, "项目", m.sideMode != "vcs" && m.sideMode != "search" && m.sideMode != "usages" && m.sideMode != "structure", func() {
+					m.sidebarTab(c, p, "项目", m.sideMode != "vcs" && m.sideMode != "structure", func() {
 						m.structure.visible = false
 						m.sideMode = ""
 						m.invalidate()
@@ -93,22 +93,6 @@ func (m *Model) sidebar(c *ui.Context, p *ui.Theme) {
 						changes = fmt.Sprintf("更改 %d", len(m.vcs.files))
 					}
 					m.sidebarTab(c, p, changes, m.sideMode == "vcs", m.ShowVCS)
-					results := "搜索"
-					if m.search.matches > 0 {
-						results = fmt.Sprintf("搜索 %d", m.search.matches)
-					}
-					m.sidebarTab(c, p, results, m.sideMode == "search", m.ShowSearch)
-					if m.usages.symbol != "" {
-						label := "用法"
-						if n := len(m.usages.locs); n > 0 {
-							label = fmt.Sprintf("用法 %d", n)
-						}
-						m.sidebarTab(c, p, label, m.sideMode == "usages", func() {
-							m.structure.visible = false
-							m.sideMode = "usages"
-							m.invalidate()
-						})
-					}
 					m.sidebarTab(c, p, "结构", m.sideMode == "structure", m.ToggleStructure)
 					ui.Spacer(c)
 					if m.sideMode == "vcs" {
@@ -122,14 +106,6 @@ func (m *Model) sidebar(c *ui.Context, p *ui.Theme) {
 			ui.Scroll(c).Grow(1).Children(func() {
 				if m.sideMode == "vcs" {
 					m.vcsRows(c, p)
-					return
-				}
-				if m.sideMode == "search" {
-					m.searchRows(c, p)
-					return
-				}
-				if m.sideMode == "usages" {
-					m.usagesRows(c, p)
 					return
 				}
 				if m.sideMode == "structure" {
@@ -944,7 +920,27 @@ func (m *Model) toolPanel(c *ui.Context, p *ui.Theme, name string) {
 		m.logPanel(c, p)
 	case "problems":
 		m.problemsPanel(c, p)
+	case "find":
+		m.searchPanel(c, p)
+	case "usages":
+		m.usagesPanel(c, p)
 	}
+}
+
+func (m *Model) searchPanel(c *ui.Context, p *ui.Theme) {
+	col := ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Background(p.Surface).
+		BorderWidth(1, 0, 0, 0).BorderColor(p.Border)
+	col.Children(func() {
+		ui.Scroll(c).Grow(1).Children(func() { m.searchRows(c, p) })
+	})
+}
+
+func (m *Model) usagesPanel(c *ui.Context, p *ui.Theme) {
+	col := ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Background(p.Surface).
+		BorderWidth(1, 0, 0, 0).BorderColor(p.Border)
+	col.Children(func() {
+		ui.Scroll(c).Grow(1).Children(func() { m.usagesRows(c, p) })
+	})
 }
 
 func (m *Model) statusBar(c *ui.Context, p *ui.Theme) {

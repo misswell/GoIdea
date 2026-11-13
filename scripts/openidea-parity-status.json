@@ -11,7 +11,7 @@
     },
     "toolwindow:find": {
       "status": "integrated",
-      "evidence": "base.search.done, base.search.files, base.search.matches"
+      "evidence": "base.search.done, base.search.files, base.search.matches; internal/app/search.go searchPanel; bottom anchor in internal/app/anchor_test.go"
     },
     "toolwindow:run": {
       "status": "integrated",
@@ -38,8 +38,8 @@
       "evidence": "internal/app/problems.go problemsPanel; lsp.problems.errors, lsp.problems.rows, lsp.problems.visible; internal/app/problems_test.go"
     },
     "toolwindow:usages": {
-      "status": "partial",
-      "evidence": "internal/app/usages.go usagesRows; lsp.references.count, lsp.references.done"
+      "status": "integrated",
+      "evidence": "internal/app/usages.go showUsages and usagesPanel; lsp.references.count, lsp.references.done; bottom anchor in internal/app/anchor_test.go"
     },
     "toolwindow:terminal": {
       "status": "partial",

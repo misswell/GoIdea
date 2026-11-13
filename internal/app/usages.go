@@ -22,9 +22,10 @@ const (
 	referenceRetryDelay = 300 * time.Millisecond
 )
 
-// UsagesPane is the sidebar's Find Usages result: the symbol looked up, every
-// place the backend says it is used, and whether the search is still streaming.
+// UsagesPane is Find Usages: the symbol looked up, every place the backend says
+// it is used, and whether the search is still streaming.
 type UsagesPane struct {
+	visible bool
 	symbol  string
 	channel uint32
 	running bool
@@ -42,9 +43,17 @@ func (m *Model) resetUsages() {
 	m.usages = UsagesPane{}
 }
 
+// showUsages opens the Find Usages window in the bottom side.
+func (m *Model) showUsages() {
+	m.usages.visible = true
+	m.occupyBottom("usages")
+	m.invalidate()
+}
+
 // FindUsages looks up every use of the symbol at the caret and shows the
-// result in the sidebar. The backend streams partial answers, so the list
-// fills while JDT is still searching.
+// result in OpenIDEA's Find Usages window, which sits in the bottom side. The
+// backend streams partial answers, so the list fills while JDT is still
+// searching.
 func (m *Model) FindUsages() {
 	t := m.tab()
 	if t == nil || !m.tabOpen(t) {
@@ -55,7 +64,7 @@ func (m *Model) FindUsages() {
 	m.cancelUsages()
 	ch := m.nextChannel()
 	m.usages = UsagesPane{symbol: symbol, channel: ch, running: true}
-	m.sideMode = "usages"
+	m.showUsages()
 	m.status = "正在查找用法…"
 	m.invalidate()
 	docID := t.doc.ID()
