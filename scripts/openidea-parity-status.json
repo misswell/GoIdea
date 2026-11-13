@@ -501,6 +501,18 @@
       "status": "partial",
       "evidence": "internal/app/tabs.go closedTab/rememberClosed/nextClosed/insertTabAt (maxClosedTabs 50, newest poppable last, open files skipped) and ReopenClosedTab; internal/app/app.go openWith openSpec at/pinned, removeTab records, removeTabNow skips the trimmed preview; internal/app/commands.go Reopen Closed Tab with no default key, as OpenIDEA's IntelliJ macOS keymap leaves Shift+Cmd+T to Go to Test; internal/app/tabs_test.go TestClosedTabsKeepTheNewestAndReopenNewestFirst, TestInsertTabAtFollowsThePinnedGroup, TestTabForPathIgnoresTabsWithoutADocument. Undo history and caret of a reopened document are not restored"
     },
+    "action:editor.copyPath": {
+      "status": "partial",
+      "evidence": "internal/app/editor_menu.go editorMenu: Copy / Paste Special › Copy Path/Reference › Absolute Path copies the active editor's path through copyEditorText and reports it in the status bar, in OpenIDEA's context-menu order after MyGo's editing commands. internal/app/editor_menu_test.go. OpenIDEA also binds the action to a shortcut, while GoIDEA reaches it from the context menu only"
+    },
+    "action:editor.copyPathReference": {
+      "status": "partial",
+      "evidence": "internal/app/editor_menu.go editorMenu Copy / Paste Special › Copy Path/Reference submenu with Absolute Path, File Name, Path From Content Root and Path with line number over editorPathFlavours/projectRelative; internal/app/editor_menu_test.go. OpenIDEA opens a caret popup that also lists Reference, resolved through the language server; GoIDEA's submenu neither pops up at the caret nor offers the LSP reference row"
+    },
+    "action:editor.copyPathWithLineNumber": {
+      "status": "partial",
+      "evidence": "internal/app/editor_menu.go editorMenu Copy Path/Reference › Path with line number builds the project-relative path and the caret's line from editor.State.CursorPos; internal/app/editor_menu_test.go. There is no command-palette entry or shortcut for it"
+    },
     "action:code.commentLine": {
       "status": "integrated",
       "evidence": "internal/app/editor_keys.go intellijEditorBindings Cmd+/ and code.commentLine in internal/app/commands.go and the Code menu; internal/app/editor_keys_test.go"

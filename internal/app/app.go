@@ -895,6 +895,7 @@ func (m *Model) newTab(doc *docbridge.Document) *Tab {
 	t.state.OnCompletion = func(req editor.CompletionRequest) { m.requestCompletion(t, req) }
 	t.state.OnHover = func(req editor.HoverRequest) { m.requestHover(t, req) }
 	t.state.OnDefinition = func(off int) { m.gotoDefinition(t, off) }
+	t.state.ContextMenu = func(menu *ui.Menu) { m.editorMenu(menu, t) }
 	m.showDiagnostics(t)
 	t.noteDisk()
 	m.markRecent(path)

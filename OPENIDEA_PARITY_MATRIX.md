@@ -27,7 +27,7 @@ new action, tool window, page or command appears automatically.
 | Kind | Items | Integrated | Partial | Engine | Blocked | Missing |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Feature folders | 43 | 0 | 12 | 0 | 0 | 31 |
-| Actions | 647 | 33 | 68 | 0 | 1 | 545 |
+| Actions | 647 | 33 | 71 | 0 | 1 | 542 |
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
 | Tool windows | 30 | 8 | 5 | 0 | 0 | 17 |
 | Overlays | 56 | 1 | 0 | 0 | 0 | 55 |
@@ -676,9 +676,9 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `editor.closeAllTabs` | Close All Tabs | `src/editor/core/actions.ts` | partial - internal/app/tabs.go CloseAllTabs with Close All Tabs and Close All but Pinned in the tab context menu; internal/app/tabs_test.go |
 | `editor.closeOtherTabs` | Close Other Tabs | `src/editor/core/actions.ts` | partial - internal/app/tabs.go CloseOtherTabs, CloseTabsToLeft/Right and CloseUnmodifiedTabs; internal/app/workbench.go tabMenu; internal/app/tabs_test.go |
 | `editor.closeTab` | Close Tab | `src/editor/core/actions.ts` | missing |
-| `editor.copyPath` | Absolute Path | `src/editor/core/actions.ts` | missing |
-| `editor.copyPathReference` | Copy Path/Reference… | `src/editor/core/actions.ts` | missing |
-| `editor.copyPathWithLineNumber` | Copy Path with Line Number | `src/editor/core/actions.ts` | missing |
+| `editor.copyPath` | Absolute Path | `src/editor/core/actions.ts` | partial - internal/app/editor_menu.go editorMenu: Copy / Paste Special › Copy Path/Reference › Absolute Path copies the active editor's path through copyEditorText and reports it in the status bar, in OpenIDEA's context-menu order after MyGo's editing commands. internal/app/editor_menu_test.go. OpenIDEA also binds the action to a shortcut, while GoIDEA reaches it from the context menu only |
+| `editor.copyPathReference` | Copy Path/Reference… | `src/editor/core/actions.ts` | partial - internal/app/editor_menu.go editorMenu Copy / Paste Special › Copy Path/Reference submenu with Absolute Path, File Name, Path From Content Root and Path with line number over editorPathFlavours/projectRelative; internal/app/editor_menu_test.go. OpenIDEA opens a caret popup that also lists Reference, resolved through the language server; GoIDEA's submenu neither pops up at the caret nor offers the LSP reference row |
+| `editor.copyPathWithLineNumber` | Copy Path with Line Number | `src/editor/core/actions.ts` | partial - internal/app/editor_menu.go editorMenu Copy Path/Reference › Path with line number builds the project-relative path and the caret's line from editor.State.CursorPos; internal/app/editor_menu_test.go. There is no command-palette entry or shortcut for it |
 | `editor.copyReference` | Copy Reference | `src/editor/core/actions.ts` | missing |
 | `editor.decreaseFontSize` | Decrease Font Size | `src/editor/core/actions.ts` | missing |
 | `editor.downloadSources` | Download Sources | `src/editor/core/librarySources.ts` | missing |
