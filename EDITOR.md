@@ -189,6 +189,8 @@ root, and runs `fs_compare_directories` over the two (`OpenDirCompare` and
 `ConfirmDirCompare` in `dircompare.go`). The sheet lists every entry as
 仅左侧, 仅右侧, 内容不同 or 相同 with a count per kind; equal files are hidden
 until **显示相同的文件**, and **另一个目录…** asks for another folder.
+Clicking a file row opens the two files in the compare view, a missing side
+counting as empty text (`ShowFileDiff` in `diff.go`).
 
 ## Features wired to the editor
 

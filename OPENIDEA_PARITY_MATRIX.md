@@ -27,7 +27,7 @@ new action, tool window, page or command appears automatically.
 | Kind | Items | Integrated | Partial | Engine | Blocked | Missing |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Feature folders | 43 | 0 | 10 | 0 | 0 | 33 |
-| Actions | 647 | 21 | 60 | 0 | 1 | 565 |
+| Actions | 647 | 22 | 59 | 0 | 1 | 565 |
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
 | Tool windows | 30 | 8 | 5 | 0 | 0 | 17 |
 | Overlays | 56 | 0 | 0 | 0 | 0 | 56 |
@@ -607,7 +607,7 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | --- | --- | --- | --- |
 | `diff.applyLeftSide` | Accept Left Side | `src/features/vcs/compare.tsx` | missing |
 | `diff.applyRightSide` | Accept Right Side | `src/features/vcs/compare.tsx` | missing |
-| `diff.compareDirectories` | Compare Directories | `src/features/vcs/compare.tsx` | partial - internal/app/dircompare.go OpenDirCompare and ConfirmDirCompare over fs_compare_directories with its onProgress channel; base.files.compareDirs; the per-file diff view is missing |
+| `diff.compareDirectories` | Compare Directories | `src/features/vcs/compare.tsx` | integrated - internal/app/dircompare.go OpenDirCompare and ConfirmDirCompare over fs_compare_directories with its onProgress channel, rows opening internal/app/diff.go ShowFileDiff; base.files.compareDirs |
 | `diff.compareFiles` | Compare Files | `src/features/vcs/compare.tsx` | missing |
 | `diff.compareTexts` | Compare Texts | `src/features/vcs/compare.tsx` | missing |
 | `diff.compareWith` | Compare With… | `src/features/vcs/compare.tsx` | missing |

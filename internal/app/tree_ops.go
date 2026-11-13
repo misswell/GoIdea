@@ -1018,6 +1018,33 @@ func (m *Model) SmokeFiles(ctx context.Context) (map[string]any, error) {
 	out["compareRight"] = counts["rightOnly"]
 	out["compareEqual"] = counts["equal"]
 	run(func() { m.closeDirCompare() })
+	var diffAdded, diffGone int
+	run(func() {
+		m.ShowFileDiff(filepath.Join(left, "a.txt"), filepath.Join(right, "a.txt"))
+	})
+	deadline = time.Now().Add(30 * time.Second)
+	for {
+		var loading bool
+		run(func() {
+			if d := m.diff; d != nil {
+				loading, diffAdded, diffGone = d.loading, d.added, d.gone
+			}
+		})
+		if !loading {
+			break
+		}
+		if time.Now().After(deadline) {
+			return out, errors.New("比较两个文件超时")
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+	out["compareDiffAdded"] = diffAdded
+	out["compareDiffGone"] = diffGone
+	run(func() { m.closeDiff() })
 	if err := os.RemoveAll(left); err != nil {
 		return out, err
 	}

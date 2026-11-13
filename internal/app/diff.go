@@ -29,6 +29,9 @@ type diffView struct {
 	rows  []textdiff.Row
 	added int
 	gone  int
+	// other is the right-hand file of a two-file compare; empty means the
+	// compare is against HEAD.
+	other string
 
 	loading bool
 	err     string
@@ -100,6 +103,67 @@ func (m *Model) ShowDiff(path string) {
 	}()
 }
 
+// ShowFileDiff opens the compare view on two files, a missing side counting as
+// empty text.
+func (m *Model) ShowFileDiff(left, right string) {
+	if left == "" && right == "" {
+		return
+	}
+	left, right = realPath(left), realPath(right)
+	m.diff = &diffView{open: true, path: left, other: right, loading: true}
+	m.invalidate()
+	go func() {
+		var err error
+		read := func(p string) string {
+			data, rerr := os.ReadFile(p)
+			if rerr != nil {
+				if !os.IsNotExist(rerr) {
+					err = rerr
+				}
+				return ""
+			}
+			return string(data)
+		}
+		old, cur := read(left), ""
+		if err == nil {
+			cur = read(right)
+		}
+		var rows []textdiff.Row
+		var added, gone int
+		if err == nil {
+			rows = textdiff.Compare(old, cur, diffContext)
+			for _, r := range rows {
+				switch r.Kind {
+				case textdiff.Add:
+					added++
+				case textdiff.Delete:
+					gone++
+				}
+			}
+		}
+		m.post(func() {
+			d := m.diff
+			if d == nil || d.path != left || d.other != right {
+				return
+			}
+			d.loading = false
+			if err != nil {
+				d.err = "读取文件失败：" + err.Error()
+				m.invalidate()
+				return
+			}
+			d.added, d.gone = added, gone
+			if added == 0 && gone == 0 {
+				d.message = "两个文件相同"
+				m.invalidate()
+				return
+			}
+			d.rows = rows
+			m.invalidate()
+		})
+	}()
+}
+
 // bufferText returns the text the user sees for path: an open tab's buffer
 // wins over the file on disk.
 func (m *Model) bufferText(path string) (string, bool) {
@@ -148,6 +212,9 @@ func (m *Model) diffDialog(c *ui.Context, p *ui.Theme) {
 		ui.Column(c).Width(920).Gap(8).Children(func() {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				title := filepath.Base(d.path) + " · 与 HEAD 比较"
+				if d.other != "" {
+					title = filepath.Base(d.path) + " ↔ " + filepath.Base(d.other)
+				}
 				if d.loading {
 					title = filepath.Base(d.path) + " · 正在比较…"
 				}
@@ -160,6 +227,10 @@ func (m *Model) diffDialog(c *ui.Context, p *ui.Theme) {
 			})
 			if rel, err := filepath.Rel(m.Root(), d.path); err == nil && !strings.HasPrefix(rel, "..") {
 				ui.Text(c, filepath.ToSlash(rel)).FontSize(10.5).TextColor(p.TextMuted).
+					SingleLine().Ellipsis("…")
+			}
+			if d.other != "" {
+				ui.Text(c, filepath.ToSlash(d.other)).FontSize(10.5).TextColor(p.TextMuted).
 					SingleLine().Ellipsis("…")
 			}
 			switch {

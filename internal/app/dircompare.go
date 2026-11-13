@@ -210,6 +210,11 @@ func (m *Model) dirCompareDialog(c *ui.Context, p *ui.Theme) {
 							ui.Text(c, e.Path).FontSize(11.5).TextColor(p.Text).
 								SingleLine().Ellipsis("…")
 						})
+						if row.Clicked() && e.LeftKind != "dir" && e.RightKind != "dir" {
+							rel := filepath.FromSlash(e.Path)
+							m.closeDirCompare()
+							m.ShowFileDiff(filepath.Join(d.left, rel), filepath.Join(d.other, rel))
+						}
 					}
 					if shown == 0 {
 						ui.Row(c).Padding(6, 8).Children(func() {
