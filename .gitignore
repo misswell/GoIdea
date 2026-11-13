@@ -1,5 +1,15 @@
+# Builds and downloaded upstream binaries.
+build/
+dist/
+resources/openidea-server
+resources/openidea-server-*.gz
+resources/openidea-server-*.sha256
+
+# macOS and editors
 .DS_Store
-/goidea
-/bin/
-/dist/
-*.log
+*.swp
+
+# Generated at release time
+resources/licenses/
+mygo.json.release-backup
+mygo.json.release-new

@@ -1,0 +1,18 @@
+GoIDEA
+Copyright 2026 GoIDEA contributors
+
+This product includes software developed by OpenIDEA contributors
+(https://github.com/l0ng-ai/openidea), licensed under the Apache License 2.0.
+
+The file openidea-server shipped in the macOS application is an unmodified
+build published by the OpenIDEA project (release v0.1.41, asset
+openidea-server-macos-aarch64.gz), verified against that release's SHA-256.
+It is distributed here under the Apache License 2.0; see
+THIRD_PARTY_LICENSES.md for the full attribution.
+
+This product also includes software developed by the Mayoi and MyGo projects
+(https://github.com/sorrycc/Mayoi, https://github.com/egoist/mygo and the fork
+https://github.com/sorrycc/mygo), both licensed under the MIT License.
+
+The full texts of these licenses are in THIRD_PARTY_LICENSES.md and in the
+upstream repositories.

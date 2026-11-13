@@ -1,0 +1,97 @@
+name: Upstream
+
+# Daily: a report of what moved in the three upstreams, kept in one issue.
+# Weekly and on demand: the same report on a sync branch with the pins bumped,
+# built and tested, offered as a pull request. It is never merged by CI.
+on:
+  schedule:
+    - cron: "0 6 * * *" # every day, 06:00 UTC
+    - cron: "0 7 * * 1" # Mondays, after the daily report
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: report, or sync (bump the pins and open a PR)
+        default: report
+        type: choice
+        options: [report, sync]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency: upstream
+
+jobs:
+  report:
+    if: github.event.schedule == '0 6 * * *' || inputs.mode == 'report'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Report
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/upstream-check.sh > "$RUNNER_TEMP/report.md"
+      - name: Put the report in its issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="上游变更报告"
+          existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --search "$title in:title" --state open --json number --jq '.[0].number')"
+          if [[ -n "$existing" ]]; then
+            gh issue edit "$existing" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/report.md"
+            echo "updated issue #$existing"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body-file "$RUNNER_TEMP/report.md"
+          fi
+
+  sync:
+    if: github.event.schedule == '0 7 * * 1' || inputs.mode == 'sync'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Bump the pins
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/upstream-bump.sh
+      - name: Report
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/upstream-check.sh > "$RUNNER_TEMP/report.md"
+      - name: Stop when nothing moved
+        id: changed
+        run: |
+          if git diff --quiet; then echo "moved=no" >> "$GITHUB_OUTPUT"; else echo "moved=yes" >> "$GITHUB_OUTPUT"; fi
+      - name: Test the bump
+        if: steps.changed.outputs.moved == 'yes'
+        run: |
+          CGO_ENABLED=0 go vet ./...
+          CGO_ENABLED=0 go test ./...
+          CGO_ENABLED=0 go build -o /tmp/goidea ./cmd/goidea
+          scripts/check-licenses.sh
+      - name: Open the pull request
+        if: steps.changed.outputs.moved == 'yes'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          branch="upstream/sync-$(date -u +%Y-%m-%d)"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$branch"
+          git add UPSTREAMS.yml go.mod go.sum
+          git commit -m "Bump the upstream pins"
+          git push --force origin "$branch"
+          {
+            echo "The pins in UPSTREAMS.yml moved. The tests, build and license check pass on this branch."
+            echo
+            cat "$RUNNER_TEMP/report.md"
+          } > "$RUNNER_TEMP/pr.md"
+          gh pr create --repo "$GITHUB_REPOSITORY" --head "$branch" \
+            --title "Bump the upstream pins" --body-file "$RUNNER_TEMP/pr.md" \
+            || gh pr edit "$branch" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/pr.md"

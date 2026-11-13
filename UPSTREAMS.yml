@@ -1,0 +1,68 @@
+# The upstream sources GoIDEA is built from. scripts/upstream-check.sh reads
+# this file and reports anything that moved; nothing else may pin them.
+schema: 1
+project:
+  name: GoIDEA
+  repository: https://github.com/misswell/GoIdea
+  default_branch: main
+  version: 0.1.0
+
+upstreams:
+  mayoi:
+    url: https://github.com/sorrycc/Mayoi
+    fork: https://github.com/misswell/Mayoi
+    default_branch: main
+    # The commit this project's behaviour was last checked against.
+    commit: 89bc891e74cb2b759eaf0ef087401b021313859b
+    version: 0.19.3
+    synced_at: 2026-11-13
+    license: MIT
+    sync: reference
+    # GoIDEA is not a git fork of Mayoi. Its native-UI app patterns, the
+    # editor integration and the mygo tooling conventions follow Mayoi; the
+    # application code lives here.
+    local_changes: none-to-upstream
+    watch:
+      - commit
+      - release
+      - tag
+
+  mygo:
+    url: https://github.com/egoist/mygo
+    fork: https://github.com/sorrycc/mygo
+    default_branch: main
+    # The replacement in go.mod resolves here; the pseudo-version has the
+    # same commit.
+    commit: f970e709191126e80e73e721b6b7b9c41cf358ab
+    module_version: v0.4.9-0.20261106101517-f970e7091911
+    synced_at: 2026-11-13
+    license: MIT
+    sync: go-module-replace
+    local_changes: none-to-fork
+    watch:
+      - commit
+      - tag
+      - go-module
+
+  openidea:
+    url: https://github.com/l0ng-ai/openidea
+    fork: https://github.com/misswell/openidea
+    default_branch: main
+    # The Rust source the RPC client was last tested against.
+    commit: 551428267deddd600b367fa01d2b80c6146f1576
+    version: 0.1.41
+    synced_at: 2026-11-13
+    license: Apache-2.0
+    sync: prebuilt-server
+    # The server GoIDEA ships is the official release asset for
+    # macos-aarch64, verified against the release's SHA-256.
+    server:
+      release: v0.1.41
+      release_commit: 108da537f4e93fc4aff9a3f089aa02d835795e3f
+      asset: openidea-server-macos-aarch64.gz
+      sha256_file: openidea-server-macos-aarch64.gz.sha256
+    local_changes: none-to-upstream
+    watch:
+      - commit
+      - release
+      - rpc-contract

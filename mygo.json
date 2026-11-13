@@ -1,0 +1,19 @@
+{
+  "name": "GoIDEA",
+  "slug": "goidea",
+  "identifier": "io.github.misswell.goidea",
+  "version": "0.1.0",
+  "copyright": "Copyright © 2026 GoIDEA contributors",
+  "publisher": "GoIDEA contributors",
+  "main": "./cmd/goidea",
+  "out": "build",
+  "icon": "resources/icon.png",
+  "macos": {
+    "minimumSystemVersion": "13.0"
+  },
+  "linux": {
+    "command": "goidea",
+    "comment": "A native Java and Spring Boot IDE",
+    "categories": ["Development", "IDE"]
+  }
+}

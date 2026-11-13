@@ -276,7 +276,8 @@ func tail(s string, n int) string {
 }
 
 // resolveServer finds openidea-server: GOIDEA_SERVER first, then beside the
-// executable, then on PATH. The app still opens without it, and says why.
+// executable, then among the bundled resources, then on PATH. The app still
+// opens without it, and says why.
 func resolveServer() (string, error) {
 	if p := os.Getenv("GOIDEA_SERVER"); p != "" {
 		if st, err := os.Stat(p); err == nil && !st.IsDir() {
@@ -286,6 +287,13 @@ func resolveServer() (string, error) {
 	}
 	if exe, err := os.Executable(); err == nil {
 		p := filepath.Join(filepath.Dir(exe), "openidea-server")
+		if st, err := os.Stat(p); err == nil && !st.IsDir() {
+			return p, nil
+		}
+	}
+	// The app bundle ships the server under Contents/Resources.
+	if dir, err := mygo.App.Path(mygo.PathResources); err == nil {
+		p := filepath.Join(dir, "openidea-server")
 		if st, err := os.Stat(p); err == nil && !st.IsDir() {
 			return p, nil
 		}
