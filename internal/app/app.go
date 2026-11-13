@@ -138,9 +138,23 @@ type Model struct {
 	prefs        Preferences
 	theme        *ui.Theme
 	settingsOpen bool
-	// settingsPage is the page the settings sheet shows: "appearance",
-	// "keymap" or "java".
+	// settingsPage is the page the settings sheet shows, by its OpenIDEA id,
+	// or "group:<name>" while a group folder is selected.
 	settingsPage string
+	// settingsDraft stages the dialog's edits, as OpenIDEA's settings store
+	// does: Apply and OK write them to prefs, Cancel drops them. settingsQuery
+	// filters the page tree, and the history stack takes Back and Forward.
+	settingsDraft     settingsDraft
+	settingsQuery     string
+	settingsHistory   []string
+	settingsHistoryAt int
+	// settingsCollapsed are the tree nodes closed with their caret, and
+	// settingsSide is the page tree's width after a drag of the split handle.
+	settingsCollapsed map[string]bool
+	settingsSide      float32
+	// settingsErr is a failed write of the staged settings, shown in the
+	// dialog's footer as OpenIDEA shows its save error.
+	settingsErr string
 
 	// zen is Distraction Free Mode, and zenHint the way-out hint entering it
 	// puts above the editor, as OpenIDEA's balloon does.

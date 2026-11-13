@@ -308,7 +308,7 @@ def settings_pages():
     """Every settings page: declarative PageSpec arrays and direct registrations."""
     items = []
     for rel, text in sources():
-        if "PageSpec" not in text and "registerSettingsPage" not in text:
+        if "PageSpec" not in text and "registerSettingsPage" not in text and "editorPage(" not in text:
             continue
         for m in re.finditer(
             r"(?:export\s+)?const\s+\w+\s*:\s*PageSpec(?:\[\])?\s*=\s*\[", text
@@ -320,6 +320,9 @@ def settings_pages():
             obj = delimited(text, m.end() - 1, "{", "}")
             items.append(page_from(obj, rel))
         for block in call_blocks(text, "registerSettingsPage"):
+            for obj in objects_in(block) or [block]:
+                items.append(page_from(obj, rel))
+        for block in call_blocks(text, "editorPage"):
             for obj in objects_in(block) or [block]:
                 items.append(page_from(obj, rel))
     return dedupe([i for i in items if i["id"]], "id")

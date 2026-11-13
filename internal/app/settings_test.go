@@ -105,3 +105,138 @@ func TestApplyPreferencesPicksTheme(t *testing.T) {
 		t.Fatalf("theme = %+v, want system", m.theme)
 	}
 }
+
+func TestSettingsTreeNestsAndGroups(t *testing.T) {
+	tree := settingsTree()
+	var roots []string
+	for _, n := range tree {
+		roots = append(roots, n.title)
+	}
+	want := []string{"Appearance & Behavior", "Editor", "Keymap", "Languages & Frameworks"}
+	if !reflect.DeepEqual(roots, want) {
+		t.Fatalf("roots = %v, want %v", roots, want)
+	}
+	editor, ok := settingsFindNode(tree, settingsGroupKey("Editor"))
+	if !ok || len(editor.children) != 2 {
+		t.Fatalf("Editor folder = %+v, want its two pages", editor)
+	}
+	if editor.children[0].key != settingsPageEditorAppearance || editor.children[1].key != settingsPageEditorFont {
+		t.Fatalf("Editor children = %q, %q", editor.children[0].key, editor.children[1].key)
+	}
+	if got := settingsBreadcrumb(tree, settingsPageJava); !reflect.DeepEqual(got, []string{"Languages & Frameworks", "Java"}) {
+		t.Fatalf("Java breadcrumb = %v", got)
+	}
+	if got := settingsBreadcrumb(tree, settingsPageKeymap); !reflect.DeepEqual(got, []string{"Keymap"}) {
+		t.Fatalf("Keymap breadcrumb = %v", got)
+	}
+}
+
+func TestSettingsFilterKeepsAncestors(t *testing.T) {
+	rows := settingsFilterTree(settingsTree(), "editor font", nil)
+	if len(rows) != 1 || rows[0].key != settingsGroupKey("Editor") {
+		t.Fatalf("filtered roots = %+v, want the Editor folder", rows)
+	}
+	if kids := rows[0].children; len(kids) != 1 || kids[0].key != settingsPageEditorFont || !kids[0].matched {
+		t.Fatalf("filtered children = %+v, want the matched Font page", kids)
+	}
+	if rows := settingsFilterTree(settingsTree(), "no such setting", nil); len(rows) != 0 {
+		t.Fatalf("unmatched query kept %+v", rows)
+	}
+}
+
+func TestSettingsQuerySelectsFirstMatch(t *testing.T) {
+	m := &Model{}
+	m.OpenSettingsPage(settingsPageKeymap)
+	m.settingsQuery = "java"
+	m.settingsQueryChanged()
+	if m.settingsPage != settingsPageJava {
+		t.Fatalf("page after searching java = %q", m.settingsPage)
+	}
+	m.settingsQuery = ""
+	m.settingsQueryChanged()
+	if m.settingsPage != settingsPageJava {
+		t.Fatalf("clearing the query moved the page to %q", m.settingsPage)
+	}
+}
+
+func TestSettingsHistoryBackAndForward(t *testing.T) {
+	m := &Model{}
+	m.OpenSettingsPage(settingsPageAppearance)
+	m.settingsSelectPage(settingsPageKeymap)
+	m.settingsSelectPage(settingsPageEditorFont)
+	m.settingsStepHistory(-1)
+	if m.settingsPage != settingsPageKeymap {
+		t.Fatalf("back = %q, want keymap", m.settingsPage)
+	}
+	m.settingsStepHistory(-1)
+	if m.settingsPage != settingsPageAppearance {
+		t.Fatalf("back again = %q, want appearance", m.settingsPage)
+	}
+	m.settingsStepHistory(1)
+	if m.settingsPage != settingsPageKeymap {
+		t.Fatalf("forward = %q, want keymap", m.settingsPage)
+	}
+}
+
+func TestSettingsCollapseHidesChildren(t *testing.T) {
+	m := &Model{}
+	m.OpenSettingsPage(settingsPageAppearance)
+	open := len(m.settingsVisibleRows())
+	m.settingsToggleNode(settingsGroupKey("Editor"))
+	closed := len(m.settingsVisibleRows())
+	if closed != open-2 {
+		t.Fatalf("rows open %d, closed %d, want two fewer", open, closed)
+	}
+	if m.settingsNormalizeKey("no.such.page") != "" {
+		t.Fatalf("unknown key normalized to a row")
+	}
+}
+
+func TestSettingsStagesUntilApplyOrCancel(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	m := &Model{cfg: Config{SettingsPath: path}, prefs: Preferences{Theme: "light", FontSize: 15, ZenWidth: 90}}
+	m.applyPreferences()
+
+	m.OpenSettingsPage(settingsPageAppearance)
+	m.settingsSetTheme("dark")
+	if m.prefs.Theme != "light" {
+		t.Fatalf("staging wrote the theme = %q", m.prefs.Theme)
+	}
+	if m.theme == nil || !m.theme.Dark {
+		t.Fatalf("staged theme was not previewed")
+	}
+	if !m.settingsPending() {
+		t.Fatalf("a staged theme did not enable Apply")
+	}
+	m.closeSettings()
+	if m.settingsOpen || m.theme != nil && m.theme.Dark || m.prefs.Theme != "light" {
+		t.Fatalf("cancel kept open %v theme %+v pref %q", m.settingsOpen, m.theme, m.prefs.Theme)
+	}
+
+	m.OpenSettingsPage(settingsPageAppearance)
+	m.settingsSetTheme("dark")
+	m.applySettings()
+	if m.prefs.Theme != "dark" || LoadPreferences(path).Theme != "dark" {
+		t.Fatalf("apply stored %q / %q", m.prefs.Theme, LoadPreferences(path).Theme)
+	}
+
+	m.settingsSelectPage(settingsPageEditorFont)
+	m.settingsSetFont(18)
+	m.settingsSetZenWidth(120)
+	if !m.settingsPending() {
+		t.Fatalf("font and width changes did not enable Apply")
+	}
+	m.applySettings()
+	if stored := LoadPreferences(path); stored.FontSize != 18 || stored.ZenWidth != 120 {
+		t.Fatalf("stored font %v width %d", stored.FontSize, stored.ZenWidth)
+	}
+	m.settingsSetFont(99)
+	if m.settingsDraft.fontSize != maxFontSize {
+		t.Fatalf("font above the range = %v", m.settingsDraft.fontSize)
+	}
+	m.settingsSelectPage(settingsPageEditorAppearance)
+	m.settingsResetPage()
+	if m.settingsDraft.zenWidth != defaultZenWidth {
+		t.Fatalf("reset width = %d, want %d", m.settingsDraft.zenWidth, defaultZenWidth)
+	}
+}

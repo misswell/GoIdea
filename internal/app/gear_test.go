@@ -105,8 +105,8 @@ func TestOpenSettingsPageSelectsThePage(t *testing.T) {
 	if !m.settingsOpen || m.settingsPage != "keymap" {
 		t.Fatalf("keymap page = open %v page %q", m.settingsOpen, m.settingsPage)
 	}
-	m.OpenSettingsPage("java")
-	if m.settingsPage != "java" {
+	m.OpenSettingsPage("languages.java")
+	if m.settingsPage != "languages.java" {
 		t.Fatalf("java page = %q", m.settingsPage)
 	}
 	m.OpenSettingsPage("no.such.page")

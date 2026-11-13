@@ -357,13 +357,7 @@ func (p Preferences) Save(path string) error {
 // themePreference maps a stored value to the theme GoIDEA draws, or nil to
 // follow the system's appearance.
 func (p Preferences) themePreference() *ui.Theme {
-	switch p.Theme {
-	case "light":
-		return openideaTheme(false)
-	case "dark":
-		return openideaTheme(true)
-	}
-	return nil
+	return themeForName(p.Theme)
 }
 
 // fontSize returns the editor font size to use, with the default standing in

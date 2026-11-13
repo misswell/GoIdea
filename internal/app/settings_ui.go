@@ -8,32 +8,63 @@ import (
 )
 
 // OpenSettings opens the settings sheet on its Appearance page.
-func (m *Model) OpenSettings() { m.OpenSettingsPage("appearance") }
+func (m *Model) OpenSettings() { m.OpenSettingsPage(settingsPageAppearance) }
 
 // OpenSettingsPage opens the settings sheet on page, as OpenIDEA's Settings
-// action takes the page in its argument.
+// action takes the page in its argument. An id this build does not register
+// falls back to Appearance, which it always carries.
 func (m *Model) OpenSettingsPage(page string) {
-	switch page {
-	case "appearance", "keymap", "java":
-	default:
-		page = "appearance"
+	if _, ok := settingsPageByID(page); !ok {
+		page = settingsPageAppearance
 	}
-	m.settingsPage = page
 	if m.settingsOpen {
+		m.settingsSelectPage(page)
 		m.invalidate()
 		return
 	}
 	m.settingsOpen = true
+	m.settingsPage = page
+	m.settingsQuery = ""
+	m.settingsErr = ""
+	m.settingsCollapsed = map[string]bool{}
+	m.settingsDraft = m.settingsDraftFromPrefs()
+	m.settingsHistory = []string{page}
+	m.settingsHistoryAt = 0
 	m.LoadJavaTools()
 	m.invalidate()
 }
 
+// closeSettings closes the dialog as Cancel does: the staged choices are
+// dropped and the stored ones go back on the window.
 func (m *Model) closeSettings() {
 	if !m.settingsOpen {
 		return
 	}
 	m.settingsOpen = false
+	m.settingsQuery = ""
+	m.settingsCollapsed = nil
+	m.settingsErr = ""
+	m.applyPreferences()
 	m.invalidate()
+}
+
+// themeForName is the theme a stored value draws, or nil to follow the
+// system's appearance.
+func themeForName(name string) *ui.Theme {
+	switch name {
+	case "light":
+		return openideaTheme(false)
+	case "dark":
+		return openideaTheme(true)
+	}
+	return nil
+}
+
+// applyEditorFont puts size on every open editor.
+func (m *Model) applyEditorFont(size float32) {
+	for _, t := range m.tabs {
+		t.state.Font = ui.Font{Family: t.state.Font.Family, Size: size}
+	}
 }
 
 // SetThemePref stores the appearance choice and redraws the window in it at
@@ -87,10 +118,7 @@ func (m *Model) setFontSize(size int) {
 func (m *Model) applyPreferences() {
 	m.theme = m.prefs.themePreference()
 	m.zen = m.prefs.Zen
-	size := m.prefs.fontSize()
-	for _, t := range m.tabs {
-		t.state.Font = ui.Font{Family: t.state.Font.Family, Size: size}
-	}
+	m.applyEditorFont(m.prefs.fontSize())
 	m.applyZenGutter()
 }
 
@@ -105,166 +133,46 @@ func (m *Model) savePreferences() {
 	}
 }
 
-// settingsDialog draws Settings as IDEA does: the page tree on the left, the
-// chosen page on the right. Appearance, Keymap and Java are the pages
-// OpenIDEA's Settings window leads with.
-func (m *Model) settingsDialog(c *ui.Context, p *ui.Theme) {
-	if !m.settingsOpen {
-		return
-	}
-	open := m.settingsOpen
-	dlg := ui.Modal(c, &open, func() {
-		ui.Column(c).Width(760).Height(520).Gap(0).Children(func() {
-			ui.Row(c).Height(46).Padding(0, 14).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, "Settings").FontSize(14).Bold().TextColor(p.Text).SingleLine()
-				ui.Spacer(c)
-				ui.Button(c, "Close").OnClick(m.closeSettings)
-			})
-			ui.Row(c).Grow(1).Children(func() {
-				ui.Column(c).Width(200).Gap(2).Padding(0, 8).Children(func() {
-					m.settingsNavItem(c, p, "appearance", "Appearance")
-					m.settingsNavItem(c, p, "keymap", "Keymap")
-					m.settingsNavItem(c, p, "java", "Java")
-				})
-				ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
-					ui.Column(c).Gap(10).Padding(0, 14).Children(func() {
-						switch m.settingsPage {
-						case "keymap":
-							m.settingsKeymapPage(c, p)
-						case "java":
-							m.settingsJavaPage(c, p)
-						default:
-							m.settingsAppearancePage(c, p)
-						}
-					})
-				})
-			})
-		})
-	})
-	if dlg.Dismissed() || !open {
-		m.closeSettings()
-	}
-}
-
-func (m *Model) settingsNavItem(c *ui.Context, p *ui.Theme, page, label string) {
-	r := ui.Row(c.Key("settings:"+page)).Height(28).Padding(0, 10).AlignItems(ui.Center)
-	if m.settingsPage == page {
-		r.Background(p.SurfaceHover)
-	} else if r.Hovered() {
-		r.Background(p.SurfaceHover)
-	}
-	r.Children(func() {
-		ui.Text(c, label).FontSize(12).TextColor(p.Text).SingleLine()
-	})
-	if r.Clicked() {
-		m.settingsPage = page
-		m.invalidate()
-	}
-}
-
-func (m *Model) settingsAppearancePage(c *ui.Context, p *ui.Theme) {
-	ui.Text(c, "Appearance").FontSize(13).Bold().TextColor(p.Text).SingleLine()
-	ui.Text(c, "Theme").FontSize(11).TextColor(p.TextMuted).SingleLine()
-	for _, o := range [][2]string{
-		{"system", "Use System Settings"},
-		{"light", "Light"},
-		{"dark", "Dark"},
-	} {
-		o := o
-		current := m.prefs.Theme == o[0] || (o[0] == "system" && m.prefs.Theme == "")
-		r := ui.Row(c.Key("theme:"+o[0])).Height(26).Padding(0, 8).Gap(8).AlignItems(ui.Center)
-		if current || r.Hovered() {
-			r.Background(p.SurfaceHover)
-		}
-		r.Children(func() {
-			mark := "○"
-			if current {
-				mark = "●"
-			}
-			ui.Text(c, mark).FontSize(12).TextColor(p.Accent).Width(16)
-			ui.Text(c, o[1]).FontSize(12).TextColor(p.Text)
-		})
-		if r.Clicked() {
-			m.SetThemePref(o[0])
-		}
-	}
-	ui.Text(c, "Editor").FontSize(11).TextColor(p.TextMuted).SingleLine()
-	ui.Row(c).Height(26).Gap(8).AlignItems(ui.Center).Children(func() {
-		ui.Text(c, "Font size").FontSize(12).TextColor(p.Text)
-		ui.Spacer(c)
-		ui.Button(c, "−").OnClick(func() { m.stepFont(-1) })
-		ui.Text(c, fmt.Sprintf("%.0f", m.prefs.fontSize())).FontSize(12).
-			TextColor(p.Text).Width(28)
-		ui.Button(c, "+").OnClick(func() { m.stepFont(1) })
-	})
-	ui.Text(c, fmt.Sprintf("Range %d–%d, applied to open editors at once", minFontSize, maxFontSize)).
-		FontSize(10.5).TextColor(p.TextMuted).SingleLine()
-	ui.Text(c, "Distraction Free Mode").FontSize(11).TextColor(p.TextMuted).SingleLine()
-	ui.Row(c).Height(26).Gap(8).AlignItems(ui.Center).Children(func() {
-		ui.Text(c, "Text width").FontSize(12).TextColor(p.Text)
-		ui.Spacer(c)
-		ui.Button(c, "−").OnClick(func() { m.StepZenWidth(-5) })
-		ui.Text(c, fmt.Sprintf("%d", m.prefs.zenWidth())).FontSize(12).
-			TextColor(p.Text).Width(36)
-		ui.Button(c, "+").OnClick(func() { m.StepZenWidth(5) })
-	})
-	ui.Text(c, fmt.Sprintf("Columns of text, %d–%d", minZenWidth, maxZenWidth)).
-		FontSize(10.5).TextColor(p.TextMuted).SingleLine()
-}
-
-func (m *Model) settingsKeymapPage(c *ui.Context, p *ui.Theme) {
-	ui.Text(c, "Keymap").FontSize(13).Bold().TextColor(p.Text).SingleLine()
-	ui.Text(c, "Keymap: "+keymapPresetTitle).FontSize(12).TextColor(p.Text).SingleLine()
-	ui.Text(c, "The actions this build carries, with the keys of the IntelliJ macOS map.").
-		FontSize(10.5).TextColor(p.TextMuted).SingleLine().Ellipsis("…")
-	for _, cmd := range commands() {
-		if cmd.shortcut == "" {
-			continue
-		}
-		ui.Row(c.Key("keymap:"+cmd.id)).Height(24).Padding(0, 8).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, cmd.title).FontSize(12).TextColor(p.Text).SingleLine().Ellipsis("…")
-			ui.Spacer(c)
-			ui.Text(c, cmd.shortcut).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
-		})
-	}
-}
-
-func (m *Model) settingsJavaPage(c *ui.Context, p *ui.Theme) {
-	ui.Text(c, "Java").FontSize(13).Bold().TextColor(p.Text).SingleLine()
-	m.javaToolsSection(c, p)
-}
-
-// SmokeSettings drives the settings sheet offscreen: theme and font changes go
-// through the same calls the sheet's controls make, and the stored file is
-// read back to prove the choice reached the disk.
+// SmokeSettings drives the settings sheet offscreen the way the dialog's
+// controls do: a staged theme previews before Apply, Apply writes the choice
+// to the file, the font clamps at the top, and Cancel drops what was staged.
 func (m *Model) SmokeSettings() map[string]any {
 	out := map[string]any{}
 	mygo.RunOnMain(func() {
-		wasTheme, wasFont := m.prefs.Theme, m.prefs.FontSize
+		was := m.prefs
 		m.OpenSettings()
 		out["opened"] = m.settingsOpen
-		m.SetThemePref("dark")
+		out["page"] = m.settingsPage
+		out["treeRows"] = len(m.settingsVisibleRows())
+		m.settingsSelectPage(settingsPageEditorFont)
+		out["selected"] = m.settingsPage
+		m.settingsSetTheme("dark")
+		out["previewDark"] = m.theme != nil && m.theme.Dark
+		out["stagedTheme"] = m.settingsDraft.theme
+		out["prefsBeforeApply"] = m.prefs.Theme
+		out["pending"] = m.settingsPending()
+		m.applySettings()
 		out["theme"] = m.prefs.Theme
-		out["darkTheme"] = m.theme != nil
-		if stored := LoadPreferences(m.cfg.SettingsPath); stored.Theme != "dark" {
-			out["storedTheme"] = stored.Theme
-		} else {
-			out["storedTheme"] = "dark"
-		}
+		out["darkTheme"] = m.theme != nil && m.theme.Dark
+		out["storedTheme"] = LoadPreferences(m.settingsWritePath()).Theme
 		before := m.prefs.fontSize()
-		m.stepFont(1)
+		m.settingsSetFont(before + 1)
 		out["fontBefore"] = before
-		out["fontAfter"] = m.prefs.fontSize()
-		for i := 0; i < 40; i++ {
-			m.stepFont(1)
-		}
-		out["fontMax"] = m.prefs.fontSize()
+		out["fontAfter"] = m.settingsDraft.fontSize
+		m.settingsSetFont(99)
+		out["fontMax"] = m.settingsDraft.fontSize
+		m.applySettings()
 		if t := m.tab(); t != nil {
 			out["editorFont"] = t.state.Font.Size
 		}
+		// A staged change the user cancels puts the stored theme back.
+		m.settingsSetTheme("light")
+		out["previewLight"] = m.theme != nil && !m.theme.Dark
 		m.closeSettings()
 		out["closed"] = !m.settingsOpen
-		m.prefs.Theme, m.prefs.FontSize = wasTheme, wasFont
+		out["themeAfterCancel"] = m.prefs.Theme
+		out["previewAfterCancel"] = m.theme != nil && m.theme.Dark
+		m.prefs = was
 		m.applyPreferences()
 		m.savePreferences()
 	})

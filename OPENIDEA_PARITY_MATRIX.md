@@ -34,7 +34,7 @@ new action, tool window, page or command appears automatically.
 | Editor contributions | 35 | 0 | 0 | 0 | 0 | 35 |
 | Editor kinds | 4 | 0 | 0 | 0 | 0 | 4 |
 | File editor providers | 4 | 0 | 0 | 0 | 0 | 4 |
-| Settings pages | 63 | 0 | 2 | 0 | 0 | 61 |
+| Settings pages | 81 | 0 | 5 | 0 | 0 | 76 |
 | Settings keys | 445 | 0 | 0 | 0 | 0 | 445 |
 | Languages | 80 | 1 | 0 | 0 | 0 | 79 |
 | Backend crates | 38 | 0 | 0 | 31 | 0 | 7 |
@@ -82,7 +82,7 @@ directory registers.
 | `scratch` | 1 | 0 | 1 | 0 | 0 | missing |
 | `search` | 24 | 3 | 6 | 2 | 0 | partial - base.search.done, base.search.files, base.search.matches |
 | `services` | 20 | 1 | 1 | 2 | 0 | missing |
-| `settings` | 11 | 0 | 3 | 0 | 56 | partial - base.settings.opened, base.settings.closed, base.settings.theme |
+| `settings` | 11 | 0 | 3 | 0 | 74 | partial - internal/app/settings_window.go; OpenIDEA's 980 DIP sheet: page tree built like model/pages.ts with group folders, search filtering with ancestors, breadcrumbs, Back/Forward history, Reset and Cancel/Apply/OK staging; internal/app/settings_test.go |
 | `ssh` | 2 | 0 | 1 | 0 | 0 | missing |
 | `templates` | 5 | 0 | 3 | 1 | 3 | missing |
 | `terminal` | 14 | 1 | 0 | 0 | 0 | partial - internal/app/term.go tab groups over backend PTYs, SplitTerm/UnsplitTerm, ShowTermFind scrollback search, per-tab channel routing and exit by id; base.term.output, base.term.tabs, base.term.split, base.term.find; UPSTREAM_FEATURE_MATRIX.md Terminal |
@@ -830,7 +830,7 @@ expected to come from a plugin or a hidden registration.
 | `editor.scrollToCenter` | intellij-macos, intellij-windows, vscode-macos | missing |
 | `editor.toggleInsertState` | intellij-macos, intellij-windows, vscode-macos | missing |
 | `editor.toggleZen` | intellij-macos, intellij-windows, vscode-macos | integrated - internal/app/zen.go ToggleZen/StepZenWidth/zenWorkbench hints and compact header; prefs Zen/ZenWidth persisted; internal/app/gear_test.go TestViewModeTitleFollowsTheMode, TestZenWidthClamps |
-| `file.settings` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/commands.go file.settings; internal/app/settings_ui.go nav + Appearance/Keymap/Java pages; OpenIDEA's remaining settings pages are not ported yet |
+| `file.settings` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/commands.go file.settings -> internal/app/settings_window.go + settings_pages.go, OpenIDEA's Settings dialog over Appearance, Keymap, Editor Appearance/Font and Java; OpenIDEA's remaining settings pages are not ported yet |
 | `find.highlightUsages` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
 | `find.popup.nextResult` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos, vscode-windows | missing |
 | `find.popup.openResult` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
@@ -1126,7 +1126,7 @@ The plain text editor is the workbench default and is not registered through
 | --- | --- | --- | --- | --- |
 | `agents.chat` | Chat | Agents | `src/features/settings/pages/tools.tsx` | missing |
 | `agents.mcpServer` | IDE MCP Server | Agents | `src/features/settings/pages/mcpServer.tsx` | missing |
-| `appearance` | Appearance |  | `src/features/settings/pages/behavior.tsx` | partial - base.settings.theme; internal/app/settings_ui.go settingsAppearancePage theme radios, font size and distraction-free width |
+| `appearance` | Appearance |  | `src/features/settings/pages/behavior.tsx` | partial - base.settings.theme; internal/app/settings_pages.go settingsAppearanceBody Theme row (Select + Sync with OS checkbox); the preferred-themes gear is not ported |
 | `build.cmake` | CMake |  | `src/features/settings/pages/execution.tsx` | missing |
 | `build.console` | Console |  | `src/features/settings/pages/execution.tsx` | missing |
 | `build.debugger` | Debugger |  | `src/features/settings/pages/execution.tsx` | missing |
@@ -1139,13 +1139,31 @@ The plain text editor is the workbench default and is not registered through
 | `build.pythonDebugger` | Python Debugger |  | `src/features/settings/pages/execution.tsx` | missing |
 | `build.run` | Run/Debug |  | `src/features/settings/pages/execution.tsx` | missing |
 | `build.runTargets` | Run Targets |  | `src/features/settings/pages/runTargets.tsx` | missing |
+| `editor.codeEditing` | Code Editing |  | `src/features/settings/pages/editor/general.tsx` | missing |
 | `editor.codeStyle` | Code Style | Editor | `src/features/settings/pages/editor/codeStyle.tsx` | missing |
+| `editor.codeStyle.other` | Other File Types |  | `src/features/settings/pages/editor/codeStyle.tsx` | missing |
+| `editor.colorScheme` | Color Scheme |  | `src/features/settings/pages/editor/colorScheme.tsx` | missing |
 | `editor.colorScheme.debugger` | Debugger |  | `src/features/settings/pages/editor/colorScheme.tsx` | missing |
 | `editor.colorScheme.general` | General |  | `src/features/settings/pages/editor/colorScheme.tsx` | missing |
 | `editor.colorScheme.language-defaults` | Language Defaults |  | `src/features/settings/pages/editor/colorScheme.tsx` | missing |
+| `editor.fileEncodings` | File Encodings |  | `src/features/settings/pages/editor/codeStyle.tsx` | missing |
 | `editor.fileTemplates` | File and Code Templates | Editor | `src/features/templates/index.ts` | missing |
 | `editor.files` | File Types |  | `src/features/settings/pages/builtins.tsx` | missing |
+| `editor.font` | Font |  | `src/features/settings/pages/editor/font.tsx` | partial - internal/app/settings_pages.go settingsFontBody Size NumberInput 10.0-24.0 px over Preferences.FontSize; typeface, spacing and ligatures are not ported |
+| `editor.general` | General |  | `src/features/settings/pages/editor/general.tsx` | missing |
+| `editor.general.appearance` | Appearance |  | `src/features/settings/pages/editor/general.tsx` | partial - internal/app/settings_pages.go settingsZenWidthBody Distraction free mode text width 20-500 chars over Preferences.ZenWidth; caret and gutter options are not ported |
+| `editor.general.autoImport` | Auto Import |  | `src/features/settings/pages/editor/general.tsx` | missing |
+| `editor.general.breadcrumbs` | Breadcrumbs |  | `src/features/settings/pages/editor/general.tsx` | missing |
+| `editor.general.codeCompletion` | Code Completion |  | `src/features/settings/pages/editor/general.tsx` | missing |
+| `editor.general.codeFolding` | Code Folding |  | `src/features/settings/pages/editor/general.tsx` | missing |
+| `editor.general.editorTabs` | Editor Tabs |  | `src/features/settings/pages/editor/general.tsx` | missing |
+| `editor.general.gutterIcons` | Gutter Icons |  | `src/features/settings/pages/editor/general.tsx` | missing |
+| `editor.general.inlineCompletion` | Inline Completion |  | `src/features/settings/pages/editor/general.tsx` | missing |
 | `editor.general.postfixCompletion` | Postfix Completion | Editor | `src/features/templates/index.ts` | missing |
+| `editor.general.richTextCopy` | Rich-Text Copy |  | `src/features/settings/pages/editor/general.tsx` | missing |
+| `editor.general.smartKeys` | Smart Keys |  | `src/features/settings/pages/editor/general.tsx` | missing |
+| `editor.general.stickyLines` | Sticky Lines |  | `src/features/settings/pages/editor/general.tsx` | missing |
+| `editor.inlayHints` | Inlay Hints |  | `src/features/settings/pages/editor/general.tsx` | missing |
 | `editor.inspections` | Inspections | Editor | `src/features/settings/pages/editor/inspections.tsx` | missing |
 | `editor.liveTemplates` | Live Templates | Editor | `src/features/templates/index.ts` | missing |
 | `editor.naturalLanguages` | Natural Languages | Editor | `src/features/settings/pages/editor/spelling.tsx` | missing |
@@ -1156,11 +1174,11 @@ The plain text editor is the workbench default and is not registered through
 | `general.httpProxy` | HTTP Proxy |  | `src/features/settings/pages/httpProxy.tsx` | missing |
 | `general.language` | Language and Region |  | `src/features/settings/pages/behavior.tsx` | missing |
 | `general.updates` | Updates |  | `src/features/settings/pages/updates.tsx` | missing |
-| `keymap` | Keymap |  | `src/features/settings/pages/builtins.tsx` | partial - internal/app/settings_ui.go settingsKeymapPage lists every registry shortcut; rebinding keys is not ported |
+| `keymap` | Keymap |  | `src/features/settings/pages/builtins.tsx` | partial - internal/app/settings_pages.go settingsKeymapBody lists every registry shortcut; rebinding keys is not ported |
 | `languages.go` | Go |  | `src/features/settings/pages/languages.tsx` | missing |
 | `languages.go.buildTags` | Build Tags |  | `src/features/settings/pages/languages.tsx` | missing |
 | `languages.go.modules` | Go Modules |  | `src/features/settings/pages/languages.tsx` | missing |
-| `languages.java` | Java |  | `src/features/settings/pages/languages.tsx` | missing |
+| `languages.java` | Java |  | `src/features/settings/pages/languages.tsx` | partial - internal/app/settings_ui.go javaToolsSection lists the real JDT LS/java-debug state with install and cancel; JDK selection is not ported |
 | `languages.markdown` | Markdown |  | `src/features/settings/pages/languages.tsx` | missing |
 | `languages.node` | Node.js |  | `src/features/settings/pages/languages.tsx` | missing |
 | `languages.oxfmt` | oxfmt |  | `src/features/settings/pages/languages.tsx` | missing |
@@ -1340,11 +1358,11 @@ settings.
 | `editor.completion.sortAlphabetically` |  | missing |
 | `editor.customSchemes` |  | missing |
 | `editor.docstringFormat` |  | missing |
-| `editor.encodings.global` |  | missing |
-| `editor.encodings.nativeToAscii` |  | missing |
-| `editor.encodings.project` |  | missing |
-| `editor.encodings.properties` |  | missing |
-| `editor.encodings.utf8Bom` |  | missing |
+| `editor.encodings.global` | editor.fileEncodings | missing |
+| `editor.encodings.nativeToAscii` | editor.fileEncodings | missing |
+| `editor.encodings.project` | editor.fileEncodings | missing |
+| `editor.encodings.properties` | editor.fileEncodings | missing |
+| `editor.encodings.utf8Bom` | editor.fileEncodings | missing |
 | `editor.fallbackFont` |  | missing |
 | `editor.folding.docComments` |  | missing |
 | `editor.folding.fileHeader` |  | missing |
@@ -1378,8 +1396,8 @@ settings.
 | `editor.inlineCompletion.enabled` |  | missing |
 | `editor.inlineCompletion.onlyOnPause` |  | missing |
 | `editor.inlineCompletion.pauseMs` |  | missing |
-| `editor.insertSpaces` |  | missing |
-| `editor.ligatures` |  | missing |
+| `editor.insertSpaces` | editor.codeStyle.other | missing |
+| `editor.ligatures` | editor.font | missing |
 | `editor.lineHeight` |  | missing |
 | `editor.rainbowBrackets` | editor.colorScheme.language-defaults | missing |
 | `editor.semanticHighlighting` | editor.colorScheme.language-defaults | missing |
@@ -1398,7 +1416,7 @@ settings.
 | `editor.smartKeys.tabOutOfPair` |  | missing |
 | `editor.softWrap` |  | missing |
 | `editor.stickyScroll` |  | missing |
-| `editor.tabSize` |  | missing |
+| `editor.tabSize` | editor.codeStyle.other | missing |
 | `editor.tabs.activateOnClose` |  | missing |
 | `editor.tabs.closeButtonPosition` |  | missing |
 | `editor.tabs.closingPolicy` |  | missing |
@@ -1420,7 +1438,7 @@ settings.
 | `files` |  | missing |
 | `files.autoSave` | general | missing |
 | `files.composeFileOverrides` |  | missing |
-| `files.ensureFinalNewline` |  | missing |
+| `files.ensureFinalNewline` | editor.general | missing |
 | `files.exclude` |  | missing |
 | `files.fileTypeOverrides` |  | missing |
 | `files.fileTypes` |  | missing |
@@ -1428,7 +1446,7 @@ settings.
 | `files.localHistoryDays` | general | missing |
 | `files.localHistoryMaxMb` | general | missing |
 | `files.syncOnFocus` | general | missing |
-| `files.trimTrailingWhitespace` |  | missing |
+| `files.trimTrailingWhitespace` | editor.general | missing |
 | `general` |  | missing |
 | `general.autoCheckUpdates` | general.updates | missing |
 | `general.closeTabsWithWindow` | general | missing |
