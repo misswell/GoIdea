@@ -142,8 +142,8 @@ Project tree rows open OpenIDEA's ProjectViewPopupMenu on right-click: **新建*
 (Absolute Path, File Name, Path From Content Root), **粘贴** while the
 clipboard holds a copied or cut entry, **跳到源码** on a file,
 **在文件夹中查找…** and **在终端中打开** on a folder, **本地历史** (显示历史…,
-标记版本…), **比较目录…** on a folder, **重命名…** and **删除…**. Entries
-that cannot apply are
+标记版本…), **比较目录…** on a folder, **从磁盘重新加载**, **重命名…** and
+**删除…**. Entries that cannot apply are
 disabled, and the project root itself cannot be cut, renamed or deleted
 (`treeMenuItems` in `tree_ops.go`, tested by `tree_ops_test.go`).
 
@@ -191,6 +191,12 @@ root, and runs `fs_compare_directories` over the two (`OpenDirCompare` and
 until **显示相同的文件**, and **另一个目录…** asks for another folder.
 Clicking a file row opens the two files in the compare view, a missing side
 counting as empty text (`ShowFileDiff` in `diff.go`).
+
+**从磁盘重新加载** rereads the selected folder and the folders below it that
+were read (`ReloadPathFromDisk` → `Tree.RefreshDir` → `workspace.Tree.RefreshDir`),
+and **Cmd+Alt+Y** does the same for the selection; the palette's
+从磁盘重新加载项目树 (`project.refresh`) rereads every folder the tree has
+read, as OpenIDEA's Reload All does.
 
 ## Features wired to the editor
 

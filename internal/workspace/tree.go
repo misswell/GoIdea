@@ -312,6 +312,24 @@ func (t *Tree) Refresh() {
 	}
 }
 
+// RefreshDir reads dir and the directories inside it that were read again,
+// as Reload from Disk does for the selected folder.
+func (t *Tree) RefreshDir(dir string) {
+	if t.remote {
+		t.poll(true)
+		return
+	}
+	prefix := dir + string(filepath.Separator)
+	for p := range t.children {
+		if p != dir && !strings.HasPrefix(p, prefix) {
+			continue
+		}
+		if !t.loading[p] {
+			t.reload(p)
+		}
+	}
+}
+
 // sortEntries are the paths of a directory's entries, directories first,
 // then files, each by name, as the file managers sort them, and the
 // directories among them.

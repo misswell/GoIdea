@@ -391,7 +391,11 @@
     },
     "action:project.reloadFromDisk": {
       "status": "partial",
-      "evidence": "internal/app/tree_ops.go ReloadProjectTree -> internal/app/tree.go Refresh rereads the open folders; base.files.expand"
+      "evidence": "internal/app/tree_ops.go ReloadPathFromDisk -> internal/app/tree.go RefreshDir -> workspace.Tree.RefreshDir rereads the selected folder and the read folders below it, from the popup and Cmd+Alt+Y; base.files.reload; re-reading a selected file's open document is missing"
+    },
+    "action:project.refresh": {
+      "status": "integrated",
+      "evidence": "internal/app/tree_ops.go ReloadProjectTree -> internal/app/tree.go Refresh -> workspace.Tree.Refresh rereads every folder read so far, from the palette's 从磁盘重新加载项目树; base.files.expand"
     },
     "action:navigate.selectInProjectView": {
       "status": "partial",

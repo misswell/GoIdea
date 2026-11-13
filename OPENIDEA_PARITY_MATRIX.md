@@ -27,7 +27,7 @@ new action, tool window, page or command appears automatically.
 | Kind | Items | Integrated | Partial | Engine | Blocked | Missing |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Feature folders | 43 | 0 | 10 | 0 | 0 | 33 |
-| Actions | 647 | 22 | 59 | 0 | 1 | 565 |
+| Actions | 647 | 23 | 59 | 0 | 1 | 564 |
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
 | Tool windows | 30 | 8 | 5 | 0 | 0 | 17 |
 | Overlays | 56 | 0 | 0 | 0 | 0 | 56 |
@@ -407,8 +407,8 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `project.optimizeImports` | Optimize Imports in File | `src/features/project-tree/actions.ts` | missing |
 | `project.paste` | Paste | `src/features/project-tree/actions.ts` | partial - internal/app/tree_ops.go PasteTreeEntry over fs_copy and fs_rename; base.files.copy, base.files.move |
 | `project.reformatCode` | Reformat File | `src/features/project-tree/actions.ts` | missing |
-| `project.refresh` | Reload Project Tree from Disk | `src/features/project-tree/actions.ts` | missing |
-| `project.reloadFromDisk` | Reload from Disk | `src/features/project-tree/actions.ts` | partial - internal/app/tree_ops.go ReloadProjectTree -> internal/app/tree.go Refresh rereads the open folders; base.files.expand |
+| `project.refresh` | Reload Project Tree from Disk | `src/features/project-tree/actions.ts` | integrated - internal/app/tree_ops.go ReloadProjectTree -> internal/app/tree.go Refresh -> workspace.Tree.Refresh rereads every folder read so far, from the palette's 从磁盘重新加载项目树; base.files.expand |
+| `project.reloadFromDisk` | Reload from Disk | `src/features/project-tree/actions.ts` | partial - internal/app/tree_ops.go ReloadPathFromDisk -> internal/app/tree.go RefreshDir -> workspace.Tree.RefreshDir rereads the selected folder and the read folders below it, from the popup and Cmd+Alt+Y; base.files.reload; re-reading a selected file's open document is missing |
 | `project.rename` | Rename File… | `src/features/project-tree/actions.ts` | partial - internal/app/tree_ops.go ConfirmTreeOp over fs_rename, moving bookmarks and closing clean tabs; base.files.rename; internal/app/tree_ops_test.go |
 | `project.renameInline` | Rename File Inline | `src/features/project-tree/actions.ts` | missing |
 | `project.reveal` | Reveal in Project View | `src/features/project-tree/actions.ts` | partial - internal/app/tree.go reveal plus Select; base.files.select |

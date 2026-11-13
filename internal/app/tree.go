@@ -90,6 +90,16 @@ func (t *Tree) Refresh() {
 	t.rebuild()
 }
 
+// RefreshDir rereads dir and the folders below it the tree read, as Reload
+// from Disk does for the selected folder.
+func (t *Tree) RefreshDir(dir string) {
+	if t.ws == nil {
+		return
+	}
+	t.ws.RefreshDir(dir)
+	t.rebuild()
+}
+
 // Rows are the visible rows, each already flattened to its depth.
 func (t *Tree) Rows() []*treeNode { return t.rows }
 

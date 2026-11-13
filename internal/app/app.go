@@ -1314,7 +1314,7 @@ func (m *Model) shortcuts(c *ui.Context) {
 		m.CollapseProjectAll()
 	}
 	if c.Shortcut(ui.Cmd|ui.Alt, ui.KeyY) && !m.overlayOpen() {
-		m.ReloadProjectTree()
+		m.ReloadSelectedFromDisk()
 	}
 	if c.Shortcut(ui.Alt, ui.KeyF1) && !m.overlayOpen() {
 		m.SelectInProjectView()

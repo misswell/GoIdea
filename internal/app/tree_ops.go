@@ -50,6 +50,7 @@ const (
 	treeActShowHistory
 	treeActPutLabel
 	treeActCompareDirs
+	treeActReload
 )
 
 // treeMenuItem is one row of the project view menu: an action, a separator or
@@ -92,6 +93,7 @@ func treeMenuItems(t treeTarget, clipboard bool) []treeMenuItem {
 			item(treeActPutLabel, "标记版本…", true),
 		}},
 		item(treeActCompareDirs, "比较目录…", t.dir),
+		item(treeActReload, "从磁盘重新加载", true),
 		sep,
 		item(treeActRename, "重命名…", !t.root),
 		item(treeActDelete, "删除…", !t.root),
@@ -165,6 +167,8 @@ func (m *Model) runTreeAct(c *ui.Context, it treeMenuItem, t treeTarget) {
 		m.OpenHistoryLabel()
 	case it.Act == treeActCompareDirs:
 		m.OpenDirCompare(t.path)
+	case it.Act == treeActReload:
+		m.ReloadPathFromDisk(t.path)
 	}
 }
 
@@ -716,6 +720,47 @@ func (m *Model) SmokeFiles(ctx context.Context) (map[string]any, error) {
 	out["expandRows"] = expanded
 	run(func() { m.ReloadProjectTree() })
 	out["reloadRows"] = rows()
+	// Reload from Disk rereads the selected folder, so a file written behind
+	// the tree's back shows after it.
+	late := filepath.Join(base, "reloaded.txt")
+	if err := os.WriteFile(late, []byte("late\n"), 0o644); err != nil {
+		return out, err
+	}
+	run(func() {
+		m.tree.Select(base)
+		m.ReloadSelectedFromDisk()
+	})
+	seen := false
+	reloadDeadline := time.Now().Add(30 * time.Second)
+	for {
+		run(func() {
+			seen = false
+			if m.tree == nil {
+				return
+			}
+			for _, r := range m.tree.Rows() {
+				if filepath.Base(r.path) == "reloaded.txt" {
+					seen = true
+				}
+			}
+		})
+		if seen {
+			break
+		}
+		if time.Now().After(reloadDeadline) {
+			return out, errors.New("从磁盘重新加载超时")
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+	out["reloadSeen"] = seen
+	run(func() { out["reloadStatus"] = m.status })
+	if err := os.Remove(late); err != nil {
+		return out, err
+	}
 	// Find in Folder searches only the chosen folder: the fixture's hits come
 	// from src/main/java, and the smoke folder's empty files give none.
 	searchIn := func(dir, query string) (int, []string, error) {
@@ -1103,8 +1148,8 @@ func (m *Model) CollapseProjectAll() {
 	m.invalidate()
 }
 
-// ReloadProjectTree rereads the project view from disk, as OpenIDEA's Reload
-// from Disk does.
+// ReloadProjectTree rereads every folder the project view has read, as
+// OpenIDEA's Reload Project Tree from Disk does.
 func (m *Model) ReloadProjectTree() {
 	if m.tree == nil {
 		return
@@ -1112,6 +1157,34 @@ func (m *Model) ReloadProjectTree() {
 	m.tree.Refresh()
 	m.status = "已从磁盘重新加载"
 	m.invalidate()
+}
+
+// ReloadPathFromDisk rereads path's folder, as OpenIDEA's Reload from Disk
+// does for a selected folder or file.
+func (m *Model) ReloadPathFromDisk(path string) {
+	if m.tree == nil || path == "" {
+		return
+	}
+	dir := path
+	if !m.tree.IsDir(path) {
+		dir = filepath.Dir(path)
+	}
+	m.tree.RefreshDir(dir)
+	m.status = "已从磁盘重新加载"
+	m.invalidate()
+}
+
+// ReloadSelectedFromDisk reloads the project view's selection, or the root
+// when nothing is selected.
+func (m *Model) ReloadSelectedFromDisk() {
+	if m.tree == nil {
+		return
+	}
+	path := m.tree.Selected()
+	if path == "" {
+		path = m.Root()
+	}
+	m.ReloadPathFromDisk(path)
 }
 
 // SelectInProjectView reveals the active file in the project view and marks
