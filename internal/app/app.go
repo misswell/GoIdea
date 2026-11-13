@@ -52,6 +52,12 @@ type Tab struct {
 	// apply the first one's edits twice.
 	formatting bool
 
+	// diskTime and diskSize are the file when the buffer last matched it, so
+	// a write by another program is noticed; reloading marks one in flight.
+	diskTime  time.Time
+	diskSize  int64
+	reloading bool
+
 	// gitMarks are the gutter marks of the buffer version gitVersion, read
 	// against HEAD; gitOff stays set when Git cannot answer for this file.
 	gitMarks   []editor.GutterMark
@@ -141,6 +147,9 @@ type Model struct {
 	status     string
 	banner     string
 	bannerPath string
+
+	// watched paces the disk check of open files in syncPump.
+	watched time.Time
 
 	quitting  bool
 	forceQuit bool
@@ -548,6 +557,7 @@ func (m *Model) newTab(doc *docbridge.Document) *Tab {
 	t.state.OnHover = func(req editor.HoverRequest) { m.requestHover(t, req) }
 	t.state.OnDefinition = func(off int) { m.gotoDefinition(t, off) }
 	m.showDiagnostics(t)
+	t.noteDisk()
 	m.markRecent(path)
 	return t
 }
@@ -719,6 +729,7 @@ func (m *Model) saveTabAsync(t *Tab, done func()) {
 			t.saving = false
 			if err == nil {
 				t.synced = v
+				t.noteDisk()
 				m.status = "已保存 " + filepath.Base(t.doc.Path())
 			} else {
 				m.fail(t.doc.Path(), err)
@@ -757,6 +768,7 @@ func saveAll(ctx context.Context, tabs []*Tab) error {
 // syncPump pushes editor buffer changes to the backend a moment after typing
 // stops. It runs once per frame; the backend calls go to other goroutines.
 func (m *Model) syncPump(now time.Time) {
+	m.watchFiles(now)
 	const idle = 220 * time.Millisecond
 	for _, t := range m.tabs {
 		v := t.doc.Buffer().Version()

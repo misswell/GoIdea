@@ -220,6 +220,15 @@ func smoke(m *app.Model) {
 	if os.Getenv("GOIDEA_SMOKE_COMMANDS") == "1" {
 		fields["commands"] = m.SmokeCommands()
 	}
+	if os.Getenv("GOIDEA_SMOKE_WATCH") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+		watch, watchErr := m.SmokeWatch(ctx)
+		cancel()
+		fields["watch"] = watch
+		if watchErr != nil {
+			fields["watchError"] = watchErr.Error()
+		}
+	}
 	if root != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		count, sample, vcsErr := m.SmokeVCS(ctx)
