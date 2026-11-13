@@ -1,6 +1,9 @@
 package app
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func strip(tabs ...*Tab) []*Tab { return tabs }
 
@@ -221,5 +224,54 @@ func TestTabLimitCandidatesKeepPinnedActiveAndUnsaved(t *testing.T) {
 	wantOrder(t, tabLimitCandidates(tabs, 2, unsaved), saved, older)
 	if got := tabLimitCandidates(strip(pinned, active), 1, func(*Tab) bool { return false }); len(got) != 0 {
 		t.Fatalf("nothing closeable = %d tabs", len(got))
+	}
+}
+
+func TestClosedTabsKeepTheNewestAndReopenNewestFirst(t *testing.T) {
+	m := &Model{}
+	for i := 0; i < maxClosedTabs+2; i++ {
+		m.rememberClosed(closedTab{path: fmt.Sprintf("/p/f%d.java", i), index: i})
+	}
+	if len(m.closedTabs) != maxClosedTabs {
+		t.Fatalf("history holds %d, want %d", len(m.closedTabs), maxClosedTabs)
+	}
+	if m.closedTabs[0].path != "/p/f2.java" {
+		t.Fatalf("oldest kept = %q", m.closedTabs[0].path)
+	}
+	e, ok := m.nextClosed()
+	if !ok || e.path != "/p/f51.java" || e.index != maxClosedTabs+1 {
+		t.Fatalf("newest = %+v %v", e, ok)
+	}
+	for len(m.closedTabs) > 0 {
+		m.nextClosed()
+	}
+	if _, ok := m.nextClosed(); ok {
+		t.Fatal("an empty history still had an entry")
+	}
+	// Nothing to undo reaches no window and opens nothing.
+	m.ReopenClosedTab()
+}
+
+func TestInsertTabAtFollowsThePinnedGroup(t *testing.T) {
+	pinned, a, b := &Tab{pinned: true}, &Tab{}, &Tab{}
+	m := &Model{tabs: strip(pinned, a, b)}
+
+	last := &Tab{}
+	m.insertTabAt(last, 99)
+	wantOrder(t, m.tabs, pinned, a, b, last)
+
+	fresh := &Tab{}
+	m.insertTabAt(fresh, 1)
+	wantOrder(t, m.tabs, pinned, fresh, a, b, last)
+
+	newPin := &Tab{pinned: true}
+	m.insertTabAt(newPin, 4)
+	wantOrder(t, m.tabs, pinned, newPin, fresh, a, b, last)
+}
+
+func TestTabForPathIgnoresTabsWithoutADocument(t *testing.T) {
+	m := &Model{tabs: strip(&Tab{})}
+	if at := m.tabForPath("/p/Main.java"); at != -1 {
+		t.Fatalf("tabForPath = %d", at)
 	}
 }

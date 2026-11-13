@@ -38,6 +38,7 @@ func commands() []appCommand {
 		{"editor.closeOthers", "关闭其他标签页", "文件", "", "close other tabs", func(m *Model) { m.CloseOtherTabs(nil) }},
 		{"editor.closeAll", "关闭所有标签页", "文件", "", "close all tabs", func(m *Model) { m.CloseAllTabs(false) }},
 		{"editor.closeAllPinned", "关闭未固定的标签页", "文件", "", "close all but pinned tabs", func(m *Model) { m.CloseAllTabs(true) }},
+		{"editor.reopenClosedTab", "Reopen Closed Tab", "文件", "", "reopen closed tab history restore", func(m *Model) { m.ReopenClosedTab() }},
 		{"vcs.show", "显示 Git 更改", "Git", "Cmd+9", "git vcs changes status", func(m *Model) { m.ShowVCS() }},
 		{"vcs.log", "显示 Git 日志", "Git", "", "git vcs log history commits", func(m *Model) { m.ShowLog() }},
 		{"vcs.branches", "分支…", "Git", "", "git vcs branches checkout", func(m *Model) { m.ToggleBranches() }},

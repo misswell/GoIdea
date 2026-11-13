@@ -27,7 +27,7 @@ new action, tool window, page or command appears automatically.
 | Kind | Items | Integrated | Partial | Engine | Blocked | Missing |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Feature folders | 43 | 0 | 12 | 0 | 0 | 31 |
-| Actions | 647 | 33 | 67 | 0 | 1 | 546 |
+| Actions | 647 | 33 | 68 | 0 | 1 | 545 |
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
 | Tool windows | 30 | 8 | 5 | 0 | 0 | 17 |
 | Overlays | 56 | 1 | 0 | 0 | 0 | 55 |
@@ -694,7 +694,7 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `editor.pinTab` | Pin / Unpin Tab | `src/editor/core/actions.ts` | partial - internal/app/tabs.go PinActiveTab/placeTab and the tab context menu in internal/app/workbench.go; pinned tabs in Session.Pinned; internal/app/tabs_test.go |
 | `editor.prevSplitter` | Go to Previous Splitter | `src/editor/core/actions.ts` | missing |
 | `editor.prevTab` | Select Previous Tab | `src/editor/core/actions.ts` | missing |
-| `editor.reopenClosedTab` | Reopen Closed Tab | `src/editor/core/actions.ts` | missing |
+| `editor.reopenClosedTab` | Reopen Closed Tab | `src/editor/core/actions.ts` | partial - internal/app/tabs.go closedTab/rememberClosed/nextClosed/insertTabAt (maxClosedTabs 50, newest poppable last, open files skipped) and ReopenClosedTab; internal/app/app.go openWith openSpec at/pinned, removeTab records, removeTabNow skips the trimmed preview; internal/app/commands.go Reopen Closed Tab with no default key, as OpenIDEA's IntelliJ macOS keymap leaves Shift+Cmd+T to Go to Test; internal/app/tabs_test.go TestClosedTabsKeepTheNewestAndReopenNewestFirst, TestInsertTabAtFollowsThePinnedGroup, TestTabForPathIgnoresTabsWithoutADocument. Undo history and caret of a reopened document are not restored |
 | `editor.resetFontSize` | Reset Font Size in All Editors | `src/editor/core/actions.ts` | missing |
 | `editor.showHint` | Show Editor Hint | `src/editor/lsp/actions.ts` | missing |
 | `editor.splitDown` | Split Down | `src/editor/core/actions.ts` | missing |

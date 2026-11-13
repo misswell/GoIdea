@@ -497,6 +497,10 @@
       "status": "partial",
       "evidence": "internal/app/tabs.go CloseOtherTabs, CloseTabsToLeft/Right and CloseUnmodifiedTabs; internal/app/workbench.go tabMenu; internal/app/tabs_test.go"
     },
+    "action:editor.reopenClosedTab": {
+      "status": "partial",
+      "evidence": "internal/app/tabs.go closedTab/rememberClosed/nextClosed/insertTabAt (maxClosedTabs 50, newest poppable last, open files skipped) and ReopenClosedTab; internal/app/app.go openWith openSpec at/pinned, removeTab records, removeTabNow skips the trimmed preview; internal/app/commands.go Reopen Closed Tab with no default key, as OpenIDEA's IntelliJ macOS keymap leaves Shift+Cmd+T to Go to Test; internal/app/tabs_test.go TestClosedTabsKeepTheNewestAndReopenNewestFirst, TestInsertTabAtFollowsThePinnedGroup, TestTabForPathIgnoresTabsWithoutADocument. Undo history and caret of a reopened document are not restored"
+    },
     "action:code.commentLine": {
       "status": "integrated",
       "evidence": "internal/app/editor_keys.go intellijEditorBindings Cmd+/ and code.commentLine in internal/app/commands.go and the Code menu; internal/app/editor_keys_test.go"

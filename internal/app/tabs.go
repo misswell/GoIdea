@@ -152,14 +152,15 @@ func (m *Model) replacePreviewTab(at int, tab *Tab) {
 	}()
 }
 
-// dropPreviewTabs closes the preview tab, as a regular open does.
+// dropPreviewTabs closes the preview tab, as a regular open trims it. The
+// trimmed preview does not join the closed history, as openTab splices it out.
 func (m *Model) dropPreviewTabs() {
 	for {
 		at := m.previewIndex()
 		if at < 0 {
 			return
 		}
-		m.removeTab(m.tabs[at])
+		m.removeTabNow(m.tabs[at])
 	}
 }
 
@@ -526,4 +527,76 @@ func (m *Model) CloseReadOnlyTabs() {
 		}
 	}
 	m.closeTabsThen(victims, nil)
+}
+
+// closedTab is a tab Reopen Closed Tab can bring back: its file, the place it
+// had in the strip and whether it was pinned.
+type closedTab struct {
+	path   string
+	index  int
+	pinned bool
+}
+
+// maxClosedTabs is how many closed tabs the history keeps, as the tabs store's
+// MAX_CLOSED does.
+const maxClosedTabs = 50
+
+// rememberClosed pushes t onto the closed history as its newest entry, dropping
+// the oldest past the cap.
+func (m *Model) rememberClosed(t closedTab) {
+	m.closedTabs = append(m.closedTabs, t)
+	if len(m.closedTabs) > maxClosedTabs {
+		m.closedTabs = m.closedTabs[len(m.closedTabs)-maxClosedTabs:]
+	}
+}
+
+// insertTabAt puts tab at at, clamped to the strip: a pinned tab goes to the
+// end of the pinned group, as OpenIDEA's openTab places one.
+func (m *Model) insertTabAt(tab *Tab, at int) {
+	if at < 0 || at > len(m.tabs) {
+		at = len(m.tabs)
+	}
+	if tab.pinned {
+		pins := 0
+		for pins < len(m.tabs) && m.tabs[pins].pinned {
+			pins++
+		}
+		at = min(at, pins)
+	}
+	m.tabs = append(m.tabs, nil)
+	copy(m.tabs[at+1:], m.tabs[at:])
+	m.tabs[at] = tab
+}
+
+// tabForPath is the tab showing path, or -1.
+func (m *Model) tabForPath(path string) int {
+	path = realPath(path)
+	for i, t := range m.tabs {
+		if t.doc != nil && t.doc.Path() == path {
+			return i
+		}
+	}
+	return -1
+}
+
+// nextClosed is the newest history entry whose file is not open again, and
+// whether there was one; entries that are open are dropped as reopenClosed's
+// loop drops them.
+func (m *Model) nextClosed() (closedTab, bool) {
+	for len(m.closedTabs) > 0 {
+		e := m.closedTabs[len(m.closedTabs)-1]
+		m.closedTabs = m.closedTabs[:len(m.closedTabs)-1]
+		if m.tabForPath(e.path) < 0 {
+			return e, true
+		}
+	}
+	return closedTab{}, false
+}
+
+// ReopenClosedTab brings back the most recently closed tab where it sat, as
+// editor.reopenClosedTab does.
+func (m *Model) ReopenClosedTab() {
+	if e, ok := m.nextClosed(); ok {
+		m.openWith(e.path, openSpec{at: e.index, pinned: e.pinned})
+	}
 }

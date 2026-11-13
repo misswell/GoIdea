@@ -20,6 +20,7 @@ needs a `## <version>` section here, or its build fails.
 - **Editor > Editor Tabs** 可选择关闭当前标签页后激活哪个：左边的、右边的或最近打开的。
 - 单击 **Problems**、**Find**、**Find Usages** 的结果在斜体预览标签中打开，下一次单击原位替换它。
 - 编辑、固定或双击结果会把预览标签转为普通标签；**Editor > Editor Tabs** 的 **Opening Policy** 可关掉预览标签。
+- 命令面板新增 **Reopen Closed Tab**，最多记住 50 个关闭的标签页，重开时回到原来位置并保留固定状态。
 - 齿轮菜单新增 **Run Anything…**：搜索最近命令和运行配置，回车在项目目录执行或在运行窗口启动配置。
 - 工作台改用 OpenIDEA Islands 布局：顶部标题栏、左侧图标条、独立面板和 34px 状态栏。
 - 左侧图标条再次点击当前面板会折叠它，再点一次恢复，**Search Everywhere** 固定在底部。

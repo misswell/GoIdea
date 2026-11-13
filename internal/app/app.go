@@ -114,6 +114,10 @@ type Model struct {
 	active int
 	tree   *Tree
 
+	// closedTabs is the tab history Reopen Closed Tab pops, most recently
+	// closed last as OpenIDEA's tabs store keeps it.
+	closedTabs []closedTab
+
 	// tabPrefs is Settings › Editor › Editor Tabs as the strip draws it, which
 	// the settings preview stages; it follows prefs.Tabs on Apply. tabUse
 	// counts activations for the tab limit's least-recently-used order.
@@ -900,9 +904,24 @@ func (m *Model) openPreview(path string) { m.openFileWith(path, true) }
 // openFileWith is openFile with the preview flag. A preview open reuses the
 // strip's one preview tab, and a regular open closes it, as openTab does.
 func (m *Model) openFileWith(path string, preview bool) {
-	if !m.tabPrefs.previews() {
-		preview = false
-	}
+	m.openWith(path, openSpec{preview: preview, at: -1})
+}
+
+// openSpec says where an opened document goes: preview marks the strip's one
+// preview tab, at (other than -1) is where a reopened tab had its place, and
+// pinned joins the pinned group.
+// pinned joins the pinned group.
+type openSpec struct {
+	preview bool
+	at      int
+	pinned  bool
+}
+
+// openWith is openFileWith with the place the document goes in the strip. A
+// regular open closes the preview tab, as openTab does, and an open that
+// replaces it keeps the preview slot.
+func (m *Model) openWith(path string, spec openSpec) {
+	preview := spec.preview && m.tabPrefs.previews()
 	path = realPath(path)
 	for i, t := range m.tabs {
 		if t.doc.Path() == path {
@@ -931,9 +950,14 @@ func (m *Model) openFileWith(path string, preview bool) {
 			}
 			tab := m.newTab(doc)
 			tab.preview = preview
-			if at := m.previewIndex(); preview && at >= 0 {
-				m.replacePreviewTab(at, tab)
-			} else {
+			tab.pinned = spec.pinned
+			switch {
+			case spec.at >= 0:
+				m.dropPreviewTabs()
+				m.insertTabAt(tab, spec.at)
+			case preview && m.previewIndex() >= 0:
+				m.replacePreviewTab(m.previewIndex(), tab)
+			default:
 				if !preview {
 					m.dropPreviewTabs()
 				}
@@ -998,7 +1022,17 @@ func (m *Model) applyActive() {
 
 func (m *Model) dropTab(i int) { m.removeTab(m.tabs[i]) }
 
+// removeTab closes t and puts it in the closed history Reopen Closed Tab pops.
 func (m *Model) removeTab(t *Tab) {
+	if idx := m.tabIndex(t); idx >= 0 && t.doc != nil {
+		m.rememberClosed(closedTab{path: t.doc.Path(), index: idx, pinned: t.pinned})
+	}
+	m.removeTabNow(t)
+}
+
+// removeTabNow takes t out of the strip without the closed history, as the
+// preview trim and the preview slot's reuse do.
+func (m *Model) removeTabNow(t *Tab) {
 	idx := m.tabIndex(t)
 	if idx < 0 {
 		return
