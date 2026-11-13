@@ -6,6 +6,10 @@ mygo_windows_*.syso
 /mayoi
 /cmd/mayoi/mayoi
 *.test
+# Java fixtures build in place during the E2E run.
+testdata/**/target/
+testdata/**/build/
+testdata/**/.gradle/
 /.agents/
 /.claude/worktrees/
 /.qoder/worktrees/
@@ -17,6 +21,7 @@ resources/openidea-server-*.sha256
 # macOS and editors
 .DS_Store
 *.swp
+__pycache__/
 
 # Generated at release time
 resources/licenses/

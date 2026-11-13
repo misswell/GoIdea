@@ -177,7 +177,7 @@ func (m *Model) SmokeSearch(ctx context.Context) (map[string]any, error) {
 		return out, errors.New("没有打开项目")
 	}
 	m.post(func() {
-		m.search.query = "func "
+		m.search.query = "class "
 		m.RunSearch()
 	})
 	deadline := time.Now().Add(90 * time.Second)

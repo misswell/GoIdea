@@ -67,7 +67,10 @@ reimplementing it. A row is `INTEGRATED` only when the GoIDEA product
 | Agent UI | ADAPTING | backend ops exist, no panel yet |
 | Plugin management UI | ADAPTING | backend ops exist, no sheet yet |
 | Remote development and containers | NOT_AVAILABLE | `openidea-server --connect` supported; no UI |
-| Java toolchain download on first use | INTEGRATED | backend installs JDT LS into GoIDEA's own data dir |
+| Java toolchain download on first use | INTEGRATED | settings sheet + palette install JDT LS/java-debug with progress, cancel and retry into GoIDEA's own data dir; `GOIDEA_SMOKE_TOOLS` |
+| Spring Boot application run/stop | IMPLEMENTED (backend) / ADAPTING (coverage) | backend detects `spring-boot` configs and GoIDEA prefers application configs; no gate runs one yet |
+| Build / rebuild / clean actions | ADAPTING | run and debug trigger the backend's build; no separate actions or test-results UI yet |
+| Multi-JDK project selection | ADAPTING | backend reports `javaExec`; no per-project JDK picker in the UI |
 
 ## Rule for a new upstream feature
 

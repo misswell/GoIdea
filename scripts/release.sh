@@ -19,7 +19,10 @@ profile="${GOIDEA_NOTARY_PROFILE:-octoshrink-notary}"
 
 [[ -f resources/icon.png ]] || { echo "resources/icon.png is missing" >&2; exit 1; }
 [[ -x resources/openidea-server ]] || scripts/fetch-server.sh
-scripts/check-licenses.sh
+# Nothing is signed or notarized before the whole regression passes: the
+# release gate covers the unit tests, the offline flow, the toolchain install,
+# JDT language services and the debugger against the real server.
+scripts/gate.sh release
 
 cp mygo.json mygo.json.release-backup
 restore() {

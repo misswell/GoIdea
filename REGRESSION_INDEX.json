@@ -1,0 +1,87 @@
+{
+  "version": 1,
+  "updated": "2026-11-13",
+  "about": "Every end-to-end regression check GoIDEA runs, the feature it protects, the doc that describes it, and the gate that must pass before code lands. scripts/check-regression-index.py keeps the ids in sync with scripts/e2e-checks.py, so a check cannot be dropped or renamed silently.",
+  "gates": {
+    "pr": {
+      "when": "every pull request and every push",
+      "command": "scripts/gate.sh pr",
+      "steps": [
+        "gofmt -l . is empty",
+        "CGO_ENABLED=0 go vet ./...",
+        "CGO_ENABLED=0 go test ./... -skip TestTerminalMovesToLockedRightColumn",
+        "CGO_ENABLED=0 go build ./cmd/goidea",
+        "scripts/check-licenses.sh",
+        "scripts/check-regression-index.py"
+      ],
+      "runs_in": ".github/workflows/ci.yml (test job, ubuntu-latest)"
+    },
+    "main": {
+      "when": "a merge or push to main",
+      "command": "scripts/gate.sh main",
+      "steps": [
+        "the pr gate",
+        "scripts/e2e.sh offline: real openidea-server, real Maven build and run"
+      ],
+      "runs_in": ".github/workflows/ci.yml (e2e job, macOS, gated by the ENABLE_MACOS_CI variable)"
+    },
+    "release": {
+      "when": "scripts/release.sh, before signing and notarizing",
+      "command": "scripts/gate.sh release",
+      "steps": [
+        "the pr gate",
+        "scripts/e2e.sh online: toolchain install, JDT language server, debugger"
+      ],
+      "runs_in": "scripts/release.sh"
+    }
+  },
+  "checks": [
+    {"id": "base.backend", "label": "backend is up", "feature": "Backend process and RPC handshake", "area": "openidea-rpc", "gate": "main", "doc": "RPC_PROTOCOL.md"},
+    {"id": "base.tabs", "label": "a file is open in a tab", "feature": "Startup file restore", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
+    {"id": "base.edited", "label": "edit reached the backend", "feature": "Buffer to doc_change sync", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
+    {"id": "base.undone", "label": "undo round-tripped", "feature": "Backend undo mirrored into the buffer", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
+    {"id": "base.outline", "label": "outline names the Java class", "feature": "Document outline", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
+    {"id": "base.search.done", "label": "project search finished", "feature": "Project-wide search", "area": "search", "gate": "main", "doc": "EDITOR.md"},
+    {"id": "base.search.files", "label": "project search scanned the sources", "feature": "Project-wide search covers the tree", "area": "search", "gate": "main", "doc": "EDITOR.md"},
+    {"id": "base.search.matches", "label": "project search found matches", "feature": "Project-wide search returns hits", "area": "search", "gate": "main", "doc": "EDITOR.md"},
+    {"id": "base.searchError", "label": "searchError is absent", "feature": "Project-wide search reports no error", "area": "search", "gate": "main", "doc": "EDITOR.md"},
+    {"id": "base.diff.rows", "label": "Git diff has rows", "feature": "Diff view over a working-tree change", "area": "vcs", "gate": "main", "doc": "EDITOR.md"},
+    {"id": "base.diffError", "label": "diffError is absent", "feature": "Diff view reports no error", "area": "vcs", "gate": "main", "doc": "EDITOR.md"},
+    {"id": "base.commands", "label": "command palette is populated", "feature": "Command palette", "area": "workbench", "gate": "main", "doc": "README.md"},
+    {"id": "base.settings.opened", "label": "settings sheet opened", "feature": "Settings sheet", "area": "workbench", "gate": "main", "doc": "README.md"},
+    {"id": "base.settings.closed", "label": "settings sheet closed", "feature": "Settings sheet dismissal", "area": "workbench", "gate": "main", "doc": "README.md"},
+    {"id": "base.settings.theme", "label": "theme choice reached the disk", "feature": "Persisted theme preference", "area": "workbench", "gate": "main", "doc": "README.md"},
+    {"id": "base.watch.reloaded", "label": "external edit was reloaded", "feature": "File watching inside the IDE", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
+    {"id": "base.vcs.changes", "label": "Git status reports the change", "feature": "Git status", "area": "vcs", "gate": "main", "doc": "EDITOR.md"},
+    {"id": "base.run.config", "label": "a run configuration was detected", "feature": "Maven run configuration detection", "area": "build-run", "gate": "main", "doc": "BUILD_AND_DEBUG.md"},
+    {"id": "base.runError", "label": "runError is absent", "feature": "Run path reports no error", "area": "build-run", "gate": "main", "doc": "BUILD_AND_DEBUG.md"},
+    {"id": "base.run.exit", "label": "run exited 0", "feature": "Real Maven run exits cleanly", "area": "build-run", "gate": "main", "doc": "BUILD_AND_DEBUG.md"},
+    {"id": "base.run.build", "label": "Maven reported BUILD SUCCESS", "feature": "Real Maven build output", "area": "build-run", "gate": "main", "doc": "BUILD_AND_DEBUG.md"},
+    {"id": "tools.toolsError", "label": "toolsError is absent", "feature": "Toolchain listing and install report no error", "area": "java-toolchain", "gate": "release", "doc": "JAVA_SUPPORT.md"},
+    {"id": "tools.jdtls", "label": "jdtls is installed", "feature": "Eclipse JDT LS install", "area": "java-toolchain", "gate": "release", "doc": "JAVA_SUPPORT.md"},
+    {"id": "tools.java-debug", "label": "java-debug is installed", "feature": "Java debug adapter install", "area": "java-toolchain", "gate": "release", "doc": "JAVA_SUPPORT.md"},
+    {"id": "lsp.lspError", "label": "lspError is absent", "feature": "Language service calls report no error", "area": "java-lsp", "gate": "release", "doc": "JAVA_SUPPORT.md"},
+    {"id": "lsp.jdtls.ready", "label": "jdtls is ready", "feature": "JDT LS lifecycle", "area": "java-lsp", "gate": "release", "doc": "JAVA_SUPPORT.md"},
+    {"id": "lsp.completion.items", "label": "completion returned items", "feature": "Completion over JDT", "area": "java-lsp", "gate": "release", "doc": "JAVA_SUPPORT.md"},
+    {"id": "lsp.completion.first", "label": "completion has a first label", "feature": "Completion item rendering", "area": "java-lsp", "gate": "release", "doc": "JAVA_SUPPORT.md"},
+    {"id": "lsp.hover", "label": "hover returned documentation", "feature": "Hover documentation", "area": "java-lsp", "gate": "release", "doc": "JAVA_SUPPORT.md"},
+    {"id": "lsp.definition", "label": "definition resolved to App.java", "feature": "Go to definition", "area": "java-lsp", "gate": "release", "doc": "JAVA_SUPPORT.md"},
+    {"id": "lsp.format", "label": "format changed the buffer", "feature": "Formatting through JDT", "area": "java-lsp", "gate": "release", "doc": "JAVA_SUPPORT.md"},
+    {"id": "lsp.references.count", "label": "find usages returned references", "feature": "Find usages", "area": "java-lsp", "gate": "release", "doc": "JAVA_SUPPORT.md"},
+    {"id": "lsp.references.done", "label": "find usages finished", "feature": "Find usages completes", "area": "java-lsp", "gate": "release", "doc": "JAVA_SUPPORT.md"},
+    {"id": "lsp.rename", "label": "rename was applied and undone", "feature": "Rename with undo", "area": "java-lsp", "gate": "release", "doc": "JAVA_SUPPORT.md"},
+    {"id": "lsp.symbols", "label": "go to symbol found the class", "feature": "Go to symbol", "area": "java-lsp", "gate": "release", "doc": "JAVA_SUPPORT.md"},
+    {"id": "lsp.diagnostics", "label": "JDT published diagnostics", "feature": "Diagnostics from JDT", "area": "java-lsp", "gate": "release", "doc": "JAVA_SUPPORT.md"},
+    {"id": "debug.debugError", "label": "debugError is absent", "feature": "Debug session reports no error", "area": "debugger", "gate": "release", "doc": "BUILD_AND_DEBUG.md"},
+    {"id": "debug.paused", "label": "debugger paused at the breakpoint", "feature": "Breakpoint hit", "area": "debugger", "gate": "release", "doc": "BUILD_AND_DEBUG.md"},
+    {"id": "debug.breakpoint", "label": "breakpoint was set", "feature": "Breakpoint creation", "area": "debugger", "gate": "release", "doc": "BUILD_AND_DEBUG.md"},
+    {"id": "debug.mainClass", "label": "main class resolved", "feature": "Launch resolver picks the main class", "area": "debugger", "gate": "release", "doc": "BUILD_AND_DEBUG.md"},
+    {"id": "debug.vars", "label": "variables were read", "feature": "Variables view", "area": "debugger", "gate": "release", "doc": "BUILD_AND_DEBUG.md"},
+    {"id": "debug.watch", "label": "watch expression evaluated", "feature": "Watch expressions", "area": "debugger", "gate": "release", "doc": "BUILD_AND_DEBUG.md"},
+    {"id": "debug.step.paused", "label": "step over paused again", "feature": "Step over", "area": "debugger", "gate": "release", "doc": "BUILD_AND_DEBUG.md"},
+    {"id": "debug.step.line", "label": "step moved to the next line", "feature": "Step advances the frame", "area": "debugger", "gate": "release", "doc": "BUILD_AND_DEBUG.md"},
+    {"id": "debug.ended", "label": "program ran to the end", "feature": "Debug session termination", "area": "debugger", "gate": "release", "doc": "BUILD_AND_DEBUG.md"},
+    {"id": "debug.errors", "label": "project compiles with no errors", "feature": "Debug launch compiles the project", "area": "debugger", "gate": "release", "doc": "BUILD_AND_DEBUG.md"},
+    {"id": "debug.output", "label": "program output was captured", "feature": "Program output in the IDE", "area": "debugger", "gate": "release", "doc": "BUILD_AND_DEBUG.md"}
+  ]
+}

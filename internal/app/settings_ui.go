@@ -13,6 +13,7 @@ func (m *Model) OpenSettings() {
 		return
 	}
 	m.settingsOpen = true
+	m.LoadJavaTools()
 	m.invalidate()
 }
 
@@ -120,6 +121,7 @@ func (m *Model) settingsDialog(c *ui.Context, p *ui.Theme) {
 			})
 			ui.Text(c, fmt.Sprintf("范围 %d–%d，打开的编辑器立即生效", minFontSize, maxFontSize)).
 				FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+			m.javaToolsSection(c, p)
 		})
 	})
 	if dlg.Dismissed() || !open {
@@ -162,4 +164,69 @@ func (m *Model) SmokeSettings() map[string]any {
 		m.savePreferences()
 	})
 	return out
+}
+
+// javaToolsSection draws the Java language server / debugger rows and the
+// install action, so a fresh data directory can get a working Java toolchain
+// without leaving the app.
+func (m *Model) javaToolsSection(c *ui.Context, p *ui.Theme) {
+	ui.Text(c, "Java 语言服务与调试器").FontSize(11).TextColor(p.TextMuted).SingleLine()
+	if m.Root() == "" {
+		ui.Text(c, "打开一个 Java 项目后可安装").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+		return
+	}
+	busy := m.toolsBusy != ""
+	for _, t := range m.javaTools {
+		t := t
+		ui.Row(c).Height(26).Gap(8).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, t.Display).FontSize(12).TextColor(p.Text).Width(230).SingleLine().Ellipsis("…")
+			label := javaToolStatus(t.Status)
+			color := p.TextMuted
+			if t.Status != "missing" {
+				color = p.Success
+			}
+			ui.Text(c, label).FontSize(11).TextColor(color).SingleLine()
+			if t.Version != "" {
+				ui.Text(c, t.Version).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+			}
+			ui.Spacer(c)
+			if t.Status == "missing" && t.CanInstall && !busy {
+				ui.Button(c, "安装").OnClick(func() { m.InstallJavaToolchain() })
+			}
+			if t.Status == "missing" && !t.CanInstall && t.Reason != "" && !busy {
+				ui.Text(c, t.Reason).FontSize(10.5).TextColor(p.Danger).SingleLine().Ellipsis("…")
+			}
+		})
+	}
+	switch {
+	case m.toolsLoading:
+		ui.Text(c, "正在读取工具状态…").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+	case !m.toolsLoaded:
+		ui.Row(c).Height(26).Gap(8).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, "尚未读取工具状态").FontSize(10.5).TextColor(p.TextMuted)
+			ui.Spacer(c)
+			ui.Button(c, "检查").OnClick(func() { m.LoadJavaTools() })
+		})
+	case busy:
+		ui.Row(c).Height(26).Gap(8).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, m.toolsBusy).FontSize(11).TextColor(p.Text).SingleLine()
+			ui.Spacer(c)
+			ui.Button(c, "取消").OnClick(func() { m.CancelToolInstall() })
+		})
+	}
+	if busy && m.toolsProgress != "" {
+		ui.Text(c, m.toolsProgress).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+	}
+	if len(m.toolsLog) > 0 {
+		from := max(0, len(m.toolsLog)-2)
+		for _, line := range m.toolsLog[from:] {
+			ui.Text(c, line).FontSize(10).TextColor(p.TextMuted).SingleLine().Ellipsis("…")
+		}
+	}
+	if m.toolsErr != "" {
+		ui.Text(c, m.toolsErr).FontSize(10.5).TextColor(p.Danger).SingleLine().Ellipsis("…")
+	}
+	if !busy && len(m.javaTools) > 0 && len(javaToolsMissing(m.javaTools)) == 0 {
+		ui.Text(c, "Java 编辑、构建与调试可用").FontSize(10.5).TextColor(p.Success).SingleLine()
+	}
 }

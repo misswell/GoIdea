@@ -132,6 +132,20 @@ type Model struct {
 	theme        *ui.Theme
 	settingsOpen bool
 
+	// javaTools is the Java language server / debugger state the settings
+	// sheet shows; toolsBusy names the install in progress, whose events
+	// arrive on toolsChannel.
+	javaTools     []javaTool
+	toolsLoaded   bool
+	toolsLoading  bool
+	toolsBusy     string
+	toolsChannel  uint32
+	toolsRequest  uint32
+	toolsProgress string
+	toolsLog      []string
+	toolsErr      string
+	toolsAbort    atomic.Bool
+
 	// refactor is the newest backend workspace edit, which UndoRefactor rolls
 	// back; redoRefactor is what the last undo can reapply.
 	refactor     *refactorEdit
@@ -167,6 +181,9 @@ type Model struct {
 	// startupRoot opens this project instead of the session's, for `goidea
 	// <dir>` and the offscreen smoke run.
 	startupRoot string
+	// startupFiles opens these files beside startupRoot, so an offscreen run
+	// has a tab without touching the user's session.
+	startupFiles []string
 }
 
 // New returns a model; Start opens the last session.
@@ -244,6 +261,10 @@ func (m *Model) Attach(win *mygo.Window) {
 // OpenAtStartup opens dir instead of the session's project; call before Start.
 func (m *Model) OpenAtStartup(dir string) { m.startupRoot = dir }
 
+// OpenFilesAtStartup opens these files in the startup project; call before
+// Start. Paths outside the project are ignored, as session files are.
+func (m *Model) OpenFilesAtStartup(paths []string) { m.startupFiles = paths }
+
 // Snapshot reports what the smoke run checks: the project, its tabs, and
 // whether the backend is up.
 func (m *Model) Snapshot() (root string, tabs int, backend bool) {
@@ -280,9 +301,15 @@ func (m *Model) start() {
 		root = s.Root
 		if root != "" {
 			for _, p := range s.Files {
-				if strings.HasPrefix(p, root+string(filepath.Separator)) {
+				if inProject(root, p) {
 					files = append(files, p)
 				}
+			}
+		}
+	} else {
+		for _, p := range m.startupFiles {
+			if inProject(root, p) {
+				files = append(files, p)
 			}
 		}
 	}
@@ -296,6 +323,32 @@ func (m *Model) start() {
 
 func (m *Model) session() Session {
 	return LoadSession(m.cfg.SessionPath)
+}
+
+// inProject reports whether p lies inside root, tolerating a path that differs
+// only by trailing separators or symlinks (/var vs /private/var).
+func inProject(root, p string) bool {
+	root = filepath.Clean(root)
+	p = filepath.Clean(p)
+	if root == "" || root == "." || p == "" || p == "." {
+		return false
+	}
+	roots := []string{root}
+	if r := realPath(root); r != root {
+		roots = append(roots, r)
+	}
+	paths := []string{p}
+	if q := realPath(p); q != p {
+		paths = append(paths, q)
+	}
+	for _, r := range roots {
+		for _, q := range paths {
+			if q != r && strings.HasPrefix(q, r+string(filepath.Separator)) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // Root is the open project folder, safe to read from any goroutine.

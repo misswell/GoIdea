@@ -183,7 +183,22 @@ func (m *Model) loadRunConfigs() {
 
 // pickRunConfig prefers a non-test configuration, so Run starts the build
 // rather than the test suite.
+// pickRunConfig prefers the program over the build tool: a detected Java
+// application, then any non-test configuration. `mvn package` is a build, so
+// it should not be what the Run button starts when an application is known.
 func pickRunConfig(configs []openidea.RunConfig) int {
+	for i, c := range configs {
+		if c.IsTest {
+			continue
+		}
+		if c.DebugAdapter != nil && *c.DebugAdapter != "" {
+			return i
+		}
+		switch c.Kind {
+		case "java", "application", "spring-boot":
+			return i
+		}
+	}
 	for i, c := range configs {
 		if !c.IsTest {
 			return i
@@ -405,6 +420,9 @@ func (m *Model) watchBackend(ctx context.Context) {
 }
 
 func (m *Model) acceptChunk(id uint32, data json.RawMessage) {
+	if m.acceptToolEvent(id, data) {
+		return
+	}
 	switch {
 	case id != 0 && id == m.run.channel:
 		var chunk openidea.OutputChunk

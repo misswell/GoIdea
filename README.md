@@ -18,11 +18,26 @@ undo/redo, Java syntax highlighting, diagnostics, completion, hover,
 definitions, intentions, rename, usages, symbols, format, project search, a
 project tree that follows the disk (Mayoi's `internal/workspace`),
 Maven/Gradle build and run, DAP debugging, Git changes and diff, terminal,
-database console, themes and font settings, command palette and quick open.
+database console, themes and font settings, command palette and quick open,
+plus the Java toolchain installer (JDT LS and java-debug) in the settings sheet.
 
 Later increments: table editing and DDL/history/explain in the database sheet,
-HTTP client, agent panel, plugin management, remote development, benchmarks,
-and the remaining docs.
+HTTP client, agent panel, plugin management, remote development, separate
+Build/Rebuild/Clean actions, Spring Boot application run/stop coverage, and the
+v0.2.0 performance bench table.
+
+## Docs
+
+- `ARCHITECTURE.md` — processes, packages, threads, restart and startup.
+- `RPC_PROTOCOL.md` — framing, `invoke` commands, channels, cancellation,
+  errors, backpressure, timeouts.
+- `EDITOR.md` — documents, ChangeSets, UTF-16 mapping, undo, save, conflicts.
+- `JAVA_SUPPORT.md` — project detection, toolchain install, LSP, fixtures.
+- `BUILD_AND_DEBUG.md` — run configurations, run/stop, DAP pipeline, gaps.
+- `UPSTREAM_SYNC.md` — pins, daily report, weekly sync, rollback.
+- `PERFORMANCE.md` — budgets, mechanisms, how to measure.
+- `RELEASE.md` — version, gates, signing, notarization, verification.
+- `REGRESSION_INDEX.json` — every end-to-end check and the gate it blocks.
 
 ## Build
 
@@ -47,16 +62,22 @@ does the same.
 Run the tests and the offscreen checks:
 
 ```sh
-gofmt -l .
-CGO_ENABLED=0 go vet ./...
-CGO_ENABLED=0 go test ./...
-scripts/check-licenses.sh
+scripts/gate.sh pr        # format, vet, unit tests, build, licenses, index
+scripts/gate.sh main      # + offline e2e against the real server and Maven
+scripts/gate.sh release   # + toolchain install, JDT language services, debugger
 ```
 
-CI runs these on `ubuntu-latest`. The `macos-14` job is gated behind the
-`ENABLE_MACOS_CI` repository variable because GitHub hosted macOS runners are
-not available to this account; the release itself was built, signed and
-notarized on macOS with `scripts/release.sh`.
+The end-to-end run copies `testdata/java-maven` to a temporary folder, builds
+it with the local `mvn`, edits it over the real backend, installs jdtls and
+java-debug into `build/e2e-data`, and drives completion, rename, a Maven build
+and a DAP session in a hidden window. Every assertion is listed in
+`REGRESSION_INDEX.json` and enforced by `scripts/check-regression-index.py`.
+
+CI runs the PR gate on `ubuntu-latest`. The `e2e` job (`scripts/gate.sh main`)
+and the `macos-14` unit tests are gated behind the `ENABLE_MACOS_CI` repository
+variable because GitHub hosted macOS runners are not available to this account;
+the release itself was built, signed and notarized on macOS with
+`scripts/release.sh`.
 
 The app reads `GOIDEA_OPEN_PROJECT` to open a folder at startup and
 `GOIDEA_HEADLESS=1` to stay offscreen. `GOIDEA_SMOKE_*` flags drive the

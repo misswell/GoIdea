@@ -5,6 +5,9 @@ needs a `## <version>` section here, or its build fails.
 
 ## Unreleased
 
+- **Settings > Java 语言服务与调试器** installs jdtls and java-debug with progress, cancel and a retry, without leaving GoIDEA.
+- The command palette's **安装 Java 语言服务与调试器** runs the same install.
+- Opening a project restores only the session files inside that project, including through `/var` → `/private/var` links.
 - Clicking a repository's name or row background in source control expands or collapses its changes.
 - **Settings > Shortcuts** lists **Report a Problem** under Help instead of Account.
 - A `mayoi://file` link opens its file at the line and column it names.

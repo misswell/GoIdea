@@ -21,6 +21,11 @@ import (
 func main() {
 	mygo.App.SetName("GoIDEA")
 
+	// GOIDEA_DATA_DIR keeps a run's session, settings and server home apart
+	// from the user's: the E2E harness uses a temporary one.
+	if dir := os.Getenv("GOIDEA_DATA_DIR"); dir != "" {
+		mygo.App.SetPath(mygo.PathUserData, dir)
+	}
 	dataDir, err := mygo.App.Path(mygo.PathUserData)
 	if err != nil {
 		log.Fatalf("goidea: user data directory: %v", err)
@@ -45,6 +50,9 @@ func main() {
 	}
 	if dir := os.Getenv("GOIDEA_OPEN_PROJECT"); dir != "" {
 		model.OpenAtStartup(dir)
+		if files := os.Getenv("GOIDEA_OPEN_FILES"); files != "" {
+			model.OpenFilesAtStartup(filepath.SplitList(files))
+		}
 	}
 	headless := os.Getenv("GOIDEA_HEADLESS") == "1"
 	if headless {
@@ -146,6 +154,15 @@ func smoke(m *app.Model) {
 	}
 	fields := map[string]any{
 		"root": root, "tabs": tabs, "backend": backend, "pid": os.Getpid(),
+	}
+	if mode := os.Getenv("GOIDEA_SMOKE_TOOLS"); mode != "" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
+		tools, toolsErr := m.SmokeTools(ctx, mode == "install")
+		cancel()
+		fields["tools"] = tools
+		if toolsErr != nil {
+			fields["toolsError"] = toolsErr.Error()
+		}
 	}
 	if os.Getenv("GOIDEA_SMOKE_EDIT") == "1" && tabs > 0 {
 		ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)

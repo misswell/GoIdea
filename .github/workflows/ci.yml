@@ -39,3 +39,27 @@ jobs:
         run: CGO_ENABLED=0 go build -o /tmp/goidea ./cmd/goidea
       - name: Licenses
         run: scripts/check-licenses.sh
+      - name: Regression index
+        run: python3 scripts/check-regression-index.py
+
+  e2e:
+    # The main gate: real openidea-server, real JDK and Maven, a hidden window.
+    # It needs a GUI session and the shipped macos-aarch64 server, so it waits
+    # for hosted macOS runners like the macOS unit tests do.
+    if: vars.ENABLE_MACOS_CI == 'true' && github.event_name != 'pull_request'
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Fetch pinned server
+        run: scripts/fetch-server.sh
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: End-to-end gate
+        run: scripts/gate.sh main
+        env:
+          GOIDEA_E2E_DATA: ${{ runner.temp }}/goidea-e2e-data

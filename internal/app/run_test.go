@@ -79,3 +79,22 @@ func TestPickRunConfigSkipsTests(t *testing.T) {
 		t.Fatalf("empty picked %d", got)
 	}
 }
+
+func TestPickRunConfigPrefersTheApplication(t *testing.T) {
+	java := "java"
+	configs := []openidea.RunConfig{
+		{Name: "mvn package", Kind: "maven"},
+		{Name: "App", Kind: "java", DebugAdapter: &java},
+		{Name: "CalculatorTest", Kind: "junit", IsTest: true},
+	}
+	if got := pickRunConfig(configs); got != 1 {
+		t.Fatalf("picked %d, want the Java application", got)
+	}
+	gradle := []openidea.RunConfig{
+		{Name: "gradle build", Kind: "gradle"},
+		{Name: "App", Kind: "application"},
+	}
+	if got := pickRunConfig(gradle); got != 1 {
+		t.Fatalf("picked %d, want the application", got)
+	}
+}

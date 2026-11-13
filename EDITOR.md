@@ -1,0 +1,90 @@
+# Editor
+
+The editor is MyGo's `ui/editor` over buffers owned by `internal/docbridge`.
+Draw and input belong to MyGo; text, positions and backend synchronization
+belong to GoIDEA.
+
+## Documents and tabs
+
+- One `docbridge.Document` exists per path; several tabs can show the same
+  document (`internal/docbridge/registry.go:12-92`).
+- `doc_open` seeds the buffer from the backend, normalized to LF. The backend
+  version and a base snapshot are kept, plus a hash of the saved text
+  (`document.go:66-135`).
+- Tab dirty state is true while syncing, saving, the buffer is unsynced, or the
+  backend reports the document dirty (`internal/app/app.go:876-878`).
+- Closing a tab keeps the buffer; text is only discarded after save or an
+  explicit revert.
+
+## Buffer → backend
+
+`syncLoop` ticks every 120 ms (`app.go:283-294`). `syncPump` debounces 220 ms
+after the last buffer-version change, then syncs off the UI thread
+(`app.go:838-872`).
+
+A `ChangeSet` is an ordered list of `{from,to,insert}` in **UTF-16 offsets into
+the pre-change text** (`internal/position/protocol.go:15-27`), built by diffing
+the base snapshot against the current buffer (`document.go:607-632`). The app
+sends `doc_edit {path, version, changes}`; there is no `doc_change` command.
+
+UTF-16 is what the backend and the LSP protocol use; the Go buffer counts
+bytes. `position.PositionMapper` keeps an implicit treap of per-line byte and
+UTF-16 counts (`position/index.go`), updated incrementally by `ApplyEdit`
+(`mapper.go:24-31`). It exposes byte↔UTF-16 offset and position conversions,
+range→byte offsets, `ChangeSetToByteEdits` and `TextEditsToByteEdits`
+(`mapper.go:41-189`). A position inside a surrogate pair snaps to the rune
+start (`mapper.go:54-59`).
+
+## Backend → buffer
+
+- `docPatched` notifications are applied as edits when the buffer still matches
+  the base. A stale base or a dirty buffer triggers a resync instead of blindly
+  applying offsets (`document.go:313-346`).
+- Resync reads `doc_snapshot`, diffs base→remote and base→local, and merges
+  non-overlapping hunks. Overlapping hunks raise `ConflictError`, are stored as
+  `pending`, and the UI asks the user which side to keep; `Resolve` pushes the
+  local text at the remote version or drops the local edit
+  (`document.go:476-723`). After three failed attempts it reports
+  `ErrResync` rather than looping.
+- Workspace edits reload the buffer and drop local undo history, because the
+  offsets no longer refer to the same text (`document.go:327-336`).
+- Undo and redo go through the buffer and then sync, so the backend's history
+  and the visible text agree (`document.go:376-409`). An editor edit is applied
+  as one transaction, which is one undo step (`document.go:728-742`).
+
+## Saving and external changes
+
+Save syncs pending changes, calls `doc_save`, clears dirty and records the text
+hash (`document.go:413-441`). Saving is asynchronous and bounded so a slow disk
+cannot block the UI (`app.go:783-817`). Run, debug and tool installs call
+`saveAll` first (`app.go:819-836`, `run.go:280`, `debug.go:474`).
+
+A 2 s stat watch notices external edits (`internal/app/watch.go:17,55-72`).
+Clean buffers reload the file; buffers above 4 MiB are left alone. Dirty
+buffers keep their text and show a banner instead of silently overwriting
+either side (`watch.go:75-106`).
+
+## Features wired to the editor
+
+| Feature | Where |
+| --- | --- |
+| Syntax highlighting | MyGo language chosen per document in `docbridge` |
+| Diagnostics, gutter marks | `internal/app/diagnostics.go`, `codeintel.go` |
+| Completion, hover, definition popups | MyGo callbacks → `internal/app/lsp.go` |
+| Intentions / quick fixes (Alt+Enter) | `internal/app/intents.go` |
+| Rename (Shift+F6) with undo | `internal/app/rename.go` |
+| Find usages (Alt+F7) | `internal/app/usages.go` |
+| Go to symbol (Cmd+Shift+O) | `internal/app/symbols.go` |
+| Formatting | Edit menu → `lsp_format` |
+| Project search | `internal/app/search.go` |
+| Diff against HEAD | `internal/app/diff.go` |
+| Quick open (Cmd+P) / command palette | `quickopen.go`, `commands.go` |
+| Vim mode, sticky scroll, terminal, Git UI | Mayoi's implementations are in-tree but not wired into `cmd/goidea` (see `UPSTREAM_FEATURE_MATRIX.md`) |
+
+## Tests
+
+`internal/position` has the offset and edit conversion tests. `internal/docbridge`
+covers round-trip edits, resync conflicts and version handling.
+`GOIDEA_SMOKE_EDIT` proves an edit and an undo reach the backend;
+`GOIDEA_SMOKE_WATCH` proves an external edit is reloaded;
+`GOIDEA_SMOKE_LSP` proves format/rename/format-through-JDT on a real project.

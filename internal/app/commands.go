@@ -56,6 +56,7 @@ func commands() []appCommand {
 		{"run.continue", "继续", "运行", "", "continue resume", func(m *Model) { m.DebugContinue() }},
 		{"run.pause", "暂停", "运行", "", "pause suspend", func(m *Model) { m.DebugPause() }},
 		{"run.trust", "信任此项目并启用运行", "运行", "", "trust project", func(m *Model) { m.TrustProject() }},
+		{"java.tools", "安装 Java 语言服务与调试器", "运行", "", "java jdtls language server debugger install toolchain", func(m *Model) { m.InstallJavaToolchain() }},
 		{"app.settings", "设置…", "文件", "Cmd+,", "settings preferences theme font appearance", func(m *Model) { m.OpenSettings() }},
 	}
 }
