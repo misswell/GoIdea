@@ -49,6 +49,9 @@ type Layout struct {
 	LeftTool string `json:"leftTool,omitempty"`
 	// LeftHidden is the left area closed, which IDEA keeps as a null slot.
 	LeftHidden bool `json:"leftHidden,omitempty"`
+	// LeftRatio is the share of the left side's room the primary area takes
+	// when both areas show, as OpenIDEA's splits.left.
+	LeftRatio float64 `json:"leftRatio,omitempty"`
 	// Bottom are the bottom windows that were showing, and Tool the one the
 	// shortcuts acted on last: F12, Shift+Escape and Move to Split target it.
 	Bottom []string `json:"bottom,omitempty"`
@@ -95,6 +98,10 @@ func normalizeLayout(l Layout) Layout {
 		l.LeftTool = ""
 	}
 	out := Layout{Side: l.Side, LeftTool: l.LeftTool, LeftHidden: l.LeftHidden}
+	// A ratio out of the range no drag reaches keeps the default divide.
+	if l.LeftRatio >= leftRatioMin && l.LeftRatio <= leftRatioMax {
+		out.LeftRatio = l.LeftRatio
+	}
 	if isToolWindow(l.Tool) {
 		out.Tool = l.Tool
 	}

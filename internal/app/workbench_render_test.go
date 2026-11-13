@@ -101,3 +101,36 @@ func TestWorkbenchToolWindowTitles(t *testing.T) {
 		t.Fatalf("Structure is not below the Project island: %+v vs %+v", r, project)
 	}
 }
+
+// leftGapY is the middle of the gap between the left side's two islands at
+// 1440×900, both showing at the default divide.
+func leftGapY() float32 {
+	side := float32(900 - oiTitleBarHeight - oiStatusBarHeight - 12)
+	area := (side - oiIslandGap) / 2
+	return float32(oiTitleBarHeight+6) + area + oiIslandGap/2
+}
+
+func TestWorkbenchLeftSplitHandleMovesTheLine(t *testing.T) {
+	m := &Model{leftSplit: "structure"}
+	tt := workbenchTester(t, m)
+	before, ok := tt.Find("Structure")
+	if !ok {
+		t.Fatalf("the Structure island is missing: %q", tt.Texts())
+	}
+	y := leftGapY()
+	tt.Move(160, y)
+	if got := tt.Cursor(); got != ui.CursorResizeRow {
+		t.Fatalf("the gap shows cursor %v, want the row resize cursor", got)
+	}
+	tt.Press(160, y)
+	tt.Move(160, y+80)
+	tt.Release(160, y+80)
+	tt.Frame()
+	if m.leftShare() <= 0.5 {
+		t.Fatalf("the drag down did not give the primary island more room: %v", m.leftShare())
+	}
+	after, ok := tt.Find("Structure")
+	if !ok || after.Y <= before.Y+40 {
+		t.Fatalf("the split island did not move down with the line: %+v -> %+v", before, after)
+	}
+}

@@ -166,6 +166,56 @@ func TestLeftSplitShowsOneWindowAtATime(t *testing.T) {
 	}
 }
 
+func TestStoredLeftRatioStaysInRange(t *testing.T) {
+	if got := normalizeLayout(Layout{LeftRatio: 0.3}).LeftRatio; got != 0.3 {
+		t.Fatalf("a stored ratio became %v", got)
+	}
+	for _, ratio := range []float64{0, 0.05, 0.95, 1} {
+		if got := normalizeLayout(Layout{LeftRatio: ratio}).LeftRatio; got != 0 {
+			t.Fatalf("ratio %v is kept as %v, want the default divide", ratio, got)
+		}
+	}
+}
+
+func TestLeftSplitRatioComesBackWithTheProject(t *testing.T) {
+	m, root := layoutModel(t)
+	m.ShowStructure()
+	m.leftRatio = 0.35
+	m.rememberLayout()
+	m.saveSessionNow()
+
+	s := LoadSession(m.cfg.SessionPath)
+	restored := toolModel()
+	restored.layouts = s.Layouts
+	restored.setRoot(root)
+	restored.applyLayout(root)
+
+	if restored.leftSplit != "structure" {
+		t.Fatalf("split = %q, want structure", restored.leftSplit)
+	}
+	if got := restored.leftShare(); got != 0.35 {
+		t.Fatalf("ratio = %v, want 0.35", got)
+	}
+}
+
+func TestLeftRatioRangeKeepsTheSmallerAreaUsable(t *testing.T) {
+	if lo, hi := leftRatioRange(800); lo != leftRatioMin || hi != leftRatioMax {
+		t.Fatalf("a tall side bounds at %v..%v, want %v..%v", lo, hi, leftRatioMin, leftRatioMax)
+	}
+	// 300 DIP short of room for both at the 0.1..0.9 range: 60 DIP is a
+	// fifth of it, as OpenIDEA's SPLIT_MIN clamps the pointer.
+	if lo, hi := leftRatioRange(300); lo != 0.2 || hi != 0.8 {
+		t.Fatalf("a short side bounds at %v..%v, want 0.2..0.8", lo, hi)
+	}
+	// Too short for the minimum on either side: the areas share it evenly.
+	if lo, hi := leftRatioRange(100); lo != 0.5 || hi != 0.5 {
+		t.Fatalf("a tiny side bounds at %v..%v, want 0.5..0.5", lo, hi)
+	}
+	if lo, hi := leftRatioRange(0); lo != leftRatioMin || hi != leftRatioMax {
+		t.Fatalf("before the first layout bounds at %v..%v", lo, hi)
+	}
+}
+
 func TestLayoutsAreBoundedAndKeepTheOpenProject(t *testing.T) {
 	m, root := layoutModel(t)
 	for i := 0; i < maxLayouts+10; i++ {

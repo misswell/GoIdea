@@ -287,26 +287,112 @@ func (m *Model) stripeButton(c *ui.Context, p *ui.Theme, oi oiColors, key string
 }
 
 // leftSide is the left side's two areas: the primary island and, below it,
-// the split island. A lone island takes the whole side, as OpenIDEA's
-// SidePanel does, and hiding both closes the side.
+// the split island, with the gap between them the pointer drags. A lone
+// island takes the whole side, as OpenIDEA's SidePanel does, and hiding both
+// closes the side.
 func (m *Model) leftSide(c *ui.Context, p *ui.Theme, oi oiColors) {
 	if m.leftHidden && m.leftSplit == "" {
 		return
 	}
-	ui.Column(c).Width(oiLeftWidth).Shrink(0).MinHeight(0).Gap(oiIslandGap).
-		AlignItems(ui.Stretch).Children(func() {
+	both := !m.leftHidden && m.leftSplit != ""
+	primaryGrow, splitGrow := float32(1), float32(1)
+	if both {
+		primaryGrow = m.leftShare()
+		splitGrow = 1 - primaryGrow
+	}
+	side := ui.Column(c).Key("left:side").Width(oiLeftWidth).Shrink(0).
+		MinHeight(0).AlignItems(ui.Stretch)
+	// The room the islands shared as the last frame laid it out, which the
+	// handle moves the line within.
+	room := side.Bounds().H - oiIslandGap
+	side.Children(func() {
 		if !m.leftHidden {
-			m.leftIsland(c, p, oi)
+			m.leftIsland(c, p, oi, primaryGrow)
+		}
+		if both {
+			m.leftSplitHandle(c, oi, room)
 		}
 		if m.leftSplit != "" {
-			m.leftSplitIsland(c, p, oi)
+			m.leftSplitIsland(c, p, oi, splitGrow)
 		}
 	})
 }
 
+// leftRatioMin and leftRatioMax bound the left side's split, as OpenIDEA's
+// MIN_SPLIT and MAX_SPLIT do, and leftSplitMin is the room the smaller area
+// keeps when the side has it, SPLIT_MIN stacked.
+const (
+	leftRatioMin     = 0.1
+	leftRatioMax     = 0.9
+	leftRatioDefault = 0.5
+	leftSplitMin     = 60
+)
+
+// leftShare is the share of the left side's room the primary area takes; a
+// ratio no drag reaches keeps the default divide.
+func (m *Model) leftShare() float32 {
+	if m.leftRatio < leftRatioMin || m.leftRatio > leftRatioMax {
+		return leftRatioDefault
+	}
+	return m.leftRatio
+}
+
+// leftRatioRange is how far a drag may push the split at the room the two
+// areas share, keeping leftSplitMin on the smaller one as OpenIDEA clamps
+// the pointer's position.
+func leftRatioRange(room float32) (lo, hi float32) {
+	lo = leftRatioMin
+	if room > 0 {
+		if floor := float32(leftSplitMin) / room; floor > lo {
+			lo = floor
+		}
+		if lo > leftRatioDefault {
+			lo = leftRatioDefault
+		}
+	}
+	return lo, 1 - lo
+}
+
+// leftSplitHandle is the gap between the left side's two islands. Dragging it
+// moves their shared line, as OpenIDEA's SplitHandle does, and the ratio is
+// kept once the pointer lets go.
+func (m *Model) leftSplitHandle(c *ui.Context, oi oiColors, room float32) {
+	h := ui.Row(c).Key("left:split-handle").Height(oiIslandGap).Shrink(0).
+		Cursor(ui.CursorResizeRow)
+	_, dy, held := h.Dragged()
+	if !held {
+		if m.leftDragging {
+			m.leftDragging = false
+			m.rememberLayout()
+		}
+		return
+	}
+	if !m.leftDragging {
+		m.leftDragging = true
+		m.leftDragStart = m.leftShare()
+		m.leftDragTotal = room
+	}
+	if dy == 0 || m.leftDragTotal <= 0 {
+		return
+	}
+	lo, hi := leftRatioRange(m.leftDragTotal)
+	ratio := m.leftDragStart + dy/m.leftDragTotal
+	if ratio < lo {
+		ratio = lo
+	}
+	if ratio > hi {
+		ratio = hi
+	}
+	if ratio != m.leftRatio {
+		m.leftRatio = ratio
+		m.invalidate()
+	}
+}
+
 // leftIsland is the tool window showing in the left primary area: its header
-// with the actions of the window, then its body.
-func (m *Model) leftIsland(c *ui.Context, p *ui.Theme, oi oiColors) {
+// with the actions of the window, then its body. grow is its share of the
+// side, which the drag of the gap between the islands moves.
+func (m *Model) leftIsland(c *ui.Context, p *ui.Theme, oi oiColors, grow float32) {
 	title := "Project"
 	if m.sideMode == "vcs" {
 		title = "Commit"
@@ -314,7 +400,7 @@ func (m *Model) leftIsland(c *ui.Context, p *ui.Theme, oi oiColors) {
 			title = fmt.Sprintf("Commit · %d", n)
 		}
 	}
-	ui.Column(c).Grow(1).MinHeight(0).Background(oi.island).
+	ui.Column(c).Grow(grow).MinHeight(0).Background(oi.island).
 		Radius(oiIslandRadius).Children(func() {
 		ui.Row(c).Height(oiHeaderHeight).Shrink(0).Padding(0, 6, 0, 8).
 			Gap(6).AlignItems(ui.Center).Children(func() {
@@ -353,13 +439,14 @@ func (m *Model) leftIsland(c *ui.Context, p *ui.Theme, oi oiColors) {
 }
 
 // leftSplitIsland is the tool window in the left split area, below the primary
-// one: Structure or Bookmarks, with a hide action in its header.
-func (m *Model) leftSplitIsland(c *ui.Context, p *ui.Theme, oi oiColors) {
+// one: Structure or Bookmarks, with a hide action in its header. grow is its
+// share of the side, which the drag of the gap between the islands moves.
+func (m *Model) leftSplitIsland(c *ui.Context, p *ui.Theme, oi oiColors, grow float32) {
 	title := "Structure"
 	if m.leftSplit == "bookmarks" {
 		title = "Bookmarks"
 	}
-	ui.Column(c).Grow(1).MinHeight(0).Background(oi.island).
+	ui.Column(c).Grow(grow).MinHeight(0).Background(oi.island).
 		Radius(oiIslandRadius).Children(func() {
 		ui.Row(c).Height(oiHeaderHeight).Shrink(0).Padding(0, 6, 0, 8).
 			Gap(6).AlignItems(ui.Center).Children(func() {

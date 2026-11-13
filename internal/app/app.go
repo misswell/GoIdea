@@ -165,6 +165,14 @@ type Model struct {
 	// leftHidden hides the left primary area; its split area and the stripe
 	// stay, as OpenIDEA hides one area without the other.
 	leftHidden bool
+	// leftRatio is the share of the left side's room the primary area takes
+	// when both areas show, as OpenIDEA's splits.left; zero is the default.
+	leftRatio float32
+	// leftDragging, leftDragStart and leftDragTotal carry a drag of the split
+	// handle: the ratio it began at and the room the areas shared then.
+	leftDragging  bool
+	leftDragStart float32
+	leftDragTotal float32
 	// showingWelcome puts the Welcome screen up while a project stays loaded,
 	// as OpenIDEA's project menu leaves it.
 	showingWelcome bool
