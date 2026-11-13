@@ -66,6 +66,11 @@ type settingsDraft struct {
 	softWrap      bool
 	softWrapFiles string
 	scrollPastEnd bool
+	// The Save Files switches clean the document on every save.
+	trimTrailing           bool
+	trimAllLines           bool
+	dropTrailingBlankLines bool
+	ensureFinalNewline     bool
 	// The tab fields are Editor Tabs' staged strip: where it sits, what a tab
 	// shows, where its close button is, how tabs are ordered and the limit.
 	tabPlacement              string
@@ -135,6 +140,17 @@ func (d settingsDraft) tabPrefs() TabPrefs {
 	return t
 }
 
+// savePrefs is the staged Save Files switches as the preferences store them:
+// the All lines choice only counts while trailing spaces are trimmed.
+func (d settingsDraft) savePrefs() SavePrefs {
+	return SavePrefs{
+		TrimTrailing:           d.trimTrailing,
+		TrimAllLines:           d.trimTrailing && d.trimAllLines,
+		DropTrailingBlankLines: d.dropTrailingBlankLines,
+		EnsureFinalNewline:     d.ensureFinalNewline,
+	}
+}
+
 // settingsPageSpec is a settings page this build carries: what
 // pages/builtins.tsx registers for it, plus the section that draws it.
 type settingsPageSpec struct {
@@ -182,6 +198,9 @@ func settingsPages() []settingsPageSpec {
 			labels: []string{
 				"Soft Wraps", "Soft-wrap files", "File patterns",
 				"Virtual Space", "Show virtual space at file bottom",
+				"Save Files", "Remove trailing spaces on:", "Modified lines", "All lines",
+				"Remove trailing blank lines at the end of saved files",
+				"Ensure every saved file ends with a line break",
 			},
 			section: "general",
 		},
@@ -656,6 +675,10 @@ func (m *Model) settingsDraftFromPrefs() settingsDraft {
 		softWrap:                  m.prefs.Editor.SoftWrap,
 		softWrapFiles:             m.prefs.Editor.softWrapFiles(),
 		scrollPastEnd:             m.prefs.Editor.ScrollPastEnd,
+		trimTrailing:              m.prefs.SaveFiles.TrimTrailing,
+		trimAllLines:              m.prefs.SaveFiles.TrimAllLines,
+		dropTrailingBlankLines:    m.prefs.SaveFiles.DropTrailingBlankLines,
+		ensureFinalNewline:        m.prefs.SaveFiles.EnsureFinalNewline,
 		tabPlacement:              tabPlacement,
 		pinnedSeparateRow:         m.prefs.Tabs.PinnedSeparateRow,
 		showExtension:             !m.prefs.Tabs.HideExtension,
@@ -794,6 +817,45 @@ func (m *Model) settingsSetScrollPastEnd(on bool) {
 		return
 	}
 	m.settingsDraft.scrollPastEnd = on
+	m.settingsPreview()
+}
+
+// settingsSetTrimTrailing stages Save Files' Remove trailing spaces switch.
+func (m *Model) settingsSetTrimTrailing(on bool) {
+	if m.settingsDraft.trimTrailing == on {
+		return
+	}
+	m.settingsDraft.trimTrailing = on
+	m.settingsPreview()
+}
+
+// settingsSetTrimAllLines stages whether trailing spaces come off every line
+// or only the lines modified since the file was saved.
+func (m *Model) settingsSetTrimAllLines(all bool) {
+	if m.settingsDraft.trimAllLines == all {
+		return
+	}
+	m.settingsDraft.trimAllLines = all
+	m.settingsPreview()
+}
+
+// settingsSetDropTrailingBlankLines stages Remove trailing blank lines at the
+// end of saved files.
+func (m *Model) settingsSetDropTrailingBlankLines(on bool) {
+	if m.settingsDraft.dropTrailingBlankLines == on {
+		return
+	}
+	m.settingsDraft.dropTrailingBlankLines = on
+	m.settingsPreview()
+}
+
+// settingsSetEnsureFinalNewline stages Ensure every saved file ends with a
+// line break.
+func (m *Model) settingsSetEnsureFinalNewline(on bool) {
+	if m.settingsDraft.ensureFinalNewline == on {
+		return
+	}
+	m.settingsDraft.ensureFinalNewline = on
 	m.settingsPreview()
 }
 
@@ -951,7 +1013,8 @@ func (m *Model) settingsDirtyPage(key string) bool {
 	case settingsPageGeneral:
 		return m.settingsDraft.softWrap != m.prefs.Editor.SoftWrap ||
 			m.settingsDraft.softWrapFiles != m.prefs.Editor.softWrapFiles() ||
-			m.settingsDraft.scrollPastEnd != m.prefs.Editor.ScrollPastEnd
+			m.settingsDraft.scrollPastEnd != m.prefs.Editor.ScrollPastEnd ||
+			m.settingsDraft.savePrefs() != m.prefs.SaveFiles
 	case settingsPageEditorTabs:
 		return m.settingsDraft.tabPrefs() != m.prefs.Tabs
 	}
@@ -981,6 +1044,10 @@ func (m *Model) settingsResetPage() {
 		m.settingsDraft.softWrap = false
 		m.settingsDraft.softWrapFiles = defaultSoftWrapFiles
 		m.settingsDraft.scrollPastEnd = false
+		m.settingsDraft.trimTrailing = false
+		m.settingsDraft.trimAllLines = false
+		m.settingsDraft.dropTrailingBlankLines = false
+		m.settingsDraft.ensureFinalNewline = false
 	case settingsPageEditorTabs:
 		m.settingsDraft.tabPlacement = "top"
 		m.settingsDraft.pinnedSeparateRow = false
@@ -1007,6 +1074,7 @@ func (m *Model) applySettings() {
 	m.prefs.Editor = m.settingsDraft.appearance()
 	m.prefs.Breadcrumbs = m.settingsDraft.breadcrumbs()
 	m.prefs.Tabs = m.settingsDraft.tabPrefs()
+	m.prefs.SaveFiles = m.settingsDraft.savePrefs()
 	m.settingsErr = ""
 	if err := m.prefs.Save(m.settingsWritePath()); err != nil {
 		m.settingsErr = err.Error()

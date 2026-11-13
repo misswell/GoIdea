@@ -468,6 +468,7 @@ func (m *Model) Debug() {
 	m.refreshDecorations()
 	m.invalidate()
 
+	p := m.prefs.SaveFiles
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 10*time.Minute)
 		defer cancel()
@@ -484,7 +485,7 @@ func (m *Model) Debug() {
 			})
 		}
 		// The build reads the files from disk.
-		if err := saveAll(ctx, tabs); err != nil {
+		if err := saveAll(ctx, tabs, p); err != nil {
 			fail("保存后再调试失败", err)
 			return
 		}

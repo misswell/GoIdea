@@ -328,6 +328,9 @@ type Preferences struct {
 	// Tabs are Settings › Editor › Editor Tabs: how the strip shows, orders
 	// and limits tabs, as editor.tabs.* stores them.
 	Tabs TabPrefs `json:"tabs,omitempty"`
+	// SaveFiles are Settings › Editor › General › Save Files, applied to the
+	// document on every save; off by default, as OpenIDEA has them.
+	SaveFiles SavePrefs `json:"saveFiles,omitempty"`
 	// MainToolbar is the title bar's saved layout, nil for the default one.
 	MainToolbar *toolbarLayout `json:"mainToolbar,omitempty"`
 	// Plugins are each plugin's settings, by name, under the same "plugins"
@@ -356,6 +359,25 @@ type EditorAppearance struct {
 
 // defaultSoftWrapFiles is what editor.general.softWrapFiles defaults to.
 const defaultSoftWrapFiles = "*.md; *.txt; *.rst; *.adoc"
+
+// SavePrefs is Settings › Editor › General › Save Files: what a save does to
+// the document first, as files.trimTrailingWhitespace,
+// editor.general.removeTrailingBlankLines and files.ensureFinalNewline store
+// it. Every switch is off in the zero value, where a save writes the text as
+// it stands.
+type SavePrefs struct {
+	// TrimTrailing removes the spaces and tabs ending a line; TrimAllLines
+	// cleans every line rather than only the ones changed since the last save.
+	TrimTrailing bool `json:"trimTrailing,omitempty"`
+	TrimAllLines bool `json:"trimAllLines,omitempty"`
+	// DropTrailingBlankLines drops the empty lines at the end of the file.
+	DropTrailingBlankLines bool `json:"dropTrailingBlankLines,omitempty"`
+	// EnsureFinalNewline ends the file with a line break.
+	EnsureFinalNewline bool `json:"ensureFinalNewline,omitempty"`
+}
+
+// empty reports a save that writes the text as it stands.
+func (p SavePrefs) empty() bool { return p == SavePrefs{} }
 
 // WrapsFile reports whether Soft-wrap files wraps file: a "*" pattern wraps
 // every file, otherwise the base name must match one of the semicolon

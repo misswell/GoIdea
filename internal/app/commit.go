@@ -156,10 +156,11 @@ func (m *Model) submitCommit() {
 		Amend: c.amend, SignOff: c.signOff, RunHooks: c.runHooks,
 		Stage: plan.stage, Exclude: plan.exclude,
 	}
+	p := m.prefs.SaveFiles
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 3*time.Minute)
 		defer cancel()
-		if err := saveAll(ctx, tabs); err != nil {
+		if err := saveAll(ctx, tabs, p); err != nil {
 			m.finishCommit(c, "", err)
 			return
 		}

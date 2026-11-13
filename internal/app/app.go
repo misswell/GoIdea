@@ -662,8 +662,9 @@ func (m *Model) openProjectSaving(dir string) {
 	m.busy = true
 	m.status = "正在保存…"
 	m.invalidate()
+	p := m.prefs.SaveFiles
 	go func() {
-		if err := saveAll(m.ctx, tabs); err != nil {
+		if err := saveAll(m.ctx, tabs, p); err != nil {
 			m.post(func() { m.fail("", err); m.busy = false })
 			return
 		}
@@ -1015,11 +1016,16 @@ func (m *Model) saveTabAsync(t *Tab, done func()) {
 	t.saving = true
 	m.status = "正在保存 " + filepath.Base(t.doc.Path()) + "…"
 	m.invalidate()
+	p := m.prefs.SaveFiles
 	go func() {
+		// Save Files cleans the document first, as the editor saves it.
+		err := cleanForSave(m.ctx, t.doc, p)
 		// The version before the sync bounds what the save writes; edits
 		// typed meanwhile stay unsaved and sync on the next tick.
 		v := t.doc.Buffer().Version()
-		err := t.doc.Sync(m.ctx)
+		if err == nil {
+			err = t.doc.Sync(m.ctx)
+		}
 		if err == nil {
 			err = t.doc.Save(m.ctx)
 		}
@@ -1044,10 +1050,16 @@ func (m *Model) saveTabAsync(t *Tab, done func()) {
 	}()
 }
 
-func saveAll(ctx context.Context, tabs []*Tab) error {
+func saveAll(ctx context.Context, tabs []*Tab, p SavePrefs) error {
 	var first error
 	for _, t := range tabs {
 		if !t.unsaved() {
+			continue
+		}
+		if err := cleanForSave(ctx, t.doc, p); err != nil {
+			if first == nil {
+				first = err
+			}
 			continue
 		}
 		if err := t.doc.Sync(ctx); err != nil {
@@ -1357,10 +1369,11 @@ func (m *Model) finishQuit(save bool) {
 		m.tree = nil
 	}
 	tabs := append([]*Tab(nil), m.tabs...)
+	p := m.prefs.SaveFiles
 	m.forceQuit = true
 	go func() {
 		if save {
-			_ = saveAll(m.ctx, tabs)
+			_ = saveAll(m.ctx, tabs, p)
 		}
 		m.off()
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

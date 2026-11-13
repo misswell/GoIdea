@@ -12,6 +12,8 @@ needs a `## <version>` section here, or its build fails.
 - **Editor > Appearance** 新增 **Use block caret**，光标可选方块形并随设置保存。
 - 新增 **Editor > Breadcrumbs** 设置页，**Show breadcrumbs** 和 **Top/Bottom** 控制编辑器的面包屑并保存。
 - 新增 **Editor > General** 设置页，**Soft-wrap files** 和虚拟空间开关直接作用于编辑器并保存。
+- **Editor > General** 新增 **Save Files**，保存时删除行尾空格，可选 **Modified lines** 或 **All lines**。
+- **Save Files** 还能在保存时删除文件末尾的空行，并保证文件以换行结尾。
 - 新增 **Editor > Editor Tabs** 设置页，标签栏可放在顶部、底部或隐藏。
 - 标签页可显示扩展名、所在目录、修改标记和完整路径提示，还能按字母排序、新标签排在末尾。
 - **Tab limit** 限制未固定标签页的数量，最久未用的先关闭，有未保存内容的标签不会关闭。

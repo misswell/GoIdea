@@ -110,8 +110,8 @@ func (m *Model) settingsFontBody(c *ui.Context, oi oiColors) {
 }
 
 // settingsGeneralBody is Editor › General: the Soft Wraps section with its
-// file patterns, then Virtual Space, in general.tsx's order. The Markdown
-// Images, Mouse Control, Scrolling and Save Files sections name features this
+// file patterns, then Virtual Space and Save Files, in general.tsx's order.
+// The Markdown Images, Mouse Control and Scrolling sections name features this
 // build does not carry, so they are not drawn.
 func (m *Model) settingsGeneralBody(c *ui.Context, oi oiColors) {
 	settingsSectionTitle(c, oi, "Soft Wraps")
@@ -135,6 +135,37 @@ func (m *Model) settingsGeneralBody(c *ui.Context, oi oiColors) {
 	if ui.Checkbox(c, &end, "Show virtual space at file bottom").Changed() {
 		m.settingsSetScrollPastEnd(end)
 	}
+	ui.Row(c).Height(10)
+	settingsSectionTitle(c, oi, "Save Files")
+	trim := m.settingsDraft.trimTrailing
+	if ui.Checkbox(c, &trim, "Remove trailing spaces on:").Changed() {
+		m.settingsSetTrimTrailing(trim)
+	}
+	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).PaddingStart(20).Children(func() {
+		shown := saveTrimLabel(m.settingsDraft.trimAllLines)
+		sel := ui.Select(c, &shown, []string{"Modified lines", "All lines"}).
+			Disabled(!m.settingsDraft.trimTrailing)
+		if sel.Changed() {
+			m.settingsSetTrimAllLines(shown == "All lines")
+		}
+	})
+	blank := m.settingsDraft.dropTrailingBlankLines
+	if ui.Checkbox(c, &blank, "Remove trailing blank lines at the end of saved files").Changed() {
+		m.settingsSetDropTrailingBlankLines(blank)
+	}
+	final := m.settingsDraft.ensureFinalNewline
+	if ui.Checkbox(c, &final, "Ensure every saved file ends with a line break").Changed() {
+		m.settingsSetEnsureFinalNewline(final)
+	}
+}
+
+// saveTrimLabel names the Remove trailing spaces choice as its select shows
+// it.
+func saveTrimLabel(all bool) string {
+	if all {
+		return "All lines"
+	}
+	return "Modified lines"
 }
 
 // settingsSectionTitle is a page section's heading, as the dialog draws the

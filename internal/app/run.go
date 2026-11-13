@@ -322,11 +322,12 @@ func (m *Model) startRunWith(raw json.RawMessage, name string) bool {
 		"onOutput": map[string]any{"$channel": ch},
 		"request":  nil,
 	}
+	p := m.prefs.SaveFiles
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 60*time.Second)
 		defer cancel()
 		// The backend builds from disk, so unsaved text must be written first.
-		if err := saveAll(ctx, tabs); err != nil {
+		if err := saveAll(ctx, tabs, p); err != nil {
 			m.post(func() {
 				m.run.busy = false
 				m.run.awaiting = false

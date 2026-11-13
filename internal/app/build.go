@@ -123,10 +123,11 @@ func (m *Model) startBuild(kind string, file *string) {
 		"clear":   clear,
 		"onEvent": map[string]any{"$channel": ch},
 	}
+	p := m.prefs.SaveFiles
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Minute)
 		defer cancel()
-		if err := saveAll(ctx, tabs); err != nil {
+		if err := saveAll(ctx, tabs, p); err != nil {
 			m.post(func() {
 				m.build.busy = false
 				m.build.err = "保存后再构建失败：" + err.Error()

@@ -79,6 +79,7 @@ type Document struct {
 	unsynced bool
 	dirty    bool
 	saved    uint64 // hash of the text on disk at the last open or save
+	savedTxt string // the text on disk at the last open or save
 	closed   bool
 	pending  *pendingRemote
 	wake     chan struct{}
@@ -108,18 +109,19 @@ func newDocument(backend Backend, window string, info openidea.DocInfo) *Documen
 	// indentation; MyGo knows the file by its name.
 	buf.SetLanguage(editor.LanguageFor(info.Path))
 	d := &Document{
-		backend: backend,
-		window:  window,
-		id:      info.ID,
-		path:    info.Path,
-		info:    info,
-		buf:     buf,
-		mapper:  position.NewMapper(text),
-		version: info.Version,
-		base:    buf.Snapshot(),
-		dirty:   info.Dirty,
-		saved:   textHash(text),
-		wake:    make(chan struct{}, 1),
+		backend:  backend,
+		window:   window,
+		id:       info.ID,
+		path:     info.Path,
+		info:     info,
+		buf:      buf,
+		mapper:   position.NewMapper(text),
+		version:  info.Version,
+		base:     buf.Snapshot(),
+		dirty:    info.Dirty,
+		saved:    textHash(text),
+		savedTxt: text,
+		wake:     make(chan struct{}, 1),
 	}
 	d.baseBuf = d.base.Version()
 	d.indexed = d.base.Version()
@@ -424,8 +426,17 @@ func (d *Document) Save(ctx context.Context) error {
 	}
 	d.dirty = false
 	// base is the text the backend kept, which is what the file holds now.
-	d.saved = textHash(d.base.String())
+	d.savedTxt = d.base.String()
+	d.saved = textHash(d.savedTxt)
 	return nil
+}
+
+// SavedText returns the text the file held at the last open or save, which is
+// the baseline Save Files' Modified lines compares against.
+func (d *Document) SavedText() string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.savedTxt
 }
 
 // ModifiedFromSaved reports whether the buffer differs from the file as of the
