@@ -3,12 +3,19 @@
 # verifies it against the release's SHA-256 before unpacking it into
 # resources/. release.sh calls this; run it alone to refresh the binary.
 #
-#   scripts/fetch-server.sh                 # this Mac's platform
-#   scripts/fetch-server.sh macos-aarch64   # a specific release asset
+#   scripts/fetch-server.sh                        # this Mac's platform
+#   scripts/fetch-server.sh macos-aarch64          # a specific release asset
+#   scripts/fetch-server.sh linux-x86_64 --out DIR # elsewhere (cross-build.sh)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 platform="${1:-macos-$(uname -m | sed 's/arm64/aarch64/;s/x86_64/x86_64/')}"
+out="resources/openidea-server"
+if [[ "${2:-}" == "--out" ]]; then
+    test -n "${3:-}" || { echo "fetch-server.sh: --out needs a path" >&2; exit 1; }
+    out="$3"
+fi
+mkdir -p "$(dirname "$out")"
 field() { # <key> in the openidea.server block
   awk -v key="$1" '
     /^    server:/ { s=1; next }
@@ -29,7 +36,7 @@ gh release download "$release" -R l0ng-ai/openidea -p "$asset*" -D "$tmp" --clob
 want="$(awk '{print $1}' "$tmp/$asset.sha256")"
 got="$(shasum -a 256 "$tmp/$asset" | awk '{print $1}')"
 test "$want" = "$got" || { echo "$asset: sha256 $got, release says $want" >&2; exit 1; }
-gunzip -c "$tmp/$asset" > resources/openidea-server.tmp
-chmod 755 resources/openidea-server.tmp
-mv resources/openidea-server.tmp resources/openidea-server
-echo "resources/openidea-server: $release $asset (sha256 $got)"
+gunzip -c "$tmp/$asset" > "$out.tmp"
+chmod 755 "$out.tmp"
+mv "$out.tmp" "$out"
+echo "$out: $release $asset (sha256 $got)"

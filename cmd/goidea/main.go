@@ -10,6 +10,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/egoist/mygo"
@@ -19,6 +21,7 @@ import (
 )
 
 func main() {
+	started := time.Now()
 	mygo.App.SetName("GoIDEA")
 
 	// GOIDEA_DATA_DIR keeps a run's session, settings and server home apart
@@ -61,6 +64,14 @@ func main() {
 	}
 
 	mygo.App.WhenReady(func() {
+		readyMs := time.Since(started).Milliseconds()
+		var firstFrame atomic.Int64
+		content := ui.View(func(c *ui.Context) {
+			if firstFrame.Load() == 0 {
+				firstFrame.CompareAndSwap(0, time.Since(started).Milliseconds())
+			}
+			model.View(c)
+		})
 		win := mygo.NewWindow(mygo.WindowOptions{
 			Title:     "GoIDEA",
 			Width:     1280,
@@ -69,13 +80,21 @@ func main() {
 			MinHeight: 560,
 			StateKey:  "main",
 			Hidden:    headless,
-			Content:   ui.View(model.View),
+			Content:   content,
 		})
 		model.Attach(win)
 		mygo.App.SetMenu(menu(model))
 		model.Start()
-		if headless {
+		// Benchmark mode owns the window: the smoke driver would quit the app
+		// before an idle sample could be taken.
+		idle := benchIdle()
+		var backendReady atomic.Int64
+		if headless && idle == 0 {
 			go smoke(model)
+		}
+		if idle > 0 {
+			go benchWaitBackend(model, started, &backendReady)
+			go benchWait(model, readyMs, &firstFrame, &backendReady, idle)
 		}
 	})
 	mygo.App.OnBeforeQuit(model.RequestQuit)
@@ -133,6 +152,59 @@ func menu(m *app.Model) *mygo.Menu {
 		}},
 		{Role: mygo.RoleWindowMenu},
 	})
+}
+
+// benchIdle is GOIDEA_BENCH_IDLE: keep the hidden window open for that many
+// seconds after startup, so the benchmark can sample it, then quit.
+func benchIdle() time.Duration {
+	n, err := strconv.Atoi(os.Getenv("GOIDEA_BENCH_IDLE"))
+	if err != nil || n <= 0 {
+		return 0
+	}
+	return time.Duration(n) * time.Second
+}
+
+// benchWaitBackend records when the backend became running, for the startup
+// budget. It polls the main thread rather than reading the model directly.
+func benchWaitBackend(m *app.Model, started time.Time, ready *atomic.Int64) {
+	for deadline := time.Now().Add(20 * time.Second); time.Now().Before(deadline); {
+		var up bool
+		mygo.RunOnMain(func() { up = m.BackendState().Running })
+		if up {
+			ready.CompareAndSwap(0, time.Since(started).Milliseconds())
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+}
+
+// benchWait writes the startup numbers and the loaded session to
+// GOIDEA_SMOKE_OUT once the idle window is over.
+func benchWait(m *app.Model, readyMs int64, firstFrame *atomic.Int64, backendReady *atomic.Int64, idle time.Duration) {
+	time.Sleep(idle)
+	var root string
+	var tabs int
+	var backend bool
+	mygo.RunOnMain(func() { root, tabs, backend = m.Snapshot() })
+	fields := map[string]any{
+		"pid":            os.Getpid(),
+		"root":           root,
+		"tabs":           tabs,
+		"backend":        backend,
+		"windowReadyMs":  readyMs,
+		"firstFrameMs":   firstFrame.Load(),
+		"backendReadyMs": backendReady.Load(),
+		"idleSeconds":    int64(idle / time.Second),
+	}
+	if n, err := strconv.Atoi(os.Getenv("GOIDEA_BENCH_TASKS")); err == nil && n > 0 {
+		fields["tasks"] = m.BenchConcurrentSearches(root, n)
+	}
+	if out, err := json.MarshalIndent(fields, "", "  "); err == nil {
+		if path := os.Getenv("GOIDEA_SMOKE_OUT"); path != "" {
+			_ = os.WriteFile(path, out, 0o644)
+		}
+	}
+	mygo.RunOnMain(m.QuitImmediately)
 }
 
 // smoke waits for the project to load in a hidden window, records what it saw

@@ -61,6 +61,15 @@ announced when its `openidea-server` asset exists, verifies against the
 release's SHA-256, and the app passes the offline e2e on that platform. Until
 then, no other platform is claimed.
 
+`scripts/cross-build.sh` builds darwin/arm64, darwin/amd64, linux/arm64,
+linux/amd64 and windows/amd64, fetching the pinned server for each target and
+checking that the packaged `openidea-server` is that target's binary. It writes
+`build/cross/MATRIX.md`; a target without a server asset (Windows today, since
+the pinned OpenIDEA release has none) is built and marked `BLOCKED` instead of
+shipping the host's binary. `scripts/bench.sh` records the performance table
+under `build/bench/<timestamp>/summary.md`; run both before announcing a new
+platform or a release.
+
 ## Rollback
 
 - A bad build: delete the GitHub release and tag, fix, and bump again; never

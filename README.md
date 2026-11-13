@@ -70,7 +70,14 @@ Run the tests and the offscreen checks:
 scripts/gate.sh pr        # format, vet, unit tests, build, licenses, index
 scripts/gate.sh main      # + offline e2e against the real server and Maven
 scripts/gate.sh release   # + toolchain install, JDT language services, debugger
+scripts/bench.sh          # performance table, build/bench/<timestamp>/
+scripts/cross-build.sh    # five targets, build/cross/MATRIX.md
 ```
+
+`cross-build.sh` fetches the pinned server for each target and fails if a
+package carries a server for another platform. Windows has no server asset in
+the pinned OpenIDEA release, so its app is built but the target is reported
+`BLOCKED` rather than shipped without a backend.
 
 The end-to-end run copies `testdata/java-maven` to a temporary folder, builds
 it with the local `mvn`, edits it over the real backend, installs jdtls and
