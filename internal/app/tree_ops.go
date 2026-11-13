@@ -1202,7 +1202,14 @@ func (m *Model) SelectInProjectView() {
 		m.invalidate()
 		return
 	}
-	path := t.doc.Path()
+	m.selectInProjectView(t.doc.Path())
+}
+
+// selectInProjectView reveals path in the project view and marks it.
+func (m *Model) selectInProjectView(path string) {
+	if m.tree == nil || m.Root() == "" || path == "" {
+		return
+	}
 	m.sideMode = ""
 	m.leftHidden = false
 	m.tree.reveal(path)

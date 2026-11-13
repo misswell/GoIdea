@@ -28,6 +28,20 @@ func editorPathFlavours(root, path string, line int) []editorPathFlavour {
 	}
 }
 
+// tabPathFlavours are the paths OpenIDEA's tab menu copies: the absolute
+// path, the file name and, inside the project, the path from the content
+// root.
+func tabPathFlavours(root, path string) []editorPathFlavour {
+	flavours := []editorPathFlavour{
+		{"Absolute Path", path},
+		{"File Name", filepath.Base(path)},
+	}
+	if rel := projectRelative(root, path); rel != path {
+		flavours = append(flavours, editorPathFlavour{"Path From Content Root", rel})
+	}
+	return flavours
+}
+
 // projectRelative is path inside root, or path itself when it lies outside.
 func projectRelative(root, path string) string {
 	if root == "" {

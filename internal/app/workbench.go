@@ -1316,10 +1316,12 @@ func (m *Model) statusBar(c *ui.Context, p *ui.Theme) {
 }
 
 // tabMenu is OpenIDEA's tab context menu: the close family, whose bulk closes
-// leave pinned tabs alone, then Pin or Unpin Tab for the clicked tab.
+// leave pinned tabs alone, then Pin or Unpin and Keep Tab Open for the clicked
+// tab, the file actions and the editor-tabs settings the menu opens.
 func (m *Model) tabMenu(menu *ui.Menu, t *Tab) {
 	at := m.tabIndex(t)
-	if menu.Item("Close").Chosen() {
+	path := tabPath(t)
+	if menu.Item("Close").Shortcut(ui.Cmd, ui.KeyW).Chosen() {
 		m.closeTabThen(t, nil)
 	}
 	if menu.Item("Close Other Tabs").Disabled(len(m.tabs) < 2).Chosen() {
@@ -1355,4 +1357,52 @@ func (m *Model) tabMenu(menu *ui.Menu, t *Tab) {
 	if menu.Item(label).Chosen() {
 		m.setTabPinned(t, !t.pinned)
 	}
+	if t.preview {
+		if menu.Item("Keep Tab Open").Chosen() {
+			m.promoteTab(t)
+		}
+	}
+	menu.Separator()
+	if path != "" {
+		m.tabOpenInMenu(menu, path)
+		menu.Submenu("Local History", func(menu *ui.Menu) {
+			if menu.Item("Show History").Chosen() {
+				m.ShowHistory(path)
+			}
+			if menu.Item("Put Label…").Chosen() {
+				m.OpenHistoryLabel()
+			}
+		})
+		menu.Separator()
+		menu.Submenu("Copy Path/Reference…", func(menu *ui.Menu) {
+			for _, f := range tabPathFlavours(m.Root(), path) {
+				if menu.Item(f.label).Chosen() {
+					m.copyEditorText(f.value)
+				}
+			}
+		})
+		if menu.Item("Rename File…").Chosen() {
+			m.OpenTreeRename(path)
+		}
+		menu.Separator()
+	}
+	if menu.Item("Configure Editor Tabs…").Chosen() {
+		m.OpenSettingsPage(settingsPageEditorTabs)
+	}
+}
+
+// tabOpenInMenu is OpenIDEA's Open In › for a tab's file: the project view,
+// the file manager and a terminal at the file's folder.
+func (m *Model) tabOpenInMenu(menu *ui.Menu, path string) {
+	menu.Submenu("Open In", func(menu *ui.Menu) {
+		if menu.Item("Project View").Chosen() {
+			m.selectInProjectView(path)
+		}
+		if menu.Item(revealLabel()).Chosen() {
+			revealPath(path)
+		}
+		if menu.Item("Terminal").Chosen() {
+			m.OpenTerminalAt(filepath.Dir(path))
+		}
+	})
 }

@@ -23,6 +23,9 @@ needs a `## <version>` section here, or its build fails.
 - 当前标签页改用 OpenIDEA 的浅色选中块和一圈描边，不再用底部色条。
 - 标签页多到放不下时，标签栏右端出现下箭头，点开 **Show Hidden Tabs** 可跳到任意标签页。
 - 拖动标签页可调整顺序：原来位置留出空位，其余标签让开，松手即按新顺序排列。
+- 标签页右键菜单新增 **Keep Tab Open**、**Open In** 和 **Local History**。
+- 文件标签页的右键菜单还能 **Copy Path/Reference** 和 **Rename File**。
+- 标签页右键菜单的 **Configure Editor Tabs…** 直接打开标签页设置页，**Close** 显示 `Cmd+W`。
 - 编辑器的右键菜单新增 **Show Context Actions**、**Copy / Paste Special**、**Go To**、**Reformat Code** 和 **Rename…**。
 - **Copy Path/Reference** 可复制编辑器的绝对路径、文件名、项目内路径和带行号的路径。
 - **Editor > Editor Tabs** 可选择关闭当前标签页后激活哪个：左边的、右边的或最近打开的。
