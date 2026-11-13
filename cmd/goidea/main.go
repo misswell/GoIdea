@@ -34,10 +34,11 @@ func main() {
 	logFile := openLog(filepath.Join(dataDir, "openidea-server.log"))
 
 	model := app.New(app.Config{
-		ServerPath:  serverPath,
-		Home:        home,
-		SessionPath: filepath.Join(dataDir, "session.json"),
-		Log:         logFile,
+		ServerPath:   serverPath,
+		Home:         home,
+		SessionPath:  filepath.Join(dataDir, "session.json"),
+		SettingsPath: filepath.Join(dataDir, "settings.json"),
+		Log:          logFile,
 	})
 	if serverErr != nil {
 		model.Notify(serverErr.Error())
@@ -87,6 +88,8 @@ func menu(m *app.Model) *mygo.Menu {
 			{Label: "显示 Git 更改", Accelerator: "CmdOrCtrl+Shift+G", Click: func(*mygo.MenuItem, *mygo.Window) { m.ShowVCS() }},
 			{Label: "与 HEAD 比较", Accelerator: "CmdOrCtrl+Shift+D", Click: func(*mygo.MenuItem, *mygo.Window) { m.CompareActive() }},
 			{Label: "在项目中查找", Accelerator: "CmdOrCtrl+Shift+F", Click: func(*mygo.MenuItem, *mygo.Window) { m.ShowSearch() }},
+			mygo.Separator(),
+			{Label: "设置…", Accelerator: "CmdOrCtrl+,", Click: func(*mygo.MenuItem, *mygo.Window) { m.OpenSettings() }},
 			mygo.Separator(),
 			{Label: "退出 GoIDEA", Accelerator: "CmdOrCtrl+Q", Click: func(*mygo.MenuItem, *mygo.Window) { m.Quit() }},
 		}},
@@ -219,6 +222,9 @@ func smoke(m *app.Model) {
 	}
 	if os.Getenv("GOIDEA_SMOKE_COMMANDS") == "1" {
 		fields["commands"] = m.SmokeCommands()
+	}
+	if os.Getenv("GOIDEA_SMOKE_SETTINGS") == "1" {
+		fields["settings"] = m.SmokeSettings()
 	}
 	if os.Getenv("GOIDEA_SMOKE_WATCH") == "1" && root != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)

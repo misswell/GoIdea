@@ -31,10 +31,11 @@ const Window = "goidea"
 
 // Config wires the model to the backend and to the user's data directory.
 type Config struct {
-	ServerPath  string
-	Home        string
-	SessionPath string
-	Log         *os.File
+	ServerPath   string
+	Home         string
+	SessionPath  string
+	SettingsPath string
+	Log          *os.File
 }
 
 // Tab is one open file: its backend document, the editor state editing the
@@ -122,6 +123,12 @@ type Model struct {
 	// intents is the open intentions prompt, or nil.
 	intents *intentPane
 
+	// prefs are the user's stored settings, and theme is the theme they pick,
+	// nil to follow the system; settingsOpen shows the settings sheet.
+	prefs        Preferences
+	theme        *ui.Theme
+	settingsOpen bool
+
 	// refactor is the newest backend workspace edit, which UndoRefactor rolls
 	// back; redoRefactor is what the last undo can reapply.
 	refactor     *refactorEdit
@@ -163,6 +170,8 @@ type Model struct {
 func New(cfg Config) *Model {
 	ctx, off := context.WithCancel(context.Background())
 	m := &Model{cfg: cfg, ctx: ctx, off: off}
+	m.prefs = LoadPreferences(cfg.SettingsPath)
+	m.applyPreferences()
 	m.mgr = openidea.NewManager(openidea.LaunchConfig{
 		ServerPath: cfg.ServerPath,
 		Home:       cfg.Home,
@@ -552,6 +561,7 @@ func (m *Model) newTab(doc *docbridge.Document) *Tab {
 		synced: v,
 		seen:   v,
 	}
+	t.state.Font = ui.Font{Size: m.prefs.fontSize()}
 	t.state.OnGutterClick = func(line int) { m.toggleBreakpointAt(path, line) }
 	t.state.OnCompletion = func(req editor.CompletionRequest) { m.requestCompletion(t, req) }
 	t.state.OnHover = func(req editor.HoverRequest) { m.requestHover(t, req) }
@@ -995,6 +1005,9 @@ func (m *Model) BackendState() openidea.State { return m.mgr.State() }
 
 // View draws the window.
 func (m *Model) View(c *ui.Context) {
+	if m.theme != nil {
+		c.SetTheme(m.theme)
+	}
 	m.shortcuts(c)
 	p := c.Theme()
 	ui.Column(c).Fill().Background(p.Background).Children(func() {
@@ -1025,9 +1038,17 @@ func (m *Model) View(c *ui.Context) {
 	m.filesDialog(c, p)
 	m.commandsDialog(c, p)
 	m.diffDialog(c, p)
+	m.settingsDialog(c, p)
 }
 
 func (m *Model) shortcuts(c *ui.Context) {
+	// A modal sheet owns the keyboard; only its own dismiss keys apply.
+	if m.settingsOpen {
+		return
+	}
+	if c.Shortcut(ui.Cmd, ui.KeyComma) {
+		m.OpenSettings()
+	}
 	if c.Shortcut(ui.Alt, ui.KeyEnter) {
 		// An open prompt keeps the keyboard; the caret's menu waits.
 		if m.rename == nil && m.symbols == nil && m.intents == nil && m.files == nil {
