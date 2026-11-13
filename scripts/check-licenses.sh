@@ -10,7 +10,7 @@ fail=0
 
 echo "==> License texts"
 for f in LICENSE NOTICE THIRD_PARTY_LICENSES.md \
-         third_party/openidea/LICENSE third_party/openidea/NOTICE \
+         third_party/openidea-server/LICENSE third_party/openidea-server/NOTICE \
          third_party/mayoi/LICENSE \
          third_party/mygo/LICENSE third_party/purego/LICENSE \
          third_party/go-text/LICENSE third_party/x-image/LICENSE \

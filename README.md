@@ -29,11 +29,19 @@ Requirements: Go 1.27.3 or newer; macOS 13 or newer for the app bundle.
 The Rust server is not compiled here: `scripts/fetch-server.sh` downloads the
 pinned official `openidea-server` release and verifies its SHA-256.
 
+Clone with the submodules; `third_party/openidea` pins the OpenIDEA fork's
+source at the commit GoIDEA ships against:
+
 ```sh
+git clone --recurse-submodules https://github.com/misswell/GoIdea
+cd GoIdea
 scripts/fetch-server.sh          # resources/openidea-server
 CGO_ENABLED=0 go build -o build/goidea ./cmd/goidea
 GOIDEA_SERVER=resources/openidea-server ./build/goidea
 ```
+
+If the repository is already cloned, `git submodule update --init --recursive`
+does the same.
 
 Run the tests and the offscreen checks:
 
@@ -75,7 +83,7 @@ from them:
 | --- | --- | --- |
 | [Mayoi](https://github.com/sorrycc/Mayoi) (fork [misswell/Mayoi](https://github.com/misswell/Mayoi)) | repository base; app, editor, terminal, Git, plugins | merged history, `UPSTREAMS.yml` |
 | [MyGo](https://github.com/egoist/mygo) (fork [sorrycc/mygo](https://github.com/sorrycc/mygo)) | native UI framework and editor | `go.mod` + `UPSTREAMS.yml` |
-| [OpenIDEA](https://github.com/l0ng-ai/openidea) | Rust backend and `openidea-server` | `UPSTREAMS.yml` |
+| [OpenIDEA](https://github.com/l0ng-ai/openidea) (fork [misswell/openidea](https://github.com/misswell/openidea)) | Rust backend and `openidea-server` | submodule `third_party/openidea` + `UPSTREAMS.yml` |
 
 `UPSTREAMS.yml` is the only pin file. `scripts/upstream-check.sh` reports what
 moved, `scripts/upstream-bump.sh` moves the pins on a branch, and the Upstream

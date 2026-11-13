@@ -35,10 +35,15 @@ jq --arg identity "$identity" --arg profile "$profile" \
 mv mygo.json.release-new mygo.json
 
 # The licenses travel with the app: Apache-2.0 and MIT both require the
-# notices to accompany the binary.
+# notices to accompany the binary. Only license texts, never the pinned
+# source trees (third_party/openidea is a 57 MB submodule).
 mkdir -p resources/licenses
 cp LICENSE NOTICE THIRD_PARTY_LICENSES.md resources/licenses/
-cp -R third_party resources/licenses/
+while IFS= read -r f; do
+  mkdir -p "resources/licenses/$(dirname "$f")"
+  cp "$f" "resources/licenses/$f"
+done < <(find third_party -maxdepth 2 -type f \
+  \( -iname 'LICENSE*' -o -iname 'NOTICE*' -o -iname 'PATENTS*' -o -iname 'COPYING*' \))
 
 go tool mygo build -platform "$platform"
 

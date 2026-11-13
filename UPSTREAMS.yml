@@ -51,12 +51,14 @@ upstreams:
     url: https://github.com/l0ng-ai/openidea
     fork: https://github.com/misswell/openidea
     default_branch: main
-    # The Rust source the RPC client was last tested against.
+    # The Rust source is a submodule pinned to the commit the RPC client was
+    # tested against; the shipped server is the release build below.
+    submodule: third_party/openidea
     commit: 551428267deddd600b367fa01d2b80c6146f1576
     version: 0.1.41
     synced_at: 2026-11-13
     license: Apache-2.0
-    sync: prebuilt-server
+    sync: fork-submodule
     # The server GoIDEA ships is the official release asset for
     # macos-aarch64, verified against the release's SHA-256.
     server:

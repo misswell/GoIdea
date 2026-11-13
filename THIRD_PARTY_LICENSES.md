@@ -16,7 +16,16 @@ into the app (`Contents/Resources/licenses`).
 - Component: `openidea-server-macos-aarch64.gz`, the official prebuilt release
   asset for Apple silicon, verified against the release's SHA-256
 - Modification: none; the binary is redistributed unmodified
-- Attribution: `third_party/openidea/LICENSE`, `third_party/openidea/NOTICE`
+- Attribution: `third_party/openidea-server/LICENSE`, `third_party/openidea-server/NOTICE`
+
+### OpenIDEA source — Apache-2.0
+
+- Project: https://github.com/l0ng-ai/openidea
+- Fork: https://github.com/misswell/openidea
+- Pin: submodule `third_party/openidea` at commit `5514282` (the source the RPC
+  client is tested against; the shipped server is the later v0.1.41 build below)
+- Modification: none; the submodule is the fork's untouched commit
+- Attribution: the submodule's own `LICENSE` and `NOTICE`
 
 GoIDEA starts this server as a child process (`openidea-server --stdio`) and
 speaks its JSON-RPC protocol. The Java project model, JDT LS integration,

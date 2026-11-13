@@ -100,10 +100,16 @@ compare_section sorrycc/mygo "$pin" "MyGo fork"
 head_section "OpenIDEA"
 pin="$(field openidea commit)"
 latest="$(latest_commit l0ng-ai/openidea main)"
-echo "- Pinned source: \`${pin:0:8}\` · upstream main: \`${latest:0:8}\`"
+fork="$(latest_commit misswell/openidea main)"
+sub="$(git submodule status third_party/openidea 2>/dev/null | awk '{print $1}' | tr -d '+-')"
+echo "- Pinned source: \`${pin:0:8}\` · upstream main: \`${latest:0:8}\` · fork main: \`${fork:0:8}\`"
+echo "- Submodule \`third_party/openidea\`: \`${sub:0:8}\`"
+if [[ "$sub" != "$pin" ]]; then
+  echo "- **Submodule is not at the pin**: commit \`third_party/openidea\` or update the pin, or the next clone gets a different source than the manifest records"
+fi
 echo "- Latest release: \`$(latest_release l0ng-ai/openidea)\`"
 echo "- Shipped server: release \`$(server_field release)\`, commit \`$(server_field release_commit)\`"
-compare_section l0ng-ai/openidea "$pin" "OpenIDEA"
+compare_section l0ng-ai/openidea "$pin" "OpenIDEA upstream"
 
 head_section "Decision"
 echo

@@ -47,7 +47,10 @@ else
 fi
 
 echo "==> OpenIDEA"
-openidea="$(head_of l0ng-ai/openidea main)"
+openidea="$(head_of misswell/openidea main)"
+upstream="$(head_of l0ng-ai/openidea main)"
+git -C third_party/openidea fetch --quiet origin main
+git -C third_party/openidea checkout --quiet "$openidea"
 release="$(gh api repos/l0ng-ai/openidea/releases/latest --jq .tag_name)"
 release_commit="$(gh api "repos/l0ng-ai/openidea/git/ref/tags/$release" --jq .object.sha)"
 set_field openidea commit "$openidea"
@@ -55,6 +58,9 @@ set_field openidea version "${release#v}"
 set_field openidea synced_at "$today"
 set_server_field release "$release"
 set_server_field release_commit "$release_commit"
-echo "  source $openidea, server $release ($release_commit)"
+echo "  source $openidea (upstream $upstream), server $release ($release_commit)"
+if [[ "$openidea" != "$upstream" ]]; then
+  echo "  note: the fork is not at upstream main; merge l0ng-ai/openidea into the fork to inherit those commits" >&2
+fi
 
 git diff --stat
