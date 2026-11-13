@@ -56,6 +56,12 @@ func commands() []appCommand {
 		{"run.continue", "继续", "运行", "", "continue resume", func(m *Model) { m.DebugContinue() }},
 		{"run.pause", "暂停", "运行", "", "pause suspend", func(m *Model) { m.DebugPause() }},
 		{"run.trust", "信任此项目并启用运行", "运行", "", "trust project", func(m *Model) { m.TrustProject() }},
+		{"build.buildProject", "构建项目", "构建", "Cmd+F9", "build project compile make mvn gradle cmake", func(m *Model) { m.BuildProject() }},
+		{"build.buildModule", "构建模块", "构建", "Cmd+Shift+F9", "build module compile file", func(m *Model) { m.BuildModule() }},
+		{"build.rebuildProject", "重新构建项目", "构建", "", "rebuild clean build", func(m *Model) { m.RebuildProject() }},
+		{"build.buildArtifacts", "构建工件", "构建", "", "artifacts package assemble jar release", func(m *Model) { m.BuildArtifacts() }},
+		{"build.stop", "停止构建", "构建", "", "stop cancel build", func(m *Model) { m.StopBuild() }},
+		{"view.build", "显示构建窗口", "视图", "", "build output console", func(m *Model) { m.ShowBuild() }},
 		{"java.tools", "安装 Java 语言服务与调试器", "运行", "", "java jdtls language server debugger install toolchain", func(m *Model) { m.InstallJavaToolchain() }},
 		{"app.settings", "设置…", "文件", "Cmd+,", "settings preferences theme font appearance", func(m *Model) { m.OpenSettings() }},
 	}

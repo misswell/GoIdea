@@ -49,6 +49,10 @@ CHECKS = {
         ("runError", *absent("runError")),
         ("run.exit", "run exited 0", lambda d: (d.get("exitCode") == 0, d.get("exitCode"))),
         ("run.build", "Maven reported BUILD SUCCESS", lambda d: ("BUILD SUCCESS" in (d.get("runOutput") or ""), d.get("runOutput"))),
+        ("build.success", "build_run succeeded", lambda d: (get(d, "build.success") is True, get(d, "build.success"))),
+        ("build.lines", "build streamed console lines", lambda d: ((get(d, "build.lines") or 0) >= 2, get(d, "build.lines"))),
+        ("build.console", "build console shows the engine's output", lambda d: (any(s in (get(d, "build.console") or "") for s in ("BUILD SUCCESS", "Up to date")), get(d, "build.console"))),
+        ("buildError", *absent("buildError")),
     ],
     "tools": [
         ("toolsError", *absent("toolsError")),

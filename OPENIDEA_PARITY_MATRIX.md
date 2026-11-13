@@ -27,9 +27,9 @@ new action, tool window, page or command appears automatically.
 | Kind | Items | Integrated | Partial | Engine | Blocked | Missing |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Feature folders | 43 | 0 | 10 | 0 | 0 | 33 |
-| Actions | 455 | 6 | 0 | 0 | 0 | 449 |
+| Actions | 455 | 7 | 4 | 0 | 1 | 443 |
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
-| Tool windows | 30 | 4 | 5 | 0 | 0 | 21 |
+| Tool windows | 30 | 4 | 6 | 0 | 0 | 20 |
 | Overlays | 56 | 0 | 0 | 0 | 0 | 56 |
 | Editor contributions | 35 | 0 | 0 | 0 | 0 | 35 |
 | Editor kinds | 4 | 0 | 0 | 0 | 0 | 4 |
@@ -136,12 +136,12 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 
 | Action | Title | Source | Status |
 | --- | --- | --- | --- |
-| `build.buildArtifacts` | Build Artifacts | `src/features/build/index.ts` | missing |
-| `build.buildModule` | Build Module | `src/features/build/index.ts` | missing |
-| `build.buildProject` | Build Project | `src/features/build/index.ts` | missing |
-| `build.compileFile` | Compile File | `src/features/build/index.ts` | missing |
-| `build.rebuildProject` | Rebuild Project | `src/features/build/index.ts` | missing |
-| `build.stop` | Stop Build | `src/features/build/index.ts` | missing |
+| `build.buildArtifacts` | Build Artifacts | `src/features/build/index.ts` | partial - internal/app/build.go BuildArtifacts (build_run kind=artifacts) |
+| `build.buildModule` | Build Module | `src/features/build/index.ts` | partial - internal/app/build.go BuildModule; base.build.success |
+| `build.buildProject` | Build Project | `src/features/build/index.ts` | integrated - base.build.success, base.build.lines, base.build.console |
+| `build.compileFile` | Compile File | `src/features/build/index.ts` | blocked - build_compile_file is not served by the pinned v0.1.41 server; OPENIDEA_IPC.md |
+| `build.rebuildProject` | Rebuild Project | `src/features/build/index.ts` | partial - internal/app/build.go RebuildProject (build_run kind=rebuild) |
+| `build.stop` | Stop Build | `src/features/build/index.ts` | partial - internal/app/build.go StopBuild (cancel_request) |
 
 ### build-tools
 
@@ -964,7 +964,7 @@ same bindings until a check records it.
 | Tool window | Title | Anchor | Source | Status |
 | --- | --- | --- | --- | --- |
 | `bookmarks` | Bookmarks | left | `src/features/search/index.ts` | missing |
-| `build` | Build | bottom | `src/features/build/index.ts` | missing |
+| `build` | Build | bottom | `src/features/build/index.ts` | partial - base.build.console, base.build.lines; internal/app/view.go buildPanel |
 | `commit` | Commit | left | `src/features/vcs/index.ts` | missing |
 | `compare` | Compare | left | `src/features/vcs/compareTool.tsx` | missing |
 | `coverage` | Coverage | right | `src/features/coverage/index.ts` | missing |
@@ -1791,7 +1791,7 @@ Local-only commands and the per-command argument lists are in
 | `apply_workspace_edit` | lsp | yes | yes | missing |
 | `build_compile_file` | build | yes |  | missing |
 | `build_model` | build | yes |  | missing |
-| `build_run` | build | yes |  | missing |
+| `build_run` | build | yes | yes | missing |
 | `build_sync` | build | yes |  | missing |
 | `caches_schedule_invalidation` | caches | no |  | missing |
 | `cancel_request` | app | yes | yes | missing |
@@ -2362,7 +2362,7 @@ Local-only commands and the per-command argument lists are in
 | `wsl_distros` | wsl | no |  | missing |
 | `wsl_resolve` | wsl | no |  | missing |
 
-446 commands are served over stdio and 63 are called by GoIDEA today. A command
+446 commands are served over stdio and 64 are called by GoIDEA today. A command
 that is registered only in the desktop shell needs an `ops` module before stdio
 can serve it; a GoIDEA check counts only when the UI path works end to end.
 

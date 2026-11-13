@@ -41,7 +41,7 @@ GoIDEA can rely on it; code that calls it must check `commands` first.
 | Code analysis | `analysis` | 5 | 0 | 0 |
 | Android devices | `android` | 0 | 2 | 0 |
 | Application and projects | `app` | 12 | 15 | 5 |
-| Maven/Gradle builds | `build` | 11 | 0 | 0 |
+| Maven/Gradle builds | `build` | 11 | 0 | 1 |
 | Binary file reads | `bytes` | 3 | 0 | 0 |
 | Caches and restart | `caches` | 0 | 2 | 0 |
 | Clipboard | `clipboard` | 0 | 5 | 0 |
@@ -88,7 +88,7 @@ GoIDEA can rely on it; code that calls it must check `commands` first.
 ## Served by `openidea-server --stdio`
 
 446 commands. `GoIDEA` marks the ones a non-test Go source invokes today
-(63 of 446).
+(64 of 446).
 
 | Command | Domain | Arguments | GoIDEA |
 | --- | --- | --- | --- |
@@ -130,7 +130,7 @@ GoIDEA can rely on it; code that calls it must check `commands` first.
 | `apply_workspace_edit` | Language services | `edit` | yes |
 | `build_compile_file` | Maven/Gradle builds | `clear`, `file`, `onEvent`, `request` | — |
 | `build_model` | Maven/Gradle builds | — | — |
-| `build_run` | Maven/Gradle builds | `clear`, `cmake`, `file`, `kind`, `onEvent`, `request` | — |
+| `build_run` | Maven/Gradle builds | `clear`, `cmake`, `file`, `kind`, `onEvent`, `request` | yes |
 | `build_sync` | Maven/Gradle builds | `buildDir`, `offline`, `onProgress`, `profiles`, `request`, `tool` | — |
 | `cancel_request` | Application and projects | — | yes |
 | `cancel_task` | Application and projects | — | — |
@@ -738,7 +738,7 @@ GoIDEA needs to do for each:
 
 ## What this means for GoIDEA
 
-446 remote commands are available today; GoIDEA uses 63. The parity work is
+446 remote commands are available today; GoIDEA uses 64. The parity work is
 first to cover the remote surface OpenIDEA's own frontend uses, then to move
 `shared-op`/`host`/`crate` commands onto stdio through the OpenIDEA fork
 (a submodule bump and a server release), and to implement `desktop` commands

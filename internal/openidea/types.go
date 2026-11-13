@@ -77,6 +77,42 @@ type RunExitedEvent struct {
 	Code *int32 `json:"code"`
 }
 
+// BuildEvent is one step of a build streamed on build_run's onEvent channel.
+// Kind selects the fields that are meaningful; Message is a BuildMessage for
+// "message" and the status text for "progress".
+type BuildEvent struct {
+	Kind    string          `json:"kind"` // started | step | output | message | progress
+	System  string          `json:"system"`
+	Title   string          `json:"title"`
+	Command string          `json:"command"`
+	Cwd     string          `json:"cwd"`
+	Text    string          `json:"text"`
+	Stderr  bool            `json:"stderr"`
+	Message json.RawMessage `json:"message"`
+}
+
+// BuildMessage is one compiler message of a build, in 0-based lines and
+// UTF-16 columns.
+type BuildMessage struct {
+	Severity string        `json:"severity"`
+	Text     string        `json:"text"`
+	Path     *string       `json:"path"`
+	Range    *OutlineRange `json:"range"`
+	Code     *string       `json:"code"`
+}
+
+// BuildResult is build_model/build_run's answer: whether the build succeeded,
+// how many messages it found and how long it took.
+type BuildResult struct {
+	System     string         `json:"system"`
+	Title      string         `json:"title"`
+	Success    bool           `json:"success"`
+	Errors     uint32         `json:"errors"`
+	Warnings   uint32         `json:"warnings"`
+	DurationMS float64        `json:"durationMs"`
+	Messages   []BuildMessage `json:"messages"`
+}
+
 // IndexStateEvent reports the project indexer's state.
 type IndexStateEvent struct {
 	Indexing bool   `json:"indexing"`

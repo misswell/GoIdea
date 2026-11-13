@@ -480,6 +480,91 @@ func (m *Model) runPanel(c *ui.Context, p *ui.Theme) {
 	})
 }
 
+func (m *Model) buildPanel(c *ui.Context, p *ui.Theme) {
+	b := &m.build
+	ui.Column(c).Height(220).Shrink(0).Background(p.Surface).
+		BorderWidth(1, 0, 0, 0).BorderColor(p.Border).Children(func() {
+		m.buildHeader(c, p)
+		if b.err != "" {
+			ui.Row(c).Height(24).Padding(0, 10).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, b.err).FontSize(11.5).TextColor(p.Warning).SingleLine().Ellipsis("…")
+			})
+		}
+		ui.Scroll(c).Grow(1).Children(func() {
+			ui.Column(c).Padding(8, 10).Children(func() {
+				if !m.run.trusted {
+					ui.Text(c, "此项目未受信任：构建默认禁止。").
+						FontSize(12).TextColor(p.TextMuted)
+					ui.Row(c).Padding(6, 0).Children(func() {
+						ui.Button(c, "信任此项目并启用运行").OnClick(func() { m.TrustProject() })
+					})
+					return
+				}
+				if len(b.output) == 0 {
+					ui.Text(c, "尚无输出。按“构建项目”开始。").
+						FontSize(11.5).TextColor(p.TextMuted)
+					return
+				}
+				if b.truncated {
+					ui.Text(c, "（输出过长，已省略较早的行）").
+						FontSize(11).TextColor(p.TextMuted)
+				}
+				ui.Text(c, b.renderText()).FontSize(11.5).TextColor(p.Text)
+			})
+		})
+	})
+}
+
+func (m *Model) buildHeader(c *ui.Context, p *ui.Theme) {
+	b := &m.build
+	ui.Row(c).Height(30).Padding(0, 8).Gap(8).AlignItems(ui.Center).
+		BorderWidth(0, 0, 1, 0).BorderColor(p.Border).Children(func() {
+		ui.Text(c, "构建").FontSize(12).Bold().TextColor(p.Text)
+		title := b.title
+		if title == "" {
+			title = "构建"
+		}
+		if b.system != "" {
+			title += " · " + b.system
+		}
+		ui.Text(c, title).FontSize(12).TextColor(p.Text).SingleLine().Ellipsis("…")
+		ui.Spacer(c)
+		summary := m.buildSummaryText()
+		if summary != "" {
+			ui.Text(c, summary).FontSize(11).TextColor(p.TextMuted).SingleLine().Ellipsis("…")
+		}
+		if b.busy {
+			ui.Button(c, "停止").OnClick(func() { m.StopBuild() })
+		} else {
+			ui.Button(c, "构建").OnClick(func() { m.BuildProject() })
+		}
+		ui.Button(c, "清空").OnClick(func() { m.ClearBuild() })
+		ui.Button(c, "收起").OnClick(func() { m.ShowBuild() })
+	})
+}
+
+// buildSummaryText is the header's one-line result: the progress while a
+// build runs, then the outcome and counts.
+func (m *Model) buildSummaryText() string {
+	b := &m.build
+	if b.busy {
+		if b.progress != "" {
+			return b.progress
+		}
+		return "正在构建…"
+	}
+	if b.success == nil {
+		return ""
+	}
+	if *b.success {
+		if b.warnings > 0 {
+			return fmt.Sprintf("成功 · %s · %d 个警告", formatBuildDuration(b.duration), b.warnings)
+		}
+		return "成功 · " + formatBuildDuration(b.duration)
+	}
+	return fmt.Sprintf("失败 · %d 个错误 · %d 个警告", b.errors, b.warnings)
+}
+
 func (m *Model) runHeader(c *ui.Context, p *ui.Theme) {
 	ui.Row(c).Height(30).Padding(0, 8).Gap(8).AlignItems(ui.Center).
 		BorderWidth(0, 0, 1, 0).BorderColor(p.Border).Children(func() {

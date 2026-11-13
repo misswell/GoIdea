@@ -108,6 +108,34 @@
     "action:run.debug": {
       "status": "integrated",
       "evidence": "debug.paused, debug.step.paused"
+    },
+    "action:build.buildProject": {
+      "status": "integrated",
+      "evidence": "base.build.success, base.build.lines, base.build.console"
+    },
+    "action:build.buildModule": {
+      "status": "partial",
+      "evidence": "internal/app/build.go BuildModule; base.build.success"
+    },
+    "action:build.rebuildProject": {
+      "status": "partial",
+      "evidence": "internal/app/build.go RebuildProject (build_run kind=rebuild)"
+    },
+    "action:build.buildArtifacts": {
+      "status": "partial",
+      "evidence": "internal/app/build.go BuildArtifacts (build_run kind=artifacts)"
+    },
+    "action:build.stop": {
+      "status": "partial",
+      "evidence": "internal/app/build.go StopBuild (cancel_request)"
+    },
+    "action:build.compileFile": {
+      "status": "blocked",
+      "evidence": "build_compile_file is not served by the pinned v0.1.41 server; OPENIDEA_IPC.md"
+    },
+    "toolwindow:build": {
+      "status": "partial",
+      "evidence": "base.build.console, base.build.lines; internal/app/view.go buildPanel"
     }
   }
 }

@@ -5,6 +5,8 @@ needs a `## <version>` section here, or its build fails.
 
 ## Unreleased
 
+- **构建项目**（`Cmd+F9`）、**构建模块**（`Cmd+Shift+F9`）、**重新构建项目** 和 **构建工件** 通过 OpenIDEA 构建引擎执行。
+- 构建输出显示在底部构建窗口，结束时给出错误数、警告数和耗时，**停止构建** 可取消。
 - **Settings > Java 语言服务与调试器** installs jdtls and java-debug with progress, cancel and a retry, without leaving GoIDEA.
 - The command palette's **安装 Java 语言服务与调试器** runs the same install.
 - Opening a project restores only the session files inside that project, including through `/var` → `/private/var` links.

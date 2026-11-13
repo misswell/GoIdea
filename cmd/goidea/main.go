@@ -184,6 +184,15 @@ func smoke(m *app.Model) {
 			fields["runError"] = runErr.Error()
 		}
 	}
+	if os.Getenv("GOIDEA_SMOKE_BUILD") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		build, buildErr := m.SmokeBuild(ctx)
+		cancel()
+		fields["build"] = build
+		if buildErr != nil {
+			fields["buildError"] = buildErr.Error()
+		}
+	}
 	if os.Getenv("GOIDEA_SMOKE_DEBUG") == "1" && root != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
 		debug, debugErr := m.SmokeDebug(ctx)

@@ -157,6 +157,7 @@ type Model struct {
 
 	run    RunPane
 	debug  DebugPane
+	build  BuildPane
 	term   TermPane
 	vcs    VCSPane
 	search SearchPane
@@ -510,6 +511,7 @@ func (m *Model) openProject(dir string, files []string) {
 	m.banner, m.bannerPath = "", ""
 	m.resetRun()
 	m.resetDebug()
+	m.resetBuild()
 	m.resetTerm()
 	m.resetVCS()
 	m.cancelSearch()
@@ -1092,6 +1094,9 @@ func (m *Model) View(c *ui.Context) {
 				} else {
 					m.runPanel(c, p)
 				}
+				if m.build.visible {
+					m.buildPanel(c, p)
+				}
 			})
 		})
 		m.statusBar(c, p)
@@ -1166,6 +1171,12 @@ func (m *Model) shortcuts(c *ui.Context) {
 	}
 	if c.Shortcut(ui.Modifiers(0), ui.KeyF9) {
 		m.Debug()
+	}
+	if c.Shortcut(ui.Cmd, ui.KeyF9) {
+		m.BuildProject()
+	}
+	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyF9) {
+		m.BuildModule()
 	}
 	if c.Shortcut(ui.Cmd, ui.KeyF8) {
 		m.ToggleBreakpoint()

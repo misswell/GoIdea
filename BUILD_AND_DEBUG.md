@@ -31,9 +31,40 @@ The e2e base phase runs the detected Maven configuration on
 `testdata/java-maven`, requires exit code 0 and requires `BUILD SUCCESS` in the
 output. This is a real `mvn` process, not a recorded transcript.
 
-Not in the UI yet: separate Build / Rebuild / Clean actions, a configuration
-editor, and a dedicated test-run view. Run and debug trigger the backend's
-build; the matrix marks these `ADAPTING`, not `INTEGRATED`.
+## Building
+
+OpenIDEA's Build actions run through the backend's build engine:
+
+- **构建项目** (`Cmd+F9`, `build.buildProject`) runs `build_run {kind:"build"}`
+  for the project.
+- **构建模块** (`Cmd+Shift+F9`, `build.buildModule`) passes the active file as
+  `file`, so the engine builds that file's module.
+- **重新构建项目** (`build.rebuildProject`) uses `kind:"rebuild"`, which cleans
+  first; **构建工件** (`build.buildArtifacts`) uses `kind:"artifacts"`.
+- **停止构建** (`build.stop`) cancels the request with `cancel_request`.
+
+Each build streams `BuildEvent`s on `onEvent`: `started`, `step`, `output`,
+`message` and `progress` (`internal/app/build.go`). The Build window shows the
+step commands and console output (last 20,000 lines), the progress text, and at
+the end the result with its error/warning counts and duration. Messages are
+counted in the console but reach the editors and Problems view as the backend's
+`build` diagnostics. Before a build, open documents are saved; the next build
+passes the previous build's message files as `clear`. Compiler messages are
+those of the engine; GoIDEA does not run `mvn` or `gradle` itself.
+
+**编译文件** (`build.compileFile`) is not ported: the pinned v0.1.41 server
+does not serve `build_compile_file` (it exists only in the pinned source), so
+the action is recorded `blocked` in `OPENIDEA_PARITY_MATRIX.md` until a server
+release or submodule bump ships it.
+
+The e2e base phase runs `GOIDEA_SMOKE_BUILD=1`: `build_run` on
+`testdata/java-maven` must succeed, stream at least two console lines and show
+`BUILD SUCCESS` (or the engine's up-to-date line when the prior run already
+built the project).
+
+Not in the UI yet: the Build view's message tree (messages are counted in the
+console and shown as diagnostics instead), the interrupted-build context, and
+a dedicated test-run view.
 
 ## Debug pipeline
 
