@@ -739,8 +739,11 @@ def render():
         add("| `{}` | {} | {} |".format(name, len(presets[name]), status_cell(st, ev)))
     add("")
     add(
-        "GoIDEA's key handling is its own; a preset id in OpenIDEA does not imply that\n"
-        "GoIDEA ships the same bindings until a check records it."
+        "Counts are the bindings written literally in a preset file. A preset may spread\n"
+        "another (`vscode-windows` translates and extends `vscode-macos`), so its effective\n"
+        "map is larger; the union above and the keymap-only ids below are complete.\n"
+        "GoIDEA's key handling is its own: a preset id does not imply that GoIDEA ships the\n"
+        "same bindings until a check records it."
     )
     add("")
 
@@ -780,6 +783,11 @@ def render():
         add("| `{}` | `{}` | {} |".format(c["id"], c["source"], status_cell(st, ev)))
     add("")
     add("### Editor kinds (file editor types)")
+    add("")
+    add(
+        "The plain text editor is the workbench default and is not registered through\n"
+        "`registerEditorKind`; the kinds below are the non-text inputs."
+    )
     add("")
     add("| Kind | Source | Status |")
     add("| --- | --- | --- |")

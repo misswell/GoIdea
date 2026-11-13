@@ -953,8 +953,11 @@ expected to come from a plugin or a hidden registration.
 | `vscode-macos` | 370 | missing |
 | `vscode-windows` | 41 | missing |
 
-GoIDEA's key handling is its own; a preset id in OpenIDEA does not imply that
-GoIDEA ships the same bindings until a check records it.
+Counts are the bindings written literally in a preset file. A preset may spread
+another (`vscode-windows` translates and extends `vscode-macos`), so its effective
+map is larger; the union above and the keymap-only ids below are complete.
+GoIDEA's key handling is its own: a preset id does not imply that GoIDEA ships the
+same bindings until a check records it.
 
 ## Tool windows
 
@@ -1095,6 +1098,9 @@ GoIDEA ships the same bindings until a check records it.
 | `vim` | `src/features/vim/index.ts` | missing |
 
 ### Editor kinds (file editor types)
+
+The plain text editor is the workbench default and is not registered through
+`registerEditorKind`; the kinds below are the non-text inputs.
 
 | Kind | Source | Status |
 | --- | --- | --- |
