@@ -26,11 +26,11 @@ new action, tool window, page or command appears automatically.
 
 | Kind | Items | Integrated | Partial | Engine | Blocked | Missing |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Feature folders | 43 | 0 | 10 | 0 | 0 | 33 |
-| Actions | 647 | 23 | 62 | 0 | 1 | 561 |
+| Feature folders | 43 | 0 | 11 | 0 | 0 | 32 |
+| Actions | 647 | 24 | 62 | 0 | 1 | 560 |
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
 | Tool windows | 30 | 8 | 5 | 0 | 0 | 17 |
-| Overlays | 56 | 0 | 0 | 0 | 0 | 56 |
+| Overlays | 56 | 1 | 0 | 0 | 0 | 55 |
 | Editor contributions | 35 | 0 | 0 | 0 | 0 | 35 |
 | Editor kinds | 4 | 0 | 0 | 0 | 0 | 4 |
 | File editor providers | 4 | 0 | 0 | 0 | 0 | 4 |
@@ -78,7 +78,7 @@ directory registers.
 | `project-trust` | 5 | 0 | 1 | 0 | 1 | missing |
 | `remote-dev` | 4 | 1 | 1 | 0 | 0 | missing |
 | `run` | 27 | 1 | 5 | 2 | 0 | partial - base.run.config, base.run.exit, base.run.build |
-| `run-anything` | 1 | 0 | 1 | 0 | 0 | missing |
+| `run-anything` | 1 | 0 | 1 | 0 | 0 | partial - internal/app/run_anything.go Run Anything popup with Recent and Run Configurations sections, Clear History, per-project history and shell command lines; gear menu action:runAnything.show; Ctrl Ctrl keymap deferred, MyGo has no KeyControl constant; internal/app/run_anything_test.go |
 | `scratch` | 1 | 0 | 1 | 0 | 0 | missing |
 | `search` | 24 | 3 | 6 | 2 | 0 | partial - base.search.done, base.search.files, base.search.matches |
 | `services` | 20 | 1 | 1 | 2 | 0 | missing |
@@ -471,7 +471,7 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 
 | Action | Title | Source | Status |
 | --- | --- | --- | --- |
-| `runAnything.show` | Run Anything… | `src/features/run-anything/index.ts` | missing |
+| `runAnything.show` | Run Anything… | `src/features/run-anything/index.ts` | integrated - internal/app/commands.go runAnything.show opens the popup; gear menu first item in internal/app/menu.go; internal/app/run_anything_test.go TestRunAnythingDialogRenders runs the action through the registry |
 
 ### scratch
 
@@ -1033,7 +1033,7 @@ same bindings until a check records it.
 | `run.editConfigs` | `src/features/run/index.ts` | missing |
 | `run.serviceImport` | `src/features/run/index.ts` | missing |
 | `run.stackTraceDialog` | `src/features/run/stackTrace.tsx` | missing |
-| `runAnything.popup` | `src/features/run-anything/index.ts` | missing |
+| `runAnything.popup` | `src/features/run-anything/index.ts` | integrated - internal/app/run_anything.go runAnythingDialog, drawn by View in internal/app/app.go; internal/app/run_anything_test.go |
 | `scratch.chooser` | `src/features/scratch/index.ts` | missing |
 | `search.bookmarks` | `src/features/search/index.ts` | missing |
 | `search.everywhere` | `src/features/search/index.ts` | missing |

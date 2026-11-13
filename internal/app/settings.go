@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strings"
 
 	"github.com/egoist/mygo/ui"
 )
@@ -33,6 +34,9 @@ type Session struct {
 	// project comes back the way it was left, as OpenIDEA stores a tool
 	// window layout per project root.
 	Layouts map[string]Layout `json:"layouts,omitempty"`
+	// RunHistory is each project's Run Anything history, by project folder,
+	// most recent first, as OpenIDEA keeps it per project root.
+	RunHistory map[string][]string `json:"runHistory,omitempty"`
 }
 
 // Layout is how one project had its workbench arranged, as OpenIDEA keeps a
@@ -180,6 +184,83 @@ func layoutKey(root string) string {
 // none is stored.
 func (s Session) layoutFor(root string) Layout {
 	return normalizeLayout(s.Layouts[layoutKey(root)])
+}
+
+// maxRunHistory is how many commands Run Anything remembers per project, as
+// OpenIDEA's MAX_HISTORY.
+const maxRunHistory = 30
+
+// runHistoryFor returns the folder's remembered commands, most recent first.
+func (s Session) runHistoryFor(root string) []string {
+	if root == "" {
+		return nil
+	}
+	return append([]string(nil), s.RunHistory[layoutKey(root)]...)
+}
+
+// normalizeRunHistory trims each project's list: blank commands and repeats
+// go, and it ends at maxRunHistory.
+func normalizeRunHistory(history map[string][]string) map[string][]string {
+	out := make(map[string][]string, len(history))
+	for key, lines := range history {
+		seen := make(map[string]bool, len(lines))
+		var kept []string
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if line == "" || seen[line] {
+				continue
+			}
+			seen[line] = true
+			kept = append(kept, line)
+			if len(kept) == maxRunHistory {
+				break
+			}
+		}
+		if len(kept) > 0 {
+			out[layoutKey(key)] = kept
+		}
+	}
+	return out
+}
+
+// pushRunHistory puts line first in the folder's history, once, as
+// OpenIDEA's pushHistory does.
+func pushRunHistory(history map[string][]string, root, line string) []string {
+	line = strings.TrimSpace(line)
+	if root == "" || line == "" {
+		return nil
+	}
+	key := layoutKey(root)
+	next := []string{line}
+	for _, h := range history[key] {
+		if h != line && len(next) < maxRunHistory {
+			next = append(next, h)
+		}
+	}
+	if history == nil {
+		history = map[string][]string{}
+	}
+	history[key] = next
+	return next
+}
+
+// pruneRunHistory keeps the histories of the remembered folders, so the map
+// does not grow with projects that left the Welcome screen.
+func pruneRunHistory(history map[string][]string, keep []string) map[string][]string {
+	if len(history) == 0 {
+		return nil
+	}
+	kept := make(map[string][]string, len(keep))
+	for _, root := range keep {
+		key := layoutKey(root)
+		if lines, ok := history[key]; ok {
+			kept[key] = lines
+		}
+	}
+	if len(kept) == 0 {
+		return nil
+	}
+	return kept
 }
 
 // normalizeRecents keeps the folders that still exist, drops duplicates and

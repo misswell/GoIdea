@@ -193,6 +193,18 @@
       "status": "partial",
       "evidence": "base.run.config, base.run.exit, base.run.build"
     },
+    "feature:run-anything": {
+      "status": "partial",
+      "evidence": "internal/app/run_anything.go Run Anything popup with Recent and Run Configurations sections, Clear History, per-project history and shell command lines; gear menu action:runAnything.show; Ctrl Ctrl keymap deferred, MyGo has no KeyControl constant; internal/app/run_anything_test.go"
+    },
+    "action:runAnything.show": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go runAnything.show opens the popup; gear menu first item in internal/app/menu.go; internal/app/run_anything_test.go TestRunAnythingDialogRenders runs the action through the registry"
+    },
+    "overlay:runAnything.popup": {
+      "status": "integrated",
+      "evidence": "internal/app/run_anything.go runAnythingDialog, drawn by View in internal/app/app.go; internal/app/run_anything_test.go"
+    },
     "feature:debugger": {
       "status": "partial",
       "evidence": "debug.paused, debug.step.paused, debug.vars"

@@ -26,6 +26,9 @@ type RunPane struct {
 	loading bool
 	// pendingStart runs the selected configuration once run_configs lands.
 	pendingStart bool
+	// inline is a configuration that is not in the detected list, such as the
+	// command line Run Anything starts; current() reports it while it is set.
+	inline *openidea.RunConfig
 
 	busy     bool
 	running  bool
@@ -171,6 +174,7 @@ func (m *Model) loadRunConfigs() {
 				return
 			}
 			m.run.configs = configs
+			m.run.inline = nil
 			m.run.loaded = true
 			m.run.sel = pickRunConfig(configs)
 			m.invalidate()
@@ -199,6 +203,7 @@ func (m *Model) ReloadRunConfigs() {
 		return
 	}
 	m.run.loaded = false
+	m.run.inline = nil
 	m.loadRunConfigs()
 	m.invalidate()
 }
@@ -230,6 +235,9 @@ func pickRunConfig(configs []openidea.RunConfig) int {
 }
 
 func (p *RunPane) current() *openidea.RunConfig {
+	if p.inline != nil {
+		return p.inline
+	}
 	if p.sel < 0 || p.sel >= len(p.configs) {
 		return nil
 	}
@@ -273,13 +281,24 @@ func (m *Model) Run() {
 }
 
 func (m *Model) startRun() {
+	m.run.inline = nil
 	cfg := m.run.current()
 	if cfg == nil {
 		m.loadRunConfigs()
 		return
 	}
+	m.startRunWith(json.RawMessage(cfg.Raw()), cfg.Name)
+}
+
+// startRunWith starts an arbitrary configuration, which is how a typed
+// command line (Run Anything) runs beside the detected configurations.
+func (m *Model) startRunWith(raw json.RawMessage, name string) bool {
+	if !m.run.trusted {
+		m.invalidate()
+		return false
+	}
 	if m.run.busy || m.run.running {
-		return
+		return false
 	}
 	tabs := append([]*Tab(nil), m.tabs...)
 	ch := m.nextChannel()
@@ -295,11 +314,11 @@ func (m *Model) startRun() {
 	m.run.err = ""
 	m.run.output = nil
 	m.run.truncated = false
-	m.status = "正在启动 " + cfg.Name + "…"
+	m.status = "正在启动 " + name + "…"
 	m.invalidate()
 
 	args := map[string]any{
-		"config":   json.RawMessage(cfg.Raw()),
+		"config":   raw,
 		"onOutput": map[string]any{"$channel": ch},
 		"request":  nil,
 	}
@@ -340,6 +359,7 @@ func (m *Model) startRun() {
 			m.invalidate()
 		})
 	}()
+	return true
 }
 
 // StopRun terminates the running configuration.
@@ -375,6 +395,7 @@ func (m *Model) CycleRunConfig(delta int) {
 		return
 	}
 	m.run.sel = (m.run.sel + delta + n) % n
+	m.run.inline = nil
 	m.invalidate()
 }
 

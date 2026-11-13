@@ -28,6 +28,7 @@ func commands() []appCommand {
 		{"project.open", "打开项目…", "文件", "Cmd+O", "open project folder", func(m *Model) { m.ChooseProject() }},
 		{"welcome.manageProjects", "管理项目…", "文件", "", "manage projects welcome recent", func(m *Model) { m.showWelcome() }},
 		{"app.commandPalette", "搜索所有位置", "文件", "Cmd+Shift+A", "search everywhere command palette find action", func(m *Model) { m.OpenCommands() }},
+		{"runAnything.show", "Run Anything…", "运行", "", "command shell execute npm mvn gradle goal", func(m *Model) { m.OpenRunAnything() }},
 		{"app.plugins", "插件…", "文件", "", "plugins settings marketplace", func(m *Model) { m.openPlugins() }},
 		{"file.quickOpen", "快速打开…", "文件", "Cmd+P", "quick open file goto recent", func(m *Model) { m.OpenQuickFiles() }},
 		{"file.save", "保存", "文件", "Cmd+S", "save write", func(m *Model) { m.SaveActive() }},

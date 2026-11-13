@@ -212,6 +212,8 @@ func mainMenuGroups() []menuEntry {
 // the theme and keymap quick switches, and the palette.
 func gearGroup() []menuEntry {
 	return []menuEntry{
+		action("Run Anything…", "runAnything.show", ""),
+		rule(),
 		action("Settings…", "app.settings", "CmdOrCtrl+,"),
 		action("Plugins…", "app.plugins", ""),
 		rule(),

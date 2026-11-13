@@ -121,6 +121,9 @@ type Model struct {
 	// palette is the open command palette, or nil.
 	palette *commandPicker
 
+	// runAnything is the open Run Anything popup, or nil.
+	runAnything *runAnythingState
+
 	// diff is the open compare-with-HEAD view, or nil.
 	diff *diffView
 
@@ -297,8 +300,11 @@ type Model struct {
 	// layouts are each project's saved workbench layout, by folder, as
 	// OpenIDEA keeps one per project root; sessionSeq orders the session
 	// writes so a slow one never overwrites a newer snapshot.
-	layouts      map[string]Layout
-	layoutHold   bool
+	layouts    map[string]Layout
+	layoutHold bool
+	// runHistory is each project's Run Anything history, by folder, as
+	// OpenIDEA keeps it per project root.
+	runHistory   map[string][]string
 	sessionSeq   int
 	sessionWrote int
 	sessionMu    sync.Mutex
@@ -332,6 +338,7 @@ func New(cfg Config) *Model {
 	for root, l := range session.Layouts {
 		m.layouts[layoutKey(root)] = normalizeLayout(l)
 	}
+	m.runHistory = normalizeRunHistory(session.RunHistory)
 	m.mgr = openidea.NewManager(openidea.LaunchConfig{
 		ServerPath: cfg.ServerPath,
 		Home:       cfg.Home,
@@ -1173,7 +1180,18 @@ func (m *Model) sessionSnapshot() (Session, bool) {
 		BookmarkLists:  append([]BookmarkList(nil), m.bookmarkLists...),
 		DefaultList:    m.defaultList,
 		RecentProjects: append([]string(nil), m.recents...),
-		Layouts:        pruneLayouts(layouts, keep)}, true
+		Layouts:        pruneLayouts(layouts, keep),
+		RunHistory:     pruneRunHistory(cloneRunHistory(m.runHistory), keep)}, true
+}
+
+// cloneRunHistory copies the histories, so a snapshot being written never
+// shares slices with the lists Run Anything keeps changing.
+func cloneRunHistory(history map[string][]string) map[string][]string {
+	out := make(map[string][]string, len(history))
+	for key, lines := range history {
+		out[key] = append([]string(nil), lines...)
+	}
+	return out
 }
 
 // saveSession writes the session in the background. The sequence numbers keep
@@ -1307,7 +1325,7 @@ func (m *Model) ShowProject() {
 // would also act in the background leaves it alone.
 func (m *Model) overlayOpen() bool {
 	return m.rename != nil || m.symbols != nil || m.intents != nil || m.files != nil ||
-		m.diff != nil || m.palette != nil || m.commit != nil || m.branch.open ||
+		m.diff != nil || m.palette != nil || m.runAnything != nil || m.commit != nil || m.branch.open ||
 		m.rollback != nil || m.bookmarksView != nil || m.mnemonics != nil || m.newList != nil ||
 		m.deleteList != nil || m.move != nil || m.editDesc != nil || m.treeOp != nil ||
 		m.history != nil || m.dirCompare != nil
@@ -1363,6 +1381,7 @@ func (m *Model) View(c *ui.Context) {
 	m.historyDialog(c, p)
 	m.dirCompareDialog(c, p)
 	m.commandsDialog(c, p)
+	m.runAnythingDialog(c, p)
 	m.diffDialog(c, p)
 	m.dbDialog(c, p)
 	m.commitDialog(c, p)

@@ -87,6 +87,7 @@ func (m *Model) runConfigChooser(c *ui.Context, p *ui.Theme, oi oiColors) {
 			it.Checked(i == m.run.sel)
 			if it.Chosen() {
 				m.run.sel = i
+				m.run.inline = nil
 				m.invalidate()
 			}
 		}
