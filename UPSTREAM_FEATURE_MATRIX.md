@@ -19,7 +19,8 @@ reimplementing it. A row is `INTEGRATED` only when the GoIDEA product
 
 | Feature | Status | Where in GoIDEA |
 | --- | --- | --- |
-| Native window, menus, dialogs, theme | INTEGRATED | `mygo` app + `cmd/goidea` menu |
+| Native window, menus, dialogs, theme | INTEGRATED | `mygo` app + `cmd/goidea` menu; OpenIDEA's palette in both appearances (`internal/app/theme.go`) |
+| Welcome screen with recent projects | INTEGRATED | `internal/app/welcome.go`; rail of pages, New Project/Open, search and recent folders, `internal/app/welcome_test.go` |
 | Editor buffer, selections, undo/redo | INTEGRATED | `ui/editor` state per tab; `internal/docbridge` syncs it |
 | Syntax highlighting | INTEGRATED | mygo editor's language for the file, set per document in `internal/docbridge` (Java, Kotlin, XML, YAML…) |
 | Quick-open files (Cmd+P) | INTEGRATED | `internal/app/quickopen.go` |

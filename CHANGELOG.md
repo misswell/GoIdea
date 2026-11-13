@@ -59,6 +59,10 @@ needs a `## <version>` section here, or its build fails.
 - A `mayoi://file` link opens its file at the line and column it names.
 - LocatorJS's **Custom link** reaches Mayoi with `mayoi://file/${projectPath}${filePath}:${line}:${column}`.
 - A `mayoi://` link to a missing file says Mayoi could not open it, in the window in front.
+- 没有打开项目时，窗口换成 OpenIDEA 风格的欢迎页：左侧栏目、**新建项目**/**打开**按钮和最近项目列表。
+- 欢迎页的**最近的项目**显示文件夹路径，可搜索，点一行直接打开该项目。
+- 窗口改用 OpenIDEA 的深色配色，工具窗口改为侧边竖向图标栏，标签页用顶部色条标出当前文件。
+- 项目视图标题栏有**全部展开**和**全部折叠**按钮，不用再打开右键菜单。
 
 ## 0.19.3
 

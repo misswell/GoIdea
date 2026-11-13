@@ -69,6 +69,13 @@ And, for review:
 
 ## Look
 
+- The window wears OpenIDEA's own palette in either appearance, day or night
+  (`internal/app/theme.go`): the editor on `#1e1f22`, chrome on `#2b2d30`, the
+  accent `#3574f0`, 4 DIP corners.
+- With no project open the Welcome screen owns the window: the rail of pages,
+  the actions, and the recent folders, in OpenIDEA's layout (`welcome.go`).
+- A tool window is a glyph over its name on the left rail, and its panel shows
+  the header of the window picked (`view.go`).
 - The page is flat: shadows only for what floats (`floating`), no box in a box.
 - An inner radius is the outer one less the padding between them.
 - The accent is for the one thing that matters on a screen.

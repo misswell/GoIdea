@@ -22,6 +22,34 @@ type Session struct {
 	// is the one new bookmarks go to.
 	BookmarkLists []BookmarkList `json:"bookmarkLists,omitempty"`
 	DefaultList   string         `json:"defaultList,omitempty"`
+	// RecentProjects are the folders the Welcome screen lists, most recent
+	// first.
+	RecentProjects []string `json:"recentProjects,omitempty"`
+}
+
+// maxRecentProjects is how many folders the Welcome screen keeps, as
+// OpenIDEA's Projects page does.
+const maxRecentProjects = 12
+
+// normalizeRecents keeps the folders that still exist, drops duplicates and
+// ends at the cap, keeping the order it is given.
+func normalizeRecents(paths []string) []string {
+	seen := make(map[string]bool, len(paths))
+	var out []string
+	for _, p := range paths {
+		if p == "" || seen[p] {
+			continue
+		}
+		if st, err := os.Stat(p); err != nil || !st.IsDir() {
+			continue
+		}
+		seen[p] = true
+		out = append(out, p)
+		if len(out) == maxRecentProjects {
+			break
+		}
+	}
+	return out
 }
 
 // LoadSession reads the session at path; a missing or unreadable file is an
@@ -90,9 +118,9 @@ func (p Preferences) Save(path string) error {
 func (p Preferences) themePreference() *ui.Theme {
 	switch p.Theme {
 	case "light":
-		return ui.LightTheme()
+		return openideaTheme(false)
 	case "dark":
-		return ui.DarkTheme()
+		return openideaTheme(true)
 	}
 	return nil
 }

@@ -238,6 +238,13 @@ type Model struct {
 	// startupFiles opens these files beside startupRoot, so an offscreen run
 	// has a tab without touching the user's session.
 	startupFiles []string
+
+	// recents are the folders the Welcome screen lists, most recent first,
+	// welcomeQuery filters them, and welcomePage is the rail page shown:
+	// "projects" or "plugins".
+	recents      []string
+	welcomeQuery string
+	welcomePage  string
 }
 
 // New returns a model; Start opens the last session.
@@ -246,6 +253,7 @@ func New(cfg Config) *Model {
 	m := &Model{cfg: cfg, ctx: ctx, off: off, bottomHeight: bottomDefaultHeight}
 	m.prefs = LoadPreferences(cfg.SettingsPath)
 	m.applyPreferences()
+	m.recents = normalizeRecents(LoadSession(cfg.SessionPath).RecentProjects)
 	m.mgr = openidea.NewManager(openidea.LaunchConfig{
 		ServerPath: cfg.ServerPath,
 		Home:       cfg.Home,
@@ -479,22 +487,6 @@ func (m *Model) Notify(msg string) {
 	})
 }
 
-// chooseProject asks for a folder and opens it.
-func (m *Model) chooseProject() {
-	parent := m.win
-	go func() {
-		paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
-			Parent: parent, Title: "打开项目", ButtonLabel: "打开",
-			Directory: true, CreateDirectories: true,
-		})
-		if err != nil || len(paths) == 0 {
-			return
-		}
-		dir := paths[0]
-		m.post(func() { m.confirmSwitch(dir) })
-	}()
-}
-
 // confirmSwitch asks about unsaved changes before replacing the project.
 func (m *Model) confirmSwitch(dir string) {
 	if m.busy {
@@ -673,6 +665,7 @@ func (m *Model) openProject(dir string, files []string) {
 				m.banner = "无法打开：" + strings.Join(failed, "、")
 			}
 			m.applyActive()
+			m.rememberProject(dir)
 			m.saveSession()
 			m.checkTrust(dir)
 			m.RefreshVCS()
@@ -1086,7 +1079,8 @@ func (m *Model) saveSession() {
 	}
 	s := Session{Root: root, Files: normalizeFiles(files), Focus: focus,
 		Bookmarks: m.bookmarks, PathBookmarks: m.pathBookmarks,
-		BookmarkLists: m.bookmarkLists, DefaultList: m.defaultList}
+		BookmarkLists: m.bookmarkLists, DefaultList: m.defaultList,
+		RecentProjects: m.recents}
 	path := m.cfg.SessionPath
 	go func() { _ = s.Save(path) }()
 }
@@ -1179,8 +1173,12 @@ func (m *Model) BackendState() openidea.State { return m.mgr.State() }
 
 // View draws the window.
 func (m *Model) View(c *ui.Context) {
+	// OpenIDEA's own palette, day or night, whatever the appearance: the
+	// stored choice picks one, the system's appearance the shade.
 	if m.theme != nil {
 		c.SetTheme(m.theme)
+	} else if base := c.Theme(); base != nil {
+		c.SetTheme(openideaTheme(base.Dark))
 	}
 	if m.maximized && m.visibleTool() == "" {
 		m.maximized = false
@@ -1189,6 +1187,16 @@ func (m *Model) View(c *ui.Context) {
 	m.shortcuts(c)
 	p := c.Theme()
 	ui.Column(c).Fill().Background(p.Background).Children(func() {
+		if m.Root() == "" {
+			// With no project open the Welcome screen owns the window, as
+			// OpenIDEA's does.
+			if m.banner != "" {
+				m.bannerRow(c, p)
+			}
+			m.welcome(c, p)
+			m.statusBar(c, p)
+			return
+		}
 		m.toolbar(c, p)
 		ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
 			m.sidebar(c, p)

@@ -13,24 +13,48 @@ import (
 
 const sidebarWidth float32 = 250
 
+// toolbar is the title bar: the project, the branch widget, and the run
+// controls, on the panel color OpenIDEA draws its chrome with.
 func (m *Model) toolbar(c *ui.Context, p *ui.Theme) {
-	ui.Row(c).Height(40).Padding(0, 10).Gap(10).AlignItems(ui.Center).
+	ui.Row(c).Height(36).Padding(0, 10).Gap(6).AlignItems(ui.Center).
 		Background(p.Surface).BorderWidth(0, 0, 1, 0).BorderColor(p.Border).
 		Children(func() {
-			ui.Text(c, "GoIDEA").FontSize(14).Bold().TextColor(p.Text)
+			ui.Row(c).Width(18).Height(18).Justify(ui.Center).AlignItems(ui.Center).
+				Background(p.Accent).Children(func() {
+				ui.Text(c, "G").FontSize(11).Bold().TextColor(p.AccentText)
+			})
+			name := "未打开项目"
+			if root := m.Root(); root != "" {
+				name = filepath.Base(root)
+			}
+			ui.Text(c, name).FontSize(12.5).Bold().TextColor(p.Text).
+				SingleLine().Ellipsis("…")
 			ui.Button(c, "打开项目").OnClick(func() { m.chooseProject() })
 			if label := m.branchLabel(); label != "" {
-				ui.Button(c, label).OnClick(func() { m.ToggleBranches() })
+				ui.Button(c, "⎇ "+label).OnClick(func() { m.ToggleBranches() })
 			}
-			debugLabel := "调试"
-			if m.debug.session != 0 && !m.debug.ended {
-				if m.debug.paused {
-					debugLabel = "继续"
+			ui.Spacer(c)
+			runLabel := "▶ 运行"
+			if m.run.running || m.run.awaiting {
+				runLabel = "■ 停止"
+			}
+			m.toolChip(c, p, "run", runLabel, m.run.running || m.run.awaiting, func() {
+				if m.run.running || m.run.awaiting {
+					m.StopRun()
 				} else {
-					debugLabel = "调试中"
+					m.Run()
+				}
+			})
+			debugLabel := "◪ 调试"
+			debugOn := m.debug.session != 0 && !m.debug.ended
+			if debugOn {
+				if m.debug.paused {
+					debugLabel = "▶ 继续"
+				} else {
+					debugLabel = "◪ 调试中"
 				}
 			}
-			ui.Button(c, debugLabel).OnClick(func() {
+			m.toolChip(c, p, "debug", debugLabel, debugOn, func() {
 				switch {
 				case m.debug.session == 0 || m.debug.ended:
 					m.Debug()
@@ -40,29 +64,11 @@ func (m *Model) toolbar(c *ui.Context, p *ui.Theme) {
 					m.ShowDebug()
 				}
 			})
-			runLabel := "运行"
-			if m.run.running || m.run.awaiting {
-				runLabel = "停止"
-			}
-			ui.Button(c, runLabel).OnClick(func() {
-				if m.run.running || m.run.awaiting {
-					m.StopRun()
-				} else {
-					m.Run()
-				}
-			})
-			termLabel := "终端"
+			termLabel := "❯ 终端"
 			if m.term.visible {
-				termLabel = "收起终端"
+				termLabel = "❯ 收起终端"
 			}
-			ui.Button(c, termLabel).OnClick(func() { m.ShowTerm() })
-			root := m.Root()
-			name := "未打开项目"
-			if root != "" {
-				name = root
-			}
-			ui.Text(c, name).FontSize(12).TextColor(p.TextMuted).SingleLine().Ellipsis("…")
-			ui.Spacer(c)
+			m.toolChip(c, p, "term", termLabel, m.term.visible, func() { m.ShowTerm() })
 			state := "就绪"
 			switch {
 			case m.busy:
@@ -70,81 +76,140 @@ func (m *Model) toolbar(c *ui.Context, p *ui.Theme) {
 			case !m.BackendState().Running:
 				state = "后端未连接"
 			}
-			if m.debug.session != 0 && !m.debug.ended {
+			if debugOn {
 				if m.debug.paused {
 					state = "调试已暂停"
 				} else {
 					state = "调试中"
 				}
 			}
-			ui.Text(c, state).FontSize(12).TextColor(p.TextMuted)
+			ui.Text(c, state).FontSize(11).TextColor(p.TextMuted).SingleLine()
 		})
 }
 
-func (m *Model) sidebar(c *ui.Context, p *ui.Theme) {
-	ui.Column(c).Width(sidebarWidth).Shrink(0).MinHeight(0).
-		Background(p.Surface).BorderWidth(0, 1, 0, 0).BorderColor(p.Border).
-		Children(func() {
-			ui.Row(c).Height(30).Padding(0, 6).Gap(4).AlignItems(ui.Center).
-				BorderWidth(0, 0, 1, 0).BorderColor(p.Border).
-				Children(func() {
-					m.sidebarTab(c, p, "项目", m.sideMode != "vcs" && m.sideMode != "structure" && m.sideMode != "bookmarks", func() {
-						m.structure.visible = false
-						m.sideMode = ""
-						m.invalidate()
-					})
-					changes := "更改"
-					if len(m.vcs.files) > 0 {
-						changes = fmt.Sprintf("更改 %d", len(m.vcs.files))
-					}
-					m.sidebarTab(c, p, changes, m.sideMode == "vcs", m.ShowVCS)
-					m.sidebarTab(c, p, "结构", m.sideMode == "structure", m.ToggleStructure)
-					m.sidebarTab(c, p, "书签", m.sideMode == "bookmarks", m.ToggleBookmarksWindow)
-					ui.Spacer(c)
-					if m.sideMode == "vcs" {
-						label := "刷新"
-						if m.vcs.loading {
-							label = "读取中…"
-						}
-						ui.Button(c, label).OnClick(func() { m.RefreshVCS() })
-					}
-				})
-			ui.Scroll(c).Grow(1).Children(func() {
-				if m.sideMode == "vcs" {
-					m.vcsRows(c, p)
-					return
-				}
-				if m.sideMode == "structure" {
-					m.structureRowsUI(c, p)
-					return
-				}
-				if m.sideMode == "bookmarks" {
-					m.bookmarkWindowRows(c, p)
-					return
-				}
-				if m.tree == nil {
-					return
-				}
-				for _, row := range m.tree.Rows() {
-					m.treeRow(c, p, row)
-				}
-			})
-		})
-}
-
-func (m *Model) sidebarTab(c *ui.Context, p *ui.Theme, label string, active bool, onClick func()) {
-	r := ui.Row(c.Key("side:"+label)).Height(22).Padding(0, 8).AlignItems(ui.Center)
-	if active {
-		r.Background(p.Background)
+// toolChip is one run control of the title bar, highlighted while its tool
+// is on.
+func (m *Model) toolChip(c *ui.Context, p *ui.Theme, key, label string, on bool, onClick func()) {
+	r := ui.Row(c.Key("toolbar:"+key)).Height(24).Padding(0, 7).AlignItems(ui.Center)
+	if on {
+		r.Background(p.SurfacePressed)
 	} else if r.Hovered() {
 		r.Background(p.SurfaceHover)
 	}
 	r.Children(func() {
-		color := p.TextMuted
-		if active {
-			color = p.Text
+		tone := p.Text
+		if on {
+			tone = p.Accent
 		}
-		ui.Text(c, label).FontSize(12).TextColor(color).SingleLine()
+		ui.Text(c, label).FontSize(11.5).TextColor(tone).SingleLine()
+	})
+	if r.Clicked() {
+		onClick()
+	}
+}
+
+// sidebar is OpenIDEA's left side: the rail of tool windows and the panel of
+// the one showing, below its header.
+func (m *Model) sidebar(c *ui.Context, p *ui.Theme) {
+	projects := m.sideMode != "vcs" && m.sideMode != "structure" && m.sideMode != "bookmarks"
+	changes := "更改"
+	if len(m.vcs.files) > 0 {
+		changes = fmt.Sprintf("更改 %d", len(m.vcs.files))
+	}
+	ui.Row(c).Width(sidebarWidth).Shrink(0).MinHeight(0).
+		Background(p.Surface).BorderWidth(0, 1, 0, 0).BorderColor(p.Border).
+		Children(func() {
+			ui.Column(c).Width(48).Shrink(0).Padding(4, 4).Gap(2).Children(func() {
+				m.sideRailItem(c, p, "项目", "▦", projects, func() {
+					m.structure.visible = false
+					m.sideMode = ""
+					m.invalidate()
+				})
+				m.sideRailItem(c, p, "更改", "⎇", m.sideMode == "vcs", m.ShowVCS)
+				m.sideRailItem(c, p, "结构", "≡", m.sideMode == "structure", m.ToggleStructure)
+				m.sideRailItem(c, p, "书签", "⚑", m.sideMode == "bookmarks", m.ToggleBookmarksWindow)
+				ui.Spacer(c)
+				m.sideRailItem(c, p, "命令", "⌘", false, m.OpenCommands)
+			})
+			ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Children(func() {
+				title := "项目"
+				switch m.sideMode {
+				case "vcs":
+					title = changes
+				case "structure":
+					title = "结构"
+				case "bookmarks":
+					title = "书签"
+				}
+				ui.Row(c).Height(32).Shrink(0).Padding(0, 8, 0, 6).Gap(4).
+					AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(p.Border).
+					Children(func() {
+						ui.Text(c, title).FontSize(11.5).Bold().TextColor(p.TextMuted).
+							SingleLine().Ellipsis("…")
+						ui.Spacer(c)
+						switch m.sideMode {
+						case "vcs":
+							label := "刷新"
+							if m.vcs.loading {
+								label = "读取中…"
+							}
+							ui.Button(c, label).OnClick(func() { m.RefreshVCS() })
+						case "":
+							if m.tree != nil {
+								ui.Button(c, "⊞").OnClick(func() {
+									m.tree.ExpandAll(m.Root())
+									m.invalidate()
+								})
+								ui.Button(c, "⊟").OnClick(func() {
+									m.tree.CollapseAll()
+									m.invalidate()
+								})
+							}
+						}
+					})
+				ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
+					if m.sideMode == "vcs" {
+						m.vcsRows(c, p)
+						return
+					}
+					if m.sideMode == "structure" {
+						m.structureRowsUI(c, p)
+						return
+					}
+					if m.sideMode == "bookmarks" {
+						m.bookmarkWindowRows(c, p)
+						return
+					}
+					if m.tree == nil {
+						return
+					}
+					for _, row := range m.tree.Rows() {
+						m.treeRow(c, p, row)
+					}
+				})
+			})
+		})
+}
+
+// sideRailItem is one tool window of the rail: its glyph over the start of
+// its name, with a count when it has one.
+func (m *Model) sideRailItem(c *ui.Context, p *ui.Theme, label, glyph string, active bool, onClick func()) {
+	r := ui.Row(c.Key("side:" + label)).Height(46).Shrink(0).AlignItems(ui.Center).
+		Justify(ui.Center)
+	if active {
+		r.Background(p.SurfaceHover)
+	} else if r.Hovered() {
+		r.Background(p.SurfaceHover)
+	}
+	r.Children(func() {
+		ui.Column(c).Gap(1).AlignItems(ui.Center).Children(func() {
+			tone := p.TextMuted
+			if active {
+				tone = p.Accent
+			}
+			ui.Text(c, glyph).FontSize(15).TextColor(tone)
+			ui.Text(c, label).FontSize(9.5).TextColor(tone).SingleLine()
+		})
 	})
 	if r.Clicked() {
 		onClick()
@@ -429,7 +494,7 @@ func (m *Model) tabStrip(c *ui.Context, p *ui.Theme) {
 			tab := ui.Row(c.Key(fmt.Sprintf("tab:%d", i))).Height(34).Padding(0, 10).Gap(8).
 				AlignItems(ui.Center)
 			if i == m.active {
-				tab.Background(p.Background)
+				tab.Background(p.Background).BorderWidth(2, 0, 0, 0).BorderColor(p.Accent)
 			} else if tab.Hovered() {
 				tab.Background(p.SurfaceHover)
 			}
@@ -475,11 +540,12 @@ func (m *Model) bannerRow(c *ui.Context, p *ui.Theme) {
 func (m *Model) editorArea(c *ui.Context, p *ui.Theme) {
 	t := m.tab()
 	if t == nil {
-		ui.Column(c).Grow(1).FillHeight().AlignItems(ui.Center).Justify(ui.Center).Gap(8).
+		// An open project with no editor tab: the editor island stays empty,
+		// as OpenIDEA leaves it, with the one hint that gets a file open.
+		ui.Column(c).Grow(1).FillHeight().AlignItems(ui.Center).Justify(ui.Center).Gap(10).
 			Background(p.Background).Children(func() {
-			ui.Text(c, "GoIDEA").FontSize(22).Bold().TextColor(p.Text)
-			ui.Text(c, "打开一个 Java 项目，然后从左侧选择文件").FontSize(13).TextColor(p.TextMuted)
-			ui.Button(c, "打开项目").OnClick(func() { m.chooseProject() })
+			ui.Text(c, "没有打开的文件").FontSize(13).TextColor(p.TextMuted)
+			ui.Button(c, "快速打开…").OnClick(func() { m.OpenQuickFiles() })
 		})
 		return
 	}
