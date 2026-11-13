@@ -29,6 +29,10 @@
       "status": "partial",
       "evidence": "base.vcs.changes, base.diff.rows"
     },
+    "toolwindow:commit": {
+      "status": "partial",
+      "evidence": "internal/app/commit.go commitDialog; base.commit.id"
+    },
     "toolwindow:problems": {
       "status": "partial",
       "evidence": "lsp.diagnostics"
@@ -55,7 +59,7 @@
     },
     "feature:vcs": {
       "status": "partial",
-      "evidence": "base.vcs.changes, base.diff.rows"
+      "evidence": "base.vcs.changes, base.diff.rows, base.commit.id"
     },
     "feature:run": {
       "status": "partial",
@@ -100,6 +104,10 @@
     "action:find.usages": {
       "status": "integrated",
       "evidence": "lsp.references.count, lsp.references.done"
+    },
+    "action:vcs.commit": {
+      "status": "integrated",
+      "evidence": "base.commit.id, base.commit.staged, base.commit.clean"
     },
     "action:run.run": {
       "status": "integrated",

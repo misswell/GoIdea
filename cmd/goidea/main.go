@@ -281,6 +281,17 @@ func smoke(m *app.Model) {
 			fields["vcsError"] = vcsErr.Error()
 		}
 	}
+	// The commit goes last: the checks above read the working tree the project
+	// started with, and committing changes it.
+	if os.Getenv("GOIDEA_SMOKE_COMMIT") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+		commit, commitErr := m.SmokeCommit(ctx)
+		cancel()
+		fields["commit"] = commit
+		if commitErr != nil {
+			fields["commitError"] = commitErr.Error()
+		}
+	}
 	out, _ := json.MarshalIndent(fields, "", "  ")
 	if path := os.Getenv("GOIDEA_SMOKE_OUT"); path != "" {
 		_ = os.WriteFile(path, out, 0o644)

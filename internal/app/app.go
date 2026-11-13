@@ -155,6 +155,9 @@ type Model struct {
 	// default), "vcs", "search" or "usages".
 	sideMode string
 
+	// commit is the open Commit dialog, or nil.
+	commit *commitState
+
 	run    RunPane
 	debug  DebugPane
 	build  BuildPane
@@ -514,6 +517,7 @@ func (m *Model) openProject(dir string, files []string) {
 	m.resetBuild()
 	m.resetTerm()
 	m.resetVCS()
+	m.commit = nil
 	m.cancelSearch()
 	m.resetSearch()
 	m.resetUsages()
@@ -1108,6 +1112,7 @@ func (m *Model) View(c *ui.Context) {
 	m.commandsDialog(c, p)
 	m.diffDialog(c, p)
 	m.dbDialog(c, p)
+	m.commitDialog(c, p)
 	m.settingsDialog(c, p)
 }
 
@@ -1145,6 +1150,12 @@ func (m *Model) shortcuts(c *ui.Context) {
 	}
 	if c.Shortcut(ui.Cmd, ui.KeyS) {
 		m.SaveActive()
+	}
+	if c.Shortcut(ui.Cmd, ui.KeyK) {
+		if m.rename == nil && m.symbols == nil && m.intents == nil && m.files == nil &&
+			m.diff == nil && m.palette == nil {
+			m.OpenCommit()
+		}
 	}
 	if c.Shortcut(ui.Cmd, ui.KeyW) {
 		m.closeTab(m.active)

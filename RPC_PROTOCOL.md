@@ -59,7 +59,7 @@ The client uses these commands (`internal/openidea/*.go`, `internal/app/*.go`):
 | Workspace edits | `apply_workspace_edit`, `undo_workspace_edit`, `redo_workspace_edit` |
 | Run | `run_configs`, `run_start`, `run_stop` |
 | Debug | `java_resolve_launch`, `java_debug_server`, `debug_start`, `debug_set_breakpoints`, `debug_threads`, `debug_stack_trace`, `debug_scopes`, `debug_variables`, `debug_evaluate`, `debug_resume`, `debug_pause`, `debug_step`, `debug_stop` |
-| Search and VCS | `search_start`, `vcs_status`, `vcs_file_at`, `vcs_diff_hunks` |
+| Search and VCS | `search_start`, `vcs_status`, `vcs_file_at`, `vcs_diff_hunks`, `vcs_commit` |
 | Terminal | `term_spawn`, `term_write`, `term_kill`, `term_default_shell` |
 | Database | `db_sources`, `db_connected`, `db_connect`, `db_disconnect`, `db_schemas`, `db_tables`, `db_statements`, `db_execute`, `db_save_sources` |
 | Tools | `tools_list`, `tools_install`, `tools_uninstall` |

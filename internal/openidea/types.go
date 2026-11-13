@@ -390,6 +390,19 @@ type FileStatus struct {
 	RenamedFrom *string `json:"renamedFrom"`
 }
 
+// CommitOptions is what vcs_commit does beyond the message: amend rewrites the
+// previous commit, signOff adds a Signed-off-by line, author overrides the
+// configured user, runHooks runs the Git hooks, stage commits files with their
+// working-tree content, and exclude keeps staged files out of the commit.
+type CommitOptions struct {
+	Amend    bool     `json:"amend"`
+	SignOff  bool     `json:"signOff"`
+	Author   *string  `json:"author"`
+	RunHooks bool     `json:"runHooks"`
+	Stage    []string `json:"stage,omitempty"`
+	Exclude  []string `json:"exclude,omitempty"`
+}
+
 // TerminalInfo is an integrated terminal the server started: its id, title
 // and process id (absent for shells without a direct child).
 type TerminalInfo struct {

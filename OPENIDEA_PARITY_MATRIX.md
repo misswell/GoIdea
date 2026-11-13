@@ -27,9 +27,9 @@ new action, tool window, page or command appears automatically.
 | Kind | Items | Integrated | Partial | Engine | Blocked | Missing |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Feature folders | 43 | 0 | 10 | 0 | 0 | 33 |
-| Actions | 455 | 7 | 4 | 0 | 1 | 443 |
+| Actions | 647 | 8 | 4 | 0 | 1 | 634 |
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
-| Tool windows | 30 | 4 | 6 | 0 | 0 | 20 |
+| Tool windows | 30 | 4 | 7 | 0 | 0 | 19 |
 | Overlays | 56 | 0 | 0 | 0 | 0 | 56 |
 | Editor contributions | 35 | 0 | 0 | 0 | 0 | 35 |
 | Editor kinds | 4 | 0 | 0 | 0 | 0 | 4 |
@@ -88,7 +88,7 @@ directory registers.
 | `terminal` | 14 | 1 | 0 | 0 | 0 | partial - internal/app/term.go; UPSTREAM_FEATURE_MATRIX.md Terminal |
 | `todo` | 2 | 1 | 0 | 1 | 1 | missing |
 | `tools` | 4 | 0 | 0 | 0 | 0 | partial - tools.jdtls, tools.java-debug |
-| `vcs` | 33 | 3 | 2 | 2 | 1 | partial - base.vcs.changes, base.diff.rows |
+| `vcs` | 33 | 3 | 2 | 2 | 1 | partial - base.vcs.changes, base.diff.rows, base.commit.id |
 | `viewers` | 0 | 0 | 0 | 1 | 0 | missing |
 | `vim` | 3 | 0 | 0 | 1 | 0 | missing |
 | `web` | 2 | 0 | 0 | 0 | 0 | missing |
@@ -916,7 +916,7 @@ expected to come from a plugin or a hidden registration.
 | `vcs.branches` | intellij-macos, intellij-windows, vscode-macos | missing |
 | `vcs.changelist.edit` | eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
 | `vcs.changelist.move` | eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
-| `vcs.commit` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
+| `vcs.commit` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | integrated - base.commit.id, base.commit.staged, base.commit.clean |
 | `vcs.commitAndPush` | intellij-macos, intellij-windows, vscode-macos | missing |
 | `vcs.localHistory` | intellij-macos, intellij-windows, vscode-macos | missing |
 | `vcs.log.copyRevision` | intellij-macos, intellij-windows, vscode-macos | missing |
@@ -965,7 +965,7 @@ same bindings until a check records it.
 | --- | --- | --- | --- | --- |
 | `bookmarks` | Bookmarks | left | `src/features/search/index.ts` | missing |
 | `build` | Build | bottom | `src/features/build/index.ts` | partial - base.build.console, base.build.lines; internal/app/view.go buildPanel |
-| `commit` | Commit | left | `src/features/vcs/index.ts` | missing |
+| `commit` | Commit | left | `src/features/vcs/index.ts` | partial - internal/app/commit.go commitDialog; base.commit.id |
 | `compare` | Compare | left | `src/features/vcs/compareTool.tsx` | missing |
 | `coverage` | Coverage | right | `src/features/coverage/index.ts` | missing |
 | `database` | Database | right | `src/features/database/index.ts` | partial - UPSTREAM_FEATURE_MATRIX.md database console; db_* commands |
@@ -2251,7 +2251,7 @@ Local-only commands and the per-command argument lists are in
 | `vcs_changelists_save` | vcs | yes |  | missing |
 | `vcs_checkout` | vcs | yes |  | missing |
 | `vcs_clone` | vcs | yes |  | missing |
-| `vcs_commit` | vcs | yes |  | missing |
+| `vcs_commit` | vcs | yes | yes | missing |
 | `vcs_commit_files` | vcs | yes |  | missing |
 | `vcs_commits_changes` | vcs | yes |  | missing |
 | `vcs_compare_paths` | vcs | yes |  | missing |
@@ -2362,7 +2362,7 @@ Local-only commands and the per-command argument lists are in
 | `wsl_distros` | wsl | no |  | missing |
 | `wsl_resolve` | wsl | no |  | missing |
 
-446 commands are served over stdio and 64 are called by GoIDEA today. A command
+446 commands are served over stdio and 65 are called by GoIDEA today. A command
 that is registered only in the desktop shell needs an `ops` module before stdio
 can serve it; a GoIDEA check counts only when the UI path works end to end.
 

@@ -60,6 +60,7 @@ reimplementing it. A row is `INTEGRATED` only when the GoIDEA product
 | Maven/Gradle build and run | INTEGRATED | run window, smoke: `GOIDEA_SMOKE_RUN` |
 | Debugger (DAP) | INTEGRATED | breakpoints, stepping, variables, watch |
 | Git changes, diff against HEAD | INTEGRATED | changes tree, compare view |
+| Commit with file inclusion, amend, sign-off, hooks | INTEGRATED | `Cmd+K` commit dialog → `vcs_commit`; base-phase e2e |
 | Terminal | INTEGRATED | terminal panel |
 | Database console | INTEGRATED | database sheet (sources, schemas, tables, SQL, results) |
 | Table editing, DDL view, history, explain | IMPLEMENTED (backend) / ADAPTING (UI) | next UI increment |

@@ -527,6 +527,8 @@ def render():
         rows.append(("feature:" + fd, status_doc(status, "feature:" + fd, status)))
     for a in acts:
         rows.append(("action:" + a["id"], status_doc(status, "action:" + a["id"], status)))
+    for k in keymap_only:
+        rows.append(("action:" + k, status_doc(status, "action:" + k, status)))
     for name in presets:
         rows.append(("keymap-preset:" + name, status_doc(status, "keymap-preset:" + name, status)))
     for t in tools:
