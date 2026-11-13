@@ -101,9 +101,9 @@ type Model struct {
 	active int
 	tree   *Tree
 
-	// diags is the newest diagnostics per open document and producer, which
-	// the tabs of that document show.
-	diags map[*docbridge.Document]map[string][]openidea.Diagnostic
+	// diags is the newest diagnostics per file path and producer, which the
+	// tabs of that file and the Problems tool window show.
+	diags map[string]map[string][]openidea.Diagnostic
 
 	// rename is the open rename prompt, or nil.
 	rename *renameState
@@ -158,14 +158,15 @@ type Model struct {
 	// commit is the open Commit dialog, or nil.
 	commit *commitState
 
-	run    RunPane
-	debug  DebugPane
-	build  BuildPane
-	term   TermPane
-	vcs    VCSPane
-	log    LogPane
-	search SearchPane
-	usages UsagesPane
+	run      RunPane
+	debug    DebugPane
+	build    BuildPane
+	term     TermPane
+	vcs      VCSPane
+	log      LogPane
+	problems ProblemsPane
+	search   SearchPane
+	usages   UsagesPane
 	// reveal is the caret position a search hit asked for; it applies once the
 	// file is the active tab.
 	reveal  *revealPos
@@ -519,6 +520,7 @@ func (m *Model) openProject(dir string, files []string) {
 	m.resetTerm()
 	m.resetVCS()
 	m.resetLog()
+	m.resetProblems()
 	m.commit = nil
 	m.cancelSearch()
 	m.resetSearch()
@@ -761,7 +763,6 @@ func (m *Model) removeTab(t *Tab) {
 		return
 	}
 	m.tabs = append(m.tabs[:idx], m.tabs[idx+1:]...)
-	m.forgetDiagnostics(t.doc)
 	if m.rename != nil && m.rename.tab == t {
 		m.rename = nil
 	}
@@ -1068,6 +1069,12 @@ func (m *Model) finishQuit(save bool) {
 // Quit is the menu's action.
 func (m *Model) Quit() { mygo.App.Quit() }
 
+// ShowProject puts the sidebar back on the project tree.
+func (m *Model) ShowProject() {
+	m.sideMode = ""
+	m.invalidate()
+}
+
 // QuitImmediately closes the backend and quits without asking about changes,
 // for the offscreen smoke run. Call it on the main thread.
 func (m *Model) QuitImmediately() { m.finishQuit(false) }
@@ -1105,6 +1112,9 @@ func (m *Model) View(c *ui.Context) {
 				}
 				if m.log.visible {
 					m.logPanel(c, p)
+				}
+				if m.problems.visible {
+					m.problemsPanel(c, p)
 				}
 			})
 		})
@@ -1168,15 +1178,37 @@ func (m *Model) shortcuts(c *ui.Context) {
 	if c.Shortcut(ui.Cmd, ui.KeyO) {
 		m.chooseProject()
 	}
-	for k := ui.Key1; k <= ui.Key9; k++ {
-		if !c.Shortcut(ui.Cmd, k) {
-			continue
+	// OpenIDEA's IntelliJ keymap keeps Cmd+1..9 for the tool windows and
+	// switches tabs with Ctrl+Right / Ctrl+Left (intellij-macos.ts
+	// toolwindow.*, editor.nextTab).
+	if c.Shortcut(ui.Cmd, ui.Key1) {
+		m.ShowProject()
+	}
+	if c.Shortcut(ui.Cmd, ui.Key3) {
+		m.ShowSearch()
+	}
+	if c.Shortcut(ui.Cmd, ui.Key4) {
+		m.ShowRun()
+	}
+	if c.Shortcut(ui.Cmd, ui.Key5) {
+		m.ShowDebug()
+	}
+	if c.Shortcut(ui.Cmd, ui.Key6) {
+		m.ShowProblems()
+	}
+	if c.Shortcut(ui.Cmd, ui.Key9) {
+		m.ShowVCS()
+	}
+	if c.Shortcut(ui.Alt, ui.KeyF12) {
+		m.ShowTerm()
+	}
+	if n := len(m.tabs); n > 0 {
+		if c.Shortcut(ui.Ctrl, ui.KeyRight) || c.Shortcut(ui.Cmd|ui.Shift, ui.KeyBracketRight) {
+			m.activate((m.active + 1) % n)
 		}
-		i := int(k - ui.Key1)
-		if k == ui.Key9 {
-			i = len(m.tabs) - 1
+		if c.Shortcut(ui.Ctrl, ui.KeyLeft) || c.Shortcut(ui.Cmd|ui.Shift, ui.KeyBracketLeft) {
+			m.activate((m.active - 1 + n) % n)
 		}
-		m.activate(i)
 	}
 	if c.Shortcut(ui.Modifiers(0), ui.KeyF5) {
 		m.Run()

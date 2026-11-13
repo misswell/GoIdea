@@ -29,7 +29,7 @@ new action, tool window, page or command appears automatically.
 | Feature folders | 43 | 0 | 10 | 0 | 0 | 33 |
 | Actions | 647 | 8 | 4 | 0 | 1 | 634 |
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
-| Tool windows | 30 | 4 | 8 | 0 | 0 | 18 |
+| Tool windows | 30 | 5 | 7 | 0 | 0 | 18 |
 | Overlays | 56 | 0 | 0 | 0 | 0 | 56 |
 | Editor contributions | 35 | 0 | 0 | 0 | 0 | 35 |
 | Editor kinds | 4 | 0 | 0 | 0 | 0 | 4 |
@@ -981,7 +981,7 @@ same bindings until a check records it.
 | `logcat` | Logcat | bottom | `src/features/logcat/index.ts` | missing |
 | `maven` | Maven | right | `src/features/build-tools/index.ts` | missing |
 | `notifications` | Notifications | right | `src/workbench/activate.ts` | missing |
-| `problems` | Problems | bottom | `src/features/code-insight/index.ts` | partial - lsp.diagnostics |
+| `problems` | Problems | bottom | `src/features/code-insight/index.ts` | integrated - internal/app/problems.go problemsPanel; lsp.problems.errors, lsp.problems.rows, lsp.problems.visible; internal/app/problems_test.go |
 | `profiler` | Profiler | bottom | `src/features/profiler/index.ts` | missing |
 | `project` | Project | left | `src/features/project-tree/index.ts` | integrated - internal/workspace tree tests; base.tabs |
 | `pullRequests` | Pull Requests | left | `src/features/github/index.ts` | missing |

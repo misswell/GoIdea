@@ -915,6 +915,7 @@ func (m *Model) statusBar(c *ui.Context, p *ui.Theme) {
 					ui.Text(c, text).FontSize(11.5).TextColor(color)
 				}
 			}
+			m.problemsStatus(c, p)
 			if t := m.tab(); t != nil {
 				pos := t.state.CursorPos()
 				ui.Text(c, fmt.Sprintf("行 %d，列 %d", pos.Line+1, pos.Col+1)).

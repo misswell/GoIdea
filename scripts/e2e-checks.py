@@ -80,6 +80,9 @@ CHECKS = {
         ("rename", "rename was applied and undone", lambda d: (get(d, "lsp.rename.undone") is True, get(d, "lsp.rename.undone"))),
         ("symbols", "go to symbol found the class", lambda d: ((get(d, "lsp.symbols.count") or 0) > 0, get(d, "lsp.symbols.count"))),
         ("diagnostics", "JDT published diagnostics", lambda d: (bool(get(d, "lsp.diagnostics")), get(d, "lsp.diagnostics"))),
+        ("problems.errors", "problems view counted the error", lambda d: ((get(d, "lsp.diagnostics.problems.errors") or 0) >= 1, get(d, "lsp.diagnostics.problems.errors"))),
+        ("problems.rows", "problems view built a row", lambda d: ((get(d, "lsp.diagnostics.problems.rows") or 0) >= 1, get(d, "lsp.diagnostics.problems.rows"))),
+        ("problems.visible", "problems tool window opened", lambda d: (get(d, "lsp.diagnostics.problems.visible") is True, get(d, "lsp.diagnostics.problems.visible"))),
     ],
     "debug": [
         ("debugError", *absent("debugError")),

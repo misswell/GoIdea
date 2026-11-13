@@ -34,8 +34,8 @@
       "evidence": "internal/app/commit.go commitDialog; base.commit.id"
     },
     "toolwindow:problems": {
-      "status": "partial",
-      "evidence": "lsp.diagnostics"
+      "status": "integrated",
+      "evidence": "internal/app/problems.go problemsPanel; lsp.problems.errors, lsp.problems.rows, lsp.problems.visible; internal/app/problems_test.go"
     },
     "toolwindow:usages": {
       "status": "partial",

@@ -64,12 +64,22 @@ Clean buffers reload the file; buffers above 4 MiB are left alone. Dirty
 buffers keep their text and show a banner instead of silently overwriting
 either side (`watch.go:75-106`).
 
+## Problems
+
+The backend publishes a file's diagnostics per producer; `diagnostics.go` keeps
+the newest per file path and producer, so a file's problems stay after its tab
+closes. The status bar counts errors, warnings and information and opens the
+Problems tool window, which shows the active file or the whole project, groups
+by file with files that have errors first, filters by severity, and jumps to a
+row's line and column (`problems.go`).
+
 ## Features wired to the editor
 
 | Feature | Where |
 | --- | --- |
 | Syntax highlighting | MyGo language chosen per document in `docbridge` |
 | Diagnostics, gutter marks | `internal/app/diagnostics.go`, `codeintel.go` |
+| Problems tool window, status-bar counts | `internal/app/problems.go` |
 | Completion, hover, definition popups | MyGo callbacks → `internal/app/lsp.go` |
 | Intentions / quick fixes (Alt+Enter) | `internal/app/intents.go` |
 | Rename (Shift+F6) with undo | `internal/app/rename.go` |
@@ -86,6 +96,9 @@ either side (`watch.go:75-106`).
 
 `internal/position` has the offset and edit conversion tests. `internal/docbridge`
 covers round-trip edits, resync conflicts and version handling.
+`internal/app/problems_test.go` proves severity mapping, ordering, filters and
+counts.
 `GOIDEA_SMOKE_EDIT` proves an edit and an undo reach the backend;
 `GOIDEA_SMOKE_WATCH` proves an external edit is reloaded;
-`GOIDEA_SMOKE_LSP` proves format/rename/format-through-JDT on a real project.
+`GOIDEA_SMOKE_LSP` proves format/rename/format-through-JDT on a real project,
+and that JDT's error reaches the Problems tool window (`lsp.problems.*`).

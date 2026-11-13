@@ -11,35 +11,39 @@ import (
 	"github.com/egoist/mygo/ui/editor"
 )
 
-// Diagnostics reach the editor: the backend publishes a file's problems per
-// producer, each publish replacing that producer's earlier ones. The model
-// keeps the newest ones per document and turns them into byte offsets of the
-// text the tab shows, as the editor's ranges are.
+// Diagnostics reach the editor and the Problems tool window: the backend
+// publishes a file's problems per producer, each publish replacing that
+// producer's earlier ones. The model keeps the newest ones per file path and
+// producer, so a file keeps its problems after its tab closes, as OpenIDEA's
+// Problems view does.
 
 // applyDiagnostics stores a publish and shows it in every tab of its file.
 func (m *Model) applyDiagnostics(ev openidea.DiagnosticsEvent) {
-	doc := m.documentFor(ev.Path)
-	if doc == nil {
+	if ev.Path == "" {
 		return
 	}
-	per := m.diags[doc]
-	if per == nil {
-		per = make(map[string][]openidea.Diagnostic)
-		if m.diags == nil {
-			m.diags = make(map[*docbridge.Document]map[string][]openidea.Diagnostic)
-		}
-		m.diags[doc] = per
+	key := realPath(ev.Path)
+	if m.diags == nil {
+		m.diags = make(map[string]map[string][]openidea.Diagnostic)
 	}
+	per := m.diags[key]
 	if len(ev.Items) == 0 {
+		if per == nil {
+			return
+		}
 		delete(per, ev.Source)
 	} else {
+		if per == nil {
+			per = make(map[string][]openidea.Diagnostic)
+			m.diags[key] = per
+		}
 		per[ev.Source] = ev.Items
 	}
 	if len(per) == 0 {
-		delete(m.diags, doc)
+		delete(m.diags, key)
 	}
 	for _, t := range m.tabs {
-		if t.doc == doc {
+		if realPath(t.doc.Path()) == key {
 			m.showDiagnostics(t)
 		}
 	}
@@ -48,7 +52,7 @@ func (m *Model) applyDiagnostics(ev openidea.DiagnosticsEvent) {
 
 // showDiagnostics shows the stored diagnostics of a tab's document.
 func (m *Model) showDiagnostics(t *Tab) {
-	per := m.diags[t.doc]
+	per := m.diags[realPath(t.doc.Path())]
 	if len(per) == 0 {
 		t.state.SetDiagnostics(t.doc.Buffer().Version(), nil)
 		return
@@ -77,19 +81,6 @@ func (m *Model) showDiagnostics(t *Tab) {
 // clearDiagnostics drops what was stored for the previous project.
 func (m *Model) clearDiagnostics() {
 	clear(m.diags)
-}
-
-// forgetDiagnostics drops a document's diagnostics once no tab shows it.
-func (m *Model) forgetDiagnostics(doc *docbridge.Document) {
-	if doc == nil {
-		return
-	}
-	for _, t := range m.tabs {
-		if t.doc == doc {
-			return
-		}
-	}
-	delete(m.diags, doc)
 }
 
 // documentFor finds the open document an event path names. The backend

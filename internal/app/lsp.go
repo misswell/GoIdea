@@ -1128,7 +1128,9 @@ func (m *Model) smokeDiagnostics(ctx context.Context, t *Tab) any {
 					Message: d.Message, Source: d.Source,
 				})
 			}
-			return list
+			// The Problems tool window reads the same store the squiggles come
+			// from, so it is sampled while the broken text is still applied.
+			return map[string]any{"items": list, "problems": m.SmokeProblems()}
 		}
 		if time.Now().After(deadline) {
 			return map[string]any{"timeout": true}
