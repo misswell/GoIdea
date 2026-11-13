@@ -40,6 +40,7 @@ CHECKS = {
         ("diff.rows", "Git diff has rows", lambda d: ((get(d, "diff.rows") or 0) > 0, get(d, "diff.rows"))),
         ("diffError", *absent("diffError")),
         ("commands", "command palette is populated", lambda d: ((get(d, "commands.all") or 0) >= 30, get(d, "commands.all"))),
+        ("commands.invalidate", "the Invalidate Caches dialog opens, stages an option and closes", lambda d: (get(d, "commands.invalidateOpen") is True and get(d, "commands.invalidateStaged") is True and get(d, "commands.invalidateClosed") is True and get(d, "commands.restartParamsNil") is True, {"open": get(d, "commands.invalidateOpen"), "staged": get(d, "commands.invalidateStaged"), "closed": get(d, "commands.invalidateClosed")})),
         ("settings.opened", "settings sheet opened", lambda d: (get(d, "settings.opened") is True, get(d, "settings.opened"))),
         ("settings.closed", "settings sheet closed", lambda d: (get(d, "settings.closed") is True, get(d, "settings.closed"))),
         ("settings.theme", "theme choice reached the disk", lambda d: (get(d, "settings.storedTheme") == "dark", get(d, "settings.storedTheme"))),

@@ -145,6 +145,8 @@ func commands() []appCommand {
 		{"view.build", "显示构建窗口", "视图", "", "build output console", func(m *Model) { m.ShowBuild() }},
 		{"java.tools", "安装 Java 语言服务与调试器", "运行", "", "java jdtls language server debugger install toolchain", func(m *Model) { m.InstallJavaToolchain() }},
 		{"file.settings", "Settings…", "文件", "Cmd+,", "settings preferences theme font appearance", func(m *Model) { m.OpenSettings() }},
+		{"file.invalidateCaches", "Invalidate Caches…", "文件", "", "invalidate caches clear rebuild index restart repair", func(m *Model) { m.OpenInvalidateCaches() }},
+		{"app.restart", "Restart IDE", "文件", "", "restart relaunch restart ide", func(m *Model) { m.RestartIDE() }},
 		{"view.toggleTheme", "切换深色/浅色主题", "视图", "", "theme dark light appearance toggle", func(m *Model) { m.ToggleTheme() }},
 		{"app.themeLight", "浅色", "视图", "", "theme light appearance", func(m *Model) { m.SetThemePref("light") }},
 		{"app.themeDark", "深色", "视图", "", "theme dark appearance", func(m *Model) { m.SetThemePref("dark") }},
@@ -349,6 +351,13 @@ func (m *Model) SmokeCommands() map[string]any {
 		m.runSelectedCommand()
 		out["sideMode"] = m.sideMode
 		out["closed"] = m.palette == nil
+		m.OpenInvalidateCaches()
+		out["invalidateOpen"] = m.invalidateDlg != nil && m.invalidateDlg.open
+		m.invalidateDlg.languageServers = true
+		out["invalidateStaged"] = m.invalidateDlg.languageServers
+		m.closeInvalidateCaches()
+		out["invalidateClosed"] = m.invalidateDlg == nil
+		out["restartParamsNil"] = invalidateParams(nil)["options"] == nil
 	})
 	return out
 }

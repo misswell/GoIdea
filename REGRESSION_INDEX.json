@@ -48,6 +48,7 @@
     {"id": "base.diff.rows", "label": "Git diff has rows", "feature": "Diff view over a working-tree change", "area": "vcs", "gate": "main", "doc": "EDITOR.md"},
     {"id": "base.diffError", "label": "diffError is absent", "feature": "Diff view reports no error", "area": "vcs", "gate": "main", "doc": "EDITOR.md"},
     {"id": "base.commands", "label": "command palette is populated", "feature": "Command palette", "area": "workbench", "gate": "main", "doc": "README.md"},
+    {"id": "base.commands.invalidate", "label": "the Invalidate Caches dialog opens, stages an option and closes", "feature": "File > Invalidate Caches dialog", "area": "workbench", "gate": "main", "doc": "README.md"},
     {"id": "base.settings.opened", "label": "settings sheet opened", "feature": "Settings sheet", "area": "workbench", "gate": "main", "doc": "README.md"},
     {"id": "base.settings.closed", "label": "settings sheet closed", "feature": "Settings sheet dismissal", "area": "workbench", "gate": "main", "doc": "README.md"},
     {"id": "base.settings.theme", "label": "theme choice reached the disk", "feature": "Persisted theme preference", "area": "workbench", "gate": "main", "doc": "README.md"},

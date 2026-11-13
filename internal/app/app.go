@@ -230,6 +230,11 @@ type Model struct {
 	toolbarAddQuery string
 	update          updateState
 
+	// invalidateDlg is File › Invalidate Caches… while it is open, and
+	// restartPending relaunches the app once the quit flow finishes.
+	invalidateDlg  *invalidatePane
+	restartPending bool
+
 	// javaTools is the Java language server / debugger state the settings
 	// sheet shows; toolsBusy names the install in progress, whose events
 	// arrive on toolsChannel.
@@ -1514,7 +1519,10 @@ func (m *Model) requestQuit(prevent func()) {
 			Buttons: []string{"保存并退出", "不保存", "取消"}, DefaultButton: 0, CancelButton: 2,
 		})
 		if err != nil {
-			m.post(func() { m.quitting = false })
+			m.post(func() {
+				m.quitting = false
+				m.restartPending = false
+			})
 			return
 		}
 		m.post(func() {
@@ -1524,6 +1532,8 @@ func (m *Model) requestQuit(prevent func()) {
 				m.finishQuit(true)
 			case 1:
 				m.finishQuit(false)
+			default:
+				m.restartPending = false
 			}
 		})
 	}()
@@ -1547,7 +1557,13 @@ func (m *Model) finishQuit(save bool) {
 		defer cancel()
 		m.reg.CloseAll(ctx)
 		_ = m.mgr.Close()
-		m.post(func() { mygo.App.Quit() })
+		m.post(func() {
+			if m.restartPending {
+				mygo.App.Relaunch()
+				return
+			}
+			mygo.App.Quit()
+		})
 	}()
 }
 
@@ -1569,7 +1585,7 @@ func (m *Model) overlayOpen() bool {
 		m.diff != nil || m.palette != nil || m.runAnything != nil || m.commit != nil || m.branch.open ||
 		m.rollback != nil || m.bookmarksView != nil || m.mnemonics != nil || m.newList != nil ||
 		m.deleteList != nil || m.move != nil || m.editDesc != nil || m.treeOp != nil ||
-		m.history != nil || m.dirCompare != nil
+		m.history != nil || m.dirCompare != nil || m.invalidateDlg != nil
 }
 
 // QuitImmediately closes the backend and quits without asking about changes,
@@ -1639,11 +1655,12 @@ func (m *Model) View(c *ui.Context) {
 	m.settingsDialog(c, p)
 	m.toolbarCustomizeDialog(c, p)
 	m.updateDialog(c, p)
+	m.invalidateCachesDialog(c, p)
 }
 
 func (m *Model) shortcuts(c *ui.Context) {
 	// A modal sheet owns the keyboard; only its own dismiss keys apply.
-	if m.settingsOpen || m.toolbarCustomize || m.update.Open || (m.db != nil && m.db.open) {
+	if m.settingsOpen || m.toolbarCustomize || m.update.Open || m.invalidateDlg != nil || (m.db != nil && m.db.open) {
 		return
 	}
 	// The Bookmarks popup steps its rows with the arrow keys.

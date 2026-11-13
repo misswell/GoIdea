@@ -641,6 +641,14 @@
       "status": "partial",
       "evidence": "internal/app/commands.go file.settings -> internal/app/settings_window.go + settings_pages.go, OpenIDEA's Settings dialog over Appearance, Keymap, Editor Appearance/Font and Java; OpenIDEA's remaining settings pages are not ported yet"
     },
+    "action:file.invalidateCaches": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go file.invalidateCaches -> internal/app/invalidate.go OpenInvalidateCaches, the dialog with the three optional caches (file system and Local History, language server workspaces, build tool caches) and Invalidate and Restart / Just Restart / Cancel; it schedules caches_schedule_invalidation with {options} and restarts through the quit flow (mygo App.Relaunch), reporting a failed schedule in the dialog; internal/app/invalidate_test.go; base.commands.invalidate"
+    },
+    "action:app.restart": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go app.restart -> internal/app/invalidate.go RestartIDE with invalidateParams(nil) scheduling caches_schedule_invalidation {options: nil} and restarting through the quit flow, so unsaved buffers still prompt; File menu Restart IDE; internal/app/invalidate_test.go"
+    },
     "action:plugins.settings": {
       "status": "partial",
       "evidence": "internal/app/commands.go plugins.settings -> internal/app/welcome.go plugins page over internal/app/plugins.go registry; internal/app/menu_test.go"
