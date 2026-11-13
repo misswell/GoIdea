@@ -85,6 +85,18 @@
       "status": "partial",
       "evidence": "internal/app/bookmarks.go JumpBookmarkMnemonic via Ctrl+digit; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go"
     },
+    "action:navigate.toggleBookmark${d}": {
+      "status": "partial",
+      "evidence": "internal/app/bookmarks.go ToggleBookmarkMnemonic bound to Ctrl+Shift+digit for 0-9; base.bookmark.mnemonic; internal/app/bookmarks_test.go"
+    },
+    "action:navigate.gotoBookmark${d}": {
+      "status": "partial",
+      "evidence": "internal/app/bookmarks.go JumpBookmarkMnemonic bound to Ctrl+digit for 0-9; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go"
+    },
+    "action:toolwindow.bookmarks": {
+      "status": "integrated",
+      "evidence": "internal/app/app.go Cmd+2 ToggleBookmarksWindow; cmd/goidea/main.go 显示书签; internal/app/view.go sidebar tab; base.bookmark.window"
+    },
     "action:bookmarks.toggleFileBookmark": {
       "status": "partial",
       "evidence": "internal/app/bookmarks.go ToggleFileBookmark and pathBookmarkLabel; cmd/goidea/main.go 切换文件书签; base.bookmark.file; internal/app/bookmarks_test.go"

@@ -27,7 +27,7 @@ new action, tool window, page or command appears automatically.
 | Kind | Items | Integrated | Partial | Engine | Blocked | Missing |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Feature folders | 43 | 0 | 10 | 0 | 0 | 33 |
-| Actions | 647 | 20 | 37 | 0 | 1 | 589 |
+| Actions | 647 | 21 | 39 | 0 | 1 | 586 |
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
 | Tool windows | 30 | 8 | 5 | 0 | 0 | 17 |
 | Overlays | 56 | 0 | 0 | 0 | 0 | 56 |
@@ -490,7 +490,7 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `find.rerun` | Rerun Search | `src/features/search/index.ts` | missing |
 | `navigate.fileStructure` | File Structure | `src/features/search/index.ts` | missing |
 | `navigate.findAction` | Find Action… | `src/features/search/index.ts` | integrated - base.commands |
-| `navigate.gotoBookmark${d}` |  | `src/features/search/index.ts` | missing |
+| `navigate.gotoBookmark${d}` |  | `src/features/search/index.ts` | partial - internal/app/bookmarks.go JumpBookmarkMnemonic bound to Ctrl+digit for 0-9; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go |
 | `navigate.gotoClass` | Go to Class… | `src/features/search/index.ts` | missing |
 | `navigate.gotoFile` | Go to File… | `src/features/search/index.ts` | integrated - internal/app/quickopen_test.go |
 | `navigate.gotoSymbol` | Go to Symbol… | `src/features/search/index.ts` | missing |
@@ -504,7 +504,7 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `navigate.switcher` | Switcher | `src/features/search/index.ts` | missing |
 | `navigate.switcherBack` | Switcher (Backward) | `src/features/search/index.ts` | missing |
 | `navigate.toggleBookmark` | Toggle Bookmark | `src/features/search/index.ts` | partial - internal/app/bookmarks.go ToggleBookmark at the caret and gutter dots; F3 in internal/app/app.go; base.bookmark.added, base.bookmark.gutter, base.bookmark.remove; internal/app/bookmarks_test.go |
-| `navigate.toggleBookmark${d}` |  | `src/features/search/index.ts` | missing |
+| `navigate.toggleBookmark${d}` |  | `src/features/search/index.ts` | partial - internal/app/bookmarks.go ToggleBookmarkMnemonic bound to Ctrl+Shift+digit for 0-9; base.bookmark.mnemonic; internal/app/bookmarks_test.go |
 | `navigate.toggleBookmarkWithMnemonic` | Toggle Bookmark with Mnemonic | `src/features/search/index.ts` | partial - internal/app/bookmarks.go OpenBookmarkMnemonics Alt+F3 chooser over digits and A-Z; internal/app/app.go shortcut; internal/app/bookmarks_test.go |
 | `search.editScopes` | Edit Scopes… | `src/features/search/index.ts` | missing |
 
@@ -896,7 +896,7 @@ expected to come from a plugin or a hidden registration.
 | `refactor.pushMembersDown` | intellij-macos, intellij-windows, vscode-macos | missing |
 | `refactor.rename` | eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
 | `refactor.safeDelete` | eclipse-macos, intellij-macos, intellij-windows, vscode-macos | missing |
-| `toolwindow.bookmarks` | eclipse-macos, intellij-macos, intellij-windows, vscode-macos | missing |
+| `toolwindow.bookmarks` | eclipse-macos, intellij-macos, intellij-windows, vscode-macos | integrated - internal/app/app.go Cmd+2 ToggleBookmarksWindow; cmd/goidea/main.go 显示书签; internal/app/view.go sidebar tab; base.bookmark.window |
 | `toolwindow.commit` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/commit.go OpenCommit; Cmd+0 in cmd/goidea/main.go |
 | `toolwindow.debug` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/debug.go ShowDebug; cmd/goidea/main.go 视图 menu |
 | `toolwindow.find` | eclipse-macos, intellij-macos, intellij-windows, vscode-macos | partial - internal/app/search.go ShowSearch; cmd/goidea/main.go 视图 menu |
