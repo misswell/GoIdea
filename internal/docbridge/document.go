@@ -228,8 +228,9 @@ func (d *Document) conflictErrorLocked() error {
 }
 
 // ApplyPatch applies a backend-originated patch. A patch whose base is not the
-// current version (stale or concurrent) triggers a resync instead of being
-// guessed at.
+// current version, or that arrives while the buffer is ahead of the base,
+// triggers a resync instead of being guessed at: its offsets describe the base
+// text, not what the user has typed since.
 func (d *Document) ApplyPatch(ctx context.Context, p Patch) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -239,18 +240,50 @@ func (d *Document) ApplyPatch(ctx context.Context, p Patch) error {
 	if p.Version <= d.version {
 		return nil
 	}
-	if p.BaseVersion != d.version || d.unsynced {
+	cur := d.buf.Snapshot()
+	if p.BaseVersion != d.version || d.unsynced || cur.Version() != d.baseBuf {
 		return d.resyncLocked(ctx, 0)
 	}
-	cur := d.buf.Snapshot()
 	edits := d.mapper.ChangeSetToByteEdits(cur, position.ChangeSet{Changes: p.Changes})
-	d.applyByteChangesLocked(edits)
+	if p.WorkspaceEdit && len(edits) > 0 {
+		// A grouped backend edit (rename, refactor, build) must not become a
+		// file-local undo step: Ctrl+Z would send the refactor back as a user
+		// edit. The buffer cannot apply text without recording history, so it
+		// is reloaded, which drops this document's undo history and leaves the
+		// backend's grouped transaction in charge of undoing it.
+		next := textAfter(cur, edits)
+		d.buf.Reset(next)
+		d.mapper = position.NewMapper(next)
+		d.indexed = d.buf.Version()
+	} else {
+		d.applyByteChangesLocked(edits)
+	}
 	d.version = p.Version
 	d.base = d.buf.Snapshot()
 	d.baseBuf = d.base.Version()
 	d.dirty = true
 	d.signal()
 	return nil
+}
+
+// textAfter returns t with changes applied in one pass, for reloading a
+// buffer. Changes may come in any order; as in the buffer, each is clipped to
+// start where the previous one ended.
+func textAfter(t editor.Snapshot, changes []position.ByteChange) string {
+	sorted := append([]position.ByteChange(nil), changes...)
+	sort.SliceStable(sorted, func(i, j int) bool { return sorted[i].Start < sorted[j].Start })
+	var b strings.Builder
+	b.Grow(t.Len())
+	last := 0
+	for _, c := range sorted {
+		start := max(last, min(c.Start, t.Len()))
+		end := max(start, min(c.End, t.Len()))
+		b.WriteString(t.Slice(last, start))
+		b.WriteString(c.Text)
+		last = end
+	}
+	b.WriteString(t.Slice(last, t.Len()))
+	return b.String()
 }
 
 // SetDirty records the backend's dirty flag.
@@ -552,6 +585,13 @@ func (d *Document) resyncLocked(ctx context.Context, attempt int) error {
 		d.pending = &pendingRemote{text: remote, version: info.Version, local: hunksLocal, remote: hunksRemote}
 		d.unsynced = true
 		return d.conflictErrorLocked()
+	}
+	if d.indexed != local.Version() {
+		// The buffer was edited directly by a widget since the mapper last
+		// moved; its byte offsets must describe the text the merged hunks
+		// are applied to.
+		d.applyHunksToIndexLocked(baseText, localText, hunksLocal)
+		d.indexed = local.Version()
 	}
 
 	d.applyRemoteLocked(hunksLocal, hunksRemote, remote)

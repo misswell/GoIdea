@@ -349,6 +349,62 @@ func TestPatchAppliesAndUndoes(t *testing.T) {
 	}
 }
 
+func TestWorkspaceEditIsNotAFileLocalUndoStep(t *testing.T) {
+	b, doc, id := openSample(t)
+	ctx := context.Background()
+	if err := doc.ApplyEdits(ctx, editorEdit(0, 0, "// typed\n")); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	typed := doc.Text()
+
+	// A grouped backend edit, as a rename or a refactor emits.
+	p := b.edit(id, 0, 0, "// refactor\n")
+	p.WorkspaceEdit = true
+	if err := doc.ApplyPatch(ctx, p); err != nil {
+		t.Fatalf("workspace patch: %v", err)
+	}
+	want := "// refactor\n" + typed
+	if got := doc.Text(); got != want {
+		t.Fatalf("buffer:\n%q\nwant\n%q", got, want)
+	}
+	if got := b.text(id); got != want {
+		t.Fatalf("backend:\n%q\nwant\n%q", got, want)
+	}
+	if doc.Version() != p.Version {
+		t.Fatalf("version %d, want %d", doc.Version(), p.Version)
+	}
+	requireMapper(t, doc)
+	if doc.Buffer().CanUndo() {
+		t.Fatal("the workspace edit entered the buffer's undo history")
+	}
+	if ok, err := doc.Undo(ctx); ok || err != nil {
+		t.Fatalf("undo after a workspace edit: %v %v", ok, err)
+	}
+	if doc.Text() != want || b.text(id) != want {
+		t.Fatal("undo changed a workspace edit")
+	}
+}
+
+func TestPatchWaitsForUnsyncedBufferEdits(t *testing.T) {
+	b, doc, id := openSample(t)
+	ctx := context.Background()
+	// Typing the sync pump has not sent yet: the patch's offsets describe the
+	// base text, not the buffer, so it must merge through a resync.
+	doc.Buffer().Edit(editorEdit(0, 0, "// typed\n"))
+	p := b.edit(id, position.UTF16Length(sampleJava), position.UTF16Length(sampleJava), "// end\n")
+	if err := doc.ApplyPatch(ctx, p); err != nil {
+		t.Fatalf("patch over unsynced edits: %v", err)
+	}
+	want := "// typed\n" + sampleJava + "// end\n"
+	if got := doc.Text(); got != want {
+		t.Fatalf("buffer:\n%q\nwant\n%q", got, want)
+	}
+	if got := b.text(id); got != want {
+		t.Fatalf("backend:\n%q\nwant\n%q", got, want)
+	}
+	requireMapper(t, doc)
+}
+
 func TestOutOfSyncMergesSeparateChanges(t *testing.T) {
 	b, doc, id := openSample(t)
 	ctx := context.Background()
