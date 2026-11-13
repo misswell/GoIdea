@@ -157,6 +157,15 @@ rename or drop with a delete. Paste skips an entry that would collide.
 (`OpenTerminalAt` in `term.go`). `SmokeFiles` drives every operation against
 the real backend and the base-phase e2e checks the results.
 
+**Cmd+=** expands every folder and **Cmd+-** folds the tree back to its root.
+A folder is read when it first opens, so Expand All marks the root as the pass
+to finish and each rebuild opens what the last read revealed, until nothing
+below the root is closed (`Tree.ExpandAll`, `openUnder`, `expandSettled`); a
+manual toggle ends the pass. **Cmd+Alt+Y** rereads the tree from disk.
+**Alt+F1** (Select in Project View) opens the folders leading to the active
+file and marks its row, which is drawn in the selection colour; a click marks
+its row too (`SelectInProjectView`, `Tree.Select`).
+
 ## Features wired to the editor
 
 | Feature | Where |

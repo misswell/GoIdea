@@ -1297,6 +1297,21 @@ func (m *Model) shortcuts(c *ui.Context) {
 	if c.Shortcut(ui.Cmd, ui.Key1) {
 		m.ShowProject()
 	}
+	// OpenIDEA's IntelliJ keymap expands the project tree with Cmd+=, collapses
+	// it with Cmd+-, reloads it from disk with Cmd+Alt+Y and selects the active
+	// file in it with Alt+F1.
+	if c.Shortcut(ui.Cmd, ui.KeyEqual) && !m.overlayOpen() {
+		m.ExpandProjectAll()
+	}
+	if c.Shortcut(ui.Cmd, ui.KeyMinus) && !m.overlayOpen() {
+		m.CollapseProjectAll()
+	}
+	if c.Shortcut(ui.Cmd|ui.Alt, ui.KeyY) && !m.overlayOpen() {
+		m.ReloadProjectTree()
+	}
+	if c.Shortcut(ui.Alt, ui.KeyF1) && !m.overlayOpen() {
+		m.SelectInProjectView()
+	}
 	if c.Shortcut(ui.Cmd, ui.Key2) {
 		if !m.overlayOpen() {
 			m.ToggleBookmarksWindow()

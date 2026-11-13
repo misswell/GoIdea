@@ -33,6 +33,11 @@ type Tree struct {
 	root *treeNode
 	rows []*treeNode
 	open map[string]bool // folders expanded, by path
+	// expandAll is the folder Expand All is still opening: children arrive one
+	// read at a time, so rebuild keeps opening what each read reveals until
+	// nothing below it is left closed.
+	expandAll string
+	sel       string // the row revealed or picked, drawn as the selection
 }
 
 // NewTree returns the tree of the folder root, with the root open. post runs a
@@ -93,6 +98,7 @@ func (t *Tree) Toggle(path string) {
 	if t.ws == nil || !t.ws.IsDir(path) {
 		return
 	}
+	t.expandAll = ""
 	if t.open[path] {
 		delete(t.open, path)
 	} else {
@@ -101,6 +107,40 @@ func (t *Tree) Toggle(path string) {
 	}
 	t.rebuild()
 }
+
+// ExpandAll opens dir and every folder below it. A folder is read when it
+// first opens, so the pass carries on through the reads' own rebuilds until
+// nothing below dir is left closed.
+func (t *Tree) ExpandAll(dir string) {
+	if t.ws == nil || dir == "" {
+		return
+	}
+	t.open[dir] = true
+	t.ws.Load(dir)
+	t.expandAll = dir
+	t.rebuild()
+}
+
+// CollapseAll closes every folder but the root, as OpenIDEA's Collapse All
+// does.
+func (t *Tree) CollapseAll() {
+	if t.ws == nil || t.root == nil {
+		return
+	}
+	t.expandAll = ""
+	for p := range t.open {
+		delete(t.open, p)
+	}
+	t.open[t.root.path] = true
+	t.rebuild()
+}
+
+// Select marks path as the tree's selection, so a reveal from the editor
+// leaves a visible row.
+func (t *Tree) Select(path string) { t.sel = path }
+
+// Selected is the row Select or reveal last named.
+func (t *Tree) Selected() string { return t.sel }
 
 // reveal opens the folders leading to path, as a file opened from elsewhere.
 func (t *Tree) reveal(path string) {
@@ -132,6 +172,9 @@ func (t *Tree) rebuild() {
 	if t.root == nil {
 		return
 	}
+	if t.expandAll != "" {
+		t.openUnder(t.expandAll)
+	}
 	var walk func(n *treeNode)
 	walk = func(n *treeNode) {
 		t.rows = append(t.rows, n)
@@ -149,6 +192,44 @@ func (t *Tree) rebuild() {
 		}
 	}
 	walk(t.root)
+	if t.expandAll != "" && t.expandSettled(t.expandAll) {
+		t.expandAll = ""
+	}
+}
+
+// openUnder opens every folder the workspace already knows below dir, so the
+// next read of one of them widens the tree. It stops once nothing below dir
+// is left closed.
+func (t *Tree) openUnder(dir string) {
+	if !t.open[dir] || t.ws.Loading(dir) || !t.ws.Loaded(dir) {
+		return
+	}
+	for _, p := range t.ws.Children(dir) {
+		if !t.ws.IsDir(p) || hidden(filepath.Base(p), true) {
+			continue
+		}
+		if !t.open[p] {
+			t.open[p] = true
+			t.ws.Load(p)
+		}
+		t.openUnder(p)
+	}
+}
+
+// expandSettled reports whether every folder below dir is open and read.
+func (t *Tree) expandSettled(dir string) bool {
+	if !t.open[dir] || t.ws.Loading(dir) || !t.ws.Loaded(dir) {
+		return false
+	}
+	for _, p := range t.ws.Children(dir) {
+		if !t.ws.IsDir(p) || hidden(filepath.Base(p), true) {
+			continue
+		}
+		if !t.expandSettled(p) {
+			return false
+		}
+	}
+	return true
 }
 
 // hidden reports whether the tree leaves a name out: tool folders and their

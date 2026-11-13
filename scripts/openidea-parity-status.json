@@ -365,6 +365,30 @@
       "status": "partial",
       "evidence": "internal/app/tree_ops.go deleteTreeEntry over fs_delete after a confirmation; base.files.delete; internal/app/tree_ops_test.go"
     },
+    "action:project.expandAll": {
+      "status": "partial",
+      "evidence": "internal/app/tree.go ExpandAll opens each folder as its read arrives; base.files.expand"
+    },
+    "action:project.collapseAll": {
+      "status": "partial",
+      "evidence": "internal/app/tree.go CollapseAll leaves only the root row; base.files.expand"
+    },
+    "action:project.reloadFromDisk": {
+      "status": "partial",
+      "evidence": "internal/app/tree_ops.go ReloadProjectTree -> internal/app/tree.go Refresh rereads the open folders; base.files.expand"
+    },
+    "action:navigate.selectInProjectView": {
+      "status": "partial",
+      "evidence": "internal/app/tree_ops.go SelectInProjectView reveals the active tab and marks its row; base.files.select"
+    },
+    "action:navigate.selectIn": {
+      "status": "partial",
+      "evidence": "Alt+F1 reveals the active file in the project view; the Select In popup's other target is Reveal in Finder, which GoIDEA leaves out; base.files.select"
+    },
+    "action:project.reveal": {
+      "status": "partial",
+      "evidence": "internal/app/tree.go reveal plus Select; base.files.select"
+    },
     "action:toolwindow.find": {
       "status": "partial",
       "evidence": "internal/app/search.go ShowSearch; cmd/goidea/main.go 视图 menu"

@@ -27,7 +27,7 @@ new action, tool window, page or command appears automatically.
 | Kind | Items | Integrated | Partial | Engine | Blocked | Missing |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Feature folders | 43 | 0 | 10 | 0 | 0 | 33 |
-| Actions | 647 | 21 | 50 | 0 | 1 | 575 |
+| Actions | 647 | 21 | 56 | 0 | 1 | 569 |
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
 | Tool windows | 30 | 8 | 5 | 0 | 0 | 17 |
 | Overlays | 56 | 0 | 0 | 0 | 0 | 56 |
@@ -385,17 +385,17 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | Action | Title | Source | Status |
 | --- | --- | --- | --- |
 | `file.new` | New… | `src/features/project-tree/actions.ts` | missing |
-| `navigate.selectIn` | Select In… | `src/features/project-tree/actions.ts` | missing |
-| `navigate.selectInProjectView` | Select in Project View | `src/features/project-tree/actions.ts` | missing |
+| `navigate.selectIn` | Select In… | `src/features/project-tree/actions.ts` | partial - Alt+F1 reveals the active file in the project view; the Select In popup's other target is Reveal in Finder, which GoIDEA leaves out; base.files.select |
+| `navigate.selectInProjectView` | Select in Project View | `src/features/project-tree/actions.ts` | partial - internal/app/tree_ops.go SelectInProjectView reveals the active tab and marks its row; base.files.select |
 | `navigate.showFilePath` | File Path | `src/features/project-tree/actions.ts` | missing |
-| `project.collapseAll` | Collapse All | `src/features/project-tree/actions.ts` | missing |
+| `project.collapseAll` | Collapse All | `src/features/project-tree/actions.ts` | partial - internal/app/tree.go CollapseAll leaves only the root row; base.files.expand |
 | `project.compareWith` | Compare With… | `src/features/project-tree/actions.ts` | missing |
 | `project.copy` | Copy | `src/features/project-tree/actions.ts` | partial - internal/app/tree_ops.go SetTreeClip; base.files.menu, base.files.copy; internal/app/tree_ops_test.go |
 | `project.copyElement` | Copy… | `src/features/project-tree/actions.ts` | missing |
 | `project.copyPath` | Copy Path | `src/features/project-tree/actions.ts` | partial - internal/app/tree_ops.go CopyTreePath with absolute, file name and content-root paths; base.files.menu |
 | `project.cut` | Cut | `src/features/project-tree/actions.ts` | partial - internal/app/tree_ops.go SetTreeClip; base.files.menu, base.files.move; internal/app/tree_ops_test.go |
 | `project.delete` | Delete… | `src/features/project-tree/actions.ts` | partial - internal/app/tree_ops.go deleteTreeEntry over fs_delete after a confirmation; base.files.delete; internal/app/tree_ops_test.go |
-| `project.expandAll` | Expand All | `src/features/project-tree/actions.ts` | missing |
+| `project.expandAll` | Expand All | `src/features/project-tree/actions.ts` | partial - internal/app/tree.go ExpandAll opens each folder as its read arrives; base.files.expand |
 | `project.findInFolder` | Find in Folder… | `src/features/project-tree/actions.ts` | missing |
 | `project.findUsages` | Find Usages of File | `src/features/project-tree/actions.ts` | missing |
 | `project.move` | Move File… | `src/features/project-tree/actions.ts` | missing |
@@ -408,10 +408,10 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `project.paste` | Paste | `src/features/project-tree/actions.ts` | partial - internal/app/tree_ops.go PasteTreeEntry over fs_copy and fs_rename; base.files.copy, base.files.move |
 | `project.reformatCode` | Reformat File | `src/features/project-tree/actions.ts` | missing |
 | `project.refresh` | Reload Project Tree from Disk | `src/features/project-tree/actions.ts` | missing |
-| `project.reloadFromDisk` | Reload from Disk | `src/features/project-tree/actions.ts` | missing |
+| `project.reloadFromDisk` | Reload from Disk | `src/features/project-tree/actions.ts` | partial - internal/app/tree_ops.go ReloadProjectTree -> internal/app/tree.go Refresh rereads the open folders; base.files.expand |
 | `project.rename` | Rename File… | `src/features/project-tree/actions.ts` | partial - internal/app/tree_ops.go ConfirmTreeOp over fs_rename, moving bookmarks and closing clean tabs; base.files.rename; internal/app/tree_ops_test.go |
 | `project.renameInline` | Rename File Inline | `src/features/project-tree/actions.ts` | missing |
-| `project.reveal` | Reveal in Project View | `src/features/project-tree/actions.ts` | missing |
+| `project.reveal` | Reveal in Project View | `src/features/project-tree/actions.ts` | partial - internal/app/tree.go reveal plus Select; base.files.select |
 | `project.revealInFinder` |  | `src/features/project-tree/actions.ts` | missing |
 | `project.showHistory` | Local History: Show History | `src/features/project-tree/actions.ts` | missing |
 | `project.undoMove` | Undo Move / Rename | `src/features/project-tree/actions.ts` | missing |

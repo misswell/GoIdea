@@ -352,7 +352,9 @@ func (m *Model) searchRows(c *ui.Context, p *ui.Theme) {
 func (m *Model) treeRow(c *ui.Context, p *ui.Theme, row *treeNode) {
 	r := ui.Row(c.Key("tree:"+row.path)).Height(24).Padding(0, 6).
 		PaddingStart(6 + float32(row.depth)*14).Gap(5).AlignItems(ui.Center)
-	if row.dir && row.expanded {
+	if row.path == m.tree.Selected() {
+		r.Background(p.Selection)
+	} else if row.dir && row.expanded {
 		r.Background(p.Background)
 	}
 	if r.Hovered() {
@@ -399,6 +401,7 @@ func (m *Model) treeRow(c *ui.Context, p *ui.Theme, row *treeNode) {
 		}
 	})
 	if r.Clicked() {
+		m.tree.Select(row.path)
 		if row.dir {
 			m.tree.Toggle(row.path)
 		} else {

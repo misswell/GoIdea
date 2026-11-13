@@ -618,6 +618,32 @@ func (m *Model) SmokeFiles(ctx context.Context) (map[string]any, error) {
 		})
 		return wait(path, false, "删除 "+filepath.Base(path))
 	}
+	rows := func() int {
+		n := 0
+		run(func() {
+			if m.tree != nil {
+				n = len(m.tree.Rows())
+			}
+		})
+		return n
+	}
+	waitRows := func(want int) (int, error) {
+		deadline := time.Now().Add(30 * time.Second)
+		for {
+			n := rows()
+			if n >= want {
+				return n, nil
+			}
+			if time.Now().After(deadline) {
+				return n, errors.New("展开全部超时")
+			}
+			select {
+			case <-ctx.Done():
+				return n, ctx.Err()
+			case <-time.After(50 * time.Millisecond):
+			}
+		}
+	}
 
 	if err := create(root, filepath.Base(base), true); err != nil {
 		return out, err
@@ -628,6 +654,49 @@ func (m *Model) SmokeFiles(ctx context.Context) (map[string]any, error) {
 		return out, err
 	}
 	out["newFile"] = true
+	if err := create(base, "nested", true); err != nil {
+		return out, err
+	}
+	// The new file's tab arrives after its read, and Select in Project View
+	// acts on the active tab.
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		open := false
+		run(func() {
+			for _, t := range m.tabs {
+				if t.doc.Path() == realPath(one) {
+					open = true
+				}
+			}
+		})
+		if open {
+			break
+		}
+		if time.Now().After(deadline) {
+			return out, errors.New("打开 one.txt 超时")
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
+	run(func() {
+		m.SelectInProjectView()
+		if m.tree != nil {
+			out["selected"] = filepath.Base(m.tree.Selected())
+		}
+	})
+	run(func() { m.CollapseProjectAll() })
+	out["collapseRows"] = rows()
+	run(func() { m.ExpandProjectAll() })
+	expanded, err := waitRows(4)
+	if err != nil {
+		return out, err
+	}
+	out["expandRows"] = expanded
+	run(func() { m.ReloadProjectTree() })
+	out["reloadRows"] = rows()
 	two := filepath.Join(base, "two.txt")
 	if err := rename(one, "two.txt"); err != nil {
 		return out, err
@@ -656,6 +725,62 @@ func (m *Model) SmokeFiles(ctx context.Context) (map[string]any, error) {
 	}
 	out["deletedDir"] = true
 	return out, nil
+}
+
+// ExpandProjectAll opens every folder in the project view, as OpenIDEA's
+// Expand All (Cmd+=) does.
+func (m *Model) ExpandProjectAll() {
+	if m.tree == nil || m.Root() == "" {
+		return
+	}
+	m.tree.ExpandAll(m.Root())
+	m.status = "已展开全部"
+	m.invalidate()
+}
+
+// CollapseProjectAll closes every folder but the root, as OpenIDEA's Collapse
+// All (Cmd+-) does.
+func (m *Model) CollapseProjectAll() {
+	if m.tree == nil {
+		return
+	}
+	m.tree.CollapseAll()
+	m.status = "已折叠全部"
+	m.invalidate()
+}
+
+// ReloadProjectTree rereads the project view from disk, as OpenIDEA's Reload
+// from Disk does.
+func (m *Model) ReloadProjectTree() {
+	if m.tree == nil {
+		return
+	}
+	m.tree.Refresh()
+	m.status = "已从磁盘重新加载"
+	m.invalidate()
+}
+
+// SelectInProjectView reveals the active file in the project view and marks
+// it, as OpenIDEA's Select in Project View does.
+func (m *Model) SelectInProjectView() {
+	if m.tree == nil || m.Root() == "" {
+		return
+	}
+	var t *Tab
+	if m.active >= 0 && m.active < len(m.tabs) {
+		t = m.tabs[m.active]
+	}
+	if t == nil || t.doc.Path() == "" {
+		m.status = "先打开一个文件"
+		m.invalidate()
+		return
+	}
+	path := t.doc.Path()
+	m.sideMode = ""
+	m.tree.reveal(path)
+	m.tree.Select(path)
+	m.status = "已在项目视图中定位 " + filepath.Base(path)
+	m.invalidate()
 }
 
 // treeOpDialog draws the project view's New, Rename or Delete prompt.
