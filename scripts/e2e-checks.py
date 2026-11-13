@@ -27,6 +27,11 @@ def absent(key, where=""):
 
 
 CHECKS = {
+    "shots": [
+        ("count", "every visual-regression state was rendered", lambda d: (len(get(d, "shots") or {}) >= 10, sorted((get(d, "shots") or {}).keys()))),
+        ("bytes", "each PNG is a real capture", lambda d: (all(v >= 15000 for v in (get(d, "shots") or {}).values()), {k: v for k, v in (get(d, "shots") or {}).items() if v < 15000})),
+        ("errors", "no shot failed", lambda d: (get(d, "shotErrors") is None and get(d, "shotsError") is None, {"errors": get(d, "shotErrors"), "error": get(d, "shotsError")})),
+    ],
     "base": [
         ("backend", "backend is up", lambda d: (d.get("backend") is True, d.get("backend"))),
         ("tabs", "a file is open in a tab", lambda d: ((d.get("tabs") or 0) >= 1, d.get("tabs"))),

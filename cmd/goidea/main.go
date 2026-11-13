@@ -380,6 +380,20 @@ func smoke(m *app.Model) {
 			fields["commitError"] = commitErr.Error()
 		}
 	}
+	if dir := os.Getenv("GOIDEA_SMOKE_SHOTS"); dir != "" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		shots, shotsErr := m.SmokeShots(ctx, dir)
+		cancel()
+		if files, ok := shots["shots"]; ok {
+			fields["shots"] = files
+		}
+		if e, ok := shots["shotErrors"]; ok {
+			fields["shotErrors"] = e
+		}
+		if shotsErr != nil {
+			fields["shotsError"] = shotsErr.Error()
+		}
+	}
 	out, _ := json.MarshalIndent(fields, "", "  ")
 	if path := os.Getenv("GOIDEA_SMOKE_OUT"); path != "" {
 		_ = os.WriteFile(path, out, 0o644)
