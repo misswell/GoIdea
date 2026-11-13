@@ -2,9 +2,11 @@ package app
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"goidea/internal/openidea"
@@ -167,5 +169,56 @@ func TestBreakpointLinesCopiesAndSorts(t *testing.T) {
 	}
 	if lines := p.breakpointLines("/p/Other.java"); lines != nil {
 		t.Fatalf("unknown file = %v", lines)
+	}
+}
+
+func TestAddWatchTrimsAndDedupes(t *testing.T) {
+	m := &Model{}
+	if !m.addWatch("  count  ") {
+		t.Fatalf("watch was rejected")
+	}
+	if !m.addWatch("count") {
+		t.Fatalf("repeat watch was rejected")
+	}
+	if len(m.debug.watches) != 1 || m.debug.watches[0].Expr != "count" {
+		t.Fatalf("watches = %+v", m.debug.watches)
+	}
+	if m.addWatch("   ") {
+		t.Fatalf("blank watch was accepted")
+	}
+}
+
+func TestAddWatchCapsThePanel(t *testing.T) {
+	m := &Model{}
+	for i := 0; i < maxWatches; i++ {
+		if !m.addWatch(fmt.Sprintf("v%d", i)) {
+			t.Fatalf("watch %d was rejected", i)
+		}
+	}
+	if m.addWatch("one-too-many") {
+		t.Fatalf("watch past the cap was accepted")
+	}
+	if m.debug.err == "" {
+		t.Fatalf("cap did not explain itself")
+	}
+}
+
+func TestRemoveWatch(t *testing.T) {
+	m := &Model{debug: DebugPane{watches: []debugWatch{{Expr: "a"}, {Expr: "b"}}}}
+	m.RemoveWatch(0)
+	if len(m.debug.watches) != 1 || m.debug.watches[0].Expr != "b" {
+		t.Fatalf("watches = %+v", m.debug.watches)
+	}
+	m.RemoveWatch(9)
+	if len(m.debug.watches) != 1 {
+		t.Fatalf("out-of-range remove changed the panel")
+	}
+}
+
+func TestSubmitWatchNeedsPause(t *testing.T) {
+	m := &Model{debug: DebugPane{evalText: "count"}}
+	m.SubmitWatch()
+	if len(m.debug.watches) != 0 || !strings.Contains(m.debug.err, "暂停") {
+		t.Fatalf("watches = %+v, err = %q", m.debug.watches, m.debug.err)
 	}
 }

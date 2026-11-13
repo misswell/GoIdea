@@ -703,7 +703,33 @@ func (m *Model) debugVars(c *ui.Context, p *ui.Theme) {
 				SingleLine().Ellipsis("…")
 		})
 		ui.Scroll(c).Grow(1).Children(func() {
+			for i, w := range d.watches {
+				i, w := i, w
+				row := ui.Row(c.Key(fmt.Sprintf("dwatch:%d", i))).Height(22).Padding(0, 8).
+					Gap(6).AlignItems(ui.Center)
+				row.Children(func() {
+					ui.Text(c, w.Expr).FontSize(11.5).TextColor(p.TextMuted).
+						SingleLine().Ellipsis("…")
+					ui.Text(c, "=").FontSize(11.5).TextColor(p.TextMuted)
+					value, color := w.Value, p.Text
+					if w.Err != "" {
+						value, color = w.Err, p.Danger
+					} else if d.paused && d.evalBusy {
+						value = "…"
+					} else if value == "" {
+						value = "（空）"
+					}
+					ui.Text(c, value).FontSize(11.5).TextColor(color).
+						SingleLine().Ellipsis("…").Grow(1)
+					if b := ui.Button(c, "×"); b.Clicked() {
+						m.RemoveWatch(i)
+					}
+				})
+			}
 			if len(d.vars) == 0 {
+				if len(d.watches) > 0 {
+					return
+				}
 				hint := "暂停后显示局部变量"
 				if d.paused {
 					hint = "没有局部变量"
@@ -723,6 +749,19 @@ func (m *Model) debugVars(c *ui.Context, p *ui.Theme) {
 							SingleLine().Ellipsis("…").Grow(1)
 					})
 			}
+		})
+		ui.Row(c).Height(32).Shrink(0).Padding(0, 8).Gap(6).AlignItems(ui.Center).
+			BorderWidth(1, 0, 0, 0).BorderColor(p.Border).Children(func() {
+			if !d.paused {
+				ui.Text(c, "暂停后可在当前帧求值").FontSize(10.5).
+					TextColor(p.TextMuted).SingleLine().Ellipsis("…")
+				return
+			}
+			in := ui.TextInput(c, &d.evalText).Grow(1)
+			if in.Submitted() {
+				m.SubmitWatch()
+			}
+			ui.Button(c, "求值").Disabled(d.evalBusy).OnClick(func() { m.SubmitWatch() })
 		})
 	})
 }

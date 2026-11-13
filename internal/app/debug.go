@@ -56,7 +56,25 @@ type DebugPane struct {
 
 	// bps maps an absolute path to its 0-based breakpoint lines.
 	bps map[string][]int
+
+	// watches are expressions the user pinned; they evaluate again in each
+	// stopped frame. evalText is the input being typed for a new one.
+	watches  []debugWatch
+	evalText string
+	evalBusy bool
 }
+
+// debugWatch is one pinned expression and what it evaluated to in the current
+// stopped frame.
+type debugWatch struct {
+	Expr  string
+	Value string
+	Err   string
+}
+
+// maxWatches bounds the panel; a frame with more expressions to inspect is
+// better served by adding them one at a time.
+const maxWatches = 20
 
 const maxDebugLines = 2000
 
@@ -637,6 +655,7 @@ func (m *Model) acceptDebugEvent(session uint32, raw json.RawMessage) {
 		d.vars = nil
 		d.stopLine = -1
 		d.stopFile = ""
+		m.clearWatchValues()
 		d.status = "运行中…"
 	case "output":
 		text := strings.TrimSuffix(stripANSI(e.Output), "\n")
@@ -660,10 +679,12 @@ func (m *Model) acceptDebugEvent(session uint32, raw json.RawMessage) {
 		d.scopes = nil
 		d.vars = nil
 		d.stopLine = -1
+		m.clearWatchValues()
 		d.status = "调试已结束"
 	case "exited":
 		d.ended = true
 		d.paused = false
+		m.clearWatchValues()
 		d.status = "程序已退出"
 		if e.Code != nil {
 			d.status = fmt.Sprintf("程序已退出（退出码 %d）", *e.Code)
@@ -702,6 +723,7 @@ func (m *Model) fetchStop(threadID int64) {
 			m.debug.scopes = scopes
 			m.debug.vars = vars
 			m.applyStopFrame()
+			m.evaluateWatches()
 			m.invalidate()
 		})
 	}()
@@ -756,6 +778,111 @@ func (m *Model) loadScopes(ctx context.Context, session uint32, frameID int64) (
 	return scopes, nil
 }
 
+// SubmitWatch evaluates the typed expression and pins it to the panel.
+func (m *Model) SubmitWatch() {
+	if !m.debug.paused {
+		m.debug.err = "暂停后才能求值"
+		m.invalidate()
+		return
+	}
+	if !m.addWatch(m.debug.evalText) {
+		return
+	}
+	m.debug.evalText = ""
+	m.invalidate()
+}
+
+// addWatch pins expr, replacing nothing: a repeat selects the existing one.
+// It reports whether the panel accepted it.
+func (m *Model) addWatch(expr string) bool {
+	expr = strings.TrimSpace(expr)
+	if expr == "" {
+		return false
+	}
+	for _, w := range m.debug.watches {
+		if w.Expr == expr {
+			m.evaluateWatches()
+			return true
+		}
+	}
+	if len(m.debug.watches) >= maxWatches {
+		m.debug.err = fmt.Sprintf("最多监视 %d 个表达式", maxWatches)
+		m.invalidate()
+		return false
+	}
+	m.debug.watches = append(m.debug.watches, debugWatch{Expr: expr})
+	m.evaluateWatches()
+	return true
+}
+
+// RemoveWatch drops the i-th pinned expression.
+func (m *Model) RemoveWatch(i int) {
+	if i < 0 || i >= len(m.debug.watches) {
+		return
+	}
+	m.debug.watches = append(m.debug.watches[:i], m.debug.watches[i+1:]...)
+	m.invalidate()
+}
+
+// evaluateWatches evaluates every pinned expression in the stopped frame. A
+// reply for a frame the user has stepped past is dropped.
+func (m *Model) evaluateWatches() {
+	d := &m.debug
+	if m.mgr == nil || d.session == 0 || !d.paused || d.frameID == 0 || len(d.watches) == 0 {
+		return
+	}
+	session, frame := d.session, d.frameID
+	exprs := make([]string, len(d.watches))
+	for i, w := range d.watches {
+		exprs[i] = w.Expr
+	}
+	d.evalBusy = true
+	m.invalidate()
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
+		defer cancel()
+		values := make(map[string]debugWatch, len(exprs))
+		for _, expr := range exprs {
+			w := debugWatch{Expr: expr}
+			raw, err := m.mgr.Invoke(ctx, Window, "debug_evaluate", map[string]any{
+				"session": session, "frameId": frame, "expression": expr,
+			})
+			if err != nil {
+				w.Err = err.Error()
+			} else {
+				var v openidea.Variable
+				if uerr := json.Unmarshal(raw, &v); uerr != nil {
+					w.Err = uerr.Error()
+				} else {
+					w.Value = v.Value
+				}
+			}
+			values[expr] = w
+		}
+		m.post(func() {
+			if m.debug.session != session || m.debug.frameID != frame || !m.debug.paused {
+				return
+			}
+			m.debug.evalBusy = false
+			for i := range m.debug.watches {
+				if w, ok := values[m.debug.watches[i].Expr]; ok {
+					m.debug.watches[i].Value = w.Value
+					m.debug.watches[i].Err = w.Err
+				}
+			}
+			m.invalidate()
+		})
+	}()
+}
+
+// clearWatchValues drops what the watches showed for a frame that is gone.
+func (m *Model) clearWatchValues() {
+	for i := range m.debug.watches {
+		m.debug.watches[i].Value = ""
+		m.debug.watches[i].Err = ""
+	}
+}
+
 // applyStopFrame highlights and reveals the selected frame's line.
 func (m *Model) applyStopFrame() {
 	if len(m.debug.frames) == 0 || m.debug.selFrame >= len(m.debug.frames) {
@@ -798,6 +925,7 @@ func (m *Model) SelectFrame(i int) {
 			}
 			m.debug.scopes = scopes
 			m.debug.vars = vars
+			m.evaluateWatches()
 			m.invalidate()
 		})
 	}()
@@ -963,6 +1091,36 @@ func (m *Model) SmokeDebug(ctx context.Context) (map[string]any, error) {
 		}
 	} else {
 		out["evaluateError"] = evalErr.Error()
+	}
+
+	// A pinned watch goes through the panel's own submit path and evaluates in
+	// the stopped frame, without the smoke talking to the backend directly.
+	m.post(func() {
+		m.debug.evalText = "2 + 2"
+		m.SubmitWatch()
+	})
+	watchDeadline := time.Now().Add(20 * time.Second)
+	for {
+		var watch, watchErr string
+		var busy bool
+		m.post(func() {
+			busy = m.debug.evalBusy
+			for _, w := range m.debug.watches {
+				if w.Expr == "2 + 2" {
+					watch, watchErr = w.Value, w.Err
+				}
+			}
+		})
+		if !busy || time.Now().After(watchDeadline) {
+			out["watch"] = watch
+			out["watchErr"] = watchErr
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(200 * time.Millisecond):
+		}
 	}
 
 	// Step over the println: the frame moves and the session pauses again.
