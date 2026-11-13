@@ -12,7 +12,27 @@ permissions:
 concurrency: release
 
 jobs:
+  guard:
+    # A tag can be published by hand before the signing secrets exist. The
+    # workflow then says so instead of showing a failed release.
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - id: check
+        env:
+          CERT: ${{ secrets.MACOS_CERTIFICATE }}
+        run: |
+          if [[ -n "$CERT" ]]; then
+            echo "ready=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=no" >> "$GITHUB_OUTPUT"
+            echo "::notice::MACOS_CERTIFICATE is not configured; publish this tag from a Mac with scripts/release.sh"
+          fi
+
   release:
+    needs: guard
+    if: needs.guard.outputs.ready == 'yes'
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v5
