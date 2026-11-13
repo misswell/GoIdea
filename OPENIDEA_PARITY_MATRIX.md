@@ -27,9 +27,9 @@ new action, tool window, page or command appears automatically.
 | Kind | Items | Integrated | Partial | Engine | Blocked | Missing |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Feature folders | 43 | 0 | 12 | 0 | 0 | 31 |
-| Actions | 647 | 35 | 86 | 0 | 1 | 525 |
+| Actions | 647 | 37 | 86 | 0 | 1 | 523 |
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
-| Tool windows | 30 | 8 | 5 | 0 | 0 | 17 |
+| Tool windows | 30 | 9 | 5 | 0 | 0 | 16 |
 | Overlays | 56 | 1 | 0 | 0 | 0 | 55 |
 | Editor contributions | 35 | 0 | 0 | 0 | 0 | 35 |
 | Editor kinds | 4 | 0 | 0 | 0 | 0 | 4 |
@@ -589,8 +589,8 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 
 | Action | Title | Source | Status |
 | --- | --- | --- | --- |
-| `todo.refresh` | Refresh TODO Items | `src/features/todo/index.ts` | missing |
-| `todo.showCurrentFile` | Show TODO Items in Current File | `src/features/todo/index.ts` | missing |
+| `todo.refresh` | Refresh TODO Items | `src/features/todo/index.ts` | integrated - internal/app/todo.go RunTodo; internal/app/commands.go todo.refresh; Tools menu Refresh TODO Items |
+| `todo.showCurrentFile` | Show TODO Items in Current File | `src/features/todo/index.ts` | integrated - internal/app/todo.go ShowTodoCurrentFile; internal/app/commands.go todo.showCurrentFile; Tools menu Show TODO Items in Current File |
 
 ### tools
 
@@ -991,7 +991,7 @@ same bindings until a check records it.
 | `services` | Services | bottom | `src/features/services/index.ts` | missing |
 | `structure` | Structure | left | `src/features/search/index.ts` | integrated - internal/app/structure.go structureRowsUI; lsp.structure.rows, lsp.structure.first, lsp.structure.visible; internal/app/structure_test.go |
 | `terminal` | Terminal | bottom | `src/features/terminal/index.ts` | partial - internal/app/term.go TermPane tab groups, OpenTermTab Cmd+T, SplitTerm/UnsplitTerm with termPaneBody in view.go, ShowTermFind/FindTermStep Cmd+F find bar, CloseTermTab hides the empty window; base.term.output, base.term.tabs, base.term.split, base.term.find; internal/app/term_test.go |
-| `todo` | TODO | bottom | `src/features/todo/index.ts` | missing |
+| `todo` | TODO | bottom | `src/features/todo/index.ts` | integrated - internal/app/todo.go todoPanel with 项目/当前文件/按范围/更改 tabs, keyword chips and scope bar over search_start; base.todo.done, base.todo.items, base.todo.openFiles, base.todo.visible; internal/app/todo_test.go |
 | `usages` | Find Usages | bottom | `src/features/code-insight/index.ts` | integrated - internal/app/usages.go showUsages and usagesPanel; lsp.references.count, lsp.references.done; bottom anchor in internal/app/anchor_test.go |
 
 ## Overlays

@@ -491,6 +491,10 @@ func (m *Model) acceptChunk(id uint32, data json.RawMessage) {
 		m.acceptSearchEvent(data)
 	case id != 0 && id == m.usages.channel:
 		m.acceptUsages(id, data)
+	case id != 0 && id == m.todo.channel:
+		m.acceptTodoEvent(data)
+	case id != 0 && id == m.todo.scopeChannel:
+		m.acceptTodoScopeEvent(data)
 	}
 }
 

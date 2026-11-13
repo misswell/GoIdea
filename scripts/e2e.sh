@@ -62,6 +62,9 @@ git -C "$PROJ" add -A
 git -C "$PROJ" -c user.name=e2e -c user.email=e2e@goidea.invalid commit -qm baseline
 printf '\n// e2e change\n' >> "$PROJ/src/main/java/com/example/Greeter.java"
 JAVA="$PROJ/src/main/java/com/example/App.java"
+# The TODO scan needs one marker in the open file; the base phase edits and
+# restores this copy, so the line survives to the scan.
+printf '\n// TODO: e2e marker\n' >> "$JAVA"
 
 # smoke runs one offscreen phase in a hidden window and leaves its JSON at
 # $1; the remaining arguments are GOIDEA_SMOKE_* variables for that phase.
@@ -80,7 +83,7 @@ command -v mvn >/dev/null || { echo "缺少 mvn：本测试用真实 Maven 构�
 say "阶段 1/4：编辑、搜索、Git、设置、外观、Maven 构建运行"
 BASE="$WORK/base.json"
 smoke "$BASE" \
-    GOIDEA_SMOKE_EDIT=1 GOIDEA_SMOKE_CODEINTEL=1 GOIDEA_SMOKE_SEARCH=1 \
+    GOIDEA_SMOKE_EDIT=1 GOIDEA_SMOKE_CODEINTEL=1 GOIDEA_SMOKE_SEARCH=1 GOIDEA_SMOKE_TODO=1 \
     GOIDEA_SMOKE_DIFF=1 GOIDEA_SMOKE_COMMANDS=1 GOIDEA_SMOKE_SETTINGS=1 \
     GOIDEA_SMOKE_WATCH=1 GOIDEA_SMOKE_RUN=1 GOIDEA_SMOKE_BUILD=1 GOIDEA_SMOKE_STAGE=1 GOIDEA_SMOKE_BOOKMARK=1 GOIDEA_SMOKE_LOG=1 GOIDEA_SMOKE_COMMIT=1 GOIDEA_SMOKE_BRANCH=1 GOIDEA_SMOKE_TERM=1 GOIDEA_SMOKE_FILES=1
 python3 "$CHECKS" base "$BASE"

@@ -232,6 +232,15 @@ func smoke(m *app.Model) {
 			fields["searchError"] = searchErr.Error()
 		}
 	}
+	if os.Getenv("GOIDEA_SMOKE_TODO") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		todo, todoErr := m.SmokeTodo(ctx)
+		cancel()
+		fields["todo"] = todo
+		if todoErr != nil {
+			fields["todoError"] = todoErr.Error()
+		}
+	}
 	if os.Getenv("GOIDEA_SMOKE_TERM") == "1" && root != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		term, termErr := m.SmokeTerm(ctx)

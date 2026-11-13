@@ -324,6 +324,7 @@ type Model struct {
 	problems  ProblemsPane
 	search    SearchPane
 	usages    UsagesPane
+	todo      TodoPane
 	structure StructurePane
 
 	// tool is the bottom tool window the shortcuts last opened, "" once it
@@ -795,6 +796,7 @@ func (m *Model) openProject(dir string, files []string) {
 	m.cancelSearch()
 	m.resetSearch()
 	m.resetUsages()
+	m.resetTodo()
 	m.closeSymbols()
 	m.closeIntents()
 	m.closeQuickFiles()

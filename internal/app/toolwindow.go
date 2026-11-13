@@ -3,7 +3,7 @@ package app
 // toolWindows lists the bottom tool windows in the order OpenIDEA registers
 // them. The shortcuts activate one of these and the Hide All action walks the
 // list, as toolwindows/store.ts does for its slots.
-var toolWindows = []string{"run", "debug", "build", "term", "log", "problems", "find", "usages"}
+var toolWindows = []string{"run", "debug", "build", "term", "log", "problems", "todo", "find", "usages"}
 
 // toolVisible reports whether a bottom tool window is showing.
 func (m *Model) toolVisible(name string) bool {
@@ -20,6 +20,8 @@ func (m *Model) toolVisible(name string) bool {
 		return m.log.visible
 	case "problems":
 		return m.problems.visible
+	case "todo":
+		return m.todo.visible
 	case "find":
 		return m.search.visible
 	case "usages":
@@ -45,6 +47,8 @@ func (m *Model) hideTool(name string) {
 		m.log.visible = false
 	case "problems":
 		m.problems.visible = false
+	case "todo":
+		m.todo.visible = false
 	case "find":
 		m.search.visible = false
 	case "usages":
@@ -301,6 +305,8 @@ func (m *Model) activateTool(name string) {
 		m.ShowLog()
 	case "problems":
 		m.ShowProblems()
+	case "todo":
+		m.ShowTodo()
 	case "find":
 		m.ShowSearch()
 	case "usages":

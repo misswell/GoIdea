@@ -995,6 +995,8 @@ func (m *Model) toolPanel(c *ui.Context, p *ui.Theme, name string) {
 		m.logPanel(c, p)
 	case "problems":
 		m.problemsPanel(c, p)
+	case "todo":
+		m.todoPanel(c, p)
 	case "find":
 		m.searchPanel(c, p)
 	case "usages":

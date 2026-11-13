@@ -161,6 +161,10 @@
       "status": "integrated",
       "evidence": "internal/app/problems.go problemsPanel; lsp.problems.errors, lsp.problems.rows, lsp.problems.visible; internal/app/problems_test.go"
     },
+    "toolwindow:todo": {
+      "status": "integrated",
+      "evidence": "internal/app/todo.go todoPanel with 项目/当前文件/按范围/更改 tabs, keyword chips and scope bar over search_start; base.todo.done, base.todo.items, base.todo.openFiles, base.todo.visible; internal/app/todo_test.go"
+    },
     "toolwindow:usages": {
       "status": "integrated",
       "evidence": "internal/app/usages.go showUsages and usagesPanel; lsp.references.count, lsp.references.done; bottom anchor in internal/app/anchor_test.go"
@@ -352,6 +356,14 @@
     "action:toolwindow.problems": {
       "status": "integrated",
       "evidence": "internal/app/problems.go ToggleProblems; lsp.problems.visible"
+    },
+    "action:todo.refresh": {
+      "status": "integrated",
+      "evidence": "internal/app/todo.go RunTodo; internal/app/commands.go todo.refresh; Tools menu Refresh TODO Items"
+    },
+    "action:todo.showCurrentFile": {
+      "status": "integrated",
+      "evidence": "internal/app/todo.go ShowTodoCurrentFile; internal/app/commands.go todo.showCurrentFile; Tools menu Show TODO Items in Current File"
     },
     "action:toolwindow.structure": {
       "status": "integrated",

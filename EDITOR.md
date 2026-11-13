@@ -135,6 +135,24 @@ container so its matches stay visible (`structure.go`). The window shares the
 outline the breadcrumbs already load, so opening it after a file has been open
 does not ask the server again.
 
+## TODO
+
+The bottom **TODO** window (`todo.go`) scans the project with `search_start`
+using OpenIDEA's default pattern `\b(TODO|FIXME|HACK|XXX)\b.*`, case-sensitive
+and comments only. A match becomes an item with its keyword, cleaned text and
+UTF-16 column when the prefix before it is a comment marker, grouped by file
+with a count; a click previews the line and a double-click opens it. The
+项目/当前文件/按范围/更改 tabs switch between the project scan, the active file,
+a scope (project, production, test or open files) and the paths the VCS status
+lists. Keyword chips toggle a pattern, **Aa** toggles case, `↑`/`↓` step over
+every item, **刷新** rescans and **关闭** hides the window. The scan stops at
+2000 files and shows the 匹配过多 banner when the engine's limit is hit.
+`RunTodo` cancels the previous request before starting the next, and
+**Tools › Refresh TODO Items** / **Show TODO Items in Current File** run the
+same scan or open the current-file tab (`todo.refresh`, `todo.showCurrentFile`).
+The editor's TODO gutter highlight and the `editor.todo` settings page are not
+ported yet.
+
 ## Project view
 
 Project tree rows open OpenIDEA's ProjectViewPopupMenu on right-click: **新建**

@@ -134,6 +134,9 @@ needs a `## <version>` section here, or its build fails.
 - **OK** 保存工具栏改动，**Cancel** 放弃，**Restore Defaults** 还原默认部件。
 - **Check for Updates…** 在后台查询 GitHub 最新版本，显示已是最新、有新版本或检查失败，并可打开发布页。
 - **Settings** 改为左侧分类、右侧内容的弹窗，包含 **Appearance**、**Keymap** 和 **Java** 页面。
+- 新增 **TODO** 工具窗口，按项目扫描 **TODO**/**FIXME**/**HACK**/**XXX** 注释并在文件下分组列出。
+- **TODO** 窗口有 **项目**、**当前文件**、**按范围**、**更改** 四个页签、关键字过滤和范围选择，单击预览、双击跳转。
+- **Tools** 菜单新增 **Refresh TODO Items** 和 **Show TODO Items in Current File**。
 
 ## 0.19.3
 
