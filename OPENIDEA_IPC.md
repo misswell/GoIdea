@@ -57,7 +57,7 @@ GoIDEA can rely on it; code that calls it must check `commands` first.
 | Fonts | `fonts` | 0 | 1 | 0 |
 | File system | `fs` | 12 | 0 | 5 |
 | GitHub | `github` | 0 | 11 | 0 |
-| Local history | `history` | 3 | 0 | 0 |
+| Local history | `history` | 3 | 0 | 3 |
 | HTTP client | `http` | 0 | 10 | 0 |
 | Java | `java` | 3 | 0 | 2 |
 | Language services | `lsp` | 43 | 1 | 14 |
@@ -88,7 +88,7 @@ GoIDEA can rely on it; code that calls it must check `commands` first.
 ## Served by `openidea-server --stdio`
 
 446 commands. `GoIDEA` marks the ones a non-test Go source invokes today
-(81 of 446).
+(84 of 446).
 
 | Command | Domain | Arguments | GoIDEA |
 | --- | --- | --- | --- |
@@ -250,9 +250,9 @@ GoIDEA can rely on it; code that calls it must check `commands` first.
 | `gradle_unlink_projects` | Maven/Gradle builds | `paths` | — |
 | `history_content` | Documents | `id` | — |
 | `history_list` | Documents | `path` | — |
-| `history_list_dir` | Local history | `path` | — |
-| `history_put_label` | Local history | `label` | — |
-| `history_restore` | Local history | `id`, `path` | — |
+| `history_list_dir` | Local history | `path` | yes |
+| `history_put_label` | Local history | `label` | yes |
+| `history_restore` | Local history | `id`, `path` | yes |
 | `index_file_extensions` | Navigation and index | — | — |
 | `index_status` | Navigation and index | — | — |
 | `inspect_code` | Code analysis | `onEvent`, `request`, `scope` | — |
@@ -738,7 +738,7 @@ GoIDEA needs to do for each:
 
 ## What this means for GoIDEA
 
-446 remote commands are available today; GoIDEA uses 81. The parity work is
+446 remote commands are available today; GoIDEA uses 84. The parity work is
 first to cover the remote surface OpenIDEA's own frontend uses, then to move
 `shared-op`/`host`/`crate` commands onto stdio through the OpenIDEA fork
 (a submodule bump and a server release), and to implement `desktop` commands

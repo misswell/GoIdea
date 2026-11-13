@@ -90,6 +90,8 @@
     {"id": "base.files.expand", "label": "Collapse All folded the tree and Expand All reopened every folder", "feature": "Expand All and Collapse All in the project view", "area": "workspace", "gate": "main", "doc": "EDITOR.md"},
     {"id": "base.files.select", "label": "Select in Project View marked the active file", "feature": "Select in Project View", "area": "workspace", "gate": "main", "doc": "EDITOR.md"},
     {"id": "base.files.findInFolder", "label": "Find in Folder searched only the chosen folder", "feature": "Find in Folder from the project view", "area": "workspace", "gate": "main", "doc": "EDITOR.md"},
+    {"id": "base.files.historyRestore", "label": "Local History restored the older snapshot of a saved file", "feature": "Local History restore from the project view", "area": "workspace", "gate": "main", "doc": "EDITOR.md"},
+    {"id": "base.files.historyLabel", "label": "Put Label listed a named history point", "feature": "Local History Put Label", "area": "workspace", "gate": "main", "doc": "EDITOR.md"},
     {"id": "base.filesError", "label": "filesError is absent", "feature": "Project view file operations report no error", "area": "workspace", "gate": "main", "doc": "EDITOR.md"},
     {"id": "base.log.commits", "label": "vcs_log returned commits", "feature": "Git log through vcs_log", "area": "vcs", "gate": "main", "doc": "RPC_PROTOCOL.md"},
     {"id": "base.log.details", "label": "vcs_log_details returned the message and a branch", "feature": "Commit details in the Git log", "area": "vcs", "gate": "main", "doc": "RPC_PROTOCOL.md"},

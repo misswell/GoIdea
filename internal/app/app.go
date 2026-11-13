@@ -182,6 +182,8 @@ type Model struct {
 	// open New, Rename or Delete prompt, or nil.
 	treeClip *treeClipState
 	treeOp   *treeOpState
+	// history is the open Local History sheet, or nil.
+	history *historyState
 
 	run       RunPane
 	debug     DebugPane
@@ -1162,7 +1164,8 @@ func (m *Model) overlayOpen() bool {
 	return m.rename != nil || m.symbols != nil || m.intents != nil || m.files != nil ||
 		m.diff != nil || m.palette != nil || m.commit != nil || m.branch.open ||
 		m.rollback != nil || m.bookmarksView != nil || m.mnemonics != nil || m.newList != nil ||
-		m.deleteList != nil || m.move != nil || m.editDesc != nil || m.treeOp != nil
+		m.deleteList != nil || m.move != nil || m.editDesc != nil || m.treeOp != nil ||
+		m.history != nil
 }
 
 // QuitImmediately closes the backend and quits without asking about changes,
@@ -1217,6 +1220,7 @@ func (m *Model) View(c *ui.Context) {
 	m.moveBookmarkDialog(c, p)
 	m.bookmarkDescriptionDialog(c, p)
 	m.treeOpDialog(c, p)
+	m.historyDialog(c, p)
 	m.commandsDialog(c, p)
 	m.diffDialog(c, p)
 	m.dbDialog(c, p)

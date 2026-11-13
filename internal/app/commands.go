@@ -38,6 +38,8 @@ func commands() []appCommand {
 		{"project.expandAll", "展开全部", "导航", "Cmd+=", "expand all project tree folders", func(m *Model) { m.ExpandProjectAll() }},
 		{"project.collapseAll", "折叠全部", "导航", "Cmd+-", "collapse all project tree folders", func(m *Model) { m.CollapseProjectAll() }},
 		{"project.reloadFromDisk", "从磁盘重新加载", "文件", "Cmd+Alt+Y", "reload project tree disk synchronize refresh", func(m *Model) { m.ReloadProjectTree() }},
+		{"project.showHistory", "显示本地历史", "文件", "", "local history revisions snapshots restore", func(m *Model) { m.ShowHistorySelected() }},
+		{"project.putLabel", "标记版本…", "文件", "", "local history put label version", func(m *Model) { m.OpenHistoryLabel() }},
 		{"navigate.selectInProjectView", "在项目视图中选择", "导航", "Alt+F1", "select in project view reveal active file locate", func(m *Model) { m.SelectInProjectView() }},
 		{"view.terminal", "显示终端", "视图", "Alt+F12", "terminal shell", func(m *Model) { m.ShowTerm() }},
 		{"term.new", "新建终端标签", "终端", "Cmd+T", "terminal new tab shell", func(m *Model) { m.OpenTermTab() }},

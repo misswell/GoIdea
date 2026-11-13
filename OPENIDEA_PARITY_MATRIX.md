@@ -27,7 +27,7 @@ new action, tool window, page or command appears automatically.
 | Kind | Items | Integrated | Partial | Engine | Blocked | Missing |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Feature folders | 43 | 0 | 10 | 0 | 0 | 33 |
-| Actions | 647 | 21 | 57 | 0 | 1 | 568 |
+| Actions | 647 | 21 | 59 | 0 | 1 | 566 |
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
 | Tool windows | 30 | 8 | 5 | 0 | 0 | 17 |
 | Overlays | 56 | 0 | 0 | 0 | 0 | 56 |
@@ -413,7 +413,7 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `project.renameInline` | Rename File Inline | `src/features/project-tree/actions.ts` | missing |
 | `project.reveal` | Reveal in Project View | `src/features/project-tree/actions.ts` | partial - internal/app/tree.go reveal plus Select; base.files.select |
 | `project.revealInFinder` |  | `src/features/project-tree/actions.ts` | missing |
-| `project.showHistory` | Local History: Show History | `src/features/project-tree/actions.ts` | missing |
+| `project.showHistory` | Local History: Show History | `src/features/project-tree/actions.ts` | partial - internal/app/history.go ShowHistory over history_list_dir and RestoreHistoryEntry over history_restore; base.files.historyRestore |
 | `project.undoMove` | Undo Move / Rename | `src/features/project-tree/actions.ts` | missing |
 
 ### project-trust
@@ -618,7 +618,7 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `diff.prevDifference` | Previous Difference | `src/features/vcs/compare.tsx` | missing |
 | `diff.prevFile` | Compare Previous File | `src/features/vcs/compare.tsx` | missing |
 | `diff.showSettings` | Diff Settings | `src/features/vcs/compare.tsx` | missing |
-| `localHistory.putLabel` | Local History: Put Label… | `src/features/vcs/localHistoryActions.ts` | missing |
+| `localHistory.putLabel` | Local History: Put Label… | `src/features/vcs/localHistoryActions.ts` | partial - internal/app/history.go ConfirmHistoryLabel over history_put_label; base.files.historyLabel |
 | `localHistory.recentChanges` | Recent Changes | `src/features/vcs/localHistoryActions.ts` | missing |
 | `merge.${command}` |  | `src/features/vcs/mergeActions.ts` | missing |
 | `vcs.log.branches.delete` | Delete Branch | `src/features/vcs/logPaneActions.ts` | missing |
@@ -1952,9 +1952,9 @@ Local-only commands and the per-command argument lists are in
 | `gtk_pick_paths` | file_dialog | no |  | missing |
 | `history_content` | doc | yes |  | missing |
 | `history_list` | doc | yes |  | missing |
-| `history_list_dir` | history | yes |  | missing |
-| `history_put_label` | history | yes |  | missing |
-| `history_restore` | history | yes |  | missing |
+| `history_list_dir` | history | yes | yes | missing |
+| `history_put_label` | history | yes | yes | missing |
+| `history_restore` | history | yes | yes | missing |
 | `http_curl` | http | no |  | missing |
 | `http_environment_file` | http | no |  | missing |
 | `http_environments` | http | no |  | missing |
@@ -2362,7 +2362,7 @@ Local-only commands and the per-command argument lists are in
 | `wsl_distros` | wsl | no |  | missing |
 | `wsl_resolve` | wsl | no |  | missing |
 
-446 commands are served over stdio and 81 are called by GoIDEA today. A command
+446 commands are served over stdio and 84 are called by GoIDEA today. A command
 that is registered only in the desktop shell needs an `ops` module before stdio
 can serve it; a GoIDEA check counts only when the UI path works end to end.
 

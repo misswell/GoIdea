@@ -369,6 +369,14 @@
       "status": "partial",
       "evidence": "internal/app/tree_ops.go treeActFindInFolder -> internal/app/search.go ShowSearchInFolder scopes search_start to the folder; base.files.findInFolder; replace in folder is missing"
     },
+    "action:project.showHistory": {
+      "status": "partial",
+      "evidence": "internal/app/history.go ShowHistory over history_list_dir and RestoreHistoryEntry over history_restore; base.files.historyRestore"
+    },
+    "action:localHistory.putLabel": {
+      "status": "partial",
+      "evidence": "internal/app/history.go ConfirmHistoryLabel over history_put_label; base.files.historyLabel"
+    },
     "action:project.expandAll": {
       "status": "partial",
       "evidence": "internal/app/tree.go ExpandAll opens each folder as its read arrives; base.files.expand"

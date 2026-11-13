@@ -141,8 +141,8 @@ Project tree rows open OpenIDEA's ProjectViewPopupMenu on right-click: **新建*
 (File…, Directory…) on a folder, **剪切**, **复制**, **复制路径/引用**
 (Absolute Path, File Name, Path From Content Root), **粘贴** while the
 clipboard holds a copied or cut entry, **跳到源码** on a file,
-**在文件夹中查找…** and **在终端中打开** on a folder, **重命名…** and
-**删除…**. Entries that cannot apply are
+**在文件夹中查找…** and **在终端中打开** on a folder, **本地历史** (显示历史…,
+标记版本…), **重命名…** and **删除…**. Entries that cannot apply are
 disabled, and the project root itself cannot be cut, renamed or deleted
 (`treeMenuItems` in `tree_ops.go`, tested by `tree_ops_test.go`).
 
@@ -174,6 +174,15 @@ Cmd+3) widens it again (`ShowSearchInFolder` in `search.go`). The palette's
 在文件夹中查找… uses the folder selected in the tree, or the whole project
 when the selection is not a folder.
 
+**本地历史 › 显示历史…** opens a sheet of the entry's snapshots from
+`history_list_dir`, newest first, each with its time, label and size
+(`ShowHistory` in `history.go`). A snapshot restores with two clicks
+(**恢复此版本** then **确认恢复**) over `history_restore`; the backend rewrites
+the file, or the open editor, and the tree rereads. **标记版本…** asks for a
+name and records it for the whole project with `history_put_label`; the label
+then lists in every file's history. The palette offers the same two as
+显示本地历史 and 标记版本….
+
 ## Features wired to the editor
 
 | Feature | Where |
@@ -185,6 +194,7 @@ when the selection is not a folder.
 | Tool window maximize and resize | `internal/app/toolwindow.go`, `maximize_test.go` |
 | Bottom split area, Move to Bottom Right | `internal/app/toolwindow.go`, `split_test.go` |
 | Find and Find Usages anchored at the bottom | `internal/app/search.go`, `usages.go`, `anchor_test.go` |
+| Local History sheet, restore and Put Label | `internal/app/history.go` |
 | Completion, hover, definition popups | MyGo callbacks → `internal/app/lsp.go` |
 | Intentions / quick fixes (Alt+Enter) | `internal/app/intents.go` |
 | Rename (Shift+F6) with undo | `internal/app/rename.go` |

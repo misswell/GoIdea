@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/editor"
 )
 
 // treeTarget is one selection of the project view, the subject of its
@@ -46,6 +47,8 @@ const (
 	treeActRename
 	treeActDelete
 	treeActTerminal
+	treeActShowHistory
+	treeActPutLabel
 )
 
 // treeMenuItem is one row of the project view menu: an action, a separator or
@@ -83,6 +86,10 @@ func treeMenuItems(t treeTarget, clipboard bool) []treeMenuItem {
 		item(treeActJump, "跳到源码", !t.dir),
 		item(treeActFindInFolder, "在文件夹中查找…", t.dir),
 		item(treeActTerminal, "在终端中打开", t.dir),
+		{Label: "本地历史", Items: []treeMenuItem{
+			item(treeActShowHistory, "显示历史…", true),
+			item(treeActPutLabel, "标记版本…", true),
+		}},
 		sep,
 		item(treeActRename, "重命名…", !t.root),
 		item(treeActDelete, "删除…", !t.root),
@@ -150,6 +157,10 @@ func (m *Model) runTreeAct(c *ui.Context, it treeMenuItem, t treeTarget) {
 		m.AskTreeDelete(t.path, t.dir)
 	case it.Act == treeActTerminal:
 		m.OpenTerminalAt(t.folder())
+	case it.Act == treeActShowHistory:
+		m.ShowHistory(t.path)
+	case it.Act == treeActPutLabel:
+		m.OpenHistoryLabel()
 	}
 }
 
@@ -750,6 +761,200 @@ func (m *Model) SmokeFiles(ctx context.Context) (map[string]any, error) {
 		return out, err
 	}
 	out["folderEmpty"] = emptyFiles
+	// Local History records a snapshot on each save; the marker write is the
+	// second revision, so restoring the oldest snapshot must remove it.
+	hist := filepath.Join(base, "hist.txt")
+	if err := create(base, "hist.txt", false); err != nil {
+		return out, err
+	}
+	var histTab *Tab
+	tabDeadline := time.Now().Add(30 * time.Second)
+	for histTab == nil {
+		run(func() {
+			for _, t := range m.tabs {
+				if t.doc.Path() == realPath(hist) {
+					histTab = t
+				}
+			}
+		})
+		if histTab != nil {
+			break
+		}
+		if time.Now().After(tabDeadline) {
+			return out, errors.New("打开 hist.txt 超时")
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
+	save := func(text string) error {
+		run(func() {
+			for i, t := range m.tabs {
+				if t == histTab {
+					m.active = i
+				}
+			}
+			histTab.doc.Buffer().Edit(editor.Edit{Start: 0, End: 0, Text: text})
+			m.invalidate()
+		})
+		run(func() { m.SaveActive() })
+		deadline := time.Now().Add(30 * time.Second)
+		for {
+			data, readErr := os.ReadFile(hist)
+			var saving bool
+			run(func() { saving = histTab.saving })
+			if readErr == nil && !saving && strings.Contains(string(data), strings.TrimSpace(text)) {
+				return nil
+			}
+			if time.Now().After(deadline) {
+				return errors.New("保存 hist.txt 超时")
+			}
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(100 * time.Millisecond):
+			}
+		}
+	}
+	if err := save("history base\n"); err != nil {
+		return out, err
+	}
+	if err := save("history-marker\n"); err != nil {
+		return out, err
+	}
+	run(func() { m.ShowHistory(hist) })
+	var entries []historyEntry
+	histDeadline := time.Now().Add(60 * time.Second)
+	for {
+		var loading bool
+		var histErr string
+		run(func() {
+			h := m.history
+			if h == nil {
+				loading = true
+				return
+			}
+			loading = h.loading
+			histErr = h.err
+			entries = append(entries[:0], h.entries...)
+		})
+		if !loading {
+			if histErr != "" {
+				return out, errors.New(histErr)
+			}
+			break
+		}
+		if time.Now().After(histDeadline) {
+			return out, errors.New("读取 hist.txt 的历史超时")
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+	out["historyEntries"] = len(entries)
+	oldest := -1
+	for i, e := range entries {
+		if e.Kind == "label" || e.ID == "" {
+			continue
+		}
+		if oldest < 0 || e.Ms < entries[oldest].Ms {
+			oldest = i
+		}
+	}
+	if oldest < 0 {
+		return out, errors.New("hist.txt 没有可恢复的历史")
+	}
+	run(func() {
+		m.history.sel = oldest
+		m.RestoreHistoryEntry()
+	})
+	run(func() { m.RestoreHistoryEntry() })
+	restored := false
+	restoreDeadline := time.Now().Add(60 * time.Second)
+	for {
+		data, readErr := os.ReadFile(hist)
+		if readErr == nil && !strings.Contains(string(data), "history-marker") {
+			restored = true
+			break
+		}
+		if time.Now().After(restoreDeadline) {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+	out["historyRestored"] = restored
+	run(func() {
+		m.OpenHistoryLabel()
+		if m.history != nil {
+			m.history.label = "e2e 标签"
+		}
+		m.ConfirmHistoryLabel()
+	})
+	labeled := false
+	deadline = time.Now().Add(30 * time.Second)
+	for {
+		run(func() { labeled = m.history == nil && strings.Contains(m.status, "已标记版本 e2e 标签") })
+		if labeled {
+			break
+		}
+		if time.Now().After(deadline) {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+	out["historyLabeled"] = labeled
+	listed := false
+	run(func() { m.ShowHistory(hist) })
+	deadline = time.Now().Add(60 * time.Second)
+	for {
+		var loading bool
+		run(func() {
+			h := m.history
+			if h == nil {
+				loading = true
+				return
+			}
+			loading = h.loading
+			for _, e := range h.entries {
+				if e.Kind == "label" && e.Label == "e2e 标签" {
+					listed = true
+				}
+			}
+		})
+		if !loading || listed {
+			break
+		}
+		if time.Now().After(deadline) {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+	out["historyLabelListed"] = listed
+	run(func() {
+		m.closeHistory()
+		for i, t := range m.tabs {
+			if t == histTab {
+				m.dropTab(i)
+				break
+			}
+		}
+	})
 	two := filepath.Join(base, "two.txt")
 	if err := rename(one, "two.txt"); err != nil {
 		return out, err
