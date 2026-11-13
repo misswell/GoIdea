@@ -138,6 +138,26 @@ type Model struct {
 	prefs        Preferences
 	theme        *ui.Theme
 	settingsOpen bool
+	// settingsPage is the page the settings sheet shows: "appearance",
+	// "keymap" or "java".
+	settingsPage string
+
+	// zen is Distraction Free Mode, and zenHint the way-out hint entering it
+	// puts above the editor, as OpenIDEA's balloon does.
+	zen     bool
+	zenHint bool
+
+	// toolbarCustomize is the open Customize Main Toolbar dialog, and update
+	// the Check for Updates dialog.
+	toolbarCustomize bool
+	// toolbarDraft is the dialog's working layout, saved on OK only; side and
+	// sel are the chosen row, adding and addQuery the Add… picker.
+	toolbarDraft    toolbarLayout
+	toolbarSide     string
+	toolbarSel      int
+	toolbarAdding   bool
+	toolbarAddQuery string
+	update          updateState
 
 	// javaTools is the Java language server / debugger state the settings
 	// sheet shows; toolsBusy names the install in progress, whose events
@@ -823,6 +843,7 @@ func (m *Model) newTab(doc *docbridge.Document) *Tab {
 		seen:   v,
 	}
 	t.state.Font = ui.Font{Size: m.prefs.fontSize()}
+	m.applyTabZenGutter(t)
 	t.state.OnGutterClick = func(line int) { m.toggleBreakpointAt(path, line) }
 	t.state.OnCompletion = func(req editor.CompletionRequest) { m.requestCompletion(t, req) }
 	t.state.OnHover = func(req editor.HoverRequest) { m.requestHover(t, req) }
@@ -1390,11 +1411,13 @@ func (m *Model) View(c *ui.Context) {
 	m.dbDialog(c, p)
 	m.commitDialog(c, p)
 	m.settingsDialog(c, p)
+	m.toolbarCustomizeDialog(c, p)
+	m.updateDialog(c, p)
 }
 
 func (m *Model) shortcuts(c *ui.Context) {
 	// A modal sheet owns the keyboard; only its own dismiss keys apply.
-	if m.settingsOpen || (m.db != nil && m.db.open) {
+	if m.settingsOpen || m.toolbarCustomize || m.update.Open || (m.db != nil && m.db.open) {
 		return
 	}
 	// The Bookmarks popup steps its rows with the arrow keys.

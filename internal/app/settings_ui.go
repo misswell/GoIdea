@@ -7,9 +7,20 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// OpenSettings opens the settings sheet.
-func (m *Model) OpenSettings() {
+// OpenSettings opens the settings sheet on its Appearance page.
+func (m *Model) OpenSettings() { m.OpenSettingsPage("appearance") }
+
+// OpenSettingsPage opens the settings sheet on page, as OpenIDEA's Settings
+// action takes the page in its argument.
+func (m *Model) OpenSettingsPage(page string) {
+	switch page {
+	case "appearance", "keymap", "java":
+	default:
+		page = "appearance"
+	}
+	m.settingsPage = page
 	if m.settingsOpen {
+		m.invalidate()
 		return
 	}
 	m.settingsOpen = true
@@ -75,10 +86,12 @@ func (m *Model) setFontSize(size int) {
 // window draws with and the font size of every open editor.
 func (m *Model) applyPreferences() {
 	m.theme = m.prefs.themePreference()
+	m.zen = m.prefs.Zen
 	size := m.prefs.fontSize()
 	for _, t := range m.tabs {
 		t.state.Font = ui.Font{Family: t.state.Font.Family, Size: size}
 	}
+	m.applyZenGutter()
 }
 
 // savePreferences writes the settings; a failed write is reported rather than
@@ -92,56 +105,133 @@ func (m *Model) savePreferences() {
 	}
 }
 
-// settingsDialog draws the settings sheet: appearance and editor font size.
+// settingsDialog draws Settings as IDEA does: the page tree on the left, the
+// chosen page on the right. Appearance, Keymap and Java are the pages
+// OpenIDEA's Settings window leads with.
 func (m *Model) settingsDialog(c *ui.Context, p *ui.Theme) {
 	if !m.settingsOpen {
 		return
 	}
 	open := m.settingsOpen
 	dlg := ui.Modal(c, &open, func() {
-		ui.Column(c).Width(520).Gap(10).Children(func() {
-			ui.Text(c, "设置").FontSize(14).Bold().TextColor(p.Text).SingleLine()
-			ui.Text(c, "外观").FontSize(11).TextColor(p.TextMuted).SingleLine()
-			for _, o := range [][2]string{
-				{"system", "跟随系统"},
-				{"light", "浅色"},
-				{"dark", "深色"},
-			} {
-				o := o
-				current := m.prefs.Theme == o[0] || (o[0] == "system" && m.prefs.Theme == "")
-				r := ui.Row(c.Key("theme:"+o[0])).Height(26).Padding(0, 8).Gap(8).AlignItems(ui.Center)
-				if current || r.Hovered() {
-					r.Background(p.SurfaceHover)
-				}
-				r.Children(func() {
-					mark := "○"
-					if current {
-						mark = "●"
-					}
-					ui.Text(c, mark).FontSize(12).TextColor(p.Accent).Width(16)
-					ui.Text(c, o[1]).FontSize(12).TextColor(p.Text)
-				})
-				if r.Clicked() {
-					m.SetThemePref(o[0])
-				}
-			}
-			ui.Text(c, "编辑器").FontSize(11).TextColor(p.TextMuted).SingleLine()
-			ui.Row(c).Height(26).Gap(8).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, "字号").FontSize(12).TextColor(p.Text)
+		ui.Column(c).Width(760).Height(520).Gap(0).Children(func() {
+			ui.Row(c).Height(46).Padding(0, 14).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, "Settings").FontSize(14).Bold().TextColor(p.Text).SingleLine()
 				ui.Spacer(c)
-				ui.Button(c, "−").OnClick(func() { m.stepFont(-1) })
-				ui.Text(c, fmt.Sprintf("%.0f", m.prefs.fontSize())).FontSize(12).
-					TextColor(p.Text).Width(28)
-				ui.Button(c, "+").OnClick(func() { m.stepFont(1) })
+				ui.Button(c, "Close").OnClick(m.closeSettings)
 			})
-			ui.Text(c, fmt.Sprintf("范围 %d–%d，打开的编辑器立即生效", minFontSize, maxFontSize)).
-				FontSize(10.5).TextColor(p.TextMuted).SingleLine()
-			m.javaToolsSection(c, p)
+			ui.Row(c).Grow(1).Children(func() {
+				ui.Column(c).Width(200).Gap(2).Padding(0, 8).Children(func() {
+					m.settingsNavItem(c, p, "appearance", "Appearance")
+					m.settingsNavItem(c, p, "keymap", "Keymap")
+					m.settingsNavItem(c, p, "java", "Java")
+				})
+				ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
+					ui.Column(c).Gap(10).Padding(0, 14).Children(func() {
+						switch m.settingsPage {
+						case "keymap":
+							m.settingsKeymapPage(c, p)
+						case "java":
+							m.settingsJavaPage(c, p)
+						default:
+							m.settingsAppearancePage(c, p)
+						}
+					})
+				})
+			})
 		})
 	})
 	if dlg.Dismissed() || !open {
 		m.closeSettings()
 	}
+}
+
+func (m *Model) settingsNavItem(c *ui.Context, p *ui.Theme, page, label string) {
+	r := ui.Row(c.Key("settings:"+page)).Height(28).Padding(0, 10).AlignItems(ui.Center)
+	if m.settingsPage == page {
+		r.Background(p.SurfaceHover)
+	} else if r.Hovered() {
+		r.Background(p.SurfaceHover)
+	}
+	r.Children(func() {
+		ui.Text(c, label).FontSize(12).TextColor(p.Text).SingleLine()
+	})
+	if r.Clicked() {
+		m.settingsPage = page
+		m.invalidate()
+	}
+}
+
+func (m *Model) settingsAppearancePage(c *ui.Context, p *ui.Theme) {
+	ui.Text(c, "Appearance").FontSize(13).Bold().TextColor(p.Text).SingleLine()
+	ui.Text(c, "Theme").FontSize(11).TextColor(p.TextMuted).SingleLine()
+	for _, o := range [][2]string{
+		{"system", "Use System Settings"},
+		{"light", "Light"},
+		{"dark", "Dark"},
+	} {
+		o := o
+		current := m.prefs.Theme == o[0] || (o[0] == "system" && m.prefs.Theme == "")
+		r := ui.Row(c.Key("theme:"+o[0])).Height(26).Padding(0, 8).Gap(8).AlignItems(ui.Center)
+		if current || r.Hovered() {
+			r.Background(p.SurfaceHover)
+		}
+		r.Children(func() {
+			mark := "○"
+			if current {
+				mark = "●"
+			}
+			ui.Text(c, mark).FontSize(12).TextColor(p.Accent).Width(16)
+			ui.Text(c, o[1]).FontSize(12).TextColor(p.Text)
+		})
+		if r.Clicked() {
+			m.SetThemePref(o[0])
+		}
+	}
+	ui.Text(c, "Editor").FontSize(11).TextColor(p.TextMuted).SingleLine()
+	ui.Row(c).Height(26).Gap(8).AlignItems(ui.Center).Children(func() {
+		ui.Text(c, "Font size").FontSize(12).TextColor(p.Text)
+		ui.Spacer(c)
+		ui.Button(c, "−").OnClick(func() { m.stepFont(-1) })
+		ui.Text(c, fmt.Sprintf("%.0f", m.prefs.fontSize())).FontSize(12).
+			TextColor(p.Text).Width(28)
+		ui.Button(c, "+").OnClick(func() { m.stepFont(1) })
+	})
+	ui.Text(c, fmt.Sprintf("Range %d–%d, applied to open editors at once", minFontSize, maxFontSize)).
+		FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+	ui.Text(c, "Distraction Free Mode").FontSize(11).TextColor(p.TextMuted).SingleLine()
+	ui.Row(c).Height(26).Gap(8).AlignItems(ui.Center).Children(func() {
+		ui.Text(c, "Text width").FontSize(12).TextColor(p.Text)
+		ui.Spacer(c)
+		ui.Button(c, "−").OnClick(func() { m.StepZenWidth(-5) })
+		ui.Text(c, fmt.Sprintf("%d", m.prefs.zenWidth())).FontSize(12).
+			TextColor(p.Text).Width(36)
+		ui.Button(c, "+").OnClick(func() { m.StepZenWidth(5) })
+	})
+	ui.Text(c, fmt.Sprintf("Columns of text, %d–%d", minZenWidth, maxZenWidth)).
+		FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+}
+
+func (m *Model) settingsKeymapPage(c *ui.Context, p *ui.Theme) {
+	ui.Text(c, "Keymap").FontSize(13).Bold().TextColor(p.Text).SingleLine()
+	ui.Text(c, "Keymap: "+keymapPresetTitle).FontSize(12).TextColor(p.Text).SingleLine()
+	ui.Text(c, "The actions this build carries, with the keys of the IntelliJ macOS map.").
+		FontSize(10.5).TextColor(p.TextMuted).SingleLine().Ellipsis("…")
+	for _, cmd := range commands() {
+		if cmd.shortcut == "" {
+			continue
+		}
+		ui.Row(c.Key("keymap:"+cmd.id)).Height(24).Padding(0, 8).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, cmd.title).FontSize(12).TextColor(p.Text).SingleLine().Ellipsis("…")
+			ui.Spacer(c)
+			ui.Text(c, cmd.shortcut).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+		})
+	}
+}
+
+func (m *Model) settingsJavaPage(c *ui.Context, p *ui.Theme) {
+	ui.Text(c, "Java").FontSize(13).Bold().TextColor(p.Text).SingleLine()
+	m.javaToolsSection(c, p)
 }
 
 // SmokeSettings drives the settings sheet offscreen: theme and font changes go

@@ -30,7 +30,7 @@ func commands() []appCommand {
 		{"welcome.manageProjects", "管理项目…", "文件", "", "manage projects welcome recent", func(m *Model) { m.showWelcome() }},
 		{"app.commandPalette", "搜索所有位置", "文件", "Cmd+Shift+A", "search everywhere command palette find action", func(m *Model) { m.OpenCommands() }},
 		{"runAnything.show", "Run Anything…", "运行", "", "command shell execute npm mvn gradle goal", func(m *Model) { m.OpenRunAnything() }},
-		{"app.plugins", "插件…", "文件", "", "plugins settings marketplace", func(m *Model) { m.openPlugins() }},
+		{"plugins.settings", "Plugins…", "文件", "", "plugins settings marketplace", func(m *Model) { m.openPlugins() }},
 		{"file.quickOpen", "快速打开…", "文件", "Cmd+P", "quick open file goto recent", func(m *Model) { m.OpenQuickFiles() }},
 		{"file.save", "保存", "文件", "Cmd+S", "save write", func(m *Model) { m.SaveActive() }},
 		{"file.close", "关闭标签页", "文件", "Cmd+W", "close tab", func(m *Model) { m.closeTab(m.active) }},
@@ -128,11 +128,18 @@ func commands() []appCommand {
 		{"build.stop", "停止构建", "构建", "", "stop cancel build", func(m *Model) { m.StopBuild() }},
 		{"view.build", "显示构建窗口", "视图", "", "build output console", func(m *Model) { m.ShowBuild() }},
 		{"java.tools", "安装 Java 语言服务与调试器", "运行", "", "java jdtls language server debugger install toolchain", func(m *Model) { m.InstallJavaToolchain() }},
-		{"app.settings", "设置…", "文件", "Cmd+,", "settings preferences theme font appearance", func(m *Model) { m.OpenSettings() }},
+		{"file.settings", "Settings…", "文件", "Cmd+,", "settings preferences theme font appearance", func(m *Model) { m.OpenSettings() }},
 		{"view.toggleTheme", "切换深色/浅色主题", "视图", "", "theme dark light appearance toggle", func(m *Model) { m.ToggleTheme() }},
 		{"app.themeLight", "浅色", "视图", "", "theme light appearance", func(m *Model) { m.SetThemePref("light") }},
 		{"app.themeDark", "深色", "视图", "", "theme dark appearance", func(m *Model) { m.SetThemePref("dark") }},
 		{"app.themeSystem", "跟随系统设置", "视图", "", "theme system appearance", func(m *Model) { m.SetThemePref("system") }},
+		{"editor.toggleZen", "Toggle Distraction Free Mode", "视图", "", "distraction free mode zen presentation", func(m *Model) { m.ToggleZen() }},
+		{"window.toggleFullScreen", "Toggle Full Screen", "视图", "Cmd+Ctrl+F", "fullscreen window display", func(m *Model) { m.ToggleFullScreen() }},
+		{"settings.appearance", "Appearance…", "视图", "", "settings appearance theme font", func(m *Model) { m.OpenSettingsPage("appearance") }},
+		{"settings.keymap", "Keymap…", "视图", "", "settings keymap shortcuts bindings", func(m *Model) { m.OpenSettingsPage("keymap") }},
+		{"toolbar.customize", "Customize Main Toolbar…", "视图", "", "toolbar widgets title bar customize", func(m *Model) { m.OpenToolbarCustomize() }},
+		{"toolbar.reset", "Restore Default Toolbar", "视图", "", "toolbar default widgets restore", func(m *Model) { m.RestoreDefaultToolbar() }},
+		{"app.checkForUpdates", "Check for Updates…", "帮助", "", "update upgrade version release", func(m *Model) { m.CheckForUpdates() }},
 	}
 }
 

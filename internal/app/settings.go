@@ -314,6 +314,10 @@ func (s Session) Save(path string) error {
 type Preferences struct {
 	Theme    string  `json:"theme,omitempty"`
 	FontSize float32 `json:"fontSize,omitempty"`
+	// Zen is Distraction Free Mode, which survives a restart as IDEA's does,
+	// and ZenWidth is its text column in columns; zero is the default.
+	Zen      bool `json:"distractionFree,omitempty"`
+	ZenWidth int  `json:"distractionFreeWidth,omitempty"`
 	// MainToolbar is the title bar's saved layout, nil for the default one.
 	MainToolbar *toolbarLayout `json:"mainToolbar,omitempty"`
 	// Plugins are each plugin's settings, by name, under the same "plugins"
@@ -369,6 +373,15 @@ func (p Preferences) fontSize() float32 {
 		return defaultFontSize
 	}
 	return p.FontSize
+}
+
+// zenWidth is the distraction free text column in columns, clamped like IDEA's
+// Settings › Appearance field.
+func (p Preferences) zenWidth() int {
+	if p.ZenWidth == 0 {
+		return defaultZenWidth
+	}
+	return max(minZenWidth, min(p.ZenWidth, maxZenWidth))
 }
 
 // writeFileAtomic replaces path in one rename, so a crash mid-write leaves

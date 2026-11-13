@@ -26,15 +26,15 @@ new action, tool window, page or command appears automatically.
 
 | Kind | Items | Integrated | Partial | Engine | Blocked | Missing |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Feature folders | 43 | 0 | 11 | 0 | 0 | 32 |
-| Actions | 647 | 31 | 64 | 0 | 1 | 551 |
+| Feature folders | 43 | 0 | 12 | 0 | 0 | 31 |
+| Actions | 647 | 33 | 67 | 0 | 1 | 546 |
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
 | Tool windows | 30 | 8 | 5 | 0 | 0 | 17 |
 | Overlays | 56 | 1 | 0 | 0 | 0 | 55 |
 | Editor contributions | 35 | 0 | 0 | 0 | 0 | 35 |
 | Editor kinds | 4 | 0 | 0 | 0 | 0 | 4 |
 | File editor providers | 4 | 0 | 0 | 0 | 0 | 4 |
-| Settings pages | 63 | 0 | 1 | 0 | 0 | 62 |
+| Settings pages | 63 | 0 | 2 | 0 | 0 | 61 |
 | Settings keys | 445 | 0 | 0 | 0 | 0 | 445 |
 | Languages | 80 | 1 | 0 | 0 | 0 | 79 |
 | Backend crates | 38 | 0 | 0 | 31 | 0 | 7 |
@@ -52,7 +52,7 @@ directory registers.
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
 | `agents` | 7 | 0 | 0 | 0 | 0 | missing |
 | `analysis` | 6 | 2 | 1 | 0 | 0 | missing |
-| `app` | 2 | 0 | 6 | 0 | 0 | missing |
+| `app` | 2 | 0 | 6 | 0 | 0 | partial - internal/app/update.go CheckForUpdates GitHub releases check with version compare and result dialog; download and install are not ported; internal/app/gear_test.go |
 | `build` | 6 | 1 | 0 | 0 | 0 | missing |
 | `build-tools` | 21 | 2 | 1 | 2 | 0 | missing |
 | `code-insight` | 6 | 3 | 1 | 0 | 0 | partial - lsp.references.count, lsp.symbols |
@@ -370,7 +370,7 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `plugins.log.${operation}` |  | `src/features/plugins/views/logActions.ts` | missing |
 | `plugins.log.toggleArgument` | Toggle Log Option | `src/features/plugins/views/logActions.ts` | missing |
 | `plugins.reloadAll` | Reload Plugins | `src/features/plugins/index.ts` | missing |
-| `plugins.settings` | Plugins… | `src/features/plugins/index.ts` | missing |
+| `plugins.settings` | Plugins… | `src/features/plugins/index.ts` | partial - internal/app/commands.go plugins.settings -> internal/app/welcome.go plugins page over internal/app/plugins.go registry; internal/app/menu_test.go |
 | `plugins.updateAll` | Update All Plugins | `src/features/plugins/index.ts` | missing |
 
 ### profiler
@@ -726,7 +726,7 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `navigate.nextOccurrence` | Next Occurrence | `src/workbench/toolwindows/actions.ts` | integrated - internal/app/problems.go StepProblem; internal/app/toolwindow_test.go |
 | `navigate.prevOccurrence` | Previous Occurrence | `src/workbench/toolwindows/actions.ts` | integrated - internal/app/problems.go StepProblem; internal/app/toolwindow_test.go |
 | `refactor.thisMenu` | Refactor This… | `src/editor/lsp/actions.ts` | missing |
-| `toolbar.customize` | Customize Main Toolbar… | `src/workbench/shellActions.ts` | missing |
+| `toolbar.customize` | Customize Main Toolbar… | `src/workbench/shellActions.ts` | integrated - internal/app/toolbar.go OpenToolbarCustomize/toolbarCustomizeDialog draft with Add/Remove/Move/side switch and Restore Defaults; internal/app/gear_test.go TestToolbarDraftEdits |
 | `toolwindow.${id}` |  | `src/workbench/toolwindows/actions.ts` | missing |
 | `toolwindow.closeContent` | Close Tool Window Tab | `src/workbench/toolwindows/actions.ts` | missing |
 | `toolwindow.focusEditor` | Focus Editor | `src/workbench/toolwindows/actions.ts` | missing |
@@ -829,8 +829,8 @@ expected to come from a plugin or a hidden registration.
 | `editor.matchBrace` | eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
 | `editor.scrollToCenter` | intellij-macos, intellij-windows, vscode-macos | missing |
 | `editor.toggleInsertState` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `editor.toggleZen` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `file.settings` | intellij-macos, intellij-windows, vscode-macos | missing |
+| `editor.toggleZen` | intellij-macos, intellij-windows, vscode-macos | integrated - internal/app/zen.go ToggleZen/StepZenWidth/zenWorkbench hints and compact header; prefs Zen/ZenWidth persisted; internal/app/gear_test.go TestViewModeTitleFollowsTheMode, TestZenWidthClamps |
+| `file.settings` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/commands.go file.settings; internal/app/settings_ui.go nav + Appearance/Keymap/Java pages; OpenIDEA's remaining settings pages are not ported yet |
 | `find.highlightUsages` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
 | `find.popup.nextResult` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos, vscode-windows | missing |
 | `find.popup.openResult` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
@@ -940,7 +940,7 @@ expected to come from a plugin or a hidden registration.
 | `window.nextTab` | intellij-macos, intellij-windows, vscode-macos | missing |
 | `window.previous` | intellij-macos, intellij-windows, vscode-macos | missing |
 | `window.previousTab` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `window.toggleFullScreen` | intellij-macos, intellij-windows, vscode-macos, vscode-windows | missing |
+| `window.toggleFullScreen` | intellij-macos, intellij-windows, vscode-macos, vscode-windows | partial - internal/app/zen.go ToggleFullScreen through mygo Window.ToggleFullScreen; the native full-screen transition is not exercised headless |
 
 ## Keymaps
 
@@ -1126,7 +1126,7 @@ The plain text editor is the workbench default and is not registered through
 | --- | --- | --- | --- | --- |
 | `agents.chat` | Chat | Agents | `src/features/settings/pages/tools.tsx` | missing |
 | `agents.mcpServer` | IDE MCP Server | Agents | `src/features/settings/pages/mcpServer.tsx` | missing |
-| `appearance` | Appearance |  | `src/features/settings/pages/behavior.tsx` | partial - base.settings.theme |
+| `appearance` | Appearance |  | `src/features/settings/pages/behavior.tsx` | partial - base.settings.theme; internal/app/settings_ui.go settingsAppearancePage theme radios, font size and distraction-free width |
 | `build.cmake` | CMake |  | `src/features/settings/pages/execution.tsx` | missing |
 | `build.console` | Console |  | `src/features/settings/pages/execution.tsx` | missing |
 | `build.debugger` | Debugger |  | `src/features/settings/pages/execution.tsx` | missing |
@@ -1156,7 +1156,7 @@ The plain text editor is the workbench default and is not registered through
 | `general.httpProxy` | HTTP Proxy |  | `src/features/settings/pages/httpProxy.tsx` | missing |
 | `general.language` | Language and Region |  | `src/features/settings/pages/behavior.tsx` | missing |
 | `general.updates` | Updates |  | `src/features/settings/pages/updates.tsx` | missing |
-| `keymap` | Keymap |  | `src/features/settings/pages/builtins.tsx` | missing |
+| `keymap` | Keymap |  | `src/features/settings/pages/builtins.tsx` | partial - internal/app/settings_ui.go settingsKeymapPage lists every registry shortcut; rebinding keys is not ported |
 | `languages.go` | Go |  | `src/features/settings/pages/languages.tsx` | missing |
 | `languages.go.buildTags` | Build Tags |  | `src/features/settings/pages/languages.tsx` | missing |
 | `languages.go.modules` | Go Modules |  | `src/features/settings/pages/languages.tsx` | missing |

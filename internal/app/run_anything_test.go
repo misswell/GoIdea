@@ -224,7 +224,7 @@ func TestRunAnythingEmptyStates(t *testing.T) {
 
 // The gear menu opens with Run Anything, then a rule, as TitleBar.tsx does.
 func TestGearMenuOpensWithRunAnything(t *testing.T) {
-	g := gearGroup()
+	g := gearGroup(&Model{})
 	if g[0].label != "Run Anything…" || g[0].command != "runAnything.show" {
 		t.Fatalf("first gear item = %+v", g[0])
 	}

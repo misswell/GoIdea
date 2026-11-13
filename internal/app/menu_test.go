@@ -11,7 +11,7 @@ func walkMenu(entries []menuEntry, visit func(menuEntry)) {
 }
 
 func TestMainMenuCommandsResolve(t *testing.T) {
-	for _, groups := range [][]menuEntry{mainMenuGroups(), gearGroup()} {
+	for _, groups := range [][]menuEntry{mainMenuGroups(), gearGroup(&Model{})} {
 		walkMenu(groups, func(e menuEntry) {
 			if e.sep || e.command == "" {
 				return
@@ -78,10 +78,10 @@ func TestRunCommandRunsKnownAndRejectsUnknown(t *testing.T) {
 	if m.RunCommand("no.such.command") {
 		t.Fatalf("unknown command reported as run")
 	}
-	if !m.RunCommand("app.plugins") {
-		t.Fatalf("app.plugins is not in the registry")
+	if !m.RunCommand("plugins.settings") {
+		t.Fatalf("plugins.settings is not in the registry")
 	}
 	if m.welcomePage != "plugins" {
-		t.Fatalf("app.plugins opened page %q", m.welcomePage)
+		t.Fatalf("plugins.settings opened page %q", m.welcomePage)
 	}
 }

@@ -227,7 +227,15 @@
     },
     "settings-page:appearance": {
       "status": "partial",
-      "evidence": "base.settings.theme"
+      "evidence": "base.settings.theme; internal/app/settings_ui.go settingsAppearancePage theme radios, font size and distraction-free width"
+    },
+    "settings-page:keymap": {
+      "status": "partial",
+      "evidence": "internal/app/settings_ui.go settingsKeymapPage lists every registry shortcut; rebinding keys is not ported"
+    },
+    "feature:app": {
+      "status": "partial",
+      "evidence": "internal/app/update.go CheckForUpdates GitHub releases check with version compare and result dialog; download and install are not ported; internal/app/gear_test.go"
     },
     "action:navigate.gotoFile": {
       "status": "integrated",
@@ -492,6 +500,26 @@
     "action:code.joinLines": {
       "status": "integrated",
       "evidence": "internal/app/editor_keys.go Ctrl+Shift+J to editor.JoinLines; internal/app/editor_keys_test.go"
+    },
+    "action:file.settings": {
+      "status": "partial",
+      "evidence": "internal/app/commands.go file.settings; internal/app/settings_ui.go nav + Appearance/Keymap/Java pages; OpenIDEA's remaining settings pages are not ported yet"
+    },
+    "action:plugins.settings": {
+      "status": "partial",
+      "evidence": "internal/app/commands.go plugins.settings -> internal/app/welcome.go plugins page over internal/app/plugins.go registry; internal/app/menu_test.go"
+    },
+    "action:editor.toggleZen": {
+      "status": "integrated",
+      "evidence": "internal/app/zen.go ToggleZen/StepZenWidth/zenWorkbench hints and compact header; prefs Zen/ZenWidth persisted; internal/app/gear_test.go TestViewModeTitleFollowsTheMode, TestZenWidthClamps"
+    },
+    "action:window.toggleFullScreen": {
+      "status": "partial",
+      "evidence": "internal/app/zen.go ToggleFullScreen through mygo Window.ToggleFullScreen; the native full-screen transition is not exercised headless"
+    },
+    "action:toolbar.customize": {
+      "status": "integrated",
+      "evidence": "internal/app/toolbar.go OpenToolbarCustomize/toolbarCustomizeDialog draft with Add/Remove/Move/side switch and Restore Defaults; internal/app/gear_test.go TestToolbarDraftEdits"
     }
   }
 }

@@ -34,7 +34,7 @@ func (m *Model) titleBar(c *ui.Context, p *ui.Theme) {
 	left, right := resolveToolbar(m.prefs.MainToolbar)
 	bar := ui.Row(c).Height(oiTitleBarHeight).Shrink(0).Gap(4).AlignItems(ui.Center).
 		Padding(0, 8, 0, 10)
-	bar.ContextMenu(func(menu *ui.Menu) { m.toolbarCustomizeMenu(menu) })
+	bar.ContextMenu(func(menu *ui.Menu) { m.toolbarCustomizeItems(menu) })
 	bar.Children(func() {
 		for _, id := range left {
 			m.toolbarEntry(c, p, oi, id)
@@ -179,11 +179,7 @@ func (m *Model) gearButton(c *ui.Context, p *ui.Theme, oi oiColors) {
 	b.Children(func() {
 		ui.Icon(c, iconWelcomeGear).Size(20, 20).TextColor(oi.textSecondary)
 	})
-	b.Menu(func(menu *ui.Menu) {
-		addMenuEntries(menu, m, gearGroup())
-		menu.Separator()
-		m.toolbarCustomizeMenu(menu)
-	})
+	b.Menu(func(menu *ui.Menu) { addMenuEntries(menu, m, gearGroup(m)) })
 }
 
 // addMenuEntries fills a MyGo menu with entries of the shared menu model, so
@@ -200,8 +196,13 @@ func addMenuEntries(menu *ui.Menu, m *Model, entries []menuEntry) {
 			if e.check != nil {
 				it.Checked(e.check(m))
 			}
-			if it.Chosen() && e.command != "" {
-				m.RunCommand(e.command)
+			if it.Chosen() {
+				switch {
+				case e.run != nil:
+					e.run(m)
+				case e.command != "":
+					m.RunCommand(e.command)
+				}
 			}
 		}
 	}
@@ -210,6 +211,10 @@ func addMenuEntries(menu *ui.Menu, m *Model, entries []menuEntry) {
 // workbench is the Islands frame: title bar, the stripe and islands of the
 // work area, an optional bottom area across their width, and the status bar.
 func (m *Model) workbench(c *ui.Context, p *ui.Theme) {
+	if m.zen {
+		m.zenWorkbench(c, p)
+		return
+	}
 	oi := oiPaletteOf(p)
 	bottom := m.bottomTool()
 	ui.Column(c).Fill().Background(oi.frame).Children(func() {

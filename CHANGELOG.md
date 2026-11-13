@@ -60,7 +60,6 @@ needs a `## <version>` section here, or its build fails.
 - 终端标签上的 **×** 结束该标签的 shell；关掉最后一个标签时工具窗口收起。
 - 终端可**拆分**成并排或上下的两个窗格，各自带标签和 shell，**合并**把两个窗格收回一个。
 - 菜单栏按 OpenIDEA 重排为 **File**、**Edit**、**View**、**Navigate**、**Code**、**Refactor**、**Build**、**Run**、**Git**、**Tools**、**Window**。
-- 标题栏齿轮菜单改为 OpenIDEA 的 **Settings**、**Plugins**、**Theme** 子菜单和 **Search Everywhere…**。
 - 没有 Git 仓库的项目在标题栏显示 **Version Control** 菜单，可**Clone…** 或打开 **Show Git Log**。
 - 终端里按 **Cmd+F** 打开查找栏，匹配的行会标出，**上一个**/**下一个** 在匹配间循环并滚到该行。
 - 终端输出会自动跟随末尾，向上滚动后停在你查看的位置，回到末尾又继续跟随。
@@ -88,6 +87,13 @@ needs a `## <version>` section here, or its build fails.
 - 项目视图标题栏有**全部展开**和**全部折叠**按钮，不用再打开右键菜单。
 - 标题栏右键或齿轮菜单的 **Customize Main Toolbar** 可以显示或隐藏部件，**Restore Default Toolbar** 还原。
 - 标题栏新增 **Run** 配置控件：选择运行配置、**Run**/**Debug**，运行中变为 **Rerun** 和 **Stop**。
+- 齿轮菜单按 OpenIDEA 顺序列出 **Run Anything…**、**Settings**、**Plugins**、**Theme**、**Keymap**、**View Mode**、**Customize Main Toolbar** 和 **Check for Updates…**。
+- **View Mode** 的 **Enter Distraction Free Mode** 隐藏工具窗口、工具栏和状态栏，把编辑器居中到设定列宽。
+- **Exit Distraction Free Mode** 恢复原布局，模式和列宽会被记住，设置里的 **Appearance** 可调整列宽。
+- **Customize Main Toolbar** 打开左右两栏的部件列表，可用 **Add…** 添加、**Remove** 移除、**Move Up/Down** 排序或换到另一侧。
+- **OK** 保存工具栏改动，**Cancel** 放弃，**Restore Defaults** 还原默认部件。
+- **Check for Updates…** 在后台查询 GitHub 最新版本，显示已是最新、有新版本或检查失败，并可打开发布页。
+- **Settings** 改为左侧分类、右侧内容的弹窗，包含 **Appearance**、**Keymap** 和 **Java** 页面。
 
 ## 0.19.3
 

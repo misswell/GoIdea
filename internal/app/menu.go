@@ -13,7 +13,10 @@ type menuEntry struct {
 	accel   string
 	sep     bool
 	check   func(*Model) bool
-	sub     []menuEntry
+	// run is the entry's action when it is not a registry command, as the
+	// toolbar checkboxes and the theme and keymap picks are.
+	run func(*Model)
+	sub []menuEntry
 }
 
 // action is a menu item that runs a registry command.
@@ -92,7 +95,7 @@ func mainMenuGroups() []menuEntry {
 			rule(),
 			action("Manage Projects…", "welcome.manageProjects", ""),
 			rule(),
-			action("Settings…", "app.settings", "CmdOrCtrl+,"),
+			action("Settings…", "file.settings", "CmdOrCtrl+,"),
 		),
 		submenu("Edit",
 			platform(mygo.RoleUndo),
@@ -219,23 +222,68 @@ func mainMenuGroups() []menuEntry {
 	}
 }
 
-// gearGroup is the gear menu of OpenIDEA's TitleBar.tsx: settings, plugins,
-// the theme and keymap quick switches, and the palette.
-func gearGroup() []menuEntry {
+// gearGroup is the gear menu of OpenIDEA's TitleBar.tsx gearMenuItems: Run
+// Anything, Settings and Plugins, then the Theme, Keymap and View Mode quick
+// switches, then the toolbar customization and the update check.
+func gearGroup(m *Model) []menuEntry {
 	return []menuEntry{
 		action("Run Anything…", "runAnything.show", ""),
 		rule(),
-		action("Settings…", "app.settings", "CmdOrCtrl+,"),
-		action("Plugins…", "app.plugins", ""),
+		action("Settings…", "file.settings", "CmdOrCtrl+,"),
+		action("Plugins…", "plugins.settings", ""),
 		rule(),
 		submenu("Theme",
 			actionChecked("Light", "app.themeLight", func(m *Model) bool { return m.prefs.Theme == "light" }),
 			actionChecked("Dark", "app.themeDark", func(m *Model) bool { return m.prefs.Theme == "dark" }),
 			actionChecked("Use System Settings", "app.themeSystem", func(m *Model) bool { return m.prefs.Theme == "" || m.prefs.Theme == "system" }),
+			rule(),
+			action("Appearance…", "settings.appearance", ""),
+		),
+		submenu("Keymap",
+			menuEntry{label: keymapPresetTitle, check: func(*Model) bool { return true }},
+			rule(),
+			action("Configure Keymap…", "settings.keymap", ""),
+		),
+		submenu("View Mode",
+			menuEntry{label: zenTitle(m), command: "editor.toggleZen"},
+			action("Toggle Full Screen", "window.toggleFullScreen", "CmdOrCtrl+Ctrl+F"),
 		),
 		rule(),
-		action("Search Everywhere…", "app.commandPalette", "CmdOrCtrl+Shift+A"),
+		submenu("Customize Main Toolbar", m.customizeToolbarEntries()...),
+		rule(),
+		action("Check for Updates…", "app.checkForUpdates", ""),
 	}
+}
+
+// keymapPresetTitle is the one keymap preset GoIDEA carries, named as
+// OpenIDEA's PRESET_TITLES names IntelliJ's macOS map.
+const keymapPresetTitle = "macOS"
+
+// zenTitle is Enter/Exit Distraction Free Mode, the title following the mode
+// as OpenIDEA's dynamic action title does.
+func zenTitle(m *Model) string {
+	if m.zen {
+		return "Exit Distraction Free Mode"
+	}
+	return "Enter Distraction Free Mode"
+}
+
+// customizeToolbarEntries is Customize Main Toolbar's body: a checkbox per
+// entry, shown and hidden alike, then the dialog and Restore Default Toolbar.
+func (m *Model) customizeToolbarEntries() []menuEntry {
+	var entries []menuEntry
+	for _, id := range m.toolbarEntries() {
+		id := id
+		entries = append(entries, menuEntry{
+			label: toolbarTitle(id),
+			check: func(mm *Model) bool { return mm.toolbarShows(id) },
+			run:   func(mm *Model) { mm.toggleToolbarWidget(id) },
+		})
+	}
+	return append(entries, rule(),
+		menuEntry{label: "Customize Toolbar…", run: func(mm *Model) { mm.OpenToolbarCustomize() }},
+		menuEntry{label: "Restore Default Toolbar", run: func(mm *Model) { mm.RestoreDefaultToolbar() }},
+	)
 }
 
 // MainMenu is the application's menu bar, the one OpenIDEA builds from its
@@ -256,13 +304,18 @@ func menuItems(m *Model, groups []menuEntry) []*mygo.MenuItem {
 		if len(g.sub) > 0 {
 			it.Submenu = menuItems(m, g.sub)
 		}
-		if g.command != "" {
+		if g.check != nil && g.check(m) {
+			it.Checked = true
+		}
+		switch {
+		case g.command != "":
 			it.ID = "menu." + g.command
 			id := g.command
 			it.Click = func(*mygo.MenuItem, *mygo.Window) { m.RunCommand(id) }
-			if g.check != nil && g.check(m) {
-				it.Checked = true
-			}
+		case g.run != nil:
+			it.ID = "menu.custom"
+			run := g.run
+			it.Click = func(*mygo.MenuItem, *mygo.Window) { run(m) }
 		}
 		items = append(items, it)
 	}
