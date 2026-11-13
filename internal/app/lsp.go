@@ -514,6 +514,10 @@ func (m *Model) SmokeLSP(ctx context.Context) (map[string]any, error) {
 
 	// Reformatting goes the other way: the server's edits reach the buffer.
 	out["format"] = m.smokeFormat(ctx, t)
+
+	// A rename goes through the backend's workspace edit, which reaches open
+	// documents as backend changes.
+	out["rename"] = m.smokeRename(ctx, t)
 	return out, nil
 }
 
@@ -554,6 +558,108 @@ func (m *Model) smokeFormat(ctx context.Context, t *Tab) any {
 		case <-time.After(200 * time.Millisecond):
 		}
 	}
+}
+
+// smokeRename adds a class with a method to the tab's text without saving it,
+// renames the method through the prompt's path, and waits for the backend's
+// workspace edit to change the buffer.
+func (m *Model) smokeRename(ctx context.Context, t *Tab) any {
+	text := t.doc.Text()
+	const helper = "\nclass SmokeRenameHelper { static int smokeValue() { return 1; } }\n"
+	if err := t.doc.ApplyEdits(ctx, editor.Edit{Start: len(text), End: len(text), Text: helper}); err != nil {
+		return map[string]any{"error": err.Error()}
+	}
+	defer func() {
+		_ = t.doc.ApplyEdits(context.Background(), editor.Edit{Start: 0, End: len(t.doc.Text()), Text: text})
+	}()
+	at := strings.Index(t.doc.Text(), "smokeValue")
+	if at < 0 {
+		return map[string]any{"error": "fixture"}
+	}
+	start := time.Now()
+	mygo.RunOnMain(func() {
+		t.state.Select(at+2, at+2)
+		m.RenameActive()
+	})
+	deadline := time.Now().Add(150 * time.Second)
+	var old string
+	for {
+		var opened bool
+		mygo.RunOnMain(func() {
+			opened = m.rename != nil
+			if opened {
+				old = m.rename.old
+			}
+		})
+		if opened {
+			break
+		}
+		if time.Now().After(deadline) {
+			return map[string]any{"timeout": "prompt", "status": m.smokeStatus()}
+		}
+		select {
+		case <-ctx.Done():
+			return map[string]any{"error": ctx.Err().Error()}
+		case <-time.After(200 * time.Millisecond):
+		}
+	}
+	if old != "smokeValue" {
+		return map[string]any{"error": "prompt did not find smokeValue", "old": old}
+	}
+	mygo.RunOnMain(func() {
+		m.rename.name = "smokeNumber"
+		m.submitRename()
+	})
+	for {
+		cur := t.doc.Text()
+		if strings.Contains(cur, "smokeNumber") {
+			tail := cur
+			if len(tail) > 120 {
+				tail = tail[len(tail)-120:]
+			}
+			return map[string]any{
+				"old":           old,
+				"status":        m.smokeStatus(),
+				"tail":          tail,
+				"elapsedMillis": time.Since(start).Milliseconds(),
+			}
+		}
+		// An edit upstream marks for preview waits for the confirmation the
+		// prompt's button sends; the smoke confirms it as a user would.
+		var pending bool
+		mygo.RunOnMain(func() {
+			pending = m.rename != nil && len(m.rename.pending) > 0
+			if pending {
+				m.applyRename()
+			}
+		})
+		if time.Now().After(deadline) {
+			var errText string
+			var busy bool
+			var files int
+			mygo.RunOnMain(func() {
+				if m.rename != nil {
+					errText, busy, files = m.rename.err, m.rename.busy, m.rename.files
+				}
+			})
+			return map[string]any{
+				"timeout": "apply", "status": m.smokeStatus(), "err": errText,
+				"busy": busy, "files": files, "elapsedMillis": time.Since(start).Milliseconds(),
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return map[string]any{"error": ctx.Err().Error()}
+		case <-time.After(200 * time.Millisecond):
+		}
+	}
+}
+
+// smokeStatus reads the status line on the main thread, where it is written.
+func (m *Model) smokeStatus() string {
+	var s string
+	mygo.RunOnMain(func() { s = m.status })
+	return s
 }
 
 // smokeDiagnostic is one diagnostic the smoke found shown in the editor.

@@ -98,6 +98,9 @@ type Model struct {
 	// the tabs of that document show.
 	diags map[*docbridge.Document]map[string][]openidea.Diagnostic
 
+	// rename is the open rename prompt, or nil.
+	rename *renameState
+
 	// sideMode picks what the sidebar shows: "tree" ("" also means tree, the
 	// default), "vcs" or "search".
 	sideMode string
@@ -440,6 +443,7 @@ func (m *Model) openProject(dir string, files []string) {
 		focus := m.session().Focus
 		m.post(func() {
 			m.clearDiagnostics()
+			m.rename = nil
 			m.tabs = m.tabs[:0]
 			for _, doc := range docs {
 				m.tabs = append(m.tabs, m.newTab(doc))
@@ -623,6 +627,9 @@ func (m *Model) removeTab(t *Tab) {
 	}
 	m.tabs = append(m.tabs[:idx], m.tabs[idx+1:]...)
 	m.forgetDiagnostics(t.doc)
+	if m.rename != nil && m.rename.tab == t {
+		m.rename = nil
+	}
 	if m.active >= len(m.tabs) {
 		m.active = len(m.tabs) - 1
 	}
@@ -953,6 +960,7 @@ func (m *Model) View(c *ui.Context) {
 		})
 		m.statusBar(c, p)
 	})
+	m.renameDialog(c, p)
 }
 
 func (m *Model) shortcuts(c *ui.Context) {

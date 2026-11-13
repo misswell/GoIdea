@@ -434,3 +434,26 @@ type TextEdit struct {
 	Range   OutlineRange `json:"range"`
 	NewText string       `json:"new_text"`
 }
+
+// Renamed is lsp_rename's answer: the edit that would rename the symbol, left
+// unapplied so the UI can show what it touches. Preview asks for confirmation
+// before it is applied, and Incomplete names what the rename may have missed.
+type Renamed struct {
+	Preview    bool            `json:"preview"`
+	Edit       json.RawMessage `json:"edit"`
+	Incomplete *string         `json:"incomplete"`
+}
+
+// WorkspaceEditInfo is the part of a workspace edit the UI previews: which
+// files it edits, and for renamed or deleted ones, which paths it moves.
+type WorkspaceEditInfo struct {
+	Files []FileEditInfo `json:"files"`
+}
+
+// FileEditInfo is one file of a workspace edit.
+type FileEditInfo struct {
+	Kind string `json:"kind"`
+	Path string `json:"path"`
+	From string `json:"from"`
+	To   string `json:"to"`
+}
