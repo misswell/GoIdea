@@ -311,6 +311,8 @@ type Model struct {
 	history *historyState
 	// dirCompare is the open Compare Directories sheet, or nil.
 	dirCompare *dirCompareState
+	// annotate is the open Annotate sheet, or nil.
+	annotate *annotateState
 
 	run       RunPane
 	debug     DebugPane
@@ -1624,6 +1626,7 @@ func (m *Model) View(c *ui.Context) {
 	m.commandsDialog(c, p)
 	m.runAnythingDialog(c, p)
 	m.diffDialog(c, p)
+	m.annotateDialog(c, p)
 	m.dbDialog(c, p)
 	m.commitDialog(c, p)
 	m.settingsDialog(c, p)

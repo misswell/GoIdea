@@ -77,7 +77,7 @@ GoIDEA can rely on it; code that calls it must check `commands` first.
 | Syntax trees | `syntax` | 9 | 0 | 0 |
 | Terminal | `term` | 8 | 0 | 4 |
 | Toolchains | `tools` | 7 | 0 | 3 |
-| Version control | `vcs` | 82 | 0 | 15 |
+| Version control | `vcs` | 82 | 0 | 16 |
 | Web preview | `web` | 0 | 3 | 0 |
 | Window and menu | `window` | 0 | 33 | 0 |
 | Window drag | `window_drag` | 0 | 1 | 0 |
@@ -88,7 +88,7 @@ GoIDEA can rely on it; code that calls it must check `commands` first.
 ## Served by `openidea-server --stdio`
 
 446 commands. `GoIDEA` marks the ones a non-test Go source invokes today
-(85 of 446).
+(86 of 446).
 
 | Command | Domain | Arguments | GoIDEA |
 | --- | --- | --- | --- |
@@ -457,7 +457,7 @@ GoIDEA can rely on it; code that calls it must check `commands` first.
 | `vcs_add_to_ignore` | Version control | `destination`, `paths` | — |
 | `vcs_add_worktree` | Version control | `commitish`, `newBranch`, `path`, `repo` | — |
 | `vcs_apply_patch` | Version control | `patch`, `repo` | — |
-| `vcs_blame` | Version control | `path`, `revision`, `text` | — |
+| `vcs_blame` | Version control | `path`, `revision`, `text` | yes |
 | `vcs_block_history` | Version control | `lines`, `path`, `request`, `text` | — |
 | `vcs_branch_info` | Version control | `repo` | yes |
 | `vcs_branches` | Version control | `repo` | yes |
@@ -738,7 +738,7 @@ GoIDEA needs to do for each:
 
 ## What this means for GoIDEA
 
-446 remote commands are available today; GoIDEA uses 85. The parity work is
+446 remote commands are available today; GoIDEA uses 86. The parity work is
 first to cover the remote surface OpenIDEA's own frontend uses, then to move
 `shared-op`/`host`/`crate` commands onto stdio through the OpenIDEA fork
 (a submodule bump and a server release), and to implement `desktop` commands

@@ -390,6 +390,16 @@ type FileStatus struct {
 	RenamedFrom *string `json:"renamedFrom"`
 }
 
+// BlameLine is one line of vcs_blame: the commit that last touched it, its
+// author, the commit time, and its summary. An all-zero commit means the line
+// is not committed yet.
+type BlameLine struct {
+	Commit  string  `json:"commit"`
+	Author  string  `json:"author"`
+	TimeMs  float64 `json:"timeMs"`
+	Summary string  `json:"summary"`
+}
+
 // CommitOptions is what vcs_commit does beyond the message: amend rewrites the
 // previous commit, signOff adds a Signed-off-by line, author overrides the
 // configured user, runHooks runs the Git hooks, stage commits files with their

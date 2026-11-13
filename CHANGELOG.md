@@ -35,6 +35,7 @@ needs a `## <version>` section here, or its build fails.
 - 标签页右键菜单新增 **Compare with Clipboard**，把当前内容与剪贴板里的文本比较。
 - 项目内文件的标签页右键菜单新增 **Git** 子菜单：**Commit File…** 只提交该文件，新文件也能一起提交。
 - **Git** 子菜单还有 **Add**、**Show Diff**、**Show History**、**Rollback…** 和 **Branches…**。
+- **Git** 子菜单新增 **Annotate**，按提交分组列出每一行最后是哪次提交、谁、何时改的。
 - 编辑器的右键菜单新增 **Show Context Actions**、**Copy / Paste Special**、**Go To**、**Reformat Code** 和 **Rename…**。
 - **Copy Path/Reference** 可复制编辑器的绝对路径、文件名、项目内路径和带行号的路径。
 - **Editor > Editor Tabs** 可选择关闭当前标签页后激活哪个：左边的、右边的或最近打开的。

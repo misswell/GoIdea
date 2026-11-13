@@ -1537,6 +1537,9 @@ func (m *Model) tabGitMenu(menu *ui.Menu, path string) {
 		m.StageChange(f)
 	}
 	menu.Separator()
+	if menu.Item("Annotate").Chosen() {
+		m.ShowAnnotate(path)
+	}
 	if menu.Item("Show Diff").Chosen() {
 		m.ShowDiff(path)
 	}
