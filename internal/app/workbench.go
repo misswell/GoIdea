@@ -764,6 +764,7 @@ func (m *Model) editorTabs(c *ui.Context, p *ui.Theme, oi oiColors) {
 	if len(m.tabs) == 0 || m.tabPrefs.Hidden() {
 		return
 	}
+	m.applyTabDrop()
 	pinned := 0
 	for _, t := range m.tabs {
 		if t.pinned {
@@ -935,11 +936,18 @@ func (m *Model) verticalTabs(c *ui.Context, p *ui.Theme, oi oiColors) {
 // tabButtons draws tabs in a row, offset being the first tab's index in the
 // strip. A squeezed strip lets the labels ellipsize down to the tab's fixed
 // parts; a vertical strip always ellipsizes, its tabs full width and only 24
-// high. A change of active tab scrolls the new one into view.
+// high. A change of active tab scrolls the new one into view. A tab dragged
+// along its row, as OpenIDEA's Tabs drags it, leaves its slot where it would
+// drop while the others make room, and a ghost of it hangs from the pointer.
 func (m *Model) tabButtons(c *ui.Context, p *ui.Theme, oi oiColors, tabs []*Tab, offset int, reveal, vertical bool) {
 	squeeze := m.tabPrefs.SqueezeTabs || vertical
-	for j, t := range tabs {
-		i, t := offset+j, t
+	from := m.tabDrag.From - offset
+	lifted := !vertical && m.tabDrag.Lifted && from >= 0 && from < len(tabs)
+	order := tabOrder(len(tabs), from, m.tabDrag.To-offset, lifted)
+	var rects []ui.Rect
+	var others []int
+	for _, j := range order {
+		i, t := offset+j, tabs[j]
 		height := oiTabHeight
 		if vertical {
 			height = oiTabColumnTab
@@ -949,7 +957,10 @@ func (m *Model) tabButtons(c *ui.Context, p *ui.Theme, oi oiColors, tabs []*Tab,
 		if vertical {
 			tab.MinWidth(0)
 		}
-		if i == m.active {
+		slot := lifted && j == from
+		if slot {
+			tab.Width(m.tabDrag.W).Background(oi.toolbarHover)
+		} else if i == m.active {
 			if reveal {
 				tab.ScrollIntoView()
 			}
@@ -957,61 +968,240 @@ func (m *Model) tabButtons(c *ui.Context, p *ui.Theme, oi oiColors, tabs []*Tab,
 		} else if tab.Hovered() {
 			tab.Background(oi.toolbarHover)
 		}
-		if !m.tabPrefs.HideFullPathOnHover {
-			if path := tabPath(t); path != "" {
-				tab.Tooltip(path)
+		if !slot {
+			if !m.tabPrefs.HideFullPathOnHover {
+				if path := tabPath(t); path != "" {
+					tab.Tooltip(path)
+				}
+			}
+			name, dir := m.tabLabel(t)
+			tab.Children(func() {
+				closeButton := func() {
+					close := ui.Row(c).Size(20, 20).Radius(4).
+						AlignItems(ui.Center).Justify(ui.Center)
+					if close.Hovered() {
+						close.Background(oi.hover)
+					}
+					close.Children(func() {
+						ui.Icon(c, iconClose).Size(14, 14).TextColor(oi.textMuted)
+					})
+					if close.Clicked() {
+						m.closeTab(i)
+					}
+				}
+				if !m.tabPrefs.NoCloseButton && m.tabPrefs.CloseButtonLeft {
+					closeButton()
+				}
+				if !m.tabPrefs.HideFileIcon {
+					ui.Icon(c, iconFile).Size(14, 14).TextColor(oi.textMuted)
+				}
+				if t.dirty() {
+					ui.Text(c, "●").FontSize(9).TextColor(oi.accent)
+				}
+				label := ui.Text(c, name).FontSize(13).TextColor(oi.text).SingleLine()
+				if squeeze {
+					label = label.MinWidth(0).Ellipsis("…")
+				}
+				if t.preview {
+					label = label.Italic()
+				}
+				if dir != "" {
+					dirText := ui.Text(c, dir).FontSize(13).TextColor(oi.textFaint).
+						PaddingStart(4).SingleLine()
+					if squeeze {
+						dirText.MinWidth(0).Ellipsis("…")
+					}
+				}
+				if t.pinned {
+					ui.Icon(c, iconPin).Size(11, 11).TextColor(oi.textMuted)
+				}
+				if !m.tabPrefs.NoCloseButton && !m.tabPrefs.CloseButtonLeft {
+					closeButton()
+				}
+			})
+			tab.ContextMenu(func(menu *ui.Menu) { m.tabMenu(menu, t) })
+			if tab.Clicked() {
+				m.activate(i)
 			}
 		}
-		name, dir := m.tabLabel(t)
-		tab.Children(func() {
-			closeButton := func() {
-				close := ui.Row(c).Size(20, 20).Radius(4).
-					AlignItems(ui.Center).Justify(ui.Center)
-				if close.Hovered() {
-					close.Background(oi.hover)
-				}
-				close.Children(func() {
-					ui.Icon(c, iconClose).Size(14, 14).TextColor(oi.textMuted)
-				})
-				if close.Clicked() {
-					m.closeTab(i)
-				}
+		if !vertical {
+			if b := tab.Bounds(); b.W > 0 {
+				rects = append(rects, b)
+				others = append(others, j)
 			}
-			if !m.tabPrefs.NoCloseButton && m.tabPrefs.CloseButtonLeft {
-				closeButton()
-			}
+			m.tabDragPress(tab, i)
+		}
+	}
+	if !lifted {
+		return
+	}
+	if len(others) > 0 {
+		to := tabDropIndex(m.tabDrag.At.X, m.tabDrag.At.Y, rects)
+		m.tabDrag.To = offset + len(tabs)
+		if to < len(others) {
+			m.tabDrag.To = offset + others[to]
+		}
+	}
+	m.tabGhost(c, oi, tabs[from])
+}
+
+// tabDragState is the tab the pointer holds: where it would drop, the point
+// and box the press took it from, and where the pointer is now. Held turns
+// false once the pointer lets go; Lifted marks the tab that left the strip.
+type tabDragState struct {
+	Held   bool
+	Lifted bool
+	From   int // strip index of the tab pressed
+	To     int // insertion index in its row the tab would drop at
+	Press  ui.Point
+	At     ui.Point // the pointer now, in window DIPs
+	Grab   ui.Point // where in the tab the press took it
+	W, H   float32
+}
+
+// tabDragPress follows a pressed tab, as OpenIDEA's Tabs does: once the
+// pointer moves past its threshold the tab lifts out of the strip, and
+// letting go drops it where the strip made room.
+func (m *Model) tabDragPress(tab ui.Element, i int) {
+	dx, dy, pressed := tab.Dragged()
+	if !pressed {
+		if m.tabDrag.Held {
+			m.tabDrag.Held = false
+			m.invalidate()
+		}
+		return
+	}
+	if !m.tabDrag.Held {
+		lx, ly, _ := tab.PointerPosition()
+		b := tab.Bounds()
+		m.tabDrag = tabDragState{
+			Held: true, From: i, To: i,
+			Press: ui.Point{X: b.X + lx, Y: b.Y + ly},
+			At:    ui.Point{X: b.X + lx, Y: b.Y + ly},
+			Grab:  ui.Point{X: lx, Y: ly},
+			W:     b.W, H: b.H,
+		}
+		return
+	}
+	if m.tabDrag.From != i {
+		return
+	}
+	m.tabDrag.At = ui.Point{X: m.tabDrag.Press.X + dx, Y: m.tabDrag.Press.Y + dy}
+	if !m.tabDrag.Lifted {
+		ax, ay := m.tabDrag.At.X-m.tabDrag.Press.X, m.tabDrag.At.Y-m.tabDrag.Press.Y
+		m.tabDrag.Lifted = ax*ax+ay*ay > 16
+	}
+}
+
+// applyTabDrop drops a lifted tab whose pointer let go where the strip made room
+// for it. Strips call it before they take their rows, so the drop lands
+// between frames and the rows draw in the new order.
+func (m *Model) applyTabDrop() {
+	d := m.tabDrag
+	if d.Held || !d.Lifted {
+		return
+	}
+	m.tabDrag = tabDragState{}
+	if d.From >= 0 && d.From < len(m.tabs) {
+		m.tabs, m.active = reorderTabs(m.tabs, m.active, d.From, d.To)
+	}
+}
+
+// tabOrder returns the local places 0..n-1 that draw in order, with the tab
+// at from spliced to insertion index to once lifted, as previewOrder splices
+// it: to past from counts the tab itself, so dropping right after it keeps
+// the strip as it was.
+func tabOrder(n, from, to int, lifted bool) []int {
+	order := make([]int, 0, n)
+	for j := 0; j < n; j++ {
+		if lifted && j == from {
+			continue
+		}
+		order = append(order, j)
+	}
+	if !lifted {
+		return order
+	}
+	at := to
+	if to > from {
+		at--
+	}
+	at = max(0, min(at, len(order)))
+	order = append(order, 0)
+	copy(order[at+1:], order[at:])
+	order[at] = from
+	return order
+}
+
+// reorderTabs returns tabs with the one at from moved to insertion index to
+// and where the active tab went, as tabOrder draws it.
+func reorderTabs(tabs []*Tab, active, from, to int) ([]*Tab, int) {
+	if from < 0 || from >= len(tabs) || to < 0 || to > len(tabs) || to == from || to == from+1 {
+		return tabs, active
+	}
+	order := tabOrder(len(tabs), from, to, true)
+	ordered := make([]*Tab, len(tabs))
+	at := active
+	for j, i := range order {
+		ordered[j] = tabs[i]
+		if i == active {
+			at = j
+		}
+	}
+	return ordered, at
+}
+
+// tabDropIndex is OpenIDEA's dropIndex: the insertion index for a drop at
+// (x, y) among boxes laid out in reading order, possibly wrapped into rows.
+// Above or below the tabs counts as their first or last row.
+func tabDropIndex(x, y float32, rects []ui.Rect) int {
+	first, last := rects[0], rects[len(rects)-1]
+	py := max(first.Y, min(y, last.Y+last.H-1))
+	for i, r := range rects {
+		if py < r.Y || (py < r.Y+r.H && x < r.X+r.W/2) {
+			return i
+		}
+	}
+	return len(rects)
+}
+
+// tabGhost draws the tab the pointer lifted over the workbench, as OpenIDEA's
+// drag ghost: the tab's face on the popup colour a little translucent, above
+// the rest of the window.
+func (m *Model) tabGhost(c *ui.Context, oi oiColors, t *Tab) {
+	d := m.tabDrag
+	ui.Overlay(c, func() {
+		g := ui.Row(c.Key("tabGhost")).Absolute().
+			Left(d.At.X-d.Grab.X).Top(d.At.Y-d.Grab.Y).
+			Width(d.W).Height(d.H).
+			Padding(0, 10).Gap(6).Radius(6).AlignItems(ui.Center).
+			Background(oi.popup).BorderWidth(1).BorderColor(oi.borderStrong).
+			Shadow(0, 8, 24, 0, ui.RGBA(0, 0, 0, 0.35)).Opacity(0.85)
+		g.Children(func() {
 			if !m.tabPrefs.HideFileIcon {
 				ui.Icon(c, iconFile).Size(14, 14).TextColor(oi.textMuted)
 			}
 			if t.dirty() {
 				ui.Text(c, "●").FontSize(9).TextColor(oi.accent)
 			}
-			label := ui.Text(c, name).FontSize(13).TextColor(oi.text).SingleLine()
-			if squeeze {
-				label = label.MinWidth(0).Ellipsis("…")
-			}
+			name, dir := m.tabLabel(t)
+			label := ui.Text(c, name).FontSize(13).TextColor(oi.text).
+				SingleLine().MinWidth(0).Ellipsis("…")
 			if t.preview {
 				label = label.Italic()
 			}
 			if dir != "" {
-				dirText := ui.Text(c, dir).FontSize(13).TextColor(oi.textFaint).
-					PaddingStart(4).SingleLine()
-				if squeeze {
-					dirText.MinWidth(0).Ellipsis("…")
-				}
+				ui.Text(c, dir).FontSize(13).TextColor(oi.textFaint).
+					PaddingStart(4).SingleLine().MinWidth(0).Ellipsis("…")
 			}
 			if t.pinned {
 				ui.Icon(c, iconPin).Size(11, 11).TextColor(oi.textMuted)
 			}
-			if !m.tabPrefs.NoCloseButton && !m.tabPrefs.CloseButtonLeft {
-				closeButton()
+			if !m.tabPrefs.NoCloseButton {
+				ui.Icon(c, iconClose).Size(14, 14).TextColor(oi.textMuted)
 			}
 		})
-		tab.ContextMenu(func(menu *ui.Menu) { m.tabMenu(menu, t) })
-		if tab.Clicked() {
-			m.activate(i)
-		}
-	}
+	})
 }
 
 // emptyEditor is IDEA's empty editor: navigation hints on the left of their

@@ -3,6 +3,8 @@ package app
 import (
 	"fmt"
 	"testing"
+
+	"github.com/egoist/mygo/ui"
 )
 
 func strip(tabs ...*Tab) []*Tab { return tabs }
@@ -291,5 +293,85 @@ func TestTabMenuRowsNumberTheStripAndMarkTheActiveTab(t *testing.T) {
 	}
 	if rows[0].Active || !rows[1].Active || rows[2].Active {
 		t.Fatalf("active rows = %v %v %v", rows[0].Active, rows[1].Active, rows[2].Active)
+	}
+}
+
+func wantPlaces(t *testing.T, got []int, want ...int) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("got places %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("got places %v, want %v", got, want)
+		}
+	}
+}
+
+func TestTabOrderSplicesTheLiftedTabIntoItsDrop(t *testing.T) {
+	// previewOrder removes the dragged id and splices it at index, and an
+	// index past the dragged tab counts the tab itself.
+	wantPlaces(t, tabOrder(4, 0, 3, true), 1, 2, 0, 3)
+	wantPlaces(t, tabOrder(4, 3, 1, true), 0, 3, 1, 2)
+	wantPlaces(t, tabOrder(4, 1, 1, true), 0, 1, 2, 3)
+	wantPlaces(t, tabOrder(4, 1, 2, true), 0, 1, 2, 3)
+	wantPlaces(t, tabOrder(3, 2, 0, true), 2, 0, 1)
+	wantPlaces(t, tabOrder(3, 0, 3, true), 1, 2, 0)
+	wantPlaces(t, tabOrder(3, 1, 2, false), 0, 1, 2)
+}
+
+func TestReorderTabsMovesTheTabAndFollowsTheActiveOne(t *testing.T) {
+	a, b, c, d := &Tab{}, &Tab{}, &Tab{}, &Tab{}
+
+	tabs, at := reorderTabs(strip(a, b, c, d), 3, 3, 1)
+	wantOrder(t, tabs, a, d, b, c)
+	if at != 1 {
+		t.Fatalf("active at %d, want 1", at)
+	}
+
+	tabs, at = reorderTabs(strip(a, b, c, d), 0, 0, 4)
+	wantOrder(t, tabs, b, c, d, a)
+	if at != 3 {
+		t.Fatalf("active at %d, want 3", at)
+	}
+
+	// Dropping a tab back onto its own place leaves the strip alone.
+	tabs, at = reorderTabs(strip(a, b, c, d), 2, 1, 2)
+	wantOrder(t, tabs, a, b, c, d)
+	if at != 2 {
+		t.Fatalf("active at %d, want 2", at)
+	}
+	tabs, at = reorderTabs(strip(a, b, c, d), 2, 1, 1)
+	wantOrder(t, tabs, a, b, c, d)
+	if at != 2 {
+		t.Fatalf("active at %d, want 2", at)
+	}
+}
+
+func TestTabDropIndexTakesTheRowAndTheSlotMidpoint(t *testing.T) {
+	// Two wrapped rows of two 100-wide tabs.
+	rects := []ui.Rect{
+		{X: 0, Y: 0, W: 100, H: 28},
+		{X: 102, Y: 0, W: 100, H: 28},
+		{X: 0, Y: 30, W: 100, H: 28},
+		{X: 102, Y: 30, W: 100, H: 28},
+	}
+	cases := []struct {
+		x, y float32
+		want int
+	}{
+		{10, 10, 0},
+		{60, 10, 1},
+		{170, 10, 2},
+		{10, 40, 2},
+		{60, 40, 3},
+		{170, 40, 4},
+		{10, -20, 0},
+		{170, 200, 4},
+	}
+	for _, c := range cases {
+		if got := tabDropIndex(c.x, c.y, rects); got != c.want {
+			t.Fatalf("tabDropIndex(%v, %v) = %d, want %d", c.x, c.y, got, c.want)
+		}
 	}
 }

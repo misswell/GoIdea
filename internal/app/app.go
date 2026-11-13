@@ -137,6 +137,10 @@ type Model struct {
 	// that a strip shows only while its tabs run past its width.
 	tabsMenuOpen bool
 
+	// tabDrag is the tab the pointer has lifted out of the strip: the strip
+	// leaves a slot where it would drop and a ghost of it follows the pointer.
+	tabDrag tabDragState
+
 	// diags is the newest diagnostics per file path and producer, which the
 	// tabs of that file and the Problems tool window show.
 	diags map[string]map[string][]openidea.Diagnostic
