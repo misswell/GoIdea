@@ -318,11 +318,23 @@ type Preferences struct {
 	// and ZenWidth is its text column in columns; zero is the default.
 	Zen      bool `json:"distractionFree,omitempty"`
 	ZenWidth int  `json:"distractionFreeWidth,omitempty"`
+	// Editor are Settings › Editor › Appearance, whose toggles are on by
+	// default; the inverse names keep the zero value meaning that.
+	Editor EditorAppearance `json:"editor,omitempty"`
 	// MainToolbar is the title bar's saved layout, nil for the default one.
 	MainToolbar *toolbarLayout `json:"mainToolbar,omitempty"`
 	// Plugins are each plugin's settings, by name, under the same "plugins"
 	// key Mayoi uses; a plugin's "enabled" lives there.
 	Plugins map[string]json.RawMessage `json:"plugins,omitempty"`
+}
+
+// EditorAppearance is what Settings › Editor › Appearance shows, as
+// editor.appearance.* and editor.showWhitespace are stored. The fields are
+// the off switches, so the zero value is IDEA's default appearance.
+type EditorAppearance struct {
+	NoLineNumbers  bool `json:"noLineNumbers,omitempty"`
+	ShowWhitespace bool `json:"showWhitespace,omitempty"`
+	NoIndentGuides bool `json:"noIndentGuides,omitempty"`
 }
 
 const (

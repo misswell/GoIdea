@@ -42,11 +42,24 @@ const (
 
 // settingsDraft is the value of each staged setting. The zero value follows
 // the system's appearance; the font size is in points and the distraction
-// free text width in columns.
+// free text width in columns. The appearance switches are the shown state, the
+// way the page reads, while the stored fields are the off switches.
 type settingsDraft struct {
-	theme    string
-	fontSize float32
-	zenWidth int
+	theme          string
+	fontSize       float32
+	zenWidth       int
+	lineNumbers    bool
+	showWhitespace bool
+	indentGuides   bool
+}
+
+// appearance is the staged switches as the editor stores them.
+func (d settingsDraft) appearance() EditorAppearance {
+	return EditorAppearance{
+		NoLineNumbers:  !d.lineNumbers,
+		ShowWhitespace: d.showWhitespace,
+		NoIndentGuides: !d.indentGuides,
+	}
 }
 
 // settingsPageSpec is a settings page this build carries: what
@@ -489,9 +502,12 @@ func (m *Model) settingsToggleNode(key string) {
 // settingsDraftFromPrefs is the stored settings as the dialog stages them.
 func (m *Model) settingsDraftFromPrefs() settingsDraft {
 	return settingsDraft{
-		theme:    m.prefs.Theme,
-		fontSize: m.prefs.fontSize(),
-		zenWidth: m.prefs.zenWidth(),
+		theme:          m.prefs.Theme,
+		fontSize:       m.prefs.fontSize(),
+		zenWidth:       m.prefs.zenWidth(),
+		lineNumbers:    !m.prefs.Editor.NoLineNumbers,
+		showWhitespace: m.prefs.Editor.ShowWhitespace,
+		indentGuides:   !m.prefs.Editor.NoIndentGuides,
 	}
 }
 
@@ -530,10 +546,39 @@ func (m *Model) settingsSetZenWidth(width int) {
 	m.invalidate()
 }
 
-// settingsPreview draws the staged theme and font in this window.
+// settingsSetLineNumbers stages the Show line numbers switch.
+func (m *Model) settingsSetLineNumbers(on bool) {
+	if m.settingsDraft.lineNumbers == on {
+		return
+	}
+	m.settingsDraft.lineNumbers = on
+	m.settingsPreview()
+}
+
+// settingsSetShowWhitespace stages the Show whitespaces switch.
+func (m *Model) settingsSetShowWhitespace(on bool) {
+	if m.settingsDraft.showWhitespace == on {
+		return
+	}
+	m.settingsDraft.showWhitespace = on
+	m.settingsPreview()
+}
+
+// settingsSetIndentGuides stages the Show indent guides switch.
+func (m *Model) settingsSetIndentGuides(on bool) {
+	if m.settingsDraft.indentGuides == on {
+		return
+	}
+	m.settingsDraft.indentGuides = on
+	m.settingsPreview()
+}
+
+// settingsPreview draws the staged theme, font and editor appearance in this
+// window.
 func (m *Model) settingsPreview() {
 	m.theme = themeForName(m.settingsDraft.theme)
 	m.applyEditorFont(m.settingsDraft.fontSize)
+	m.applyAppearanceToTabs(m.settingsDraft.appearance())
 	m.invalidate()
 }
 
@@ -557,7 +602,8 @@ func (m *Model) settingsDirtyPage(key string) bool {
 	case settingsPageEditorFont:
 		return m.settingsDraft.fontSize != m.prefs.fontSize()
 	case settingsPageEditorAppearance:
-		return m.settingsDraft.zenWidth != m.prefs.zenWidth()
+		return m.settingsDraft.zenWidth != m.prefs.zenWidth() ||
+			m.settingsDraft.appearance() != m.prefs.Editor
 	}
 	return false
 }
@@ -572,6 +618,9 @@ func (m *Model) settingsResetPage() {
 		m.settingsDraft.fontSize = defaultFontSize
 	case settingsPageEditorAppearance:
 		m.settingsDraft.zenWidth = defaultZenWidth
+		m.settingsDraft.lineNumbers = true
+		m.settingsDraft.showWhitespace = false
+		m.settingsDraft.indentGuides = true
 	default:
 		return
 	}
@@ -584,6 +633,7 @@ func (m *Model) applySettings() {
 	m.prefs.Theme = m.settingsDraft.theme
 	m.prefs.FontSize = m.settingsDraft.fontSize
 	m.prefs.ZenWidth = m.settingsDraft.zenWidth
+	m.prefs.Editor = m.settingsDraft.appearance()
 	m.settingsErr = ""
 	if err := m.prefs.Save(m.settingsWritePath()); err != nil {
 		m.settingsErr = err.Error()

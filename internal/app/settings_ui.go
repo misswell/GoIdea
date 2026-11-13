@@ -5,6 +5,7 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/editor"
 )
 
 // OpenSettings opens the settings sheet on its Appearance page.
@@ -61,9 +62,40 @@ func themeForName(name string) *ui.Theme {
 }
 
 // applyEditorFont puts size on every open editor.
+// applyEditorFont sets the size of every open editor's font.
 func (m *Model) applyEditorFont(size float32) {
 	for _, t := range m.tabs {
 		t.state.Font = ui.Font{Family: t.state.Font.Family, Size: size}
+	}
+}
+
+// applyEditorAppearance gives every open editor the gutter and whitespace
+// choices of Settings › Editor › Appearance.
+func (m *Model) applyEditorAppearance() {
+	m.applyAppearanceToTabs(m.prefs.Editor)
+}
+
+// applyAppearanceToTabs is the same with an appearance the dialog stages.
+func (m *Model) applyAppearanceToTabs(a EditorAppearance) {
+	for _, t := range m.tabs {
+		m.applyTabAppearance(t, a)
+	}
+}
+
+// applyTabAppearance is the same for one editor, including a tab opened after
+// the choice was made. Distraction Free Mode hides the gutter over whatever
+// the settings say.
+func (m *Model) applyTabAppearance(t *Tab, a EditorAppearance) {
+	t.state.LineNumbers = editor.LineNumbersOn
+	if a.NoLineNumbers || m.zen {
+		t.state.LineNumbers = editor.LineNumbersOff
+	}
+	t.state.NoIndentGuides = a.NoIndentGuides
+	t.state.NoFolding = m.zen
+	if a.ShowWhitespace {
+		t.state.Whitespace = editor.WhitespaceAll
+	} else {
+		t.state.Whitespace = editor.WhitespaceSelection
 	}
 }
 
@@ -119,7 +151,7 @@ func (m *Model) applyPreferences() {
 	m.theme = m.prefs.themePreference()
 	m.zen = m.prefs.Zen
 	m.applyEditorFont(m.prefs.fontSize())
-	m.applyZenGutter()
+	m.applyEditorAppearance()
 }
 
 // savePreferences writes the settings; a failed write is reported rather than

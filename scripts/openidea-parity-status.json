@@ -235,7 +235,7 @@
     },
     "settings-page:editor.general.appearance": {
       "status": "partial",
-      "evidence": "internal/app/settings_pages.go settingsZenWidthBody Distraction free mode text width 20-500 chars over Preferences.ZenWidth; caret and gutter options are not ported"
+      "evidence": "internal/app/settings_pages.go settingsEditorAppearanceBody: Show line numbers, Show whitespaces and Show indent guides checkboxes over Preferences.Editor feeding the MyGo editor gutter and whitespace state, plus Distraction free mode text width 20-500 chars over Preferences.ZenWidth, staged through settingsDraft and proven by settings_test.go TestSettingsAppearanceSwitchesReachTheEditor; caret, method separators, intention bulb and the leading/inner/trailing whitespace children are not ported"
     },
     "settings-page:languages.java": {
       "status": "partial",

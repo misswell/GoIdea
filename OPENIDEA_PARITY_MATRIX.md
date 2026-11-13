@@ -1151,7 +1151,7 @@ The plain text editor is the workbench default and is not registered through
 | `editor.files` | File Types |  | `src/features/settings/pages/builtins.tsx` | missing |
 | `editor.font` | Font |  | `src/features/settings/pages/editor/font.tsx` | partial - internal/app/settings_pages.go settingsFontBody Size NumberInput 10.0-24.0 px over Preferences.FontSize; typeface, spacing and ligatures are not ported |
 | `editor.general` | General |  | `src/features/settings/pages/editor/general.tsx` | missing |
-| `editor.general.appearance` | Appearance |  | `src/features/settings/pages/editor/general.tsx` | partial - internal/app/settings_pages.go settingsZenWidthBody Distraction free mode text width 20-500 chars over Preferences.ZenWidth; caret and gutter options are not ported |
+| `editor.general.appearance` | Appearance |  | `src/features/settings/pages/editor/general.tsx` | partial - internal/app/settings_pages.go settingsEditorAppearanceBody: Show line numbers, Show whitespaces and Show indent guides checkboxes over Preferences.Editor feeding the MyGo editor gutter and whitespace state, plus Distraction free mode text width 20-500 chars over Preferences.ZenWidth, staged through settingsDraft and proven by settings_test.go TestSettingsAppearanceSwitchesReachTheEditor; caret, method separators, intention bulb and the leading/inner/trailing whitespace children are not ported |
 | `editor.general.autoImport` | Auto Import |  | `src/features/settings/pages/editor/general.tsx` | missing |
 | `editor.general.breadcrumbs` | Breadcrumbs |  | `src/features/settings/pages/editor/general.tsx` | missing |
 | `editor.general.codeCompletion` | Code Completion |  | `src/features/settings/pages/editor/general.tsx` | missing |

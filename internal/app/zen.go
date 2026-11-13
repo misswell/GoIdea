@@ -68,24 +68,18 @@ func (m *Model) ToggleFullScreen() {
 	m.invalidate()
 }
 
-// applyZenGutter hides the gutter in distraction free mode, as IDEA hides it
-// with the line numbers and fold markers, and restores it on the way out.
+// applyZenGutter gives every editor the gutter the mode and the settings ask
+// for, as IDEA hides it with the line numbers and fold markers.
 func (m *Model) applyZenGutter() {
 	for _, t := range m.tabs {
 		m.applyTabZenGutter(t)
 	}
 }
 
-// applyTabZenGutter gives one editor the gutter the mode asks for, including a
-// tab opened while the mode is on.
+// applyTabZenGutter is the same for one editor, including a tab opened while
+// the mode is on.
 func (m *Model) applyTabZenGutter(t *Tab) {
-	if m.zen {
-		t.state.LineNumbers = editor.LineNumbersOff
-		t.state.NoFolding = true
-	} else {
-		t.state.LineNumbers = editor.LineNumbersOn
-		t.state.NoFolding = false
-	}
+	m.applyTabAppearance(t, m.prefs.Editor)
 }
 
 // zenColumnWidth is the width of the centred text column in DIPs. A monospace

@@ -24,7 +24,7 @@ func (m *Model) settingsPageBody(c *ui.Context, p *ui.Theme, oi oiColors, node s
 	case "appearance":
 		m.settingsAppearanceBody(c, oi)
 	case "editorAppearance":
-		m.settingsZenWidthBody(c, oi)
+		m.settingsEditorAppearanceBody(c, oi)
 	case "editorFont":
 		m.settingsFontBody(c, oi)
 	case "keymap":
@@ -101,8 +101,22 @@ func (m *Model) settingsFontBody(c *ui.Context, oi oiColors) {
 	})
 }
 
-// settingsZenWidthBody is the distraction free text width, 20 to 500 chars.
-func (m *Model) settingsZenWidthBody(c *ui.Context, oi oiColors) {
+// settingsEditorAppearanceBody is Editor › General › Appearance: the gutter
+// and whitespace switches, then the distraction free text width, in the order
+// general.tsx lists them.
+func (m *Model) settingsEditorAppearanceBody(c *ui.Context, oi oiColors) {
+	lineNumbers := m.settingsDraft.lineNumbers
+	if ui.Checkbox(c, &lineNumbers, "Show line numbers").Changed() {
+		m.settingsSetLineNumbers(lineNumbers)
+	}
+	showWhitespace := m.settingsDraft.showWhitespace
+	if ui.Checkbox(c, &showWhitespace, "Show whitespaces").Changed() {
+		m.settingsSetShowWhitespace(showWhitespace)
+	}
+	indentGuides := m.settingsDraft.indentGuides
+	if ui.Checkbox(c, &indentGuides, "Show indent guides").Changed() {
+		m.settingsSetIndentGuides(indentGuides)
+	}
 	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Distraction free mode text width:", 260)
 		width := float64(m.settingsDraft.zenWidth)

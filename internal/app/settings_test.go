@@ -240,3 +240,69 @@ func TestSettingsStagesUntilApplyOrCancel(t *testing.T) {
 		t.Fatalf("reset width = %d, want %d", m.settingsDraft.zenWidth, defaultZenWidth)
 	}
 }
+
+func TestSettingsAppearanceSwitchesReachTheEditor(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	tab := &Tab{state: &editor.State{}}
+	m := &Model{cfg: Config{SettingsPath: path}, tabs: []*Tab{tab}}
+	m.applyPreferences()
+	if tab.state.LineNumbers != editor.LineNumbersOn || tab.state.Whitespace != editor.WhitespaceSelection ||
+		tab.state.NoIndentGuides {
+		t.Fatalf("defaults: line %v whitespace %v noindent %v",
+			tab.state.LineNumbers, tab.state.Whitespace, tab.state.NoIndentGuides)
+	}
+
+	m.OpenSettingsPage(settingsPageEditorAppearance)
+	m.settingsSetLineNumbers(false)
+	m.settingsSetShowWhitespace(true)
+	m.settingsSetIndentGuides(false)
+	if m.prefs.Editor != (EditorAppearance{}) {
+		t.Fatalf("staging wrote the prefs: %+v", m.prefs.Editor)
+	}
+	if tab.state.LineNumbers != editor.LineNumbersOff || tab.state.Whitespace != editor.WhitespaceAll ||
+		!tab.state.NoIndentGuides {
+		t.Fatalf("staged appearance not previewed")
+	}
+	m.closeSettings()
+	if tab.state.LineNumbers != editor.LineNumbersOn || tab.state.Whitespace != editor.WhitespaceSelection ||
+		tab.state.NoIndentGuides {
+		t.Fatalf("cancel kept the staged appearance")
+	}
+
+	m.OpenSettingsPage(settingsPageEditorAppearance)
+	m.settingsSetLineNumbers(false)
+	m.settingsSetShowWhitespace(true)
+	m.settingsSetIndentGuides(false)
+	if !m.settingsDirtyPage(settingsPageEditorAppearance) {
+		t.Fatalf("staged appearance did not dirty its page")
+	}
+	m.applySettings()
+	want := EditorAppearance{NoLineNumbers: true, ShowWhitespace: true, NoIndentGuides: true}
+	if m.prefs.Editor != want || LoadPreferences(path).Editor != want {
+		t.Fatalf("stored appearance = %+v / %+v", m.prefs.Editor, LoadPreferences(path).Editor)
+	}
+	if tab.state.LineNumbers != editor.LineNumbersOff || tab.state.Whitespace != editor.WhitespaceAll ||
+		!tab.state.NoIndentGuides {
+		t.Fatalf("applied appearance not on the editor")
+	}
+
+	// Distraction Free Mode hides the gutter over the setting, and leaving it
+	// goes back to what the setting says.
+	m.prefs.Zen = true
+	m.applyPreferences()
+	if tab.state.LineNumbers != editor.LineNumbersOff {
+		t.Fatalf("zen kept the gutter")
+	}
+	m.prefs.Zen = false
+	m.applyPreferences()
+	if tab.state.LineNumbers != editor.LineNumbersOff || tab.state.Whitespace != editor.WhitespaceAll {
+		t.Fatalf("leaving zen dropped the stored appearance")
+	}
+
+	m.settingsSelectPage(settingsPageEditorAppearance)
+	m.settingsResetPage()
+	d := m.settingsDraft
+	if !d.lineNumbers || d.showWhitespace || !d.indentGuides {
+		t.Fatalf("reset appearance = %+v", d)
+	}
+}
