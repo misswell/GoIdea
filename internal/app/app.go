@@ -158,6 +158,9 @@ type Model struct {
 	// commit is the open Commit dialog, or nil.
 	commit *commitState
 
+	// rollback is the open confirmation for discarding a change, or nil.
+	rollback *rollbackState
+
 	run       RunPane
 	debug     DebugPane
 	build     BuildPane
@@ -539,6 +542,7 @@ func (m *Model) openProject(dir string, files []string) {
 	m.resetTerm()
 	m.resetVCS()
 	m.resetBranch()
+	m.rollback = nil
 	m.resetLog()
 	m.resetProblems()
 	m.structure = StructurePane{}
@@ -1108,7 +1112,8 @@ func (m *Model) ShowProject() {
 // would also act in the background leaves it alone.
 func (m *Model) overlayOpen() bool {
 	return m.rename != nil || m.symbols != nil || m.intents != nil || m.files != nil ||
-		m.diff != nil || m.palette != nil || m.commit != nil || m.branch.open
+		m.diff != nil || m.palette != nil || m.commit != nil || m.branch.open ||
+		m.rollback != nil
 }
 
 // QuitImmediately closes the backend and quits without asking about changes,
@@ -1155,6 +1160,7 @@ func (m *Model) View(c *ui.Context) {
 	m.intentionsDialog(c, p)
 	m.filesDialog(c, p)
 	m.branchesDialog(c, p)
+	m.rollbackDialog(c, p)
 	m.commandsDialog(c, p)
 	m.diffDialog(c, p)
 	m.dbDialog(c, p)

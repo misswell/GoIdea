@@ -88,7 +88,7 @@ directory registers.
 | `terminal` | 14 | 1 | 0 | 0 | 0 | partial - internal/app/term.go; UPSTREAM_FEATURE_MATRIX.md Terminal |
 | `todo` | 2 | 1 | 0 | 1 | 1 | missing |
 | `tools` | 4 | 0 | 0 | 0 | 0 | partial - tools.jdtls, tools.java-debug |
-| `vcs` | 33 | 3 | 2 | 2 | 1 | partial - base.vcs.changes, base.diff.rows, base.commit.id, base.log.commits, base.log.details, base.log.changes; internal/app/branch.go branchLabel and branchesDialog, base.branch.head, base.branch.list, base.branch.checkout |
+| `vcs` | 33 | 3 | 2 | 2 | 1 | partial - base.vcs.changes, base.diff.rows, base.commit.id, base.log.commits, base.log.details, base.log.changes; internal/app/branch.go branchLabel and branchesDialog, base.branch.head, base.branch.list, base.branch.checkout; internal/app/vcs.go vcsStaged, vcsUnstaged, StageChange, UnstageChange, AskRollback, base.stage.roundtrip, base.stage.discard |
 | `viewers` | 0 | 0 | 0 | 1 | 0 | missing |
 | `vim` | 3 | 0 | 0 | 1 | 0 | missing |
 | `web` | 2 | 0 | 0 | 0 | 0 | missing |
@@ -974,7 +974,7 @@ same bindings until a check records it.
 | `dotnet` | .NET | right | `src/features/dotnet/index.ts` | missing |
 | `duplicates` | Duplicates | bottom | `src/features/analysis/index.ts` | missing |
 | `find` | Find | bottom | `src/features/search/index.ts` | integrated - base.search.done, base.search.files, base.search.matches; internal/app/search.go searchPanel; bottom anchor in internal/app/anchor_test.go |
-| `git` | Git | bottom | `src/features/vcs/index.ts` | partial - base.vcs.changes, base.diff.rows, internal/app/log.go logPanel, base.log.commits, base.log.details, base.log.changes; internal/app/branch.go branchLabel, base.branch.head, base.branch.list, base.branch.checkout |
+| `git` | Git | bottom | `src/features/vcs/index.ts` | partial - base.vcs.changes, base.diff.rows, internal/app/log.go logPanel, base.log.commits, base.log.details, base.log.changes; internal/app/branch.go branchLabel, base.branch.head, base.branch.list, base.branch.checkout; internal/app/vcs.go vcsRows staging groups, StageChange, UnstageChange, AskRollback, base.stage.roundtrip, base.stage.discard |
 | `gradle` | Gradle | right | `src/features/build-tools/index.ts` | missing |
 | `hierarchy` | Hierarchy | right | `src/features/code-insight/index.ts` | missing |
 | `inspection` | Inspection Results | bottom | `src/features/analysis/index.ts` | missing |
@@ -2269,7 +2269,7 @@ Local-only commands and the per-command argument lists are in
 | `vcs_diff_revisions` | vcs | yes |  | missing |
 | `vcs_diff_text` | vcs | yes |  | missing |
 | `vcs_diff_with_worktree` | vcs | yes |  | missing |
-| `vcs_discard` | vcs | yes |  | missing |
+| `vcs_discard` | vcs | yes | yes | missing |
 | `vcs_edit_remote` | vcs | yes |  | missing |
 | `vcs_file_at` | vcs | yes | yes | missing |
 | `vcs_git_version` | vcs | yes |  | missing |
@@ -2308,7 +2308,7 @@ Local-only commands and the per-command argument lists are in
 | `vcs_shelf_rename` | vcs | yes |  | missing |
 | `vcs_shelve` | vcs | yes |  | missing |
 | `vcs_shelves` | vcs | yes |  | missing |
-| `vcs_stage` | vcs | yes |  | missing |
+| `vcs_stage` | vcs | yes | yes | missing |
 | `vcs_stage_hunks` | vcs | yes |  | missing |
 | `vcs_stage_patch` | vcs | yes |  | missing |
 | `vcs_stash_apply` | vcs | yes |  | missing |
@@ -2319,7 +2319,7 @@ Local-only commands and the per-command argument lists are in
 | `vcs_tags` | vcs | yes |  | missing |
 | `vcs_undo_commit` | vcs | yes |  | missing |
 | `vcs_unshelve` | vcs | yes |  | missing |
-| `vcs_unstage` | vcs | yes |  | missing |
+| `vcs_unstage` | vcs | yes | yes | missing |
 | `vcs_worktrees` | vcs | yes |  | missing |
 | `vcs_write_patch` | vcs | yes |  | missing |
 | `web_browsers` | web | no |  | missing |
@@ -2362,7 +2362,7 @@ Local-only commands and the per-command argument lists are in
 | `wsl_distros` | wsl | no |  | missing |
 | `wsl_resolve` | wsl | no |  | missing |
 
-446 commands are served over stdio and 73 are called by GoIDEA today. A command
+446 commands are served over stdio and 76 are called by GoIDEA today. A command
 that is registered only in the desktop shell needs an `ops` module before stdio
 can serve it; a GoIDEA check counts only when the UI path works end to end.
 

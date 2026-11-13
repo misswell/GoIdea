@@ -7,6 +7,8 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
+
+	"mayoi/internal/openidea"
 )
 
 const sidebarWidth float32 = 250
@@ -164,41 +166,93 @@ func (m *Model) vcsRows(c *ui.Context, p *ui.Theme) {
 		})
 		return
 	}
-	for i, f := range m.vcs.files {
-		i, f := i, f
-		letter, word, tone := vcsBadge(f)
-		color := p.TextMuted
-		switch tone {
-		case "add":
-			color = p.Success
-		case "mod":
-			color = p.Accent
-		case "del":
-			color = p.Danger
-		}
-		r := ui.Row(c.Key(fmt.Sprintf("vcs:%d", i))).Height(22).Padding(0, 8).Gap(6).
-			AlignItems(ui.Center)
-		if r.Hovered() {
-			r.Background(p.SurfaceHover)
-		}
-		r.Children(func() {
-			ui.Text(c, letter).FontSize(11).Bold().TextColor(color)
-			ui.Text(c, filepath.Base(f.RelPath)).FontSize(12).TextColor(p.Text).
-				SingleLine().Ellipsis("…")
-			ui.Spacer(c)
-			ui.Text(c, word).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+	if m.vcs.opErr != "" {
+		ui.Row(c).Padding(4, 8).Children(func() {
+			ui.Text(c, m.vcs.opErr).FontSize(11).TextColor(p.Danger).SingleLine().
+				Ellipsis("…")
 		})
-		if r.Clicked() {
-			m.ShowDiff(f.Path)
-		}
-		// A double click takes the row further, to the file itself, as IDEA
-		// does from its changes view.
-		if r.DoubleClicked() {
-			m.closeDiff()
-			m.openFile(f.Path)
-			m.invalidate()
+	}
+	// The staging groups OpenIDEA's changes view draws: a file staged and then
+	// edited again is listed under both.
+	staged, unstaged := vcsStaged(m.vcs.files), vcsUnstaged(m.vcs.files)
+	if len(staged) > 0 {
+		m.vcsGroup(c, p, "已暂存", len(staged))
+		for i, f := range staged {
+			m.vcsRow(c, p, "staged", i, f)
 		}
 	}
+	if len(unstaged) > 0 {
+		m.vcsGroup(c, p, "未暂存", len(unstaged))
+		for i, f := range unstaged {
+			m.vcsRow(c, p, "unstaged", i, f)
+		}
+	}
+}
+
+func (m *Model) vcsGroup(c *ui.Context, p *ui.Theme, label string, n int) {
+	ui.Row(c).Height(22).Padding(6, 8).Gap(4).AlignItems(ui.Center).Children(func() {
+		ui.Text(c, label).FontSize(11).Bold().TextColor(p.TextMuted).SingleLine()
+		ui.Text(c, fmt.Sprintf("%d", n)).FontSize(10.5).TextColor(p.TextMuted)
+	})
+}
+
+func (m *Model) vcsRow(c *ui.Context, p *ui.Theme, side string, i int, f openidea.FileStatus) {
+	letter, word, tone := vcsBadge(f)
+	color := p.TextMuted
+	switch tone {
+	case "add":
+		color = p.Success
+	case "mod":
+		color = p.Accent
+	case "del":
+		color = p.Danger
+	}
+	r := ui.Row(c.Key(fmt.Sprintf("vcs:%s:%d", side, i))).Height(22).Padding(0, 8).Gap(6).
+		AlignItems(ui.Center)
+	if r.Hovered() {
+		r.Background(p.SurfaceHover)
+	}
+	r.Children(func() {
+		ui.Text(c, letter).FontSize(11).Bold().TextColor(color)
+		ui.Text(c, filepath.Base(f.RelPath)).FontSize(12).TextColor(p.Text).
+			SingleLine().Ellipsis("…")
+		ui.Spacer(c)
+		if side == "staged" {
+			if m.vcsChip(c, p, "vcs:unstage:"+f.Path, "取消暂存") {
+				m.UnstageChange(f)
+			}
+		} else {
+			if m.vcsChip(c, p, "vcs:stage:"+f.Path, "暂存") {
+				m.StageChange(f)
+			}
+			if m.vcsChip(c, p, "vcs:rollback:"+f.Path, "回滚") {
+				m.AskRollback(f)
+			}
+		}
+		ui.Text(c, word).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+	})
+	if r.Clicked() {
+		m.ShowDiff(f.Path)
+	}
+	// A double click takes the row further, to the file itself, as IDEA does
+	// from its changes view.
+	if r.DoubleClicked() {
+		m.closeDiff()
+		m.openFile(f.Path)
+		m.invalidate()
+	}
+}
+
+// vcsChip is one small action on a change row; it reports a click.
+func (m *Model) vcsChip(c *ui.Context, p *ui.Theme, key, label string) bool {
+	chip := ui.Row(c.Key(key)).Height(16).Padding(0, 5).AlignItems(ui.Center)
+	if chip.Hovered() {
+		chip.Background(p.SurfacePressed)
+	}
+	chip.Children(func() {
+		ui.Text(c, label).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+	})
+	return chip.Clicked()
 }
 
 func (m *Model) searchRows(c *ui.Context, p *ui.Theme) {

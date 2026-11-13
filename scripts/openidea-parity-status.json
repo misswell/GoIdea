@@ -27,7 +27,7 @@
     },
     "toolwindow:git": {
       "status": "partial",
-      "evidence": "base.vcs.changes, base.diff.rows, internal/app/log.go logPanel, base.log.commits, base.log.details, base.log.changes; internal/app/branch.go branchLabel, base.branch.head, base.branch.list, base.branch.checkout"
+      "evidence": "base.vcs.changes, base.diff.rows, internal/app/log.go logPanel, base.log.commits, base.log.details, base.log.changes; internal/app/branch.go branchLabel, base.branch.head, base.branch.list, base.branch.checkout; internal/app/vcs.go vcsRows staging groups, StageChange, UnstageChange, AskRollback, base.stage.roundtrip, base.stage.discard"
     },
     "toolwindow:commit": {
       "status": "partial",
@@ -63,7 +63,7 @@
     },
     "feature:vcs": {
       "status": "partial",
-      "evidence": "base.vcs.changes, base.diff.rows, base.commit.id, base.log.commits, base.log.details, base.log.changes; internal/app/branch.go branchLabel and branchesDialog, base.branch.head, base.branch.list, base.branch.checkout"
+      "evidence": "base.vcs.changes, base.diff.rows, base.commit.id, base.log.commits, base.log.details, base.log.changes; internal/app/branch.go branchLabel and branchesDialog, base.branch.head, base.branch.list, base.branch.checkout; internal/app/vcs.go vcsStaged, vcsUnstaged, StageChange, UnstageChange, AskRollback, base.stage.roundtrip, base.stage.discard"
     },
     "feature:run": {
       "status": "partial",

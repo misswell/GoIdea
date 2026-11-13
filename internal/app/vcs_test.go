@@ -33,3 +33,45 @@ func TestVCSBadge(t *testing.T) {
 		}
 	}
 }
+
+func TestVCSGroupsSplitByStagingState(t *testing.T) {
+	files := []openidea.FileStatus{
+		{Path: "/p/a.java", RelPath: "a.java", Staged: str("added")},
+		{Path: "/p/b.java", RelPath: "b.java", Unstaged: str("modified")},
+		{Path: "/p/c.java", RelPath: "c.java", Staged: str("added"), Unstaged: str("modified")},
+		{Path: "/p/d.java", RelPath: "d.java"},
+	}
+	staged, unstaged := vcsStaged(files), vcsUnstaged(files)
+	if len(staged) != 2 || staged[0].RelPath != "a.java" || staged[1].RelPath != "c.java" {
+		t.Fatalf("staged group = %v, want a.java and c.java", staged)
+	}
+	if len(unstaged) != 2 || unstaged[0].RelPath != "b.java" || unstaged[1].RelPath != "c.java" {
+		t.Fatalf("unstaged group = %v, want b.java and c.java", unstaged)
+	}
+}
+
+func TestRollbackAsksBeforeDiscarding(t *testing.T) {
+	m := &Model{}
+	m.AskRollback(openidea.FileStatus{Path: "/p/a.java", RelPath: "a.java"})
+	if m.rollback == nil || !m.rollback.open || m.rollback.path != "/p/a.java" || m.rollback.name != "a.java" {
+		t.Fatalf("rollback = %+v, want an open confirmation for a.java", m.rollback)
+	}
+	m.closeRollback()
+	if m.rollback != nil {
+		t.Fatalf("rollback still %+v after closing", m.rollback)
+	}
+	m.ConfirmRollback()
+	if m.rollback != nil || m.status != "" {
+		t.Fatalf("confirming without a dialog changed something: %+v, %q", m.rollback, m.status)
+	}
+}
+
+func TestChangeActionsDoNothingWithoutAProject(t *testing.T) {
+	m := &Model{}
+	m.StageChange(openidea.FileStatus{Path: "/p/a.java", RelPath: "a.java"})
+	m.UnstageChange(openidea.FileStatus{Path: "/p/a.java", RelPath: "a.java"})
+	if m.vcs.busy || m.status != "" || m.vcs.opErr != "" {
+		t.Fatalf("a change action ran without a project: busy=%v status=%q err=%q",
+			m.vcs.busy, m.status, m.vcs.opErr)
+	}
+}

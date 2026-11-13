@@ -133,6 +133,7 @@ does not ask the server again.
 | Project search | `internal/app/search.go` |
 | Diff against HEAD | `internal/app/diff.go` |
 | Git changes and Git log | `internal/app/vcs.go`, `internal/app/log.go`; commit in `commit.go` |
+| Staged and unstaged change groups | `internal/app/vcs.go`; 已暂存/未暂存 split, per-row `vcs_stage` / `vcs_unstage` / `vcs_discard` with a rollback confirmation |
 | Branch widget and Branches popup | `internal/app/branch.go`; title bar `vcs_branch_info`, popup `vcs_branches` / `vcs_checkout` |
 | Quick open (Cmd+P) / command palette | `quickopen.go`, `commands.go` |
 | Vim mode, sticky scroll | Mayoi's implementations are in-tree but not wired into `cmd/goidea` (see `UPSTREAM_FEATURE_MATRIX.md`) |
