@@ -1,0 +1,20 @@
+# AGENTS.md
+
+## Commits
+
+- One imperative subject line of 72 characters or fewer, for one change: `Add mayoi run and mayoi commands`.
+- Put any detail in a short body, not the subject.
+- Dont run full test since its slow.
+
+## Design
+
+- Follow docs/DESIGN.md for motion, layout stability, states, speed, failures and words.
+- Take animation lengths from the tokens in cmd/mayoi/motion.go, never a number written out.
+
+## Changelog
+
+- Add a bullet for every user-facing change under `## Unreleased` in CHANGELOG.md, creating that section above the latest version if it is missing.
+- One sentence per bullet, about 100 characters at most, saying what the user sees.
+- Use **bold** for menu paths and `code` for commands, keys and settings. Leave out internals.
+- Split a big feature into several bullets rather than writing one long one.
+- Skip changes users can't see: tests, CI, refactors.
