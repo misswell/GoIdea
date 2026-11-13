@@ -82,6 +82,9 @@ func (s Session) Save(path string) error {
 type Preferences struct {
 	Theme    string  `json:"theme,omitempty"`
 	FontSize float32 `json:"fontSize,omitempty"`
+	// Plugins are each plugin's settings, by name, under the same "plugins"
+	// key Mayoi uses; a plugin's "enabled" lives there.
+	Plugins map[string]json.RawMessage `json:"plugins,omitempty"`
 }
 
 const (

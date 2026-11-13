@@ -528,21 +528,9 @@ func editorFontSizes() []string {
 	return out
 }
 
-// welcomePlugins is the Plugins page. GoIDEA loads no plugins yet, and the
-// page says so rather than inventing a manager.
+// welcomePlugins is Welcome › Plugins, over the real plugin registry.
 func (m *Model) welcomePlugins(c *ui.Context, oi oiColors) {
-	ui.Column(c).Grow(1).Padding(16, 20, 12, 20).Gap(10).AlignItems(ui.Start).
-		Children(func() {
-			ui.Text(c, "Plugins").FontSize(18).Bold().TextColor(oi.textStrong).
-				SingleLine()
-			ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
-				ui.Icon(c, iconWelcomePlugin).Size(20, 20).TextColor(oi.textMuted)
-				ui.Text(c, "No plugins installed").FontSize(13).TextColor(oi.textMuted).
-					SingleLine()
-			})
-			ui.Text(c, "GoIDEA does not load Mayoi plugins yet.").FontSize(11).
-				TextColor(oi.textFaint).SingleLine()
-		})
+	m.pluginPageUI(c, oi)
 }
 
 // openCloneDialog shows the Clone Repository dialog, with the folder of

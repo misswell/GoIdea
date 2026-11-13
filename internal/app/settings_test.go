@@ -3,20 +3,21 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/egoist/mygo/ui/editor"
 )
 
 func TestLoadPreferencesDefaults(t *testing.T) {
-	if p := LoadPreferences(filepath.Join(t.TempDir(), "missing.json")); p != (Preferences{}) {
+	if p := LoadPreferences(filepath.Join(t.TempDir(), "missing.json")); !reflect.DeepEqual(p, Preferences{}) {
 		t.Fatalf("missing file = %+v, want defaults", p)
 	}
 	bad := filepath.Join(t.TempDir(), "bad.json")
 	if err := os.WriteFile(bad, []byte("{"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if p := LoadPreferences(bad); p != (Preferences{}) {
+	if p := LoadPreferences(bad); !reflect.DeepEqual(p, Preferences{}) {
 		t.Fatalf("broken file = %+v, want defaults", p)
 	}
 }
@@ -27,7 +28,7 @@ func TestPreferencesRoundTrip(t *testing.T) {
 	if err := want.Save(path); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
-	if got := LoadPreferences(path); got != want {
+	if got := LoadPreferences(path); !reflect.DeepEqual(got, want) {
 		t.Fatalf("LoadPreferences = %+v, want %+v", got, want)
 	}
 	entries, err := os.ReadDir(filepath.Dir(path))

@@ -160,6 +160,9 @@ type Model struct {
 	// as OpenIDEA's project menu leaves it.
 	showingWelcome bool
 
+	// plugins is Welcome › Plugins, made on first use, nil before.
+	plugins *pluginPage
+
 	// commit is the open Commit dialog, or nil.
 	commit *commitState
 

@@ -21,6 +21,7 @@ reimplementing it. A row is `INTEGRATED` only when the GoIDEA product
 | --- | --- | --- |
 | Native window, menus, dialogs, theme | INTEGRATED | `mygo` app + `cmd/goidea` menu; OpenIDEA's palette in both appearances (`internal/app/theme.go`) |
 | Welcome screen with recent projects | INTEGRATED | `internal/app/welcome.go` mirrors WelcomeView.tsx: brand rail, Projects/Customize/Plugins, search and actions, recent projects with branch and menus, clone and remove dialogs; offscreen render in `welcome_render_test.go` |
+| Plugin manager page (Welcome › Plugins) | INTEGRATED | `internal/app/plugins.go` over `internal/plugin`: Available/Installed lists, details, enable state under `plugins.<name>`, Git install, reload and remove; tests in `plugins_test.go` |
 | Editor buffer, selections, undo/redo | INTEGRATED | `ui/editor` state per tab; `internal/docbridge` syncs it |
 | Syntax highlighting | INTEGRATED | mygo editor's language for the file, set per document in `internal/docbridge` (Java, Kotlin, XML, YAML…) |
 | Quick-open files (Cmd+P) | INTEGRATED | `internal/app/quickopen.go` |
@@ -33,7 +34,7 @@ reimplementing it. A row is `INTEGRATED` only when the GoIDEA product
 | Vim mode | DETECTED | source in `cmd/mayoi`; not wired into `cmd/goidea` |
 | Terminal UI and PTY lifecycle | DETECTED | Mayoi's terminal is in-tree; GoIDEA uses the backend terminal |
 | Git changes/history UI | DETECTED | Mayoi's SCM is in-tree; GoIDEA uses the backend VCS |
-| JS/TS plugin engine (moejs) | DETECTED | source and plugin runtime in-tree; GoIDEA does not load plugins yet |
+| JS/TS plugin engine (moejs) | DETECTED | source and plugin runtime in-tree; the management page uses `internal/plugin`, but plugin code is not started in `cmd/goidea` |
 | Signed updates (mygo.Updater) | NOT_AVAILABLE | updates need the updater key; defer |
 
 ## MyGo (native UI framework and editor component)

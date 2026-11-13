@@ -12,6 +12,8 @@ needs a `## <version>` section here, or its build fails.
 - 最近项目显示渐变首字母图标、路径和 Git 分支，悬停出现菜单，可打开、在访达中显示、复制路径或移除。
 - Welcome 的 **Clone Repository** 用 `git clone` 把仓库克隆到所选目录并打开。
 - Customize 页面可切换颜色主题、同步系统外观和调整编辑器字号，**All settings…** 打开设置。
+- Welcome 的 **Plugins** 页面读取真实插件目录，分 **Available** / **Installed** 两栏，可搜索、查看详情并开关插件。
+- **Plugins** 页面可从 **Install Plugin from Git…** 安装插件，详情里可 **Reload** 或 **Remove**，删除前会确认。
 - **显示问题** 在底部列出当前文件或整个项目的错误、警告和信息，点击跳到所在行，状态栏显示计数。
 - 工具窗口使用 OpenIDEA 的快捷键：**项目** Cmd+1、**查找** Cmd+3、**运行** Cmd+4、**调试** Cmd+5、**问题** Cmd+6、**Git** Cmd+9、**终端** Alt+F12。
 - 标签页切换从 Cmd+数字 改为 OpenIDEA 的 Ctrl+→ / Ctrl+←，以及 Cmd+Shift+] / Cmd+Shift+[。

@@ -91,7 +91,8 @@ func TestWelcomeCustomizeAndPluginsRender(t *testing.T) {
 	m.welcomePage = "plugins"
 	tt.Frame()
 	for _, text := range []string{
-		"No plugins installed", "GoIDEA does not load Mayoi plugins yet.",
+		"Available", "Installed", "Preview",
+		"No plugins installed.", "No plugin selected",
 	} {
 		if !tt.HasText(text) {
 			t.Fatalf("%q is not on the plugins page: %q", text, tt.Texts())
