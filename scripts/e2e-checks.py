@@ -45,6 +45,7 @@ CHECKS = {
         ("settings.closed", "settings sheet closed", lambda d: (get(d, "settings.closed") is True, get(d, "settings.closed"))),
         ("settings.theme", "theme choice reached the disk", lambda d: (get(d, "settings.storedTheme") == "dark", get(d, "settings.storedTheme"))),
         ("watch.reloaded", "external edit was reloaded", lambda d: (get(d, "watch.reloaded") is True, get(d, "watch.reloaded"))),
+        ("watch.reloadAll", "Reload All from Disk reread the clean buffer, and restoring it kept the file", lambda d: (get(d, "watch.reloadAll") is True and get(d, "watch.reloadAllRestored") is True, {"reloadAll": get(d, "watch.reloadAll"), "restored": get(d, "watch.reloadAllRestored")})),
         ("vcs.changes", "Git status reports the change", lambda d: ((d.get("vcsChanges") or 0) >= 1, d.get("vcsChanges"))),
         ("branch.head", "vcs_branch_info names the branch", lambda d: (bool(get(d, "branch.head")), get(d, "branch.head"))),
         ("branch.list", "vcs_branches lists the current branch", lambda d: ((get(d, "branch.branches") or 0) >= 1 and get(d, "branch.current") == get(d, "branch.head"), {"branches": get(d, "branch.branches"), "current": get(d, "branch.current")})),

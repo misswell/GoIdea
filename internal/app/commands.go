@@ -34,6 +34,7 @@ func commands() []appCommand {
 		{"file.quickOpen", "快速打开…", "文件", "Cmd+P", "quick open file goto recent", func(m *Model) { m.OpenQuickFiles() }},
 		{"file.save", "保存", "文件", "Cmd+S", "save write", func(m *Model) { m.SaveActive() }},
 		{"file.close", "关闭标签页", "文件", "Cmd+W", "close tab", func(m *Model) { m.closeTab(m.active) }},
+		{"file.reloadAllFromDisk", "Reload All from Disk", "文件", "", "reload all from disk synchronize refresh external", func(m *Model) { m.ReloadAllFromDisk() }},
 		{"editor.pinTab", "固定/取消固定标签页", "文件", "", "pin unpin tab", func(m *Model) { m.PinActiveTab() }},
 		{"editor.closeOthers", "关闭其他标签页", "文件", "", "close other tabs", func(m *Model) { m.CloseOtherTabs(nil) }},
 		{"editor.closeAll", "关闭所有标签页", "文件", "", "close all tabs", func(m *Model) { m.CloseAllTabs(false) }},

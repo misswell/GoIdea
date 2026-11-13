@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -69,6 +70,30 @@ func (m *Model) watchFiles(now time.Time) {
 		}
 		m.reloadTab(t)
 	}
+}
+
+// ReloadAllFromDisk rereads every clean buffer from disk, as File › Reload All
+// from Disk does. A buffer with unsaved edits keeps them and says so, since
+// rereading would silently drop the user's work.
+func (m *Model) ReloadAllFromDisk() {
+	n := 0
+	for _, t := range m.tabs {
+		if t.reloading || t.syncing {
+			continue
+		}
+		if t.unsaved() {
+			m.banner = "文件有未保存的修改，未从磁盘重新加载：" + filepath.Base(t.doc.Path())
+			continue
+		}
+		m.reloadTab(t)
+		n++
+	}
+	if n == 0 {
+		m.status = "没有可从磁盘重新加载的文件"
+	} else {
+		m.status = fmt.Sprintf("正在从磁盘重新加载 %d 个文件…", n)
+	}
+	m.invalidate()
 }
 
 // reloadTab rereads a clean buffer from disk after an external rewrite.
@@ -193,6 +218,52 @@ func (m *Model) SmokeWatch(ctx context.Context) (map[string]any, error) {
 		}
 		if time.Now().After(deadline) {
 			out["restoreError"] = "保存恢复内容超时"
+			break
+		}
+		time.Sleep(150 * time.Millisecond)
+	}
+	// File › Reload All from Disk rereads the clean buffer from the file.
+	marker2 := "\n// goidea-reload-all-smoke\n"
+	if err := os.WriteFile(path, []byte(before+marker2), 0o644); err != nil {
+		out["reloadAllError"] = err.Error()
+		return out, nil
+	}
+	mygo.RunOnMain(m.ReloadAllFromDisk)
+	deadline = time.Now().Add(30 * time.Second)
+	reloadedAll := false
+	for {
+		var text string
+		mygo.RunOnMain(func() { text = t.doc.Text() })
+		if strings.Contains(text, "goidea-reload-all-smoke") {
+			reloadedAll = true
+			break
+		}
+		if time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(150 * time.Millisecond)
+	}
+	out["reloadAll"] = reloadedAll
+	rctx, cancel = context.WithTimeout(m.ctx, 30*time.Second)
+	err = t.doc.ApplyEdits(rctx, editor.Edit{Start: 0, End: len(t.doc.Text()), Text: before})
+	cancel()
+	if err != nil {
+		out["reloadAllError"] = err.Error()
+		return out, nil
+	}
+	mygo.RunOnMain(func() { m.saveTabAsync(t, nil) })
+	deadline = time.Now().Add(30 * time.Second)
+	for {
+		var clean, saving bool
+		mygo.RunOnMain(func() {
+			clean, saving = !t.unsaved(), t.saving
+		})
+		if clean && !saving {
+			out["reloadAllRestored"] = true
+			break
+		}
+		if time.Now().After(deadline) {
+			out["reloadAllError"] = "恢复重新加载前的文件超时"
 			break
 		}
 		time.Sleep(150 * time.Millisecond)

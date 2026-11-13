@@ -641,6 +641,10 @@
       "status": "partial",
       "evidence": "internal/app/commands.go file.settings -> internal/app/settings_window.go + settings_pages.go, OpenIDEA's Settings dialog over Appearance, Keymap, Editor Appearance/Font and Java; OpenIDEA's remaining settings pages are not ported yet"
     },
+    "action:file.reloadAllFromDisk": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go file.reloadAllFromDisk -> internal/app/watch.go ReloadAllFromDisk, which rereads every clean buffer through reloadTab (a shared ApplyEdits against the disk text), skips a buffer with unsaved edits and says so in the banner, and reports how many files it is reloading; File menu Reload All from Disk; base.watch.reloadAll"
+    },
     "action:file.invalidateCaches": {
       "status": "integrated",
       "evidence": "internal/app/commands.go file.invalidateCaches -> internal/app/invalidate.go OpenInvalidateCaches, the dialog with the three optional caches (file system and Local History, language server workspaces, build tool caches) and Invalidate and Restart / Just Restart / Cancel; it schedules caches_schedule_invalidation with {options} and restarts through the quit flow (mygo App.Relaunch), reporting a failed schedule in the dialog; internal/app/invalidate_test.go; base.commands.invalidate"

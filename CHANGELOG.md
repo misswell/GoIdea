@@ -139,6 +139,7 @@ needs a `## <version>` section here, or its build fails.
 - **Tools** 菜单新增 **Refresh TODO Items** 和 **Show TODO Items in Current File**。
 - 新增 **Editor > TODO** 设置页，可开关 **Case sensitive** / **Only in comments**，增删关键字和配色。
 - 编辑器用各关键字的颜色给 TODO 注释加上高亮，输入停下后更新，并随设置保存。
+- **文件** 菜单新增 **Reload All from Disk**，重新读取所有未修改的标签页，未保存的修改会保留并提示。
 - **文件** 菜单新增 **Invalidate Caches…**：可选清除本地历史、语言服务工作区和构建工具缓存，重启后重建索引。
 - **文件** 菜单新增 **Restart IDE**：只重启应用，有未保存的修改时仍会先询问。
 

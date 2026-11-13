@@ -94,6 +94,8 @@ func mainMenuGroups() []menuEntry {
 			action("Save", "file.save", "CmdOrCtrl+S"),
 			action("Close", "file.close", "CmdOrCtrl+W"),
 			rule(),
+			action("Reload All from Disk", "file.reloadAllFromDisk", ""),
+			rule(),
 			action("Manage Projects…", "welcome.manageProjects", ""),
 			rule(),
 			action("Settings…", "file.settings", "CmdOrCtrl+,"),

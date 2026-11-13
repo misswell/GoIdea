@@ -27,7 +27,7 @@ new action, tool window, page or command appears automatically.
 | Kind | Items | Integrated | Partial | Engine | Blocked | Missing |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Feature folders | 43 | 0 | 12 | 0 | 0 | 31 |
-| Actions | 647 | 39 | 86 | 0 | 1 | 521 |
+| Actions | 647 | 40 | 86 | 0 | 1 | 520 |
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
 | Tool windows | 30 | 9 | 5 | 0 | 0 | 16 |
 | Overlays | 56 | 1 | 0 | 0 | 0 | 55 |
@@ -705,7 +705,7 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `editor.unsplitAll` | Unsplit All | `src/editor/core/actions.ts` | partial - internal/app/editor_split.go UnsplitAll closes the other group's tabs through the dirty guard and keeps the active group; Window › Editor Tabs and the tab context menu; internal/app/commands.go editor.unsplitAll; internal/app/editor_groups_test.go |
 | `file.closeProject` | Close Project | `src/workbench/shellActions.ts` | missing |
 | `file.openProject` | Open… | `src/workbench/shellActions.ts` | missing |
-| `file.reloadAllFromDisk` | Reload All from Disk | `src/editor/core/actions.ts` | missing |
+| `file.reloadAllFromDisk` | Reload All from Disk | `src/editor/core/actions.ts` | integrated - internal/app/commands.go file.reloadAllFromDisk -> internal/app/watch.go ReloadAllFromDisk, which rereads every clean buffer through reloadTab (a shared ApplyEdits against the disk text), skips a buffer with unsaved edits and says so in the banner, and reports how many files it is reloading; File menu Reload All from Disk; base.watch.reloadAll |
 | `file.reloadFromDisk` | Reload from Disk | `src/editor/core/actions.ts` | missing |
 | `file.save` | Save All | `src/editor/core/actions.ts` | missing |
 | `file.toggleReadOnly` | Toggle Read-only Attribute | `src/editor/core/actions.ts` | missing |
