@@ -68,7 +68,7 @@ a dedicated test-run view.
 
 ## Debug pipeline
 
-1. The user sets line breakpoints in Java files (F9). Breakpoints are stored per
+1. The user sets line breakpoints in Java files (`Cmd+F8`). Breakpoints are stored per
    path and pushed wholesale with `debug_set_breakpoints`
    (`internal/app/debug.go:96-196`). The gutter and the paused line are drawn
    from that state.
