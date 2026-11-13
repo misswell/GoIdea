@@ -72,7 +72,9 @@ func (m *Model) welcomeSidebar(c *ui.Context, oi oiColors) {
 				}
 				ui.Column(c).Justify(ui.Center).Children(func() {
 					ui.Text(c, "OpenIDEA").FontSize(13).TextColor(oi.textStrong).SingleLine()
-					ui.Text(c, mygo.App.Version()).FontSize(13).TextColor(oi.textMuted).SingleLine()
+					if version := mygo.App.Version(); version != "" {
+						ui.Text(c, version).FontSize(13).TextColor(oi.textMuted).SingleLine()
+					}
 				})
 			})
 			ui.Text(c, "An open-source IDE inspired by IntelliJ IDEA").
