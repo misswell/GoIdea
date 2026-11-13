@@ -358,6 +358,13 @@ func (m *Model) treeRow(c *ui.Context, p *ui.Theme, row *treeNode) {
 	if r.Hovered() {
 		r.Background(p.SurfaceHover)
 	}
+	bookmarked := false
+	for _, pb := range m.pathBookmarks {
+		if pb.Path == row.path {
+			bookmarked = true
+			break
+		}
+	}
 	r.Children(func() {
 		label := row.name
 		if row.dir {
@@ -372,6 +379,24 @@ func (m *Model) treeRow(c *ui.Context, p *ui.Theme, row *treeNode) {
 			color = p.Accent
 		}
 		ui.Text(c, label).FontSize(12.5).TextColor(color).SingleLine().Ellipsis("…")
+		if bookmarked || r.Hovered() {
+			ui.Spacer(c)
+			chip := ui.Row(c.Key("treeBookmark:"+row.path)).Height(16).Padding(0, 5).
+				AlignItems(ui.Center)
+			if chip.Hovered() {
+				chip.Background(p.SurfacePressed)
+			}
+			chip.Children(func() {
+				tone := p.TextMuted
+				if bookmarked {
+					tone = p.Accent
+				}
+				ui.Text(c, "书签").FontSize(10.5).TextColor(tone).SingleLine()
+			})
+			if chip.Clicked() {
+				m.ToggleFolderBookmark(row.path, row.dir)
+			}
+		}
 	})
 	if r.Clicked() {
 		if row.dir {

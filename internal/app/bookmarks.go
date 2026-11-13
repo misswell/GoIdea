@@ -66,6 +66,18 @@ type newListPane struct {
 	name     string
 	err      string
 	renameID string
+	// move names a bookmark the new list takes, as the move chooser's New
+	// List… does in OpenIDEA.
+	move *movePane
+}
+
+// movePane is the open Move to List chooser, or nil.
+type movePane struct {
+	open bool
+	path string
+	line int
+	// file names a file or folder bookmark rather than a line one.
+	file bool
 }
 
 // deleteListPane is the open Delete Bookmark List confirmation, or nil.
@@ -185,28 +197,31 @@ func toggleBookmark(list []Bookmark, add Bookmark) ([]Bookmark, bool) {
 	return out, true
 }
 
-// PathBookmark is a bookmarked file, as OpenIDEA's Toggle File Bookmark marks
-// the project view or editor tab selection.
+// PathBookmark is a bookmarked file or folder, as OpenIDEA's Toggle File
+// Bookmark marks the project view or editor tab selection.
 type PathBookmark struct {
 	Path string `json:"path"`
+	// Dir marks a folder, which the project view's bookmark targets add.
+	Dir  bool   `json:"dir,omitempty"`
 	List string `json:"list,omitempty"`
 }
 
-// togglePathBookmark adds the file's bookmark, or removes it when present,
-// reporting whether it was added.
-func togglePathBookmark(list []PathBookmark, path string) ([]PathBookmark, bool) {
+// togglePathBookmark adds the file or folder's bookmark, or removes it when
+// present, reporting whether it was added.
+func togglePathBookmark(list []PathBookmark, path string, dir bool) ([]PathBookmark, bool) {
 	for i, pb := range list {
 		if pb.Path == path {
 			out := append(append([]PathBookmark(nil), list[:i]...), list[i+1:]...)
 			return out, false
 		}
 	}
-	out := append(append([]PathBookmark(nil), list...), PathBookmark{Path: path})
+	out := append(append([]PathBookmark(nil), list...), PathBookmark{Path: path, Dir: dir})
 	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
 	return out, true
 }
 
-// pathBookmarksInProject keeps the file bookmarks inside root that still exist.
+// pathBookmarksInProject keeps the file and folder bookmarks inside root that
+// still exist.
 func pathBookmarksInProject(list []PathBookmark, root string) []PathBookmark {
 	out := make([]PathBookmark, 0, len(list))
 	seen := make(map[string]bool, len(list))
@@ -214,7 +229,8 @@ func pathBookmarksInProject(list []PathBookmark, root string) []PathBookmark {
 		if pb.Path == "" || !inProject(root, pb.Path) || seen[pb.Path] {
 			continue
 		}
-		if st, err := os.Stat(pb.Path); err != nil || st.IsDir() {
+		st, err := os.Stat(pb.Path)
+		if err != nil || st.IsDir() != pb.Dir {
 			continue
 		}
 		seen[pb.Path] = true
@@ -548,7 +564,7 @@ func (m *Model) ToggleFileBookmark() {
 	}
 	path := t.doc.Path()
 	var added bool
-	m.pathBookmarks, added = togglePathBookmark(m.pathBookmarks, path)
+	m.pathBookmarks, added = togglePathBookmark(m.pathBookmarks, path, false)
 	if added {
 		for i := range m.pathBookmarks {
 			if m.pathBookmarks[i].Path == path {
@@ -560,6 +576,34 @@ func (m *Model) ToggleFileBookmark() {
 		m.status = "已添加文件书签 " + filepath.Base(path)
 	} else {
 		m.status = "已移除文件书签 " + filepath.Base(path)
+	}
+	m.saveSession()
+	m.invalidate()
+}
+
+// ToggleFolderBookmark marks or unmarks a project view row, which OpenIDEA's
+// project view bookmark target does for files and folders alike.
+func (m *Model) ToggleFolderBookmark(path string, dir bool) {
+	if path == "" {
+		return
+	}
+	var added bool
+	m.pathBookmarks, added = togglePathBookmark(m.pathBookmarks, path, dir)
+	if added {
+		for i := range m.pathBookmarks {
+			if m.pathBookmarks[i].Path == path {
+				m.pathBookmarks[i].List = m.defaultBookmarkList()
+			}
+		}
+	}
+	name := filepath.Base(path)
+	if dir {
+		name += "/"
+	}
+	if added {
+		m.status = "已添加书签 " + name
+	} else {
+		m.status = "已移除书签 " + name
 	}
 	m.saveSession()
 	m.invalidate()
@@ -589,6 +633,102 @@ func (m *Model) removeBookmark(path string, line int) {
 		m.removeBookmarkAt(i)
 		return
 	}
+}
+
+// moveBookmarkToList sends one line bookmark to another list.
+func moveBookmarkToList(list []Bookmark, path string, line int, to string) []Bookmark {
+	out := append([]Bookmark(nil), list...)
+	for i := range out {
+		if out[i].Path == path && out[i].Line == line {
+			out[i].List = to
+		}
+	}
+	return out
+}
+
+// movePathBookmarkToList sends one file or folder bookmark to another list.
+func movePathBookmarkToList(list []PathBookmark, path, to string) []PathBookmark {
+	out := append([]PathBookmark(nil), list...)
+	for i := range out {
+		if out[i].Path == path {
+			out[i].List = to
+		}
+	}
+	return out
+}
+
+// OpenMoveBookmark opens the Move to List chooser for a line bookmark.
+func (m *Model) OpenMoveBookmark(path string, line int) {
+	m.move = &movePane{open: true, path: path, line: line}
+	m.invalidate()
+}
+
+// OpenMoveFileBookmark opens the chooser for a file or folder bookmark.
+func (m *Model) OpenMoveFileBookmark(path string) {
+	m.move = &movePane{open: true, path: path, file: true}
+	m.invalidate()
+}
+
+// closeMoveBookmark drops the chooser.
+func (m *Model) closeMoveBookmark() {
+	if m.move == nil {
+		return
+	}
+	m.move = nil
+	m.invalidate()
+}
+
+// moveSourceList names the list the chooser's bookmark lives in.
+func (m *Model) moveSourceList(v *movePane) string {
+	if v.file {
+		for _, pb := range m.pathBookmarks {
+			if pb.Path == v.path {
+				return bookmarkListOf(pb.List)
+			}
+		}
+		return ""
+	}
+	for _, b := range m.bookmarks {
+		if b.Path == v.path && b.Line == v.line {
+			return bookmarkListOf(b.List)
+		}
+	}
+	return ""
+}
+
+// MoveBookmarkToList moves the chooser's bookmark into id.
+func (m *Model) MoveBookmarkToList(id string) {
+	v := m.move
+	if v == nil {
+		return
+	}
+	for _, l := range normalizeBookmarkLists(m.bookmarkLists) {
+		if l.ID != id {
+			continue
+		}
+		if v.file {
+			m.pathBookmarks = movePathBookmarkToList(m.pathBookmarks, v.path, id)
+		} else {
+			m.bookmarks = moveBookmarkToList(m.bookmarks, v.path, v.line, id)
+		}
+		m.move = nil
+		m.status = "已将书签移动到“" + l.Name + "”"
+		m.saveSession()
+		m.invalidate()
+		return
+	}
+}
+
+// OpenNewBookmarkListForMove asks for a list name, then moves the bookmark the
+// chooser names into it, as OpenIDEA's move menu's New List… does.
+func (m *Model) OpenNewBookmarkListForMove() {
+	v := m.move
+	if v == nil {
+		return
+	}
+	m.move = nil
+	m.newList = &newListPane{open: true, move: v}
+	m.invalidate()
 }
 
 // defaultBookmarkList is the list new bookmarks go to, defaulting to the first
@@ -670,10 +810,23 @@ func (m *Model) CreateBookmarkList() {
 		return
 	}
 	m.bookmarkLists = lists
-	m.defaultList = id
 	m.newList = nil
-	m.status = "已新建书签列表“" + strings.TrimSpace(lists[len(lists)-1].Name) + "”"
+	name := strings.TrimSpace(lists[len(lists)-1].Name)
+	if v.move != nil {
+		// The move chooser's New List… adds the list and puts the bookmark in
+		// it, without changing where new bookmarks go, as OpenIDEA does.
+		if v.move.file {
+			m.pathBookmarks = movePathBookmarkToList(m.pathBookmarks, v.move.path, id)
+		} else {
+			m.bookmarks = moveBookmarkToList(m.bookmarks, v.move.path, v.move.line, id)
+		}
+		m.status = "已新建书签列表“" + name + "”并移动书签"
+	} else {
+		m.defaultList = id
+		m.status = "已新建书签列表“" + name + "”"
+	}
 	m.saveSession()
+	m.refreshDecorations()
 	m.invalidate()
 }
 
@@ -770,6 +923,36 @@ func (m *Model) newListDialog(c *ui.Context, p *ui.Theme) {
 	}
 }
 
+// moveBookmarkDialog asks which list the chooser's bookmark moves into.
+func (m *Model) moveBookmarkDialog(c *ui.Context, p *ui.Theme) {
+	v := m.move
+	if v == nil {
+		return
+	}
+	open := v.open
+	src := m.moveSourceList(v)
+	d := ui.Modal(c, &open, func() {
+		ui.Column(c).Width(360).Gap(6).Children(func() {
+			ui.Text(c, "移动到列表").FontSize(13).Bold().TextColor(p.Text).SingleLine()
+			ui.Text(c, "选择书签的新列表：").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+			for _, l := range normalizeBookmarkLists(m.bookmarkLists) {
+				if l.ID == src {
+					continue
+				}
+				id, name := l.ID, l.Name
+				ui.Button(c, name).OnClick(func() { m.MoveBookmarkToList(id) })
+			}
+			ui.Row(c).Gap(8).Children(func() {
+				ui.Button(c, "新建列表…").OnClick(m.OpenNewBookmarkListForMove)
+				ui.Button(c, "取消").OnClick(m.closeMoveBookmark)
+			})
+		})
+	})
+	if d.Dismissed() || !open {
+		m.closeMoveBookmark()
+	}
+}
+
 // bookmarkDescriptionDialog edits the highlighted popup row's description.
 func (m *Model) bookmarkDescriptionDialog(c *ui.Context, p *ui.Theme) {
 	v := m.editDesc
@@ -851,7 +1034,8 @@ func (m *Model) bookmarkWindowRows(c *ui.Context, p *ui.Theme) {
 		})
 	}
 	var jumpPath, removePath, makeDefault, renameList, deleteList string
-	var jumpLine, removeLine = -1, -1
+	var moveFilePath, moveLinePath string
+	var jumpLine, removeLine, moveLine = -1, -1, -1
 	for _, l := range lists {
 		l := l
 		paths := pathBookmarksInList(m.pathBookmarks, l.ID)
@@ -881,15 +1065,30 @@ func (m *Model) bookmarkWindowRows(c *ui.Context, p *ui.Theme) {
 				r.Background(p.SurfaceHover)
 			}
 			r.Children(func() {
-				ui.Text(c, pathBookmarkLabel(root, pb.Path)).FontSize(11.5).TextColor(p.Text).
+				label := pathBookmarkLabel(root, pb.Path)
+				if pb.Dir {
+					label += "/"
+				}
+				ui.Text(c, label).FontSize(11.5).TextColor(p.Text).
 					SingleLine().Ellipsis("…")
 				ui.Spacer(c)
+				if m.rowChip(c, p, "bookmark-window:pathMove:"+l.ID+":"+pb.Path, "移动") {
+					moveFilePath = pb.Path
+				}
 				if m.rowChip(c, p, "bookmark-window:pathDel:"+l.ID+":"+pb.Path, "删除") {
 					removePath = pb.Path
 				}
 			})
 			if r.Clicked() {
-				jumpPath = pb.Path
+				if pb.Dir {
+					m.ShowProject()
+					if m.tree != nil {
+						m.tree.reveal(pb.Path)
+					}
+					m.invalidate()
+				} else {
+					jumpPath = pb.Path
+				}
 			}
 		}
 		for _, b := range marks {
@@ -909,6 +1108,9 @@ func (m *Model) bookmarkWindowRows(c *ui.Context, p *ui.Theme) {
 					ui.Text(c, bookmarkTitle(b)).FontSize(12).TextColor(p.Text).
 						SingleLine().Ellipsis("…")
 					ui.Spacer(c)
+					if m.rowChip(c, p, key+":move", "移动") {
+						moveLinePath, moveLine = b.Path, b.Line
+					}
 					if m.rowChip(c, p, key+":del", "删除") {
 						removePath, removeLine = b.Path, b.Line
 					}
@@ -930,6 +1132,10 @@ func (m *Model) bookmarkWindowRows(c *ui.Context, p *ui.Theme) {
 		m.AskDeleteBookmarkList(deleteList)
 	case makeDefault != "":
 		m.SetDefaultBookmarkList(makeDefault)
+	case moveLine >= 0:
+		m.OpenMoveBookmark(moveLinePath, moveLine)
+	case moveFilePath != "":
+		m.OpenMoveFileBookmark(moveFilePath)
 	case removeLine >= 0:
 		m.removeBookmark(removePath, removeLine)
 	case removePath != "":
@@ -1531,6 +1737,64 @@ func (m *Model) SmokeBookmark(ctx context.Context) (map[string]any, error) {
 		m.ConfirmDeleteBookmarkList()
 		out["listsAfterDelete"] = len(m.bookmarkLists)
 		out["marksAfterDelete"] = len(m.bookmarks)
+		// A line bookmark moves between lists through the chooser, including
+		// into a list the chooser's New List… just made.
+		m.OpenNewBookmarkList()
+		m.newList.name = "Move A"
+		m.CreateBookmarkList()
+		aID := m.defaultList
+		m.OpenNewBookmarkList()
+		m.newList.name = "Move B"
+		m.CreateBookmarkList()
+		bID := m.defaultList
+		t.state.GoTo(editor.Pos{Line: first, Col: 0})
+		m.ToggleBookmark()
+		m.OpenMoveBookmark(t.doc.Path(), first)
+		m.MoveBookmarkToList(aID)
+		for _, b := range m.bookmarks {
+			if b.Path == t.doc.Path() && b.Line == first {
+				out["movedTo"] = b.List == aID
+			}
+		}
+		m.OpenMoveBookmark(t.doc.Path(), first)
+		m.MoveBookmarkToList(bID)
+		for _, b := range m.bookmarks {
+			if b.Path == t.doc.Path() && b.Line == first {
+				out["movedAgain"] = b.List == bID
+			}
+		}
+		before := m.defaultList
+		m.OpenMoveBookmark(t.doc.Path(), first)
+		m.OpenNewBookmarkListForMove()
+		m.newList.name = "Move C"
+		m.CreateBookmarkList()
+		cID := ""
+		for _, l := range m.bookmarkLists {
+			if l.Name == "Move C" {
+				cID = l.ID
+			}
+		}
+		for _, b := range m.bookmarks {
+			if b.Path == t.doc.Path() && b.Line == first {
+				out["movedToNew"] = b.List == cID
+			}
+		}
+		out["moveKeptDefault"] = m.defaultList == before
+		t.state.GoTo(editor.Pos{Line: first, Col: 0})
+		m.ToggleBookmark()
+		// A folder is a bookmark target too, as the project view's Add Bookmark
+		// bookmarks the selected folder.
+		folder := filepath.Dir(t.doc.Path())
+		m.ToggleFolderBookmark(folder, true)
+		for _, pb := range m.pathBookmarks {
+			if pb.Path == folder {
+				out["folderMarked"] = pb.Dir
+			}
+		}
+		m.ShowBookmarksWindow()
+		out["folderListed"] = len(pathBookmarksInList(m.pathBookmarks, m.defaultList))
+		m.ToggleFolderBookmark(folder, true)
+		out["folderCleared"] = len(m.pathBookmarks)
 	})
 	select {
 	case <-done:

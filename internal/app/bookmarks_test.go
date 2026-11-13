@@ -138,17 +138,24 @@ func TestBookmarkByMnemonic(t *testing.T) {
 }
 
 func TestTogglePathBookmarkAddsAndRemoves(t *testing.T) {
-	list, added := togglePathBookmark(nil, "/p/b.java")
+	list, added := togglePathBookmark(nil, "/p/b.java", false)
 	if !added || len(list) != 1 {
 		t.Fatalf("add = %v, %v; want one file", list, added)
 	}
-	list, added = togglePathBookmark(list, "/p/a.java")
+	list, added = togglePathBookmark(list, "/p/a.java", false)
 	if !added || len(list) != 2 || list[0].Path != "/p/a.java" {
 		t.Fatalf("sorted = %v, want a.java first", list)
 	}
-	list, added = togglePathBookmark(list, "/p/b.java")
+	list, added = togglePathBookmark(list, "/p/b.java", false)
 	if added || len(list) != 1 || list[0].Path != "/p/a.java" {
 		t.Fatalf("remove = %v, %v; want only a.java", list, added)
+	}
+}
+
+func TestTogglePathBookmarkKeepsTheFolderFlag(t *testing.T) {
+	list, added := togglePathBookmark(nil, "/p/src", true)
+	if !added || len(list) != 1 || !list[0].Dir {
+		t.Fatalf("add = %v, %v; want one folder", list, added)
 	}
 }
 
@@ -162,13 +169,38 @@ func TestPathBookmarksInProjectDropsMissingAndOutside(t *testing.T) {
 	if err := os.WriteFile(outside, []byte("class B {}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	dir := filepath.Join(root, "src")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	list := []PathBookmark{
-		{Path: inside}, {Path: outside},
+		{Path: inside}, {Path: outside}, {Path: dir, Dir: true},
 		{Path: filepath.Join(root, "gone.java")}, {Path: inside},
+		// The folder flag has to match what is on disk.
+		{Path: dir}, {Path: inside, Dir: true},
 	}
 	got := pathBookmarksInProject(list, root)
-	if len(got) != 1 || got[0].Path != inside {
-		t.Fatalf("pathBookmarksInProject = %v, want only %s", got, inside)
+	if len(got) != 2 || got[0].Path != inside || got[1].Path != dir || !got[1].Dir {
+		t.Fatalf("pathBookmarksInProject = %v, want the file and the folder", got)
+	}
+}
+
+func TestMoveBookmarkToList(t *testing.T) {
+	list := []Bookmark{
+		{Path: "/p/a.java", Line: 1},
+		{Path: "/p/a.java", Line: 2, List: "list2"},
+	}
+	got := moveBookmarkToList(list, "/p/a.java", 2, "list3")
+	if got[1].List != "list3" || got[0].List != "" {
+		t.Fatalf("move = %v, want only line 2 in list3", got)
+	}
+	if list[1].List != "list2" {
+		t.Fatal("the move changed the caller's list")
+	}
+	paths := []PathBookmark{{Path: "/p/a.java"}, {Path: "/p/dir", Dir: true}}
+	gotPaths := movePathBookmarkToList(paths, "/p/dir", "list3")
+	if gotPaths[1].List != "list3" || gotPaths[0].List != "" {
+		t.Fatalf("path move = %v, want only the folder in list3", gotPaths)
 	}
 }
 

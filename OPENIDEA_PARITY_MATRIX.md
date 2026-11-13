@@ -483,8 +483,8 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 
 | Action | Title | Source | Status |
 | --- | --- | --- | --- |
-| `bookmarks.newList` | New Bookmark List… | `src/features/search/index.ts` | partial - internal/app/bookmarks.go addBookmarkList, renameBookmarkList, removeBookmarkList and newListDialog; tool-window chips 重命名/删除; cmd/goidea/main.go 新建书签列表…; base.bookmark.list, base.bookmark.listOps; internal/app/bookmarks_test.go |
-| `bookmarks.toggleFileBookmark` | Toggle File Bookmark | `src/features/search/index.ts` | partial - internal/app/bookmarks.go ToggleFileBookmark and pathBookmarkLabel; cmd/goidea/main.go 切换文件书签; base.bookmark.file; internal/app/bookmarks_test.go |
+| `bookmarks.newList` | New Bookmark List… | `src/features/search/index.ts` | partial - internal/app/bookmarks.go addBookmarkList, renameBookmarkList, removeBookmarkList and newListDialog; tool-window chips 重命名/删除; the move chooser's 新建列表… creates a list and moves the bookmark into it; cmd/goidea/main.go 新建书签列表…; base.bookmark.list, base.bookmark.listOps, base.bookmark.move; internal/app/bookmarks_test.go |
+| `bookmarks.toggleFileBookmark` | Toggle File Bookmark | `src/features/search/index.ts` | partial - internal/app/bookmarks.go ToggleFileBookmark and ToggleFolderBookmark with PathBookmark.Dir, pathBookmarkLabel; project tree rows chip 书签 in internal/app/view.go; cmd/goidea/main.go 切换文件书签; base.bookmark.file, base.bookmark.folder; internal/app/bookmarks_test.go |
 | `find.inPath` | Find in Files… | `src/features/search/index.ts` | missing |
 | `find.replaceInPath` | Replace in Files… | `src/features/search/index.ts` | missing |
 | `find.rerun` | Rerun Search | `src/features/search/index.ts` | missing |
@@ -963,7 +963,7 @@ same bindings until a check records it.
 
 | Tool window | Title | Anchor | Source | Status |
 | --- | --- | --- | --- | --- |
-| `bookmarks` | Bookmarks | left | `src/features/search/index.ts` | integrated - internal/app/bookmarks.go bookmarkWindowRows, ShowBookmarksWindow Cmd+2; Cmd+F3 popup edit description (F2) in bookmarksDialog; internal/app/view.go sidebar tab; base.bookmark.window, base.bookmark.popup |
+| `bookmarks` | Bookmarks | left | `src/features/search/index.ts` | integrated - internal/app/bookmarks.go bookmarkWindowRows, ShowBookmarksWindow Cmd+2, move chooser 移动 with OpenMoveBookmark/OpenNewBookmarkListForMove and folder rows; Cmd+F3 popup edit description (F2) in bookmarksDialog; internal/app/view.go sidebar tab and project tree 书签 chip; base.bookmark.window, base.bookmark.popup, base.bookmark.move, base.bookmark.folder |
 | `build` | Build | bottom | `src/features/build/index.ts` | partial - base.build.console, base.build.lines; internal/app/view.go buildPanel |
 | `commit` | Commit | left | `src/features/vcs/index.ts` | partial - internal/app/commit.go commitDialog; base.commit.id |
 | `compare` | Compare | left | `src/features/vcs/compareTool.tsx` | missing |
