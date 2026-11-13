@@ -1,0 +1,5 @@
+.DS_Store
+/goidea
+/bin/
+/dist/
+*.log

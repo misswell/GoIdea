@@ -1,0 +1,278 @@
+package openidea
+
+import (
+	"encoding/json"
+	"fmt"
+
+	"goidea/internal/position"
+)
+
+// ServerInfo is the reply to initialize.
+type ServerInfo struct {
+	Version  string `json:"version"`
+	Protocol uint32 `json:"protocol"`
+	OS       string `json:"os"`
+	Arch     string `json:"arch"`
+	Home     string `json:"home"`
+}
+
+// DocInfo is the reply to doc_open and doc_snapshot.
+type DocInfo struct {
+	ID         uint32 `json:"id"`
+	Path       string `json:"path"`
+	Text       string `json:"text"`
+	Version    uint32 `json:"version"`
+	Language   string `json:"language"`
+	Encoding   string `json:"encoding"`
+	HasBOM     bool   `json:"hasBom"`
+	LineEnding string `json:"lineEnding"`
+	ReadOnly   bool   `json:"readOnly"`
+	Dirty      bool   `json:"dirty"`
+	Large      bool   `json:"large"`
+	URI        string `json:"uri"`
+}
+
+// EventType returns the discriminant of an event payload.
+func EventType(params json.RawMessage) string {
+	var envelope struct {
+		Type string `json:"type"`
+	}
+	_ = json.Unmarshal(params, &envelope)
+	return envelope.Type
+}
+
+// DocPatchedEvent is the backend having changed a document (formatting,
+// refactoring, reload). Changes are UTF-16 into baseVersion and yield version.
+type DocPatchedEvent struct {
+	Doc           uint32                `json:"doc"`
+	BaseVersion   uint32                `json:"baseVersion"`
+	Version       uint32                `json:"version"`
+	Changes       []position.TextChange `json:"changes"`
+	WorkspaceEdit bool                  `json:"workspaceEdit"`
+}
+
+// DecodeDocPatched decodes a docPatched event.
+func DecodeDocPatched(params json.RawMessage) (DocPatchedEvent, error) {
+	var e DocPatchedEvent
+	err := json.Unmarshal(params, &e)
+	return e, err
+}
+
+// DocDirtyEvent reports a document's dirty flag changing.
+type DocDirtyEvent struct {
+	Doc   uint32 `json:"doc"`
+	Dirty bool   `json:"dirty"`
+}
+
+// FsChangedEvent reports files changed on disk, after ignore rules.
+type FsChangedEvent struct {
+	Created  []string `json:"created"`
+	Modified []string `json:"modified"`
+	Removed  []string `json:"removed"`
+}
+
+// RunExitedEvent reports a run configuration's process ending.
+type RunExitedEvent struct {
+	Run  uint32 `json:"run"`
+	Code *int32 `json:"code"`
+}
+
+// IndexStateEvent reports the project indexer's state.
+type IndexStateEvent struct {
+	Indexing bool   `json:"indexing"`
+	Files    uint32 `json:"files"`
+	Symbols  uint32 `json:"symbols"`
+}
+
+// WindowEvent is the params of an event notification.
+type WindowEvent struct {
+	Window *string         `json:"window"`
+	Event  json.RawMessage `json:"event"`
+}
+
+// InvokeArgs is the params of invoke.
+type InvokeArgs struct {
+	Window string `json:"window"`
+	Cmd    string `json:"cmd"`
+	Args   any    `json:"args,omitempty"`
+}
+
+func (i InvokeArgs) String() string { return fmt.Sprintf("%s in %s", i.Cmd, i.Window) }
+
+// ChannelMessage is a `channel` notification: one value of a streaming
+// invoke argument, by the channel id the caller put in the arguments.
+type ChannelMessage struct {
+	ID   uint32          `json:"id"`
+	Data json.RawMessage `json:"data"`
+}
+
+// OutputChunk is one piece of a run configuration's output.
+type OutputChunk struct {
+	Kind string `json:"kind"` // stdout | stderr | system
+	Text string `json:"text"`
+}
+
+// RunConfig is a run configuration as run_configs returns it. Raw keeps the
+// whole object so run_start gets back every field, including the ones GoIDEA
+// does not model.
+type RunConfig struct {
+	ID           string  `json:"id"`
+	Name         string  `json:"name"`
+	Kind         string  `json:"kind"`
+	Command      string  `json:"command"`
+	Detected     bool    `json:"detected"`
+	IsTest       bool    `json:"isTest"`
+	DebugAdapter *string `json:"debugAdapter"`
+
+	raw json.RawMessage
+}
+
+// Raw is the configuration exactly as the backend sent it.
+func (r RunConfig) Raw() json.RawMessage { return r.raw }
+
+// DecodeRunConfigs decodes the run_configs reply.
+func DecodeRunConfigs(raw json.RawMessage) ([]RunConfig, error) {
+	var items []json.RawMessage
+	if err := json.Unmarshal(raw, &items); err != nil {
+		return nil, err
+	}
+	out := make([]RunConfig, 0, len(items))
+	for _, item := range items {
+		var cfg RunConfig
+		if err := json.Unmarshal(item, &cfg); err != nil {
+			return nil, err
+		}
+		cfg.raw = item
+		out = append(out, cfg)
+	}
+	return out, nil
+}
+
+// RunInfo is the reply to run_start.
+type RunInfo struct {
+	ID       uint32 `json:"id"`
+	ConfigID string `json:"configId"`
+	Name     string `json:"name"`
+	PID      *int32 `json:"pid"`
+	Running  bool   `json:"running"`
+	Pty      bool   `json:"pty"`
+}
+
+// TrustStatus is the reply to project_trust_status.
+type TrustStatus struct {
+	Decided bool   `json:"decided"`
+	Root    string `json:"root"`
+	Trusted bool   `json:"trusted"`
+}
+
+// DebugLaunchConfig is a debug adapter session start: what to run or attach to,
+// and extraJson for the adapter's own fields (java-debug's debugServer port,
+// main class, classpath).
+type DebugLaunchConfig struct {
+	Name      string            `json:"name"`
+	Adapter   string            `json:"adapter"`
+	Request   string            `json:"request"`
+	Program   *string           `json:"program"`
+	Args      []string          `json:"args"`
+	Cwd       string            `json:"cwd"`
+	Env       map[string]string `json:"env"`
+	ExtraJSON *string           `json:"extraJson"`
+}
+
+// Breakpoint is one line breakpoint; Line is 0-based, as the editor's.
+type Breakpoint struct {
+	Line         int     `json:"line"`
+	Condition    *string `json:"condition"`
+	HitCondition *string `json:"hitCondition"`
+	LogMessage   *string `json:"logMessage"`
+	Enabled      bool    `json:"enabled"`
+}
+
+// BreakpointState is the adapter's verdict on a breakpoint.
+type BreakpointState struct {
+	Line     int     `json:"line"`
+	Verified bool    `json:"verified"`
+	Message  *string `json:"message"`
+}
+
+// JavaCompileError is one compile error the launch build found.
+type JavaCompileError struct {
+	Path    string `json:"path"`
+	Line    int    `json:"line"`
+	Column  int    `json:"column"`
+	Message string `json:"message"`
+}
+
+// JavaLaunchInfo is the reply to java_resolve_launch: the built classpath and
+// JDK of a module, plus what the build found.
+type JavaLaunchInfo struct {
+	Build              *string            `json:"build"`
+	ProjectRoot        *string            `json:"projectRoot"`
+	ClassPaths         []string           `json:"classPaths"`
+	ModulePaths        []string           `json:"modulePaths"`
+	PathListSeparator  string             `json:"pathListSeparator"`
+	JavaHome           *string            `json:"javaHome"`
+	JavaExec           *string            `json:"javaExec"`
+	ShortenCommandLine *string            `json:"shortenCommandLine"`
+	Errors             []JavaCompileError `json:"errors"`
+	ErrorCount         int                `json:"errorCount"`
+	Hints              []string           `json:"hints"`
+}
+
+// ThreadInfo is one thread of a debug session.
+type ThreadInfo struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+}
+
+// StackFrame is one frame of a thread; Line and Column are 0-based.
+type StackFrame struct {
+	ID               int64   `json:"id"`
+	Name             string  `json:"name"`
+	Path             *string `json:"path"`
+	Line             int     `json:"line"`
+	Column           int     `json:"column"`
+	PresentationHint *string `json:"presentationHint"`
+}
+
+// Scope is one variable scope of a frame, as Locals or "this".
+type Scope struct {
+	Name               string `json:"name"`
+	VariablesReference int64  `json:"variablesReference"`
+	Expensive          bool   `json:"expensive"`
+}
+
+// Variable is one variable, or a value with children when
+// VariablesReference is positive.
+type Variable struct {
+	Name               string  `json:"name"`
+	Value              string  `json:"value"`
+	TypeName           *string `json:"typeName"`
+	VariablesReference int64   `json:"variablesReference"`
+	EvaluateName       *string `json:"evaluateName"`
+}
+
+// DebugEnvelope is the `debug` event's payload: the session it belongs to and
+// the adapter event.
+type DebugEnvelope struct {
+	Session uint32          `json:"session"`
+	Event   json.RawMessage `json:"event"`
+}
+
+// DebugEvent is one DAP event, flattened. Kind selects the fields that are
+// meaningful: "stopped" has ThreadID/Reason/Description, "output" has
+// Category/Output, "exited" has Code.
+type DebugEvent struct {
+	Kind              string `json:"kind"`
+	Name              string `json:"name"`
+	Adapter           string `json:"adapter"`
+	ThreadID          int64  `json:"threadId"`
+	AllThreadsStopped bool   `json:"allThreadsStopped"`
+	Reason            string `json:"reason"`
+	Description       string `json:"description"`
+	Category          string `json:"category"`
+	Output            string `json:"output"`
+	Path              string `json:"path"`
+	Code              *int32 `json:"code"`
+	Message           string `json:"message"`
+}
