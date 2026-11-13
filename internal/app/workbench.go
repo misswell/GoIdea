@@ -772,18 +772,19 @@ func (m *Model) editorTabs(c *ui.Context, p *ui.Theme, oi oiColors) {
 	}
 	if m.tabPrefs.PinnedSeparateRow && pinned > 0 && pinned < len(m.tabs) {
 		ui.Column(c).Shrink(0).Children(func() {
-			m.tabStrip(c, p, oi, m.tabs[:pinned], 0)
-			m.tabStrip(c, p, oi, m.tabs[pinned:], pinned)
+			m.tabStrip(c, p, oi, m.tabs[:pinned], 0, &m.tabsPinnedScroll)
+			m.tabStrip(c, p, oi, m.tabs[pinned:], pinned, &m.tabsScroll)
 		})
 		return
 	}
-	m.tabStrip(c, p, oi, m.tabs, 0)
+	m.tabStrip(c, p, oi, m.tabs, 0, &m.tabsScroll)
 }
 
 // tabStrip is the tab bar with the island's bottom border; offset is the
-// row's first tab in the strip. Show tabs in decides how tabs that don't fit
-// go: one row scrolls sideways or squeezes them, multiple rows wrap.
-func (m *Model) tabStrip(c *ui.Context, p *ui.Theme, oi oiColors, tabs []*Tab, offset int) {
+// row's first tab in the strip and scroll the row's sideways place. Show tabs
+// in decides how tabs that don't fit go: one row scrolls sideways or squeezes
+// them, multiple rows wrap.
+func (m *Model) tabStrip(c *ui.Context, p *ui.Theme, oi oiColors, tabs []*Tab, offset int, scroll *ui.ScrollState) {
 	reveal := m.tabsShown != m.active
 	m.tabsShown = m.active
 	strip := ui.Row(c).Shrink(0).Padding(0, 4).
@@ -805,12 +806,87 @@ func (m *Model) tabStrip(c *ui.Context, p *ui.Theme, oi oiColors, tabs []*Tab, o
 				m.tabButtons(c, p, oi, tabs, offset, reveal, false)
 			})
 		default:
-			ui.ScrollHorizontal(c).Grow(1).MinWidth(0).Gap(2).
-				AlignItems(ui.Center).TrackScroll(&m.tabsScroll).Children(func() {
-				m.tabButtons(c, p, oi, tabs, offset, reveal, false)
+			ui.Row(c).Grow(1).MinWidth(0).AlignItems(ui.Center).Children(func() {
+				ui.ScrollHorizontal(c).Grow(1).MinWidth(0).Gap(2).
+					AlignItems(ui.Center).TrackScroll(scroll).Children(func() {
+					m.tabButtons(c, p, oi, tabs, offset, reveal, false)
+				})
+				if scroll.MaxX > 0.5 {
+					m.tabOverflow(c, p, oi, tabs, offset)
+				}
 			})
 		}
 	})
+}
+
+// tabMenuRow is a tab the Show Hidden Tabs menu lists: its place in the
+// workbench strip and whether it is the tab on show.
+type tabMenuRow struct {
+	Tab    *Tab
+	Index  int
+	Active bool
+}
+
+// tabMenuRows numbers a strip's tabs for the menu above the chevron.
+func tabMenuRows(tabs []*Tab, offset, active int) []tabMenuRow {
+	rows := make([]tabMenuRow, 0, len(tabs))
+	for j, t := range tabs {
+		i := offset + j
+		rows = append(rows, tabMenuRow{Tab: t, Index: i, Active: i == active})
+	}
+	return rows
+}
+
+// tabOverflow is OpenIDEA's chevron at the end of a strip whose tabs run past
+// its width: Show Hidden Tabs opens a menu of every tab in the strip, the
+// active one marked, and picking one shows it.
+func (m *Model) tabOverflow(c *ui.Context, p *ui.Theme, oi oiColors, tabs []*Tab, offset int) {
+	b := ui.ButtonBase(c.Key("tabsOverflow")).Size(22, 22).Radius(4).
+		AlignItems(ui.Center).Justify(ui.Center).Cursor(ui.CursorPointer).
+		Tooltip("Show Hidden Tabs")
+	if b.Hovered() {
+		b.Background(oi.toolbarHover)
+	}
+	b.Children(func() {
+		ui.Icon(c, iconChevronDown).Size(14, 14).TextColor(oi.textMuted)
+	})
+	if b.Clicked() {
+		m.tabsMenuOpen = !m.tabsMenuOpen
+		m.invalidate()
+	}
+	open := m.tabsMenuOpen
+	ui.PopoverBase(c, b, &open, func(panel ui.Element) {
+		panel.Width(300).Padding(4).Background(oi.popup).
+			BorderWidth(1).BorderColor(oi.borderStrong).Radius(8)
+		panel.Children(func() {
+			for _, row := range tabMenuRows(tabs, offset, m.active) {
+				row := row
+				r := ui.Row(c.Key(fmt.Sprintf("tabsOverflow:%d", row.Index))).
+					Height(26).Shrink(0).Padding(0, 8).Gap(8).Radius(4).
+					AlignItems(ui.Center).Cursor(ui.CursorPointer)
+				if row.Active || r.Hovered() {
+					r.Background(oi.hoverTint)
+				}
+				name, dir := m.tabLabel(row.Tab)
+				r.Children(func() {
+					ui.Icon(c, iconFile).Size(14, 14).TextColor(oi.textMuted)
+					ui.Text(c, name).FontSize(13).TextColor(oi.text).SingleLine().
+						Ellipsis("…")
+					if dir != "" {
+						ui.Text(c, dir).FontSize(13).TextColor(oi.textFaint).
+							SingleLine().Ellipsis("…")
+					}
+				})
+				if r.Clicked() {
+					m.tabsMenuOpen = false
+					m.activate(row.Index)
+				}
+			}
+		})
+	})
+	if !open {
+		m.tabsMenuOpen = false
+	}
 }
 
 // verticalTabs is OpenIDEA's strip on the editor's left or right: a scrolling

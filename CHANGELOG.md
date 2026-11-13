@@ -21,6 +21,7 @@ needs a `## <version>` section here, or its build fails.
 - 标签页可显示文件图标，**Show file icon** 可关掉它。
 - **Tab placement** 可选 **Left** 或 **Right**，标签页变成编辑器旁边一列 140–260 宽的竖排标签。
 - 当前标签页改用 OpenIDEA 的浅色选中块和一圈描边，不再用底部色条。
+- 标签页多到放不下时，标签栏右端出现下箭头，点开 **Show Hidden Tabs** 可跳到任意标签页。
 - 编辑器的右键菜单新增 **Show Context Actions**、**Copy / Paste Special**、**Go To**、**Reformat Code** 和 **Rename…**。
 - **Copy Path/Reference** 可复制编辑器的绝对路径、文件名、项目内路径和带行号的路径。
 - **Editor > Editor Tabs** 可选择关闭当前标签页后激活哪个：左边的、右边的或最近打开的。

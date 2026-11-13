@@ -275,3 +275,21 @@ func TestTabForPathIgnoresTabsWithoutADocument(t *testing.T) {
 		t.Fatalf("tabForPath = %d", at)
 	}
 }
+
+func TestTabMenuRowsNumberTheStripAndMarkTheActiveTab(t *testing.T) {
+	a, b, c := &Tab{}, &Tab{}, &Tab{}
+	// The second row of a pinned strip: its tabs keep their workbench
+	// index while the menu numbers them from the row's start.
+	rows := tabMenuRows(strip(a, b, c), 2, 3)
+	if len(rows) != 3 {
+		t.Fatalf("rows = %d", len(rows))
+	}
+	for j, row := range rows {
+		if row.Index != 2+j || row.Tab != strip(a, b, c)[j] {
+			t.Fatalf("row %d = %+v", j, row)
+		}
+	}
+	if rows[0].Active || !rows[1].Active || rows[2].Active {
+		t.Fatalf("active rows = %v %v %v", rows[0].Active, rows[1].Active, rows[2].Active)
+	}
+}

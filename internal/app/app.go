@@ -124,12 +124,18 @@ type Model struct {
 	tabPrefs TabPrefs
 	tabUse   uint64
 
-	// tabsScroll keeps how far the strip scrolls sideways, tabsSideScroll how
-	// far a strip on the editor's left or right scrolls down, and tabsShown is
-	// the active tab the last strip drew, so a change reveals the new one.
-	tabsScroll     ui.ScrollState
-	tabsSideScroll ui.ScrollState
-	tabsShown      int
+	// tabsScroll keeps how far the strip scrolls sideways, tabsPinnedScroll the
+	// pinned row of a two-row strip, tabsSideScroll how far a strip on the
+	// editor's left or right scrolls down, and tabsShown is the active tab the
+	// last strip drew, so a change reveals the new one.
+	tabsScroll       ui.ScrollState
+	tabsPinnedScroll ui.ScrollState
+	tabsSideScroll   ui.ScrollState
+	tabsShown        int
+
+	// tabsMenuOpen is OpenIDEA's Show Hidden Tabs menu, opened by the chevron
+	// that a strip shows only while its tabs run past its width.
+	tabsMenuOpen bool
 
 	// diags is the newest diagnostics per file path and producer, which the
 	// tabs of that file and the Problems tool window show.
