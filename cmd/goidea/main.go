@@ -185,6 +185,15 @@ func smoke(m *app.Model) {
 			fields["codeIntelError"] = intelErr.Error()
 		}
 	}
+	if os.Getenv("GOIDEA_SMOKE_LSP") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		lsp, lspErr := m.SmokeLSP(ctx)
+		cancel()
+		fields["lsp"] = lsp
+		if lspErr != nil {
+			fields["lspError"] = lspErr.Error()
+		}
+	}
 	if root != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		count, sample, vcsErr := m.SmokeVCS(ctx)

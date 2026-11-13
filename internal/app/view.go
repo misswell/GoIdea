@@ -411,10 +411,9 @@ func (m *Model) breadcrumbs(c *ui.Context, p *ui.Theme, t *Tab) {
 					ui.Text(c, it.Name).FontSize(11.5).TextColor(p.Text).SingleLine()
 				})
 				if chip.Clicked() {
-					t.state.GoTo(editor.Pos{
-						Line: int(it.SelectionRange.Start.Line),
-						Col:  int(it.SelectionRange.Start.Col),
-					})
+					line, col := t.doc.BytePos(
+						int(it.SelectionRange.Start.Line), int(it.SelectionRange.Start.Col))
+					t.state.GoTo(editor.Pos{Line: line, Col: col})
 					m.invalidate()
 				}
 			}

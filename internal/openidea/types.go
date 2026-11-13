@@ -368,3 +368,44 @@ type TerminalExitedEvent struct {
 	Terminal uint32 `json:"terminal"`
 	Code     *int32 `json:"code"`
 }
+
+// Markup is text a language server wrote: "markdown" or "plaintext".
+type Markup struct {
+	Kind  string `json:"kind"`
+	Value string `json:"value"`
+}
+
+// Hover is lsp_hover's answer: what a symbol is, and the range it covers.
+type Hover struct {
+	Contents Markup        `json:"contents"`
+	Range    *OutlineRange `json:"range"`
+}
+
+// CompletionList is lsp_completion's answer.
+type CompletionList struct {
+	Items        []CompletionItem `json:"items"`
+	IsIncomplete bool             `json:"isIncomplete"`
+}
+
+// CompletionItem is one suggestion of a completion list; only what the editor
+// shows is kept.
+type CompletionItem struct {
+	Label            string  `json:"label"`
+	LabelDetail      *string `json:"labelDetail"`
+	LabelDescription *string `json:"labelDescription"`
+	Detail           *string `json:"detail"`
+	Kind             *string `json:"kind"`
+	InsertText       string  `json:"insertText"`
+	IsSnippet        bool    `json:"isSnippet"`
+	FilterText       *string `json:"filterText"`
+	Documentation    *Markup `json:"documentation"`
+}
+
+// Location is a place a language server points at: a file and a range of it.
+// Virtual targets (an entry of a jar, for one) carry a URI instead of a path a
+// tab can open.
+type Location struct {
+	Path  string       `json:"path"`
+	Range OutlineRange `json:"range"`
+	URI   *string      `json:"uri"`
+}

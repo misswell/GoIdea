@@ -63,6 +63,15 @@ type Tab struct {
 	outlineVersion uint64
 	outlineGen     uint64
 	outlineLoading bool
+
+	// compReq is the completion request in flight, compGen and hoverGen drop
+	// replies a newer request superseded, and compOff is when completion asks
+	// again after the language server was missing.
+	compReq  uint32
+	compGen  uint64
+	compOff  time.Time
+	hoverGen uint64
+	defGen   uint64
 }
 
 // Model is the app's state.
@@ -475,6 +484,9 @@ func (m *Model) newTab(doc *docbridge.Document) *Tab {
 		seen:   v,
 	}
 	t.state.OnGutterClick = func(line int) { m.toggleBreakpointAt(path, line) }
+	t.state.OnCompletion = func(req editor.CompletionRequest) { m.requestCompletion(t, req) }
+	t.state.OnHover = func(req editor.HoverRequest) { m.requestHover(t, req) }
+	t.state.OnDefinition = func(off int) { m.gotoDefinition(t, off) }
 	return t
 }
 

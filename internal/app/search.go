@@ -140,7 +140,9 @@ func (m *Model) acceptSearchEvent(data json.RawMessage) {
 	m.invalidate()
 }
 
-// revealPos is a caret position to apply when its file becomes active.
+// revealPos is a caret position to apply when its file becomes active. The
+// column is UTF-16, as search hits and language servers report it; it turns
+// into the editor's byte column once the tab has the document open.
 type revealPos struct {
 	path      string
 	line, col int
@@ -162,6 +164,7 @@ func (m *Model) applyReveal(t *Tab) {
 	}
 	line, col := m.reveal.line, m.reveal.col
 	m.reveal = nil
+	line, col = t.doc.BytePos(line, col)
 	t.state.GoTo(editor.Pos{Line: line, Col: col})
 	t.state.ScrollTo(line)
 	m.invalidate()

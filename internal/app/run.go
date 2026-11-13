@@ -96,6 +96,7 @@ func (m *Model) TrustProject() {
 	}
 	m.run.busy = true
 	m.run.trustErr = ""
+	wasTrusted := m.run.trusted
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
@@ -111,6 +112,13 @@ func (m *Model) TrustProject() {
 				err = json.Unmarshal(raw, &status)
 			}
 		}
+		// Documents opened while the project was untrusted carry no language
+		// server: attaching them happened before the grant existed. Re-opening
+		// them attaches the servers the grant started.
+		var reopenErr error
+		if err == nil && status.Trusted && !wasTrusted {
+			reopenErr = m.reg.ReopenAll(ctx)
+		}
 		m.post(func() {
 			m.run.busy = false
 			if m.Root() != root {
@@ -125,6 +133,9 @@ func (m *Model) TrustProject() {
 			if m.run.trusted {
 				m.status = "已信任此项目，可以构建和运行"
 				m.loadRunConfigs()
+			}
+			if reopenErr != nil {
+				m.run.trustErr = "语言服务重连失败：" + reopenErr.Error()
 			}
 			m.invalidate()
 		})

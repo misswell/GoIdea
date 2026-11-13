@@ -171,6 +171,63 @@ func (d *Document) Buffer() *editor.Buffer { return d.buf }
 // Mapper returns the byte/UTF-16 mapper of the buffer's current text.
 func (d *Document) Mapper() *position.Mapper { return d.mapper }
 
+// UTF16Pos converts a byte offset of the buffer to a protocol position.
+func (d *Document) UTF16Pos(off int) openidea.OutlinePos {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	cur := d.buf.Snapshot()
+	d.catchUpLocked(cur)
+	p := d.mapper.ByteOffsetToUTF16Position(snapText{cur}, off)
+	return openidea.OutlinePos{Line: p.Line, Col: p.Character}
+}
+
+// ByteOffset converts a protocol position to a byte offset of the buffer.
+func (d *Document) ByteOffset(p openidea.OutlinePos) int {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	cur := d.buf.Snapshot()
+	d.catchUpLocked(cur)
+	return d.mapper.UTF16PositionToByteOffset(snapText{cur}, position.Position{
+		Line: p.Line, Character: p.Col,
+	})
+}
+
+// BytePos converts a protocol line and UTF-16 column to a line and byte
+// column, as the editor takes them.
+func (d *Document) BytePos(line, col int) (int, int) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	cur := d.buf.Snapshot()
+	d.catchUpLocked(cur)
+	return d.mapper.UTF16PositionToBytePosition(snapText{cur}, position.Position{
+		Line: uint32(line), Character: uint32(col),
+	})
+}
+
+// ByteRange converts a protocol range to byte offsets of the buffer.
+func (d *Document) ByteRange(r openidea.OutlineRange) (start, end int) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	cur := d.buf.Snapshot()
+	d.catchUpLocked(cur)
+	return d.mapper.RangeToByteOffsets(snapText{cur}, position.Range{
+		Start: position.Position{Line: r.Start.Line, Character: r.Start.Col},
+		End:   position.Position{Line: r.End.Line, Character: r.End.Col},
+	})
+}
+
+// catchUpLocked moves the mapper to the buffer's text when a widget edited the
+// shared buffer since the mapper last moved. The mapper describes the base in
+// that state (every other path moves it with the buffer as it edits), so the
+// diff from the base is what it missed.
+func (d *Document) catchUpLocked(cur editor.Snapshot) {
+	if d.indexed == cur.Version() || d.indexed != d.baseBuf {
+		return
+	}
+	d.applyHunksToIndexLocked(snapText{d.base}, snapText{cur}, diffTexts(snapText{d.base}, snapText{cur}))
+	d.indexed = cur.Version()
+}
+
 // Changes signals that the buffer's text changed, from any goroutine. Slow
 // consumers keep one pending signal.
 func (d *Document) Changes() <-chan struct{} { return d.wake }

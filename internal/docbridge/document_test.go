@@ -704,3 +704,61 @@ func TestModifiedFromSavedFollowsTextNotVersions(t *testing.T) {
 	}
 	requireMapper(t, doc)
 }
+
+func TestProtocolCoordinatesOnASText(t *testing.T) {
+	_, doc, _ := openSample(t)
+	text := doc.Text()
+
+	// "class 世界 {": the CJK name is six bytes but one UTF-16 unit per
+	// character, the case a byte column gets wrong.
+	at := strings.Index(text, "世界")
+	if p := doc.UTF16Pos(at); p != (openidea.OutlinePos{Line: 2, Col: 6}) {
+		t.Fatalf("start of name: %+v, want line 2 col 6", p)
+	}
+	if p := doc.UTF16Pos(at + len("世界")); p != (openidea.OutlinePos{Line: 2, Col: 8}) {
+		t.Fatalf("end of name: %+v, want line 2 col 8", p)
+	}
+	start, end := doc.ByteRange(openidea.OutlineRange{
+		Start: openidea.OutlinePos{Line: 2, Col: 6},
+		End:   openidea.OutlinePos{Line: 2, Col: 8},
+	})
+	if text[start:end] != "世界" {
+		t.Fatalf("range maps to %q, want 世界", text[start:end])
+	}
+
+	// The emoji is four bytes and two UTF-16 units: a surrogate pair.
+	emoji := strings.Index(text, "😀")
+	if p := doc.UTF16Pos(emoji); p != (openidea.OutlinePos{Line: 3, Col: 13}) {
+		t.Fatalf("start of emoji: %+v, want line 3 col 13", p)
+	}
+	if p := doc.UTF16Pos(emoji + len("😀")); p != (openidea.OutlinePos{Line: 3, Col: 15}) {
+		t.Fatalf("end of emoji: %+v, want line 3 col 15", p)
+	}
+	if off := doc.ByteOffset(openidea.OutlinePos{Line: 3, Col: 15}); off != emoji+len("😀") {
+		t.Fatalf("col 15 of line 3 is byte %d, want %d", off, emoji+len("😀"))
+	}
+	lineStart := strings.LastIndex(text[:emoji], "\n") + 1
+	if line, col := doc.BytePos(3, 15); line != 3 || col != emoji+len("😀")-lineStart {
+		t.Fatalf("byte position of 3:15 is %d:%d, want 3:%d", line, col, emoji+len("😀")-lineStart)
+	}
+}
+
+func TestCoordinatesCatchUpAfterWidgetEdit(t *testing.T) {
+	_, doc, _ := openSample(t)
+	// A widget edits the shared buffer directly; the mapper only learns of it
+	// on the next look, which these conversions must trigger themselves.
+	doc.Buffer().Edit(editor.Edit{Start: 0, End: 0, Text: "// 世界\n"})
+	text := doc.Text()
+	at := strings.LastIndex(text, "世界")
+	if p := doc.UTF16Pos(at); p != (openidea.OutlinePos{Line: 3, Col: 6}) {
+		t.Fatalf("name after widget edit: %+v, want line 3 col 6", p)
+	}
+	if off := doc.ByteOffset(openidea.OutlinePos{Line: 3, Col: 8}); off != at+len("世界") {
+		t.Fatalf("col 8 of line 3 is byte %d, want %d", off, at+len("世界"))
+	}
+	// Conversions must not have edited anything.
+	if doc.Text() != text {
+		t.Fatal("coordinate conversion changed the buffer")
+	}
+	requireMapper(t, doc)
+}

@@ -84,6 +84,24 @@ func (m *Mapper) bytePosToUTF16(t Text, line, colBytes int) Position {
 	return Position{Line: uint32(line), Character: uint32(utf16Len(t.Slice(start, start+colBytes)))}
 }
 
+// ByteOffsetToUTF16Position converts a byte offset to a protocol position.
+func (m *Mapper) ByteOffsetToUTF16Position(t Text, off int) Position {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	off = clamp(off, 0, t.Len())
+	line, start := m.idx.lineAtByte(int64(off))
+	return m.bytePosToUTF16(t, line, off-int(start))
+}
+
+// UTF16PositionToByteOffset converts a protocol position to a byte offset,
+// clamping the line and its column to the text.
+func (m *Mapper) UTF16PositionToByteOffset(t Text, p Position) int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	line, col := m.utf16PosToByte(t, p)
+	return int(m.idx.lineStartByte(line)) + col
+}
+
 // UTF16PositionToBytePosition converts a protocol position to a line and byte
 // column, clamping the line and its column to the text.
 func (m *Mapper) UTF16PositionToBytePosition(t Text, p Position) (line, colBytes int) {
