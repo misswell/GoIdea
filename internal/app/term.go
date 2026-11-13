@@ -4,8 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"math"
 	"strings"
 	"time"
+
+	"github.com/egoist/mygo/ui"
 
 	"mayoi/internal/openidea"
 )
@@ -21,10 +25,12 @@ type TermPane struct {
 	groups  []termGroup
 	// active is the group that takes typing; split is "right" or "down" while
 	// a second group shows, "" with one group.
-	active int
-	split  string
-	input  string
-	err    string
+	active  int
+	split   string
+	input   string
+	err     string
+	finding bool
+	find    string
 }
 
 // termGroup is one pane's tabs: the primary group is 0, the split group 1.
@@ -46,6 +52,13 @@ type termSession struct {
 	truncated bool
 	ended     bool
 	exitCode  *int32
+
+	// scroll keeps this tab's place in the scrollback; findAt is the line the
+	// find bar last jumped to, -1 when the query matched nothing, and reveal
+	// asks the next frame to scroll that line into view.
+	scroll ui.ScrollState
+	findAt int
+	reveal bool
 }
 
 // group returns group g, creating it when it does not exist.
@@ -412,6 +425,100 @@ func (m *Model) ClearTerm() {
 	m.invalidate()
 }
 
+// ShowTermFind opens the scrollback search bar over the terminal, as OpenIDEA's
+// Find in Terminal does.
+func (m *Model) ShowTermFind() {
+	if !m.term.visible {
+		m.term.visible = true
+		m.occupyBottom("term")
+	}
+	m.term.finding = true
+	m.invalidate()
+}
+
+// HideTermFind closes the bar and drops its matches.
+func (m *Model) HideTermFind() {
+	m.term.finding = false
+	m.term.find = ""
+	if s := m.term.current(); s != nil {
+		s.findAt = -1
+		s.reveal = false
+	}
+	m.invalidate()
+}
+
+// FindTermStep jumps to the next (dir 1) or previous (dir -1) line holding the
+// query, wrapping at both ends; the first step starts at the newest end's first
+// match, or the top when going forward.
+func (m *Model) FindTermStep(dir int) {
+	s := m.term.current()
+	if s == nil || m.term.find == "" {
+		return
+	}
+	hits := termHits(s.lines, m.term.find)
+	if len(hits) == 0 {
+		s.findAt = -1
+		s.reveal = false
+		m.invalidate()
+		return
+	}
+	at := -1
+	for i, line := range hits {
+		if line == s.findAt {
+			at = i
+			break
+		}
+	}
+	switch {
+	case at < 0 && dir < 0:
+		at = len(hits) - 1
+	case at < 0:
+		at = 0
+	default:
+		at = (at + dir + len(hits)) % len(hits)
+	}
+	s.findAt = hits[at]
+	s.reveal = true
+	m.invalidate()
+}
+
+// termFindLabel is the bar's match position, "" before a query.
+func (m *Model) termFindLabel() string {
+	s := m.term.current()
+	if s == nil || m.term.find == "" {
+		return ""
+	}
+	hits := termHits(s.lines, m.term.find)
+	if len(hits) == 0 {
+		return "无匹配"
+	}
+	at := 0
+	for i, line := range hits {
+		if line == s.findAt {
+			at = i + 1
+		}
+	}
+	if at == 0 {
+		return fmt.Sprintf("%d 个", len(hits))
+	}
+	return fmt.Sprintf("%d/%d", at, len(hits))
+}
+
+// termHits lists the lines containing q, ignoring case.
+func termHits(lines []string, q string) []int {
+	if q == "" {
+		return nil
+	}
+	needle := strings.ToLower(q)
+	var hits []int
+	for i, line := range lines {
+		if strings.Contains(strings.ToLower(line), needle) {
+			hits = append(hits, i)
+		}
+	}
+	return hits
+}
+
 // write appends terminal output, honoring the line discipline a text pane can:
 // newlines start lines, a carriage return rewrites the current one (progress
 // bars), and everything else appends. ANSI colour codes are dropped.
@@ -449,6 +556,11 @@ func (m *Model) acceptTermChunk(ch uint32, data json.RawMessage) {
 		return
 	}
 	s.write(text)
+	// A pane that showed the end follows new output; one scrolled up keeps
+	// its place until the user comes back to the end.
+	if s.scroll.Y >= s.scroll.MaxY {
+		s.scroll.Y = math.MaxFloat32
+	}
 	m.invalidate()
 }
 
@@ -546,6 +658,25 @@ func (m *Model) SmokeTerm(ctx context.Context) (map[string]any, error) {
 		case <-time.After(150 * time.Millisecond):
 		}
 	}
+	// Find in Terminal marks the line that holds the query.
+	m.post(func() {
+		m.ShowTermFind()
+		m.term.find = "GOIDEA_TERM_OK"
+		m.FindTermStep(1)
+	})
+	var findAt, findHits int
+	var findLabel string
+	m.post(func() {
+		if s := m.term.current(); s != nil {
+			findAt = s.findAt
+			findHits = len(termHits(s.lines, "GOIDEA_TERM_OK"))
+			findLabel = m.termFindLabel()
+		}
+	})
+	out["findAt"] = findAt
+	out["findHits"] = findHits
+	out["findLabel"] = findLabel
+	m.post(func() { m.HideTermFind() })
 	// A second tab gets its own PTY, and closing it leaves the first one.
 	m.post(func() { m.OpenTermTab() })
 	tabs, tabsReady := m.waitTermTabs(ctx, ch, 2)

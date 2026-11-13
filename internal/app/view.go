@@ -686,6 +686,11 @@ func (m *Model) termPanel(c *ui.Context, p *ui.Theme) {
 	t := &m.term
 	col := ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Background(p.Surface).
 		BorderWidth(1, 0, 0, 0).BorderColor(p.Border)
+	// Find in Terminal, bounded to the focus: Cmd+F in the editor stays the
+	// editor's.
+	if col.Shortcut(ui.Cmd, ui.KeyF) {
+		m.ShowTermFind()
+	}
 	col.Children(func() {
 		ui.Row(c).Height(30).Shrink(0).Padding(0, 8).Gap(6).AlignItems(ui.Center).
 			BorderWidth(0, 0, 1, 0).BorderColor(p.Border).Children(func() {
@@ -717,6 +722,22 @@ func (m *Model) termPanel(c *ui.Context, p *ui.Theme) {
 					t.err = ""
 					m.invalidate()
 				})
+			})
+		}
+		if t.finding {
+			ui.Row(c).Height(30).Shrink(0).Padding(3, 8).Gap(6).AlignItems(ui.Center).
+				BorderWidth(0, 0, 1, 0).BorderColor(p.Border).Children(func() {
+				ui.Text(c, "查找").FontSize(11.5).TextColor(p.TextMuted)
+				in := ui.TextInput(c, &t.find).Grow(1)
+				if in.Submitted() {
+					m.FindTermStep(1)
+				}
+				if label := m.termFindLabel(); label != "" {
+					ui.Text(c, label).FontSize(11).TextColor(p.TextMuted)
+				}
+				ui.Button(c, "上一个").OnClick(func() { m.FindTermStep(-1) })
+				ui.Button(c, "下一个").OnClick(func() { m.FindTermStep(1) })
+				ui.Button(c, "关闭").OnClick(func() { m.HideTermFind() })
 			})
 		}
 		if t.split != "" && len(t.groups) > 1 {
@@ -794,9 +815,15 @@ func (m *Model) termPaneBody(c *ui.Context, p *ui.Theme, g int) {
 				ui.Button(c, "+").OnClick(func() { m.OpenTermTabIn(g) })
 			}
 		})
-		ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
+		// The scrollback is one text row per line, so find can mark the lines it
+		// matched and scroll the chosen one into view.
+		s := gr.tab()
+		scroll := ui.Scroll(c).Grow(1).MinHeight(0)
+		if s != nil {
+			scroll.TrackScroll(&s.scroll)
+		}
+		scroll.Children(func() {
 			ui.Column(c).Padding(8, 10).Children(func() {
-				s := gr.tab()
 				if s == nil || len(s.lines) == 0 {
 					hint := "终端输出显示在这里。Enter 发送这一行。"
 					if s == nil || (s.id == 0 && !s.starting) {
@@ -809,7 +836,32 @@ func (m *Model) termPaneBody(c *ui.Context, p *ui.Theme, g int) {
 					ui.Text(c, "（输出过长，已省略较早的行）").
 						FontSize(11).TextColor(p.TextMuted)
 				}
-				ui.Text(c, s.render()).FontSize(11.5).TextColor(p.Text)
+				var hits map[int]bool
+				if t.finding && t.find != "" && t.active == g {
+					hits = map[int]bool{}
+					for _, line := range termHits(s.lines, t.find) {
+						hits[line] = true
+					}
+				}
+				for i, line := range s.lines {
+					text := line
+					if text == "" {
+						text = " "
+					}
+					row := ui.Text(c, text).FontSize(11.5).TextColor(p.Text).
+						Key(fmt.Sprintf("termLine:%d:%d", s.channel, i))
+					if hits[i] {
+						if i == s.findAt {
+							row.Background(p.Selection)
+						} else {
+							row.Background(p.SurfacePressed)
+						}
+					}
+					if s.reveal && i == s.findAt {
+						row.ScrollIntoView()
+					}
+				}
+				s.reveal = false
 			})
 		})
 		if t.active == g || len(t.groups) == 1 {
@@ -823,22 +875,6 @@ func (m *Model) termPaneBody(c *ui.Context, p *ui.Theme, g int) {
 			})
 		}
 	})
-}
-
-// render is the scrollback as one string; empty lines keep their height.
-func (p *termSession) render() string {
-	var b strings.Builder
-	for i, line := range p.lines {
-		if i > 0 {
-			b.WriteByte('\n')
-		}
-		if line == "" {
-			b.WriteByte(' ')
-		} else {
-			b.WriteString(line)
-		}
-	}
-	return b.String()
 }
 
 func (m *Model) debugPanel(c *ui.Context, p *ui.Theme) {

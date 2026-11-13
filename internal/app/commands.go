@@ -41,6 +41,7 @@ func commands() []appCommand {
 		{"term.unsplit", "合并终端拆分", "终端", "", "terminal unsplit merge pane group", func(m *Model) { m.UnsplitTerm() }},
 		{"term.close", "关闭当前终端标签", "终端", "", "terminal close tab session", func(m *Model) { m.CloseActiveTermTab() }},
 		{"term.clear", "清空终端输出", "终端", "", "terminal clear buffer", func(m *Model) { m.ClearTerm() }},
+		{"term.find", "在终端中查找", "终端", "Cmd+F", "terminal find search scrollback", func(m *Model) { m.ShowTermFind() }},
 		{"view.run", "显示运行窗口", "视图", "Cmd+4", "run output console", func(m *Model) { m.ShowRun() }},
 		{"view.debug", "显示调试窗口", "视图", "Cmd+5", "debug variables frames", func(m *Model) { m.ShowDebug() }},
 		{"view.problems", "显示问题", "视图", "Cmd+6", "problems diagnostics errors warnings inspections", func(m *Model) { m.ShowProblems() }},

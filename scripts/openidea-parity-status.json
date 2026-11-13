@@ -167,7 +167,7 @@
     },
     "toolwindow:terminal": {
       "status": "partial",
-      "evidence": "internal/app/term.go TermPane tab groups, OpenTermTab Cmd+T, SplitTerm/UnsplitTerm with termPaneBody in view.go, CloseTermTab hides the empty window; base.term.output, base.term.tabs, base.term.split; internal/app/term_test.go"
+      "evidence": "internal/app/term.go TermPane tab groups, OpenTermTab Cmd+T, SplitTerm/UnsplitTerm with termPaneBody in view.go, ShowTermFind/FindTermStep Cmd+F find bar, CloseTermTab hides the empty window; base.term.output, base.term.tabs, base.term.split, base.term.find; internal/app/term_test.go"
     },
     "toolwindow:database": {
       "status": "partial",
@@ -199,7 +199,7 @@
     },
     "feature:terminal": {
       "status": "partial",
-      "evidence": "internal/app/term.go tab groups over backend PTYs, SplitTerm/UnsplitTerm, per-tab channel routing and exit by id; base.term.output, base.term.tabs, base.term.split; UPSTREAM_FEATURE_MATRIX.md Terminal"
+      "evidence": "internal/app/term.go tab groups over backend PTYs, SplitTerm/UnsplitTerm, ShowTermFind scrollback search, per-tab channel routing and exit by id; base.term.output, base.term.tabs, base.term.split, base.term.find; UPSTREAM_FEATURE_MATRIX.md Terminal"
     },
     "feature:database": {
       "status": "partial",

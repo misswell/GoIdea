@@ -17,6 +17,20 @@ func TestTermWriteKeepsTheLineDiscipline(t *testing.T) {
 	}
 }
 
+func TestTermHitsIgnoreCaseInTheScrollback(t *testing.T) {
+	lines := []string{"one", "", "Match ME", "two"}
+	hits := termHits(lines, "match")
+	if len(hits) != 1 || hits[0] != 2 {
+		t.Fatalf("hits = %v", hits)
+	}
+	if hits := termHits(lines, ""); hits != nil {
+		t.Fatalf("empty query matched %v", hits)
+	}
+	if hits := termHits(lines, "absent"); len(hits) != 0 {
+		t.Fatalf("absent query matched %v", hits)
+	}
+}
+
 func TestTermTabsRouteByChannelAndKeepActiveInRange(t *testing.T) {
 	var p TermPane
 	p.add(0).channel = 7

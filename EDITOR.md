@@ -117,6 +117,13 @@ pane. Splitting again only turns the divider, **合并** folds the second group'
 tabs into the first with their shells running, and emptying a split group in
 the pane merges it away (`SplitTerm`, `UnsplitTerm`, `termPaneBody`).
 
+`Cmd+F` in the terminal opens its find bar, bounded to the terminal's focus so
+the editor keeps its own Find: the query marks every matching line and
+**上一个**/**下一个** (or Enter for the next) cycle through them, wrapping at
+both ends and scrolling the chosen line into view (`ShowTermFind`,
+`FindTermStep`). The scrollback follows new output while it shows the end and
+keeps its place once the user scrolls up.
+
 ## Structure
 
 `Cmd+7` opens OpenIDEA's Structure window in the sidebar: the active file's

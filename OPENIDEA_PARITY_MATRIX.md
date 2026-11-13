@@ -85,7 +85,7 @@ directory registers.
 | `settings` | 11 | 0 | 3 | 0 | 56 | partial - base.settings.opened, base.settings.closed, base.settings.theme |
 | `ssh` | 2 | 0 | 1 | 0 | 0 | missing |
 | `templates` | 5 | 0 | 3 | 1 | 3 | missing |
-| `terminal` | 14 | 1 | 0 | 0 | 0 | partial - internal/app/term.go tab groups over backend PTYs, SplitTerm/UnsplitTerm, per-tab channel routing and exit by id; base.term.output, base.term.tabs, base.term.split; UPSTREAM_FEATURE_MATRIX.md Terminal |
+| `terminal` | 14 | 1 | 0 | 0 | 0 | partial - internal/app/term.go tab groups over backend PTYs, SplitTerm/UnsplitTerm, ShowTermFind scrollback search, per-tab channel routing and exit by id; base.term.output, base.term.tabs, base.term.split, base.term.find; UPSTREAM_FEATURE_MATRIX.md Terminal |
 | `todo` | 2 | 1 | 0 | 1 | 1 | missing |
 | `tools` | 4 | 0 | 0 | 0 | 0 | partial - tools.jdtls, tools.java-debug |
 | `vcs` | 33 | 3 | 2 | 2 | 1 | partial - base.vcs.changes, base.diff.rows, base.commit.id, base.log.commits, base.log.details, base.log.changes; internal/app/branch.go branchLabel and branchesDialog, base.branch.head, base.branch.list, base.branch.checkout; internal/app/vcs.go vcsStaged, vcsUnstaged, StageChange, UnstageChange, AskRollback, base.stage.roundtrip, base.stage.discard |
@@ -990,7 +990,7 @@ same bindings until a check records it.
 | `run` | Run | bottom | `src/features/run/index.ts` | integrated - base.run.config, base.run.exit, base.run.build |
 | `services` | Services | bottom | `src/features/services/index.ts` | missing |
 | `structure` | Structure | left | `src/features/search/index.ts` | integrated - internal/app/structure.go structureRowsUI; lsp.structure.rows, lsp.structure.first, lsp.structure.visible; internal/app/structure_test.go |
-| `terminal` | Terminal | bottom | `src/features/terminal/index.ts` | partial - internal/app/term.go TermPane tab groups, OpenTermTab Cmd+T, SplitTerm/UnsplitTerm with termPaneBody in view.go, CloseTermTab hides the empty window; base.term.output, base.term.tabs, base.term.split; internal/app/term_test.go |
+| `terminal` | Terminal | bottom | `src/features/terminal/index.ts` | partial - internal/app/term.go TermPane tab groups, OpenTermTab Cmd+T, SplitTerm/UnsplitTerm with termPaneBody in view.go, ShowTermFind/FindTermStep Cmd+F find bar, CloseTermTab hides the empty window; base.term.output, base.term.tabs, base.term.split, base.term.find; internal/app/term_test.go |
 | `todo` | TODO | bottom | `src/features/todo/index.ts` | missing |
 | `usages` | Find Usages | bottom | `src/features/code-insight/index.ts` | integrated - internal/app/usages.go showUsages and usagesPanel; lsp.references.count, lsp.references.done; bottom anchor in internal/app/anchor_test.go |
 

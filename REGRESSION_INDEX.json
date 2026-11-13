@@ -79,6 +79,7 @@
     {"id": "base.term.output", "label": "a real shell ran echo in the terminal", "feature": "Terminal shell through term_spawn and term_write", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
     {"id": "base.term.tabs", "label": "a second terminal tab opened and closed", "feature": "Multiple terminal tabs", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
     {"id": "base.term.split", "label": "split right opened a second shell and unsplit merged it back", "feature": "Terminal split tab groups", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
+    {"id": "base.term.find", "label": "find in the terminal marked the line with the query", "feature": "Find in Terminal", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
     {"id": "base.termError", "label": "termError is absent", "feature": "Terminal path reports no error", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
     {"id": "base.log.commits", "label": "vcs_log returned commits", "feature": "Git log through vcs_log", "area": "vcs", "gate": "main", "doc": "RPC_PROTOCOL.md"},
     {"id": "base.log.details", "label": "vcs_log_details returned the message and a branch", "feature": "Commit details in the Git log", "area": "vcs", "gate": "main", "doc": "RPC_PROTOCOL.md"},
