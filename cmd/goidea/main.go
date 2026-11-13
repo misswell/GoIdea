@@ -186,7 +186,7 @@ func smoke(m *app.Model) {
 		}
 	}
 	if os.Getenv("GOIDEA_SMOKE_LSP") == "1" && root != "" {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
 		lsp, lspErr := m.SmokeLSP(ctx)
 		cancel()
 		fields["lsp"] = lsp

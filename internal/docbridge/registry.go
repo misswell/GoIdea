@@ -19,6 +19,7 @@ type Registry struct {
 	byPath  map[string]*entry
 	byID    map[uint32]*entry
 	onError func(path string, err error)
+	onDiags func(ev openidea.DiagnosticsEvent)
 }
 
 type entry struct {
@@ -41,6 +42,14 @@ func NewRegistry(backend Backend, window string) *Registry {
 func (r *Registry) SetErrorHandler(fn func(path string, err error)) {
 	r.mu.Lock()
 	r.onError = fn
+	r.mu.Unlock()
+}
+
+// SetDiagnosticsHandler receives the diagnostics the backend publishes for a
+// file, on the goroutine that feeds the registry.
+func (r *Registry) SetDiagnosticsHandler(fn func(ev openidea.DiagnosticsEvent)) {
+	r.mu.Lock()
+	r.onDiags = fn
 	r.mu.Unlock()
 }
 
@@ -215,6 +224,18 @@ func (r *Registry) HandleNotification(ctx context.Context, n openidea.Notificati
 		}
 		if doc := r.ByID(ev.Doc); doc != nil {
 			doc.SetDirty(ev.Dirty)
+		}
+		return true
+	case "diagnostics":
+		var ev openidea.DiagnosticsEvent
+		if err := json.Unmarshal(we.Event, &ev); err != nil {
+			return true
+		}
+		r.mu.Lock()
+		fn := r.onDiags
+		r.mu.Unlock()
+		if fn != nil {
+			fn(ev)
 		}
 		return true
 	}

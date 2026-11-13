@@ -409,3 +409,22 @@ type Location struct {
 	Range OutlineRange `json:"range"`
 	URI   *string      `json:"uri"`
 }
+
+// DiagnosticsEvent is the complete diagnostics of one file from one producer,
+// replacing that producer's earlier ones.
+type DiagnosticsEvent struct {
+	Path   string       `json:"path"`
+	Source string       `json:"source"`
+	Items  []Diagnostic `json:"items"`
+}
+
+// Diagnostic is a problem with a range of a file: 0-based lines and UTF-16
+// columns, as every backend range is.
+type Diagnostic struct {
+	Range    OutlineRange `json:"range"`
+	Severity string       `json:"severity"`
+	Message  string       `json:"message"`
+	Source   *string      `json:"source"`
+	Code     *string      `json:"code"`
+	Server   *string      `json:"server"`
+}

@@ -164,3 +164,63 @@ func TestRegistryReopenAllKeepsUnsavedText(t *testing.T) {
 		t.Fatalf("%d documents left after CloseAll", got)
 	}
 }
+
+func TestRegistryPublishesDiagnostics(t *testing.T) {
+	b := newFakeBackend()
+	disk := b.add("/tmp/demo/Broken.java", sampleJava)
+	r := NewRegistry(b, "w1")
+	ctx := context.Background()
+	if _, err := r.Open(ctx, disk.path); err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	var got []openidea.DiagnosticsEvent
+	r.SetDiagnosticsHandler(func(ev openidea.DiagnosticsEvent) { got = append(got, ev) })
+
+	n := eventNotification(t, "w1", map[string]any{
+		"type":   "diagnostics",
+		"path":   disk.path,
+		"source": "jdtls",
+		"items": []any{map[string]any{
+			"range": map[string]any{
+				"start": map[string]any{"line": 2, "col": 4},
+				"end":   map[string]any{"line": 2, "col": 9},
+			},
+			"severity": "warning",
+			"message":  "unused variable",
+			"server":   "jdtls",
+		}},
+	})
+	if !r.HandleNotification(ctx, n) {
+		t.Fatal("diagnostics was not recognised as an event")
+	}
+	if len(got) != 1 {
+		t.Fatalf("handler got %d publishes, want 1", len(got))
+	}
+	ev := got[0]
+	if ev.Path != disk.path || ev.Source != "jdtls" || len(ev.Items) != 1 {
+		t.Fatalf("publish = %+v", ev)
+	}
+	d := ev.Items[0]
+	if d.Range.Start.Line != 2 || d.Range.End.Col != 9 || d.Severity != "warning" || d.Message != "unused variable" {
+		t.Fatalf("diagnostic = %+v", d)
+	}
+	if d.Server == nil || *d.Server != "jdtls" {
+		t.Fatalf("diagnostic server = %v", d.Server)
+	}
+
+	// Another window's publish is not this window's.
+	r.HandleNotification(ctx, eventNotification(t, "w2", map[string]any{
+		"type": "diagnostics", "path": disk.path, "source": "jdtls", "items": []any{},
+	}))
+	if len(got) != 1 {
+		t.Fatalf("handler got %d publishes after another window's, want 1", len(got))
+	}
+
+	// An empty publish is delivered too: it is how a producer clears its own.
+	r.HandleNotification(ctx, eventNotification(t, "w1", map[string]any{
+		"type": "diagnostics", "path": disk.path, "source": "jdtls", "items": []any{},
+	}))
+	if len(got) != 2 || len(got[1].Items) != 0 {
+		t.Fatalf("clearing publish = %+v", got)
+	}
+}

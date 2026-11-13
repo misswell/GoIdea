@@ -507,7 +507,72 @@ func (m *Model) SmokeLSP(ctx context.Context) (map[string]any, error) {
 		out["definitionPath"] = locs[0].Path
 		out["definitionLine"] = locs[0].Range.Start.Line
 	}
+
+	// What the server finds wrong with the text must reach the editor as a
+	// squiggle. Breaking the text in memory is not saved.
+	out["diagnostics"] = m.smokeDiagnostics(ctx, t)
 	return out, nil
+}
+
+// smokeDiagnostic is one diagnostic the smoke found shown in the editor.
+type smokeDiagnostic struct {
+	Start    int    `json:"start"`
+	End      int    `json:"end"`
+	Severity string `json:"severity"`
+	Message  string `json:"message"`
+	Source   string `json:"source,omitempty"`
+}
+
+// smokeDiagnostics adds an undefined call to the tab's text without saving it,
+// then waits for the language server's publish to show up as editor
+// diagnostics, and puts the text back.
+func (m *Model) smokeDiagnostics(ctx context.Context, t *Tab) any {
+	text := t.doc.Text()
+	const broken = "\nclass SmokeBroken { void run() { smokeUndefinedSymbol(); } }\n"
+	if err := t.doc.ApplyEdits(ctx, editor.Edit{Start: len(text), End: len(text), Text: broken}); err != nil {
+		return map[string]any{"error": err.Error()}
+	}
+	defer func() {
+		_ = t.doc.ApplyEdits(ctx, editor.Edit{Start: len(text), End: len(text) + len(broken)})
+	}()
+	deadline := time.Now().Add(90 * time.Second)
+	for {
+		var ds []editor.Diagnostic
+		mygo.RunOnMain(func() { ds = t.state.Diagnostics() })
+		if len(ds) > 0 {
+			list := make([]smokeDiagnostic, 0, len(ds))
+			for i, d := range ds {
+				if i == 20 {
+					break
+				}
+				list = append(list, smokeDiagnostic{
+					Start: d.Start, End: d.End, Severity: severityName(d.Severity),
+					Message: d.Message, Source: d.Source,
+				})
+			}
+			return list
+		}
+		if time.Now().After(deadline) {
+			return map[string]any{"timeout": true}
+		}
+		select {
+		case <-ctx.Done():
+			return map[string]any{"error": ctx.Err().Error()}
+		case <-time.After(time.Second):
+		}
+	}
+}
+
+func severityName(s editor.Severity) string {
+	switch s {
+	case editor.SeverityWarning:
+		return "warning"
+	case editor.SeverityInfo:
+		return "info"
+	case editor.SeverityHint:
+		return "hint"
+	}
+	return "error"
 }
 
 // smokeLSPCall is one language-server request, bounded on its own so a stuck

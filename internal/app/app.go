@@ -90,6 +90,10 @@ type Model struct {
 	active int
 	tree   *Tree
 
+	// diags is the newest diagnostics per open document and producer, which
+	// the tabs of that document show.
+	diags map[*docbridge.Document]map[string][]openidea.Diagnostic
+
 	// sideMode picks what the sidebar shows: "tree" ("" also means tree, the
 	// default), "vcs" or "search".
 	sideMode string
@@ -130,6 +134,9 @@ func New(cfg Config) *Model {
 	m.reg = docbridge.NewRegistry(openidea.Docs{M: m.mgr, Window: Window}, Window)
 	m.reg.SetErrorHandler(func(path string, err error) {
 		m.post(func() { m.fail(path, err) })
+	})
+	m.reg.SetDiagnosticsHandler(func(ev openidea.DiagnosticsEvent) {
+		m.post(func() { m.applyDiagnostics(ev) })
 	})
 	// Backend edits (formatting, refactors, reloads) reach the shared
 	// buffers through the registry, so the editor shows them without a
@@ -428,6 +435,7 @@ func (m *Model) openProject(dir string, files []string) {
 		}
 		focus := m.session().Focus
 		m.post(func() {
+			m.clearDiagnostics()
 			m.tabs = m.tabs[:0]
 			for _, doc := range docs {
 				m.tabs = append(m.tabs, m.newTab(doc))
@@ -487,6 +495,7 @@ func (m *Model) newTab(doc *docbridge.Document) *Tab {
 	t.state.OnCompletion = func(req editor.CompletionRequest) { m.requestCompletion(t, req) }
 	t.state.OnHover = func(req editor.HoverRequest) { m.requestHover(t, req) }
 	t.state.OnDefinition = func(off int) { m.gotoDefinition(t, off) }
+	m.showDiagnostics(t)
 	return t
 }
 
@@ -609,6 +618,7 @@ func (m *Model) removeTab(t *Tab) {
 		return
 	}
 	m.tabs = append(m.tabs[:idx], m.tabs[idx+1:]...)
+	m.forgetDiagnostics(t.doc)
 	if m.active >= len(m.tabs) {
 		m.active = len(m.tabs) - 1
 	}
