@@ -92,6 +92,7 @@ say "阶段 1b：离屏视觉截图"
 SHOTS="$WORK/shots"
 mkdir -p "$SHOTS"
 SHOTS_JSON="$WORK/shots.json"
+grep -q "TODO: visual shot" "$JAVA" || printf '\n// TODO: visual shot\n' >> "$JAVA"
 smoke "$SHOTS_JSON" GOIDEA_SMOKE_SHOTS="$SHOTS"
 python3 "$CHECKS" shots "$SHOTS_JSON"
 
