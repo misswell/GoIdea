@@ -55,7 +55,7 @@ GoIDEA can rely on it; code that calls it must check `commands` first.
 | Environment | `env` | 1 | 0 | 0 |
 | File dialogs | `file_dialog` | 0 | 2 | 0 |
 | Fonts | `fonts` | 0 | 1 | 0 |
-| File system | `fs` | 12 | 0 | 0 |
+| File system | `fs` | 12 | 0 | 5 |
 | GitHub | `github` | 0 | 11 | 0 |
 | Local history | `history` | 3 | 0 | 0 |
 | HTTP client | `http` | 0 | 10 | 0 |
@@ -88,7 +88,7 @@ GoIDEA can rely on it; code that calls it must check `commands` first.
 ## Served by `openidea-server --stdio`
 
 446 commands. `GoIDEA` marks the ones a non-test Go source invokes today
-(76 of 446).
+(81 of 446).
 
 | Command | Domain | Arguments | GoIDEA |
 | --- | --- | --- | --- |
@@ -229,19 +229,19 @@ GoIDEA can rely on it; code that calls it must check `commands` first.
 | `find_files_named` | Navigation and index | `name` | — |
 | `find_symbols` | Navigation and index | `filter`, `limit`, `query` | — |
 | `fs_compare_directories` | File system | `left`, `onProgress`, `request`, `right` | — |
-| `fs_copy` | File system | `from`, `to` | — |
+| `fs_copy` | File system | `from`, `to` | yes |
 | `fs_copy_merge` | File system | `destinationRoot`, `overwrite`, `path`, `sourceRoot` | — |
-| `fs_create_dir` | File system | — | — |
-| `fs_create_file` | File system | `path` | — |
+| `fs_create_dir` | File system | — | yes |
+| `fs_create_file` | File system | `path` | yes |
 | `fs_create_file_bytes` | File system | `data`, `path` | — |
-| `fs_delete` | File system | `path` | — |
+| `fs_delete` | File system | `path` | yes |
 | `fs_entry_kind` | File system | `path` | — |
 | `fs_probe` | Binary file reads | `path` | — |
 | `fs_read_dir` | File system | `path` | — |
 | `fs_read_image` | Binary file reads | `path` | — |
 | `fs_read_range` | Binary file reads | `len`, `offset`, `path` | — |
 | `fs_read_text` | File system | `path` | — |
-| `fs_rename` | File system | `from`, `to` | — |
+| `fs_rename` | File system | `from`, `to` | yes |
 | `fs_resolve_reference` | Navigation and index | `from`, `value` | — |
 | `fs_set_writable` | File system | `path`, `writable` | — |
 | `gradle_dependencies` | Maven/Gradle builds | `buildDir`, `configuration`, `gradlePath`, `offline`, `request` | — |
@@ -738,7 +738,7 @@ GoIDEA needs to do for each:
 
 ## What this means for GoIDEA
 
-446 remote commands are available today; GoIDEA uses 76. The parity work is
+446 remote commands are available today; GoIDEA uses 81. The parity work is
 first to cover the remote surface OpenIDEA's own frontend uses, then to move
 `shared-op`/`host`/`crate` commands onto stdio through the OpenIDEA fork
 (a submodule bump and a server release), and to implement `desktop` commands

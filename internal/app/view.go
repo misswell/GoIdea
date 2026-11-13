@@ -406,6 +406,8 @@ func (m *Model) treeRow(c *ui.Context, p *ui.Theme, row *treeNode) {
 		}
 		m.invalidate()
 	}
+	target := treeTarget{path: row.path, dir: row.dir, root: row.path == m.Root()}
+	r.ContextMenu(func(menu *ui.Menu) { m.treeMenu(c, menu, target) })
 }
 
 func (m *Model) tabStrip(c *ui.Context, p *ui.Theme) {

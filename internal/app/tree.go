@@ -76,6 +76,15 @@ func (t *Tree) Close() {
 	}
 }
 
+// Refresh rereads the open folders, as a new or renamed entry asks.
+func (t *Tree) Refresh() {
+	if t.ws == nil {
+		return
+	}
+	t.ws.Refresh()
+	t.rebuild()
+}
+
 // Rows are the visible rows, each already flattened to its depth.
 func (t *Tree) Rows() []*treeNode { return t.rows }
 

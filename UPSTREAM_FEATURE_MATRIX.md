@@ -61,6 +61,7 @@ reimplementing it. A row is `INTEGRATED` only when the GoIDEA product
 | Intentions and quick fixes | INTEGRATED | Alt+Enter sheet |
 | Rename, usages, symbols, format | INTEGRATED | code menu and pickers; Find Usages is OpenIDEA's bottom window, `internal/app/usages.go` |
 | Find/replace in project | INTEGRATED | search view |
+| Project view menu: New, Cut/Copy/Paste, Copy Path, Jump to Source, Rename, Delete, Open in Terminal | INTEGRATED | right-click menu in `internal/app/tree_ops.go` over `fs_create_file`, `fs_create_dir`, `fs_rename`, `fs_copy`, `fs_delete`, with a prompt sheet and unsaved-tab guards; base-phase e2e `base.files.*` |
 | Maven/Gradle build and run | INTEGRATED | run window, smoke: `GOIDEA_SMOKE_RUN` |
 | Debugger (DAP) | INTEGRATED | breakpoints, stepping, variables, watch |
 | Git changes, diff against HEAD | INTEGRATED | changes tree, compare view |

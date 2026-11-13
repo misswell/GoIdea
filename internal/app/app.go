@@ -178,6 +178,11 @@ type Model struct {
 	move          *movePane
 	editDesc      *descPane
 
+	// treeClip is what the project view's Copy or Cut holds, and treeOp its
+	// open New, Rename or Delete prompt, or nil.
+	treeClip *treeClipState
+	treeOp   *treeOpState
+
 	run       RunPane
 	debug     DebugPane
 	build     BuildPane
@@ -1157,7 +1162,7 @@ func (m *Model) overlayOpen() bool {
 	return m.rename != nil || m.symbols != nil || m.intents != nil || m.files != nil ||
 		m.diff != nil || m.palette != nil || m.commit != nil || m.branch.open ||
 		m.rollback != nil || m.bookmarksView != nil || m.mnemonics != nil || m.newList != nil ||
-		m.deleteList != nil || m.move != nil || m.editDesc != nil
+		m.deleteList != nil || m.move != nil || m.editDesc != nil || m.treeOp != nil
 }
 
 // QuitImmediately closes the backend and quits without asking about changes,
@@ -1211,6 +1216,7 @@ func (m *Model) View(c *ui.Context) {
 	m.deleteListDialog(c, p)
 	m.moveBookmarkDialog(c, p)
 	m.bookmarkDescriptionDialog(c, p)
+	m.treeOpDialog(c, p)
 	m.commandsDialog(c, p)
 	m.diffDialog(c, p)
 	m.dbDialog(c, p)

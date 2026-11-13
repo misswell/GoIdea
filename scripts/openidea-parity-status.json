@@ -325,6 +325,46 @@
       "status": "partial",
       "evidence": "internal/app/app.go ShowProject; cmd/goidea/main.go 视图 menu"
     },
+    "action:project.newFile": {
+      "status": "partial",
+      "evidence": "internal/app/tree_ops.go treeMenuItems OpenNewTreeEntry; base.files.menu, base.files.new; internal/app/tree_ops_test.go"
+    },
+    "action:project.newFolder": {
+      "status": "partial",
+      "evidence": "internal/app/tree_ops.go treeMenuItems OpenNewTreeEntry; base.files.menu, base.files.new; internal/app/tree_ops_test.go"
+    },
+    "action:project.cut": {
+      "status": "partial",
+      "evidence": "internal/app/tree_ops.go SetTreeClip; base.files.menu, base.files.move; internal/app/tree_ops_test.go"
+    },
+    "action:project.copy": {
+      "status": "partial",
+      "evidence": "internal/app/tree_ops.go SetTreeClip; base.files.menu, base.files.copy; internal/app/tree_ops_test.go"
+    },
+    "action:project.paste": {
+      "status": "partial",
+      "evidence": "internal/app/tree_ops.go PasteTreeEntry over fs_copy and fs_rename; base.files.copy, base.files.move"
+    },
+    "action:project.copyPath": {
+      "status": "partial",
+      "evidence": "internal/app/tree_ops.go CopyTreePath with absolute, file name and content-root paths; base.files.menu"
+    },
+    "action:project.open": {
+      "status": "partial",
+      "evidence": "internal/app/tree_ops.go runTreeAct treeActJump -> openFile; base.files.menu; internal/app/tree_ops_test.go"
+    },
+    "action:project.openInTerminal": {
+      "status": "partial",
+      "evidence": "internal/app/tree_ops.go treeActTerminal -> OpenTerminalAt in internal/app/term.go; base.files.menu, base.term.output"
+    },
+    "action:project.rename": {
+      "status": "partial",
+      "evidence": "internal/app/tree_ops.go ConfirmTreeOp over fs_rename, moving bookmarks and closing clean tabs; base.files.rename; internal/app/tree_ops_test.go"
+    },
+    "action:project.delete": {
+      "status": "partial",
+      "evidence": "internal/app/tree_ops.go deleteTreeEntry over fs_delete after a confirmation; base.files.delete; internal/app/tree_ops_test.go"
+    },
     "action:toolwindow.find": {
       "status": "partial",
       "evidence": "internal/app/search.go ShowSearch; cmd/goidea/main.go 视图 menu"

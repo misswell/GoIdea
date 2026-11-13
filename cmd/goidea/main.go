@@ -370,6 +370,15 @@ func smoke(m *app.Model) {
 			fields["watchError"] = watchErr.Error()
 		}
 	}
+	if os.Getenv("GOIDEA_SMOKE_FILES") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		files, filesErr := m.SmokeFiles(ctx)
+		cancel()
+		fields["files"] = files
+		if filesErr != nil {
+			fields["filesError"] = filesErr.Error()
+		}
+	}
 	if root != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		count, sample, vcsErr := m.SmokeVCS(ctx)

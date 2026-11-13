@@ -27,7 +27,7 @@ new action, tool window, page or command appears automatically.
 | Kind | Items | Integrated | Partial | Engine | Blocked | Missing |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Feature folders | 43 | 0 | 10 | 0 | 0 | 33 |
-| Actions | 647 | 21 | 40 | 0 | 1 | 585 |
+| Actions | 647 | 21 | 50 | 0 | 1 | 575 |
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
 | Tool windows | 30 | 8 | 5 | 0 | 0 | 17 |
 | Overlays | 56 | 0 | 0 | 0 | 0 | 56 |
@@ -390,26 +390,26 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `navigate.showFilePath` | File Path | `src/features/project-tree/actions.ts` | missing |
 | `project.collapseAll` | Collapse All | `src/features/project-tree/actions.ts` | missing |
 | `project.compareWith` | Compare With… | `src/features/project-tree/actions.ts` | missing |
-| `project.copy` | Copy | `src/features/project-tree/actions.ts` | missing |
+| `project.copy` | Copy | `src/features/project-tree/actions.ts` | partial - internal/app/tree_ops.go SetTreeClip; base.files.menu, base.files.copy; internal/app/tree_ops_test.go |
 | `project.copyElement` | Copy… | `src/features/project-tree/actions.ts` | missing |
-| `project.copyPath` | Copy Path | `src/features/project-tree/actions.ts` | missing |
-| `project.cut` | Cut | `src/features/project-tree/actions.ts` | missing |
-| `project.delete` | Delete… | `src/features/project-tree/actions.ts` | missing |
+| `project.copyPath` | Copy Path | `src/features/project-tree/actions.ts` | partial - internal/app/tree_ops.go CopyTreePath with absolute, file name and content-root paths; base.files.menu |
+| `project.cut` | Cut | `src/features/project-tree/actions.ts` | partial - internal/app/tree_ops.go SetTreeClip; base.files.menu, base.files.move; internal/app/tree_ops_test.go |
+| `project.delete` | Delete… | `src/features/project-tree/actions.ts` | partial - internal/app/tree_ops.go deleteTreeEntry over fs_delete after a confirmation; base.files.delete; internal/app/tree_ops_test.go |
 | `project.expandAll` | Expand All | `src/features/project-tree/actions.ts` | missing |
 | `project.findInFolder` | Find in Folder… | `src/features/project-tree/actions.ts` | missing |
 | `project.findUsages` | Find Usages of File | `src/features/project-tree/actions.ts` | missing |
 | `project.move` | Move File… | `src/features/project-tree/actions.ts` | missing |
-| `project.newFile` | New File | `src/features/project-tree/actions.ts` | missing |
-| `project.newFolder` | New Directory | `src/features/project-tree/actions.ts` | missing |
+| `project.newFile` | New File | `src/features/project-tree/actions.ts` | partial - internal/app/tree_ops.go treeMenuItems OpenNewTreeEntry; base.files.menu, base.files.new; internal/app/tree_ops_test.go |
+| `project.newFolder` | New Directory | `src/features/project-tree/actions.ts` | partial - internal/app/tree_ops.go treeMenuItems OpenNewTreeEntry; base.files.menu, base.files.new; internal/app/tree_ops_test.go |
 | `project.newInThisDirectory` | New in This Directory… | `src/features/project-tree/actions.ts` | missing |
-| `project.open` | Jump to Source | `src/features/project-tree/actions.ts` | missing |
-| `project.openInTerminal` | Open in Terminal | `src/features/project-tree/actions.ts` | missing |
+| `project.open` | Jump to Source | `src/features/project-tree/actions.ts` | partial - internal/app/tree_ops.go runTreeAct treeActJump -> openFile; base.files.menu; internal/app/tree_ops_test.go |
+| `project.openInTerminal` | Open in Terminal | `src/features/project-tree/actions.ts` | partial - internal/app/tree_ops.go treeActTerminal -> OpenTerminalAt in internal/app/term.go; base.files.menu, base.term.output |
 | `project.optimizeImports` | Optimize Imports in File | `src/features/project-tree/actions.ts` | missing |
-| `project.paste` | Paste | `src/features/project-tree/actions.ts` | missing |
+| `project.paste` | Paste | `src/features/project-tree/actions.ts` | partial - internal/app/tree_ops.go PasteTreeEntry over fs_copy and fs_rename; base.files.copy, base.files.move |
 | `project.reformatCode` | Reformat File | `src/features/project-tree/actions.ts` | missing |
 | `project.refresh` | Reload Project Tree from Disk | `src/features/project-tree/actions.ts` | missing |
 | `project.reloadFromDisk` | Reload from Disk | `src/features/project-tree/actions.ts` | missing |
-| `project.rename` | Rename File… | `src/features/project-tree/actions.ts` | missing |
+| `project.rename` | Rename File… | `src/features/project-tree/actions.ts` | partial - internal/app/tree_ops.go ConfirmTreeOp over fs_rename, moving bookmarks and closing clean tabs; base.files.rename; internal/app/tree_ops_test.go |
 | `project.renameInline` | Rename File Inline | `src/features/project-tree/actions.ts` | missing |
 | `project.reveal` | Reveal in Project View | `src/features/project-tree/actions.ts` | missing |
 | `project.revealInFinder` |  | `src/features/project-tree/actions.ts` | missing |
@@ -1917,19 +1917,19 @@ Local-only commands and the per-command argument lists are in
 | `find_files_named` | nav | yes |  | missing |
 | `find_symbols` | nav | yes |  | missing |
 | `fs_compare_directories` | fs | yes |  | missing |
-| `fs_copy` | fs | yes |  | missing |
+| `fs_copy` | fs | yes | yes | missing |
 | `fs_copy_merge` | fs | yes |  | missing |
-| `fs_create_dir` | fs | yes |  | missing |
-| `fs_create_file` | fs | yes |  | missing |
+| `fs_create_dir` | fs | yes | yes | missing |
+| `fs_create_file` | fs | yes | yes | missing |
 | `fs_create_file_bytes` | fs | yes |  | missing |
-| `fs_delete` | fs | yes |  | missing |
+| `fs_delete` | fs | yes | yes | missing |
 | `fs_entry_kind` | fs | yes |  | missing |
 | `fs_probe` | bytes | yes |  | missing |
 | `fs_read_dir` | fs | yes |  | missing |
 | `fs_read_image` | bytes | yes |  | missing |
 | `fs_read_range` | bytes | yes |  | missing |
 | `fs_read_text` | fs | yes |  | missing |
-| `fs_rename` | fs | yes |  | missing |
+| `fs_rename` | fs | yes | yes | missing |
 | `fs_resolve_reference` | nav | yes |  | missing |
 | `fs_set_writable` | fs | yes |  | missing |
 | `gh_account_repos` | github | no |  | missing |
@@ -2362,7 +2362,7 @@ Local-only commands and the per-command argument lists are in
 | `wsl_distros` | wsl | no |  | missing |
 | `wsl_resolve` | wsl | no |  | missing |
 
-446 commands are served over stdio and 76 are called by GoIDEA today. A command
+446 commands are served over stdio and 81 are called by GoIDEA today. A command
 that is registered only in the desktop shell needs an `ops` module before stdio
 can serve it; a GoIDEA check counts only when the UI path works end to end.
 

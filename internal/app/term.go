@@ -206,7 +206,7 @@ func (m *Model) SpawnTerm() {
 	if s := m.term.current(); s != nil && (s.starting || s.id != 0) {
 		return
 	}
-	m.spawnTermSession(root, m.term.active)
+	m.spawnTermSession(root, root, m.term.active)
 }
 
 // OpenTermTab opens one more shell tab in the active group, as OpenIDEA's New
@@ -227,7 +227,23 @@ func (m *Model) OpenTermTabIn(g int) {
 		m.term.visible = true
 		m.occupyBottom("term")
 	}
-	m.spawnTermSession(root, g)
+	m.spawnTermSession(root, root, g)
+}
+
+// OpenTerminalAt opens a tab whose shell starts in dir, as OpenIDEA's Open in
+// Terminal does for a project-tree folder.
+func (m *Model) OpenTerminalAt(dir string) {
+	root := m.Root()
+	if root == "" || dir == "" {
+		m.term.err = "先打开一个项目，再启动终端"
+		m.invalidate()
+		return
+	}
+	if !m.term.visible {
+		m.term.visible = true
+		m.occupyBottom("term")
+	}
+	m.spawnTermSession(root, dir, m.term.active)
 }
 
 // SplitTermRight splits the window and opens a shell beside the active group.
@@ -255,7 +271,7 @@ func (m *Model) SplitTerm(axis string) {
 		return
 	}
 	m.term.split = axis
-	m.spawnTermSession(root, 1)
+	m.spawnTermSession(root, root, 1)
 }
 
 // UnsplitTerm merges the split group's tabs into the primary group, keeping
@@ -276,9 +292,9 @@ func (m *Model) UnsplitTerm() {
 	m.invalidate()
 }
 
-// spawnTermSession adds a tab to group g and starts its login shell in the
-// project root.
-func (m *Model) spawnTermSession(root string, g int) {
+// spawnTermSession adds a tab to group g and starts its login shell in cwd,
+// which belongs to the project at root.
+func (m *Model) spawnTermSession(root, cwd string, g int) {
 	ch := m.nextChannel()
 	s := m.term.add(g)
 	s.starting = true
@@ -290,7 +306,7 @@ func (m *Model) spawnTermSession(root string, g int) {
 		defer cancel()
 		raw, err := m.mgr.Invoke(ctx, Window, "term_spawn", map[string]any{
 			"options": map[string]any{
-				"cwd": root, "args": []string{}, "env": map[string]string{},
+				"cwd": cwd, "args": []string{}, "env": map[string]string{},
 				"cols": 100, "rows": 30, "shellIntegration": true,
 			},
 			"onOutput": map[string]any{"$channel": ch},

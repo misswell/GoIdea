@@ -135,6 +135,28 @@ container so its matches stay visible (`structure.go`). The window shares the
 outline the breadcrumbs already load, so opening it after a file has been open
 does not ask the server again.
 
+## Project view
+
+Project tree rows open OpenIDEA's ProjectViewPopupMenu on right-click: **新建**
+(File…, Directory…) on a folder, **剪切**, **复制**, **复制路径/引用**
+(Absolute Path, File Name, Path From Content Root), **粘贴** while the
+clipboard holds a copied or cut entry, **跳到源码** on a file, **在终端中打开**
+on a folder, **重命名…** and **删除…**. Entries that cannot apply are
+disabled, and the project root itself cannot be cut, renamed or deleted
+(`treeMenuItems` in `tree_ops.go`, tested by `tree_ops_test.go`).
+
+New, Rename and Delete ask in a small sheet first; the name is refused when it
+is empty or carries a path separator, and an existing entry is refused with
+已存在同名文件或目录. Delete moves the entry to the trash after
+**把“X”移到废纸篓？**. All four run through the backend's `fs_create_file`,
+`fs_create_dir`, `fs_rename` and `fs_delete`, and Paste runs `fs_copy` or, for
+a cut, `fs_rename`. A tab under an affected path that has unsaved text blocks
+Rename and Delete; otherwise its clean tabs close, and bookmarks move with a
+rename or drop with a delete. Paste skips an entry that would collide.
+**在终端中打开** opens a terminal tab whose shell starts in that folder
+(`OpenTerminalAt` in `term.go`). `SmokeFiles` drives every operation against
+the real backend and the base-phase e2e checks the results.
+
 ## Features wired to the editor
 
 | Feature | Where |
@@ -158,6 +180,7 @@ does not ask the server again.
 | Staged and unstaged change groups | `internal/app/vcs.go`; 已暂存/未暂存 split, per-row `vcs_stage` / `vcs_unstage` / `vcs_discard` with a rollback confirmation |
 | Branch widget and Branches popup | `internal/app/branch.go`; title bar `vcs_branch_info`, popup `vcs_branches` / `vcs_checkout` |
 | Line bookmarks | `internal/app/bookmarks.go`; F3 toggles the caret line, Cmd+F3 lists files and lines grouped by list with F2 description editing, next/previous cycle, gutter dots, saved in the session; Alt+F3 assigns a unique mnemonic, Ctrl+Shift+digit toggles and Ctrl+digit jumps; Cmd+2 opens the Bookmarks tool window; Toggle File Bookmark marks the active file, project tree rows mark files and folders; named lists group the window, can be renamed or deleted, and rows move between lists |
+| Project view menu | `internal/app/tree_ops.go`; New File/Directory, Cut, Copy, Paste, Copy Path, Jump to Source, Open in Terminal, Rename and Delete over `fs_*`, with a confirmation sheet and unsaved-tab guards |
 | Quick open (Cmd+P) / command palette | `quickopen.go`, `commands.go` |
 | Vim mode, sticky scroll | Mayoi's implementations are in-tree but not wired into `cmd/goidea` (see `UPSTREAM_FEATURE_MATRIX.md`) |
 
