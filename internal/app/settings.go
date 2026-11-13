@@ -338,6 +338,9 @@ type Preferences struct {
 	// SaveFiles are Settings › Editor › General › Save Files, applied to the
 	// document on every save; off by default, as OpenIDEA has them.
 	SaveFiles SavePrefs `json:"saveFiles,omitempty"`
+	// Todo are Settings › Editor › TODO, nil until the page is applied, which
+	// keeps OpenIDEA's built-in patterns.
+	Todo *TodoPrefs `json:"todo,omitempty"`
 	// MainToolbar is the title bar's saved layout, nil for the default one.
 	MainToolbar *toolbarLayout `json:"mainToolbar,omitempty"`
 	// Plugins are each plugin's settings, by name, under the same "plugins"
@@ -555,6 +558,20 @@ func (p Preferences) zenWidth() int {
 		return defaultZenWidth
 	}
 	return max(minZenWidth, min(p.ZenWidth, maxZenWidth))
+}
+
+// todoSettings is Settings › Editor › TODO with OpenIDEA's defaults standing
+// in for the unset value: the four built-in patterns, matching case
+// sensitively and comments only.
+func (p Preferences) todoSettings() (patterns []TodoPattern, caseSensitive, commentsOnly bool) {
+	patterns = append([]TodoPattern(nil), defaultTodoPatterns...)
+	if p.Todo == nil {
+		return patterns, true, true
+	}
+	if p.Todo.Patterns != nil {
+		patterns = append([]TodoPattern{}, p.Todo.Patterns...)
+	}
+	return patterns, !p.Todo.IgnoreCase, !p.Todo.AllText
 }
 
 // writeFileAtomic replaces path in one rename, so a crash mid-write leaves

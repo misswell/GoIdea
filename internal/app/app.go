@@ -41,13 +41,17 @@ type Config struct {
 // Tab is one open file: its backend document, the editor state editing the
 // document's buffer, and how much of that buffer the backend has.
 type Tab struct {
-	doc     *docbridge.Document
-	state   *editor.State
-	synced  uint64 // buffer version the backend was last given
-	seen    uint64 // buffer version last looked at, for the sync debounce
-	edited  time.Time
-	syncing bool
-	saving  bool
+	doc    *docbridge.Document
+	state  *editor.State
+	synced uint64 // buffer version the backend was last given
+	seen   uint64 // buffer version last looked at, for the sync debounce
+	// todoSeen and todoDark are the buffer version and appearance the editor's
+	// TODO tints were computed for, so a frame only rescans when one changed.
+	todoSeen uint64
+	todoDark bool
+	edited   time.Time
+	syncing  bool
+	saving   bool
 
 	// formatting marks a reformat request in flight, so a second one does not
 	// apply the first one's edits twice.
@@ -1598,6 +1602,7 @@ func (m *Model) View(c *ui.Context) {
 	_, m.frameHeight = c.Size()
 	m.shortcuts(c)
 	p := c.Theme()
+	m.refreshTodoHighlights(time.Now(), p)
 	ui.Column(c).Fill().Background(p.Background).Children(func() {
 		if m.Root() == "" || m.showingWelcome {
 			// With no project open the Welcome screen owns the window, as

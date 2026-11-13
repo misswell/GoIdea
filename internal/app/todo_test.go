@@ -201,3 +201,118 @@ func TestTodoFileTabNeedsAnEditor(t *testing.T) {
 		t.Fatalf("hint = %q, want 没有打开的文件", hint)
 	}
 }
+
+func TestTodoSettingsDefaults(t *testing.T) {
+	patterns, caseSensitive, commentsOnly := Preferences{}.todoSettings()
+	if !caseSensitive || !commentsOnly || !sameTodoPatterns(patterns, defaultTodoPatterns) {
+		t.Fatalf("defaults = %+v %v %v, want the built-in patterns", patterns, caseSensitive, commentsOnly)
+	}
+	// A stored Todo with no pattern list is the default set.
+	patterns, _, _ = (&Preferences{Todo: &TodoPrefs{}}).todoSettings()
+	if !sameTodoPatterns(patterns, defaultTodoPatterns) {
+		t.Fatalf("null patterns = %+v, want the defaults", patterns)
+	}
+	// An empty list means the user removed every pattern, and stays empty.
+	patterns, _, _ = (&Preferences{Todo: &TodoPrefs{Patterns: []TodoPattern{}}}).todoSettings()
+	if patterns == nil || len(patterns) != 0 {
+		t.Fatalf("empty patterns = %+v, want an empty list", patterns)
+	}
+	custom := []TodoPattern{{Keyword: "NOTE", Color: "success", Enabled: true}}
+	prefs := Preferences{Todo: &TodoPrefs{Patterns: custom, IgnoreCase: true, AllText: true}}
+	patterns, caseSensitive, commentsOnly = prefs.todoSettings()
+	if caseSensitive || commentsOnly || !sameTodoPatterns(patterns, custom) {
+		t.Fatalf("stored = %+v %v %v", patterns, caseSensitive, commentsOnly)
+	}
+}
+
+func TestPreferencesTodoRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	if err := (Preferences{Todo: &TodoPrefs{Patterns: []TodoPattern{}}}).Save(path); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	stored := LoadPreferences(path)
+	if stored.Todo == nil || stored.Todo.Patterns == nil || len(stored.Todo.Patterns) != 0 {
+		t.Fatalf("stored todo = %+v, want an empty pattern list", stored.Todo)
+	}
+	patterns, caseSensitive, commentsOnly := stored.todoSettings()
+	if len(patterns) != 0 || !caseSensitive || !commentsOnly {
+		t.Fatalf("settings = %+v %v %v", patterns, caseSensitive, commentsOnly)
+	}
+}
+
+func TestResetTodoLoadsStoredSettings(t *testing.T) {
+	m := &Model{prefs: Preferences{Todo: &TodoPrefs{
+		Patterns:   []TodoPattern{{Keyword: "NOTE", Color: "success", Enabled: true}},
+		IgnoreCase: true,
+		AllText:    true,
+	}}}
+	m.resetTodo()
+	if got, want := m.todoRegex(), `\b(NOTE)\b.*`; got != want {
+		t.Fatalf("regex = %q, want %q", got, want)
+	}
+	if m.todo.caseSensitive || m.todo.commentsOnly {
+		t.Fatalf("switches = %v %v, want both off", m.todo.caseSensitive, m.todo.commentsOnly)
+	}
+}
+
+func TestSettingsTodoPageStagesAndApplies(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	m := &Model{cfg: Config{SettingsPath: path}}
+	m.applyPreferences()
+	m.resetTodo()
+	m.OpenSettingsPage(settingsPageTodo)
+	if m.settingsPage != settingsPageTodo {
+		t.Fatalf("page = %q, want %q", m.settingsPage, settingsPageTodo)
+	}
+	if !sameTodoPatterns(m.settingsDraft.todoPatterns, defaultTodoPatterns) {
+		t.Fatalf("draft = %+v, want the built-in patterns", m.settingsDraft.todoPatterns)
+	}
+	if m.settingsDirtyPage(settingsPageTodo) || m.settingsPending() {
+		t.Fatalf("fresh page reported staged changes")
+	}
+
+	m.settingsSetTodoCase(false)
+	m.settingsSetTodoComments(false)
+	m.settingsSetTodoKeyword(3, "YY Y")
+	if m.prefs.Todo != nil {
+		t.Fatalf("staging wrote the prefs: %+v", m.prefs.Todo)
+	}
+	if !m.settingsDirtyPage(settingsPageTodo) || !m.settingsPending() {
+		t.Fatalf("staged TODO did not dirty its page")
+	}
+	m.applySettings()
+	if m.prefs.Todo == nil || !m.prefs.Todo.IgnoreCase || !m.prefs.Todo.AllText {
+		t.Fatalf("applied prefs = %+v", m.prefs.Todo)
+	}
+	if len(m.prefs.Todo.Patterns) != 4 || m.prefs.Todo.Patterns[3].Keyword != "YYY" {
+		t.Fatalf("stored patterns = %+v, want the whitespace stripped", m.prefs.Todo.Patterns)
+	}
+	if m.todo.caseSensitive || m.todo.commentsOnly {
+		t.Fatalf("tool window kept %v %v, want both off", m.todo.caseSensitive, m.todo.commentsOnly)
+	}
+	if stored := LoadPreferences(path); stored.Todo == nil || !stored.Todo.IgnoreCase || !stored.Todo.AllText {
+		t.Fatalf("file = %+v, want the applied TODO settings", stored.Todo)
+	}
+
+	m.settingsRestoreTodoPatterns()
+	m.applySettings()
+	if m.prefs.Todo != nil {
+		t.Fatalf("restoring the defaults stored %+v", m.prefs.Todo)
+	}
+	if !m.todo.caseSensitive || !m.todo.commentsOnly {
+		t.Fatalf("tool window = %v %v, want the defaults", m.todo.caseSensitive, m.todo.commentsOnly)
+	}
+
+	m.OpenSettingsPage(settingsPageTodo)
+	for len(m.settingsDraft.todoPatterns) > 0 {
+		m.settingsRemoveTodoPattern(0)
+	}
+	m.applySettings()
+	stored := LoadPreferences(path)
+	if stored.Todo == nil || stored.Todo.Patterns == nil || len(stored.Todo.Patterns) != 0 {
+		t.Fatalf("stored empty patterns = %+v", stored.Todo)
+	}
+	if len(m.todo.patterns) != 0 || m.todoRegex() != "" {
+		t.Fatalf("tool window kept patterns %+v", m.todo.patterns)
+	}
+}

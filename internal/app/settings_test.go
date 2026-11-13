@@ -117,12 +117,13 @@ func TestSettingsTreeNestsAndGroups(t *testing.T) {
 		t.Fatalf("roots = %v, want %v", roots, want)
 	}
 	editor, ok := settingsFindNode(tree, settingsGroupKey("Editor"))
-	if !ok || len(editor.children) != 2 {
-		t.Fatalf("Editor folder = %+v, want General and Font", editor)
+	if !ok || len(editor.children) != 3 {
+		t.Fatalf("Editor folder = %+v, want General, Font and TODO", editor)
 	}
 	general := editor.children[0]
-	if general.key != settingsPageGeneral || editor.children[1].key != settingsPageEditorFont {
-		t.Fatalf("Editor children = %q, %q", general.key, editor.children[1].key)
+	if general.key != settingsPageGeneral || editor.children[1].key != settingsPageEditorFont ||
+		editor.children[2].key != settingsPageTodo {
+		t.Fatalf("Editor children = %q, %q, %q", general.key, editor.children[1].key, editor.children[2].key)
 	}
 	if len(general.children) != 4 ||
 		general.children[0].key != settingsPageEditorAppearance ||
@@ -200,8 +201,8 @@ func TestSettingsCollapseHidesChildren(t *testing.T) {
 	open := len(m.settingsVisibleRows())
 	m.settingsToggleNode(settingsGroupKey("Editor"))
 	closed := len(m.settingsVisibleRows())
-	if closed != open-6 {
-		t.Fatalf("rows open %d, closed %d, want six fewer", open, closed)
+	if closed != open-7 {
+		t.Fatalf("rows open %d, closed %d, want seven fewer", open, closed)
 	}
 	if m.settingsNormalizeKey("no.such.page") != "" {
 		t.Fatalf("unknown key normalized to a row")

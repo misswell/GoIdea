@@ -37,6 +37,8 @@ func (m *Model) settingsPageBody(c *ui.Context, p *ui.Theme, oi oiColors, node s
 		m.settingsFontBody(c, oi)
 	case "keymap":
 		m.settingsKeymapBody(c, oi)
+	case "todo":
+		m.settingsTodoBody(c, oi)
 	case "java":
 		m.javaToolsSection(c, p)
 	}
@@ -430,6 +432,110 @@ func (m *Model) settingsKeymapBody(c *ui.Context, oi oiColors) {
 			ui.Text(c, cmd.shortcut).FontSize(10.5).TextColor(oi.textMuted).SingleLine()
 		})
 	}
+}
+
+// todoColorLabels are the colour names the TODO page's select offers, in the
+// order OpenIDEA's TodoSettingsPage lists them.
+var todoColorLabels = []string{"Blue", "Red", "Yellow", "Green", "Violet", "Grey"}
+
+// todoColorLabel is the select's label for a stored tone.
+func todoColorLabel(tone string) string {
+	switch tone {
+	case "danger":
+		return "Red"
+	case "warning":
+		return "Yellow"
+	case "success":
+		return "Green"
+	case "violet":
+		return "Violet"
+	case "muted":
+		return "Grey"
+	}
+	return "Blue"
+}
+
+// todoColorValue is the stored tone for a select's label.
+func todoColorValue(label string) string {
+	switch label {
+	case "Red":
+		return "danger"
+	case "Yellow":
+		return "warning"
+	case "Green":
+		return "success"
+	case "Violet":
+		return "violet"
+	case "Grey":
+		return "muted"
+	}
+	return "info"
+}
+
+// todoToneOf is a pattern tone in the palette the page draws with.
+func todoToneOf(tone string, oi oiColors) ui.Color {
+	switch tone {
+	case "danger":
+		return oi.danger
+	case "warning":
+		return oi.warning
+	case "success":
+		return oi.success
+	case "violet":
+		return todoViolet
+	case "muted":
+		return oi.textMuted
+	}
+	return oi.accent
+}
+
+// settingsTodoBody is Editor › TODO: the matching switches and the keyword
+// patterns, with their enable switches, colours and actions, as
+// TodoSettingsPage.tsx draws them.
+func (m *Model) settingsTodoBody(c *ui.Context, oi oiColors) {
+	caseOn := m.settingsDraft.todoCaseSensitive
+	if ui.Checkbox(c, &caseOn, "Case sensitive").Changed() {
+		m.settingsSetTodoCase(caseOn)
+	}
+	comments := m.settingsDraft.todoCommentsOnly
+	if ui.Checkbox(c, &comments, "Only in comments").Changed() {
+		m.settingsSetTodoComments(comments)
+	}
+	ui.Row(c).Height(10)
+	ui.Row(c).MinHeight(28).AlignItems(ui.Center).Children(func() {
+		ui.Text(c, "Patterns").FontSize(12).TextColor(oi.textStrong).SingleLine().Grow(1)
+		ui.Button(c, "Add Pattern").OnClick(m.settingsAddTodoPattern)
+	})
+	ui.Row(c).MinHeight(24).Gap(8).AlignItems(ui.Center).PaddingStart(20).Children(func() {
+		settingsFormLabelDim(c, oi, "", 18)
+		settingsFormLabelDim(c, oi, "Keyword", 180)
+		settingsFormLabelDim(c, oi, "", 14)
+		settingsFormLabelDim(c, oi, "Color", 96)
+	})
+	for i := range m.settingsDraft.todoPatterns {
+		ui.Row(c.Key(fmt.Sprintf("settings:todo:%d", i))).MinHeight(28).Gap(8).
+			AlignItems(ui.Center).PaddingStart(20).Children(func() {
+			enabled := m.settingsDraft.todoPatterns[i].Enabled
+			if ui.Checkbox(c, &enabled, "").Changed() {
+				m.settingsSetTodoEnabled(i, enabled)
+			}
+			keyword := m.settingsDraft.todoPatterns[i].Keyword
+			in := ui.TextInput(c, &keyword).Width(180)
+			if in.Changed() {
+				m.settingsSetTodoKeyword(i, keyword)
+			}
+			ui.Row(c).Size(14, 14).Radius(3).
+				Background(todoToneOf(m.settingsDraft.todoPatterns[i].Color, oi))
+			shown := todoColorLabel(m.settingsDraft.todoPatterns[i].Color)
+			sel := ui.Select(c, &shown, todoColorLabels)
+			if sel.Changed() {
+				m.settingsSetTodoColor(i, todoColorValue(shown))
+			}
+			ui.Button(c, "Remove").OnClick(func() { m.settingsRemoveTodoPattern(i) })
+		})
+	}
+	ui.Row(c).Height(10)
+	ui.Button(c, "Restore Defaults").OnClick(m.settingsRestoreTodoPatterns)
 }
 
 // settingsPageSummary is the settings tree as text, for the offscreen smoke

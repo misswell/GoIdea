@@ -31,10 +31,10 @@ new action, tool window, page or command appears automatically.
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
 | Tool windows | 30 | 9 | 5 | 0 | 0 | 16 |
 | Overlays | 56 | 1 | 0 | 0 | 0 | 55 |
-| Editor contributions | 35 | 0 | 0 | 0 | 0 | 35 |
+| Editor contributions | 35 | 0 | 1 | 0 | 0 | 34 |
 | Editor kinds | 4 | 0 | 0 | 0 | 0 | 4 |
 | File editor providers | 4 | 0 | 0 | 0 | 0 | 4 |
-| Settings pages | 81 | 0 | 9 | 0 | 0 | 72 |
+| Settings pages | 81 | 1 | 9 | 0 | 0 | 71 |
 | Settings keys | 445 | 0 | 1 | 0 | 0 | 444 |
 | Languages | 80 | 1 | 0 | 0 | 0 | 79 |
 | Backend crates | 38 | 0 | 0 | 31 | 0 | 7 |
@@ -1091,7 +1091,7 @@ same bindings until a check records it.
 | `services.composeEditor` | `src/features/services/index.ts` | missing |
 | `services.dockerGutter` | `src/features/services/index.ts` | missing |
 | `templates` | `src/features/templates/index.ts` | missing |
-| `todo.highlight` | `src/features/todo/index.ts` | missing |
+| `todo.highlight` | `src/features/todo/index.ts` | partial - internal/app/todo.go todoMarksOf and refreshTodoHighlights: the open buffer's TODOs, matched by the same keyword and comment rules and rescanned 400ms after typing pauses, paint as editor.TextBackground spans tinted in the pattern's tone (internal/app/app.go View), proven by base.todo.highlight; OpenIDEA colours and italicises the comment text instead, which the MyGo editor has no foreground-span API for, so the tint is the native equivalent |
 | `vcs.changeMarkers` | `src/features/vcs/index.ts` | missing |
 | `vcs.marks` | `src/editor/api.ts` | missing |
 | `viewers.markdownLive` | `src/features/viewers/markdown/live.ts` | missing |
@@ -1168,7 +1168,7 @@ The plain text editor is the workbench default and is not registered through
 | `editor.liveTemplates` | Live Templates | Editor | `src/features/templates/index.ts` | missing |
 | `editor.naturalLanguages` | Natural Languages | Editor | `src/features/settings/pages/editor/spelling.tsx` | missing |
 | `editor.naturalLanguages.spelling` | Spelling | Editor | `src/features/settings/pages/editor/spelling.tsx` | missing |
-| `editor.todo` | TODO | Editor | `src/features/todo/index.ts` | missing |
+| `editor.todo` | TODO | Editor | `src/features/todo/index.ts` | integrated - internal/app/settings_pages.go settingsTodoBody: Case sensitive and Only in comments checkboxes, the Patterns list with each row's enable checkbox, keyword field (whitespace stripped) and Blue/Red/Yellow/Green/Violet/Grey colour select, Add Pattern (NOTE in green), Remove Pattern and Restore Defaults, staged through settingsDraft.todoPrefs into Preferences.Todo and applied to the tool window by internal/app/todo.go applyTodoSettings (rescans); base.todo.settings; internal/app/todo_test.go TestTodoSettingsDefaults, TestPreferencesTodoRoundTrip, TestSettingsTodoPageStagesAndApplies |
 | `general` | System Settings |  | `src/features/settings/pages/behavior.tsx` | missing |
 | `general.dateFormats` | Date Formats |  | `src/features/settings/pages/behavior.tsx` | missing |
 | `general.httpProxy` | HTTP Proxy |  | `src/features/settings/pages/httpProxy.tsx` | missing |

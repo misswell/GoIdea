@@ -72,6 +72,8 @@ CHECKS = {
         ("todo.items", "TODO scan found the marker comment", lambda d: ((get(d, "todo.items") or 0) >= 1 and get(d, "todo.firstKeyword") == "TODO", {"items": get(d, "todo.items"), "keyword": get(d, "todo.firstKeyword")})),
         ("todo.openFiles", "open-files scope returned the current file's item", lambda d: ((get(d, "todo.openFilesItems") or 0) >= 1, get(d, "todo.openFilesItems"))),
         ("todo.visible", "the TODO window stayed open", lambda d: (get(d, "todo.visible") is True, get(d, "todo.visible"))),
+        ("todo.settings", "the editor.todo page opens, applies a pattern and restores the defaults", lambda d: (get(d, "todo.settingsPage") is True and get(d, "todo.settingsDefaults") == 4 and get(d, "todo.settingsApplied") is True and get(d, "todo.settingsRestored") is True, {"page": get(d, "todo.settingsPage"), "defaults": get(d, "todo.settingsDefaults"), "applied": get(d, "todo.settingsApplied"), "restored": get(d, "todo.settingsRestored")})),
+        ("todo.highlight", "the editor tinted the open file's TODO spans", lambda d: ((get(d, "todo.highlightSpans") or 0) >= 1, get(d, "todo.highlightSpans"))),
         ("todoError", *absent("todoError")),
         ("term.output", "a real shell ran echo in the terminal", lambda d: ("GOIDEA_TERM_OK" in (get(d, "term.output") or ""), (get(d, "term.output") or "")[-300:])),
         ("term.tabs", "a second terminal tab opened and closed", lambda d: (get(d, "term.tabs") == 2 and get(d, "term.tabsAfterClose") == 1, {"tabs": get(d, "term.tabs"), "afterClose": get(d, "term.tabsAfterClose")})),

@@ -137,6 +137,8 @@ needs a `## <version>` section here, or its build fails.
 - 新增 **TODO** 工具窗口，按项目扫描 **TODO**/**FIXME**/**HACK**/**XXX** 注释并在文件下分组列出。
 - **TODO** 窗口有 **项目**、**当前文件**、**按范围**、**更改** 四个页签、关键字过滤和范围选择，单击预览、双击跳转。
 - **Tools** 菜单新增 **Refresh TODO Items** 和 **Show TODO Items in Current File**。
+- 新增 **Editor > TODO** 设置页，可开关 **Case sensitive** / **Only in comments**，增删关键字和配色。
+- 编辑器用各关键字的颜色给 TODO 注释加上高亮，输入停下后更新，并随设置保存。
 
 ## 0.19.3
 

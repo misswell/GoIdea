@@ -80,6 +80,8 @@
     {"id": "base.todo.items", "label": "TODO scan found the marker comment", "feature": "TODO pattern matching over search_start", "area": "workbench", "gate": "main", "doc": "EDITOR.md"},
     {"id": "base.todo.openFiles", "label": "open-files scope returned the current file's item", "feature": "TODO Scope Based open files", "area": "workbench", "gate": "main", "doc": "EDITOR.md"},
     {"id": "base.todo.visible", "label": "the TODO window stayed open", "feature": "TODO tool window activation", "area": "workbench", "gate": "main", "doc": "EDITOR.md"},
+    {"id": "base.todo.settings", "label": "the editor.todo page opens, applies a pattern and restores the defaults", "feature": "TODO settings page and its stored patterns", "area": "settings", "gate": "main", "doc": "EDITOR.md"},
+    {"id": "base.todo.highlight", "label": "the editor tinted the open file's TODO spans", "feature": "TODO editor highlight", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
     {"id": "base.todoError", "label": "todoError is absent", "feature": "TODO scan reports no error", "area": "workbench", "gate": "main", "doc": "EDITOR.md"},
     {"id": "base.term.output", "label": "a real shell ran echo in the terminal", "feature": "Terminal shell through term_spawn and term_write", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
     {"id": "base.term.tabs", "label": "a second terminal tab opened and closed", "feature": "Multiple terminal tabs", "area": "editor", "gate": "main", "doc": "EDITOR.md"},

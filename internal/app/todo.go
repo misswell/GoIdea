@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/editor"
 
 	"mayoi/internal/openidea"
 )
@@ -24,11 +25,34 @@ import (
 // TodoPattern is one keyword the window looks for: TODO, FIXME, HACK or XXX
 // unless the settings page says otherwise.
 type TodoPattern struct {
-	ID      string
-	Keyword string
+	ID      string `json:"id,omitempty"`
+	Keyword string `json:"keyword"`
 	// Color names a theme tone: info, danger, warning, success, violet, muted.
-	Color   string
-	Enabled bool
+	Color   string `json:"color,omitempty"`
+	Enabled bool   `json:"enabled,omitempty"`
+}
+
+// TodoPrefs is Settings › Editor › TODO as the preferences store it. The
+// inverse names keep the zero value OpenIDEA's defaults: matching is case
+// sensitive and only comments count. Patterns keeps a nil list, never
+// written, apart from an empty one, where the user removed every pattern.
+type TodoPrefs struct {
+	Patterns   []TodoPattern `json:"patterns"`
+	IgnoreCase bool          `json:"ignoreCase,omitempty"`
+	AllText    bool          `json:"allText,omitempty"`
+}
+
+// sameTodoPatterns reports two pattern lists as the same keyword set.
+func sameTodoPatterns(a, b []TodoPattern) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 var defaultTodoPatterns = []TodoPattern{
@@ -37,6 +61,9 @@ var defaultTodoPatterns = []TodoPattern{
 	{ID: "hack", Keyword: "HACK", Color: "warning", Enabled: true},
 	{ID: "xxx", Keyword: "XXX", Color: "warning", Enabled: true},
 }
+
+// todoViolet is the violet tone's colour, which ui.Theme has no field for.
+var todoViolet = ui.Hex("#9876aa")
 
 // TodoItem is one keyword occurrence: its file, 0-based line and UTF-16
 // column, the configured keyword and the text from the keyword to the end of
@@ -112,15 +139,85 @@ var todoScopes = []struct{ id, label string }{
 }
 
 func (m *Model) resetTodo() {
+	patterns, caseSensitive, commentsOnly := m.prefs.todoSettings()
 	m.todo = TodoPane{
 		tab:           "project",
-		patterns:      append([]TodoPattern(nil), defaultTodoPatterns...),
-		caseSensitive: true,
-		commentsOnly:  true,
+		patterns:      patterns,
+		caseSensitive: caseSensitive,
+		commentsOnly:  commentsOnly,
 		hidden:        map[string]bool{},
 		collapsed:     map[string]bool{},
 		scopeKind:     "projectFiles",
 		step:          -1,
+	}
+}
+
+// applyTodoSettings puts the stored TODO settings on the tool window: when
+// they differ from the ones in use, the scans run again and every editor
+// highlights the new keywords on its next frame.
+func (m *Model) applyTodoSettings() {
+	patterns, caseSensitive, commentsOnly := m.prefs.todoSettings()
+	if sameTodoPatterns(patterns, m.todo.patterns) &&
+		caseSensitive == m.todo.caseSensitive && commentsOnly == m.todo.commentsOnly {
+		return
+	}
+	m.todo.patterns = patterns
+	m.todo.caseSensitive = caseSensitive
+	m.todo.commentsOnly = commentsOnly
+	m.todo.step = -1
+	m.todo.livePath, m.todo.liveVersion, m.todo.liveItems = "", 0, nil
+	m.RunTodo()
+	if m.todo.scopeScanned != "" {
+		m.RunTodoScope()
+	}
+	for _, t := range m.tabs {
+		t.todoSeen = 0
+	}
+	m.invalidate()
+}
+
+// todoHighlightDelay waits for typing to pause before an editor's TODO tints
+// follow its buffer, as todo.highlight debounces its scan.
+const todoHighlightDelay = 400 * time.Millisecond
+
+// todoMarksOf is a tab's TODO spans, tinted in each keyword's tone: the
+// native stand-in for todo.highlight's coloured comment text.
+func (m *Model) todoMarksOf(t *Tab, p *ui.Theme) []editor.TextBackground {
+	items := m.scanTodoText(t.doc.Path(), t.doc.Text())
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]editor.TextBackground, 0, len(items))
+	for _, it := range items {
+		start := t.doc.ByteOffset(openidea.OutlinePos{Line: uint32(it.Line), Col: uint32(it.Col)})
+		end := t.doc.ByteOffset(openidea.OutlinePos{Line: uint32(it.Line), Col: uint32(it.Col) + utf16Len(it.Text)})
+		if end <= start {
+			continue
+		}
+		out = append(out, editor.TextBackground{
+			Start: start, End: end, Color: m.todoTone(it.Keyword, p).Alpha(0.18),
+		})
+	}
+	return out
+}
+
+// refreshTodoHighlights keeps every editor's TODO tints current: recomputed
+// when typing paused after a change, or when the theme changed.
+func (m *Model) refreshTodoHighlights(now time.Time, p *ui.Theme) {
+	if p == nil {
+		return
+	}
+	for _, t := range m.tabs {
+		v := t.doc.Buffer().Version()
+		if t.todoSeen == v && t.todoDark == p.Dark {
+			continue
+		}
+		if t.todoSeen != 0 && v != t.todoSeen && now.Sub(t.edited) < todoHighlightDelay {
+			continue
+		}
+		t.todoSeen = v
+		t.todoDark = p.Dark
+		t.state.TextBackgrounds = m.todoMarksOf(t, p)
 	}
 }
 
@@ -744,7 +841,7 @@ func (m *Model) todoTone(keyword string, p *ui.Theme) ui.Color {
 		case "success":
 			return p.Success
 		case "violet":
-			return p.Accent
+			return todoViolet
 		case "muted":
 			return p.TextMuted
 		}
@@ -1085,5 +1182,43 @@ func (m *Model) SmokeTodo(ctx context.Context) (map[string]any, error) {
 		case <-time.After(150 * time.Millisecond):
 		}
 	}
+	// Settings › Editor › TODO registers, stages and applies; an open editor
+	// tints the TODOs of the file it shows.
+	m.post(func() {
+		if m.tab() == nil {
+			if p := findSmokeFile(m.Root()); p != "" {
+				m.openFile(p)
+			}
+		}
+	})
+	openDeadline := time.Now().Add(30 * time.Second)
+	for {
+		opened := false
+		m.post(func() { opened = m.tab() != nil })
+		if opened || time.Now().After(openDeadline) {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+	m.post(func() {
+		m.OpenSettingsPage(settingsPageTodo)
+		out["settingsPage"] = m.settingsPage == settingsPageTodo
+		out["settingsDefaults"] = len(m.settingsDraft.todoPatterns)
+		m.settingsAddTodoPattern()
+		m.applySettings()
+		out["settingsApplied"] = m.prefs.Todo != nil && len(m.prefs.Todo.Patterns) == 5
+		m.settingsRestoreTodoPatterns()
+		m.applySettings()
+		out["settingsRestored"] = m.prefs.Todo == nil
+		m.closeSettings()
+		m.refreshTodoHighlights(time.Now(), openideaTheme(true))
+		if t := m.tab(); t != nil {
+			out["highlightSpans"] = len(t.state.TextBackgrounds)
+		}
+	})
 	return out, nil
 }

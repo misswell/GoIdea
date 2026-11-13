@@ -41,6 +41,7 @@ const (
 	settingsPageEditorTabs       = "editor.general.editorTabs"
 	settingsPageCodeFolding      = "editor.general.codeFolding"
 	settingsPageEditorFont       = "editor.font"
+	settingsPageTodo             = "editor.todo"
 	settingsPageJava             = "languages.java"
 )
 
@@ -92,6 +93,11 @@ type settingsDraft struct {
 	multipleRows bool
 	squeezeTabs  bool
 	showFileIcon bool
+	// The TODO page stages its keywords, whether matching is case sensitive
+	// and whether only comments count.
+	todoPatterns      []TodoPattern
+	todoCaseSensitive bool
+	todoCommentsOnly  bool
 }
 
 // appearance is the staged switches as the editor stores them.
@@ -154,6 +160,21 @@ func (d settingsDraft) tabPrefs() TabPrefs {
 		t.ActivateOnClose = d.activateOnClose
 	}
 	return t
+}
+
+// todoPrefs is the staged TODO page as the preferences store it: nil while it
+// still holds OpenIDEA's built-in patterns, so the stored file keeps the
+// defaults out of sight. An empty list is kept, as removing every pattern is a
+// choice.
+func (d settingsDraft) todoPrefs() *TodoPrefs {
+	if sameTodoPatterns(d.todoPatterns, defaultTodoPatterns) && d.todoCaseSensitive && d.todoCommentsOnly {
+		return nil
+	}
+	return &TodoPrefs{
+		Patterns:   append([]TodoPattern{}, d.todoPatterns...),
+		IgnoreCase: !d.todoCaseSensitive,
+		AllText:    !d.todoCommentsOnly,
+	}
 }
 
 // savePrefs is the staged Save Files switches as the preferences store them:
@@ -283,6 +304,20 @@ func settingsPages() []settingsPageSpec {
 			},
 			labels:  []string{"Size"},
 			section: "editorFont",
+		},
+		{
+			id:    settingsPageTodo,
+			title: "TODO",
+			group: "Editor",
+			order: 40,
+			keywords: []string{
+				"todo", "fixme", "hack", "pattern",
+			},
+			labels: []string{
+				"Case sensitive", "Only in comments", "Patterns",
+				"Add Pattern", "Restore Defaults", "Remove Pattern",
+			},
+			section: "todo",
 		},
 		{
 			id:    settingsPageJava,
@@ -679,6 +714,7 @@ func (m *Model) settingsDraftFromPrefs() settingsDraft {
 	if m.prefs.Tabs.CloseButtonLeft {
 		closePosition = "left"
 	}
+	todoPatterns, todoCase, todoComments := m.prefs.todoSettings()
 	return settingsDraft{
 		theme:                     m.prefs.Theme,
 		fontSize:                  m.prefs.fontSize(),
@@ -712,6 +748,9 @@ func (m *Model) settingsDraftFromPrefs() settingsDraft {
 		multipleRows:              m.prefs.Tabs.MultipleRows,
 		squeezeTabs:               m.prefs.Tabs.SqueezeTabs,
 		showFileIcon:              !m.prefs.Tabs.HideFileIcon,
+		todoPatterns:              todoPatterns,
+		todoCaseSensitive:         todoCase,
+		todoCommentsOnly:          todoComments,
 	}
 }
 
@@ -1041,6 +1080,81 @@ func (m *Model) settingsSetNoPreviewTab(noPreview bool) {
 	m.settingsPreview()
 }
 
+// settingsSetTodoCase stages the TODO page's Case sensitive switch.
+func (m *Model) settingsSetTodoCase(on bool) {
+	if m.settingsDraft.todoCaseSensitive == on {
+		return
+	}
+	m.settingsDraft.todoCaseSensitive = on
+	m.invalidate()
+}
+
+// settingsSetTodoComments stages the TODO page's Only in comments switch.
+func (m *Model) settingsSetTodoComments(on bool) {
+	if m.settingsDraft.todoCommentsOnly == on {
+		return
+	}
+	m.settingsDraft.todoCommentsOnly = on
+	m.invalidate()
+}
+
+// settingsSetTodoEnabled stages one pattern row's checkbox.
+func (m *Model) settingsSetTodoEnabled(index int, on bool) {
+	if index < 0 || index >= len(m.settingsDraft.todoPatterns) {
+		return
+	}
+	m.settingsDraft.todoPatterns[index].Enabled = on
+	m.invalidate()
+}
+
+// settingsSetTodoKeyword stages a row's keyword, with the whitespace stripped
+// as the page's input does.
+func (m *Model) settingsSetTodoKeyword(index int, keyword string) {
+	if index < 0 || index >= len(m.settingsDraft.todoPatterns) {
+		return
+	}
+	cleaned := strings.Join(strings.Fields(keyword), "")
+	if m.settingsDraft.todoPatterns[index].Keyword == cleaned {
+		return
+	}
+	m.settingsDraft.todoPatterns[index].Keyword = cleaned
+	m.invalidate()
+}
+
+// settingsSetTodoColor stages a row's colour tone.
+func (m *Model) settingsSetTodoColor(index int, tone string) {
+	if index < 0 || index >= len(m.settingsDraft.todoPatterns) {
+		return
+	}
+	m.settingsDraft.todoPatterns[index].Color = tone
+	m.invalidate()
+}
+
+// settingsAddTodoPattern appends NOTE in the success tone, as Add Pattern does.
+func (m *Model) settingsAddTodoPattern() {
+	m.settingsDraft.todoPatterns = append(m.settingsDraft.todoPatterns,
+		TodoPattern{Keyword: "NOTE", Color: "success", Enabled: true})
+	m.invalidate()
+}
+
+// settingsRemoveTodoPattern drops one row.
+func (m *Model) settingsRemoveTodoPattern(index int) {
+	if index < 0 || index >= len(m.settingsDraft.todoPatterns) {
+		return
+	}
+	m.settingsDraft.todoPatterns = append(m.settingsDraft.todoPatterns[:index:index],
+		m.settingsDraft.todoPatterns[index+1:]...)
+	m.invalidate()
+}
+
+// settingsRestoreTodoPatterns puts the built-in keywords back.
+func (m *Model) settingsRestoreTodoPatterns() {
+	m.settingsDraft.todoPatterns = append([]TodoPattern(nil), defaultTodoPatterns...)
+	m.settingsDraft.todoCaseSensitive = true
+	m.settingsDraft.todoCommentsOnly = true
+	m.invalidate()
+}
+
 // settingsPreview draws the staged theme, font, editor appearance,
 // breadcrumbs and tab strip in this window.
 func (m *Model) settingsPreview() {
@@ -1059,7 +1173,7 @@ func (m *Model) settingsPending() bool {
 	for _, key := range []string{
 		settingsPageAppearance, settingsPageEditorFont, settingsPageEditorAppearance,
 		settingsPageBreadcrumbs, settingsPageCodeFolding, settingsPageGeneral,
-		settingsPageEditorTabs,
+		settingsPageEditorTabs, settingsPageTodo,
 	} {
 		if m.settingsDirtyPage(key) {
 			return true
@@ -1094,6 +1208,11 @@ func (m *Model) settingsDirtyPage(key string) bool {
 			m.settingsDraft.savePrefs() != m.prefs.SaveFiles
 	case settingsPageEditorTabs:
 		return m.settingsDraft.tabPrefs() != m.prefs.Tabs
+	case settingsPageTodo:
+		patterns, caseSensitive, commentsOnly := m.prefs.todoSettings()
+		return !sameTodoPatterns(m.settingsDraft.todoPatterns, patterns) ||
+			m.settingsDraft.todoCaseSensitive != caseSensitive ||
+			m.settingsDraft.todoCommentsOnly != commentsOnly
 	}
 	return false
 }
@@ -1141,6 +1260,10 @@ func (m *Model) settingsResetPage() {
 		m.settingsDraft.multipleRows = false
 		m.settingsDraft.squeezeTabs = false
 		m.settingsDraft.showFileIcon = true
+	case settingsPageTodo:
+		m.settingsDraft.todoPatterns = append([]TodoPattern(nil), defaultTodoPatterns...)
+		m.settingsDraft.todoCaseSensitive = true
+		m.settingsDraft.todoCommentsOnly = true
 	default:
 		return
 	}
@@ -1157,11 +1280,13 @@ func (m *Model) applySettings() {
 	m.prefs.Breadcrumbs = m.settingsDraft.breadcrumbs()
 	m.prefs.Tabs = m.settingsDraft.tabPrefs()
 	m.prefs.SaveFiles = m.settingsDraft.savePrefs()
+	m.prefs.Todo = m.settingsDraft.todoPrefs()
 	m.settingsErr = ""
 	if err := m.prefs.Save(m.settingsWritePath()); err != nil {
 		m.settingsErr = err.Error()
 	}
 	m.applyPreferences()
+	m.applyTodoSettings()
 	m.settingsDraft = m.settingsDraftFromPrefs()
 	m.invalidate()
 }

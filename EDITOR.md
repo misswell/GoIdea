@@ -150,8 +150,25 @@ every item, **刷新** rescans and **关闭** hides the window. The scan stops a
 `RunTodo` cancels the previous request before starting the next, and
 **Tools › Refresh TODO Items** / **Show TODO Items in Current File** run the
 same scan or open the current-file tab (`todo.refresh`, `todo.showCurrentFile`).
-The editor's TODO gutter highlight and the `editor.todo` settings page are not
-ported yet.
+
+**Settings › Editor › TODO** ports `TodoSettingsPage.tsx`: **Case sensitive**
+and **Only in comments** switch the matching rules, and the **Patterns** list
+gives each keyword an enable checkbox, a keyword field (whitespace stripped)
+and a Blue/Red/Yellow/Green/Violet/Grey colour, with **Add Pattern** (NOTE in
+green), **Remove Pattern** and **Restore Defaults**. The choices are staged
+like every other page and written to `Preferences.Todo` on **Apply**/**OK**:
+a missing list keeps the built-in patterns, an empty list means the user
+removed them all, and `IgnoreCase`/`AllText` store the two switches. Applying
+rescans the open tabs of the window.
+
+The editor keeps the buffer's TODOs tinted, as the `todo.highlight` editor
+contribution decorates them: `todoMarksOf` applies the same keyword and
+comment rules to the buffer text and paints each match from the keyword to the
+end of its comment with the pattern's colour at 18% alpha through
+`editor.TextBackground`; `refreshTodoHighlights` runs once per frame and
+rescans only when the buffer version or the theme changed, 400 ms after
+typing pauses. OpenIDEA colours and italicises the comment text; the MyGo
+editor has no foreground-span API, so the tint is the native equivalent.
 
 ## Project view
 
