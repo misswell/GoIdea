@@ -25,6 +25,8 @@ func (m *Model) settingsPageBody(c *ui.Context, p *ui.Theme, oi oiColors, node s
 		m.settingsAppearanceBody(c, oi)
 	case "editorAppearance":
 		m.settingsEditorAppearanceBody(c, oi)
+	case "codeFolding":
+		m.settingsCodeFoldingBody(c)
 	case "editorFont":
 		m.settingsFontBody(c, oi)
 	case "keymap":
@@ -126,6 +128,16 @@ func (m *Model) settingsEditorAppearanceBody(c *ui.Context, oi oiColors) {
 		}
 		ui.Text(c, "chars").FontSize(12).TextColor(oi.textMuted).SingleLine()
 	})
+}
+
+// settingsCodeFoldingBody is Code Folding's Show code folding outline switch.
+// The editor folds from the gutter only, so the Fold by default types are not
+// drawn.
+func (m *Model) settingsCodeFoldingBody(c *ui.Context) {
+	folding := m.settingsDraft.showFolding
+	if ui.Checkbox(c, &folding, "Show code folding outline").Changed() {
+		m.settingsSetShowFolding(folding)
+	}
 }
 
 // settingsKeymapBody is the Keymap page: the map in use and the actions this

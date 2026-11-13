@@ -91,7 +91,7 @@ func (m *Model) applyTabAppearance(t *Tab, a EditorAppearance) {
 		t.state.LineNumbers = editor.LineNumbersOff
 	}
 	t.state.NoIndentGuides = a.NoIndentGuides
-	t.state.NoFolding = m.zen
+	t.state.NoFolding = a.NoFolding || m.zen
 	if a.ShowWhitespace {
 		t.state.Whitespace = editor.WhitespaceAll
 	} else {

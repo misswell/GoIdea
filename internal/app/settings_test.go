@@ -117,11 +117,14 @@ func TestSettingsTreeNestsAndGroups(t *testing.T) {
 		t.Fatalf("roots = %v, want %v", roots, want)
 	}
 	editor, ok := settingsFindNode(tree, settingsGroupKey("Editor"))
-	if !ok || len(editor.children) != 2 {
-		t.Fatalf("Editor folder = %+v, want its two pages", editor)
+	if !ok || len(editor.children) != 3 {
+		t.Fatalf("Editor folder = %+v, want its three pages", editor)
 	}
-	if editor.children[0].key != settingsPageEditorAppearance || editor.children[1].key != settingsPageEditorFont {
-		t.Fatalf("Editor children = %q, %q", editor.children[0].key, editor.children[1].key)
+	if editor.children[0].key != settingsPageEditorAppearance ||
+		editor.children[1].key != settingsPageCodeFolding ||
+		editor.children[2].key != settingsPageEditorFont {
+		t.Fatalf("Editor children = %q, %q, %q",
+			editor.children[0].key, editor.children[1].key, editor.children[2].key)
 	}
 	if got := settingsBreadcrumb(tree, settingsPageJava); !reflect.DeepEqual(got, []string{"Languages & Frameworks", "Java"}) {
 		t.Fatalf("Java breadcrumb = %v", got)
@@ -184,8 +187,8 @@ func TestSettingsCollapseHidesChildren(t *testing.T) {
 	open := len(m.settingsVisibleRows())
 	m.settingsToggleNode(settingsGroupKey("Editor"))
 	closed := len(m.settingsVisibleRows())
-	if closed != open-2 {
-		t.Fatalf("rows open %d, closed %d, want two fewer", open, closed)
+	if closed != open-3 {
+		t.Fatalf("rows open %d, closed %d, want three fewer", open, closed)
 	}
 	if m.settingsNormalizeKey("no.such.page") != "" {
 		t.Fatalf("unknown key normalized to a row")
@@ -304,5 +307,40 @@ func TestSettingsAppearanceSwitchesReachTheEditor(t *testing.T) {
 	d := m.settingsDraft
 	if !d.lineNumbers || d.showWhitespace || !d.indentGuides {
 		t.Fatalf("reset appearance = %+v", d)
+	}
+}
+
+func TestSettingsCodeFoldingStagesAndApplies(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	tab := &Tab{state: &editor.State{}}
+	m := &Model{cfg: Config{SettingsPath: path}, tabs: []*Tab{tab}}
+	m.applyPreferences()
+	if tab.state.NoFolding {
+		t.Fatalf("defaults hide the folding outline")
+	}
+
+	m.OpenSettingsPage(settingsPageCodeFolding)
+	m.settingsSetShowFolding(false)
+	if !tab.state.NoFolding {
+		t.Fatalf("staged outline not previewed")
+	}
+	if m.settingsDirtyPage(settingsPageEditorAppearance) {
+		t.Fatalf("a folding change dirtied the Appearance page")
+	}
+	if !m.settingsPending() {
+		t.Fatalf("a folding change did not enable Apply")
+	}
+	m.applySettings()
+	if stored := LoadPreferences(path); !stored.Editor.NoFolding {
+		t.Fatalf("stored folding = %+v", stored.Editor)
+	}
+	if !tab.state.NoFolding {
+		t.Fatalf("applied folding not on the editor")
+	}
+
+	m.settingsSelectPage(settingsPageCodeFolding)
+	m.settingsResetPage()
+	if !m.settingsDraft.showFolding {
+		t.Fatalf("reset folding = %+v", m.settingsDraft)
 	}
 }

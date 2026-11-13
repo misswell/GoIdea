@@ -34,7 +34,7 @@ new action, tool window, page or command appears automatically.
 | Editor contributions | 35 | 0 | 0 | 0 | 0 | 35 |
 | Editor kinds | 4 | 0 | 0 | 0 | 0 | 4 |
 | File editor providers | 4 | 0 | 0 | 0 | 0 | 4 |
-| Settings pages | 81 | 0 | 5 | 0 | 0 | 76 |
+| Settings pages | 81 | 0 | 6 | 0 | 0 | 75 |
 | Settings keys | 445 | 0 | 0 | 0 | 0 | 445 |
 | Languages | 80 | 1 | 0 | 0 | 0 | 79 |
 | Backend crates | 38 | 0 | 0 | 31 | 0 | 7 |
@@ -1155,7 +1155,7 @@ The plain text editor is the workbench default and is not registered through
 | `editor.general.autoImport` | Auto Import |  | `src/features/settings/pages/editor/general.tsx` | missing |
 | `editor.general.breadcrumbs` | Breadcrumbs |  | `src/features/settings/pages/editor/general.tsx` | missing |
 | `editor.general.codeCompletion` | Code Completion |  | `src/features/settings/pages/editor/general.tsx` | missing |
-| `editor.general.codeFolding` | Code Folding |  | `src/features/settings/pages/editor/general.tsx` | missing |
+| `editor.general.codeFolding` | Code Folding |  | `src/features/settings/pages/editor/general.tsx` | partial - internal/app/settings_pages.go settingsCodeFoldingBody: Show code folding outline checkbox over Preferences.Editor.NoFolding feeding the MyGo editor fold markers, staged through settingsDraft and proven by settings_test.go TestSettingsCodeFoldingStagesAndApplies; the Fold by default file header, imports and doc comment types are not ported |
 | `editor.general.editorTabs` | Editor Tabs |  | `src/features/settings/pages/editor/general.tsx` | missing |
 | `editor.general.gutterIcons` | Gutter Icons |  | `src/features/settings/pages/editor/general.tsx` | missing |
 | `editor.general.inlineCompletion` | Inline Completion |  | `src/features/settings/pages/editor/general.tsx` | missing |

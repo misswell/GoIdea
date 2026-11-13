@@ -36,6 +36,7 @@ const (
 	settingsPageKeymap           = "keymap"
 	settingsPageAppearance       = "appearance"
 	settingsPageEditorAppearance = "editor.general.appearance"
+	settingsPageCodeFolding      = "editor.general.codeFolding"
 	settingsPageEditorFont       = "editor.font"
 	settingsPageJava             = "languages.java"
 )
@@ -51,6 +52,7 @@ type settingsDraft struct {
 	lineNumbers    bool
 	showWhitespace bool
 	indentGuides   bool
+	showFolding    bool
 }
 
 // appearance is the staged switches as the editor stores them.
@@ -59,6 +61,7 @@ func (d settingsDraft) appearance() EditorAppearance {
 		NoLineNumbers:  !d.lineNumbers,
 		ShowWhitespace: d.showWhitespace,
 		NoIndentGuides: !d.indentGuides,
+		NoFolding:      !d.showFolding,
 	}
 }
 
@@ -110,6 +113,17 @@ func settingsPages() []settingsPageSpec {
 			},
 			labels:  []string{"Distraction free mode text width:"},
 			section: "editorAppearance",
+		},
+		{
+			id:    settingsPageCodeFolding,
+			title: "Code Folding",
+			group: "Editor",
+			order: 4,
+			keywords: []string{
+				"fold", "collapse",
+			},
+			labels:  []string{"Show code folding outline", "Fold by default:"},
+			section: "codeFolding",
 		},
 		{
 			id:    settingsPageEditorFont,
@@ -508,6 +522,7 @@ func (m *Model) settingsDraftFromPrefs() settingsDraft {
 		lineNumbers:    !m.prefs.Editor.NoLineNumbers,
 		showWhitespace: m.prefs.Editor.ShowWhitespace,
 		indentGuides:   !m.prefs.Editor.NoIndentGuides,
+		showFolding:    !m.prefs.Editor.NoFolding,
 	}
 }
 
@@ -573,6 +588,15 @@ func (m *Model) settingsSetIndentGuides(on bool) {
 	m.settingsPreview()
 }
 
+// settingsSetShowFolding stages the Show code folding outline switch.
+func (m *Model) settingsSetShowFolding(on bool) {
+	if m.settingsDraft.showFolding == on {
+		return
+	}
+	m.settingsDraft.showFolding = on
+	m.settingsPreview()
+}
+
 // settingsPreview draws the staged theme, font and editor appearance in this
 // window.
 func (m *Model) settingsPreview() {
@@ -585,7 +609,9 @@ func (m *Model) settingsPreview() {
 // settingsPending reports staged settings that differ from the stored ones,
 // which enables Apply.
 func (m *Model) settingsPending() bool {
-	for _, key := range []string{settingsPageAppearance, settingsPageEditorFont, settingsPageEditorAppearance} {
+	for _, key := range []string{
+		settingsPageAppearance, settingsPageEditorFont, settingsPageEditorAppearance, settingsPageCodeFolding,
+	} {
 		if m.settingsDirtyPage(key) {
 			return true
 		}
@@ -602,8 +628,13 @@ func (m *Model) settingsDirtyPage(key string) bool {
 	case settingsPageEditorFont:
 		return m.settingsDraft.fontSize != m.prefs.fontSize()
 	case settingsPageEditorAppearance:
+		a := m.settingsDraft.appearance()
 		return m.settingsDraft.zenWidth != m.prefs.zenWidth() ||
-			m.settingsDraft.appearance() != m.prefs.Editor
+			a.NoLineNumbers != m.prefs.Editor.NoLineNumbers ||
+			a.ShowWhitespace != m.prefs.Editor.ShowWhitespace ||
+			a.NoIndentGuides != m.prefs.Editor.NoIndentGuides
+	case settingsPageCodeFolding:
+		return !m.settingsDraft.showFolding != m.prefs.Editor.NoFolding
 	}
 	return false
 }
@@ -621,6 +652,8 @@ func (m *Model) settingsResetPage() {
 		m.settingsDraft.lineNumbers = true
 		m.settingsDraft.showWhitespace = false
 		m.settingsDraft.indentGuides = true
+	case settingsPageCodeFolding:
+		m.settingsDraft.showFolding = true
 	default:
 		return
 	}

@@ -9,6 +9,7 @@ needs a `## <version>` section here, or its build fails.
 - 设置窗底部是 **Cancel** / **Apply** / **OK**，改动会先预览，**Apply** 和 **OK** 才写入，**Cancel** 恢复原样。
 - 设置页按 OpenIDEA 分组：**Appearance**、**Keymap**、**Editor > Appearance / Font**、**Languages & Frameworks > Java**。
 - **Editor > Appearance** 的 **Show line numbers**、**Show whitespaces** 和 **Show indent guides** 会立即作用到所有打开的编辑器并保存。
+- 新增 **Editor > Code Folding** 设置页，**Show code folding outline** 控制编辑器的折叠标记并保存。
 - 齿轮菜单新增 **Run Anything…**：搜索最近命令和运行配置，回车在项目目录执行或在运行窗口启动配置。
 - 工作台改用 OpenIDEA Islands 布局：顶部标题栏、左侧图标条、独立面板和 34px 状态栏。
 - 左侧图标条再次点击当前面板会折叠它，再点一次恢复，**Search Everywhere** 固定在底部。

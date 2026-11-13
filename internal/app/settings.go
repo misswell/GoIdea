@@ -328,13 +328,14 @@ type Preferences struct {
 	Plugins map[string]json.RawMessage `json:"plugins,omitempty"`
 }
 
-// EditorAppearance is what Settings › Editor › Appearance shows, as
-// editor.appearance.* and editor.showWhitespace are stored. The fields are
-// the off switches, so the zero value is IDEA's default appearance.
+// EditorAppearance is what Settings › Editor › Appearance and Code Folding
+// show, as editor.appearance.* and editor.folding.showOutline are stored. The
+// fields are the off switches, so the zero value is IDEA's default look.
 type EditorAppearance struct {
 	NoLineNumbers  bool `json:"noLineNumbers,omitempty"`
 	ShowWhitespace bool `json:"showWhitespace,omitempty"`
 	NoIndentGuides bool `json:"noIndentGuides,omitempty"`
+	NoFolding      bool `json:"noFolding,omitempty"`
 }
 
 const (
