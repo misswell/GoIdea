@@ -29,7 +29,7 @@ new action, tool window, page or command appears automatically.
 | Feature folders | 43 | 0 | 10 | 0 | 0 | 33 |
 | Actions | 647 | 8 | 4 | 0 | 1 | 634 |
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
-| Tool windows | 30 | 4 | 7 | 0 | 0 | 19 |
+| Tool windows | 30 | 4 | 8 | 0 | 0 | 18 |
 | Overlays | 56 | 0 | 0 | 0 | 0 | 56 |
 | Editor contributions | 35 | 0 | 0 | 0 | 0 | 35 |
 | Editor kinds | 4 | 0 | 0 | 0 | 0 | 4 |
@@ -88,7 +88,7 @@ directory registers.
 | `terminal` | 14 | 1 | 0 | 0 | 0 | partial - internal/app/term.go; UPSTREAM_FEATURE_MATRIX.md Terminal |
 | `todo` | 2 | 1 | 0 | 1 | 1 | missing |
 | `tools` | 4 | 0 | 0 | 0 | 0 | partial - tools.jdtls, tools.java-debug |
-| `vcs` | 33 | 3 | 2 | 2 | 1 | partial - base.vcs.changes, base.diff.rows, base.commit.id |
+| `vcs` | 33 | 3 | 2 | 2 | 1 | partial - base.vcs.changes, base.diff.rows, base.commit.id, base.log.commits, base.log.details, base.log.changes |
 | `viewers` | 0 | 0 | 0 | 1 | 0 | missing |
 | `vim` | 3 | 0 | 0 | 1 | 0 | missing |
 | `web` | 2 | 0 | 0 | 0 | 0 | missing |
@@ -974,7 +974,7 @@ same bindings until a check records it.
 | `dotnet` | .NET | right | `src/features/dotnet/index.ts` | missing |
 | `duplicates` | Duplicates | bottom | `src/features/analysis/index.ts` | missing |
 | `find` | Find | bottom | `src/features/search/index.ts` | integrated - base.search.done, base.search.files, base.search.matches |
-| `git` | Git | bottom | `src/features/vcs/index.ts` | partial - base.vcs.changes, base.diff.rows |
+| `git` | Git | bottom | `src/features/vcs/index.ts` | partial - base.vcs.changes, base.diff.rows, internal/app/log.go logPanel, base.log.commits, base.log.details, base.log.changes |
 | `gradle` | Gradle | right | `src/features/build-tools/index.ts` | missing |
 | `hierarchy` | Hierarchy | right | `src/features/code-insight/index.ts` | missing |
 | `inspection` | Inspection Results | bottom | `src/features/analysis/index.ts` | missing |
@@ -992,7 +992,7 @@ same bindings until a check records it.
 | `structure` | Structure | left | `src/features/search/index.ts` | partial - base.outline |
 | `terminal` | Terminal | bottom | `src/features/terminal/index.ts` | partial - internal/app/term.go; UPSTREAM_FEATURE_MATRIX.md Terminal |
 | `todo` | TODO | bottom | `src/features/todo/index.ts` | missing |
-| `usages` | Find Usages | bottom | `src/features/code-insight/index.ts` | missing |
+| `usages` | Find Usages | bottom | `src/features/code-insight/index.ts` | partial - internal/app/usages.go usagesRows; lsp.references.count, lsp.references.done |
 
 ## Overlays
 
@@ -2253,7 +2253,7 @@ Local-only commands and the per-command argument lists are in
 | `vcs_clone` | vcs | yes |  | missing |
 | `vcs_commit` | vcs | yes | yes | missing |
 | `vcs_commit_files` | vcs | yes |  | missing |
-| `vcs_commits_changes` | vcs | yes |  | missing |
+| `vcs_commits_changes` | vcs | yes | yes | missing |
 | `vcs_compare_paths` | vcs | yes |  | missing |
 | `vcs_compare_scope` | vcs | yes |  | missing |
 | `vcs_config_get` | vcs | yes |  | missing |
@@ -2276,8 +2276,8 @@ Local-only commands and the per-command argument lists are in
 | `vcs_has_hook` | vcs | yes |  | missing |
 | `vcs_init` | vcs | yes |  | missing |
 | `vcs_line_hunks` | vcs | yes |  | missing |
-| `vcs_log` | vcs | yes |  | missing |
-| `vcs_log_details` | vcs | yes |  | missing |
+| `vcs_log` | vcs | yes | yes | missing |
+| `vcs_log_details` | vcs | yes | yes | missing |
 | `vcs_log_details_batch` | vcs | yes |  | missing |
 | `vcs_log_refs` | vcs | yes |  | missing |
 | `vcs_log_users` | vcs | yes |  | missing |
@@ -2362,7 +2362,7 @@ Local-only commands and the per-command argument lists are in
 | `wsl_distros` | wsl | no |  | missing |
 | `wsl_resolve` | wsl | no |  | missing |
 
-446 commands are served over stdio and 65 are called by GoIDEA today. A command
+446 commands are served over stdio and 68 are called by GoIDEA today. A command
 that is registered only in the desktop shell needs an `ops` module before stdio
 can serve it; a GoIDEA check counts only when the UI path works end to end.
 

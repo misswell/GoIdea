@@ -78,8 +78,9 @@ either side (`watch.go:75-106`).
 | Formatting | Edit menu → `lsp_format` |
 | Project search | `internal/app/search.go` |
 | Diff against HEAD | `internal/app/diff.go` |
+| Git changes and Git log | `internal/app/vcs.go`, `internal/app/log.go`; commit in `commit.go` |
 | Quick open (Cmd+P) / command palette | `quickopen.go`, `commands.go` |
-| Vim mode, sticky scroll, terminal, Git UI | Mayoi's implementations are in-tree but not wired into `cmd/goidea` (see `UPSTREAM_FEATURE_MATRIX.md`) |
+| Vim mode, sticky scroll | Mayoi's implementations are in-tree but not wired into `cmd/goidea` (see `UPSTREAM_FEATURE_MATRIX.md`) |
 
 ## Tests
 

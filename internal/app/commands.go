@@ -29,6 +29,7 @@ func commands() []appCommand {
 		{"file.save", "保存", "文件", "Cmd+S", "save write", func(m *Model) { m.SaveActive() }},
 		{"file.close", "关闭标签页", "文件", "Cmd+W", "close tab", func(m *Model) { m.closeTab(m.active) }},
 		{"vcs.show", "显示 Git 更改", "Git", "Cmd+Shift+G", "git vcs changes status", func(m *Model) { m.ShowVCS() }},
+		{"vcs.log", "显示 Git 日志", "Git", "", "git vcs log history commits", func(m *Model) { m.ShowLog() }},
 		{"vcs.commit", "提交…", "Git", "Cmd+K", "git commit message stage", func(m *Model) { m.OpenCommit() }},
 		{"vcs.diff", "与 HEAD 比较", "Git", "Cmd+Shift+D", "git diff compare head", func(m *Model) { m.CompareActive() }},
 		{"search.project", "在项目中查找", "搜索", "Cmd+Shift+F", "search find in project", func(m *Model) { m.ShowSearch() }},

@@ -27,7 +27,7 @@
     },
     "toolwindow:git": {
       "status": "partial",
-      "evidence": "base.vcs.changes, base.diff.rows"
+      "evidence": "base.vcs.changes, base.diff.rows, internal/app/log.go logPanel, base.log.commits, base.log.details, base.log.changes"
     },
     "toolwindow:commit": {
       "status": "partial",
@@ -36,6 +36,10 @@
     "toolwindow:problems": {
       "status": "partial",
       "evidence": "lsp.diagnostics"
+    },
+    "toolwindow:usages": {
+      "status": "partial",
+      "evidence": "internal/app/usages.go usagesRows; lsp.references.count, lsp.references.done"
     },
     "toolwindow:terminal": {
       "status": "partial",
@@ -59,7 +63,7 @@
     },
     "feature:vcs": {
       "status": "partial",
-      "evidence": "base.vcs.changes, base.diff.rows, base.commit.id"
+      "evidence": "base.vcs.changes, base.diff.rows, base.commit.id, base.log.commits, base.log.details, base.log.changes"
     },
     "feature:run": {
       "status": "partial",

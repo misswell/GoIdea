@@ -403,6 +403,40 @@ type CommitOptions struct {
 	Exclude  []string `json:"exclude,omitempty"`
 }
 
+// Commit is one row of vcs_log: the id and summary the log list shows, the
+// refs pointing at it, and what the commit details view needs.
+type Commit struct {
+	ID        string   `json:"id"`
+	ShortID   string   `json:"shortId"`
+	Parents   []string `json:"parents"`
+	Author    string   `json:"author"`
+	Email     string   `json:"email"`
+	TimeMs    float64  `json:"timeMs"`
+	Summary   string   `json:"summary"`
+	Message   string   `json:"message"`
+	Refs      []string `json:"refs"`
+	OnCurrent *bool    `json:"onCurrentBranch"`
+}
+
+// LogDetails is the selected commit's full message, the branches that contain
+// it, and Git's signature verification of it.
+type LogDetails struct {
+	Message            string   `json:"message"`
+	ContainingBranches []string `json:"containingBranches"`
+	Signature          string   `json:"signature"`
+	Signer             string   `json:"signer"`
+	Key                string   `json:"key"`
+	Fingerprint        string   `json:"fingerprint"`
+}
+
+// RevisionChange is one file a commit changed: Kind is added, modified,
+// deleted, renamed, untracked, ignored or conflicted.
+type RevisionChange struct {
+	Path    string  `json:"path"`
+	Kind    string  `json:"kind"`
+	OldPath *string `json:"oldPath"`
+}
+
 // TerminalInfo is an integrated terminal the server started: its id, title
 // and process id (absent for shells without a direct child).
 type TerminalInfo struct {

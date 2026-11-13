@@ -163,6 +163,7 @@ type Model struct {
 	build  BuildPane
 	term   TermPane
 	vcs    VCSPane
+	log    LogPane
 	search SearchPane
 	usages UsagesPane
 	// reveal is the caret position a search hit asked for; it applies once the
@@ -517,6 +518,7 @@ func (m *Model) openProject(dir string, files []string) {
 	m.resetBuild()
 	m.resetTerm()
 	m.resetVCS()
+	m.resetLog()
 	m.commit = nil
 	m.cancelSearch()
 	m.resetSearch()
@@ -1100,6 +1102,9 @@ func (m *Model) View(c *ui.Context) {
 				}
 				if m.build.visible {
 					m.buildPanel(c, p)
+				}
+				if m.log.visible {
+					m.logPanel(c, p)
 				}
 			})
 		})
