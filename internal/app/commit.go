@@ -24,8 +24,11 @@ type commitState struct {
 	// checks overrides the inclusion of a file (absolute path → included);
 	// without an entry a file uses its initial check, as OpenIDEA does.
 	checks map[string]bool
-	busy   bool
-	err    string
+	// only keeps a single file in the commit, as the tab menu's Commit File…
+	// asks for.
+	only string
+	busy bool
+	err  string
 }
 
 // commitPlan is what vcs_commit gets: files committed with their working-tree
@@ -48,10 +51,29 @@ func (m *Model) OpenCommit() {
 	m.invalidate()
 }
 
+// OpenCommitFile shows the Commit dialog for one file, as the tab menu's
+// Commit File… does: every other change stays out of the commit.
+func (m *Model) OpenCommitFile(path string) {
+	if m.Root() == "" || m.commit != nil || path == "" {
+		return
+	}
+	m.commit = &commitState{runHooks: true, checks: map[string]bool{}, only: realPath(path)}
+	m.RefreshVCS()
+	m.invalidate()
+}
+
 // commitIncluded is a file's inclusion: the user's override, or the initial
 // check OpenIDEA uses — changes are included, unversioned files and conflicts
-// are opt-in, and a partially staged file commits only what is staged.
+// are opt-in, and a partially staged file commits only what is staged. A
+// single-file commit includes only that file, even when it is new.
 func (m *Model) commitIncluded(c *commitState, f openidea.FileStatus) bool {
+	if c.only != "" {
+		if f.Path != c.only {
+			return false
+		}
+		kind := effectiveVCSKind(f)
+		return kind != "ignored" && kind != "" && kind != "conflicted"
+	}
 	if on, ok := c.checks[f.Path]; ok {
 		return on
 	}

@@ -1475,6 +1475,11 @@ func (m *Model) tabMenu(menu *ui.Menu, t *Tab) {
 				m.OpenHistoryLabel()
 			}
 		})
+		if m.Root() != "" && inProject(m.Root(), path) {
+			menu.Submenu("Git", func(menu *ui.Menu) {
+				m.tabGitMenu(menu, path)
+			})
+		}
 		menu.Separator()
 		if menu.Item("Compare With…").Chosen() {
 			m.PickCompareFile(t)
@@ -1514,4 +1519,35 @@ func (m *Model) tabOpenInMenu(menu *ui.Menu, path string) {
 			m.OpenTerminalAt(filepath.Dir(path))
 		}
 	})
+}
+
+// tabGitMenu is OpenIDEA's Git › for a tab's file. It carries the entries
+// GoIDEA can run today: commit this file alone, add an unversioned file, the
+// diff against HEAD, the file's history, a rollback of its working-tree
+// change and the Branches popup. OpenIDEA's blame, branch and revision
+// compares, push/pull/fetch, merge/rebase, tag, reset, stash, GitHub and
+// remote entries have no GoIDEA view yet and stay out until they do.
+func (m *Model) tabGitMenu(menu *ui.Menu, path string) {
+	f, changed := m.statusFor(path)
+	kind := effectiveVCSKind(f)
+	if menu.Item("Commit File…").Disabled(!changed || kind == "conflicted").Chosen() {
+		m.OpenCommitFile(path)
+	}
+	if menu.Item("Add").Disabled(kind != "untracked").Chosen() {
+		m.StageChange(f)
+	}
+	menu.Separator()
+	if menu.Item("Show Diff").Chosen() {
+		m.ShowDiff(path)
+	}
+	if menu.Item("Show History").Chosen() {
+		m.ShowHistory(path)
+	}
+	if menu.Item("Rollback…").Disabled(!changed || f.Unstaged == nil).Chosen() {
+		m.AskRollback(f)
+	}
+	menu.Separator()
+	if menu.Item("Branches…").Chosen() {
+		m.ShowBranches()
+	}
 }

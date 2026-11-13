@@ -177,6 +177,17 @@ func vcsUnstaged(files []openidea.FileStatus) []openidea.FileStatus {
 // StageChange stages one file from the changes view.
 func (m *Model) StageChange(f openidea.FileStatus) { m.changeOp("vcs_stage", f, "已暂存 ") }
 
+// statusFor is the change `git status` reported for path, if the loaded list
+// has one; the tab menu's Git actions read it to enable themselves.
+func (m *Model) statusFor(path string) (openidea.FileStatus, bool) {
+	for _, f := range m.vcs.files {
+		if f.Path == path {
+			return f, true
+		}
+	}
+	return openidea.FileStatus{}, false
+}
+
 // UnstageChange takes one file back out of the index.
 func (m *Model) UnstageChange(f openidea.FileStatus) {
 	m.changeOp("vcs_unstage", f, "已取消暂存 ")

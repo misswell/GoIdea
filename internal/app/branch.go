@@ -153,6 +153,15 @@ func (m *Model) ToggleBranches() {
 	m.loadBranches()
 }
 
+// ShowBranches opens the Branches popup, leaving it open when it already is;
+// the tab menu's Git › Branches… uses it.
+func (m *Model) ShowBranches() {
+	if m.branch.open {
+		return
+	}
+	m.ToggleBranches()
+}
+
 // closeBranches drops the popup.
 func (m *Model) closeBranches() {
 	if !m.branch.open {
