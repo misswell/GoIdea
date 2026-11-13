@@ -321,6 +321,9 @@ type Preferences struct {
 	// Editor are Settings › Editor › Appearance, whose toggles are on by
 	// default; the inverse names keep the zero value meaning that.
 	Editor EditorAppearance `json:"editor,omitempty"`
+	// Breadcrumbs are Settings › Editor › Breadcrumbs: shown above the editor
+	// unless hidden, as editor.breadcrumbs.show and .placement store.
+	Breadcrumbs BreadcrumbPrefs `json:"breadcrumbs,omitempty"`
 	// MainToolbar is the title bar's saved layout, nil for the default one.
 	MainToolbar *toolbarLayout `json:"mainToolbar,omitempty"`
 	// Plugins are each plugin's settings, by name, under the same "plugins"
@@ -337,6 +340,18 @@ type EditorAppearance struct {
 	NoIndentGuides bool `json:"noIndentGuides,omitempty"`
 	NoFolding      bool `json:"noFolding,omitempty"`
 }
+
+// BreadcrumbPrefs is Settings › Editor › Breadcrumbs. The zero value shows the
+// chain at the top, as "top" is the placement editor.breadcrumbs.placement
+// defaults to.
+type BreadcrumbPrefs struct {
+	Hidden    bool   `json:"hidden,omitempty"`
+	Placement string `json:"placement,omitempty"`
+}
+
+// AtBottom reports whether the chain sits under the editor rather than above
+// it.
+func (b BreadcrumbPrefs) AtBottom() bool { return b.Placement == "bottom" }
 
 const (
 	defaultFontSize = 13

@@ -36,6 +36,7 @@ const (
 	settingsPageKeymap           = "keymap"
 	settingsPageAppearance       = "appearance"
 	settingsPageEditorAppearance = "editor.general.appearance"
+	settingsPageBreadcrumbs      = "editor.general.breadcrumbs"
 	settingsPageCodeFolding      = "editor.general.codeFolding"
 	settingsPageEditorFont       = "editor.font"
 	settingsPageJava             = "languages.java"
@@ -53,6 +54,10 @@ type settingsDraft struct {
 	showWhitespace bool
 	indentGuides   bool
 	showFolding    bool
+	// showBreadcrumbs and breadcrumbPlacement are Breadcrumbs' switches, the
+	// placement "top" or "bottom" as the page's radios read.
+	showBreadcrumbs     bool
+	breadcrumbPlacement string
 }
 
 // appearance is the staged switches as the editor stores them.
@@ -63,6 +68,16 @@ func (d settingsDraft) appearance() EditorAppearance {
 		NoIndentGuides: !d.indentGuides,
 		NoFolding:      !d.showFolding,
 	}
+}
+
+// breadcrumbs is the staged breadcrumb switches as the preferences store
+// them: a top placement is the default, so only "bottom" is stored.
+func (d settingsDraft) breadcrumbs() BreadcrumbPrefs {
+	b := BreadcrumbPrefs{Hidden: !d.showBreadcrumbs}
+	if d.breadcrumbPlacement == "bottom" {
+		b.Placement = "bottom"
+	}
+	return b
 }
 
 // settingsPageSpec is a settings page this build carries: what
@@ -113,6 +128,16 @@ func settingsPages() []settingsPageSpec {
 			},
 			labels:  []string{"Distraction free mode text width:"},
 			section: "editorAppearance",
+		},
+		{
+			id:    settingsPageBreadcrumbs,
+			title: "Breadcrumbs",
+			group: "Editor",
+			order: 2,
+			labels: []string{
+				"Show breadcrumbs:", "Top", "Bottom",
+			},
+			section: "breadcrumbs",
 		},
 		{
 			id:    settingsPageCodeFolding,
@@ -515,14 +540,20 @@ func (m *Model) settingsToggleNode(key string) {
 
 // settingsDraftFromPrefs is the stored settings as the dialog stages them.
 func (m *Model) settingsDraftFromPrefs() settingsDraft {
+	placement := "top"
+	if m.prefs.Breadcrumbs.AtBottom() {
+		placement = "bottom"
+	}
 	return settingsDraft{
-		theme:          m.prefs.Theme,
-		fontSize:       m.prefs.fontSize(),
-		zenWidth:       m.prefs.zenWidth(),
-		lineNumbers:    !m.prefs.Editor.NoLineNumbers,
-		showWhitespace: m.prefs.Editor.ShowWhitespace,
-		indentGuides:   !m.prefs.Editor.NoIndentGuides,
-		showFolding:    !m.prefs.Editor.NoFolding,
+		theme:               m.prefs.Theme,
+		fontSize:            m.prefs.fontSize(),
+		zenWidth:            m.prefs.zenWidth(),
+		lineNumbers:         !m.prefs.Editor.NoLineNumbers,
+		showWhitespace:      m.prefs.Editor.ShowWhitespace,
+		indentGuides:        !m.prefs.Editor.NoIndentGuides,
+		showFolding:         !m.prefs.Editor.NoFolding,
+		showBreadcrumbs:     !m.prefs.Breadcrumbs.Hidden,
+		breadcrumbPlacement: placement,
 	}
 }
 
@@ -597,12 +628,36 @@ func (m *Model) settingsSetShowFolding(on bool) {
 	m.settingsPreview()
 }
 
-// settingsPreview draws the staged theme, font and editor appearance in this
-// window.
+// settingsSetShowBreadcrumbs stages the Show breadcrumbs switch.
+func (m *Model) settingsSetShowBreadcrumbs(on bool) {
+	if m.settingsDraft.showBreadcrumbs == on {
+		return
+	}
+	m.settingsDraft.showBreadcrumbs = on
+	m.settingsPreview()
+}
+
+// settingsSetBreadcrumbPlacement stages the Top / Bottom radios.
+func (m *Model) settingsSetBreadcrumbPlacement(place string) {
+	switch place {
+	case "top", "bottom":
+	default:
+		return
+	}
+	if m.settingsDraft.breadcrumbPlacement == place {
+		return
+	}
+	m.settingsDraft.breadcrumbPlacement = place
+	m.settingsPreview()
+}
+
+// settingsPreview draws the staged theme, font, editor appearance and
+// breadcrumbs in this window.
 func (m *Model) settingsPreview() {
 	m.theme = themeForName(m.settingsDraft.theme)
 	m.applyEditorFont(m.settingsDraft.fontSize)
 	m.applyAppearanceToTabs(m.settingsDraft.appearance())
+	m.crumbs = m.settingsDraft.breadcrumbs()
 	m.invalidate()
 }
 
@@ -610,7 +665,8 @@ func (m *Model) settingsPreview() {
 // which enables Apply.
 func (m *Model) settingsPending() bool {
 	for _, key := range []string{
-		settingsPageAppearance, settingsPageEditorFont, settingsPageEditorAppearance, settingsPageCodeFolding,
+		settingsPageAppearance, settingsPageEditorFont, settingsPageEditorAppearance,
+		settingsPageBreadcrumbs, settingsPageCodeFolding,
 	} {
 		if m.settingsDirtyPage(key) {
 			return true
@@ -635,6 +691,8 @@ func (m *Model) settingsDirtyPage(key string) bool {
 			a.NoIndentGuides != m.prefs.Editor.NoIndentGuides
 	case settingsPageCodeFolding:
 		return !m.settingsDraft.showFolding != m.prefs.Editor.NoFolding
+	case settingsPageBreadcrumbs:
+		return m.settingsDraft.breadcrumbs() != m.prefs.Breadcrumbs
 	}
 	return false
 }
@@ -654,6 +712,9 @@ func (m *Model) settingsResetPage() {
 		m.settingsDraft.indentGuides = true
 	case settingsPageCodeFolding:
 		m.settingsDraft.showFolding = true
+	case settingsPageBreadcrumbs:
+		m.settingsDraft.showBreadcrumbs = true
+		m.settingsDraft.breadcrumbPlacement = "top"
 	default:
 		return
 	}
@@ -667,6 +728,7 @@ func (m *Model) applySettings() {
 	m.prefs.FontSize = m.settingsDraft.fontSize
 	m.prefs.ZenWidth = m.settingsDraft.zenWidth
 	m.prefs.Editor = m.settingsDraft.appearance()
+	m.prefs.Breadcrumbs = m.settingsDraft.breadcrumbs()
 	m.settingsErr = ""
 	if err := m.prefs.Save(m.settingsWritePath()); err != nil {
 		m.settingsErr = err.Error()

@@ -117,14 +117,16 @@ func TestSettingsTreeNestsAndGroups(t *testing.T) {
 		t.Fatalf("roots = %v, want %v", roots, want)
 	}
 	editor, ok := settingsFindNode(tree, settingsGroupKey("Editor"))
-	if !ok || len(editor.children) != 3 {
-		t.Fatalf("Editor folder = %+v, want its three pages", editor)
+	if !ok || len(editor.children) != 4 {
+		t.Fatalf("Editor folder = %+v, want its four pages", editor)
 	}
 	if editor.children[0].key != settingsPageEditorAppearance ||
-		editor.children[1].key != settingsPageCodeFolding ||
-		editor.children[2].key != settingsPageEditorFont {
-		t.Fatalf("Editor children = %q, %q, %q",
-			editor.children[0].key, editor.children[1].key, editor.children[2].key)
+		editor.children[1].key != settingsPageBreadcrumbs ||
+		editor.children[2].key != settingsPageCodeFolding ||
+		editor.children[3].key != settingsPageEditorFont {
+		t.Fatalf("Editor children = %q, %q, %q, %q",
+			editor.children[0].key, editor.children[1].key,
+			editor.children[2].key, editor.children[3].key)
 	}
 	if got := settingsBreadcrumb(tree, settingsPageJava); !reflect.DeepEqual(got, []string{"Languages & Frameworks", "Java"}) {
 		t.Fatalf("Java breadcrumb = %v", got)
@@ -187,8 +189,8 @@ func TestSettingsCollapseHidesChildren(t *testing.T) {
 	open := len(m.settingsVisibleRows())
 	m.settingsToggleNode(settingsGroupKey("Editor"))
 	closed := len(m.settingsVisibleRows())
-	if closed != open-3 {
-		t.Fatalf("rows open %d, closed %d, want three fewer", open, closed)
+	if closed != open-4 {
+		t.Fatalf("rows open %d, closed %d, want four fewer", open, closed)
 	}
 	if m.settingsNormalizeKey("no.such.page") != "" {
 		t.Fatalf("unknown key normalized to a row")
@@ -342,5 +344,53 @@ func TestSettingsCodeFoldingStagesAndApplies(t *testing.T) {
 	m.settingsResetPage()
 	if !m.settingsDraft.showFolding {
 		t.Fatalf("reset folding = %+v", m.settingsDraft)
+	}
+}
+
+func TestSettingsBreadcrumbsStagePlacement(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	m := &Model{cfg: Config{SettingsPath: path}}
+	m.applyPreferences()
+	if m.crumbs.Hidden || m.crumbs.AtBottom() {
+		t.Fatalf("defaults hidden=%v bottom=%v", m.crumbs.Hidden, m.crumbs.AtBottom())
+	}
+
+	m.OpenSettingsPage(settingsPageBreadcrumbs)
+	m.settingsSetBreadcrumbPlacement("bottom")
+	if m.prefs.Breadcrumbs != (BreadcrumbPrefs{}) {
+		t.Fatalf("staging wrote the prefs: %+v", m.prefs.Breadcrumbs)
+	}
+	if m.crumbs.Hidden || !m.crumbs.AtBottom() {
+		t.Fatalf("staged placement not previewed: %+v", m.crumbs)
+	}
+	if !m.settingsDirtyPage(settingsPageBreadcrumbs) || !m.settingsPending() {
+		t.Fatalf("a staged placement did not dirty its page")
+	}
+	m.closeSettings()
+	if m.crumbs.AtBottom() {
+		t.Fatalf("cancel kept the staged placement")
+	}
+
+	m.OpenSettingsPage(settingsPageBreadcrumbs)
+	m.settingsSetShowBreadcrumbs(false)
+	m.settingsSetBreadcrumbPlacement("bottom")
+	m.applySettings()
+	want := BreadcrumbPrefs{Hidden: true, Placement: "bottom"}
+	if m.prefs.Breadcrumbs != want || LoadPreferences(path).Breadcrumbs != want {
+		t.Fatalf("stored breadcrumbs = %+v / %+v", m.prefs.Breadcrumbs, LoadPreferences(path).Breadcrumbs)
+	}
+	if !m.crumbs.Hidden || !m.crumbs.AtBottom() {
+		t.Fatalf("applied breadcrumbs not on the window: %+v", m.crumbs)
+	}
+
+	m.settingsSelectPage(settingsPageBreadcrumbs)
+	m.settingsResetPage()
+	if d := m.settingsDraft; !d.showBreadcrumbs || d.breadcrumbPlacement != "top" {
+		t.Fatalf("reset breadcrumbs = %+v", d)
+	}
+	// The radios offer two placements, so anything else is ignored.
+	m.settingsSetBreadcrumbPlacement("left")
+	if m.settingsDraft.breadcrumbPlacement != "top" {
+		t.Fatalf("an unknown placement was staged")
 	}
 }

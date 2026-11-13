@@ -150,6 +150,7 @@ func (m *Model) setFontSize(size int) {
 func (m *Model) applyPreferences() {
 	m.theme = m.prefs.themePreference()
 	m.zen = m.prefs.Zen
+	m.crumbs = m.prefs.Breadcrumbs
 	m.applyEditorFont(m.prefs.fontSize())
 	m.applyEditorAppearance()
 }

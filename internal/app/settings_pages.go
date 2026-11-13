@@ -25,6 +25,8 @@ func (m *Model) settingsPageBody(c *ui.Context, p *ui.Theme, oi oiColors, node s
 		m.settingsAppearanceBody(c, oi)
 	case "editorAppearance":
 		m.settingsEditorAppearanceBody(c, oi)
+	case "breadcrumbs":
+		m.settingsBreadcrumbsBody(c, oi)
 	case "codeFolding":
 		m.settingsCodeFoldingBody(c)
 	case "editorFont":
@@ -128,6 +130,25 @@ func (m *Model) settingsEditorAppearanceBody(c *ui.Context, oi oiColors) {
 		}
 		ui.Text(c, "chars").FontSize(12).TextColor(oi.textMuted).SingleLine()
 	})
+}
+
+// settingsBreadcrumbsBody is Editor › General › Breadcrumbs: the Show
+// breadcrumbs switch with its Top / Bottom placement radios, as general.tsx
+// draws them. The languages chooser below it lists language settings this
+// build does not carry, so it is not drawn.
+func (m *Model) settingsBreadcrumbsBody(c *ui.Context, oi oiColors) {
+	show := m.settingsDraft.showBreadcrumbs
+	if ui.Checkbox(c, &show, "Show breadcrumbs:").Changed() {
+		m.settingsSetShowBreadcrumbs(show)
+	}
+	place := m.settingsDraft.breadcrumbPlacement
+	ui.RadioGroup(c, func() {
+		ui.Radio(c, &place, "top", "Top")
+		ui.Radio(c, &place, "bottom", "Bottom")
+	}).PaddingStart(20).Disabled(!m.settingsDraft.showBreadcrumbs)
+	if place != m.settingsDraft.breadcrumbPlacement {
+		m.settingsSetBreadcrumbPlacement(place)
+	}
 }
 
 // settingsCodeFoldingBody is Code Folding's Show code folding outline switch.

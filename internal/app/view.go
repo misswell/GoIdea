@@ -305,8 +305,17 @@ func (m *Model) editorArea(c *ui.Context, p *ui.Theme) {
 	}
 	ui.Column(c.Key("editor:" + t.doc.Path())).Grow(1).MinHeight(0).MinWidth(0).
 		Background(p.Background).Children(func() {
-		m.breadcrumbs(c, p, t)
+		// Breadcrumbs sit above the text unless Settings › Editor ›
+		// Breadcrumbs puts them below it, and they are hidden when the page
+		// says so.
+		top := !m.crumbs.Hidden && !m.crumbs.AtBottom()
+		if top {
+			m.breadcrumbs(c, p, t)
+		}
 		editor.View(c, t.state).Grow(1).MinHeight(0)
+		if !top && !m.crumbs.Hidden {
+			m.breadcrumbs(c, p, t)
+		}
 	})
 }
 

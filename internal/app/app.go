@@ -161,6 +161,11 @@ type Model struct {
 	zen     bool
 	zenHint bool
 
+	// crumbs are Settings › Editor › Breadcrumbs as the editor draws them:
+	// whether the chain shows and whether it sits below the text, so the
+	// dialog can preview a staged choice.
+	crumbs BreadcrumbPrefs
+
 	// toolbarCustomize is the open Customize Main Toolbar dialog, and update
 	// the Check for Updates dialog.
 	toolbarCustomize bool
