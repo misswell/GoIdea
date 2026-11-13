@@ -1,9 +1,11 @@
 package app
 
 import (
+	"context"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo"
 )
@@ -121,6 +123,57 @@ func (m *Model) insertTab(t *Tab) {
 	m.tabs[at] = t
 }
 
+// previewIndex is where the preview tab sits, or -1 when the strip has none.
+func (m *Model) previewIndex() int {
+	for i, t := range m.tabs {
+		if t.preview {
+			return i
+		}
+	}
+	return -1
+}
+
+// replacePreviewTab puts tab where the preview tab at is and closes the one it
+// replaces, as openTab reuses the preview's slot.
+func (m *Model) replacePreviewTab(at int, tab *Tab) {
+	if at < 0 || at >= len(m.tabs) {
+		m.insertTab(tab)
+		return
+	}
+	old := m.tabs[at]
+	m.tabs[at] = tab
+	if m.rename != nil && m.rename.tab == old {
+		m.rename = nil
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		_ = m.reg.Close(ctx, old.doc.Path())
+	}()
+}
+
+// dropPreviewTabs closes the preview tab, as a regular open does.
+func (m *Model) dropPreviewTabs() {
+	for {
+		at := m.previewIndex()
+		if at < 0 {
+			return
+		}
+		m.removeTab(m.tabs[at])
+	}
+}
+
+// promoteTab turns the preview tab into a regular one, as an edit, a pin or an
+// explicit open does.
+func (m *Model) promoteTab(t *Tab) {
+	if t == nil || !t.preview {
+		return
+	}
+	t.preview = false
+	m.saveSession()
+	m.invalidate()
+}
+
 // tabLimitCandidates are the tabs the limit may close, least recently used
 // first: pinned tabs, the active one and tabs with unsaved text stay, so the
 // limit can not drop an edit or the tab in front.
@@ -230,9 +283,14 @@ func (m *Model) PinActiveTab() {
 }
 
 func (m *Model) setTabPinned(t *Tab, pinned bool) {
-	if t == nil || !m.hasTab(t) || t.pinned == pinned {
+	if t == nil || !m.hasTab(t) {
 		return
 	}
+	if t.pinned == pinned && !t.preview {
+		return
+	}
+	// Pinning promotes the preview tab, as togglePin clears its preview flag.
+	t.preview = false
 	tabs, at := placeTab(m.tabs, t, pinned)
 	m.tabs = tabs
 	m.active = at

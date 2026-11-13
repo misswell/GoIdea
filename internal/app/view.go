@@ -204,11 +204,14 @@ func (m *Model) searchRows(c *ui.Context, p *ui.Theme) {
 				ui.Text(c, strings.TrimSpace(mm.Text)).FontSize(11).TextColor(p.Text).
 					SingleLine().Ellipsis("…")
 			})
+			col := 0
+			if len(mm.Ranges) > 0 {
+				col = int(mm.Ranges[0][0])
+			}
 			if r.Clicked() {
-				col := 0
-				if len(mm.Ranges) > 0 {
-					col = int(mm.Ranges[0][0])
-				}
+				m.previewAt(f.Path, int(mm.Line), col)
+			}
+			if r.DoubleClicked() {
 				m.revealAt(f.Path, int(mm.Line), col)
 			}
 		}

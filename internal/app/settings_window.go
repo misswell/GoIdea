@@ -85,6 +85,8 @@ type settingsDraft struct {
 	openAtEnd                 bool
 	tabLimit                  int
 	activateOnClose           string
+	// noPreviewTab is Opening Policy's "Enable preview tab" turned off.
+	noPreviewTab bool
 }
 
 // appearance is the staged switches as the editor stores them.
@@ -126,6 +128,7 @@ func (d settingsDraft) tabPrefs() TabPrefs {
 		HideFullPathOnHover:     !d.showFullPathOnHover,
 		SortAlphabetically:      d.sortAlphabetically,
 		OpenAtEnd:               d.openAtEnd,
+		NoPreviewTab:            d.noPreviewTab,
 	}
 	if d.tabPlacement != "top" {
 		t.Placement = d.tabPlacement
@@ -244,7 +247,8 @@ func settingsPages() []settingsPageSpec {
 				"Show pinned tabs in a separate row", "Show file extension",
 				"Show directory for non-unique file names", "Mark modified (*)",
 				"Show full path on mouse hover", "Close button position:", "Right", "Left",
-				"Sort tabs alphabetically", "Open new tabs at the end", "Tab limit",
+				"Sort tabs alphabetically", "Open new tabs at the end",
+				"Enable preview tab", "Tab limit",
 				"When the current tab is closed, activate", "The tab on the left",
 				"The tab on the right", "Most recently opened tab",
 			},
@@ -698,6 +702,7 @@ func (m *Model) settingsDraftFromPrefs() settingsDraft {
 		openAtEnd:                 m.prefs.Tabs.OpenAtEnd,
 		tabLimit:                  m.prefs.Tabs.limit(),
 		activateOnClose:           m.prefs.Tabs.activation(),
+		noPreviewTab:              m.prefs.Tabs.NoPreviewTab,
 	}
 }
 
@@ -988,6 +993,16 @@ func (m *Model) settingsSetActivateOnClose(policy string) {
 	m.settingsPreview()
 }
 
+// settingsSetNoPreviewTab stages Opening Policy's "Enable preview tab", which
+// the strip's italic preview tab shows.
+func (m *Model) settingsSetNoPreviewTab(noPreview bool) {
+	if m.settingsDraft.noPreviewTab == noPreview {
+		return
+	}
+	m.settingsDraft.noPreviewTab = noPreview
+	m.settingsPreview()
+}
+
 // settingsPreview draws the staged theme, font, editor appearance,
 // breadcrumbs and tab strip in this window.
 func (m *Model) settingsPreview() {
@@ -1084,6 +1099,7 @@ func (m *Model) settingsResetPage() {
 		m.settingsDraft.openAtEnd = false
 		m.settingsDraft.tabLimit = defaultTabLimit
 		m.settingsDraft.activateOnClose = "left"
+		m.settingsDraft.noPreviewTab = false
 	default:
 		return
 	}

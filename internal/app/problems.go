@@ -418,6 +418,9 @@ func (m *Model) problemFileRow(c *ui.Context, p *ui.Theme, gi int, items []Probl
 		ui.Text(c, fmt.Sprintf("%d", len(items))).FontSize(10.5).TextColor(p.TextMuted)
 	})
 	if head.Clicked() {
+		m.previewAt(first.Path, first.Line, first.Col)
+	}
+	if head.DoubleClicked() {
 		m.revealAt(first.Path, first.Line, first.Col)
 	}
 	for i, item := range items {
@@ -441,6 +444,9 @@ func (m *Model) problemFileRow(c *ui.Context, p *ui.Theme, gi int, items []Probl
 				TextColor(p.TextMuted).SingleLine()
 		})
 		if r.Clicked() {
+			m.previewAt(item.Path, item.Line, item.Col)
+		}
+		if r.DoubleClicked() {
 			m.revealAt(item.Path, item.Line, item.Col)
 		}
 	}

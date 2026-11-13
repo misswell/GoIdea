@@ -441,6 +441,9 @@ type TabPrefs struct {
 	TabLimit int `json:"tabLimit,omitempty"`
 	// ActivateOnClose is "left", "right" or "mru"; empty is OpenIDEA's left.
 	ActivateOnClose string `json:"activateOnClose,omitempty"`
+	// NoPreviewTab turns off OpenIDEA's preview tab, where a click in a results
+	// list reuses one italic tab instead of adding a tab.
+	NoPreviewTab bool `json:"noPreviewTab,omitempty"`
 }
 
 // defaultTabLimit is where editor.tabs.tabLimit starts.
@@ -470,6 +473,9 @@ func (t TabPrefs) activation() string {
 	}
 	return "left"
 }
+
+// previews reports whether a navigation open lands in the preview tab.
+func (t TabPrefs) previews() bool { return !t.NoPreviewTab }
 
 // Hidden reports whether Tab placement is None.
 func (t TabPrefs) Hidden() bool { return t.Placement == "none" }

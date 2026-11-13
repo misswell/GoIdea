@@ -800,7 +800,10 @@ func (m *Model) tabStrip(c *ui.Context, p *ui.Theme, oi oiColors, tabs []*Tab, o
 					if t.dirty() {
 						ui.Text(c, "●").FontSize(9).TextColor(oi.accent)
 					}
-					ui.Text(c, name).FontSize(13).TextColor(oi.text).SingleLine()
+					label := ui.Text(c, name).FontSize(13).TextColor(oi.text).SingleLine()
+					if t.preview {
+						label = label.Italic()
+					}
 					if dir != "" {
 						ui.Text(c, dir).FontSize(13).TextColor(oi.textFaint).
 							PaddingStart(4).SingleLine()

@@ -185,10 +185,27 @@ type revealPos struct {
 	line, col int
 }
 
-// revealAt opens a file and moves the caret to line and col (0-based).
+// revealAt opens a file in a regular tab and moves the caret to line and col
+// (0-based).
 func (m *Model) revealAt(path string, line, col int) {
+	m.revealTo(path, line, col, false)
+}
+
+// previewAt opens a file in the preview tab and moves the caret to line and
+// col, as a single click in a results list does.
+func (m *Model) previewAt(path string, line, col int) {
+	m.revealTo(path, line, col, true)
+}
+
+// revealTo opens path in a tab, preview or regular, and puts the caret where
+// the navigation points.
+func (m *Model) revealTo(path string, line, col int, preview bool) {
 	m.reveal = &revealPos{path: path, line: line, col: col}
-	m.openFile(path)
+	if preview {
+		m.openPreview(path)
+	} else {
+		m.openFile(path)
+	}
 	if t := m.tab(); t != nil && t.doc.Path() == path {
 		m.applyReveal(t)
 	}

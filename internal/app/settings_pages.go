@@ -225,9 +225,9 @@ func (m *Model) settingsBreadcrumbsBody(c *ui.Context, oi oiColors) {
 }
 
 // settingsEditorTabsBody is Editor › General › Editor Tabs: the strip's
-// placement and what a tab shows, then the tab order, the closing limit and
-// the tab a close activates, in general.tsx's order. "Show tabs in", the file
-// icon, the preview tab and the closing-policy radios name behaviour this
+// placement and what a tab shows, then the tab order, the preview tab, the
+// closing limit and the tab a close activates, in general.tsx's order. "Show
+// tabs in", the file icon and the closing-policy radios name behaviour this
 // build does not carry, so they are not drawn.
 func (m *Model) settingsEditorTabsBody(c *ui.Context, oi oiColors) {
 	settingsSectionTitle(c, oi, "Appearance")
@@ -276,6 +276,12 @@ func (m *Model) settingsEditorTabsBody(c *ui.Context, oi oiColors) {
 	atEnd := m.settingsDraft.openAtEnd
 	if ui.Checkbox(c, &atEnd, "Open new tabs at the end").Changed() {
 		m.settingsSetOpenAtEnd(atEnd)
+	}
+	ui.Row(c).Height(10)
+	settingsSectionTitle(c, oi, "Opening Policy")
+	previewTab := !m.settingsDraft.noPreviewTab
+	if ui.Checkbox(c, &previewTab, "Enable preview tab").Changed() {
+		m.settingsSetNoPreviewTab(!previewTab)
 	}
 	ui.Row(c).Height(10)
 	settingsSectionTitle(c, oi, "Closing Policy")

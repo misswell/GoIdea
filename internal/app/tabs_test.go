@@ -186,6 +186,30 @@ func TestTabActivationDefaultsToTheLeft(t *testing.T) {
 	}
 }
 
+func TestPreviewTabPromotesAndIsNotPinned(t *testing.T) {
+	if !(TabPrefs{}).previews() || (TabPrefs{NoPreviewTab: true}).previews() {
+		t.Fatal("previews does not follow the switch")
+	}
+
+	a, b := &Tab{}, &Tab{preview: true}
+	m := &Model{tabs: strip(a, b), active: 1}
+	if at := m.previewIndex(); at != 1 {
+		t.Fatalf("preview at %d, want 1", at)
+	}
+	m.promoteTab(b)
+	if b.preview || m.previewIndex() != -1 {
+		t.Fatal("promote left the preview flag on")
+	}
+
+	// Pinning the preview tab promotes it, as togglePin clears the flag.
+	c := &Tab{preview: true}
+	m = &Model{tabs: strip(a, c), active: 1}
+	m.setTabPinned(c, true)
+	if c.preview || !c.pinned {
+		t.Fatalf("pin: preview %v pinned %v", c.preview, c.pinned)
+	}
+}
+
 func TestTabLimitCandidatesKeepPinnedActiveAndUnsaved(t *testing.T) {
 	pinned := &Tab{pinned: true, used: 1}
 	saved := &Tab{used: 3}

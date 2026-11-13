@@ -323,12 +323,17 @@ func (m *Model) usagesRows(c *ui.Context, p *ui.Theme) {
 					ui.Text(c, "外部依赖").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
 				}
 			})
-			if r.Clicked() {
-				if strings.Contains(loc.Path, "://") {
+			if strings.Contains(loc.Path, "://") {
+				if r.Clicked() {
 					m.status = "用法在外部依赖中，无法作为文件打开"
 					m.invalidate()
-					continue
 				}
+				continue
+			}
+			if r.Clicked() {
+				m.previewAt(loc.Path, int(loc.Range.Start.Line), int(loc.Range.Start.Col))
+			}
+			if r.DoubleClicked() {
 				m.revealAt(loc.Path, int(loc.Range.Start.Line), int(loc.Range.Start.Col))
 			}
 		}

@@ -57,6 +57,11 @@ type Tab struct {
 	// bulk closes leave it, except Close All Tabs.
 	pinned bool
 
+	// preview marks the single tab a results-list click opens: italic in the
+	// strip, reused in place by the next such click, promoted by an edit or a
+	// pin, and closed when a regular tab opens.
+	preview bool
+
 	// used is when the tab was last activated, so the tab limit closes the
 	// least recently used one.
 	used uint64
@@ -885,11 +890,25 @@ func (m *Model) newTab(doc *docbridge.Document) *Tab {
 	return t
 }
 
-// openFile opens path in a tab, or shows the tab that has it.
-func (m *Model) openFile(path string) {
+// openFile opens path in a regular tab, or shows the tab that has it.
+func (m *Model) openFile(path string) { m.openFileWith(path, false) }
+
+// openPreview opens path in the preview tab, or shows the tab that has it:
+// the preview turns regular, as an explicit open promotes it.
+func (m *Model) openPreview(path string) { m.openFileWith(path, true) }
+
+// openFileWith is openFile with the preview flag. A preview open reuses the
+// strip's one preview tab, and a regular open closes it, as openTab does.
+func (m *Model) openFileWith(path string, preview bool) {
+	if !m.tabPrefs.previews() {
+		preview = false
+	}
 	path = realPath(path)
 	for i, t := range m.tabs {
 		if t.doc.Path() == path {
+			if !preview {
+				m.promoteTab(t)
+			}
 			m.activate(i)
 			return
 		}
@@ -911,7 +930,15 @@ func (m *Model) openFile(path string) {
 				return
 			}
 			tab := m.newTab(doc)
-			m.insertTab(tab)
+			tab.preview = preview
+			if at := m.previewIndex(); preview && at >= 0 {
+				m.replacePreviewTab(at, tab)
+			} else {
+				if !preview {
+					m.dropPreviewTabs()
+				}
+				m.insertTab(tab)
+			}
 			m.active = m.tabIndex(tab)
 			m.sortTabsAlphabetically()
 			m.active = m.tabIndex(tab)
@@ -1082,6 +1109,8 @@ func (m *Model) syncPump(now time.Time) {
 		if v != t.seen {
 			t.seen = v
 			t.edited = now
+			// An edit promotes the preview tab, as the controller does.
+			m.promoteTab(t)
 		}
 		m.kickCodeIntel(t, now)
 		if t.syncing || t.saving || v == t.synced {

@@ -468,12 +468,13 @@ func TestSettingsEditorTabsStageAndApply(t *testing.T) {
 	m.settingsSetOpenAtEnd(true)
 	m.settingsSetTabLimit(5)
 	m.settingsSetActivateOnClose("mru")
+	m.settingsSetNoPreviewTab(true)
 	if m.prefs.Tabs != (TabPrefs{}) {
 		t.Fatalf("staging wrote the prefs: %+v", m.prefs.Tabs)
 	}
 	if m.tabPrefs.Placement != "bottom" || !m.tabPrefs.HideExtension || !m.tabPrefs.MarkModified ||
 		!m.tabPrefs.CloseButtonLeft || !m.tabPrefs.SortAlphabetically || !m.tabPrefs.OpenAtEnd ||
-		m.tabPrefs.TabLimit != 5 || m.tabPrefs.activation() != "mru" {
+		m.tabPrefs.TabLimit != 5 || m.tabPrefs.activation() != "mru" || m.tabPrefs.previews() {
 		t.Fatalf("staged strip not previewed: %+v", m.tabPrefs)
 	}
 	if !m.settingsDirtyPage(settingsPageEditorTabs) || !m.settingsPending() {
@@ -493,10 +494,12 @@ func TestSettingsEditorTabsStageAndApply(t *testing.T) {
 	m.settingsSetOpenAtEnd(true)
 	m.settingsSetTabLimit(5)
 	m.settingsSetActivateOnClose("mru")
+	m.settingsSetNoPreviewTab(true)
 	m.applySettings()
 	want := TabPrefs{
 		Placement: "bottom", HideExtension: true, MarkModified: true, CloseButtonLeft: true,
 		SortAlphabetically: true, OpenAtEnd: true, TabLimit: 5, ActivateOnClose: "mru",
+		NoPreviewTab: true,
 	}
 	if m.prefs.Tabs != want || LoadPreferences(path).Tabs != want {
 		t.Fatalf("stored tabs = %+v / %+v", m.prefs.Tabs, LoadPreferences(path).Tabs)
@@ -509,7 +512,7 @@ func TestSettingsEditorTabsStageAndApply(t *testing.T) {
 	m.settingsResetPage()
 	if d := m.settingsDraft; d.tabPlacement != "top" || !d.showExtension || d.markModified ||
 		d.closePosition != "right" || d.sortAlphabetically || d.openAtEnd || d.tabLimit != defaultTabLimit ||
-		d.activateOnClose != "left" {
+		d.activateOnClose != "left" || d.noPreviewTab {
 		t.Fatalf("reset tabs = %+v", d)
 	}
 	// The selects offer three placements each, so anything else is ignored.
