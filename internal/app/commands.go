@@ -106,6 +106,8 @@ func commands() []appCommand {
 		{"run.continue", "继续", "运行", "", "continue resume", func(m *Model) { m.DebugContinue() }},
 		{"run.pause", "暂停", "运行", "", "pause suspend", func(m *Model) { m.DebugPause() }},
 		{"run.trust", "信任此项目并启用运行", "运行", "", "trust project", func(m *Model) { m.TrustProject() }},
+		{"run.chooseConfig", "选择运行配置…", "运行", "", "select run debug configuration", func(m *Model) { m.ChooseRunConfig() }},
+		{"run.reloadConfigs", "重新加载运行配置", "运行", "", "reload run configurations", func(m *Model) { m.ReloadRunConfigs() }},
 		{"run.configNext", "下一个运行配置", "运行", "", "next run configuration", func(m *Model) { m.CycleRunConfig(1) }},
 		{"run.configPrev", "上一个运行配置", "运行", "", "previous run configuration", func(m *Model) { m.CycleRunConfig(-1) }},
 		{"build.buildProject", "构建项目", "构建", "Cmd+F9", "build project compile make mvn gradle cmake", func(m *Model) { m.BuildProject() }},

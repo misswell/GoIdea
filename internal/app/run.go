@@ -182,6 +182,27 @@ func (m *Model) loadRunConfigs() {
 	}()
 }
 
+// ChooseRunConfig shows the Run window, where the configurations the title
+// bar's chooser lists are chosen; the widget's own menu only fits the title.
+func (m *Model) ChooseRunConfig() {
+	m.run.visible = true
+	m.occupyBottom("run")
+	if m.run.trusted && !m.run.loaded {
+		m.loadRunConfigs()
+	}
+	m.invalidate()
+}
+
+// ReloadRunConfigs drops what detection found and asks the backend again.
+func (m *Model) ReloadRunConfigs() {
+	if m.Root() == "" || m.run.loading {
+		return
+	}
+	m.run.loaded = false
+	m.loadRunConfigs()
+	m.invalidate()
+}
+
 // pickRunConfig prefers a non-test configuration, so Run starts the build
 // rather than the test suite.
 // pickRunConfig prefers the program over the build tool: a detected Java

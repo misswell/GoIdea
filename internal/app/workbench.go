@@ -28,7 +28,7 @@ const (
 )
 
 // titleBar is OpenIDEA's compact header: the project widget, the VCS widget,
-// then the search, run, debug, terminal controls and the gear.
+// then the run widget, the search and terminal controls and the gear.
 func (m *Model) titleBar(c *ui.Context, p *ui.Theme) {
 	oi := oiPaletteOf(p)
 	ui.Row(c).Height(oiTitleBarHeight).Shrink(0).Gap(4).AlignItems(ui.Center).
@@ -40,30 +40,9 @@ func (m *Model) titleBar(c *ui.Context, p *ui.Theme) {
 			m.vcsFallbackWidget(c, p, oi)
 		}
 		ui.Spacer(c)
+		m.runWidget(c, p, oi)
 		m.titleTool(c, p, oi, "search", "Search Everywhere", iconWelcomeSearch, func() {
 			m.OpenCommands()
-		})
-		runOn := m.run.running || m.run.awaiting
-		m.titleTool(c, p, oi, "run", "Run", iconRun, func() {
-			if runOn {
-				m.StopRun()
-			} else {
-				m.Run()
-			}
-		})
-		debugTip := "Debug"
-		if m.debug.session != 0 && !m.debug.ended {
-			debugTip = "Show Debug Window"
-		}
-		m.titleTool(c, p, oi, "debug", debugTip, iconDebug, func() {
-			switch {
-			case m.debug.session == 0 || m.debug.ended:
-				m.Debug()
-			case m.debug.paused:
-				m.DebugContinue()
-			default:
-				m.ShowDebug()
-			}
 		})
 		m.titleTool(c, p, oi, "term", "Terminal", iconTerminal, func() { m.ShowTerm() })
 		m.gearButton(c, p, oi)
