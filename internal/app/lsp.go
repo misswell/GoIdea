@@ -525,6 +525,10 @@ func (m *Model) SmokeLSP(ctx context.Context) (map[string]any, error) {
 
 	// The symbol picker searches the whole project and opens what it finds.
 	out["symbols"] = m.smokeSymbols(ctx, t)
+
+	// Intentions resolve what the server finds wrong at the caret, and the
+	// quickfix's edits reach the buffer through the backend.
+	out["intents"] = m.smokeIntentions(ctx, t)
 	return out, nil
 }
 
@@ -747,6 +751,130 @@ func (m *Model) smokeReferences(ctx context.Context, t *Tab) any {
 			return map[string]any{"error": ctx.Err().Error()}
 		case <-time.After(200 * time.Millisecond):
 		}
+	}
+}
+
+// smokeIntentions adds a class calling a method that does not exist, asks the
+// servers for the actions at that call, and applies the quickfix that creates
+// the method, waiting for its edits to reach the buffer.
+func (m *Model) smokeIntentions(ctx context.Context, t *Tab) any {
+	text := t.doc.Text()
+	const helper = "\nclass SmokeIntentions { void smokeRun() { smokeMissingCall(); } }\n"
+	if err := t.doc.ApplyEdits(ctx, editor.Edit{Start: len(text), End: len(text), Text: helper}); err != nil {
+		return map[string]any{"error": err.Error()}
+	}
+	defer func() {
+		_ = t.doc.ApplyEdits(context.Background(), editor.Edit{Start: 0, End: len(t.doc.Text()), Text: text})
+	}()
+	at := strings.Index(t.doc.Text(), "smokeMissingCall")
+	if at < 0 {
+		return map[string]any{"error": "fixture"}
+	}
+	start := time.Now()
+	deadline := time.Now().Add(150 * time.Second)
+	var titles []string
+	var errText, chosen string
+	var applied bool
+	// The server lists its refactorings at once, while the quickfix for the
+	// undefined call arrives with the diagnostics for the edit, which trail
+	// the didChange; ask again until the quickfix shows up.
+	for !applied {
+		mygo.RunOnMain(func() {
+			t.state.Select(at+2, at+2)
+			if m.intents == nil {
+				m.ShowIntentions()
+			}
+		})
+		var pick int
+		queryDeadline := time.Now().Add(30 * time.Second)
+		for {
+			pick = -1
+			titles, errText = nil, ""
+			var busy, open bool
+			mygo.RunOnMain(func() {
+				p := m.intents
+				if p == nil {
+					return
+				}
+				open, busy, errText = true, p.busy, p.err
+				for i, it := range p.items {
+					titles = append(titles, it.title)
+					if pick < 0 && it.disabled == "" && strings.Contains(it.title, "Create method") {
+						pick = i
+					}
+				}
+			})
+			if !open || !busy || errText != "" || time.Now().After(queryDeadline) {
+				break
+			}
+			select {
+			case <-ctx.Done():
+				return map[string]any{"error": ctx.Err().Error()}
+			case <-time.After(200 * time.Millisecond):
+			}
+		}
+		if pick >= 0 {
+			mygo.RunOnMain(func() {
+				if p := m.intents; p != nil && pick < len(p.items) {
+					chosen = p.items[pick].title
+					m.applyIntent(p.items[pick])
+					applied = true
+				}
+			})
+			break
+		}
+		if errText != "" || time.Now().After(deadline) {
+			break
+		}
+		mygo.RunOnMain(func() { m.closeIntents() })
+		select {
+		case <-ctx.Done():
+			return map[string]any{"error": ctx.Err().Error()}
+		case <-time.After(300 * time.Millisecond):
+		}
+	}
+	if !applied {
+		mygo.RunOnMain(func() { m.closeIntents() })
+		return map[string]any{
+			"actions": len(titles), "titles": titles, "err": errText,
+			"timeout": errText == "", "elapsedMillis": time.Since(start).Milliseconds(),
+		}
+	}
+	var status string
+	var changed bool
+	applyDeadline := time.Now().Add(60 * time.Second)
+	for {
+		status = m.smokeStatus()
+		changed = strings.Contains(t.doc.Text(), "void smokeMissingCall")
+		var open bool
+		var errNow string
+		mygo.RunOnMain(func() {
+			if p := m.intents; p != nil {
+				open, errNow = true, p.err
+			}
+		})
+		if changed || (open && errNow != "") || time.Now().After(applyDeadline) {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return map[string]any{"error": ctx.Err().Error()}
+		case <-time.After(200 * time.Millisecond):
+		}
+	}
+	var stillOpen bool
+	mygo.RunOnMain(func() { stillOpen = m.intents != nil })
+	if stillOpen {
+		mygo.RunOnMain(func() { m.closeIntents() })
+	}
+	tail := t.doc.Text()
+	if len(tail) > 160 {
+		tail = tail[len(tail)-160:]
+	}
+	return map[string]any{
+		"actions": len(titles), "titles": titles, "title": chosen,
+		"applied": true, "changed": changed, "status": status, "tail": tail,
+		"elapsedMillis": time.Since(start).Milliseconds(),
 	}
 }
 

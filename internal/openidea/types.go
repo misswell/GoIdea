@@ -482,3 +482,11 @@ type WorkspaceSymbol struct {
 	Container *string  `json:"container"`
 	Location  Location `json:"location"`
 }
+
+// CodeActionQuery is lsp_code_action_query's answer: the actions the servers
+// offer at a range, kept raw for lsp_apply_code_action, and the kinds they
+// advertise.
+type CodeActionQuery struct {
+	Actions         []json.RawMessage `json:"actions"`
+	AdvertisedKinds *[]string         `json:"advertisedKinds"`
+}

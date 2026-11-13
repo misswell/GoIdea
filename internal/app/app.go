@@ -104,6 +104,9 @@ type Model struct {
 	// symbols is the open Go to Symbol picker, or nil.
 	symbols *symbolPicker
 
+	// intents is the open intentions prompt, or nil.
+	intents *intentPane
+
 	// refactor is the newest backend workspace edit, which UndoRefactor rolls
 	// back; redoRefactor is what the last undo can reapply.
 	refactor     *refactorEdit
@@ -403,6 +406,19 @@ func (m *Model) openProjectSaving(dir string) {
 // openProject switches the backend project and restores files, all in the
 // background.
 func (m *Model) openProject(dir string, files []string) {
+	// Language servers resolve symlinks, so a project opened through one
+	// (/tmp on macOS) would give the backend paths that miss the diagnostics
+	// published under the real path — and code actions lose their context.
+	if resolved := realPath(dir); resolved != dir {
+		for i, p := range files {
+			if rel, err := filepath.Rel(dir, p); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+				files[i] = filepath.Join(resolved, rel)
+			} else {
+				files[i] = realPath(p)
+			}
+		}
+		dir = resolved
+	}
 	old := append([]*Tab(nil), m.tabs...)
 	oldRun := m.run.runID
 	oldDebug := m.debug.session
@@ -417,6 +433,7 @@ func (m *Model) openProject(dir string, files []string) {
 	m.resetSearch()
 	m.resetUsages()
 	m.closeSymbols()
+	m.closeIntents()
 	m.refactor, m.redoRefactor = nil, nil
 	m.busy = true
 	m.status = "正在打开 " + filepath.Base(dir) + "…"
@@ -453,6 +470,9 @@ func (m *Model) openProject(dir string, files []string) {
 			docs = append(docs, doc)
 		}
 		focus := m.session().Focus
+		if focus != "" {
+			focus = realPath(focus)
+		}
 		m.post(func() {
 			m.clearDiagnostics()
 			m.rename = nil
@@ -521,6 +541,7 @@ func (m *Model) newTab(doc *docbridge.Document) *Tab {
 
 // openFile opens path in a tab, or shows the tab that has it.
 func (m *Model) openFile(path string) {
+	path = realPath(path)
 	for i, t := range m.tabs {
 		if t.doc.Path() == path {
 			m.activate(i)
@@ -974,9 +995,16 @@ func (m *Model) View(c *ui.Context) {
 	})
 	m.renameDialog(c, p)
 	m.symbolsDialog(c, p)
+	m.intentionsDialog(c, p)
 }
 
 func (m *Model) shortcuts(c *ui.Context) {
+	if c.Shortcut(ui.Alt, ui.KeyEnter) {
+		// An open prompt keeps the keyboard; the caret's menu waits.
+		if m.rename == nil && m.symbols == nil && m.intents == nil {
+			m.ShowIntentions()
+		}
+	}
 	if c.Shortcut(ui.Cmd, ui.KeyS) {
 		m.SaveActive()
 	}
