@@ -44,6 +44,7 @@ reimplementing it. A row is `INTEGRATED` only when the GoIDEA product
 | GPU renderer, window system, controls | INTEGRATED | every view in `internal/app` |
 | Text input, buttons, scroll, modals | INTEGRATED | sheets (diff, commands, database, settings) |
 | Editor: text, selections, line numbers | INTEGRATED | every open tab |
+| Editor tabs: pin, close others/all/left/right/unmodified | INTEGRATED | pinned group at the left with a pin glyph, OpenIDEA's tab context menu and guarded closes that stop on cancel; `internal/app/tabs.go`, `internal/app/tabs_test.go` |
 | Editor: completion, hover, go-to-definition | INTEGRATED | callbacks wired to backend RPC |
 | Editor: increment search, multi-caret | DETECTED | upstream exists; not yet exposed in GoIDEA |
 | Editor: IME and grapheme handling | INTEGRATED | inherited from mygo |

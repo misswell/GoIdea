@@ -27,7 +27,7 @@ new action, tool window, page or command appears automatically.
 | Kind | Items | Integrated | Partial | Engine | Blocked | Missing |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Feature folders | 43 | 0 | 10 | 0 | 0 | 33 |
-| Actions | 647 | 23 | 59 | 0 | 1 | 564 |
+| Actions | 647 | 23 | 62 | 0 | 1 | 561 |
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
 | Tool windows | 30 | 8 | 5 | 0 | 0 | 17 |
 | Overlays | 56 | 0 | 0 | 0 | 0 | 56 |
@@ -673,8 +673,8 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `editor.cancelSourceDownload` | Cancel | `src/editor/core/librarySources.ts` | missing |
 | `editor.changeSplitOrientation` | Change Splitter Orientation | `src/editor/core/actions.ts` | missing |
 | `editor.chooseSources` | Choose Sources… | `src/editor/core/librarySources.ts` | missing |
-| `editor.closeAllTabs` | Close All Tabs | `src/editor/core/actions.ts` | missing |
-| `editor.closeOtherTabs` | Close Other Tabs | `src/editor/core/actions.ts` | missing |
+| `editor.closeAllTabs` | Close All Tabs | `src/editor/core/actions.ts` | partial - internal/app/tabs.go CloseAllTabs with Close All Tabs and Close All but Pinned in the tab context menu; internal/app/tabs_test.go |
+| `editor.closeOtherTabs` | Close Other Tabs | `src/editor/core/actions.ts` | partial - internal/app/tabs.go CloseOtherTabs, CloseTabsToLeft/Right and CloseUnmodifiedTabs; internal/app/workbench.go tabMenu; internal/app/tabs_test.go |
 | `editor.closeTab` | Close Tab | `src/editor/core/actions.ts` | missing |
 | `editor.copyPath` | Absolute Path | `src/editor/core/actions.ts` | missing |
 | `editor.copyPathReference` | Copy Path/Reference… | `src/editor/core/actions.ts` | missing |
@@ -691,7 +691,7 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `editor.openInOppositeGroup` | Open in Opposite Group | `src/editor/core/actions.ts` | missing |
 | `editor.pasteHistory.paste` | Paste | `src/editor/core/view/PasteHistoryDialog.tsx` | missing |
 | `editor.pasteHistory.remove` | Delete | `src/editor/core/view/PasteHistoryDialog.tsx` | missing |
-| `editor.pinTab` | Pin / Unpin Tab | `src/editor/core/actions.ts` | missing |
+| `editor.pinTab` | Pin / Unpin Tab | `src/editor/core/actions.ts` | partial - internal/app/tabs.go PinActiveTab/placeTab and the tab context menu in internal/app/workbench.go; pinned tabs in Session.Pinned; internal/app/tabs_test.go |
 | `editor.prevSplitter` | Go to Previous Splitter | `src/editor/core/actions.ts` | missing |
 | `editor.prevTab` | Select Previous Tab | `src/editor/core/actions.ts` | missing |
 | `editor.reopenClosedTab` | Reopen Closed Tab | `src/editor/core/actions.ts` | missing |

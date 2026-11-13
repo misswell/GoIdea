@@ -388,6 +388,9 @@ func (m *Model) editorTabs(c *ui.Context, p *ui.Theme, oi oiColors) {
 						ui.Text(c, "●").FontSize(9).TextColor(oi.accent)
 					}
 					ui.Text(c, name).FontSize(13).TextColor(oi.text).SingleLine()
+					if t.pinned {
+						ui.Icon(c, iconPin).Size(11, 11).TextColor(oi.textMuted)
+					}
 					close := ui.Row(c).Size(20, 20).Radius(4).
 						AlignItems(ui.Center).Justify(ui.Center)
 					if close.Hovered() {
@@ -400,6 +403,7 @@ func (m *Model) editorTabs(c *ui.Context, p *ui.Theme, oi oiColors) {
 						m.closeTab(i)
 					}
 				})
+				tab.ContextMenu(func(menu *ui.Menu) { m.tabMenu(menu, t) })
 				if tab.Clicked() {
 					m.activate(i)
 				}
@@ -518,4 +522,46 @@ func (m *Model) statusBar(c *ui.Context, p *ui.Theme) {
 		}
 		ui.Text(c, state).FontSize(13).TextColor(oi.textMuted).SingleLine()
 	})
+}
+
+// tabMenu is OpenIDEA's tab context menu: the close family, whose bulk closes
+// leave pinned tabs alone, then Pin or Unpin Tab for the clicked tab.
+func (m *Model) tabMenu(menu *ui.Menu, t *Tab) {
+	at := m.tabIndex(t)
+	if menu.Item("Close").Chosen() {
+		m.closeTabThen(t, nil)
+	}
+	if menu.Item("Close Other Tabs").Disabled(len(m.tabs) < 2).Chosen() {
+		m.CloseOtherTabs(t)
+	}
+	if menu.Item("Close Tabs to the Left").Disabled(at <= 0).Chosen() {
+		m.CloseTabsToLeft(t)
+	}
+	if menu.Item("Close Tabs to the Right").Disabled(at < 0 || at >= len(m.tabs)-1).Chosen() {
+		m.CloseTabsToRight(t)
+	}
+	if menu.Item("Close All Tabs").Chosen() {
+		m.CloseAllTabs(false)
+	}
+	if menu.Item("Close Unmodified Tabs").Chosen() {
+		m.CloseUnmodifiedTabs()
+	}
+	if m.anyPinned() {
+		if menu.Item("Close All but Pinned").Chosen() {
+			m.CloseAllTabs(true)
+		}
+	}
+	if m.anyReadOnlyUnpinned() {
+		if menu.Item("Close All Read-Only Tabs").Chosen() {
+			m.CloseReadOnlyTabs()
+		}
+	}
+	menu.Separator()
+	label := "Pin Tab"
+	if t.pinned {
+		label = "Unpin Tab"
+	}
+	if menu.Item(label).Chosen() {
+		m.setTabPinned(t, !t.pinned)
+	}
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // layoutModel is a model with the bottom windows a layout needs, its session
@@ -15,6 +16,19 @@ func layoutModel(t *testing.T) (*Model, string) {
 	m.cfg = Config{SessionPath: filepath.Join(t.TempDir(), "session.json")}
 	m.layouts = map[string]Layout{}
 	m.setRoot(root)
+	// A session write runs in the background, so the temporary folder must
+	// not be removed under it; holding the write lock proves it finished.
+	t.Cleanup(func() {
+		for i := 0; i < 2000; i++ {
+			m.sessionMu.Lock()
+			done := m.sessionWrote >= m.sessionSeq
+			m.sessionMu.Unlock()
+			if done {
+				return
+			}
+			time.Sleep(time.Millisecond)
+		}
+	})
 	return m, root
 }
 

@@ -432,6 +432,18 @@
     "action:toolwindow.commit": {
       "status": "partial",
       "evidence": "internal/app/commit.go OpenCommit; Cmd+0 in cmd/goidea/main.go"
+    },
+    "action:editor.pinTab": {
+      "status": "partial",
+      "evidence": "internal/app/tabs.go PinActiveTab/placeTab and the tab context menu in internal/app/workbench.go; pinned tabs in Session.Pinned; internal/app/tabs_test.go"
+    },
+    "action:editor.closeAllTabs": {
+      "status": "partial",
+      "evidence": "internal/app/tabs.go CloseAllTabs with Close All Tabs and Close All but Pinned in the tab context menu; internal/app/tabs_test.go"
+    },
+    "action:editor.closeOtherTabs": {
+      "status": "partial",
+      "evidence": "internal/app/tabs.go CloseOtherTabs, CloseTabsToLeft/Right and CloseUnmodifiedTabs; internal/app/workbench.go tabMenu; internal/app/tabs_test.go"
     }
   }
 }

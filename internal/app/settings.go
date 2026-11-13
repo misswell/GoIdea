@@ -17,6 +17,9 @@ type Session struct {
 	Files     []string   `json:"files,omitempty"`
 	Focus     string     `json:"focus,omitempty"`
 	Bookmarks []Bookmark `json:"bookmarks,omitempty"`
+	// Pinned are the open files whose tabs were pinned, which OpenIDEA keeps
+	// at the left of the strip across starts.
+	Pinned []string `json:"pinned,omitempty"`
 	// PathBookmarks are the files marked with Toggle File Bookmark.
 	PathBookmarks []PathBookmark `json:"pathBookmarks,omitempty"`
 	// BookmarkLists are the named groups the tool window shows, and DefaultList

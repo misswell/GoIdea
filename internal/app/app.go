@@ -53,6 +53,10 @@ type Tab struct {
 	// apply the first one's edits twice.
 	formatting bool
 
+	// pinned keeps the tab at the left of the strip, as OpenIDEA pins it; the
+	// bulk closes leave it, except Close All Tabs.
+	pinned bool
+
 	// diskTime and diskSize are the file when the buffer last matched it, so
 	// a write by another program is noticed; reloading marks one in flight.
 	diskTime  time.Time
@@ -598,6 +602,10 @@ func (m *Model) openProject(dir string, files []string) {
 		m.layouts[layoutKey(prev)] = m.currentLayout()
 	}
 	old := append([]*Tab(nil), m.tabs...)
+	pinned := map[string]bool{}
+	for _, p := range m.session().Pinned {
+		pinned[realPath(p)] = true
+	}
 	oldRun := m.run.runID
 	oldDebug := m.debug.session
 	var oldTerms []uint32
@@ -693,6 +701,22 @@ func (m *Model) openProject(dir string, files []string) {
 			m.tabs = m.tabs[:0]
 			for _, doc := range docs {
 				m.tabs = append(m.tabs, m.newTab(doc))
+			}
+			// Pinned tabs come back left of the strip, as the saved order and
+			// OpenIDEA's pinned group put them.
+			if len(pinned) > 0 {
+				ordered := make([]*Tab, 0, len(m.tabs))
+				for _, t := range m.tabs {
+					if t.pinned = pinned[t.doc.Path()]; t.pinned {
+						ordered = append(ordered, t)
+					}
+				}
+				for _, t := range m.tabs {
+					if !t.pinned {
+						ordered = append(ordered, t)
+					}
+				}
+				m.tabs = ordered
 			}
 			m.active = 0
 			for i, t := range m.tabs {
@@ -838,37 +862,6 @@ func (m *Model) applyActive() {
 	m.win.SetTitle("GoIDEA")
 	m.win.SetRepresentedFile("")
 	m.win.SetDocumentEdited(false)
-}
-
-// closeTab closes a tab, asking about unsaved text first.
-func (m *Model) closeTab(i int) {
-	if i < 0 || i >= len(m.tabs) {
-		return
-	}
-	t := m.tabs[i]
-	if !t.unsaved() {
-		m.dropTab(i)
-		return
-	}
-	name := filepath.Base(t.doc.Path())
-	go func() {
-		res, err := mygo.Dialog.Message(mygo.MessageOptions{
-			Parent: m.win, Type: mygo.MessageWarning, Title: "关闭文件",
-			Message: "是否保存对 " + name + " 的更改？",
-			Buttons: []string{"保存", "不保存", "取消"}, DefaultButton: 0, CancelButton: 2,
-		})
-		if err != nil {
-			return
-		}
-		m.post(func() {
-			switch res.Button {
-			case 0:
-				m.saveTabAsync(t, func() { m.removeTab(t) })
-			case 1:
-				m.removeTab(t)
-			}
-		})
-	}()
 }
 
 func (m *Model) dropTab(i int) { m.removeTab(m.tabs[i]) }
@@ -1116,10 +1109,13 @@ func (m *Model) sessionSnapshot() (Session, bool) {
 		// writing an empty one after a failed start.
 		return Session{}, false
 	}
-	var files []string
+	var files, pinned []string
 	focus := ""
 	for _, t := range m.tabs {
 		files = append(files, t.doc.Path())
+		if t.pinned {
+			pinned = append(pinned, t.doc.Path())
+		}
 	}
 	if t := m.tab(); t != nil {
 		focus = t.doc.Path()
@@ -1135,6 +1131,7 @@ func (m *Model) sessionSnapshot() (Session, bool) {
 	}
 	keep := append([]string{root}, m.recents...)
 	return Session{Root: root, Files: normalizeFiles(files), Focus: focus,
+		Pinned:         pinned,
 		Bookmarks:      append([]Bookmark(nil), m.bookmarks...),
 		PathBookmarks:  append([]PathBookmark(nil), m.pathBookmarks...),
 		BookmarkLists:  append([]BookmarkList(nil), m.bookmarkLists...),
