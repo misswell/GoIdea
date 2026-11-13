@@ -276,3 +276,28 @@ type DebugEvent struct {
 	Code              *int32 `json:"code"`
 	Message           string `json:"message"`
 }
+
+// FileStatus is one changed file of a Git repository: the two change kinds
+// are staged (index) and unstaged (working tree), either may be absent.
+type FileStatus struct {
+	Path        string  `json:"path"`
+	RelPath     string  `json:"relPath"`
+	Staged      *string `json:"staged"`
+	Unstaged    *string `json:"unstaged"`
+	RenamedFrom *string `json:"renamedFrom"`
+}
+
+// TerminalInfo is an integrated terminal the server started: its id, title
+// and process id (absent for shells without a direct child).
+type TerminalInfo struct {
+	ID    uint32 `json:"id"`
+	Title string `json:"title"`
+	PID   *int32 `json:"pid"`
+}
+
+// TerminalExitedEvent is the `terminalExited` window event: the shell ended
+// with an exit code, or without one when it was killed.
+type TerminalExitedEvent struct {
+	Terminal uint32 `json:"terminal"`
+	Code     *int32 `json:"code"`
+}

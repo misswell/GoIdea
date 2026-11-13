@@ -65,8 +65,14 @@ type Model struct {
 	active int
 	tree   *Tree
 
+	// sideMode picks what the sidebar shows: "tree" ("" also means tree, the
+	// default) or "vcs".
+	sideMode string
+
 	run     RunPane
 	debug   DebugPane
+	term    TermPane
+	vcs     VCSPane
 	chanSeq atomic.Uint32
 	reqSeq  atomic.Uint32
 
@@ -125,6 +131,13 @@ func New(cfg Config) *Model {
 			m.debug.session = 0
 			if m.debug.visible {
 				m.debug.err = "后端已重启，调试已中断"
+			}
+			m.term.id = 0
+			m.term.pid = nil
+			m.term.starting = false
+			m.term.ended = true
+			if m.term.visible {
+				m.term.err = "后端已重启，终端已关闭"
 			}
 			if m.run.trusted {
 				m.loadRunConfigs()
@@ -341,10 +354,13 @@ func (m *Model) openProject(dir string, files []string) {
 	old := append([]*Tab(nil), m.tabs...)
 	oldRun := m.run.runID
 	oldDebug := m.debug.session
+	oldTerm := m.term.id
 	m.tabs, m.active = nil, 0
 	m.banner, m.bannerPath = "", ""
 	m.resetRun()
 	m.resetDebug()
+	m.resetTerm()
+	m.resetVCS()
 	m.busy = true
 	m.status = "正在打开 " + filepath.Base(dir) + "…"
 	m.setRoot(dir)
@@ -358,6 +374,9 @@ func (m *Model) openProject(dir string, files []string) {
 		}
 		if oldDebug != 0 {
 			_, _ = m.mgr.Invoke(ctx, Window, "debug_stop", map[string]any{"session": oldDebug})
+		}
+		if oldTerm != 0 {
+			_, _ = m.mgr.Invoke(ctx, Window, "term_kill", map[string]any{"id": oldTerm})
 		}
 		for _, t := range old {
 			_ = m.reg.Close(ctx, t.doc.Path())
@@ -397,6 +416,7 @@ func (m *Model) openProject(dir string, files []string) {
 			m.applyActive()
 			m.saveSession()
 			m.checkTrust(dir)
+			m.RefreshVCS()
 			m.invalidate()
 		})
 	}()
@@ -603,6 +623,9 @@ func (m *Model) saveTabAsync(t *Tab, done func()) {
 			}
 			m.applyActive()
 			m.invalidate()
+			if m.vcs.loaded {
+				m.RefreshVCS()
+			}
 		})
 	}()
 }
@@ -866,6 +889,9 @@ func (m *Model) View(c *ui.Context) {
 					m.bannerRow(c, p)
 				}
 				m.editorArea(c, p)
+				if m.term.visible {
+					m.termPanel(c, p)
+				}
 				if m.debug.visible {
 					m.debugPanel(c, p)
 				} else {

@@ -2,7 +2,6 @@ package openidea
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"time"
 )
@@ -272,12 +271,10 @@ func (m *Manager) Invoke(ctx context.Context, window, cmd string, args any) ([]b
 		return nil, err
 	}
 	raw, err := s.Invoke(ctx, window, cmd, args)
-	if errors.Is(err, ErrClosed) {
-		// The connection died mid-call; surface it so the caller can decide
-		// whether replay is safe (documents resync; builds do not auto-replay).
-		return nil, err
-	}
-	return raw, nil
+	// Server errors carry the backend's kind and message; swallowing them turned
+	// every refusal into an empty result far from the cause. Closed needs no
+	// special case either: callers decide whether replay is safe.
+	return raw, err
 }
 
 // Close shuts the server down and stops restarts.

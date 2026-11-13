@@ -46,6 +46,11 @@ func (m *Model) toolbar(c *ui.Context, p *ui.Theme) {
 					m.Run()
 				}
 			})
+			termLabel := "终端"
+			if m.term.visible {
+				termLabel = "收起终端"
+			}
+			ui.Button(c, termLabel).OnClick(func() { m.ShowTerm() })
 			root := m.Root()
 			name := "未打开项目"
 			if root != "" {
@@ -75,12 +80,32 @@ func (m *Model) sidebar(c *ui.Context, p *ui.Theme) {
 	ui.Column(c).Width(sidebarWidth).Shrink(0).MinHeight(0).
 		Background(p.Surface).BorderWidth(0, 1, 0, 0).BorderColor(p.Border).
 		Children(func() {
-			ui.Row(c).Height(30).Padding(0, 10).AlignItems(ui.Center).
+			ui.Row(c).Height(30).Padding(0, 6).Gap(4).AlignItems(ui.Center).
 				BorderWidth(0, 0, 1, 0).BorderColor(p.Border).
 				Children(func() {
-					ui.Text(c, "项目").FontSize(12).Bold().TextColor(p.TextMuted)
+					m.sidebarTab(c, p, "项目", m.sideMode != "vcs", func() {
+						m.sideMode = ""
+						m.invalidate()
+					})
+					changes := "更改"
+					if len(m.vcs.files) > 0 {
+						changes = fmt.Sprintf("更改 %d", len(m.vcs.files))
+					}
+					m.sidebarTab(c, p, changes, m.sideMode == "vcs", m.ShowVCS)
+					ui.Spacer(c)
+					if m.sideMode == "vcs" {
+						label := "刷新"
+						if m.vcs.loading {
+							label = "读取中…"
+						}
+						ui.Button(c, label).OnClick(func() { m.RefreshVCS() })
+					}
 				})
 			ui.Scroll(c).Grow(1).Children(func() {
+				if m.sideMode == "vcs" {
+					m.vcsRows(c, p)
+					return
+				}
 				if m.tree == nil {
 					return
 				}
@@ -89,6 +114,76 @@ func (m *Model) sidebar(c *ui.Context, p *ui.Theme) {
 				}
 			})
 		})
+}
+
+func (m *Model) sidebarTab(c *ui.Context, p *ui.Theme, label string, active bool, onClick func()) {
+	r := ui.Row(c.Key("side:"+label)).Height(22).Padding(0, 8).AlignItems(ui.Center)
+	if active {
+		r.Background(p.Background)
+	} else if r.Hovered() {
+		r.Background(p.SurfaceHover)
+	}
+	r.Children(func() {
+		color := p.TextMuted
+		if active {
+			color = p.Text
+		}
+		ui.Text(c, label).FontSize(12).TextColor(color).SingleLine()
+	})
+	if r.Clicked() {
+		onClick()
+	}
+}
+
+func (m *Model) vcsRows(c *ui.Context, p *ui.Theme) {
+	if m.vcs.err != "" {
+		ui.Row(c).Padding(8, 8).Children(func() {
+			ui.Text(c, m.vcs.err).FontSize(11.5).TextColor(p.Warning)
+		})
+		return
+	}
+	if len(m.vcs.files) == 0 {
+		hint := "没有未提交的更改"
+		if !m.vcs.loaded && !m.vcs.loading {
+			hint = "点“刷新”读取 Git 状态"
+		}
+		if m.vcs.loading {
+			hint = "正在读取 Git 状态…"
+		}
+		ui.Row(c).Padding(8, 8).Children(func() {
+			ui.Text(c, hint).FontSize(11.5).TextColor(p.TextMuted)
+		})
+		return
+	}
+	for i, f := range m.vcs.files {
+		i, f := i, f
+		letter, word, tone := vcsBadge(f)
+		color := p.TextMuted
+		switch tone {
+		case "add":
+			color = p.Success
+		case "mod":
+			color = p.Accent
+		case "del":
+			color = p.Danger
+		}
+		r := ui.Row(c.Key(fmt.Sprintf("vcs:%d", i))).Height(22).Padding(0, 8).Gap(6).
+			AlignItems(ui.Center)
+		if r.Hovered() {
+			r.Background(p.SurfaceHover)
+		}
+		r.Children(func() {
+			ui.Text(c, letter).FontSize(11).Bold().TextColor(color)
+			ui.Text(c, filepath.Base(f.RelPath)).FontSize(12).TextColor(p.Text).
+				SingleLine().Ellipsis("…")
+			ui.Spacer(c)
+			ui.Text(c, word).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+		})
+		if r.Clicked() {
+			m.openFile(f.Path)
+			m.invalidate()
+		}
+	}
 }
 
 func (m *Model) treeRow(c *ui.Context, p *ui.Theme, row *treeNode) {
@@ -273,6 +368,88 @@ func (p *RunPane) renderText() string {
 			b.WriteByte(' ')
 		} else {
 			b.WriteString(line.text)
+		}
+	}
+	return b.String()
+}
+
+// termPanel is the integrated terminal: scrollback above, one input line that
+// sends Enter-terminated text to the shell.
+func (m *Model) termPanel(c *ui.Context, p *ui.Theme) {
+	t := &m.term
+	ui.Column(c).Height(220).Shrink(0).MinHeight(0).Background(p.Surface).
+		BorderWidth(1, 0, 0, 0).BorderColor(p.Border).Children(func() {
+		ui.Row(c).Height(30).Shrink(0).Padding(0, 8).Gap(8).AlignItems(ui.Center).
+			BorderWidth(0, 0, 1, 0).BorderColor(p.Border).Children(func() {
+			ui.Text(c, "终端").FontSize(12).Bold().TextColor(p.Text)
+			shell := t.shell
+			switch {
+			case t.starting:
+				shell = "正在启动…"
+			case t.id == 0 && shell == "":
+				shell = "未运行"
+			case t.id == 0:
+				shell += "（已结束）"
+			}
+			ui.Text(c, shell).FontSize(11.5).TextColor(p.TextMuted).
+				SingleLine().Ellipsis("…").Grow(1)
+			if t.id == 0 && !t.starting {
+				ui.Button(c, "启动").OnClick(func() { m.SpawnTerm() })
+			} else {
+				ui.Button(c, "结束").OnClick(func() { m.KillTerm() })
+			}
+			ui.Button(c, "清空").OnClick(func() { m.ClearTerm() })
+			ui.Button(c, "收起").OnClick(func() { m.ShowTerm() })
+		})
+		if t.err != "" {
+			ui.Row(c).Shrink(0).Padding(4, 10).Gap(8).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, t.err).FontSize(11.5).TextColor(p.Danger).
+					SingleLine().Ellipsis("…").Grow(1)
+				ui.Button(c, "关闭").OnClick(func() {
+					t.err = ""
+					m.invalidate()
+				})
+			})
+		}
+		ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
+			ui.Column(c).Padding(8, 10).Children(func() {
+				if len(t.lines) == 0 {
+					hint := "终端输出显示在这里。Enter 发送这一行。"
+					if t.id == 0 && !t.starting {
+						hint = "点“启动”打开登录 shell。"
+					}
+					ui.Text(c, hint).FontSize(11.5).TextColor(p.TextMuted)
+					return
+				}
+				if t.truncated {
+					ui.Text(c, "（输出过长，已省略较早的行）").
+						FontSize(11).TextColor(p.TextMuted)
+				}
+				ui.Text(c, t.render()).FontSize(11.5).TextColor(p.Text)
+			})
+		})
+		ui.Row(c).Height(30).Shrink(0).Padding(3, 8).Gap(6).AlignItems(ui.Center).
+			BorderWidth(1, 0, 0, 0).BorderColor(p.Border).Children(func() {
+			ui.Text(c, "❯").FontSize(12).TextColor(p.Accent)
+			in := ui.TextInput(c, &t.input).Grow(1)
+			if in.Submitted() {
+				m.SubmitTermInput()
+			}
+		})
+	})
+}
+
+// render is the scrollback as one string; empty lines keep their height.
+func (p *TermPane) render() string {
+	var b strings.Builder
+	for i, line := range p.lines {
+		if i > 0 {
+			b.WriteByte('\n')
+		}
+		if line == "" {
+			b.WriteByte(' ')
+		} else {
+			b.WriteString(line)
 		}
 	}
 	return b.String()

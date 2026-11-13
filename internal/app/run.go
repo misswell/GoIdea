@@ -367,6 +367,13 @@ func (m *Model) watchBackend(ctx context.Context) {
 						continue
 					}
 					m.post(func() { m.acceptExit(e) })
+				case "terminalExited":
+					var e openidea.TerminalExitedEvent
+					if json.Unmarshal(env.Event, &e) != nil {
+						continue
+					}
+					term, code := e.Terminal, e.Code
+					m.post(func() { m.acceptTermExit(term, code) })
 				case "debug":
 					var d openidea.DebugEnvelope
 					if json.Unmarshal(env.Event, &d) != nil {
@@ -381,15 +388,17 @@ func (m *Model) watchBackend(ctx context.Context) {
 }
 
 func (m *Model) acceptChunk(id uint32, data json.RawMessage) {
-	if id != m.run.channel {
-		return
+	switch {
+	case id != 0 && id == m.run.channel:
+		var chunk openidea.OutputChunk
+		if json.Unmarshal(data, &chunk) != nil {
+			return
+		}
+		m.run.append(chunk)
+		m.invalidate()
+	case id != 0 && id == m.term.channel:
+		m.acceptTermChunk(data)
 	}
-	var chunk openidea.OutputChunk
-	if json.Unmarshal(data, &chunk) != nil {
-		return
-	}
-	m.run.append(chunk)
-	m.invalidate()
 }
 
 func (p *RunPane) append(c openidea.OutputChunk) {

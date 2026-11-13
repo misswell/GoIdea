@@ -82,6 +82,7 @@ func menu(m *app.Model) *mygo.Menu {
 		{Label: "文件", Submenu: []*mygo.MenuItem{
 			{Label: "打开项目…", Accelerator: "CmdOrCtrl+O", Click: func(*mygo.MenuItem, *mygo.Window) { m.ChooseProject() }},
 			{Label: "保存", Accelerator: "CmdOrCtrl+S", Click: func(*mygo.MenuItem, *mygo.Window) { m.SaveActive() }},
+			{Label: "显示 Git 更改", Accelerator: "CmdOrCtrl+Shift+G", Click: func(*mygo.MenuItem, *mygo.Window) { m.ShowVCS() }},
 			mygo.Separator(),
 			{Label: "退出 GoIDEA", Accelerator: "CmdOrCtrl+Q", Click: func(*mygo.MenuItem, *mygo.Window) { m.Quit() }},
 		}},
@@ -100,6 +101,7 @@ func menu(m *app.Model) *mygo.Menu {
 			mygo.Separator(),
 			{Label: "显示运行窗口", Click: func(*mygo.MenuItem, *mygo.Window) { m.ShowRun() }},
 			{Label: "显示调试窗口", Click: func(*mygo.MenuItem, *mygo.Window) { m.ShowDebug() }},
+			{Label: "终端", Accelerator: "CmdOrCtrl+J", Click: func(*mygo.MenuItem, *mygo.Window) { m.ShowTerm() }},
 			{Label: "信任此项目并启用运行", Click: func(*mygo.MenuItem, *mygo.Window) { m.TrustProject() }},
 		}},
 		{Role: mygo.RoleWindowMenu},
@@ -153,6 +155,25 @@ func smoke(m *app.Model) {
 		fields["debug"] = debug
 		if debugErr != nil {
 			fields["debugError"] = debugErr.Error()
+		}
+	}
+	if os.Getenv("GOIDEA_SMOKE_TERM") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+		term, termErr := m.SmokeTerm(ctx)
+		cancel()
+		fields["term"] = term
+		if termErr != nil {
+			fields["termError"] = termErr.Error()
+		}
+	}
+	if root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		count, sample, vcsErr := m.SmokeVCS(ctx)
+		cancel()
+		fields["vcsChanges"] = count
+		fields["vcsSample"] = sample
+		if vcsErr != nil {
+			fields["vcsError"] = vcsErr.Error()
 		}
 	}
 	out, _ := json.MarshalIndent(fields, "", "  ")
