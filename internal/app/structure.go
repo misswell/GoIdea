@@ -42,7 +42,9 @@ type StructureRow struct {
 func (m *Model) ShowStructure() {
 	m.structure.visible = true
 	m.sideMode = "structure"
+	m.leftHidden = false
 	m.refreshStructure()
+	m.rememberLayout()
 	m.invalidate()
 }
 
@@ -64,6 +66,7 @@ func (m *Model) CloseStructure() {
 	if m.sideMode == "structure" {
 		m.sideMode = ""
 	}
+	m.rememberLayout()
 	m.invalidate()
 }
 

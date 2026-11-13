@@ -228,6 +228,7 @@ func (m *Model) toolStripe(c *ui.Context, p *ui.Theme, oi oiColors) {
 func (m *Model) modeClick(mode string) {
 	if m.sideMode == mode && !m.leftHidden {
 		m.leftHidden = true
+		m.rememberLayout()
 		m.invalidate()
 		return
 	}
@@ -242,6 +243,7 @@ func (m *Model) modeClick(mode string) {
 		m.RefreshVCS()
 		m.RefreshBranch()
 	}
+	m.rememberLayout()
 	m.invalidate()
 }
 
@@ -307,6 +309,7 @@ func (m *Model) leftIsland(c *ui.Context, p *ui.Theme, oi oiColors) {
 			default:
 				m.headerIcon(c, p, oi, "hide", "Hide", iconClose, func() {
 					m.leftHidden = true
+					m.rememberLayout()
 					m.invalidate()
 				})
 			}

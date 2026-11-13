@@ -254,6 +254,16 @@ type Model struct {
 	welcomeQuery string
 	welcomePage  string
 
+	// layouts are each project's saved workbench layout, by folder, as
+	// OpenIDEA keeps one per project root; sessionSeq orders the session
+	// writes so a slow one never overwrites a newer snapshot.
+	layouts      map[string]Layout
+	layoutHold   bool
+	sessionSeq   int
+	sessionWrote int
+	sessionMu    sync.Mutex
+	sessionWrite sync.Mutex
+
 	// The Welcome screen's per-folder and per-dialog state: the branch of
 	// each recent project once read, the gear popup, and the clone and
 	// remove dialogs.
@@ -276,7 +286,12 @@ func New(cfg Config) *Model {
 	m := &Model{cfg: cfg, ctx: ctx, off: off, bottomHeight: bottomDefaultHeight}
 	m.prefs = LoadPreferences(cfg.SettingsPath)
 	m.applyPreferences()
-	m.recents = normalizeRecents(LoadSession(cfg.SessionPath).RecentProjects)
+	session := LoadSession(cfg.SessionPath)
+	m.recents = normalizeRecents(session.RecentProjects)
+	m.layouts = map[string]Layout{}
+	for root, l := range session.Layouts {
+		m.layouts[layoutKey(root)] = normalizeLayout(l)
+	}
 	m.mgr = openidea.NewManager(openidea.LaunchConfig{
 		ServerPath: cfg.ServerPath,
 		Home:       cfg.Home,
@@ -576,6 +591,12 @@ func (m *Model) openProject(dir string, files []string) {
 		}
 		dir = resolved
 	}
+	if prev := m.Root(); prev != "" && layoutKey(prev) != layoutKey(dir) {
+		if m.layouts == nil {
+			m.layouts = map[string]Layout{}
+		}
+		m.layouts[layoutKey(prev)] = m.currentLayout()
+	}
 	old := append([]*Tab(nil), m.tabs...)
 	oldRun := m.run.runID
 	oldDebug := m.debug.session
@@ -689,6 +710,7 @@ func (m *Model) openProject(dir string, files []string) {
 				m.banner = "无法打开：" + strings.Join(failed, "、")
 			}
 			m.applyActive()
+			m.applyLayout(dir)
 			m.rememberProject(dir)
 			m.saveSession()
 			m.checkTrust(dir)
@@ -1085,13 +1107,14 @@ func (m *Model) SmokeRoundTrip(ctx context.Context) (edited, undone bool) {
 	return edited, undone
 }
 
-// saveSession records the project and its tabs for the next start.
-func (m *Model) saveSession() {
+// sessionSnapshot copies the session on the main thread, so the goroutine that
+// writes it never reads state the user is still changing.
+func (m *Model) sessionSnapshot() (Session, bool) {
 	root := m.Root()
 	if root == "" && len(m.tabs) == 0 {
 		// Nothing to remember; keep the previous session rather than
 		// writing an empty one after a failed start.
-		return
+		return Session{}, false
 	}
 	var files []string
 	focus := ""
@@ -1101,12 +1124,79 @@ func (m *Model) saveSession() {
 	if t := m.tab(); t != nil {
 		focus = t.doc.Path()
 	}
-	s := Session{Root: root, Files: normalizeFiles(files), Focus: focus,
-		Bookmarks: m.bookmarks, PathBookmarks: m.pathBookmarks,
-		BookmarkLists: m.bookmarkLists, DefaultList: m.defaultList,
-		RecentProjects: m.recents}
+	layouts := make(map[string]Layout, len(m.layouts))
+	for key, l := range m.layouts {
+		layouts[key] = l.clone()
+	}
+	// The open project's layout is what the workbench shows right now, so a
+	// change no action recorded still reaches the next start.
+	if root != "" && !m.layoutHold {
+		layouts[layoutKey(root)] = m.currentLayout()
+	}
+	keep := append([]string{root}, m.recents...)
+	return Session{Root: root, Files: normalizeFiles(files), Focus: focus,
+		Bookmarks:      append([]Bookmark(nil), m.bookmarks...),
+		PathBookmarks:  append([]PathBookmark(nil), m.pathBookmarks...),
+		BookmarkLists:  append([]BookmarkList(nil), m.bookmarkLists...),
+		DefaultList:    m.defaultList,
+		RecentProjects: append([]string(nil), m.recents...),
+		Layouts:        pruneLayouts(layouts, keep)}, true
+}
+
+// saveSession writes the session in the background. The sequence numbers keep
+// a slow write from replacing a newer snapshot on disk.
+func (m *Model) saveSession() {
+	if m.cfg.SessionPath == "" {
+		return
+	}
+	s, ok := m.sessionSnapshot()
+	if !ok {
+		return
+	}
+	m.sessionMu.Lock()
+	m.sessionSeq++
+	seq := m.sessionSeq
+	m.sessionMu.Unlock()
 	path := m.cfg.SessionPath
-	go func() { _ = s.Save(path) }()
+	go m.writeSession(seq, path, s)
+}
+
+// writeSession writes one snapshot unless a newer one already reached the
+// disk, and the write lock serializes them so the newest seq writes last.
+func (m *Model) writeSession(seq int, path string, s Session) {
+	m.sessionWrite.Lock()
+	defer m.sessionWrite.Unlock()
+	m.sessionMu.Lock()
+	superseded := seq <= m.sessionWrote
+	m.sessionMu.Unlock()
+	if superseded {
+		return
+	}
+	if s.Save(path) != nil {
+		return
+	}
+	m.sessionMu.Lock()
+	if seq > m.sessionWrote {
+		m.sessionWrote = seq
+	}
+	m.sessionMu.Unlock()
+}
+
+// saveSessionNow writes the session before the process exits, so the last
+// layout change is not lost with a write still in flight.
+func (m *Model) saveSessionNow() {
+	if m.cfg.SessionPath == "" {
+		return
+	}
+	s, ok := m.sessionSnapshot()
+	if !ok {
+		return
+	}
+	m.sessionMu.Lock()
+	m.sessionSeq++
+	seq := m.sessionSeq
+	m.sessionMu.Unlock()
+	m.writeSession(seq, m.cfg.SessionPath, s)
 }
 
 // RequestQuit asks about unsaved tabs and then closes the backend.
@@ -1149,7 +1239,7 @@ func (m *Model) requestQuit(prevent func()) {
 }
 
 func (m *Model) finishQuit(save bool) {
-	m.saveSession()
+	m.saveSessionNow()
 	if m.tree != nil {
 		m.tree.Close()
 		m.tree = nil
@@ -1175,6 +1265,8 @@ func (m *Model) Quit() { mygo.App.Quit() }
 // ShowProject puts the sidebar back on the project tree.
 func (m *Model) ShowProject() {
 	m.sideMode = ""
+	m.leftHidden = false
+	m.rememberLayout()
 	m.invalidate()
 }
 

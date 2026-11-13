@@ -60,6 +60,7 @@ reimplementing it. A row is `INTEGRATED` only when the GoIDEA product
 | Structure tool window (Cmd+7) | INTEGRATED | `internal/app/structure.go`; filter, collapse, click-to-jump, `lsp.structure.*` in the release e2e |
 | Tool window maximize (Cmd+Shift+'), resize (Ctrl+Alt+arrows) | INTEGRATED | `internal/app/toolwindow.go`; one height per bottom slot, editor restored on navigation; `internal/app/maximize_test.go` |
 | Bottom split area, Move to Bottom Right | INTEGRATED | `internal/app/toolwindow.go`; each area shows one window at half the width; `internal/app/split_test.go` |
+| Per-project tool window layout | INTEGRATED | `internal/app/toolwindow.go`, `settings.go`; left window, bottom windows, split dock, height and last-used window stored per project root in the session and restored on open, **恢复默认布局** merges the split area; `internal/app/layout_test.go` |
 | Intentions and quick fixes | INTEGRATED | Alt+Enter sheet |
 | Rename, usages, symbols, format | INTEGRATED | code menu and pickers; Find Usages is OpenIDEA's bottom window, `internal/app/usages.go` |
 | Find/replace in project | INTEGRATED | search view |

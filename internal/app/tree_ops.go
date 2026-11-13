@@ -1204,9 +1204,11 @@ func (m *Model) SelectInProjectView() {
 	}
 	path := t.doc.Path()
 	m.sideMode = ""
+	m.leftHidden = false
 	m.tree.reveal(path)
 	m.tree.Select(path)
 	m.status = "已在项目视图中定位 " + filepath.Base(path)
+	m.rememberLayout()
 	m.invalidate()
 }
 

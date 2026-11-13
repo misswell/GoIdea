@@ -549,6 +549,8 @@ func setBookmarkDescription(list []Bookmark, path string, line int, text string)
 func (m *Model) ShowBookmarksWindow() {
 	m.structure.visible = false
 	m.sideMode = "bookmarks"
+	m.leftHidden = false
+	m.rememberLayout()
 	m.invalidate()
 }
 

@@ -87,8 +87,10 @@ func (m *Model) RefreshVCS() {
 // ShowVCS switches the sidebar to the changes view (and reloads it).
 func (m *Model) ShowVCS() {
 	m.sideMode = "vcs"
+	m.leftHidden = false
 	m.RefreshVCS()
 	m.RefreshBranch()
+	m.rememberLayout()
 	m.invalidate()
 }
 

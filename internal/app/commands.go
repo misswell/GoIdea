@@ -59,6 +59,7 @@ func commands() []appCommand {
 		{"view.hideAll", "隐藏全部工具窗口", "视图", "Cmd+Shift+F12", "hide all tool windows restore", func(m *Model) { m.HideAllToolWindows() }},
 		{"view.jumpLast", "跳转到上一个工具窗口", "视图", "F12", "jump last tool window", func(m *Model) { m.JumpToLastToolWindow() }},
 		{"view.maximize", "最大化工具窗口", "视图", "Cmd+Shift+'", "maximize tool window restore size", func(m *Model) { m.ToggleMaximizeToolWindow() }},
+		{"view.resetLayout", "恢复默认布局", "视图", "", "restore default layout reset tool windows split", func(m *Model) { m.ResetToolWindowLayout() }},
 		{"view.resizeUp", "向上拉伸工具窗口", "视图", "Ctrl+Alt+Up", "resize stretch tool window taller", func(m *Model) { m.ResizeBottomToolWindow("up") }},
 		{"view.resizeDown", "向下拉伸工具窗口", "视图", "Ctrl+Alt+Down", "resize stretch tool window shorter", func(m *Model) { m.ResizeBottomToolWindow("down") }},
 		{"view.resizeLeft", "向左拉伸工具窗口", "视图", "Ctrl+Alt+Left", "resize stretch tool window left", func(m *Model) { m.ResizeBottomToolWindow("left") }},

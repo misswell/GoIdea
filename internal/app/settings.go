@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 
 	"github.com/egoist/mygo/ui"
@@ -25,11 +26,129 @@ type Session struct {
 	// RecentProjects are the folders the Welcome screen lists, most recent
 	// first.
 	RecentProjects []string `json:"recentProjects,omitempty"`
+	// Layouts are each project's workbench layout, by project folder, so a
+	// project comes back the way it was left, as OpenIDEA stores a tool
+	// window layout per project root.
+	Layouts map[string]Layout `json:"layouts,omitempty"`
+}
+
+// Layout is how one project had its workbench arranged, as OpenIDEA keeps a
+// tool window layout per project: the window the left area showed, the bottom
+// windows that were up, where the split area's windows dock and how tall the
+// bottom area was. A maximized window is a moment, not a layout, so it is not
+// kept.
+type Layout struct {
+	// Side is the window the left area showed: "" for Project, or "vcs",
+	// "structure" or "bookmarks".
+	Side string `json:"side,omitempty"`
+	// LeftHidden is the left area closed, which IDEA keeps as a null slot.
+	LeftHidden bool `json:"leftHidden,omitempty"`
+	// Bottom are the bottom windows that were showing, and Tool the one the
+	// shortcuts acted on last: F12, Shift+Escape and Move to Split target it.
+	Bottom []string `json:"bottom,omitempty"`
+	Tool   string   `json:"tool,omitempty"`
+	// Split are the bottom windows that dock in the split area.
+	Split map[string]bool `json:"split,omitempty"`
+	// BottomHeight is the bottom area's height in DIPs.
+	BottomHeight int `json:"bottomHeight,omitempty"`
+}
+
+// clone copies a layout, so a saved snapshot never shares maps with the one
+// the main thread keeps changing.
+func (l Layout) clone() Layout {
+	out := l
+	out.Bottom = append([]string(nil), l.Bottom...)
+	if l.Split != nil {
+		out.Split = make(map[string]bool, len(l.Split))
+		for name, split := range l.Split {
+			out.Split[name] = split
+		}
+	}
+	return out
+}
+
+// normalizeLayout drops what a stored layout cannot mean: an unknown left
+// window, bottom windows that are not tool windows, a height no resize
+// reaches. The zero Layout is the default arrangement.
+func normalizeLayout(l Layout) Layout {
+	switch l.Side {
+	case "", "vcs", "structure", "bookmarks":
+	default:
+		l.Side = ""
+	}
+	out := Layout{Side: l.Side, LeftHidden: l.LeftHidden}
+	if isToolWindow(l.Tool) {
+		out.Tool = l.Tool
+	}
+	for _, name := range l.Bottom {
+		if !isToolWindow(name) || slices.Contains(out.Bottom, name) {
+			continue
+		}
+		out.Bottom = append(out.Bottom, name)
+	}
+	for name, split := range l.Split {
+		if !split || !isToolWindow(name) {
+			continue
+		}
+		if out.Split == nil {
+			out.Split = map[string]bool{}
+		}
+		out.Split[name] = true
+	}
+	if l.BottomHeight >= bottomMin && l.BottomHeight <= maxBottomHeight {
+		out.BottomHeight = l.BottomHeight
+	}
+	return out
 }
 
 // maxRecentProjects is how many folders the Welcome screen keeps, as
 // OpenIDEA's Projects page does.
 const maxRecentProjects = 12
+
+// maxLayouts bounds the remembered layouts, as maxRecentProjects bounds the
+// folders; the oldest ones go first.
+const maxLayouts = 48
+
+// pruneLayouts drops layouts for folders that are no longer recent until at
+// most maxLayouts remain, keeping the ones in keep.
+func pruneLayouts(layouts map[string]Layout, keep []string) map[string]Layout {
+	if len(layouts) <= maxLayouts {
+		return layouts
+	}
+	kept := make(map[string]Layout, maxLayouts)
+	for _, root := range keep {
+		key := layoutKey(root)
+		if l, ok := layouts[key]; ok {
+			kept[key] = l
+		}
+	}
+	var rest []string
+	for key := range layouts {
+		if _, ok := kept[key]; !ok {
+			rest = append(rest, key)
+		}
+	}
+	sort.Strings(rest)
+	for _, key := range rest {
+		if len(kept) >= maxLayouts {
+			break
+		}
+		kept[key] = layouts[key]
+	}
+	return kept
+}
+
+// layoutKey is the key a project's layout is stored under: its folder without
+// a trailing separator.
+func layoutKey(root string) string {
+	return filepath.Clean(root)
+}
+
+// layoutFor is the layout the folder had, normalized; the zero Layout when
+// none is stored.
+func (s Session) layoutFor(root string) Layout {
+	return normalizeLayout(s.Layouts[layoutKey(root)])
+}
 
 // normalizeRecents keeps the folders that still exist, drops duplicates and
 // ends at the cap, keeping the order it is given.
