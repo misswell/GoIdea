@@ -31,22 +31,46 @@ const (
 // then the run widget, the search and terminal controls and the gear.
 func (m *Model) titleBar(c *ui.Context, p *ui.Theme) {
 	oi := oiPaletteOf(p)
-	ui.Row(c).Height(oiTitleBarHeight).Shrink(0).Gap(4).AlignItems(ui.Center).
-		Padding(0, 8, 0, 10).Children(func() {
+	left, right := resolveToolbar(m.prefs.MainToolbar)
+	bar := ui.Row(c).Height(oiTitleBarHeight).Shrink(0).Gap(4).AlignItems(ui.Center).
+		Padding(0, 8, 0, 10)
+	bar.ContextMenu(func(menu *ui.Menu) { m.toolbarCustomizeMenu(menu) })
+	bar.Children(func() {
+		for _, id := range left {
+			m.toolbarEntry(c, p, oi, id)
+		}
+		ui.Spacer(c)
+		for _, id := range right {
+			m.toolbarEntry(c, p, oi, id)
+		}
+		m.gearButton(c, p, oi)
+	})
+}
+
+// toolbarEntry draws one title bar entry of the saved layout. An entry this
+// build has no widget for is skipped, as a contribution that is not
+// registered is.
+func (m *Model) toolbarEntry(c *ui.Context, p *ui.Theme, oi oiColors, id string) {
+	switch id {
+	case toolbarProject:
 		m.projectWidget(c, p, oi)
+	case toolbarVCS:
 		if label := m.branchLabel(); label != "" {
 			m.branchWidget(c, p, oi, label)
 		} else {
 			m.vcsFallbackWidget(c, p, oi)
 		}
-		ui.Spacer(c)
+	case toolbarRun:
 		m.runWidget(c, p, oi)
+	case toolbarSearch:
 		m.titleTool(c, p, oi, "search", "Search Everywhere", iconWelcomeSearch, func() {
-			m.OpenCommands()
+			m.RunCommand(toolbarAction(toolbarSearch))
 		})
-		m.titleTool(c, p, oi, "term", "Terminal", iconTerminal, func() { m.ShowTerm() })
-		m.gearButton(c, p, oi)
-	})
+	case toolbarTerminal:
+		m.titleTool(c, p, oi, "term", "Terminal", iconTerminal, func() {
+			m.RunCommand(toolbarAction(toolbarTerminal))
+		})
+	}
 }
 
 // projectWidget is the avatar, the project name and the chevron, with
@@ -157,6 +181,8 @@ func (m *Model) gearButton(c *ui.Context, p *ui.Theme, oi oiColors) {
 	})
 	b.Menu(func(menu *ui.Menu) {
 		addMenuEntries(menu, m, gearGroup())
+		menu.Separator()
+		m.toolbarCustomizeMenu(menu)
 	})
 }
 
