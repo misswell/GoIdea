@@ -44,6 +44,29 @@ func (m *Model) hideTool(name string) {
 	}
 }
 
+// occupyBottom makes name the bottom slot's window and closes the others: an
+// OpenIDEA slot shows one tool window at a time, so opening a window takes the
+// area from the one that held it. The closed window keeps its contents, as a
+// tab does: the terminal's shell and a run's output are still there.
+func (m *Model) occupyBottom(name string) {
+	for _, other := range toolWindows {
+		if other != name {
+			m.hideTool(other)
+		}
+	}
+	m.tool = name
+}
+
+// visibleTool is the window the bottom slot shows, "" when the slot is closed.
+func (m *Model) visibleTool() string {
+	for _, name := range toolWindows {
+		if m.toolVisible(name) {
+			return name
+		}
+	}
+	return ""
+}
+
 // activateTool opens the named bottom tool window and remembers it as the one
 // the shortcuts act on, as OpenIDEA's showToolWindow does.
 func (m *Model) activateTool(name string) {

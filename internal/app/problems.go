@@ -43,7 +43,7 @@ func (m *Model) resetProblems() {
 // the current file the first time, as OpenIDEA's window keeps its tab.
 func (m *Model) ShowProblems() {
 	m.problems.visible = true
-	m.tool = "problems"
+	m.occupyBottom("problems")
 	m.invalidate()
 }
 
@@ -255,7 +255,7 @@ func (m *Model) problemCounts() (errors, warnings, infos int) {
 func (m *Model) SmokeProblems() map[string]any {
 	out := map[string]any{}
 	run := func() {
-		was := m.problems.visible
+		was, prev := m.problems.visible, m.visibleTool()
 		m.ShowProblems()
 		errors, warnings, infos := m.problemCounts()
 		groups := m.problemList()
@@ -276,6 +276,9 @@ func (m *Model) SmokeProblems() map[string]any {
 		out["visible"] = m.problems.visible
 		if !was {
 			m.CloseProblems()
+			if prev != "" && prev != "problems" {
+				m.activateTool(prev)
+			}
 		}
 	}
 	m.post(run)

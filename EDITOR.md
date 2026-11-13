@@ -80,6 +80,11 @@ that were visible, `F12` reopens the last window used, even after it was hidden,
 and `Cmd+0` opens Commit (`toolwindow.go`). `Cmd+Alt+Down` and `Cmd+Alt+Up`
 step through the problem rows and wrap at both ends.
 
+The bottom area is one slot, as OpenIDEA's bottom slot is: opening Problems
+takes the area from the Run output, and the replaced window keeps its contents,
+so the terminal's shell and a run's output are still there when it comes back
+(`occupyBottom` in `toolwindow.go`, `bottomSlot` in `view.go`).
+
 ## Features wired to the editor
 
 | Feature | Where |

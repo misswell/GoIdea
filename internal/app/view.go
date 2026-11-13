@@ -893,6 +893,25 @@ func (m *Model) debugConsole(c *ui.Context, p *ui.Theme) {
 	})
 }
 
+// bottomSlot draws the bottom slot's one tool window, as OpenIDEA's bottom
+// slot shows a single window in its primary area.
+func (m *Model) bottomSlot(c *ui.Context, p *ui.Theme) {
+	switch {
+	case m.run.visible:
+		m.runPanel(c, p)
+	case m.debug.visible:
+		m.debugPanel(c, p)
+	case m.build.visible:
+		m.buildPanel(c, p)
+	case m.term.visible:
+		m.termPanel(c, p)
+	case m.log.visible:
+		m.logPanel(c, p)
+	case m.problems.visible:
+		m.problemsPanel(c, p)
+	}
+}
+
 func (m *Model) statusBar(c *ui.Context, p *ui.Theme) {
 	ui.Row(c).Height(24).Shrink(0).Padding(0, 10).Gap(16).AlignItems(ui.Center).
 		Background(p.Surface).BorderWidth(1, 0, 0, 0).BorderColor(p.Border).

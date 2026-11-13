@@ -48,10 +48,13 @@ func (m *Model) resetBuild() { m.build = BuildPane{} }
 
 // ShowBuild toggles the Build tool window.
 func (m *Model) ShowBuild() {
-	m.build.visible = !m.build.visible
 	if m.build.visible {
-		m.tool = "build"
+		m.hideTool("build")
+		m.invalidate()
+		return
 	}
+	m.build.visible = true
+	m.occupyBottom("build")
 	m.invalidate()
 }
 
@@ -81,7 +84,7 @@ func (m *Model) activeFileOrNil() *string {
 // ignored, as the actions are disabled while building.
 func (m *Model) startBuild(kind string, file *string) {
 	m.build.visible = true
-	m.tool = "build"
+	m.occupyBottom("build")
 	if m.build.busy {
 		m.invalidate()
 		return
@@ -345,7 +348,7 @@ func (m *Model) SmokeBuild(ctx context.Context) (map[string]any, error) {
 	m.post(func() {
 		m.run.trusted = true
 		m.build.visible = true
-		m.tool = "build"
+		m.occupyBottom("build")
 		m.build.kind = "build"
 		m.build.busy = true
 		m.build.request = request

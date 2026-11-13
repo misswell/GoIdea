@@ -29,38 +29,71 @@ func TestToolWindowRemembersTheLastOneShown(t *testing.T) {
 	}
 }
 
-func TestHideActiveHidesOnlyTheLastOne(t *testing.T) {
+func TestOneWindowHoldsTheBottomSlot(t *testing.T) {
 	m := toolModel()
 	m.ShowRun()
-	m.ShowBuild()
-	m.HideActiveToolWindow()
-	if m.build.visible || !m.run.visible {
-		t.Fatalf("hide active hid the wrong window: run=%v build=%v", m.run.visible, m.build.visible)
+	m.ShowProblems()
+	if !m.problems.visible || m.run.visible {
+		t.Fatalf("opening problems did not take the slot: run=%v problems=%v", m.run.visible, m.problems.visible)
 	}
-	// The last-used mark survives the hide, so F12 can bring it back.
-	if m.tool != "build" {
-		t.Fatalf("tool = %q, want build", m.tool)
+	if m.tool != "problems" {
+		t.Fatalf("tool = %q, want problems", m.tool)
 	}
-	m.HideActiveToolWindow()
-	if !m.run.visible {
-		t.Fatal("hide active closed run, which is not the last-used window")
+	// A second Cmd+6 closes the window it is on, not the one it replaced.
+	m.ToggleProblems()
+	if m.problems.visible || m.visibleTool() != "" {
+		t.Fatalf("second press left a window open: %q", m.visibleTool())
 	}
 }
 
-func TestHideAllRestoresExactlyWhatItHid(t *testing.T) {
+func TestShowRunAgainClosesItAndF12Reopens(t *testing.T) {
 	m := toolModel()
 	m.ShowRun()
-	m.ShowBuild()
+	m.ShowRun()
+	if m.run.visible {
+		t.Fatal("a second Cmd+4 did not close the Run window")
+	}
+	// The last-used mark survives the hide, so F12 brings it back.
+	if m.tool != "run" {
+		t.Fatalf("tool = %q after hiding, want run", m.tool)
+	}
+	m.JumpToLastToolWindow()
+	if !m.run.visible {
+		t.Fatal("F12 did not reopen the Run window")
+	}
+}
+
+func TestHideActiveHidesTheWindowInTheSlot(t *testing.T) {
+	m := toolModel()
+	m.ShowProblems()
+	m.HideActiveToolWindow()
+	if m.problems.visible {
+		t.Fatal("hide active left the Problems window open")
+	}
+	if m.tool != "problems" {
+		t.Fatalf("tool = %q, want problems", m.tool)
+	}
+	// Nothing is showing, so a second press changes nothing.
+	m.HideActiveToolWindow()
+	if m.problems.visible {
+		t.Fatal("hide active reopened a window")
+	}
+}
+
+func TestHideAllRestoresTheSlot(t *testing.T) {
+	m := toolModel()
+	m.ShowRun()
+	m.ShowProblems()
 	m.HideAllToolWindows()
-	if m.run.visible || m.build.visible || m.term.visible || m.problems.visible {
-		t.Fatalf("hide all left a window: %+v", m)
+	if m.run.visible || m.problems.visible {
+		t.Fatal("hide all left a window open")
 	}
 	m.HideAllToolWindows()
-	if !m.run.visible || !m.build.visible {
-		t.Fatalf("restore did not bring back run and build: run=%v build=%v", m.run.visible, m.build.visible)
+	if !m.problems.visible {
+		t.Fatal("restore did not bring back the window that held the slot")
 	}
-	if m.term.visible || m.problems.visible || m.debug.visible || m.log.visible {
-		t.Fatal("restore opened a window that was not hidden")
+	if m.run.visible {
+		t.Fatal("restore brought back a window the slot had replaced")
 	}
 }
 

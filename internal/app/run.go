@@ -166,7 +166,7 @@ func (m *Model) loadRunConfigs() {
 			if err != nil {
 				m.run.err = "读取运行配置失败：" + err.Error()
 				m.run.visible = true
-				m.tool = "run"
+				m.occupyBottom("run")
 				m.invalidate()
 				return
 			}
@@ -217,11 +217,14 @@ func (p *RunPane) current() *openidea.RunConfig {
 
 // ShowRun toggles the Run tool window.
 func (m *Model) ShowRun() {
-	m.run.visible = !m.run.visible
 	if m.run.visible {
-		m.tool = "run"
+		m.hideTool("run")
+		m.invalidate()
+		return
 	}
-	if m.run.visible && m.run.trusted && !m.run.loaded {
+	m.run.visible = true
+	m.occupyBottom("run")
+	if m.run.trusted && !m.run.loaded {
 		m.loadRunConfigs()
 	}
 	m.invalidate()
@@ -230,7 +233,7 @@ func (m *Model) ShowRun() {
 // Run starts the selected configuration, after saving what the build must see.
 func (m *Model) Run() {
 	m.run.visible = true
-	m.tool = "run"
+	m.occupyBottom("run")
 	if m.busy {
 		m.invalidate()
 		return
@@ -260,7 +263,7 @@ func (m *Model) startRun() {
 	tabs := append([]*Tab(nil), m.tabs...)
 	ch := m.nextChannel()
 	m.run.visible = true
-	m.tool = "run"
+	m.occupyBottom("run")
 	m.run.busy = true
 	m.run.awaiting = true
 	m.run.running = false
@@ -551,7 +554,7 @@ func (m *Model) SmokeRun(ctx context.Context) (config string, code *int32, outpu
 	channel := m.nextChannel()
 	m.post(func() {
 		m.run.visible = true
-		m.tool = "run"
+		m.occupyBottom("run")
 		m.run.trusted = true
 		m.run.loaded = true
 		m.run.configs = configs

@@ -1115,23 +1115,7 @@ func (m *Model) View(c *ui.Context) {
 					m.bannerRow(c, p)
 				}
 				m.editorArea(c, p)
-				if m.term.visible {
-					m.termPanel(c, p)
-				}
-				if m.debug.visible {
-					m.debugPanel(c, p)
-				} else {
-					m.runPanel(c, p)
-				}
-				if m.build.visible {
-					m.buildPanel(c, p)
-				}
-				if m.log.visible {
-					m.logPanel(c, p)
-				}
-				if m.problems.visible {
-					m.problemsPanel(c, p)
-				}
+				m.bottomSlot(c, p)
 			})
 		})
 		m.statusBar(c, p)
