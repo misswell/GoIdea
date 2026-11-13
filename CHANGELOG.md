@@ -26,6 +26,11 @@ needs a `## <version>` section here, or its build fails.
 - 标签页右键菜单新增 **Keep Tab Open**、**Open In** 和 **Local History**。
 - 文件标签页的右键菜单还能 **Copy Path/Reference** 和 **Rename File**。
 - 标签页右键菜单的 **Configure Editor Tabs…** 直接打开标签页设置页，**Close** 显示 `Cmd+W`。
+- 编辑器可拆成两组：**Split Right**（`Cmd+\`）和 **Split Down** 并排或上下显示同一文件的两个视图。
+- 标签页右键菜单和 **Window › Editor Tabs** 还能 **Split and Move**、**Move to Opposite Group** 和 **Open in Opposite Group**。
+- **Unsplit**、**Unsplit All** 合并两组，**Change Splitter Orientation** 在并排和上下之间切换。
+- `Alt+Tab` / `Alt+Shift+Tab` 在两组之间切换，点另一组的标签页或面包屑也会把焦点带过去。
+- 两组编辑器随项目保存，重开项目后回到原来的排列和活动标签页。
 - 编辑器的右键菜单新增 **Show Context Actions**、**Copy / Paste Special**、**Go To**、**Reformat Code** 和 **Rename…**。
 - **Copy Path/Reference** 可复制编辑器的绝对路径、文件名、项目内路径和带行号的路径。
 - **Editor > Editor Tabs** 可选择关闭当前标签页后激活哪个：左边的、右边的或最近打开的。

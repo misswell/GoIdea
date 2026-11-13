@@ -45,6 +45,7 @@ reimplementing it. A row is `INTEGRATED` only when the GoIDEA product
 | Text input, buttons, scroll, modals | INTEGRATED | sheets (diff, commands, database, settings) |
 | Editor: text, selections, line numbers | INTEGRATED | every open tab |
 | Editor tabs: pin, close others/all/left/right/unmodified | INTEGRATED | pinned group at the left with a pin glyph, OpenIDEA's tab context menu and guarded closes that stop on cancel; `internal/app/tabs.go`, `internal/app/tabs_test.go` |
+| Editor window groups: split right/down, move or open in the opposite group, unsplit | INTEGRATED | a second window group beside or below the editor with its own tab strip and active tab, sharing each file's buffer and undo history; the focused group stays the one commands act on, `Cmd+\`, `Alt+Tab` / `Alt+Shift+Tab`, the Window › Editor Tabs menu and the tab context menu's split entries, split state saved per project; two groups at most, and dragging a tab to the editor edge is not ported; `internal/app/editor_split.go`, `internal/app/editor_groups_test.go` |
 | Editor: completion, hover, go-to-definition | INTEGRATED | callbacks wired to backend RPC |
 | Editor lines: comment, duplicate, delete, join, move | INTEGRATED | IntelliJ macOS keys from `src/platform/keymaps/intellij-macos.ts` via `editor.State.Bindings`, the same commands in the **Code** menu and registry; statement moves run on whole lines; `internal/app/editor_keys.go`, `internal/app/editor_keys_test.go` |
 | Editor: increment search, multi-caret | DETECTED | upstream exists; not yet exposed in GoIDEA |

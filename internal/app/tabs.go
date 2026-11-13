@@ -23,8 +23,14 @@ func tabPath(t *Tab) string {
 // Mark modified is on and the text is unsaved, and the parent folder beside it
 // when another tab shows the same name.
 func (m *Model) tabLabel(t *Tab) (name, dir string) {
-	paths := make([]string, len(m.tabs))
-	for i, x := range m.tabs {
+	return m.tabLabelIn(m.tabs, t)
+}
+
+// tabLabelIn is tabLabel over a window group: each strip decides its folder
+// suffixes from its own tabs, as OpenIDEA's strips label independently.
+func (m *Model) tabLabelIn(tabs []*Tab, t *Tab) (name, dir string) {
+	paths := make([]string, len(tabs))
+	for i, x := range tabs {
 		paths[i] = tabPath(x)
 	}
 	return tabLabelFor(tabPath(t), m.tabPrefs, t.unsaved(), paths)
@@ -192,11 +198,12 @@ func tabLimitCandidates(tabs []*Tab, active int, unsaved func(*Tab) bool) []*Tab
 
 // enforceTabLimit closes tabs beyond Tab limit, as enforceTabLimit does:
 // pinned tabs do not count, and a strip with nothing closeable keeps its tabs.
+// The limit counts both window groups, as OpenIDEA counts a group's tabs.
 func (m *Model) enforceTabLimit() {
 	limit := m.tabPrefs.limit()
 	for {
 		unpinned := 0
-		for _, t := range m.tabs {
+		for _, t := range m.allTabs() {
 			if !t.pinned {
 				unpinned++
 			}
@@ -204,10 +211,19 @@ func (m *Model) enforceTabLimit() {
 		if unpinned <= limit {
 			return
 		}
-		candidates := tabLimitCandidates(m.tabs, m.active, (*Tab).unsaved)
+		var candidates []*Tab
+		for _, g := range []groupRef{groupFocused, groupSplit} {
+			tabs := m.groupTabsAt(g)
+			active := m.active
+			if g == groupSplit && m.split != nil {
+				active = m.split.active
+			}
+			candidates = append(candidates, tabLimitCandidates(tabs, active, (*Tab).unsaved)...)
+		}
 		if len(candidates) == 0 {
 			return
 		}
+		sort.SliceStable(candidates, func(i, j int) bool { return candidates[i].used < candidates[j].used })
 		m.removeTab(candidates[0])
 	}
 }
@@ -284,7 +300,11 @@ func (m *Model) PinActiveTab() {
 }
 
 func (m *Model) setTabPinned(t *Tab, pinned bool) {
-	if t == nil || !m.hasTab(t) {
+	if t == nil {
+		return
+	}
+	g, ok := m.groupOf(t)
+	if !ok {
 		return
 	}
 	if t.pinned == pinned && !t.preview {
@@ -292,6 +312,13 @@ func (m *Model) setTabPinned(t *Tab, pinned bool) {
 	}
 	// Pinning promotes the preview tab, as togglePin clears its preview flag.
 	t.preview = false
+	if g == groupSplit {
+		tabs, at := placeTab(m.split.tabs, t, pinned)
+		m.split.tabs, m.split.active = tabs, at
+		m.saveSession()
+		m.invalidate()
+		return
+	}
 	tabs, at := placeTab(m.tabs, t, pinned)
 	m.tabs = tabs
 	m.active = at
@@ -300,16 +327,17 @@ func (m *Model) setTabPinned(t *Tab, pinned bool) {
 }
 
 func (m *Model) hasTab(t *Tab) bool {
-	for _, x := range m.tabs {
-		if x == t {
-			return true
-		}
-	}
-	return false
+	_, ok := m.groupOf(t)
+	return ok
 }
 
 func (m *Model) tabIndex(t *Tab) int {
-	for i, x := range m.tabs {
+	return tabIndexIn(m.tabs, t)
+}
+
+// tabIndexIn is the index of t in tabs, or -1.
+func tabIndexIn(tabs []*Tab, t *Tab) int {
+	for i, x := range tabs {
 		if x == t {
 			return i
 		}
@@ -318,9 +346,12 @@ func (m *Model) tabIndex(t *Tab) int {
 }
 
 func (m *Model) activateTab(t *Tab) {
-	if i := m.tabIndex(t); i >= 0 {
-		m.activate(i)
+	g, ok := m.groupOf(t)
+	if !ok {
+		return
 	}
+	m.focusGroup(g)
+	m.activateIn(groupFocused, m.tabIndex(t))
 }
 
 // closeTab closes a tab, asking about unsaved text first.
@@ -464,7 +495,8 @@ func tabModifiedForClose(t *Tab) bool {
 	return t.unsaved() || (!t.gitOff && len(t.gitMarks) > 0)
 }
 
-// CloseOtherTabs closes every tab but t, keeping the pinned ones.
+// CloseOtherTabs closes every tab but t in t's window group, keeping the
+// pinned ones.
 func (m *Model) CloseOtherTabs(t *Tab) {
 	if t == nil {
 		t = m.tab()
@@ -473,33 +505,47 @@ func (m *Model) CloseOtherTabs(t *Tab) {
 		return
 	}
 	m.activateTab(t)
-	m.closeTabsThen(closeOthersTargets(m.tabs, t), nil)
+	g, ok := m.groupOf(t)
+	if !ok {
+		return
+	}
+	m.closeTabsThen(closeOthersTargets(m.groupTabsAt(g), t), nil)
 }
 
-// CloseTabsToLeft closes the unpinned tabs before t.
+// CloseTabsToLeft closes the unpinned tabs before t in t's window group.
 func (m *Model) CloseTabsToLeft(t *Tab) {
-	m.closeTabsThen(closeSideTargets(m.tabs, t, -1), nil)
+	if t == nil {
+		return
+	}
+	if g, ok := m.groupOf(t); ok {
+		m.closeTabsThen(closeSideTargets(m.groupTabsAt(g), t, -1), nil)
+	}
 }
 
-// CloseTabsToRight closes the unpinned tabs after t.
+// CloseTabsToRight closes the unpinned tabs after t in t's window group.
 func (m *Model) CloseTabsToRight(t *Tab) {
-	m.closeTabsThen(closeSideTargets(m.tabs, t, 1), nil)
+	if t == nil {
+		return
+	}
+	if g, ok := m.groupOf(t); ok {
+		m.closeTabsThen(closeSideTargets(m.groupTabsAt(g), t, 1), nil)
+	}
 }
 
 // CloseAllTabs closes every tab, or every unpinned tab when keepPinned is
 // set, as OpenIDEA's Close All but Pinned does.
 func (m *Model) CloseAllTabs(keepPinned bool) {
-	m.closeTabsThen(closeAllTargets(m.tabs, keepPinned), nil)
+	m.closeTabsThen(closeAllTargets(m.allTabs(), keepPinned), func() { m.settleGroups() })
 }
 
 // CloseUnmodifiedTabs closes the tabs without unsaved text or VCS changes.
 func (m *Model) CloseUnmodifiedTabs() {
-	m.closeTabsThen(closeUnmodifiedTargets(m.tabs, tabModifiedForClose), nil)
+	m.closeTabsThen(closeUnmodifiedTargets(m.allTabs(), tabModifiedForClose), func() { m.settleGroups() })
 }
 
-// anyPinned reports whether the strip holds a pinned tab.
+// anyPinned reports whether any window group holds a pinned tab.
 func (m *Model) anyPinned() bool {
-	for _, t := range m.tabs {
+	for _, t := range m.allTabs() {
 		if t.pinned {
 			return true
 		}
@@ -510,7 +556,7 @@ func (m *Model) anyPinned() bool {
 // anyReadOnlyUnpinned reports whether a read-only tab could be closed by
 // Close All Read-Only Tabs, which OpenIDEA offers only when one is open.
 func (m *Model) anyReadOnlyUnpinned() bool {
-	for _, t := range m.tabs {
+	for _, t := range m.allTabs() {
 		if !t.pinned && t.doc != nil && t.doc.Info().ReadOnly {
 			return true
 		}
@@ -521,12 +567,12 @@ func (m *Model) anyReadOnlyUnpinned() bool {
 // CloseReadOnlyTabs closes the unpinned tabs whose files are read-only.
 func (m *Model) CloseReadOnlyTabs() {
 	var victims []*Tab
-	for _, t := range m.tabs {
+	for _, t := range m.allTabs() {
 		if !t.pinned && t.doc != nil && t.doc.Info().ReadOnly {
 			victims = append(victims, t)
 		}
 	}
-	m.closeTabsThen(victims, nil)
+	m.closeTabsThen(victims, func() { m.settleGroups() })
 }
 
 // closedTab is a tab Reopen Closed Tab can bring back: its file, the place it
@@ -568,7 +614,7 @@ func (m *Model) insertTabAt(tab *Tab, at int) {
 	m.tabs[at] = tab
 }
 
-// tabForPath is the tab showing path, or -1.
+// tabForPath is the index of the focused group's tab showing path, or -1.
 func (m *Model) tabForPath(path string) int {
 	path = realPath(path)
 	for i, t := range m.tabs {
@@ -579,6 +625,17 @@ func (m *Model) tabForPath(path string) int {
 	return -1
 }
 
+// tabOpenInAnyGroup reports whether either window group shows path.
+func (m *Model) tabOpenInAnyGroup(path string) bool {
+	path = realPath(path)
+	for _, t := range m.allTabs() {
+		if t.doc != nil && t.doc.Path() == path {
+			return true
+		}
+	}
+	return false
+}
+
 // nextClosed is the newest history entry whose file is not open again, and
 // whether there was one; entries that are open are dropped as reopenClosed's
 // loop drops them.
@@ -586,7 +643,7 @@ func (m *Model) nextClosed() (closedTab, bool) {
 	for len(m.closedTabs) > 0 {
 		e := m.closedTabs[len(m.closedTabs)-1]
 		m.closedTabs = m.closedTabs[:len(m.closedTabs)-1]
-		if m.tabForPath(e.path) < 0 {
+		if !m.tabOpenInAnyGroup(e.path) {
 			return e, true
 		}
 	}

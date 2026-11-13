@@ -22,6 +22,13 @@ type Session struct {
 	// Pinned are the open files whose tabs were pinned, which OpenIDEA keeps
 	// at the left of the strip across starts.
 	Pinned []string `json:"pinned,omitempty"`
+	// SplitFiles, SplitActive, SplitDown and SplitFirst are the second editor
+	// window group: its open files, the one it showed, whether it was stacked
+	// under the first group and whether it sat left of or above it.
+	SplitFiles  []string `json:"splitFiles,omitempty"`
+	SplitActive int      `json:"splitActive,omitempty"`
+	SplitDown   bool     `json:"splitDown,omitempty"`
+	SplitFirst  bool     `json:"splitFirst,omitempty"`
 	// PathBookmarks are the files marked with Toggle File Bookmark.
 	PathBookmarks []PathBookmark `json:"pathBookmarks,omitempty"`
 	// BookmarkLists are the named groups the tool window shows, and DefaultList

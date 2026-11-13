@@ -713,8 +713,8 @@ func (m *Model) headerIcon(c *ui.Context, p *ui.Theme, oi oiColors, key, tip str
 	}
 }
 
-// editorIsland is the editor surface: the tab bar on top, then the breadcrumb
-// chain and the editor.
+// editorIsland is the editor surface: one window group, or two split side by
+// side or stacked, each with its tab bar, breadcrumb chain and editor.
 func (m *Model) editorIsland(c *ui.Context, p *ui.Theme) {
 	oi := oiPaletteOf(p)
 	island := ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Background(oi.island).
@@ -724,70 +724,102 @@ func (m *Model) editorIsland(c *ui.Context, p *ui.Theme) {
 	m.editorWidth = island.Bounds().W
 	m.editorHeight = island.Bounds().H
 	island.Children(func() {
+		if m.split == nil {
+			m.editorGroup(c, p, oi, m.focusedView())
+			return
+		}
+		first, second := m.focusedView(), m.splitView()
+		if m.splitFirst {
+			first, second = second, first
+		}
+		if m.splitDown {
+			ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Children(func() {
+				m.editorGroup(c, p, oi, first)
+				ui.Row(c).Height(1).Shrink(0).Background(oi.border)
+				m.editorGroup(c, p, oi, second)
+			})
+			return
+		}
+		ui.Row(c).Grow(1).MinWidth(0).MinHeight(0).Children(func() {
+			m.editorGroup(c, p, oi, first)
+			ui.Column(c).Width(1).Shrink(0).Background(oi.border)
+			m.editorGroup(c, p, oi, second)
+		})
+	})
+}
+
+// editorGroup is one window group: its tabs where Editor Tabs puts them and
+// its editor, taking its half of the island.
+func (m *Model) editorGroup(c *ui.Context, p *ui.Theme, oi oiColors, g groupView) {
+	pane := ui.Column(c).Grow(1).MinWidth(0).MinHeight(0)
+	pane.Children(func() {
 		if m.tabPrefs.Vertical() {
 			ui.Row(c).Grow(1).MinWidth(0).MinHeight(0).Children(func() {
 				if m.tabPrefs.Placement != "right" {
-					m.verticalTabs(c, p, oi)
+					m.verticalTabs(c, p, oi, g)
 				}
 				ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Children(func() {
-					m.editorBody(c, p)
+					m.editorBody(c, p, g)
 				})
 				if m.tabPrefs.Placement == "right" {
-					m.verticalTabs(c, p, oi)
+					m.verticalTabs(c, p, oi, g)
 				}
 			})
 			return
 		}
 		if !m.tabPrefs.AtBottom() {
-			m.editorTabs(c, p, oi)
+			m.editorTabs(c, p, oi, g)
 		}
-		m.editorBody(c, p)
+		m.editorBody(c, p, g)
 		if m.tabPrefs.AtBottom() {
-			m.editorTabs(c, p, oi)
+			m.editorTabs(c, p, oi, g)
 		}
 	})
 }
 
-// editorBody is the banner over the editor, which takes the rest of the island.
-func (m *Model) editorBody(c *ui.Context, p *ui.Theme) {
-	if m.banner != "" {
+// editorBody is the banner over the editor, which takes the rest of the
+// group. The banner is the project's, so only the focused group shows it.
+func (m *Model) editorBody(c *ui.Context, p *ui.Theme, g groupView) {
+	if m.banner != "" && g.focused {
 		m.bannerRow(c, p)
 	}
-	m.editorArea(c, p)
+	m.editorArea(c, p, g)
 }
 
 // editorTabs is OpenIDEA's tab bar: 40px high on the island, 28px tabs with
 // the selected one tinted and underlined in the accent. Editor Tabs decides
 // where it sits, whether pinned tabs get their own row, what each tab shows
 // and where its close button is.
-func (m *Model) editorTabs(c *ui.Context, p *ui.Theme, oi oiColors) {
-	if len(m.tabs) == 0 || m.tabPrefs.Hidden() {
+func (m *Model) editorTabs(c *ui.Context, p *ui.Theme, oi oiColors, g groupView) {
+	if len(g.tabs) == 0 || m.tabPrefs.Hidden() {
 		return
 	}
-	m.applyTabDrop()
+	if g.focused {
+		m.applyTabDrop()
+	}
 	pinned := 0
-	for _, t := range m.tabs {
+	for _, t := range g.tabs {
 		if t.pinned {
 			pinned++
 		}
 	}
-	if m.tabPrefs.PinnedSeparateRow && pinned > 0 && pinned < len(m.tabs) {
+	if m.tabPrefs.PinnedSeparateRow && pinned > 0 && pinned < len(g.tabs) {
 		ui.Column(c).Shrink(0).Children(func() {
-			m.tabStrip(c, p, oi, m.tabs[:pinned], 0, &m.tabsPinnedScroll)
-			m.tabStrip(c, p, oi, m.tabs[pinned:], pinned, &m.tabsScroll)
+			m.tabStrip(c, p, oi, g, g.tabs[:pinned], 0, g.pinned)
+			m.tabStrip(c, p, oi, g, g.tabs[pinned:], pinned, g.scroll)
 		})
 		return
 	}
-	m.tabStrip(c, p, oi, m.tabs, 0, &m.tabsScroll)
+	m.tabStrip(c, p, oi, g, g.tabs, 0, g.scroll)
 }
 
 // tabStrip is the tab bar with the island's bottom border; offset is the
 // row's first tab in the strip and scroll the row's sideways place. Show tabs
 // in decides how tabs that don't fit go: one row scrolls sideways or squeezes
 // them, multiple rows wrap.
-func (m *Model) tabStrip(c *ui.Context, p *ui.Theme, oi oiColors, tabs []*Tab, offset int, scroll *ui.ScrollState) {
-	reveal := m.tabsShown != m.active
-	m.tabsShown = m.active
+func (m *Model) tabStrip(c *ui.Context, p *ui.Theme, oi oiColors, g groupView, tabs []*Tab, offset int, scroll *ui.ScrollState) {
+	reveal := *g.shown != g.active
+	*g.shown = g.active
 	strip := ui.Row(c).Shrink(0).Padding(0, 4).
 		BorderWidth(0, 0, 1, 0).BorderColor(oi.border)
 	if m.tabPrefs.MultipleRows {
@@ -800,20 +832,20 @@ func (m *Model) tabStrip(c *ui.Context, p *ui.Theme, oi oiColors, tabs []*Tab, o
 		case m.tabPrefs.MultipleRows:
 			ui.Row(c).Grow(1).MinWidth(0).Wrap().Gap(2).Padding(3, 0).
 				AlignItems(ui.Center).AlignContent(ui.Center).Children(func() {
-				m.tabButtons(c, p, oi, tabs, offset, reveal, false)
+				m.tabButtons(c, p, oi, g, tabs, offset, reveal, false)
 			})
 		case m.tabPrefs.SqueezeTabs:
 			ui.Row(c).Gap(2).AlignItems(ui.Center).Children(func() {
-				m.tabButtons(c, p, oi, tabs, offset, reveal, false)
+				m.tabButtons(c, p, oi, g, tabs, offset, reveal, false)
 			})
 		default:
 			ui.Row(c).Grow(1).MinWidth(0).AlignItems(ui.Center).Children(func() {
 				ui.ScrollHorizontal(c).Grow(1).MinWidth(0).Gap(2).
 					AlignItems(ui.Center).TrackScroll(scroll).Children(func() {
-					m.tabButtons(c, p, oi, tabs, offset, reveal, false)
+					m.tabButtons(c, p, oi, g, tabs, offset, reveal, false)
 				})
 				if scroll.MaxX > 0.5 {
-					m.tabOverflow(c, p, oi, tabs, offset)
+					m.tabOverflow(c, p, oi, g, tabs, offset)
 				}
 			})
 		}
@@ -841,8 +873,12 @@ func tabMenuRows(tabs []*Tab, offset, active int) []tabMenuRow {
 // tabOverflow is OpenIDEA's chevron at the end of a strip whose tabs run past
 // its width: Show Hidden Tabs opens a menu of every tab in the strip, the
 // active one marked, and picking one shows it.
-func (m *Model) tabOverflow(c *ui.Context, p *ui.Theme, oi oiColors, tabs []*Tab, offset int) {
-	b := ui.ButtonBase(c.Key("tabsOverflow")).Size(22, 22).Radius(4).
+func (m *Model) tabOverflow(c *ui.Context, p *ui.Theme, oi oiColors, g groupView, tabs []*Tab, offset int) {
+	key, rowKey := "tabsOverflow", "tabsOverflow:%d"
+	if g.ref == groupSplit {
+		key, rowKey = "splitTabsOverflow", "splitTabsOverflow:%d"
+	}
+	b := ui.ButtonBase(c.Key(key)).Size(22, 22).Radius(4).
 		AlignItems(ui.Center).Justify(ui.Center).Cursor(ui.CursorPointer).
 		Tooltip("Show Hidden Tabs")
 	if b.Hovered() {
@@ -852,23 +888,23 @@ func (m *Model) tabOverflow(c *ui.Context, p *ui.Theme, oi oiColors, tabs []*Tab
 		ui.Icon(c, iconChevronDown).Size(14, 14).TextColor(oi.textMuted)
 	})
 	if b.Clicked() {
-		m.tabsMenuOpen = !m.tabsMenuOpen
+		*g.menuOpen = !*g.menuOpen
 		m.invalidate()
 	}
-	open := m.tabsMenuOpen
+	open := *g.menuOpen
 	ui.PopoverBase(c, b, &open, func(panel ui.Element) {
 		panel.Width(300).Padding(4).Background(oi.popup).
 			BorderWidth(1).BorderColor(oi.borderStrong).Radius(8)
 		panel.Children(func() {
-			for _, row := range tabMenuRows(tabs, offset, m.active) {
+			for _, row := range tabMenuRows(tabs, offset, g.active) {
 				row := row
-				r := ui.Row(c.Key(fmt.Sprintf("tabsOverflow:%d", row.Index))).
+				r := ui.Row(c.Key(fmt.Sprintf(rowKey, row.Index))).
 					Height(26).Shrink(0).Padding(0, 8).Gap(8).Radius(4).
 					AlignItems(ui.Center).Cursor(ui.CursorPointer)
 				if row.Active || r.Hovered() {
 					r.Background(oi.hoverTint)
 				}
-				name, dir := m.tabLabel(row.Tab)
+				name, dir := m.tabLabelIn(g.tabs, row.Tab)
 				r.Children(func() {
 					ui.Icon(c, iconFile).Size(14, 14).TextColor(oi.textMuted)
 					ui.Text(c, name).FontSize(13).TextColor(oi.text).SingleLine().
@@ -879,14 +915,14 @@ func (m *Model) tabOverflow(c *ui.Context, p *ui.Theme, oi oiColors, tabs []*Tab
 					}
 				})
 				if r.Clicked() {
-					m.tabsMenuOpen = false
-					m.activate(row.Index)
+					*g.menuOpen = false
+					m.activateIn(g.ref, row.Index)
 				}
 			}
 		})
 	})
 	if !open {
-		m.tabsMenuOpen = false
+		*g.menuOpen = false
 	}
 }
 
@@ -894,12 +930,12 @@ func (m *Model) tabOverflow(c *ui.Context, p *ui.Theme, oi oiColors, tabs []*Tab
 // column of full-width 24px tabs, as wide as its widest tab between 140 and
 // 260, divided from the editor by a border on that side. Show tabs in does not
 // apply: a vertical strip always scrolls.
-func (m *Model) verticalTabs(c *ui.Context, p *ui.Theme, oi oiColors) {
-	if len(m.tabs) == 0 || m.tabPrefs.Hidden() {
+func (m *Model) verticalTabs(c *ui.Context, p *ui.Theme, oi oiColors, g groupView) {
+	if len(g.tabs) == 0 || m.tabPrefs.Hidden() {
 		return
 	}
-	reveal := m.tabsShown != m.active
-	m.tabsShown = m.active
+	reveal := *g.shown != g.active
+	*g.shown = g.active
 	strip := ui.Column(c).Shrink(0).MinWidth(oiTabColumnMin).MaxWidth(oiTabColumnMax).
 		Padding(4).Gap(2).BorderColor(oi.border)
 	if m.tabPrefs.Placement == "right" {
@@ -908,27 +944,27 @@ func (m *Model) verticalTabs(c *ui.Context, p *ui.Theme, oi oiColors) {
 		strip.BorderWidth(0, 1, 0, 0)
 	}
 	pinned := 0
-	for _, t := range m.tabs {
+	for _, t := range g.tabs {
 		if t.pinned {
 			pinned++
 		}
 	}
-	if m.tabPrefs.PinnedSeparateRow && pinned > 0 && pinned < len(m.tabs) {
+	if m.tabPrefs.PinnedSeparateRow && pinned > 0 && pinned < len(g.tabs) {
 		strip.Children(func() {
 			ui.Scroll(c).Shrink(0).MinHeight(0).Gap(2).Children(func() {
-				m.tabButtons(c, p, oi, m.tabs[:pinned], 0, reveal, true)
+				m.tabButtons(c, p, oi, g, g.tabs[:pinned], 0, reveal, true)
 			})
-			ui.Scroll(c).Grow(1).MinHeight(0).Gap(2).TrackScroll(&m.tabsSideScroll).
+			ui.Scroll(c).Grow(1).MinHeight(0).Gap(2).TrackScroll(g.side).
 				Children(func() {
-					m.tabButtons(c, p, oi, m.tabs[pinned:], pinned, reveal, true)
+					m.tabButtons(c, p, oi, g, g.tabs[pinned:], pinned, reveal, true)
 				})
 		})
 		return
 	}
 	strip.Children(func() {
-		ui.Scroll(c).Grow(1).MinHeight(0).Gap(2).TrackScroll(&m.tabsSideScroll).
+		ui.Scroll(c).Grow(1).MinHeight(0).Gap(2).TrackScroll(g.side).
 			Children(func() {
-				m.tabButtons(c, p, oi, m.tabs, 0, reveal, true)
+				m.tabButtons(c, p, oi, g, g.tabs, 0, reveal, true)
 			})
 	})
 }
@@ -939,10 +975,13 @@ func (m *Model) verticalTabs(c *ui.Context, p *ui.Theme, oi oiColors) {
 // high. A change of active tab scrolls the new one into view. A tab dragged
 // along its row, as OpenIDEA's Tabs drags it, leaves its slot where it would
 // drop while the others make room, and a ghost of it hangs from the pointer.
-func (m *Model) tabButtons(c *ui.Context, p *ui.Theme, oi oiColors, tabs []*Tab, offset int, reveal, vertical bool) {
+func (m *Model) tabButtons(c *ui.Context, p *ui.Theme, oi oiColors, g groupView, tabs []*Tab, offset int, reveal, vertical bool) {
 	squeeze := m.tabPrefs.SqueezeTabs || vertical
-	from := m.tabDrag.From - offset
-	lifted := !vertical && m.tabDrag.Lifted && from >= 0 && from < len(tabs)
+	from := -1
+	if g.focused && !vertical && m.tabDrag.Held {
+		from = m.tabDrag.From - offset
+	}
+	lifted := from >= 0 && from < len(tabs) && m.tabDrag.Lifted
 	order := tabOrder(len(tabs), from, m.tabDrag.To-offset, lifted)
 	var rects []ui.Rect
 	var others []int
@@ -952,7 +991,11 @@ func (m *Model) tabButtons(c *ui.Context, p *ui.Theme, oi oiColors, tabs []*Tab,
 		if vertical {
 			height = oiTabColumnTab
 		}
-		tab := ui.Row(c.Key(fmt.Sprintf("tab:%d", i))).Height(height).
+		key := fmt.Sprintf("tab:%d", i)
+		if g.ref == groupSplit {
+			key = fmt.Sprintf("splitTab:%d", i)
+		}
+		tab := ui.Row(c.Key(key)).Height(height).
 			Padding(0, 10).Gap(6).Radius(6).AlignItems(ui.Center)
 		if vertical {
 			tab.MinWidth(0)
@@ -960,11 +1003,17 @@ func (m *Model) tabButtons(c *ui.Context, p *ui.Theme, oi oiColors, tabs []*Tab,
 		slot := lifted && j == from
 		if slot {
 			tab.Width(m.tabDrag.W).Background(oi.toolbarHover)
-		} else if i == m.active {
+		} else if i == g.active {
 			if reveal {
 				tab.ScrollIntoView()
 			}
-			tab.Background(oi.tabSelected).BorderWidth(1).BorderColor(oi.tabSelectedBorder)
+			// The tab the group shows is tinted; the one an unfocused group
+			// shows is muted, as OpenIDEA fades the pane that has no focus.
+			if g.focused {
+				tab.Background(oi.tabSelected).BorderWidth(1).BorderColor(oi.tabSelectedBorder)
+			} else {
+				tab.Background(oi.toolbarHover)
+			}
 		} else if tab.Hovered() {
 			tab.Background(oi.toolbarHover)
 		}
@@ -974,7 +1023,7 @@ func (m *Model) tabButtons(c *ui.Context, p *ui.Theme, oi oiColors, tabs []*Tab,
 					tab.Tooltip(path)
 				}
 			}
-			name, dir := m.tabLabel(t)
+			name, dir := m.tabLabelIn(g.tabs, t)
 			tab.Children(func() {
 				closeButton := func() {
 					close := ui.Row(c).Size(20, 20).Radius(4).
@@ -986,7 +1035,7 @@ func (m *Model) tabButtons(c *ui.Context, p *ui.Theme, oi oiColors, tabs []*Tab,
 						ui.Icon(c, iconClose).Size(14, 14).TextColor(oi.textMuted)
 					})
 					if close.Clicked() {
-						m.closeTab(i)
+						m.closeTabThen(t, nil)
 					}
 				}
 				if !m.tabPrefs.NoCloseButton && m.tabPrefs.CloseButtonLeft {
@@ -1021,7 +1070,7 @@ func (m *Model) tabButtons(c *ui.Context, p *ui.Theme, oi oiColors, tabs []*Tab,
 			})
 			tab.ContextMenu(func(menu *ui.Menu) { m.tabMenu(menu, t) })
 			if tab.Clicked() {
-				m.activate(i)
+				m.activateIn(g.ref, i)
 			}
 		}
 		if !vertical {
@@ -1029,7 +1078,9 @@ func (m *Model) tabButtons(c *ui.Context, p *ui.Theme, oi oiColors, tabs []*Tab,
 				rects = append(rects, b)
 				others = append(others, j)
 			}
-			m.tabDragPress(tab, i)
+			if g.focused {
+				m.tabDragPress(tab, i)
+			}
 		}
 	}
 	if !lifted {
@@ -1319,18 +1370,23 @@ func (m *Model) statusBar(c *ui.Context, p *ui.Theme) {
 // leave pinned tabs alone, then Pin or Unpin and Keep Tab Open for the clicked
 // tab, the file actions and the editor-tabs settings the menu opens.
 func (m *Model) tabMenu(menu *ui.Menu, t *Tab) {
-	at := m.tabIndex(t)
+	g, ok := m.groupOf(t)
+	if !ok {
+		return
+	}
+	tabs := m.groupTabsAt(g)
+	at := tabIndexIn(tabs, t)
 	path := tabPath(t)
 	if menu.Item("Close").Shortcut(ui.Cmd, ui.KeyW).Chosen() {
 		m.closeTabThen(t, nil)
 	}
-	if menu.Item("Close Other Tabs").Disabled(len(m.tabs) < 2).Chosen() {
+	if menu.Item("Close Other Tabs").Disabled(len(tabs) < 2).Chosen() {
 		m.CloseOtherTabs(t)
 	}
 	if menu.Item("Close Tabs to the Left").Disabled(at <= 0).Chosen() {
 		m.CloseTabsToLeft(t)
 	}
-	if menu.Item("Close Tabs to the Right").Disabled(at < 0 || at >= len(m.tabs)-1).Chosen() {
+	if menu.Item("Close Tabs to the Right").Disabled(at < 0 || at >= len(tabs)-1).Chosen() {
 		m.CloseTabsToRight(t)
 	}
 	if menu.Item("Close All Tabs").Chosen() {
@@ -1360,6 +1416,51 @@ func (m *Model) tabMenu(menu *ui.Menu, t *Tab) {
 	if t.preview {
 		if menu.Item("Keep Tab Open").Chosen() {
 			m.promoteTab(t)
+		}
+	}
+	menu.Separator()
+	// The split entries act on the tab's own group, as OpenIDEA's tab menu
+	// does; the opposite-group entries appear once the editor has two groups.
+	// A tab in the unfocused group takes the keyboard first, so the commands
+	// that act on the active tab act on this one.
+	focusT := func() {
+		if g != groupFocused {
+			m.focusGroup(groupSplit)
+		}
+	}
+	if menu.Item("Split and Move Right").Chosen() {
+		focusT()
+		m.SplitAndMoveRight()
+	}
+	if menu.Item("Split and Move Down").Chosen() {
+		focusT()
+		m.SplitAndMoveDown()
+	}
+	if menu.Item("Split Right").Shortcut(ui.Cmd, ui.KeyBackslash).Chosen() {
+		focusT()
+		m.SplitEditorRight()
+	}
+	if menu.Item("Split Down").Chosen() {
+		focusT()
+		m.SplitEditorDown()
+	}
+	if m.split != nil {
+		if menu.Item("Move to Opposite Group").Chosen() {
+			focusT()
+			m.MoveToOppositeGroup()
+		}
+		if menu.Item("Open in Opposite Group").Chosen() {
+			focusT()
+			m.OpenInOppositeGroup()
+		}
+		if menu.Item("Change Splitter Orientation").Chosen() {
+			m.ChangeSplitterOrientation()
+		}
+		if menu.Item("Unsplit").Chosen() {
+			m.Unsplit()
+		}
+		if menu.Item("Unsplit All").Chosen() {
+			m.UnsplitAll()
 		}
 	}
 	menu.Separator()

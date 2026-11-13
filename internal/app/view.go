@@ -298,33 +298,47 @@ func (m *Model) bannerRow(c *ui.Context, p *ui.Theme) {
 		})
 }
 
-func (m *Model) editorArea(c *ui.Context, p *ui.Theme) {
-	t := m.tab()
+func (m *Model) editorArea(c *ui.Context, p *ui.Theme, g groupView) {
+	t := g.tab()
 	if t == nil {
 		// An open project with no editor tab: IDEA's empty editor, the hints
 		// that get a file open.
 		m.emptyEditor(c, p)
 		return
 	}
-	ui.Column(c.Key("editor:" + t.doc.Path())).Grow(1).MinHeight(0).MinWidth(0).
+	key := "editor:" + t.doc.Path()
+	if g.ref == groupSplit {
+		key += ":split"
+	}
+	ui.Column(c.Key(key)).Grow(1).MinHeight(0).MinWidth(0).
 		Background(p.Background).Children(func() {
 		// Breadcrumbs sit above the text unless Settings › Editor ›
 		// Breadcrumbs puts them below it, and they are hidden when the page
 		// says so.
 		top := !m.crumbs.Hidden && !m.crumbs.AtBottom()
 		if top {
-			m.breadcrumbs(c, p, t)
+			m.breadcrumbs(c, p, t, g)
 		}
-		editor.View(c, t.state).Grow(1).MinHeight(0)
+		view := editor.View(c, t.state).Grow(1).MinHeight(0)
+		// A click in the unfocused pane takes the keyboard back to the main
+		// group, whose commands act on m.tabs; applyTab always runs before the
+		// next frame, so the queued swap lands between frames.
+		switch {
+		case g.focused && m.focusApply:
+			m.focusApply = false
+			view.Focus()
+		case !g.focused && view.Focused():
+			m.focusQueued = true
+		}
 		if !top && !m.crumbs.Hidden {
-			m.breadcrumbs(c, p, t)
+			m.breadcrumbs(c, p, t, g)
 		}
 	})
 }
 
 // breadcrumbs is the file and symbol chain the caret sits in; a symbol jumps
 // to its declaration.
-func (m *Model) breadcrumbs(c *ui.Context, p *ui.Theme, t *Tab) {
+func (m *Model) breadcrumbs(c *ui.Context, p *ui.Theme, t *Tab, g groupView) {
 	pos := t.state.CursorPos()
 	chain := outlinePath(t.outline, pos.Line)
 	ui.Row(c).Height(26).Shrink(0).Padding(0, 10).Gap(4).AlignItems(ui.Center).
@@ -334,7 +348,7 @@ func (m *Model) breadcrumbs(c *ui.Context, p *ui.Theme, t *Tab) {
 			for i, it := range chain {
 				it := it
 				ui.Text(c, "›").FontSize(11).TextColor(p.TextMuted)
-				chip := ui.Row(c.Key(fmt.Sprintf("bc:%d:%s", i, it.Name))).Padding(2, 4).
+				chip := ui.Row(c.Key(fmt.Sprintf("bc:%d:%d:%s", g.ref, i, it.Name))).Padding(2, 4).
 					AlignItems(ui.Center)
 				if chip.Hovered() {
 					chip.Background(p.SurfaceHover)
@@ -346,6 +360,9 @@ func (m *Model) breadcrumbs(c *ui.Context, p *ui.Theme, t *Tab) {
 					line, col := t.doc.BytePos(
 						int(it.SelectionRange.Start.Line), int(it.SelectionRange.Start.Col))
 					t.state.GoTo(editor.Pos{Line: line, Col: col})
+					if g.ref == groupSplit {
+						m.focusQueued = true
+					}
 					m.invalidate()
 				}
 			}

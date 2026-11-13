@@ -114,6 +114,18 @@ type Model struct {
 	active int
 	tree   *Tree
 
+	// split is the second editor window group, or nil while the editor is one
+	// group. The focused group stays in tabs and active; the other lives in
+	// split. splitDown stacks the two, splitFirst draws the split group left
+	// or above, and focusQueued moves the keyboard to the split group on the
+	// next frame after its editor took it. focusApply gives the keyboard to
+	// the editor of the group that just became focused.
+	split       *splitGroup
+	splitDown   bool
+	splitFirst  bool
+	focusQueued bool
+	focusApply  bool
+
 	// closedTabs is the tab history Reopen Closed Tab pops, most recently
 	// closed last as OpenIDEA's tabs store keeps it.
 	closedTabs []closedTab
@@ -720,11 +732,22 @@ func (m *Model) openProject(dir string, files []string) {
 		}
 		m.layouts[layoutKey(prev)] = m.currentLayout()
 	}
-	old := append([]*Tab(nil), m.tabs...)
+	old := m.allTabs()
 	pinned := map[string]bool{}
 	for _, p := range m.session().Pinned {
 		pinned[realPath(p)] = true
 	}
+	// The second window group comes back with its files, its active tab and
+	// its side, as the first group's files come back.
+	sess := m.session()
+	var splitFiles []string
+	for _, p := range sess.SplitFiles {
+		p = realPath(p)
+		if inProject(dir, p) {
+			splitFiles = append(splitFiles, p)
+		}
+	}
+	splitActive, splitDown, splitFirst := sess.SplitActive, sess.SplitDown, sess.SplitFirst
 	oldRun := m.run.runID
 	oldDebug := m.debug.session
 	var oldTerms []uint32
@@ -737,6 +760,7 @@ func (m *Model) openProject(dir string, files []string) {
 		}
 	}
 	m.tabs, m.active = nil, 0
+	m.split, m.splitDown, m.splitFirst, m.focusQueued = nil, false, false, false
 	m.banner, m.bannerPath = "", ""
 	m.showingWelcome = false
 	m.resetRun()
@@ -810,6 +834,15 @@ func (m *Model) openProject(dir string, files []string) {
 			}
 			docs = append(docs, doc)
 		}
+		var splitDocs []*docbridge.Document
+		for _, p := range splitFiles {
+			doc, err := m.reg.Open(ctx, p)
+			if err != nil {
+				failed = append(failed, filepath.Base(p))
+				continue
+			}
+			splitDocs = append(splitDocs, doc)
+		}
 		focus := m.session().Focus
 		if focus != "" {
 			focus = realPath(focus)
@@ -841,6 +874,26 @@ func (m *Model) openProject(dir string, files []string) {
 			for i, t := range m.tabs {
 				if t.doc.Path() == focus {
 					m.active = i
+				}
+			}
+			// The second window group comes back with its tabs, side and
+			// stacked or side-by-side orientation.
+			if len(splitDocs) > 0 {
+				s := &splitGroup{}
+				for _, doc := range splitDocs {
+					s.tabs = append(s.tabs, m.newTab(doc))
+				}
+				s.active = min(max(splitActive, 0), len(s.tabs)-1)
+				m.split = s
+				m.splitDown, m.splitFirst = splitDown, splitFirst
+				if focus != "" && m.tabForPath(focus) < 0 {
+					for i, t := range s.tabs {
+						if t.doc.Path() == focus {
+							m.focusGroup(groupSplit)
+							m.active = i
+							break
+						}
+					}
 				}
 			}
 			if m.tree != nil {
@@ -941,13 +994,23 @@ type openSpec struct {
 func (m *Model) openWith(path string, spec openSpec) {
 	preview := spec.preview && m.tabPrefs.previews()
 	path = realPath(path)
-	for i, t := range m.tabs {
-		if t.doc.Path() == path {
-			if !preview {
-				m.promoteTab(t)
+	if i := m.tabForPath(path); i >= 0 {
+		if !preview {
+			m.promoteTab(m.tabs[i])
+		}
+		m.activate(i)
+		return
+	}
+	if m.split != nil {
+		for i, t := range m.split.tabs {
+			if t.doc.Path() == path {
+				if !preview {
+					m.promoteTab(t)
+				}
+				m.focusGroup(groupSplit)
+				m.activateIn(groupFocused, i)
+				return
 			}
-			m.activate(i)
-			return
 		}
 	}
 	if m.busy || m.Root() == "" {
@@ -1008,6 +1071,15 @@ func (m *Model) tab() *Tab {
 }
 
 func (m *Model) activate(i int) {
+	m.activateIn(groupFocused, i)
+}
+
+// activateIn shows the tab at i in the window group g; g is the focused group
+// by the time the replacement tab is applied.
+func (m *Model) activateIn(g groupRef, i int) {
+	if g == groupSplit {
+		m.focusGroup(groupSplit)
+	}
 	if i < 0 || i >= len(m.tabs) || i == m.active {
 		return
 	}
@@ -1042,37 +1114,34 @@ func (m *Model) dropTab(i int) { m.removeTab(m.tabs[i]) }
 
 // removeTab closes t and puts it in the closed history Reopen Closed Tab pops.
 func (m *Model) removeTab(t *Tab) {
-	if idx := m.tabIndex(t); idx >= 0 && t.doc != nil {
-		m.rememberClosed(closedTab{path: t.doc.Path(), index: idx, pinned: t.pinned})
+	if g, ok := m.groupOf(t); ok && t.doc != nil {
+		m.rememberClosed(closedTab{path: t.doc.Path(), index: tabIndexIn(m.groupTabsAt(g), t), pinned: t.pinned})
 	}
 	m.removeTabNow(t)
 }
 
-// removeTabNow takes t out of the strip without the closed history, as the
-// preview trim and the preview slot's reuse do.
+// removeTabNow takes t out of its window group without the closed history, as
+// the preview trim and the preview slot's reuse do.
 func (m *Model) removeTabNow(t *Tab) {
-	idx := m.tabIndex(t)
-	if idx < 0 {
+	g, ok := m.groupOf(t)
+	if !ok {
 		return
 	}
-	wasActive := idx == m.active
-	m.tabs = append(m.tabs[:idx], m.tabs[idx+1:]...)
+	m.removeFromGroup(g, t)
 	if m.rename != nil && m.rename.tab == t {
 		m.rename = nil
 	}
-	switch {
-	case len(m.tabs) == 0:
-		m.active = 0
-	case wasActive:
-		m.active = nextActiveAfterClose(m.tabs, idx, m.tabPrefs.activation())
-	case idx < m.active:
-		m.active--
+	m.settleGroups()
+	if t.doc != nil {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			_ = m.reg.Close(ctx, t.doc.Path())
+		}()
 	}
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		_ = m.reg.Close(ctx, t.doc.Path())
-	}()
+	if len(m.tabs) == 0 {
+		m.active = 0
+	}
 	m.applyActive()
 	m.saveSession()
 	m.invalidate()
@@ -1314,6 +1383,14 @@ func (m *Model) sessionSnapshot() (Session, bool) {
 	if t := m.tab(); t != nil {
 		focus = t.doc.Path()
 	}
+	var splitFiles []string
+	splitActive := 0
+	if m.split != nil {
+		for _, t := range m.split.tabs {
+			splitFiles = append(splitFiles, t.doc.Path())
+		}
+		splitActive = m.split.active
+	}
 	layouts := make(map[string]Layout, len(m.layouts))
 	for key, l := range m.layouts {
 		layouts[key] = l.clone()
@@ -1326,6 +1403,10 @@ func (m *Model) sessionSnapshot() (Session, bool) {
 	keep := append([]string{root}, m.recents...)
 	return Session{Root: root, Files: normalizeFiles(files), Focus: focus,
 		Pinned:         pinned,
+		SplitFiles:     normalizeFiles(splitFiles),
+		SplitActive:    splitActive,
+		SplitDown:      m.splitDown,
+		SplitFirst:     m.splitFirst,
 		Bookmarks:      append([]Bookmark(nil), m.bookmarks...),
 		PathBookmarks:  append([]PathBookmark(nil), m.pathBookmarks...),
 		BookmarkLists:  append([]BookmarkList(nil), m.bookmarkLists...),
@@ -1501,6 +1582,14 @@ func (m *Model) View(c *ui.Context) {
 	}
 	if m.maximized && m.visibleTool() == "" {
 		m.maximized = false
+	}
+	// A click in the split pane's editor asked for the keyboard: the groups
+	// swap here, between frames, and the editor of the group that is now
+	// focused takes it back while this frame builds.
+	if m.focusQueued && m.split != nil {
+		m.focusQueued = false
+		m.focusGroup(groupSplit)
+		m.focusApply = true
 	}
 	_, m.frameHeight = c.Size()
 	m.shortcuts(c)
@@ -1707,6 +1796,18 @@ func (m *Model) shortcuts(c *ui.Context) {
 		if c.Shortcut(ui.Ctrl, ui.KeyLeft) || c.Shortcut(ui.Cmd|ui.Shift, ui.KeyBracketLeft) {
 			m.activate((m.active - 1 + n) % n)
 		}
+	}
+	// OpenIDEA's keymap splits the editor right with Cmd+\ and moves between
+	// the window groups with Alt+Tab / Alt+Shift+Tab (editor.splitRight,
+	// editor.nextSplitter, editor.prevSplitter).
+	if c.Shortcut(ui.Cmd, ui.KeyBackslash) && !m.overlayOpen() {
+		m.SplitEditorRight()
+	}
+	if c.Shortcut(ui.Alt, ui.KeyTab) && !m.overlayOpen() {
+		m.GoToNextSplitter()
+	}
+	if c.Shortcut(ui.Alt|ui.Shift, ui.KeyTab) && !m.overlayOpen() {
+		m.GoToPreviousSplitter()
 	}
 	if c.Shortcut(ui.Modifiers(0), ui.KeyF5) {
 		m.Run()
