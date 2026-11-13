@@ -38,6 +38,7 @@ const (
 	settingsPageGeneral          = "editor.general"
 	settingsPageEditorAppearance = "editor.general.appearance"
 	settingsPageBreadcrumbs      = "editor.general.breadcrumbs"
+	settingsPageEditorTabs       = "editor.general.editorTabs"
 	settingsPageCodeFolding      = "editor.general.codeFolding"
 	settingsPageEditorFont       = "editor.font"
 	settingsPageJava             = "languages.java"
@@ -64,6 +65,18 @@ type settingsDraft struct {
 	softWrap      bool
 	softWrapFiles string
 	scrollPastEnd bool
+	// The tab fields are Editor Tabs' staged strip: where it sits, what a tab
+	// shows, where its close button is, how tabs are ordered and the limit.
+	tabPlacement              string
+	pinnedSeparateRow         bool
+	showExtension             bool
+	showDirectoryForNonUnique bool
+	markModified              bool
+	showFullPathOnHover       bool
+	closePosition             string
+	sortAlphabetically        bool
+	openAtEnd                 bool
+	tabLimit                  int
 }
 
 // appearance is the staged switches as the editor stores them.
@@ -91,6 +104,33 @@ func (d settingsDraft) breadcrumbs() BreadcrumbPrefs {
 		b.Placement = "bottom"
 	}
 	return b
+}
+
+// tabPrefs is the staged Editor Tabs strip as the preferences store it, with
+// the defaults left out so the zero value stays OpenIDEA's look.
+func (d settingsDraft) tabPrefs() TabPrefs {
+	t := TabPrefs{
+		PinnedSeparateRow:       d.pinnedSeparateRow,
+		HideExtension:           !d.showExtension,
+		NoDirectoryForNonUnique: !d.showDirectoryForNonUnique,
+		MarkModified:            d.markModified,
+		HideFullPathOnHover:     !d.showFullPathOnHover,
+		SortAlphabetically:      d.sortAlphabetically,
+		OpenAtEnd:               d.openAtEnd,
+	}
+	if d.tabPlacement != "top" {
+		t.Placement = d.tabPlacement
+	}
+	switch d.closePosition {
+	case "none":
+		t.NoCloseButton = true
+	case "left":
+		t.CloseButtonLeft = true
+	}
+	if d.tabLimit != defaultTabLimit {
+		t.TabLimit = d.tabLimit
+	}
+	return t
 }
 
 // settingsPageSpec is a settings page this build carries: what
@@ -163,6 +203,23 @@ func settingsPages() []settingsPageSpec {
 				"Show breadcrumbs:", "Top", "Bottom",
 			},
 			section: "breadcrumbs",
+		},
+		{
+			id:    settingsPageEditorTabs,
+			title: "Editor Tabs",
+			group: "Editor",
+			order: 5,
+			keywords: []string{
+				"tab limit", "preview tab", "close button", "pinned", "squeeze", "rows",
+			},
+			labels: []string{
+				"Tab placement", "Top", "Bottom", "None",
+				"Show pinned tabs in a separate row", "Show file extension",
+				"Show directory for non-unique file names", "Mark modified (*)",
+				"Show full path on mouse hover", "Close button position:", "Right", "Left",
+				"Sort tabs alphabetically", "Open new tabs at the end", "Tab limit",
+			},
+			section: "editorTabs",
 		},
 		{
 			id:    settingsPageCodeFolding,
@@ -569,19 +626,43 @@ func (m *Model) settingsDraftFromPrefs() settingsDraft {
 	if m.prefs.Breadcrumbs.AtBottom() {
 		placement = "bottom"
 	}
+	tabPlacement := "top"
+	if m.prefs.Tabs.AtBottom() {
+		tabPlacement = "bottom"
+	}
+	if m.prefs.Tabs.Hidden() {
+		tabPlacement = "none"
+	}
+	closePosition := "right"
+	if m.prefs.Tabs.NoCloseButton {
+		closePosition = "none"
+	}
+	if m.prefs.Tabs.CloseButtonLeft {
+		closePosition = "left"
+	}
 	return settingsDraft{
-		theme:               m.prefs.Theme,
-		fontSize:            m.prefs.fontSize(),
-		zenWidth:            m.prefs.zenWidth(),
-		lineNumbers:         !m.prefs.Editor.NoLineNumbers,
-		showWhitespace:      m.prefs.Editor.ShowWhitespace,
-		indentGuides:        !m.prefs.Editor.NoIndentGuides,
-		showFolding:         !m.prefs.Editor.NoFolding,
-		showBreadcrumbs:     !m.prefs.Breadcrumbs.Hidden,
-		breadcrumbPlacement: placement,
-		softWrap:            m.prefs.Editor.SoftWrap,
-		softWrapFiles:       m.prefs.Editor.softWrapFiles(),
-		scrollPastEnd:       m.prefs.Editor.ScrollPastEnd,
+		theme:                     m.prefs.Theme,
+		fontSize:                  m.prefs.fontSize(),
+		zenWidth:                  m.prefs.zenWidth(),
+		lineNumbers:               !m.prefs.Editor.NoLineNumbers,
+		showWhitespace:            m.prefs.Editor.ShowWhitespace,
+		indentGuides:              !m.prefs.Editor.NoIndentGuides,
+		showFolding:               !m.prefs.Editor.NoFolding,
+		showBreadcrumbs:           !m.prefs.Breadcrumbs.Hidden,
+		breadcrumbPlacement:       placement,
+		softWrap:                  m.prefs.Editor.SoftWrap,
+		softWrapFiles:             m.prefs.Editor.softWrapFiles(),
+		scrollPastEnd:             m.prefs.Editor.ScrollPastEnd,
+		tabPlacement:              tabPlacement,
+		pinnedSeparateRow:         m.prefs.Tabs.PinnedSeparateRow,
+		showExtension:             !m.prefs.Tabs.HideExtension,
+		showDirectoryForNonUnique: !m.prefs.Tabs.NoDirectoryForNonUnique,
+		markModified:              m.prefs.Tabs.MarkModified,
+		showFullPathOnHover:       !m.prefs.Tabs.HideFullPathOnHover,
+		closePosition:             closePosition,
+		sortAlphabetically:        m.prefs.Tabs.SortAlphabetically,
+		openAtEnd:                 m.prefs.Tabs.OpenAtEnd,
+		tabLimit:                  m.prefs.Tabs.limit(),
 	}
 }
 
@@ -704,13 +785,120 @@ func (m *Model) settingsSetScrollPastEnd(on bool) {
 	m.settingsPreview()
 }
 
-// settingsPreview draws the staged theme, font, editor appearance and
-// breadcrumbs in this window.
+// settingsSetTabPlacement stages the Tab placement select: where the editor
+// strip sits, or none to hide it.
+func (m *Model) settingsSetTabPlacement(place string) {
+	switch place {
+	case "top", "bottom", "none":
+	default:
+		return
+	}
+	if m.settingsDraft.tabPlacement == place {
+		return
+	}
+	m.settingsDraft.tabPlacement = place
+	m.settingsPreview()
+}
+
+// settingsSetPinnedSeparateRow stages the pinned tabs row switch.
+func (m *Model) settingsSetPinnedSeparateRow(on bool) {
+	if m.settingsDraft.pinnedSeparateRow == on {
+		return
+	}
+	m.settingsDraft.pinnedSeparateRow = on
+	m.settingsPreview()
+}
+
+// settingsSetShowExtension stages the Show file extension switch.
+func (m *Model) settingsSetShowExtension(on bool) {
+	if m.settingsDraft.showExtension == on {
+		return
+	}
+	m.settingsDraft.showExtension = on
+	m.settingsPreview()
+}
+
+// settingsSetShowDirectoryForNonUnique stages the directory suffix switch.
+func (m *Model) settingsSetShowDirectoryForNonUnique(on bool) {
+	if m.settingsDraft.showDirectoryForNonUnique == on {
+		return
+	}
+	m.settingsDraft.showDirectoryForNonUnique = on
+	m.settingsPreview()
+}
+
+// settingsSetMarkModified stages the Mark modified switch.
+func (m *Model) settingsSetMarkModified(on bool) {
+	if m.settingsDraft.markModified == on {
+		return
+	}
+	m.settingsDraft.markModified = on
+	m.settingsPreview()
+}
+
+// settingsSetShowFullPathOnHover stages the full-path tooltip switch.
+func (m *Model) settingsSetShowFullPathOnHover(on bool) {
+	if m.settingsDraft.showFullPathOnHover == on {
+		return
+	}
+	m.settingsDraft.showFullPathOnHover = on
+	m.settingsPreview()
+}
+
+// settingsSetClosePosition stages the close button position select.
+func (m *Model) settingsSetClosePosition(place string) {
+	switch place {
+	case "right", "left", "none":
+	default:
+		return
+	}
+	if m.settingsDraft.closePosition == place {
+		return
+	}
+	m.settingsDraft.closePosition = place
+	m.settingsPreview()
+}
+
+// settingsSetSortTabs stages the Sort tabs alphabetically switch and the
+// strip reorders to show it.
+func (m *Model) settingsSetSortTabs(on bool) {
+	if m.settingsDraft.sortAlphabetically == on {
+		return
+	}
+	m.settingsDraft.sortAlphabetically = on
+	m.settingsPreview()
+}
+
+// settingsSetOpenAtEnd stages the Open new tabs at the end switch.
+func (m *Model) settingsSetOpenAtEnd(on bool) {
+	if m.settingsDraft.openAtEnd == on {
+		return
+	}
+	m.settingsDraft.openAtEnd = on
+	m.settingsPreview()
+}
+
+// settingsSetTabLimit stages the Tab limit field, clamped to its range. The
+// previewed strip keeps the draft's limit, but the limit only closes tabs when
+// a file opens, so staging can not drop one.
+func (m *Model) settingsSetTabLimit(limit int) {
+	limit = max(1, min(limit, maxTabLimit))
+	if m.settingsDraft.tabLimit == limit {
+		return
+	}
+	m.settingsDraft.tabLimit = limit
+	m.settingsPreview()
+}
+
+// settingsPreview draws the staged theme, font, editor appearance,
+// breadcrumbs and tab strip in this window.
 func (m *Model) settingsPreview() {
 	m.theme = themeForName(m.settingsDraft.theme)
 	m.applyEditorFont(m.settingsDraft.fontSize)
 	m.applyAppearanceToTabs(m.settingsDraft.appearance())
 	m.crumbs = m.settingsDraft.breadcrumbs()
+	m.tabPrefs = m.settingsDraft.tabPrefs()
+	m.sortTabsAlphabetically()
 	m.invalidate()
 }
 
@@ -720,6 +908,7 @@ func (m *Model) settingsPending() bool {
 	for _, key := range []string{
 		settingsPageAppearance, settingsPageEditorFont, settingsPageEditorAppearance,
 		settingsPageBreadcrumbs, settingsPageCodeFolding, settingsPageGeneral,
+		settingsPageEditorTabs,
 	} {
 		if m.settingsDirtyPage(key) {
 			return true
@@ -750,6 +939,8 @@ func (m *Model) settingsDirtyPage(key string) bool {
 		return m.settingsDraft.softWrap != m.prefs.Editor.SoftWrap ||
 			m.settingsDraft.softWrapFiles != m.prefs.Editor.softWrapFiles() ||
 			m.settingsDraft.scrollPastEnd != m.prefs.Editor.ScrollPastEnd
+	case settingsPageEditorTabs:
+		return m.settingsDraft.tabPrefs() != m.prefs.Tabs
 	}
 	return false
 }
@@ -776,6 +967,17 @@ func (m *Model) settingsResetPage() {
 		m.settingsDraft.softWrap = false
 		m.settingsDraft.softWrapFiles = defaultSoftWrapFiles
 		m.settingsDraft.scrollPastEnd = false
+	case settingsPageEditorTabs:
+		m.settingsDraft.tabPlacement = "top"
+		m.settingsDraft.pinnedSeparateRow = false
+		m.settingsDraft.showExtension = true
+		m.settingsDraft.showDirectoryForNonUnique = true
+		m.settingsDraft.markModified = false
+		m.settingsDraft.showFullPathOnHover = true
+		m.settingsDraft.closePosition = "right"
+		m.settingsDraft.sortAlphabetically = false
+		m.settingsDraft.openAtEnd = false
+		m.settingsDraft.tabLimit = defaultTabLimit
 	default:
 		return
 	}
@@ -790,6 +992,7 @@ func (m *Model) applySettings() {
 	m.prefs.ZenWidth = m.settingsDraft.zenWidth
 	m.prefs.Editor = m.settingsDraft.appearance()
 	m.prefs.Breadcrumbs = m.settingsDraft.breadcrumbs()
+	m.prefs.Tabs = m.settingsDraft.tabPrefs()
 	m.settingsErr = ""
 	if err := m.prefs.Save(m.settingsWritePath()); err != nil {
 		m.settingsErr = err.Error()

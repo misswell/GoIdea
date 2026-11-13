@@ -249,6 +249,10 @@
       "status": "partial",
       "evidence": "internal/app/settings_pages.go settingsCodeFoldingBody: Show code folding outline checkbox over Preferences.Editor.NoFolding feeding the MyGo editor fold markers, staged through settingsDraft and proven by settings_test.go TestSettingsCodeFoldingStagesAndApplies; the Fold by default file header, imports and doc comment types are not ported"
     },
+    "settings-page:editor.general.editorTabs": {
+      "status": "partial",
+      "evidence": "internal/app/settings_pages.go settingsEditorTabsBody: Tab placement Top/Bottom/None, Show pinned tabs in a separate row, Show file extension, Show directory for non-unique file names, Mark modified (*), Show full path on mouse hover, Close button position Right/Left/None, Sort tabs alphabetically, Open new tabs at the end and Tab limit 1-100 over Preferences.Tabs feeding the workbench tab strip (internal/app/workbench.go) and insertion/sort/limit (internal/app/tabs.go), staged through settingsDraft and proven by settings_test.go TestSettingsEditorTabsStageAndApply and tabs_test.go TestTabLabelFollowsTheStripSettings, TestInsertTabAfterTheActiveOneOrAtTheEnd, TestSortTabsByTitlePinsFirstAndKeepsTheActiveTab, TestTabLimitCandidatesKeepPinnedActiveAndUnsaved; the Show tabs in scroll/squeeze/several rows select, Show file icon, preview tab, closing policy and activate-on-close radios (GoIDEA never closes unsaved tabs automatically) and the left/right vertical placements are not ported"
+    },
     "settings-page:languages.java": {
       "status": "partial",
       "evidence": "internal/app/settings_ui.go javaToolsSection lists the real JDT LS/java-debug state with install and cancel; JDK selection is not ported"

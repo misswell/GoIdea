@@ -57,6 +57,10 @@ type Tab struct {
 	// bulk closes leave it, except Close All Tabs.
 	pinned bool
 
+	// used is when the tab was last activated, so the tab limit closes the
+	// least recently used one.
+	used uint64
+
 	// diskTime and diskSize are the file when the buffer last matched it, so
 	// a write by another program is noticed; reloading marks one in flight.
 	diskTime  time.Time
@@ -104,6 +108,12 @@ type Model struct {
 	tabs   []*Tab
 	active int
 	tree   *Tree
+
+	// tabPrefs is Settings › Editor › Editor Tabs as the strip draws it, which
+	// the settings preview stages; it follows prefs.Tabs on Apply. tabUse
+	// counts activations for the tab limit's least-recently-used order.
+	tabPrefs TabPrefs
+	tabUse   uint64
 
 	// diags is the newest diagnostics per file path and producer, which the
 	// tabs of that file and the Problems tool window show.
@@ -863,6 +873,7 @@ func (m *Model) newTab(doc *docbridge.Document) *Tab {
 	}
 	t.state.Font = ui.Font{Size: m.prefs.fontSize()}
 	m.applyTabZenGutter(t)
+	m.noteTabUse(t)
 	t.state.OnGutterClick = func(line int) { m.toggleBreakpointAt(path, line) }
 	t.state.OnCompletion = func(req editor.CompletionRequest) { m.requestCompletion(t, req) }
 	t.state.OnHover = func(req editor.HoverRequest) { m.requestHover(t, req) }
@@ -898,8 +909,13 @@ func (m *Model) openFile(path string) {
 				m.fail(path, err)
 				return
 			}
-			m.tabs = append(m.tabs, m.newTab(doc))
-			m.active = len(m.tabs) - 1
+			tab := m.newTab(doc)
+			m.insertTab(tab)
+			m.active = m.tabIndex(tab)
+			m.sortTabsAlphabetically()
+			m.active = m.tabIndex(tab)
+			m.enforceTabLimit()
+			m.active = m.tabIndex(tab)
 			m.revealEditor()
 			if m.tree != nil {
 				m.tree.reveal(path)
@@ -927,6 +943,7 @@ func (m *Model) activate(i int) {
 	}
 	m.revealEditor()
 	m.active = i
+	m.noteTabUse(m.tabs[i])
 	m.applyActive()
 	m.applyReveal(m.tabs[i])
 	m.markRecent(m.tabs[i].doc.Path())

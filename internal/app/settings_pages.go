@@ -29,6 +29,8 @@ func (m *Model) settingsPageBody(c *ui.Context, p *ui.Theme, oi oiColors, node s
 		m.settingsGeneralBody(c, oi)
 	case "breadcrumbs":
 		m.settingsBreadcrumbsBody(c, oi)
+	case "editorTabs":
+		m.settingsEditorTabsBody(c, oi)
 	case "codeFolding":
 		m.settingsCodeFoldingBody(c)
 	case "editorFont":
@@ -185,6 +187,117 @@ func (m *Model) settingsBreadcrumbsBody(c *ui.Context, oi oiColors) {
 	if place != m.settingsDraft.breadcrumbPlacement {
 		m.settingsSetBreadcrumbPlacement(place)
 	}
+}
+
+// settingsEditorTabsBody is Editor › General › Editor Tabs: the strip's
+// placement and what a tab shows, then the tab order and the closing limit, in
+// general.tsx's order. "Show tabs in", the file icon, the preview tab and the
+// closing-policy radios name behaviour this build does not carry, so they are
+// not drawn.
+func (m *Model) settingsEditorTabsBody(c *ui.Context, oi oiColors) {
+	settingsSectionTitle(c, oi, "Appearance")
+	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).PaddingStart(20).Children(func() {
+		settingsFormLabel(c, oi, "Tab placement", 220)
+		shown := tabPlacementLabel(m.settingsDraft.tabPlacement)
+		sel := ui.Select(c, &shown, []string{"Top", "Bottom", "None"})
+		if sel.Changed() {
+			m.settingsSetTabPlacement(tabPlacementValue(shown))
+		}
+	})
+	pinnedRow := m.settingsDraft.pinnedSeparateRow
+	if ui.Checkbox(c, &pinnedRow, "Show pinned tabs in a separate row").Changed() {
+		m.settingsSetPinnedSeparateRow(pinnedRow)
+	}
+	extension := m.settingsDraft.showExtension
+	if ui.Checkbox(c, &extension, "Show file extension").Changed() {
+		m.settingsSetShowExtension(extension)
+	}
+	directory := m.settingsDraft.showDirectoryForNonUnique
+	if ui.Checkbox(c, &directory, "Show directory for non-unique file names").Changed() {
+		m.settingsSetShowDirectoryForNonUnique(directory)
+	}
+	modified := m.settingsDraft.markModified
+	if ui.Checkbox(c, &modified, "Mark modified (*)").Changed() {
+		m.settingsSetMarkModified(modified)
+	}
+	fullPath := m.settingsDraft.showFullPathOnHover
+	if ui.Checkbox(c, &fullPath, "Show full path on mouse hover").Changed() {
+		m.settingsSetShowFullPathOnHover(fullPath)
+	}
+	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).PaddingStart(20).Children(func() {
+		settingsFormLabel(c, oi, "Close button position:", 220)
+		shown := closePositionLabel(m.settingsDraft.closePosition)
+		sel := ui.Select(c, &shown, []string{"Right", "Left", "None"})
+		if sel.Changed() {
+			m.settingsSetClosePosition(closePositionValue(shown))
+		}
+	})
+	ui.Row(c).Height(10)
+	settingsSectionTitle(c, oi, "Tab Order")
+	sortTabs := m.settingsDraft.sortAlphabetically
+	if ui.Checkbox(c, &sortTabs, "Sort tabs alphabetically").Changed() {
+		m.settingsSetSortTabs(sortTabs)
+	}
+	atEnd := m.settingsDraft.openAtEnd
+	if ui.Checkbox(c, &atEnd, "Open new tabs at the end").Changed() {
+		m.settingsSetOpenAtEnd(atEnd)
+	}
+	ui.Row(c).Height(10)
+	settingsSectionTitle(c, oi, "Closing Policy")
+	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).PaddingStart(20).Children(func() {
+		settingsFormLabel(c, oi, "Tab limit", 220)
+		limit := float64(m.settingsDraft.tabLimit)
+		in := ui.NumberInput(c, &limit, 1, maxTabLimit, 1).Width(100)
+		if in.Changed() {
+			m.settingsSetTabLimit(int(math.Round(limit)))
+		}
+	})
+	ui.Text(c, "Tabs with unsaved changes are never closed automatically.").
+		FontSize(10.5).TextColor(oi.textMuted).PaddingStart(20).SingleLine().Ellipsis("…")
+}
+
+// tabPlacementLabel is the select's label for a stored placement.
+func tabPlacementLabel(place string) string {
+	switch place {
+	case "bottom":
+		return "Bottom"
+	case "none":
+		return "None"
+	}
+	return "Top"
+}
+
+// tabPlacementValue is the staged placement for a select's label.
+func tabPlacementValue(label string) string {
+	switch label {
+	case "Bottom":
+		return "bottom"
+	case "None":
+		return "none"
+	}
+	return "top"
+}
+
+// closePositionLabel is the select's label for a stored close position.
+func closePositionLabel(place string) string {
+	switch place {
+	case "left":
+		return "Left"
+	case "none":
+		return "None"
+	}
+	return "Right"
+}
+
+// closePositionValue is the staged close position for a select's label.
+func closePositionValue(label string) string {
+	switch label {
+	case "Left":
+		return "left"
+	case "None":
+		return "none"
+	}
+	return "right"
 }
 
 // settingsCodeFoldingBody is Code Folding's Show code folding outline switch.

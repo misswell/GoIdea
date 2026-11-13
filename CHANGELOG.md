@@ -11,6 +11,9 @@ needs a `## <version>` section here, or its build fails.
 - **Editor > Appearance** 的 **Show line numbers**、**Show whitespaces** 和 **Show indent guides** 会立即作用到所有打开的编辑器并保存。
 - 新增 **Editor > Breadcrumbs** 设置页，**Show breadcrumbs** 和 **Top/Bottom** 控制编辑器的面包屑并保存。
 - 新增 **Editor > General** 设置页，**Soft-wrap files** 和虚拟空间开关直接作用于编辑器并保存。
+- 新增 **Editor > Editor Tabs** 设置页，标签栏可放在顶部、底部或隐藏。
+- 标签页可显示扩展名、所在目录、修改标记和完整路径提示，还能按字母排序、新标签排在末尾。
+- **Tab limit** 限制未固定标签页的数量，最久未用的先关闭，有未保存内容的标签不会关闭。
 - 齿轮菜单新增 **Run Anything…**：搜索最近命令和运行配置，回车在项目目录执行或在运行窗口启动配置。
 - 工作台改用 OpenIDEA Islands 布局：顶部标题栏、左侧图标条、独立面板和 34px 状态栏。
 - 左侧图标条再次点击当前面板会折叠它，再点一次恢复，**Search Everywhere** 固定在底部。

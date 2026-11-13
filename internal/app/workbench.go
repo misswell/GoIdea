@@ -721,25 +721,51 @@ func (m *Model) editorIsland(c *ui.Context, p *ui.Theme) {
 	m.editorWidth = island.Bounds().W
 	m.editorHeight = island.Bounds().H
 	island.Children(func() {
-		m.editorTabs(c, p, oi)
+		if !m.tabPrefs.AtBottom() {
+			m.editorTabs(c, p, oi)
+		}
 		if m.banner != "" {
 			m.bannerRow(c, p)
 		}
 		m.editorArea(c, p)
+		if m.tabPrefs.AtBottom() {
+			m.editorTabs(c, p, oi)
+		}
 	})
 }
 
 // editorTabs is OpenIDEA's tab bar: 40px high on the island, 28px tabs with
-// the selected one tinted and underlined in the accent.
+// the selected one tinted and underlined in the accent. Editor Tabs decides
+// where it sits, whether pinned tabs get their own row, what each tab shows
+// and where its close button is.
 func (m *Model) editorTabs(c *ui.Context, p *ui.Theme, oi oiColors) {
-	if len(m.tabs) == 0 {
+	if len(m.tabs) == 0 || m.tabPrefs.Hidden() {
 		return
 	}
+	pinned := 0
+	for _, t := range m.tabs {
+		if t.pinned {
+			pinned++
+		}
+	}
+	if m.tabPrefs.PinnedSeparateRow && pinned > 0 && pinned < len(m.tabs) {
+		ui.Column(c).Shrink(0).Children(func() {
+			m.tabStrip(c, p, oi, m.tabs[:pinned], 0)
+			m.tabStrip(c, p, oi, m.tabs[pinned:], pinned)
+		})
+		return
+	}
+	m.tabStrip(c, p, oi, m.tabs, 0)
+}
+
+// tabStrip is one row of tabs with the island's bottom border; offset is the
+// row's first tab in the strip.
+func (m *Model) tabStrip(c *ui.Context, p *ui.Theme, oi oiColors, tabs []*Tab, offset int) {
 	ui.Row(c).Height(oiTabBarHeight).Shrink(0).Padding(0, 4).
 		BorderWidth(0, 0, 1, 0).BorderColor(oi.border).Children(func() {
 		ui.Row(c).Gap(2).AlignItems(ui.Center).Children(func() {
-			for i, t := range m.tabs {
-				i, t := i, t
+			for j, t := range tabs {
+				i, t := offset+j, t
 				tab := ui.Row(c.Key(fmt.Sprintf("tab:%d", i))).Height(oiTabHeight).
 					Padding(0, 10).Gap(6).Radius(6).AlignItems(ui.Center)
 				if i == m.active {
@@ -748,25 +774,42 @@ func (m *Model) editorTabs(c *ui.Context, p *ui.Theme, oi oiColors) {
 				} else if tab.Hovered() {
 					tab.Background(oi.toolbarHover)
 				}
+				if !m.tabPrefs.HideFullPathOnHover {
+					if path := tabPath(t); path != "" {
+						tab.Tooltip(path)
+					}
+				}
+				name, dir := m.tabLabel(t)
 				tab.Children(func() {
-					name := filepath.Base(t.doc.Path())
+					closeButton := func() {
+						close := ui.Row(c).Size(20, 20).Radius(4).
+							AlignItems(ui.Center).Justify(ui.Center)
+						if close.Hovered() {
+							close.Background(oi.hover)
+						}
+						close.Children(func() {
+							ui.Icon(c, iconClose).Size(14, 14).TextColor(oi.textMuted)
+						})
+						if close.Clicked() {
+							m.closeTab(i)
+						}
+					}
+					if !m.tabPrefs.NoCloseButton && m.tabPrefs.CloseButtonLeft {
+						closeButton()
+					}
 					if t.dirty() {
 						ui.Text(c, "●").FontSize(9).TextColor(oi.accent)
 					}
 					ui.Text(c, name).FontSize(13).TextColor(oi.text).SingleLine()
+					if dir != "" {
+						ui.Text(c, dir).FontSize(13).TextColor(oi.textFaint).
+							PaddingStart(4).SingleLine()
+					}
 					if t.pinned {
 						ui.Icon(c, iconPin).Size(11, 11).TextColor(oi.textMuted)
 					}
-					close := ui.Row(c).Size(20, 20).Radius(4).
-						AlignItems(ui.Center).Justify(ui.Center)
-					if close.Hovered() {
-						close.Background(oi.hover)
-					}
-					close.Children(func() {
-						ui.Icon(c, iconClose).Size(14, 14).TextColor(oi.textMuted)
-					})
-					if close.Clicked() {
-						m.closeTab(i)
+					if !m.tabPrefs.NoCloseButton && !m.tabPrefs.CloseButtonLeft {
+						closeButton()
 					}
 				})
 				tab.ContextMenu(func(menu *ui.Menu) { m.tabMenu(menu, t) })

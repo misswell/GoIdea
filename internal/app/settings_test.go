@@ -124,11 +124,16 @@ func TestSettingsTreeNestsAndGroups(t *testing.T) {
 	if general.key != settingsPageGeneral || editor.children[1].key != settingsPageEditorFont {
 		t.Fatalf("Editor children = %q, %q", general.key, editor.children[1].key)
 	}
-	if len(general.children) != 3 ||
+	if len(general.children) != 4 ||
 		general.children[0].key != settingsPageEditorAppearance ||
 		general.children[1].key != settingsPageBreadcrumbs ||
-		general.children[2].key != settingsPageCodeFolding {
+		general.children[2].key != settingsPageCodeFolding ||
+		general.children[3].key != settingsPageEditorTabs {
 		t.Fatalf("General children = %+v", general.children)
+	}
+	if got := settingsBreadcrumb(tree, settingsPageEditorTabs); !reflect.DeepEqual(got,
+		[]string{"Editor", "General", "Editor Tabs"}) {
+		t.Fatalf("Editor Tabs breadcrumb = %v", got)
 	}
 	if got := settingsBreadcrumb(tree, settingsPageBreadcrumbs); !reflect.DeepEqual(got,
 		[]string{"Editor", "General", "Breadcrumbs"}) {
@@ -195,8 +200,8 @@ func TestSettingsCollapseHidesChildren(t *testing.T) {
 	open := len(m.settingsVisibleRows())
 	m.settingsToggleNode(settingsGroupKey("Editor"))
 	closed := len(m.settingsVisibleRows())
-	if closed != open-5 {
-		t.Fatalf("rows open %d, closed %d, want five fewer", open, closed)
+	if closed != open-6 {
+		t.Fatalf("rows open %d, closed %d, want six fewer", open, closed)
 	}
 	if m.settingsNormalizeKey("no.such.page") != "" {
 		t.Fatalf("unknown key normalized to a row")
@@ -398,6 +403,72 @@ func TestSettingsBreadcrumbsStagePlacement(t *testing.T) {
 	m.settingsSetBreadcrumbPlacement("left")
 	if m.settingsDraft.breadcrumbPlacement != "top" {
 		t.Fatalf("an unknown placement was staged")
+	}
+}
+
+func TestSettingsEditorTabsStageAndApply(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	m := &Model{cfg: Config{SettingsPath: path}}
+	m.applyPreferences()
+	if m.tabPrefs != (TabPrefs{}) || m.settingsDraftFromPrefs().tabPlacement != "top" {
+		t.Fatalf("defaults = %+v / %q", m.tabPrefs, m.settingsDraftFromPrefs().tabPlacement)
+	}
+
+	m.OpenSettingsPage(settingsPageEditorTabs)
+	m.settingsSetTabPlacement("bottom")
+	m.settingsSetShowExtension(false)
+	m.settingsSetMarkModified(true)
+	m.settingsSetClosePosition("left")
+	m.settingsSetSortTabs(true)
+	m.settingsSetOpenAtEnd(true)
+	m.settingsSetTabLimit(5)
+	if m.prefs.Tabs != (TabPrefs{}) {
+		t.Fatalf("staging wrote the prefs: %+v", m.prefs.Tabs)
+	}
+	if m.tabPrefs.Placement != "bottom" || !m.tabPrefs.HideExtension || !m.tabPrefs.MarkModified ||
+		!m.tabPrefs.CloseButtonLeft || !m.tabPrefs.SortAlphabetically || !m.tabPrefs.OpenAtEnd ||
+		m.tabPrefs.TabLimit != 5 {
+		t.Fatalf("staged strip not previewed: %+v", m.tabPrefs)
+	}
+	if !m.settingsDirtyPage(settingsPageEditorTabs) || !m.settingsPending() {
+		t.Fatalf("staging did not enable Apply")
+	}
+	m.closeSettings()
+	if m.tabPrefs != (TabPrefs{}) {
+		t.Fatalf("cancel kept the staged strip: %+v", m.tabPrefs)
+	}
+
+	m.OpenSettingsPage(settingsPageEditorTabs)
+	m.settingsSetTabPlacement("bottom")
+	m.settingsSetShowExtension(false)
+	m.settingsSetMarkModified(true)
+	m.settingsSetClosePosition("left")
+	m.settingsSetSortTabs(true)
+	m.settingsSetOpenAtEnd(true)
+	m.settingsSetTabLimit(5)
+	m.applySettings()
+	want := TabPrefs{
+		Placement: "bottom", HideExtension: true, MarkModified: true, CloseButtonLeft: true,
+		SortAlphabetically: true, OpenAtEnd: true, TabLimit: 5,
+	}
+	if m.prefs.Tabs != want || LoadPreferences(path).Tabs != want {
+		t.Fatalf("stored tabs = %+v / %+v", m.prefs.Tabs, LoadPreferences(path).Tabs)
+	}
+	if m.tabPrefs != want {
+		t.Fatalf("applied strip = %+v", m.tabPrefs)
+	}
+
+	m.settingsSelectPage(settingsPageEditorTabs)
+	m.settingsResetPage()
+	if d := m.settingsDraft; d.tabPlacement != "top" || !d.showExtension || d.markModified ||
+		d.closePosition != "right" || d.sortAlphabetically || d.openAtEnd || d.tabLimit != defaultTabLimit {
+		t.Fatalf("reset tabs = %+v", d)
+	}
+	// The selects offer three placements each, so anything else is ignored.
+	m.settingsSetTabPlacement("left")
+	m.settingsSetClosePosition("middle")
+	if d := m.settingsDraft; d.tabPlacement != "top" || d.closePosition != "right" {
+		t.Fatalf("unknown choices were staged: %+v", d)
 	}
 }
 

@@ -34,7 +34,7 @@ new action, tool window, page or command appears automatically.
 | Editor contributions | 35 | 0 | 0 | 0 | 0 | 35 |
 | Editor kinds | 4 | 0 | 0 | 0 | 0 | 4 |
 | File editor providers | 4 | 0 | 0 | 0 | 0 | 4 |
-| Settings pages | 81 | 0 | 8 | 0 | 0 | 73 |
+| Settings pages | 81 | 0 | 9 | 0 | 0 | 72 |
 | Settings keys | 445 | 0 | 0 | 0 | 0 | 445 |
 | Languages | 80 | 1 | 0 | 0 | 0 | 79 |
 | Backend crates | 38 | 0 | 0 | 31 | 0 | 7 |
@@ -1156,7 +1156,7 @@ The plain text editor is the workbench default and is not registered through
 | `editor.general.breadcrumbs` | Breadcrumbs |  | `src/features/settings/pages/editor/general.tsx` | partial - internal/app/settings_pages.go settingsBreadcrumbsBody: Show breadcrumbs checkbox and Top/Bottom placement radios over Preferences.Breadcrumbs feeding the editor's breadcrumb row in internal/app/view.go, staged through settingsDraft and proven by settings_test.go TestSettingsBreadcrumbsStagePlacement; the Show breadcrumbs for languages chooser is not ported |
 | `editor.general.codeCompletion` | Code Completion |  | `src/features/settings/pages/editor/general.tsx` | missing |
 | `editor.general.codeFolding` | Code Folding |  | `src/features/settings/pages/editor/general.tsx` | partial - internal/app/settings_pages.go settingsCodeFoldingBody: Show code folding outline checkbox over Preferences.Editor.NoFolding feeding the MyGo editor fold markers, staged through settingsDraft and proven by settings_test.go TestSettingsCodeFoldingStagesAndApplies; the Fold by default file header, imports and doc comment types are not ported |
-| `editor.general.editorTabs` | Editor Tabs |  | `src/features/settings/pages/editor/general.tsx` | missing |
+| `editor.general.editorTabs` | Editor Tabs |  | `src/features/settings/pages/editor/general.tsx` | partial - internal/app/settings_pages.go settingsEditorTabsBody: Tab placement Top/Bottom/None, Show pinned tabs in a separate row, Show file extension, Show directory for non-unique file names, Mark modified (*), Show full path on mouse hover, Close button position Right/Left/None, Sort tabs alphabetically, Open new tabs at the end and Tab limit 1-100 over Preferences.Tabs feeding the workbench tab strip (internal/app/workbench.go) and insertion/sort/limit (internal/app/tabs.go), staged through settingsDraft and proven by settings_test.go TestSettingsEditorTabsStageAndApply and tabs_test.go TestTabLabelFollowsTheStripSettings, TestInsertTabAfterTheActiveOneOrAtTheEnd, TestSortTabsByTitlePinsFirstAndKeepsTheActiveTab, TestTabLimitCandidatesKeepPinnedActiveAndUnsaved; the Show tabs in scroll/squeeze/several rows select, Show file icon, preview tab, closing policy and activate-on-close radios (GoIDEA never closes unsaved tabs automatically) and the left/right vertical placements are not ported |
 | `editor.general.gutterIcons` | Gutter Icons |  | `src/features/settings/pages/editor/general.tsx` | missing |
 | `editor.general.inlineCompletion` | Inline Completion |  | `src/features/settings/pages/editor/general.tsx` | missing |
 | `editor.general.postfixCompletion` | Postfix Completion | Editor | `src/features/templates/index.ts` | missing |

@@ -156,8 +156,10 @@ func (m *Model) applyPreferences() {
 	m.theme = m.prefs.themePreference()
 	m.zen = m.prefs.Zen
 	m.crumbs = m.prefs.Breadcrumbs
+	m.tabPrefs = m.prefs.Tabs
 	m.applyEditorFont(m.prefs.fontSize())
 	m.applyEditorAppearance()
+	m.sortTabsAlphabetically()
 }
 
 // savePreferences writes the settings; a failed write is reported rather than

@@ -325,6 +325,9 @@ type Preferences struct {
 	// Breadcrumbs are Settings › Editor › Breadcrumbs: shown above the editor
 	// unless hidden, as editor.breadcrumbs.show and .placement store.
 	Breadcrumbs BreadcrumbPrefs `json:"breadcrumbs,omitempty"`
+	// Tabs are Settings › Editor › Editor Tabs: how the strip shows, orders
+	// and limits tabs, as editor.tabs.* stores them.
+	Tabs TabPrefs `json:"tabs,omitempty"`
 	// MainToolbar is the title bar's saved layout, nil for the default one.
 	MainToolbar *toolbarLayout `json:"mainToolbar,omitempty"`
 	// Plugins are each plugin's settings, by name, under the same "plugins"
@@ -390,6 +393,49 @@ type BreadcrumbPrefs struct {
 	Hidden    bool   `json:"hidden,omitempty"`
 	Placement string `json:"placement,omitempty"`
 }
+
+// TabPrefs is Settings › Editor › Editor Tabs, as editor.tabs.* stores it. The
+// inverted names keep the zero value OpenIDEA's default strip: tabs on top,
+// extension and directory shown, the full path on hover and a close button on
+// the right.
+type TabPrefs struct {
+	// Placement is "" for the top, "bottom", or "none" to hide the strip.
+	Placement         string `json:"placement,omitempty"`
+	PinnedSeparateRow bool   `json:"pinnedSeparateRow,omitempty"`
+	HideExtension     bool   `json:"hideExtension,omitempty"`
+	// NoDirectoryForNonUnique hides the folder a tab appends when another tab
+	// shows the same file name.
+	NoDirectoryForNonUnique bool `json:"noDirectoryForNonUnique,omitempty"`
+	MarkModified            bool `json:"markModified,omitempty"`
+	HideFullPathOnHover     bool `json:"hideFullPathOnHover,omitempty"`
+	NoCloseButton           bool `json:"noCloseButton,omitempty"`
+	CloseButtonLeft         bool `json:"closeButtonLeft,omitempty"`
+	SortAlphabetically      bool `json:"sortAlphabetically,omitempty"`
+	OpenAtEnd               bool `json:"openAtEnd,omitempty"`
+	// TabLimit is editor.tabs.tabLimit; zero is the default of 30.
+	TabLimit int `json:"tabLimit,omitempty"`
+}
+
+// defaultTabLimit is where editor.tabs.tabLimit starts.
+const defaultTabLimit = 30
+
+// maxTabLimit is the top of the Tab limit field's range.
+const maxTabLimit = 100
+
+// limit is the tab limit the strip enforces: the stored one, or OpenIDEA's
+// default 30.
+func (t TabPrefs) limit() int {
+	if t.TabLimit <= 0 {
+		return defaultTabLimit
+	}
+	return t.TabLimit
+}
+
+// AtBottom reports whether the strip sits under the editor.
+func (t TabPrefs) AtBottom() bool { return t.Placement == "bottom" }
+
+// Hidden reports whether Tab placement is None.
+func (t TabPrefs) Hidden() bool { return t.Placement == "none" }
 
 // AtBottom reports whether the chain sits under the editor rather than above
 // it.
