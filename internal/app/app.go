@@ -154,6 +154,11 @@ type Model struct {
 	// sideMode picks what the sidebar shows: "tree" ("" also means tree, the
 	// default), "vcs", "search", "usages", "structure" or "bookmarks".
 	sideMode string
+	// leftHidden hides the left tool window island; the stripe stays.
+	leftHidden bool
+	// showingWelcome puts the Welcome screen up while a project stays loaded,
+	// as OpenIDEA's project menu leaves it.
+	showingWelcome bool
 
 	// commit is the open Commit dialog, or nil.
 	commit *commitState
@@ -582,6 +587,7 @@ func (m *Model) openProject(dir string, files []string) {
 	}
 	m.tabs, m.active = nil, 0
 	m.banner, m.bannerPath = "", ""
+	m.showingWelcome = false
 	m.resetRun()
 	m.resetDebug()
 	m.resetBuild()
@@ -1202,7 +1208,7 @@ func (m *Model) View(c *ui.Context) {
 	m.shortcuts(c)
 	p := c.Theme()
 	ui.Column(c).Fill().Background(p.Background).Children(func() {
-		if m.Root() == "" {
+		if m.Root() == "" || m.showingWelcome {
 			// With no project open the Welcome screen owns the window, as
 			// OpenIDEA's does.
 			if m.banner != "" {
@@ -1211,25 +1217,7 @@ func (m *Model) View(c *ui.Context) {
 			m.welcome(c, p)
 			return
 		}
-		m.toolbar(c, p)
-		ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
-			m.sidebar(c, p)
-			ui.Column(c).Grow(1).MinWidth(0).Children(func() {
-				if m.maximized {
-					// A maximized tool window takes the workbench, as
-					// OpenIDEA hides the editor island over it.
-					m.bottomSlot(c, p)
-					return
-				}
-				m.tabStrip(c, p)
-				if m.banner != "" {
-					m.bannerRow(c, p)
-				}
-				m.editorArea(c, p)
-				m.bottomSlot(c, p)
-			})
-		})
-		m.statusBar(c, p)
+		m.workbench(c, p)
 	})
 	m.renameDialog(c, p)
 	m.symbolsDialog(c, p)

@@ -5,6 +5,9 @@ needs a `## <version>` section here, or its build fails.
 
 ## Unreleased
 
+- 工作台改用 OpenIDEA Islands 布局：顶部标题栏、左侧图标条、独立面板和 34px 状态栏。
+- 左侧图标条再次点击当前面板会折叠它，再点一次恢复，**Search Everywhere** 固定在底部。
+- 没有打开文件时，编辑器居中显示 **Search Everywhere** 和 **Go to File** 提示，可直接点击。
 - Welcome 按 OpenIDEA 原页面重做：左侧品牌栏和 Projects、Customize、Plugins 页面，右侧项目搜索、操作和最近项目。
 - 最近项目显示渐变首字母图标、路径和 Git 分支，悬停出现菜单，可打开、在访达中显示、复制路径或移除。
 - Welcome 的 **Clone Repository** 用 `git clone` 把仓库克隆到所选目录并打开。

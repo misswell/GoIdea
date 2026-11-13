@@ -19,4 +19,16 @@ var (
 	iconWelcomePlugin  = welcomeIcon(`<path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/>`)
 	iconWelcomeMore    = welcomeIcon(`<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>`)
 	iconWelcomeInstall = welcomeIcon(`<path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/>`)
+
+	// Workbench chrome: the chevrons of its widgets, the stripe's tool windows
+	// and the title bar's run controls.
+	iconChevronDown = welcomeIcon(`<path d="m6 9 6 6 6-6"/>`)
+	iconStructure   = welcomeIcon(`<line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/>`)
+	iconBookmark    = welcomeIcon(`<path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/>`)
+	iconTerminal    = welcomeIcon(`<polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/>`)
+	iconRun         = welcomeIcon(`<polygon points="6 3 20 12 6 21 6 3"/>`)
+	iconDebug       = welcomeIcon(`<path d="M12 20v-9"/><path d="M9 7.13v-1a3.003 3.003 0 1 1 6 0v1"/><path d="m8 2 1.88 1.88"/><path d="M14.12 3.88 16 2"/><path d="M6.53 9C4.6 8.8 3 7.1 3 5"/><path d="M6 13H2"/><path d="M3 21c0-2.1 1.7-3.9 3.8-4"/><path d="M20.97 5c0 2.1-1.6 3.8-3.5 4"/><path d="M22 13h-4"/><path d="M17.2 17c2.1.1 3.8 1.9 3.8 4"/>`)
+	iconClose       = welcomeIcon(`<path d="M18 6 6 18"/><path d="m6 6 12 12"/>`)
+	iconExpandAll   = welcomeIcon(`<path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/>`)
+	iconCollapseAll = welcomeIcon(`<path d="m7 20 5-5 5 5"/><path d="m7 4 5 5 5-5"/>`)
 )
