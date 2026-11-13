@@ -134,3 +134,58 @@ func TestWorkbenchLeftSplitHandleMovesTheLine(t *testing.T) {
 		t.Fatalf("the split island did not move down with the line: %+v -> %+v", before, after)
 	}
 }
+
+// leftGapX is the middle of the gap on the left side's inner edge at 1440×900,
+// the side at its default width.
+func leftGapX() float32 {
+	return 6 + oiStripeWidth + oiLeftWidth + oiIslandGap/2
+}
+
+func TestWorkbenchLeftWidthHandleResizesTheSide(t *testing.T) {
+	m := &Model{}
+	tt := workbenchTester(t, m)
+	before, ok := tt.Find("Project")
+	if !ok {
+		t.Fatalf("the Project island is missing: %q", tt.Texts())
+	}
+	x := leftGapX()
+	tt.Move(x, 300)
+	if got := tt.Cursor(); got != ui.CursorResizeColumn {
+		t.Fatalf("the gap shows cursor %v, want the column resize cursor", got)
+	}
+	tt.Press(x, 300)
+	tt.Move(x+60, 300)
+	tt.Release(x+60, 300)
+	tt.Frame()
+	if got := m.leftWidth; got != 300 {
+		t.Fatalf("the drag set the width to %v, want 300", got)
+	}
+	if got := m.leftSideWidth(); got != 300 {
+		t.Fatalf("the side draws at %v, want 300", got)
+	}
+	after, ok := tt.Find("Project")
+	if !ok || after.X != before.X {
+		t.Fatalf("the island's title moved with the resize: %+v -> %+v", before, after)
+	}
+}
+
+func TestWorkbenchLeftWidthDragPastTheMinimumClosesTheSide(t *testing.T) {
+	m := &Model{leftSplit: "structure"}
+	tt := workbenchTester(t, m)
+	x := leftGapX()
+	// 180 DIPs off the default 240 leaves 60, under half the smallest
+	// width, so the release closes the side.
+	tt.Press(x, 300)
+	tt.Move(x-180, 300)
+	tt.Release(x-180, 300)
+	tt.Frame()
+	if m.leftShown() || m.leftSplit != "" {
+		t.Fatalf("the side stayed: hidden=%v split=%q", m.leftHidden, m.leftSplit)
+	}
+	if tt.HasText("Project") || tt.HasText("Structure") {
+		t.Fatalf("the side kept its islands: %q", tt.Texts())
+	}
+	if got := m.leftWidth; got != 0 {
+		t.Fatalf("a closed side kept a width: %v", got)
+	}
+}

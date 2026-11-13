@@ -16,7 +16,7 @@ import (
 const (
 	oiTitleBarHeight  float32 = 40
 	oiStatusBarHeight float32 = 34
-	oiStripeWidth     float32 = 34 // 30px button + 4px outer padding
+	oiStripeWidth     float32 = 40 // 30px button + 4px padding + the island gap
 	oiStripeButton    float32 = 30
 	oiStripeGap       float32 = 10 // title bar height minus the button
 	oiIslandGap       float32 = 6
@@ -173,10 +173,18 @@ func (m *Model) workbench(c *ui.Context, p *ui.Theme) {
 			// hides the editor island over it.
 			m.bottomSlot(c, p)
 		} else {
-			ui.Row(c).Grow(1).MinHeight(0).MinWidth(0).Gap(oiIslandGap).
+			ui.Row(c).Grow(1).MinHeight(0).MinWidth(0).
 				AlignItems(ui.Stretch).Padding(0, 6, 0, 6).Children(func() {
 				m.toolStripe(c, p, oi)
 				m.leftSide(c, p, oi)
+				// The gap beside the side takes the pointer, as OpenIDEA's
+				// GapHandle does; the editor keeps the island gap from the
+				// stripe when the side is closed.
+				if m.leftShown() {
+					m.leftWidthHandle(c, oi)
+				} else {
+					ui.Box(c).Width(oiIslandGap).Shrink(0)
+				}
 				m.editorIsland(c, p)
 			})
 			if bottom != "" {
@@ -203,7 +211,7 @@ func (m *Model) showWelcome() {
 // Bookmarks belong to the side's split area, as OpenIDEA registers them
 // below the Project window.
 func (m *Model) toolStripe(c *ui.Context, p *ui.Theme, oi oiColors) {
-	ui.Column(c).Width(oiStripeWidth).Shrink(0).Padding(5, 0, 6, 4).
+	ui.Column(c).Width(oiStripeWidth).Shrink(0).Padding(5, oiIslandGap, 6, 4).
 		Gap(oiStripeGap).Children(func() {
 		m.stripeButton(c, p, oi, "project", iconWelcomeFolder, "Project", m.sideMode == "" && !m.leftHidden, func() {
 			m.modeClick("")
@@ -286,12 +294,18 @@ func (m *Model) stripeButton(c *ui.Context, p *ui.Theme, oi oiColors, key string
 	}
 }
 
+// leftShown reports whether the left side draws: a window in either of its
+// areas.
+func (m *Model) leftShown() bool {
+	return !m.leftHidden || m.leftSplit != ""
+}
+
 // leftSide is the left side's two areas: the primary island and, below it,
 // the split island, with the gap between them the pointer drags. A lone
 // island takes the whole side, as OpenIDEA's SidePanel does, and hiding both
 // closes the side.
 func (m *Model) leftSide(c *ui.Context, p *ui.Theme, oi oiColors) {
-	if m.leftHidden && m.leftSplit == "" {
+	if !m.leftShown() {
 		return
 	}
 	both := !m.leftHidden && m.leftSplit != ""
@@ -300,7 +314,7 @@ func (m *Model) leftSide(c *ui.Context, p *ui.Theme, oi oiColors) {
 		primaryGrow = m.leftShare()
 		splitGrow = 1 - primaryGrow
 	}
-	side := ui.Column(c).Key("left:side").Width(oiLeftWidth).Shrink(0).
+	side := ui.Column(c).Key("left:side").Width(m.leftSideWidth()).Shrink(0).
 		MinHeight(0).AlignItems(ui.Stretch)
 	// The room the islands shared as the last frame laid it out, which the
 	// handle moves the line within.
@@ -316,6 +330,88 @@ func (m *Model) leftSide(c *ui.Context, p *ui.Theme, oi oiColors) {
 			m.leftSplitIsland(c, p, oi, splitGrow)
 		}
 	})
+}
+
+// The left side's sizes, as OpenIDEA's sizes.left and its handles: a stored
+// width outside 80..4000 is ignored, a drag keeps 140 DIPs for the side and
+// 200 for the editor, and half of 140 closes the side as IDEA does.
+const (
+	leftWidthStoredMin = 80
+	leftWidthStoredMax = 4000
+	leftWidthDragMin   = 140
+	editorMinWidth     = 200
+)
+
+// leftSideWidth is the width the left side draws at: the width a resize left,
+// or the width the gap's drag has put it at.
+func (m *Model) leftSideWidth() float32 {
+	if m.leftWidthDragging {
+		if m.leftDragCollapse {
+			return 0
+		}
+		w := m.leftDragWidth
+		if w < leftWidthDragMin {
+			w = leftWidthDragMin
+		}
+		if w > m.leftDragMax {
+			w = m.leftDragMax
+		}
+		return w
+	}
+	if m.leftWidth < leftWidthStoredMin {
+		return oiLeftWidth
+	}
+	return m.leftWidth
+}
+
+// leftWidthHandle is the gap on the side's inner edge, between it and the
+// editor, which the pointer drags to resize the side, as OpenIDEA's GapHandle
+// does. A drag past half the side's smallest width closes the side on release;
+// anything else is kept then.
+func (m *Model) leftWidthHandle(c *ui.Context, oi oiColors) {
+	h := ui.Row(c).Key("left:width-handle").Width(oiIslandGap).Shrink(0).
+		Cursor(ui.CursorResizeColumn)
+	dx, _, held := h.Dragged()
+	if !held {
+		if m.leftWidthDragging {
+			w := m.leftSideWidth()
+			m.leftWidthDragging = false
+			if m.leftDragCollapse {
+				m.leftDragCollapse = false
+				m.hideLeftSide()
+			} else {
+				// OpenIDEA stores and draws whole DIPs.
+				m.leftWidth = float32(int(w + 0.5))
+				m.rememberLayout()
+			}
+		}
+		return
+	}
+	if !m.leftWidthDragging {
+		// The base is the width drawn now, read before the drag takes over
+		// from it.
+		base := m.leftSideWidth()
+		m.leftWidthDragging = true
+		m.leftDragWidth = base
+		m.leftDragMax = base
+		if spare := m.editorWidth - editorMinWidth; spare > 0 {
+			m.leftDragMax += spare
+		}
+		m.leftDragCollapse = false
+	}
+	m.leftDragWidth += dx
+	m.leftDragCollapse = m.leftDragWidth < leftWidthDragMin/2
+	m.invalidate()
+}
+
+// hideLeftSide closes both of the left side's areas, which a drag of its gap
+// past half the smallest width does.
+func (m *Model) hideLeftSide() {
+	m.leftHidden = true
+	m.leftSplit = ""
+	m.structure.visible = false
+	m.rememberLayout()
+	m.invalidate()
 }
 
 // leftRatioMin and leftRatioMax bound the left side's split, as OpenIDEA's
@@ -369,14 +465,13 @@ func (m *Model) leftSplitHandle(c *ui.Context, oi oiColors, room float32) {
 	}
 	if !m.leftDragging {
 		m.leftDragging = true
-		m.leftDragStart = m.leftShare()
 		m.leftDragTotal = room
 	}
 	if dy == 0 || m.leftDragTotal <= 0 {
 		return
 	}
 	lo, hi := leftRatioRange(m.leftDragTotal)
-	ratio := m.leftDragStart + dy/m.leftDragTotal
+	ratio := m.leftShare() + dy/m.leftDragTotal
 	if ratio < lo {
 		ratio = lo
 	}
@@ -490,8 +585,11 @@ func (m *Model) headerIcon(c *ui.Context, p *ui.Theme, oi oiColors, key, tip str
 // chain and the editor.
 func (m *Model) editorIsland(c *ui.Context, p *ui.Theme) {
 	oi := oiPaletteOf(p)
-	ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Background(oi.island).
-		Radius(oiIslandRadius).Children(func() {
+	island := ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Background(oi.island).
+		Radius(oiIslandRadius)
+	// The width it drew at last frame caps a drag of the side beside it.
+	m.editorWidth = island.Bounds().W
+	island.Children(func() {
 		m.editorTabs(c, p, oi)
 		if m.banner != "" {
 			m.bannerRow(c, p)

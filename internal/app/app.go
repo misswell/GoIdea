@@ -168,10 +168,20 @@ type Model struct {
 	// leftRatio is the share of the left side's room the primary area takes
 	// when both areas show, as OpenIDEA's splits.left; zero is the default.
 	leftRatio float32
-	// leftDragging, leftDragStart and leftDragTotal carry a drag of the split
-	// handle: the ratio it began at and the room the areas shared then.
+	// leftWidth is the left side's width in DIPs, as OpenIDEA's sizes.left;
+	// zero is the default.
+	leftWidth float32
+	// leftWidthDragging, leftDragWidth and leftDragMax carry a drag of the
+	// gap beside the side: where the pointer put the edge, and the widest it
+	// may go with the editor's minimum kept. leftDragCollapse hides the side
+	// when the pointer went past half its minimum.
+	leftWidthDragging bool
+	leftDragWidth     float32
+	leftDragMax       float32
+	leftDragCollapse  bool
+	// leftDragging and leftDragTotal carry a drag of the split handle: that it
+	// is going on, and the room the areas shared when it began.
 	leftDragging  bool
-	leftDragStart float32
 	leftDragTotal float32
 	// showingWelcome puts the Welcome screen up while a project stays loaded,
 	// as OpenIDEA's project menu leaves it.
@@ -238,6 +248,9 @@ type Model struct {
 	maximized    bool
 	// frameHeight is the last drawn window height, which caps a resize.
 	frameHeight float32
+	// editorWidth is the width the editor island drew at last frame, which
+	// caps a drag of the side beside it.
+	editorWidth float32
 	// problemStep is the row Cmd+Alt+Down last revealed.
 	problemStep int
 	// reveal is the caret position a search hit asked for; it applies once the

@@ -63,6 +63,7 @@ needs a `## <version>` section here, or its build fails.
 - 提交窗口先保存打开的文件，再按 OpenIDEA 的规则把选中的改动加入暂存区后提交。
 - **显示 Git 日志** 在底部打开提交历史，可查看提交说明、所在分支、签名和改动的文件。
 - 每个项目记住自己的工具窗口布局：左栏窗口、底部窗口、拆分和高度在再次打开时恢复，**恢复默认布局**把拆分窗格并回底部。
+- 拖动左侧栏右缘的间隙可调整其宽度，拖过最小值一半再松手会收起，每个项目记住自己的宽度。
 - **构建项目**（`Cmd+F9`）、**构建模块**（`Cmd+Shift+F9`）、**重新构建项目** 和 **构建工件** 通过 OpenIDEA 构建引擎执行。
 - 构建输出显示在底部构建窗口，结束时给出错误数、警告数和耗时，**停止构建** 可取消。
 - **Settings > Java 语言服务与调试器** installs jdtls and java-debug with progress, cancel and a retry, without leaving GoIDEA.

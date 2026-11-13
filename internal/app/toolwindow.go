@@ -103,6 +103,7 @@ func (m *Model) currentLayout() Layout {
 		LeftTool:     m.leftSplit,
 		LeftHidden:   m.leftHidden,
 		LeftRatio:    float64(m.leftShare()),
+		LeftWidth:    int(m.leftWidth + 0.5),
 		Tool:         m.tool,
 		BottomHeight: m.bottomHeight,
 	}
@@ -156,6 +157,9 @@ func (m *Model) applyLayout(root string) {
 	m.leftSplit = ""
 	m.leftRatio = float32(l.LeftRatio)
 	m.leftDragging = false
+	m.leftWidth = float32(l.LeftWidth)
+	m.leftWidthDragging = false
+	m.leftDragCollapse = false
 	switch l.Side {
 	case "vcs":
 		m.sideMode = "vcs"

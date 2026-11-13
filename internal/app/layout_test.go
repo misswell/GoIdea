@@ -177,6 +177,34 @@ func TestStoredLeftRatioStaysInRange(t *testing.T) {
 	}
 }
 
+func TestStoredLeftWidthStaysInRange(t *testing.T) {
+	if got := normalizeLayout(Layout{LeftWidth: 300}).LeftWidth; got != 300 {
+		t.Fatalf("a stored width became %v", got)
+	}
+	for _, width := range []int{0, 79, 4001} {
+		if got := normalizeLayout(Layout{LeftWidth: width}).LeftWidth; got != 0 {
+			t.Fatalf("width %v is kept as %v, want the default", width, got)
+		}
+	}
+}
+
+func TestLeftWidthComesBackWithTheProject(t *testing.T) {
+	m, root := layoutModel(t)
+	m.leftWidth = 320
+	m.rememberLayout()
+	m.saveSessionNow()
+
+	s := LoadSession(m.cfg.SessionPath)
+	restored := toolModel()
+	restored.layouts = s.Layouts
+	restored.setRoot(root)
+	restored.applyLayout(root)
+
+	if got := restored.leftSideWidth(); got != 320 {
+		t.Fatalf("side width = %v, want 320", got)
+	}
+}
+
 func TestLeftSplitRatioComesBackWithTheProject(t *testing.T) {
 	m, root := layoutModel(t)
 	m.ShowStructure()

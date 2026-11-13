@@ -52,6 +52,8 @@ type Layout struct {
 	// LeftRatio is the share of the left side's room the primary area takes
 	// when both areas show, as OpenIDEA's splits.left.
 	LeftRatio float64 `json:"leftRatio,omitempty"`
+	// LeftWidth is the left side's width in DIPs, as OpenIDEA's sizes.left.
+	LeftWidth int `json:"leftWidth,omitempty"`
 	// Bottom are the bottom windows that were showing, and Tool the one the
 	// shortcuts acted on last: F12, Shift+Escape and Move to Split target it.
 	Bottom []string `json:"bottom,omitempty"`
@@ -101,6 +103,11 @@ func normalizeLayout(l Layout) Layout {
 	// A ratio out of the range no drag reaches keeps the default divide.
 	if l.LeftRatio >= leftRatioMin && l.LeftRatio <= leftRatioMax {
 		out.LeftRatio = l.LeftRatio
+	}
+	// A width no drag or resize reaches is dropped the way OpenIDEA's
+	// sanitizeSizes does.
+	if l.LeftWidth >= leftWidthStoredMin && l.LeftWidth <= leftWidthStoredMax {
+		out.LeftWidth = l.LeftWidth
 	}
 	if isToolWindow(l.Tool) {
 		out.Tool = l.Tool
