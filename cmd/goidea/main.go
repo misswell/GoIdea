@@ -311,6 +311,10 @@ func smoke(m *app.Model) {
 	if os.Getenv("GOIDEA_SMOKE_NOTIFY") == "1" {
 		fields["notifications"] = m.SmokeNotifications()
 	}
+	if os.Getenv("GOIDEA_SMOKE_GOLDENS") == "1" {
+		fields["goldens"] = m.SmokeGoldens(os.Getenv("GOIDEA_SHOTS_DIR"),
+			os.Getenv("GOIDEA_GOLDEN_DIR"), os.Getenv("GOIDEA_GOLDEN_DIFF_DIR"))
+	}
 	if os.Getenv("GOIDEA_SMOKE_NEWPROJECT") == "1" {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		fields["newProject"] = m.SmokeNewProject(ctx)

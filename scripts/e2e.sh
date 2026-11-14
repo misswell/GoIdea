@@ -104,6 +104,16 @@ else
     smoke "$TOOLS" GOIDEA_SMOKE_TOOLS=install
     python3 "$CHECKS" tools "$TOOLS"
 
+    if [ -n "${GOIDEA_GOLDEN_DIR:-}" ]; then
+        say "阶段 2b：OpenIDEA Golden 视觉差异"
+        GOLD="$WORK/goldens.json"
+        smoke "$GOLD" GOIDEA_SMOKE_GOLDENS=1 GOIDEA_SHOTS_DIR="$SHOTS" \
+            GOIDEA_GOLDEN_DIR="$GOIDEA_GOLDEN_DIR" GOIDEA_GOLDEN_DIFF_DIR="$WORK/diffs"
+        python3 "$CHECKS" goldens "$GOLD"
+    else
+        say "SKIP：OpenIDEA Golden 截图未提供（设置 GOIDEA_GOLDEN_DIR）"
+    fi
+
     say "阶段 3/4：JDT 补全、悬停、跳转、格式化、用法、重命名、诊断"
     LSP="$WORK/lsp.json"
     smoke "$LSP" GOIDEA_SMOKE_LSP=1 GOIDEA_SMOKE_HIERARCHY=1 GOIDEA_SMOKE_SE=1

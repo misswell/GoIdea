@@ -30,35 +30,53 @@ func (m *Model) SmokeShots(ctx context.Context, dir string) (map[string]any, err
 	out := map[string]any{}
 	sizes := map[string]int{}
 	var errs []string
+	// Every state is captured in both appearances, as the Dark and Light
+	// golden sets require.
 	shot := func(name string) {
-		var size int
-		var errText string
-		m.post(func() {
-			tt := ui.NewTester(func(c *ui.Context) { m.View(c) }, smokeShotWidth, smokeShotHeight)
-			tt.SetDark(true)
-			tt.SetScale(1)
-			tt.Frame()
-			path := filepath.Join(dir, name+".png")
-			f, err := os.Create(path)
-			if err != nil {
-				errText = err.Error()
-				return
+		for _, theme := range []struct {
+			name string
+			dark bool
+		}{{"dark", true}, {"light", false}} {
+			theme := theme
+			key := theme.name + "/" + name
+			var size int
+			var errText string
+			m.post(func() {
+				previous := m.theme
+				m.theme = openideaTheme(theme.dark)
+				tt := ui.NewTester(func(c *ui.Context) { m.View(c) }, smokeShotWidth, smokeShotHeight)
+				tt.SetDark(theme.dark)
+				tt.SetScale(1)
+				tt.Frame()
+				img := tt.Image()
+				m.theme = previous
+				themeDir := filepath.Join(dir, theme.name)
+				if err := os.MkdirAll(themeDir, 0o755); err != nil {
+					errText = err.Error()
+					return
+				}
+				path := filepath.Join(themeDir, name+".png")
+				f, err := os.Create(path)
+				if err != nil {
+					errText = err.Error()
+					return
+				}
+				err = png.Encode(f, img)
+				f.Close()
+				if err != nil {
+					errText = err.Error()
+					return
+				}
+				if fi, err := os.Stat(path); err == nil {
+					size = int(fi.Size())
+				}
+			})
+			if errText != "" {
+				errs = append(errs, key+": "+errText)
+				continue
 			}
-			err = png.Encode(f, tt.Image())
-			f.Close()
-			if err != nil {
-				errText = err.Error()
-				return
-			}
-			if fi, err := os.Stat(path); err == nil {
-				size = int(fi.Size())
-			}
-		})
-		if errText != "" {
-			errs = append(errs, name+": "+errText)
-			return
+			sizes[key] = size
 		}
-		sizes[name] = size
 	}
 	wait := func(done func() bool, limit time.Duration) bool {
 		deadline := time.Now().Add(limit)

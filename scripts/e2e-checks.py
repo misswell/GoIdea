@@ -38,13 +38,18 @@ def absent(key, where=""):
 
 CHECKS = {
     "shots": [
-        ("count", "every visual-regression state was rendered", lambda d: (len(get(d, "shots") or {}) >= 10, sorted((get(d, "shots") or {}).keys()))),
+        ("count", "every visual-regression state was rendered in both themes", lambda d: (len(get(d, "shots") or {}) >= 2 * len(SHOT_STATES), len(get(d, "shots") or {}))),
         ("bytes", "each PNG is a real capture", lambda d: (all(v >= 15000 for v in (get(d, "shots") or {}).values()), {k: v for k, v in (get(d, "shots") or {}).items() if v < 15000})),
-        ("states", "the baseline names every expected state", lambda d: (
-            sorted(SHOT_STATES - set((get(d, "shots") or {}).keys())) == [],
-            sorted(SHOT_STATES - set((get(d, "shots") or {}).keys())),
+        ("states", "the baseline names every expected state in Dark and Light", lambda d: (
+            sorted(set(theme + "/" + state for theme in ("dark", "light") for state in SHOT_STATES) - set((get(d, "shots") or {}).keys())) == [],
+            sorted(set(theme + "/" + state for theme in ("dark", "light") for state in SHOT_STATES) - set((get(d, "shots") or {}).keys())),
         )),
         ("errors", "no shot failed", lambda d: (get(d, "shotErrors") is None and get(d, "shotsError") is None, {"errors": get(d, "shotErrors"), "error": get(d, "shotsError")})),
+    ],
+    "goldens": [
+        ("references", "the golden set holds reference images", lambda d: ((get(d, "goldens.references") or 0) > 0, get(d, "goldens.references"))),
+        ("missing", "every reference found a rendered frame", lambda d: ((get(d, "goldens.missing") or []) == [], get(d, "goldens.missing"))),
+        ("match", "every state is within its pixel tolerance", lambda d: (all((v or {}).get("passed") is True for v in (get(d, "goldens.results") or {}).values()), {k: v for k, v in (get(d, "goldens.results") or {}).items() if (v or {}).get("passed") is not True})),
     ],
     "base": [
         ("backend", "backend is up", lambda d: (d.get("backend") is True, d.get("backend"))),
