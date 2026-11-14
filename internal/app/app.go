@@ -232,6 +232,9 @@ type Model struct {
 	db *dbView
 	// dbTable is the open table data page.
 	dbTable *dbTableSheet
+	// dbHist is the open statement history and dbPlan the execution plan.
+	dbHist *dbHistoryPane
+	dbPlan *dbPlanPane
 
 	// intents is the open intentions prompt, or nil.
 	intents *intentPane
@@ -965,6 +968,8 @@ func (m *Model) openProject(dir string, files []string) {
 	m.diff = nil
 	m.db = nil
 	m.dbTable = nil
+	m.dbHist = nil
+	m.dbPlan = nil
 	mavenVisible := m.maven.visible
 	m.maven = mavenPane{visible: mavenVisible}
 	m.refactor, m.redoRefactor = nil, nil
@@ -1888,6 +1893,19 @@ func (m *Model) shortcuts(c *ui.Context) {
 		}
 		if c.Shortcut(ui.Modifiers(0), ui.KeyEnter) {
 			m.chooseImplementation(m.impl.sel)
+		}
+		return
+	}
+	// The statement history steps the same way.
+	if m.dbHist != nil && m.dbHist.open {
+		if c.Shortcut(ui.Modifiers(0), ui.KeyDown) {
+			m.StepDBHistory(1)
+		}
+		if c.Shortcut(ui.Modifiers(0), ui.KeyUp) {
+			m.StepDBHistory(-1)
+		}
+		if c.Shortcut(ui.Modifiers(0), ui.KeyEnter) {
+			m.ChooseDBHistory(m.dbHist.sel)
 		}
 		return
 	}

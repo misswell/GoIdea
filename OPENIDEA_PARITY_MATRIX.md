@@ -1907,10 +1907,10 @@ Local-only commands and the per-command argument lists are in
 | `db_ddl` | db | yes | yes | missing |
 | `db_disconnect` | db | yes | yes | missing |
 | `db_execute` | db | yes | yes | missing |
-| `db_explain` | db | yes |  | missing |
+| `db_explain` | db | yes | yes | missing |
 | `db_export_file` | db | no |  | missing |
 | `db_finish_transaction` | db | yes |  | missing |
-| `db_history` | db | yes |  | missing |
+| `db_history` | db | yes | yes | missing |
 | `db_object_ddl` | db | yes |  | missing |
 | `db_remove_history` | db | yes |  | missing |
 | `db_retain_catalog` | db | yes |  | missing |
@@ -2488,7 +2488,7 @@ Local-only commands and the per-command argument lists are in
 | `wsl_distros` | wsl | no |  | missing |
 | `wsl_resolve` | wsl | no |  | missing |
 
-476 commands are served over stdio and 100 are called by GoIDEA today. A command
+476 commands are served over stdio and 102 are called by GoIDEA today. A command
 that is registered only in the desktop shell needs an `ops` module before stdio
 can serve it; a GoIDEA check counts only when the UI path works end to end.
 

@@ -140,6 +140,9 @@ func (m *Model) closeDatabase() {
 		return
 	}
 	m.db.open = false
+	m.dbTable = nil
+	m.dbHist = nil
+	m.dbPlan = nil
 	m.invalidate()
 }
 
@@ -600,6 +603,8 @@ func (m *Model) dbDialog(c *ui.Context, p *ui.Theme) {
 					area.OnShortcut(ui.Cmd, ui.KeyEnter, func() { m.RunDB() })
 					ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 						ui.Button(c, "运行").Disabled(v.running).OnClick(func() { m.RunDB() })
+						ui.Button(c, "历史").OnClick(func() { m.OpenDBHistory() })
+						ui.Button(c, "解释").OnClick(func() { m.ExplainDB() })
 						ui.Text(c, "Cmd+Enter 运行，结果最多显示前 50 行").FontSize(10.5).
 							TextColor(p.TextMuted).SingleLine()
 					})
@@ -897,6 +902,43 @@ func (m *Model) SmokeDatabase(ctx context.Context) (map[string]any, error) {
 			m.closeDBTable()
 			out["tableClosed"] = m.dbTable == nil
 		}
+		m.OpenDBHistory()
+	})
+	wait("history", func() bool {
+		h := m.dbHist
+		return h != nil && !h.loading && (h.err != "" || len(h.items) > 0)
+	})
+	mygo.RunOnMain(func() {
+		if h := m.dbHist; h != nil {
+			out["history"] = len(h.items)
+			if h.err != "" {
+				out["historyError"] = h.err
+			}
+			if len(h.items) > 0 {
+				out["historyFirst"] = dbHistoryLabel(h.items[0])
+			}
+		}
+		m.closeDBHistory()
+		if m.db != nil {
+			m.db.sql = "SELECT * FROM people"
+			m.ExplainDB()
+		}
+	})
+	wait("plan", func() bool {
+		p := m.dbPlan
+		return p != nil && !p.loading && (p.err != "" || len(p.nodes) > 0)
+	})
+	mygo.RunOnMain(func() {
+		if p := m.dbPlan; p != nil {
+			out["planNodes"] = len(p.nodes)
+			if p.err != "" {
+				out["planError"] = p.err
+			}
+			if len(p.nodes) > 0 {
+				out["planFirst"] = p.nodes[0].Operation
+			}
+			m.closeDBPlan()
+		}
 		m.closeDatabase()
 		out["closed"] = m.db == nil || !m.db.open
 	})
@@ -1101,6 +1143,260 @@ func (m *Model) dbTableDialog(c *ui.Context, p *ui.Theme) {
 	})
 	if !open && m.dbTable != nil {
 		m.closeDBTable()
+	}
+}
+
+// dbHistoryPane is the open statement history list.
+type dbHistoryPane struct {
+	open    bool
+	loading bool
+	err     string
+	items   []openidea.DBHistoryEntry
+	sel     int
+	gen     uint64
+}
+
+// dbPlanPane is the open execution plan of one statement.
+type dbPlanPane struct {
+	open      bool
+	loading   bool
+	err       string
+	statement string
+	nodes     []openidea.DBPlanNode
+	rows      []dbPlanRow
+}
+
+// dbPlanRow is one plan node placed in the tree.
+type dbPlanRow struct {
+	index uint32
+	depth int
+}
+
+// OpenDBHistory shows the statements run against the selected source.
+func (m *Model) OpenDBHistory() {
+	if m.db == nil || m.db.source == "" {
+		return
+	}
+	h := &dbHistoryPane{open: true, loading: true}
+	m.dbHist = h
+	h.gen++
+	gen := h.gen
+	source := m.db.source
+	m.invalidate()
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
+		defer cancel()
+		items, err := m.mgr.DBHistory(ctx, Window, source)
+		m.post(func() {
+			if m.dbHist != h || h.gen != gen {
+				return
+			}
+			h.loading = false
+			if err != nil {
+				h.err = "读取历史失败：" + err.Error()
+			} else {
+				h.items = items
+			}
+			m.invalidate()
+		})
+	}()
+}
+
+// StepDBHistory moves the history selection, wrapping around.
+func (m *Model) StepDBHistory(delta int) {
+	h := m.dbHist
+	if h == nil || len(h.items) == 0 {
+		return
+	}
+	h.sel = (h.sel + delta + len(h.items)) % len(h.items)
+	m.invalidate()
+}
+
+// ChooseDBHistory puts the selected statement into the console and runs it.
+func (m *Model) ChooseDBHistory(i int) {
+	h := m.dbHist
+	if h == nil || i < 0 || i >= len(h.items) {
+		return
+	}
+	text := h.items[i].Text
+	m.closeDBHistory()
+	if m.db != nil {
+		m.db.sql = text
+		m.invalidate()
+	}
+}
+
+// closeDBHistory drops the history list.
+func (m *Model) closeDBHistory() { m.dbHist = nil; m.invalidate() }
+
+// ExplainDB shows the plan of the console's first statement.
+func (m *Model) ExplainDB() {
+	if m.db == nil || m.db.source == "" || strings.TrimSpace(m.db.sql) == "" {
+		return
+	}
+	p := &dbPlanPane{open: true, loading: true, statement: m.db.sql}
+	m.dbPlan = p
+	m.invalidate()
+	source := m.db.source
+	schema := m.db.schema
+	text := m.db.sql
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, 60*time.Second)
+		defer cancel()
+		stmts, err := m.mgr.DBStatements(ctx, Window, source, text, 0, uint32(byteToUTF16Offset(text, len(text))))
+		if err == nil && len(stmts) == 0 {
+			err = fmt.Errorf("没有可解释的语句")
+		}
+		var nodes []openidea.DBPlanNode
+		if err == nil {
+			p.statement = stmts[0].Text
+			nodes, err = m.mgr.DBExplain(ctx, Window, m.nextRequest(), source, stmts[0].Text, schema)
+		}
+		m.post(func() {
+			if m.dbPlan != p {
+				return
+			}
+			p.loading = false
+			if err != nil {
+				p.err = "读取执行计划失败：" + err.Error()
+			} else {
+				p.nodes = nodes
+				p.rows = dbPlanRows(nodes)
+			}
+			m.invalidate()
+		})
+	}()
+}
+
+// closeDBPlan drops the plan view.
+func (m *Model) closeDBPlan() { m.dbPlan = nil; m.invalidate() }
+
+// dbPlanRows places each node under its parent, depth first.
+func dbPlanRows(nodes []openidea.DBPlanNode) []dbPlanRow {
+	children := make(map[int][]uint32)
+	var roots []uint32
+	for i, n := range nodes {
+		if n.Parent != nil && int(*n.Parent) < len(nodes) {
+			children[int(*n.Parent)] = append(children[int(*n.Parent)], uint32(i))
+		} else {
+			roots = append(roots, uint32(i))
+		}
+	}
+	out := make([]dbPlanRow, 0, len(nodes))
+	var walk func(i uint32, depth int)
+	walk = func(i uint32, depth int) {
+		out = append(out, dbPlanRow{index: i, depth: depth})
+		for _, c := range children[int(i)] {
+			walk(c, depth+1)
+		}
+	}
+	for _, r := range roots {
+		walk(r, 0)
+	}
+	return out
+}
+
+// dbHistoryLabel names a history entry in the list.
+func dbHistoryLabel(e openidea.DBHistoryEntry) string {
+	line := strings.TrimSpace(strings.SplitN(strings.TrimSpace(e.Text), "\n", 2)[0])
+	if len(line) > 90 {
+		line = line[:90] + "…"
+	}
+	return line
+}
+
+// dbHistoryDialog draws the statement history list.
+func (m *Model) dbHistoryDialog(c *ui.Context, p *ui.Theme) {
+	h := m.dbHist
+	if h == nil {
+		return
+	}
+	open := h.open
+	jump := -1
+	ui.Modal(c, &open, func() {
+		ui.Column(c).Width(620).Gap(8).Children(func() {
+			ui.Text(c, "执行历史").FontSize(13).Bold().TextColor(p.Text).SingleLine()
+			if h.loading {
+				ui.Text(c, "读取中…").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+			} else if h.err != "" {
+				ui.Text(c, h.err).FontSize(11).TextColor(p.Danger).SingleLine().Ellipsis("…")
+			} else if len(h.items) == 0 {
+				ui.Text(c, "还没有执行过 SQL。").FontSize(11).TextColor(p.TextMuted).SingleLine()
+			} else {
+				ui.Text(c, fmt.Sprintf("%d 条 · Enter 放入控制台 · Esc 关闭", len(h.items))).
+					FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+				ui.Scroll(c).Height(320).Children(func() {
+					ui.Column(c).Children(func() {
+						for i, e := range h.items {
+							i, e := i, e
+							row := ui.Row(c.Key(fmt.Sprintf("dbhist:%d", i))).Height(24).Padding(0, 8).
+								AlignItems(ui.Center)
+							if i == h.sel || row.Hovered() {
+								row.Background(p.SurfaceHover)
+							}
+							row.Children(func() {
+								ui.Text(c, dbHistoryLabel(e)).FontSize(11.5).TextColor(p.Text).
+									SingleLine().Ellipsis("…")
+							})
+							if row.Clicked() {
+								jump = i
+								h.sel = i
+							}
+						}
+					})
+				})
+			}
+		})
+	})
+	if !open && m.dbHist != nil {
+		m.closeDBHistory()
+	}
+	if jump >= 0 {
+		m.ChooseDBHistory(jump)
+	}
+}
+
+// dbPlanDialog draws an execution plan.
+func (m *Model) dbPlanDialog(c *ui.Context, p *ui.Theme) {
+	pl := m.dbPlan
+	if pl == nil {
+		return
+	}
+	open := pl.open
+	ui.Modal(c, &open, func() {
+		ui.Column(c).Width(720).Gap(8).Children(func() {
+			ui.Text(c, "执行计划").FontSize(13).Bold().TextColor(p.Text).SingleLine()
+			ui.Text(c, strings.TrimSpace(strings.SplitN(pl.statement, "\n", 2)[0])).FontSize(10.5).
+				TextColor(p.TextMuted).SingleLine().Ellipsis("…")
+			if pl.loading {
+				ui.Text(c, "解释中…").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+			} else if pl.err != "" {
+				ui.Text(c, pl.err).FontSize(11).TextColor(p.Danger).SingleLine().Ellipsis("…")
+			} else {
+				ui.Scroll(c).Height(340).Children(func() {
+					ui.Column(c).Children(func() {
+						for _, r := range pl.rows {
+							n := pl.nodes[r.index]
+							ui.Row(c).Height(22).Padding(0, float32(8+r.depth*16)).Gap(6).
+								AlignItems(ui.Center).Children(func() {
+								ui.Text(c, n.Operation).FontSize(11.5).TextColor(p.Text).SingleLine()
+								if n.Params != "" {
+									ui.Text(c, n.Params).FontSize(10.5).TextColor(p.TextMuted).
+										SingleLine().Ellipsis("…")
+								}
+							})
+						}
+					})
+				})
+			}
+			ui.Row(c).Children(func() {
+				ui.Spacer(c)
+				ui.Button(c, "关闭").OnClick(func() { m.closeDBPlan() })
+			})
+		})
+	})
+	if !open && m.dbPlan != nil {
+		m.closeDBPlan()
 	}
 }
 

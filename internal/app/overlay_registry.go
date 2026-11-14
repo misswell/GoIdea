@@ -28,6 +28,12 @@ func init() {
 	reg("dbTable", overlayLayerDialog, 55, true,
 		func(m *Model) bool { return m.dbTable != nil },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.dbTableDialog(c, p) })
+	reg("dbHistory", overlayLayerPopup, 56, true,
+		func(m *Model) bool { return m.dbHist != nil && m.dbHist.open },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.dbHistoryDialog(c, p) })
+	reg("dbPlan", overlayLayerDialog, 57, true,
+		func(m *Model) bool { return m.dbPlan != nil && m.dbPlan.open },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.dbPlanDialog(c, p) })
 	reg("intentions", overlayLayerPopup, 30, false,
 		func(m *Model) bool { return m.intents != nil },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.intentionsDialog(c, p) })

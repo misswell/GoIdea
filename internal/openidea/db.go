@@ -112,6 +112,54 @@ func (m *Manager) DBTableDDL(ctx context.Context, window, id, schema, table stri
 	return out, nil
 }
 
+// DBHistoryEntry is one statement the console ran; Time is Unix milliseconds.
+type DBHistoryEntry struct {
+	Text string  `json:"text"`
+	Time float64 `json:"time"`
+}
+
+// DBPlanNode is one operation of an explained statement; Parent indexes the
+// plan's node list (roots: nil).
+type DBPlanNode struct {
+	Parent     *uint32 `json:"parent"`
+	Operation  string  `json:"operation"`
+	Params     string  `json:"params"`
+	Properties []struct {
+		Name  string `json:"name"`
+		Value string `json:"value"`
+	} `json:"properties"`
+}
+
+// DBHistory lists the statements run against source id, newest first.
+func (m *Manager) DBHistory(ctx context.Context, window, id string) ([]DBHistoryEntry, error) {
+	raw, err := m.Invoke(ctx, window, "db_history", map[string]any{"id": id})
+	if err != nil {
+		return nil, err
+	}
+	var out []DBHistoryEntry
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// DBExplain is the plan of statement without running it.
+func (m *Manager) DBExplain(ctx context.Context, window string, request uint32, id, statement, schema string) ([]DBPlanNode, error) {
+	args := map[string]any{"request": request, "id": id, "statement": statement}
+	if schema != "" {
+		args["schema"] = schema
+	}
+	raw, err := m.Invoke(ctx, window, "db_explain", args)
+	if err != nil {
+		return nil, err
+	}
+	var out []DBPlanNode
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DBSources lists the project's data sources.
 func (m *Manager) DBSources(ctx context.Context, window string) ([]DataSource, error) {
 	raw, err := m.Invoke(ctx, window, "db_sources", nil)

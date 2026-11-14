@@ -1,6 +1,7 @@
 package app
 
 import (
+	"strings"
 	"testing"
 
 	"mayoi/internal/openidea"
@@ -72,5 +73,36 @@ func TestDBTableRange(t *testing.T) {
 	s.page.Result.Rows = [][]*string{nil, nil, nil}
 	if got := dbTableRange(s); got != "101–103 行" {
 		t.Fatalf("range = %q", got)
+	}
+}
+
+func TestDBPlanRows(t *testing.T) {
+	p := func(i uint32) *uint32 { return &i }
+	nodes := []openidea.DBPlanNode{
+		{Operation: "root"},
+		{Parent: p(0), Operation: "child-a"},
+		{Parent: p(0), Operation: "child-b"},
+		{Parent: p(1), Operation: "grandchild"},
+		{Operation: "root-2"},
+	}
+	rows := dbPlanRows(nodes)
+	want := []dbPlanRow{{0, 0}, {1, 1}, {3, 2}, {2, 1}, {4, 0}}
+	if len(rows) != len(want) {
+		t.Fatalf("rows = %+v", rows)
+	}
+	for i := range want {
+		if rows[i] != want[i] {
+			t.Fatalf("row %d = %+v, want %+v", i, rows[i], want[i])
+		}
+	}
+}
+
+func TestDBHistoryLabel(t *testing.T) {
+	if got := dbHistoryLabel(openidea.DBHistoryEntry{Text: "  SELECT 1;\nSELECT 2;"}); got != "SELECT 1;" {
+		t.Fatalf("label = %q", got)
+	}
+	long := strings.Repeat("x", 120)
+	if got := dbHistoryLabel(openidea.DBHistoryEntry{Text: long}); got != long[:90]+"…" {
+		t.Fatalf("long label = %q", got)
 	}
 }
