@@ -756,6 +756,8 @@ type NotifyPrefs struct {
 	// NoBalloons turns balloons off everywhere; the answer to a command the
 	// user ran still pops up, as userInitiated does upstream.
 	NoBalloons bool `json:"noBalloons,omitempty"`
+	// Sound plays the system alert for a balloon, as "Play sound" does.
+	Sound bool `json:"sound,omitempty"`
 	// Groups holds each group's choice; a group with no entry balloons and
 	// logs.
 	Groups map[string]NotifyGroupPrefs `json:"groups,omitempty"`

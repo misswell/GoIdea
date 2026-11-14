@@ -141,9 +141,17 @@ func TestNotifyPrefsDraftRoundTrip(t *testing.T) {
 	if !d.notifyBalloons || len(d.notifyGroups) != 0 {
 		t.Fatalf("the default draft is %+v", d)
 	}
+	if d.notifySound {
+		t.Fatal("the default draft plays sound")
+	}
 	if p := d.notifyPrefs(); p != nil {
 		t.Fatalf("the default draft stores %+v, want nil", p)
 	}
+	d.notifySound = true
+	if p := d.notifyPrefs(); p == nil || !p.Sound {
+		t.Fatalf("the staged sound is %+v", p)
+	}
+	d.notifySound = false
 	d.notifyBalloons = false
 	d.notifyGroups["lsp"] = NotifyGroupPrefs{Display: "none", NoLog: true}
 	p := d.notifyPrefs()
@@ -153,4 +161,28 @@ func TestNotifyPrefsDraftRoundTrip(t *testing.T) {
 	if !sameNotifyGroups(d.notifyGroups, p.Groups) {
 		t.Fatalf("the staged groups do not compare equal to the stored ones")
 	}
+}
+
+func TestNotificationSoundPlaysForBalloons(t *testing.T) {
+	old := notifyBeep
+	played := 0
+	notifyBeep = func() { played++ }
+	defer func() { notifyBeep = old }()
+
+	m := &Model{}
+	m.notifyInfo("quiet", "Quiet", "")
+	if played != 0 {
+		t.Fatalf("sound played while off: %d", played)
+	}
+	m.prefs.Notify = &NotifyPrefs{Sound: true}
+	m.notifyInfo("loud", "Loud", "")
+	if played != 1 {
+		t.Fatalf("the balloon did not play the sound: %d", played)
+	}
+	m.prefs.Notify.Groups = map[string]NotifyGroupPrefs{"lsp": {Display: "none"}}
+	m.notifyInfo("lsp:silent", "Silent", "")
+	if played != 1 {
+		t.Fatalf("a suppressed balloon played the sound: %d", played)
+	}
+	m.ClearNotifications()
 }

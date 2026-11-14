@@ -102,6 +102,7 @@ type settingsDraft struct {
 	// The Notifications page stages the global balloon switch and each
 	// group's display and log choice.
 	notifyBalloons bool
+	notifySound    bool
 	notifyGroups   map[string]NotifyGroupPrefs
 }
 
@@ -113,10 +114,10 @@ func (d settingsDraft) notifyPrefs() *NotifyPrefs {
 			groups[k] = v
 		}
 	}
-	if d.notifyBalloons && len(groups) == 0 {
+	if d.notifyBalloons && !d.notifySound && len(groups) == 0 {
 		return nil
 	}
-	return &NotifyPrefs{NoBalloons: !d.notifyBalloons, Groups: groups}
+	return &NotifyPrefs{NoBalloons: !d.notifyBalloons, Sound: d.notifySound, Groups: groups}
 }
 
 // appearance is the staged switches as the editor stores them.
@@ -782,6 +783,7 @@ func (m *Model) settingsDraftFromPrefs() settingsDraft {
 		todoCaseSensitive:         todoCase,
 		todoCommentsOnly:          todoComments,
 		notifyBalloons:            m.prefs.Notify == nil || !m.prefs.Notify.NoBalloons,
+		notifySound:               m.prefs.Notify != nil && m.prefs.Notify.Sound,
 		notifyGroups:              m.prefs.notifyGroups(),
 	}
 }
@@ -1242,6 +1244,7 @@ func (m *Model) settingsDirtyPage(key string) bool {
 		return m.settingsDraft.tabPrefs() != m.prefs.Tabs
 	case settingsPageNotifications:
 		return m.settingsDraft.notifyBalloons != (m.prefs.Notify == nil || !m.prefs.Notify.NoBalloons) ||
+			m.settingsDraft.notifySound != (m.prefs.Notify != nil && m.prefs.Notify.Sound) ||
 			!sameNotifyGroups(m.settingsDraft.notifyGroups, m.prefs.notifyGroups())
 	case settingsPageTodo:
 		patterns, caseSensitive, commentsOnly := m.prefs.todoSettings()
@@ -1297,6 +1300,7 @@ func (m *Model) settingsResetPage() {
 		m.settingsDraft.showFileIcon = true
 	case settingsPageNotifications:
 		m.settingsDraft.notifyBalloons = true
+		m.settingsDraft.notifySound = false
 		m.settingsDraft.notifyGroups = map[string]NotifyGroupPrefs{}
 	case settingsPageTodo:
 		m.settingsDraft.todoPatterns = append([]TodoPattern(nil), defaultTodoPatterns...)

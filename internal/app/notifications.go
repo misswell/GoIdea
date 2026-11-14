@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 )
 
@@ -79,6 +80,9 @@ func (m *Model) notifyError(key, title, body string, actions ...notifyAction) {
 	m.postNotification(ideNotification{key: key, level: "error", title: title, body: body, actions: actions})
 }
 
+// notifyBeep plays the system alert; a test replaces it.
+var notifyBeep = func() { mygo.Shell.Beep() }
+
 // postNotification adds an entry and starts its balloon's clock.
 func (m *Model) postNotification(n ideNotification) {
 	n.id = m.notify.seq + 1
@@ -89,6 +93,9 @@ func (m *Model) postNotification(n ideNotification) {
 	n.balloon = n.userInitiated || (!m.notifyOff() && prefs.Display != "none")
 	n.sticky = prefs.Display == "sticky" || n.level == "error"
 	n.logged = !prefs.NoLog
+	if n.balloon && m.prefs.Notify != nil && m.prefs.Notify.Sound {
+		notifyBeep()
+	}
 	// Neither popped nor listed: dropped, as IDEA's "No popup" and no log.
 	if !n.balloon && !n.logged {
 		m.invalidate()

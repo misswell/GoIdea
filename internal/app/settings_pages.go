@@ -624,6 +624,10 @@ func (m *Model) settingsNotificationsBody(c *ui.Context, oi oiColors) {
 	if ui.Checkbox(c, &balloons, "Display balloon notifications").Changed() {
 		m.settingsDraft.notifyBalloons = balloons
 	}
+	sound := m.settingsDraft.notifySound
+	if ui.Checkbox(c, &sound, "Play sound").Changed() {
+		m.settingsDraft.notifySound = sound
+	}
 	choices := []struct{ id, label string }{
 		{"balloon", "Balloon"},
 		{"sticky", "Sticky"},
