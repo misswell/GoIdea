@@ -67,6 +67,7 @@ needs a `## <version>` section here, or its build fails.
 - 右下角弹出通知气泡：构建结果与错误会提示，悬停暂停消失，错误气泡保留到手动关闭。
 - 右侧条纹新增 **Notifications** 铃铛和未读计数，窗口里保留历史，**Clear All** 清空。
 - 设置新增 **Appearance & Behavior › Notifications**：全局气泡开关、每组 Balloon/Sticky/No popup 和 Log。
+- 新增 **Services** 工具窗口（**Window › Tool Windows › Services**），列出构建系统、运行配置与工具设置，双击即执行。
 - **Navigate > Call Hierarchy**（`Ctrl+Alt+H`）和 **Type Hierarchy**（`Ctrl+H`）在右侧列出调用链，可逐级展开。
 - **查找**（`Cmd+3`）和**查找用法**（`Alt+F7`）的结果改在底部工具窗口显示，不再占用侧边栏。
 - **结构**窗口（`Cmd+7`）在侧边栏列出当前文件的成员，可过滤、折叠，点击跳到声明。

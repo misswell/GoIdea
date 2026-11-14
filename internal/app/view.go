@@ -1001,6 +1001,8 @@ func (m *Model) toolPanel(c *ui.Context, p *ui.Theme, name string) {
 		m.searchPanel(c, p)
 	case "usages":
 		m.usagesPanel(c, p)
+	case "services":
+		m.servicesPanel(c, p)
 	}
 }
 

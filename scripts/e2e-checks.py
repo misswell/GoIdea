@@ -27,7 +27,7 @@ def get(data, dotted, default=None):
 SHOT_STATES = {
     "workbench", "editor", "bottom-todo", "split", "settings", "palette",
     "popup-quick-files", "search-everywhere", "balloons", "notifications",
-    "left-structure", "dialog", "welcome-empty", "welcome",
+    "left-structure", "services", "dialog", "welcome-empty", "welcome",
     "welcome-customize", "welcome-plugins",
 }
 

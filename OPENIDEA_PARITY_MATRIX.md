@@ -29,7 +29,7 @@ new action, tool window, page or command appears automatically.
 | Feature folders | 43 | 0 | 12 | 0 | 0 | 31 |
 | Actions | 647 | 43 | 87 | 0 | 1 | 516 |
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
-| Tool windows | 30 | 10 | 6 | 0 | 0 | 14 |
+| Tool windows | 30 | 10 | 7 | 0 | 0 | 13 |
 | Overlays | 56 | 1 | 0 | 0 | 0 | 55 |
 | Editor contributions | 35 | 0 | 1 | 0 | 0 | 34 |
 | Editor kinds | 4 | 0 | 0 | 0 | 0 | 4 |
@@ -988,7 +988,7 @@ same bindings until a check records it.
 | `remote.ports` | Ports | bottom | `src/features/remote-dev/index.ts` | missing |
 | `remoteHost` | Remote Host | right | `src/features/deployment/index.ts` | missing |
 | `run` | Run | bottom | `src/features/run/index.ts` | integrated - base.run.config, base.run.exit, base.run.build |
-| `services` | Services | bottom | `src/features/services/index.ts` | missing |
+| `services` | Services | bottom | `src/features/services/index.ts` | partial - internal/app/services.go: build system detection, run configurations and tool settings rows that run their action; internal/app/services_test.go; missing the compose/plugin service model and per-service logs |
 | `structure` | Structure | left | `src/features/search/index.ts` | integrated - internal/app/structure.go structureRowsUI; lsp.structure.rows, lsp.structure.first, lsp.structure.visible; internal/app/structure_test.go |
 | `terminal` | Terminal | bottom | `src/features/terminal/index.ts` | partial - internal/app/term.go TermPane tab groups, OpenTermTab Cmd+T, SplitTerm/UnsplitTerm with termPaneBody in view.go, ShowTermFind/FindTermStep Cmd+F find bar, CloseTermTab hides the empty window; base.term.output, base.term.tabs, base.term.split, base.term.find; internal/app/term_test.go |
 | `todo` | TODO | bottom | `src/features/todo/index.ts` | integrated - internal/app/todo.go todoPanel with 项目/当前文件/按范围/更改 tabs, keyword chips and scope bar over search_start; base.todo.done, base.todo.items, base.todo.openFiles, base.todo.visible; internal/app/todo_test.go |

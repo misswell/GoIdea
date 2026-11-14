@@ -181,6 +181,9 @@ type Model struct {
 	// notify is the notification center: the balloons and their history.
 	notify notifier
 
+	// services is the Services bottom window.
+	services servicesPane
+
 	// runAnything is the open Run Anything popup, or nil.
 	runAnything *runAnythingState
 

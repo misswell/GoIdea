@@ -75,6 +75,7 @@ func mainMenuGroups() []menuEntry {
 		action("Git", "vcs.show", "CmdOrCtrl+9"),
 		action("Terminal", "view.terminal", "Alt+F12"),
 		action("Database", "view.database", ""),
+		action("Services", "view.services", ""),
 		rule(),
 		action("Hide All Tool Windows", "view.hideAll", "CmdOrCtrl+Shift+F12"),
 	)

@@ -55,6 +55,7 @@ func commands() []appCommand {
 		{"editor.previousSplitter", "转到上一个编辑器组", "视图", "Alt+Shift+Tab", "go to previous splitter editor group pane", func(m *Model) { m.GoToPreviousSplitter() }},
 		{"editor.configureTabs", "配置编辑器标签页…", "文件", "", "configure editor tabs settings", func(m *Model) { m.OpenSettingsPage(settingsPageEditorTabs) }},
 		{"view.notifications", "Notifications", "视图", "", "notifications balloon history alerts unread", func(m *Model) { m.ToggleNotificationsWindow() }},
+		{"view.services", "Services", "视图", "", "services build maven gradle run tools", func(m *Model) { m.ToggleServices() }},
 		{"notifications.clear", "Clear All Notifications", "视图", "", "clear all notifications history", func(m *Model) { m.ClearNotifications() }},
 		{"vcs.show", "显示 Git 更改", "Git", "Cmd+9", "git vcs changes status", func(m *Model) { m.ShowVCS() }},
 		{"vcs.log", "显示 Git 日志", "Git", "", "git vcs log history commits", func(m *Model) { m.ShowLog() }},

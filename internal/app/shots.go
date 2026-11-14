@@ -152,6 +152,11 @@ func (m *Model) SmokeShots(ctx context.Context, dir string) (map[string]any, err
 	shot("search-everywhere")
 	m.post(func() { m.CloseSearchEverywhere() })
 
+	// The Services tool window over the detected build system.
+	m.post(func() { m.ShowServices() })
+	shot("services")
+	m.post(func() { m.CloseServices() })
+
 	// The left tool window: Structure in the split area below Project.
 	m.post(func() { m.ShowStructure() })
 	wait(func() bool { return m.leftSplit == "structure" && m.structure.visible }, 30*time.Second)
