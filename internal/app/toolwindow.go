@@ -516,6 +516,35 @@ func (m *Model) MoveToolToRight() {
 	m.invalidate()
 }
 
+// MoveToolToLeft docks the active window into the left area, the left split
+// with MoveToolToLeftSplit, and the right split or bottom split with their own
+// commands, as OpenIDEA's Move to › Left Top / Left Bottom / Right Bottom /
+// Bottom Right do.
+func (m *Model) MoveToolToLeft() { m.moveToolToSlot(dockLeft) }
+
+// MoveToolToLeftSplit docks the active window under the left area's first one.
+func (m *Model) MoveToolToLeftSplit() { m.moveToolToSlot(dockLeftSplit) }
+
+// MoveToolToRightSplit docks the active window into the right area's bottom
+// island, below the window already there.
+func (m *Model) MoveToolToRightSplit() { m.moveToolToSlot(dockRightSplit) }
+
+// MoveToolToBottomSplit docks the active window into the bottom area's right
+// island, beside the window already there.
+func (m *Model) MoveToolToBottomSplit() { m.moveToolToSlot(dockBottomSplit) }
+
+func (m *Model) moveToolToSlot(target dockSlot) {
+	if !isToolWindow(m.tool) || !m.toolVisible(m.tool) {
+		return
+	}
+	if dockSpec(m.tool) == nil {
+		m.status = "该工具窗口不能移动"
+		m.invalidate()
+		return
+	}
+	m.DockMove(m.tool, target)
+}
+
 // MoveToolToBottom docks a right-area window back into the bottom area.
 func (m *Model) MoveToolToBottom() {
 	if id := m.dockOccupant(dockRight); id != "" {

@@ -71,6 +71,7 @@ needs a `## <version>` section here, or its build fails.
 - **Problems** 和 **TODO** 可在右侧与底部之间移动：**Window › Move Tool Window to Right / Bottom**。
 - 移到右侧的 **Problems**、**TODO** 不再显示空白；右侧上下可各放一个窗口，中间分隔线可拖动调整比例。
 - **Customize Main Toolbar** 加入的操作现在真的出现在标题栏，以操作标题显示，上下文不可用时自动隐藏。
+- **Window › Move to** 提供 Left Top / Left Bottom / Right Top / Right Bottom / Bottom Left / Bottom Right，移动不丢内容。
 - 状态栏显示当前 **Git** 分支和构建进度，点击分支即打开分支弹窗。
 - 工具窗口的位置、隐藏与恢复按六个插槽保存，旧会话打开项目时会自动迁移。
 - 全部工具窗口（Run、Debug、Build、Terminal、Git Log、Find、Usages、Structure、Bookmarks）改用同一套插槽与注册表，移动或隐藏不会清空内容。

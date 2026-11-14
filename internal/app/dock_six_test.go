@@ -72,6 +72,47 @@ func TestHideAllRestoresBothRightSlots(t *testing.T) {
 	}
 }
 
+func TestMoveCommandsReachEverySlot(t *testing.T) {
+	m := toolModel()
+	m.ShowProblems()
+	steps := []struct {
+		name string
+		move func(*Model)
+		want dockSlot
+	}{
+		{"left", (*Model).MoveToolToLeft, dockLeft},
+		{"left split", (*Model).MoveToolToLeftSplit, dockLeftSplit},
+		{"right split", (*Model).MoveToolToRightSplit, dockRightSplit},
+		{"right", (*Model).MoveToolToRight, dockRight},
+		{"bottom", (*Model).MoveToolToBottom, dockBottom},
+		{"bottom split", (*Model).MoveToolToBottomSplit, dockBottomSplit},
+	}
+	for _, s := range steps {
+		s.move(m)
+		if got := m.dock.slots[s.want]; got != "problems" {
+			t.Fatalf("%s: the slot holds %q", s.name, got)
+		}
+		count := 0
+		for _, id := range m.dock.slots {
+			if id == "problems" {
+				count++
+			}
+		}
+		if count != 1 {
+			t.Fatalf("%s: problems sits in %d slots", s.name, count)
+		}
+		if !m.problems.visible {
+			t.Fatalf("%s: the content was closed", s.name)
+		}
+	}
+	for _, id := range []string{"view.moveToolToLeft", "view.moveToolToLeftSplit",
+		"view.moveToolToRightSplit", "view.moveToolToBottomSplit"} {
+		if _, ok := Command(id); !ok {
+			t.Fatalf("%s is not in the palette", id)
+		}
+	}
+}
+
 func TestDockLayoutRoundTrips(t *testing.T) {
 	m := toolModel()
 	m.setRoot(t.TempDir())
