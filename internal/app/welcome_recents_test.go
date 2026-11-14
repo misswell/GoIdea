@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/egoist/mygo/ui"
 )
 
 func TestSessionRecentsMigrateTheOldList(t *testing.T) {
@@ -131,5 +133,19 @@ func TestRememberProjectKeepsGroupAndBranch(t *testing.T) {
 	m.rememberProject(a)
 	if len(m.recents) != 1 || m.recents[0].Group != "Work" || m.recents[0].Branch != "main" || m.recents[0].OpenedAt == 0 {
 		t.Fatalf("remember lost %+v", m.recents[0])
+	}
+}
+
+func TestWelcomeRendersAGroupAndItsProjects(t *testing.T) {
+	m := &Model{recents: []RecentProject{{Path: "/work/shop", Name: "shop"}}}
+	m.CreateRecentGroup("Work")
+	m.MoveRecentToGroup("/work/shop", "Work")
+	tt := ui.NewTester(func(c *ui.Context) { m.View(c) }, 1440, 900)
+	tt.Frame()
+	if !tt.HasText("Work") {
+		t.Fatalf("the group did not draw: %q", tt.Texts())
+	}
+	if !tt.HasText("shop") {
+		t.Fatalf("the grouped project did not draw: %q", tt.Texts())
 	}
 }
