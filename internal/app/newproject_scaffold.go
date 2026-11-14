@@ -192,6 +192,25 @@ func (st *newProjectState) scaffoldFieldError(f scaffoldField) string {
 	return "Invalid value"
 }
 
+// scaffoldVisible reports whether a field applies to the current values, as
+// filters.ts' isVisible does (a C++ standard field only under the C++ choice).
+func (st *newProjectState) scaffoldVisible(f scaffoldField) bool {
+	for id, allowed := range f.Visible {
+		v := st.scaffoldValue(id)
+		ok := false
+		for _, a := range allowed {
+			if a == v {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			return false
+		}
+	}
+	return true
+}
+
 // scaffoldReady reports whether the backend generators drive the dialog.
 func (st *newProjectState) scaffoldReady() bool {
 	return len(st.catalog) > 0 && st.generator != "" && !st.busy
@@ -202,6 +221,9 @@ func (m *Model) createScaffoldProject() {
 	st := &m.newProject
 	values := map[string]string{}
 	for _, f := range st.fields {
+		if !st.scaffoldVisible(f) {
+			continue
+		}
 		if v := st.scaffoldValue(f.ID); v != "" || f.Kind.Type == "text" || f.Kind.Type == "sdk" {
 			values[f.ID] = v
 		}
@@ -311,6 +333,9 @@ func (m *Model) newProjectScaffoldPanel(c *ui.Context, p *ui.Theme) {
 		ui.Column(c).Grow(1).Gap(6).Children(func() {
 			for _, f := range st.fields {
 				f := f
+				if !st.scaffoldVisible(f) {
+					continue
+				}
 				switch f.Kind.Type {
 				case "choice":
 					ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {

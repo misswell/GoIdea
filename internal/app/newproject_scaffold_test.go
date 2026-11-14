@@ -73,3 +73,17 @@ func TestScaffoldGeneratorSelection(t *testing.T) {
 		t.Fatalf("build default = %q", got)
 	}
 }
+
+func TestScaffoldFieldVisibility(t *testing.T) {
+	st := &newProjectState{values: map[string]string{"lang": "cpp"}, fields: []scaffoldField{
+		{ID: "lang", Default: "cpp", Kind: scaffoldKind{Type: "choice"}},
+		{ID: "cxx", Default: "20", Visible: map[string][]string{"lang": {"cpp"}}},
+		{ID: "cstd", Default: "17", Visible: map[string][]string{"lang": {"c"}}},
+	}}
+	if !st.scaffoldVisible(st.fields[1]) {
+		t.Fatal("the C++ field is hidden under C++")
+	}
+	if st.scaffoldVisible(st.fields[2]) {
+		t.Fatal("the C field shows under C++")
+	}
+}
