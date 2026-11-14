@@ -2127,7 +2127,7 @@ Local-only commands and the per-command argument lists are in
 | `lsp_virtual_document` | lsp | yes |  | missing |
 | `lsp_workspace_symbols` | lsp | yes | yes | missing |
 | `mark_recent` | nav | yes | yes | missing |
-| `maven_dependency_completion` | build | yes |  | missing |
+| `maven_dependency_completion` | build | yes | yes | missing |
 | `maven_dependency_declaration` | build | yes |  | missing |
 | `maven_exclude_dependency` | build | yes |  | missing |
 | `maven_goto_declaration` | build | yes |  | missing |
@@ -2488,7 +2488,7 @@ Local-only commands and the per-command argument lists are in
 | `wsl_distros` | wsl | no |  | missing |
 | `wsl_resolve` | wsl | no |  | missing |
 
-476 commands are served over stdio and 94 are called by GoIDEA today. A command
+476 commands are served over stdio and 95 are called by GoIDEA today. A command
 that is registered only in the desktop shell needs an `ops` module before stdio
 can serve it; a GoIDEA check counts only when the UI path works end to end.
 

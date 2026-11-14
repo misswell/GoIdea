@@ -31,6 +31,10 @@ func (m *Model) requestCompletion(t *Tab, req editor.CompletionRequest) {
 	if !m.tabOpen(t) || time.Now().Before(t.compOff) {
 		return
 	}
+	if isPomPath(t.doc.Path()) {
+		m.requestPomCompletion(t, req)
+		return
+	}
 	doc := t.doc
 	docID := doc.ID()
 	pos := doc.UTF16Pos(req.Offset)
