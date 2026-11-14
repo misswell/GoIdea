@@ -379,6 +379,16 @@ func (m *Model) stripeButton(c *ui.Context, p *ui.Theme, oi oiColors, key string
 	if b.Clicked() {
 		onClick()
 	}
+	// A registered window's button drags: the edges of the workbench dock it,
+	// as OpenIDEA's drag and drop does.
+	if dockSpec(key) != nil {
+		if _, _, held := b.Dragged(); held || m.dockDragArmed {
+			w, h := c.Size()
+			lx, ly, _ := b.PointerPosition()
+			r := b.Bounds()
+			m.dockDragGhost(key, r.X+lx, r.Y+ly, w, h, held)
+		}
+	}
 }
 
 // leftShown reports whether the left side draws: a window in either of its

@@ -276,6 +276,72 @@ func (m *Model) ToggleToolWindowPin() {
 	m.SetToolWindowPinned(id, !m.dockPinned(id))
 }
 
+// dockSlotLabel names a slot the way Move To does.
+func dockSlotLabel(s dockSlot) string {
+	switch s {
+	case dockLeft:
+		return "Left Top"
+	case dockLeftSplit:
+		return "Left Bottom"
+	case dockBottom:
+		return "Bottom Left"
+	case dockBottomSplit:
+		return "Bottom Right"
+	case dockRight:
+		return "Right Top"
+	case dockRightSplit:
+		return "Right Bottom"
+	}
+	return ""
+}
+
+// dockDropSlot is where a dropped tool window lands: the edges choose a side,
+// the lower or right-hand part of an edge chooses its split slot, as OpenIDEA's
+// drag and drop drops into the area under the pointer.
+func dockDropSlot(x, y, w, h float32) (dockSlot, bool) {
+	const edge float32 = 120
+	switch {
+	case x < edge:
+		if y > h*0.6 {
+			return dockLeftSplit, true
+		}
+		return dockLeft, true
+	case x > w-edge:
+		if y > h*0.6 {
+			return dockRightSplit, true
+		}
+		return dockRight, true
+	case y > h-160:
+		if x > w*0.55 {
+			return dockBottomSplit, true
+		}
+		return dockBottom, true
+	}
+	return 0, false
+}
+
+// dockDragGhost follows a tool window button dragged to x, y: over an edge it
+// previews the slot in the status bar and remembers it; letting go moves the
+// window there.
+func (m *Model) dockDragGhost(id string, x, y, w, h float32, held bool) {
+	if held {
+		slot, ok := dockDropSlot(x, y, w, h)
+		if !ok {
+			return
+		}
+		m.dockDragID, m.dockDragSlot, m.dockDragArmed = id, slot, true
+		m.status = "松开以停靠到 " + dockSlotLabel(slot)
+		m.invalidate()
+		return
+	}
+	if !m.dockDragArmed || m.dockDragID != id {
+		return
+	}
+	m.dockDragArmed = false
+	m.dockDragID = ""
+	m.DockMove(id, m.dockDragSlot)
+}
+
 // DockShow shows a registered window in its home slot (or where it already
 // sits), taking that slot from whatever held it. The content opens even when
 // it moves areas, so no slot is ever blank. A pinned window keeps its slot:

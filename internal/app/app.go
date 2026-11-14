@@ -183,6 +183,12 @@ type Model struct {
 	// seFilters is Search Everywhere's funnel, mirrored into the prefs.
 	seFilters seFilters
 
+	// dockDragID, dockDragSlot and dockDragArmed carry a dragged tool window
+	// button: the slot under the pointer and whether letting go moves it.
+	dockDragID    string
+	dockDragSlot  dockSlot
+	dockDragArmed bool
+
 	// notify is the notification center: the balloons and their history.
 	notify notifier
 
