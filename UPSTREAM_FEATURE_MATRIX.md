@@ -34,7 +34,7 @@ reimplementing it. A row is `INTEGRATED` only when the GoIDEA product
 | Vim mode | DETECTED | source in `cmd/mayoi`; not wired into `cmd/goidea` |
 | Terminal UI and PTY lifecycle | DETECTED | Mayoi's terminal is in-tree; GoIDEA uses the backend terminal |
 | Git changes/history UI | DETECTED | Mayoi's SCM is in-tree; GoIDEA uses the backend VCS |
-| JS/TS plugin engine (moejs) | DETECTED | source and plugin runtime in-tree; the management page uses `internal/plugin`, but plugin code is not started in `cmd/goidea` |
+| JS/TS plugin engine (moejs) | PARTIAL | `internal/plugin` starts the enabled plugins from the data folder at app start (on their own goroutines, `start()` calls `pluginsPage`); their manifest commands join the Action Registry as `plugin:<id>`, so the palette, menus and shortcuts run them through `Registry.Run`, and the set follows enable/disable, install, reload and remove. The Host serves `workspace.root`/`isRemote`/`readFile`/`stat` inside the project and `commands.list`/`run`, and names any unsupported API in its error; `plugins_test.go` covers the palette bridge and the workspace APIs. Still missing: editor/document/status-item/view APIs and plugin tool windows or overlays registering through the shared contribution registries |
 | Signed updates (mygo.Updater) | NOT_AVAILABLE | updates need the updater key; defer |
 
 ## MyGo (native UI framework and editor component)

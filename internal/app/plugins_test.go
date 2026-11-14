@@ -51,6 +51,23 @@ func TestPluginPageListsInstalledPlugins(t *testing.T) {
 			t.Fatalf("%q is not on the plugins page: %q", text, tt.Texts())
 		}
 	}
+	// The contributed command is a palette action, and the plugin's switch
+	// takes it out and puts it back.
+	id := pluginActionPrefix + "demo.run"
+	if _, ok := Command(id); !ok {
+		t.Fatalf("the plugin command is not in the palette: %v", actionList())
+	}
+	if got := commandTitle(id); got != "Demo: Run" {
+		t.Fatalf("the action title is %q", got)
+	}
+	m.setPluginEnabled("demo", false)
+	if _, ok := Command(id); ok {
+		t.Fatal("a disabled plugin's command stayed in the palette")
+	}
+	m.setPluginEnabled("demo", true)
+	if _, ok := Command(id); !ok {
+		t.Fatal("re-enabling the plugin did not bring its command back")
+	}
 }
 
 func TestPluginEnablePersists(t *testing.T) {
@@ -98,5 +115,38 @@ func TestPluginRemoveDeletesFolderAndSetting(t *testing.T) {
 	tt := welcomeTester(t, m, true)
 	if !tt.HasText("No plugins installed.") {
 		t.Fatalf("the page does not show the empty state: %q", tt.Texts())
+	}
+}
+
+func TestPluginHostServesTheWorkspace(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "a.txt"), []byte("hi"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := &Model{}
+	m.setRoot(root)
+	h := &goideaPluginHost{m: m}
+	if v, err := h.Call(nil, "workspace.root", nil); err != nil || v != root {
+		t.Fatalf("workspace.root = %v, %v", v, err)
+	}
+	if v, err := h.Call(nil, "workspace.isRemote", nil); err != nil || v != false {
+		t.Fatalf("workspace.isRemote = %v, %v", v, err)
+	}
+	v, err := h.Call(nil, "workspace.readFile", json.RawMessage(`{"path":"a.txt"}`))
+	if err != nil || v != "hi" {
+		t.Fatalf("workspace.readFile = %v, %v", v, err)
+	}
+	if _, err := h.Call(nil, "workspace.readFile", json.RawMessage(`{"path":"../escape.txt"}`)); err == nil {
+		t.Fatal("a path outside the project was read")
+	}
+	stat, err := h.Call(nil, "workspace.stat", json.RawMessage(`{"path":"a.txt"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := stat.(map[string]any)["type"]; got != "file" {
+		t.Fatalf("workspace.stat type = %v", got)
+	}
+	if _, err := h.Call(nil, "editor.active", nil); err == nil {
+		t.Fatal("an unsupported API answered without an error")
 	}
 }

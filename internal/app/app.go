@@ -618,6 +618,9 @@ func (m *Model) syncLoop() {
 }
 
 func (m *Model) start() {
+	// Start the plugin engine once the window loop is up: enabled plugins
+	// activate on their own goroutines and their commands join the palette.
+	m.pluginsPage()
 	root := m.startupRoot
 	var files []string
 	if root == "" {

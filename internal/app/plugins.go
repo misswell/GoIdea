@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -40,9 +41,82 @@ func (h *goideaPluginHost) setSettings(all map[string]json.RawMessage) {
 
 func (h *goideaPluginHost) setFolder(folder string) { h.folder.Store(&folder) }
 
-// Call implements plugin.Host.
-func (h *goideaPluginHost) Call(*plugin.Plugin, string, json.RawMessage) (any, error) {
-	return nil, errors.New("GoIDEA does not run plugin API calls yet")
+// Call implements plugin.Host: the read-only workspace APIs and the command
+// bridge every plugin needs. APIs without a GoIDEA equivalent answer with an
+// error naming them, so a plugin sees the limit instead of a silent nil.
+func (h *goideaPluginHost) Call(p *plugin.Plugin, method string, args json.RawMessage) (any, error) {
+	var in struct {
+		ID   string          `json:"id"`
+		Arg  json.RawMessage `json:"arg"`
+		Path string          `json:"path"`
+	}
+	if len(args) > 0 {
+		_ = json.Unmarshal(args, &in)
+	}
+	switch method {
+	case "workspace.root":
+		return h.m.Root(), nil
+	case "workspace.isRemote":
+		return false, nil
+	case "workspace.readFile":
+		path, err := h.projectPath(in.Path)
+		if err != nil {
+			return nil, err
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, err
+		}
+		return string(data), nil
+	case "workspace.stat":
+		path, err := h.projectPath(in.Path)
+		if err != nil {
+			return nil, err
+		}
+		info, err := os.Stat(path)
+		if err != nil {
+			return nil, err
+		}
+		kind := "file"
+		if info.IsDir() {
+			kind = "directory"
+		}
+		return map[string]any{"type": kind, "size": info.Size()}, nil
+	case "commands.list":
+		out := make([]map[string]string, 0, 32)
+		for _, a := range actionList() {
+			out = append(out, map[string]string{"id": a.ID, "title": a.Title})
+		}
+		return out, nil
+	case "commands.run":
+		if in.ID == "" {
+			return nil, errors.New("commands.run needs an id")
+		}
+		h.m.post(func() { h.m.RunCommand(in.ID) })
+		return nil, nil
+	}
+	return nil, fmt.Errorf("GoIDEA does not support the plugin API %q yet", method)
+}
+
+// projectPath resolves a plugin's workspace path, refusing one outside the
+// project so a plugin cannot read the rest of the machine through GoIDEA.
+func (h *goideaPluginHost) projectPath(path string) (string, error) {
+	root := h.m.Root()
+	if root == "" {
+		return "", errors.New("no project is open")
+	}
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(root, path)
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(root, abs)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("outside the project: %s", path)
+	}
+	return abs, nil
 }
 
 // Settings implements plugin.Host: the plugin's object of plugins.<name>.
@@ -121,6 +195,10 @@ type pluginPage struct {
 	index      []plugin.IndexEntry
 	indexState int
 	indexErr   string
+
+	// actions are the palette action ids registered for the plugins'
+	// commands, so a reload can take the old ones out first.
+	actions []string
 }
 
 // pluginDirs are where GoIDEA keeps its plugins: beside its settings file,
@@ -155,7 +233,67 @@ func (m *Model) pluginsPage() *pluginPage {
 	pg.reg.Version = mygo.App.Version()
 	m.plugins = pg
 	pg.reg.Load()
+	for _, p := range pg.reg.Plugins() {
+		// Toggled launches the enabled plugins whose activation is onStartup,
+		// on their own goroutine.
+		pg.reg.Toggled(p.Name)
+	}
+	pg.refreshActions(m)
 	return pg
+}
+
+// pluginActionPrefix keeps a plugin's command ids from colliding with the
+// point's own actions in the palette.
+const pluginActionPrefix = "plugin:"
+
+// refreshActions mirrors the enabled plugins' commands into the action
+// registry, so the palette, menus and shortcuts run them exactly once.
+func (pg *pluginPage) refreshActions(m *Model) {
+	pg.syncActions(m, pg.reg.Commands(""))
+}
+
+// syncActions replaces the plugin-command actions with cmds.
+func (pg *pluginPage) syncActions(m *Model, cmds []plugin.Command) {
+	for _, id := range pg.actions {
+		unregisterAction(id)
+	}
+	pg.actions = nil
+	for _, c := range cmds {
+		c := c
+		title := c.Title
+		if title == "" {
+			title = c.ID
+		}
+		err := registerAction(&Action{
+			ID:          pluginActionPrefix + c.ID,
+			Title:       title,
+			Category:    "Plugins",
+			Description: "Plugin: " + c.Plugin.Name,
+			Keywords:    "plugin " + c.Plugin.Name,
+			Run:         func(mm *Model) { mm.runPluginCommand(pg, c) },
+		})
+		if err == nil {
+			pg.actions = append(pg.actions, pluginActionPrefix+c.ID)
+		}
+	}
+}
+
+// runPluginCommand asks the plugin to run a command; a command may ask the
+// user and wait, so it runs off the UI thread and reports failure in the
+// status bar.
+func (m *Model) runPluginCommand(pg *pluginPage, c plugin.Command) {
+	go func() {
+		var arg any
+		if c.Arg != "" {
+			arg = c.Arg
+		}
+		if _, err := pg.reg.Run(c.ID, arg); err != nil {
+			m.post(func() {
+				m.status = "插件命令失败：" + err.Error()
+				m.invalidate()
+			})
+		}
+	}()
 }
 
 // pluginIsEnabled is the state the settings leave the plugin in, or its
@@ -194,6 +332,7 @@ func (m *Model) setPluginEnabled(name string, on bool) {
 	m.savePreferences()
 	pg.host.setSettings(m.prefs.Plugins)
 	pg.reg.Toggled(name)
+	pg.refreshActions(m)
 	pg.err = ""
 	m.invalidate()
 }
@@ -214,6 +353,7 @@ func (m *Model) removePlugin(name string) {
 	m.savePreferences()
 	pg.host.setSettings(m.prefs.Plugins)
 	pg.reg.Load()
+	pg.refreshActions(m)
 	m.invalidate()
 }
 
@@ -274,6 +414,7 @@ func (m *Model) pluginInstallDone(name string, err error) {
 			return
 		}
 		pg.reg.Load()
+		pg.refreshActions(m)
 		pg.tab, pg.selected, pg.query = 0, name, ""
 		m.invalidate()
 	})
@@ -460,6 +601,7 @@ func (m *Model) pluginGear(c *ui.Context, oi oiColors, pg *pluginPage) {
 			m.welcomeGearItem(c, oi, "Reload Installed Plugins", func() {
 				pg.gearOpen = false
 				pg.reg.Load()
+				pg.refreshActions(m)
 				m.invalidate()
 			})
 		})
@@ -750,6 +892,7 @@ func (m *Model) pluginHeader(c *ui.Context, oi oiColors, pg *pluginPage, p *plug
 		ui.Row(c).Shrink(0).Gap(6).AlignItems(ui.Center).Children(func() {
 			m.pluginButton(c, oi, "Reload", false, func() {
 				pg.reg.Restart(p.Name)
+				pg.refreshActions(m)
 				m.invalidate()
 			})
 			if !p.Bundled {
