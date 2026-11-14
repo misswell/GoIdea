@@ -179,6 +179,8 @@ func (m *Model) acceptSearchEvent(data json.RawMessage) {
 type revealPos struct {
 	path      string
 	line, col int
+	// endLine and endCol select a range; -1 puts a caret at line and col.
+	endLine, endCol int
 }
 
 // revealAt opens a file in a regular tab and moves the caret to line and col
@@ -196,7 +198,7 @@ func (m *Model) previewAt(path string, line, col int) {
 // revealTo opens path in a tab, preview or regular, and puts the caret where
 // the navigation points.
 func (m *Model) revealTo(path string, line, col int, preview bool) {
-	m.reveal = &revealPos{path: path, line: line, col: col}
+	m.reveal = &revealPos{path: path, line: line, col: col, endLine: -1, endCol: -1}
 	if preview {
 		m.openPreview(path)
 	} else {
@@ -207,14 +209,34 @@ func (m *Model) revealTo(path string, line, col int, preview bool) {
 	}
 }
 
+// revealRange opens path in a regular tab and selects the declaration a
+// navigation points at, 0-based.
+func (m *Model) revealRange(path string, line, col, endLine, endCol int) {
+	m.reveal = &revealPos{path: path, line: line, col: col, endLine: endLine, endCol: endCol}
+	m.openFile(path)
+	if t := m.tab(); t != nil && t.doc.Path() == path {
+		m.applyReveal(t)
+	}
+}
+
 // applyReveal moves the caret once the file a search hit points at is active.
 func (m *Model) applyReveal(t *Tab) {
 	if m.reveal == nil || t.doc.Path() != m.reveal.path {
 		return
 	}
-	line, col := m.reveal.line, m.reveal.col
+	r := m.reveal
 	m.reveal = nil
-	line, col = t.doc.BytePos(line, col)
+	if r.endLine >= 0 {
+		start, end := t.doc.ByteRange(openidea.OutlineRange{
+			Start: openidea.OutlinePos{Line: uint32(r.line), Col: uint32(r.col)},
+			End:   openidea.OutlinePos{Line: uint32(r.endLine), Col: uint32(r.endCol)},
+		})
+		t.state.Select(start, end)
+		t.state.ScrollTo(r.line)
+		m.invalidate()
+		return
+	}
+	line, col := t.doc.BytePos(r.line, r.col)
 	t.state.GoTo(editor.Pos{Line: line, Col: col})
 	t.state.ScrollTo(line)
 	m.invalidate()

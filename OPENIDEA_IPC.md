@@ -38,7 +38,7 @@ release can be called today.
 | Code analysis | `analysis` | 5 | 0 | 0 |
 | Android devices | `android` | 0 | 2 | 0 |
 | Application and projects | `app` | 12 | 15 | 5 |
-| Maven/Gradle builds | `build` | 12 | 0 | 3 |
+| Maven/Gradle builds | `build` | 12 | 0 | 4 |
 | Binary file reads | `bytes` | 3 | 0 | 0 |
 | Caches and restart | `caches` | 0 | 4 | 0 |
 | Clipboard | `clipboard` | 0 | 6 | 0 |
@@ -88,7 +88,7 @@ release can be called today.
 ## Served by `openidea-server --stdio`
 
 476 commands. `GoIDEA` marks the ones a non-test Go source invokes today
-(96 of 476).
+(97 of 476).
 
 | Command | Domain | Arguments | GoIDEA |
 | --- | --- | --- | --- |
@@ -324,7 +324,7 @@ release can be called today.
 | `maven_dependency_completion` | Maven/Gradle builds | `doc`, `offset`, `request` | yes |
 | `maven_dependency_declaration` | Maven/Gradle builds | `dependency`, `pom` | — |
 | `maven_exclude_dependency` | Maven/Gradle builds | `dependency`, `exclusion`, `pom` | — |
-| `maven_goto_declaration` | Maven/Gradle builds | `pom`, `pos` | — |
+| `maven_goto_declaration` | Maven/Gradle builds | `pom`, `pos` | yes |
 | `mcp_report_problems` | MCP | `files`, `reset` | — |
 | `mcp_set_focused_editor` | MCP | `editor`, `focused` | — |
 | `mcp_set_open_editors` | MCP | `paths` | — |
@@ -782,7 +782,7 @@ GoIDEA needs to do for each:
 
 ## What this means for GoIDEA
 
-476 remote commands are available today; GoIDEA uses 96. The parity work is
+476 remote commands are available today; GoIDEA uses 97. The parity work is
 first to cover the remote surface OpenIDEA's own frontend uses, then to move
 `shared-op`/`host`/`crate` commands onto stdio through the OpenIDEA fork
 (a submodule bump and a server release), and to implement `desktop` commands

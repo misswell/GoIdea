@@ -2130,7 +2130,7 @@ Local-only commands and the per-command argument lists are in
 | `maven_dependency_completion` | build | yes | yes | missing |
 | `maven_dependency_declaration` | build | yes |  | missing |
 | `maven_exclude_dependency` | build | yes |  | missing |
-| `maven_goto_declaration` | build | yes |  | missing |
+| `maven_goto_declaration` | build | yes | yes | missing |
 | `mcp_agent_run_closed` | mcp | no |  | missing |
 | `mcp_report_problems` | mcp | yes |  | missing |
 | `mcp_respond` | mcp | no |  | missing |
@@ -2488,7 +2488,7 @@ Local-only commands and the per-command argument lists are in
 | `wsl_distros` | wsl | no |  | missing |
 | `wsl_resolve` | wsl | no |  | missing |
 
-476 commands are served over stdio and 96 are called by GoIDEA today. A command
+476 commands are served over stdio and 97 are called by GoIDEA today. A command
 that is registered only in the desktop shell needs an `ops` module before stdio
 can serve it; a GoIDEA check counts only when the UI path works end to end.
 

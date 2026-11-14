@@ -128,10 +128,23 @@ func (m *Model) requestHover(t *Tab, req editor.HoverRequest) {
 	}()
 }
 
-// gotoDefinition jumps to the first definition of the symbol at off. Results
-// inside a jar or jrt have no file to open and say so instead of failing to
-// open a URI as a path.
+// gotoDefinition jumps to the first definition of the symbol at off. A POM
+// resolves through the build model first (pomGotoDeclaration); everything
+// else, and a POM position the backend does not resolve, goes to the
+// language server. Results inside a jar or jrt have no file to open and say
+// so instead of failing to open a URI as a path.
 func (m *Model) gotoDefinition(t *Tab, off int) {
+	if !m.tabOpen(t) {
+		return
+	}
+	if isPomPath(t.doc.Path()) && m.pomGotoDeclaration(t, off) {
+		return
+	}
+	m.lspGotoDefinition(t, off)
+}
+
+// lspGotoDefinition is the language server's definition request.
+func (m *Model) lspGotoDefinition(t *Tab, off int) {
 	if !m.tabOpen(t) {
 		return
 	}

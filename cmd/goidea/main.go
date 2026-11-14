@@ -268,6 +268,15 @@ func smoke(m *app.Model) {
 			fields["mavenError"] = mvErr.Error()
 		}
 	}
+	if os.Getenv("GOIDEA_SMOKE_POM_GOTO") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+		pg, pgErr := m.SmokePomGoto(ctx, os.Getenv("GOIDEA_SMOKE_POM"), os.Getenv("GOIDEA_SMOKE_POM_NEEDLE"))
+		cancel()
+		fields["pomGoto"] = pg
+		if pgErr != nil {
+			fields["pomGotoError"] = pgErr.Error()
+		}
+	}
 	if os.Getenv("GOIDEA_SMOKE_TRUST") == "1" && root != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		tr, trErr := m.SmokeTrust(ctx)
