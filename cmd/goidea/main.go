@@ -286,6 +286,15 @@ func smoke(m *app.Model) {
 			fields["implementationError"] = imErr.Error()
 		}
 	}
+	if os.Getenv("GOIDEA_SMOKE_TYPEDECL") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		td, tdErr := m.SmokeTypeDeclaration(ctx, os.Getenv("GOIDEA_SMOKE_IMPL_FILE"), os.Getenv("GOIDEA_SMOKE_IMPL_NEEDLE"))
+		cancel()
+		fields["typeDeclaration"] = td
+		if tdErr != nil {
+			fields["typeDeclarationError"] = tdErr.Error()
+		}
+	}
 	if os.Getenv("GOIDEA_SMOKE_TRUST") == "1" && root != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		tr, trErr := m.SmokeTrust(ctx)

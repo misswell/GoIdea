@@ -45,6 +45,16 @@ type implChooser struct {
 // GoToImplementation is Navigate › Go to Implementation(s).
 func (m *Model) GoToImplementation() { m.gotoImplementation() }
 
+// GoToTypeDeclaration is Navigate › Go to Type Declaration, the declaration
+// of the type the symbol at the caret has.
+func (m *Model) GoToTypeDeclaration() {
+	t := m.tab()
+	if t == nil || m.mgr == nil || m.ctx == nil {
+		return
+	}
+	m.lspGoto(t, t.state.Cursor(), "typeDefinition")
+}
+
 // gotoImplementation asks the backend for the implementations at the caret,
 // replacing any search already running.
 func (m *Model) gotoImplementation() {
@@ -300,6 +310,84 @@ func implTargetLabel(root string, t implTarget) string {
 		}
 	}
 	return fmt.Sprintf("%s:%d", path, int(t.rng.Start.Line)+1)
+}
+
+// SmokeTypeDeclaration runs Go to Type Declaration at a needle in a project
+// file and reports where it landed, for the real-server acceptance run.
+func (m *Model) SmokeTypeDeclaration(ctx context.Context, relFile, needle string) (map[string]any, error) {
+	out := map[string]any{}
+	root := m.Root()
+	if root == "" {
+		return out, fmt.Errorf("没有打开项目")
+	}
+	if _, err := m.mgr.Invoke(ctx, Window, "project_trust_set", map[string]any{
+		"path": root, "trusted": true, "folder": true,
+	}); err != nil {
+		return out, err
+	}
+	if err := m.reg.ReopenAll(ctx); err != nil {
+		out["reopenError"] = err.Error()
+	}
+	path := filepath.Join(root, relFile)
+	src, err := os.ReadFile(path)
+	if err != nil {
+		return out, err
+	}
+	off := strings.Index(string(src), needle)
+	if off < 0 {
+		return out, fmt.Errorf("%s 里没有 %q", relFile, needle)
+	}
+	out["file"], out["needle"] = relFile, needle
+	m.post(func() { m.openFile(path) })
+	deadline := time.Now().Add(2 * time.Minute)
+	for {
+		var open bool
+		m.post(func() { open = m.tab() != nil && m.tab().doc.Path() == path })
+		if open {
+			break
+		}
+		if time.Now().After(deadline) {
+			return out, fmt.Errorf("打开 %s 超时", relFile)
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+	started := false
+	for {
+		var done bool
+		var landed, status string
+		m.post(func() {
+			if !started {
+				if t := m.tab(); t != nil && t.doc.Path() == path {
+					t.state.Select(off, off)
+					m.GoToTypeDeclaration()
+					started = true
+				}
+				return
+			}
+			done, landed, status = m.navDone, m.navLanded, m.status
+		})
+		if started && done {
+			if landed != "" && !strings.Contains(landed, "://") {
+				if rel, err := filepath.Rel(root, landed); err == nil {
+					landed = rel
+				}
+			}
+			out["target"], out["status"] = landed, status
+			return out, nil
+		}
+		if time.Now().After(deadline) {
+			return out, fmt.Errorf("类型声明查找没有返回")
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
 }
 
 // SmokeImplementation runs Go to Implementation at a needle in a project file

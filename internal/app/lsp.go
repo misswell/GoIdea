@@ -144,19 +144,28 @@ func (m *Model) gotoDefinition(t *Tab, off int) {
 }
 
 // lspGotoDefinition is the language server's definition request.
-func (m *Model) lspGotoDefinition(t *Tab, off int) {
+func (m *Model) lspGotoDefinition(t *Tab, off int) { m.lspGoto(t, off, "definition") }
+
+// lspGoto is one language server navigation of kind definition or
+// typeDefinition, to the first target it returns.
+func (m *Model) lspGoto(t *Tab, off int, kind string) {
 	if !m.tabOpen(t) {
 		return
 	}
 	docID := t.doc.ID()
 	pos := t.doc.UTF16Pos(off)
+	notFound := "未找到定义"
+	if kind == "typeDefinition" {
+		notFound = "未找到类型声明"
+	}
 	t.defGen++
 	gen := t.defGen
+	m.navDone, m.navLanded = false, ""
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, lspTimeout)
 		defer cancel()
 		raw, err := m.mgr.Invoke(ctx, Window, "lsp_goto", map[string]any{
-			"doc": docID, "pos": lspPos(pos), "kind": "definition",
+			"doc": docID, "pos": lspPos(pos), "kind": kind,
 		})
 		var locs []openidea.Location
 		if err == nil {
@@ -166,15 +175,17 @@ func (m *Model) lspGotoDefinition(t *Tab, off int) {
 			if t.defGen != gen || !m.tabOpen(t) {
 				return
 			}
+			m.navDone = true
 			switch {
 			case err != nil:
 				m.status = "跳转失败：" + err.Error()
 			case len(locs) == 0:
-				m.status = "未找到定义"
+				m.status = notFound
 			case strings.Contains(locs[0].Path, "://"):
 				m.status = "定义在外部依赖中，无法作为文件打开"
 			default:
 				loc := locs[0]
+				m.navLanded = loc.Path
 				m.revealAt(loc.Path, int(loc.Range.Start.Line), int(loc.Range.Start.Col))
 				return
 			}

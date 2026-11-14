@@ -147,6 +147,7 @@ func mainMenuGroups() []menuEntry {
 			action("Call Hierarchy", "navigate.callHierarchy", "Ctrl+Alt+H"),
 			action("Type Hierarchy", "navigate.typeHierarchy", "Ctrl+H"),
 			action("Go to Implementation(s)", "navigate.implementation", "Cmd+Alt+B"),
+			action("Go to Type Declaration", "navigate.typeDeclaration", "Cmd+Shift+B"),
 			rule(),
 			action("Select In Project View", "navigate.selectInProjectView", "Alt+F1"),
 			rule(),

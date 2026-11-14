@@ -205,6 +205,10 @@ type Model struct {
 	maven    mavenPane
 	// impl is the Go to Implementation(s) search and chooser.
 	impl implChooser
+	// navDone and navLanded record the last language-server navigation, for
+	// the headless acceptance runs.
+	navDone   bool
+	navLanded string
 
 	// dock is the six-slot dock: the slots are the authority on where each
 	// registered tool window shows.

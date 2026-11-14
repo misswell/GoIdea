@@ -88,6 +88,7 @@ func builtinCommands() []appCommand {
 		{"navigate.callHierarchy", "Call Hierarchy", "导航", "Ctrl+Alt+H", "call hierarchy callers callees", func(m *Model) { m.OpenCallHierarchy() }},
 		{"navigate.typeHierarchy", "Type Hierarchy", "导航", "Ctrl+H", "type hierarchy supertypes subtypes class", func(m *Model) { m.OpenTypeHierarchy() }},
 		{"navigate.implementation", "转到实现", "导航", "Cmd+Alt+B", "implementation implementations overrides goto", func(m *Model) { m.GoToImplementation() }},
+		{"navigate.typeDeclaration", "转到类型声明", "导航", "Cmd+Shift+B", "type declaration class type goto", func(m *Model) { m.GoToTypeDeclaration() }},
 		{"view.terminal", "显示终端", "视图", "Alt+F12", "terminal shell", func(m *Model) { m.ShowTerm() }},
 		{"term.new", "新建终端标签", "终端", "Cmd+T", "terminal new tab shell", func(m *Model) { m.OpenTermTab() }},
 		{"term.splitRight", "向右拆分终端", "终端", "", "terminal split right pane group", func(m *Model) { m.SplitTermRight() }},
