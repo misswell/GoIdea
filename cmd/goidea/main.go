@@ -248,6 +248,15 @@ func smoke(m *app.Model) {
 			fields["todoError"] = todoErr.Error()
 		}
 	}
+	if other := os.Getenv("GOIDEA_SMOKE_SWITCH_TO"); other != "" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
+		sw, swErr := m.SmokeSwitch(ctx, other)
+		cancel()
+		fields["switch"] = sw
+		if swErr != nil {
+			fields["switchError"] = swErr.Error()
+		}
+	}
 	if os.Getenv("GOIDEA_SMOKE_RECOVERY") == "1" && root != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		rec, recErr := m.SmokeRecovery(ctx)

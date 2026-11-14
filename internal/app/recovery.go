@@ -79,3 +79,59 @@ func (m *Model) SmokeRecovery(ctx context.Context) (map[string]any, error) {
 	}
 	return out, nil
 }
+
+// SmokeSwitch opens another project through the normal transactional path and
+// switches back, recording both roots and the backend's project_current, for
+// the real-server acceptance run.
+func (m *Model) SmokeSwitch(ctx context.Context, other string) (map[string]any, error) {
+	out := map[string]any{}
+	from := m.Root()
+	if from == "" {
+		return out, fmt.Errorf("没有打开项目")
+	}
+	out["from"], out["to"] = from, other
+	current := func() string {
+		raw, err := m.mgr.Invoke(ctx, Window, "project_current", nil)
+		if err != nil {
+			return ""
+		}
+		var info struct {
+			Root string `json:"root"`
+		}
+		_ = json.Unmarshal(raw, &info)
+		return info.Root
+	}
+	wait := func(dir string) error {
+		deadline := time.Now().Add(90 * time.Second)
+		for time.Now().Before(deadline) {
+			var busy bool
+			var root string
+			m.post(func() { busy, root = m.busy, m.Root() })
+			if !busy && layoutKey(root) == layoutKey(dir) && layoutKey(current()) == layoutKey(dir) {
+				return nil
+			}
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(100 * time.Millisecond):
+			}
+		}
+		return fmt.Errorf("切换到 %s 超时", dir)
+	}
+	started := time.Now()
+	m.post(func() { m.openProject(other, nil) })
+	if err := wait(other); err != nil {
+		out["switched"] = false
+		out["elapsedMs"] = time.Since(started).Milliseconds()
+		return out, err
+	}
+	out["switched"] = true
+	m.post(func() { m.openProject(from, nil) })
+	if err := wait(from); err != nil {
+		out["back"] = false
+		return out, err
+	}
+	out["back"] = true
+	out["elapsedMs"] = time.Since(started).Milliseconds()
+	return out, nil
+}
