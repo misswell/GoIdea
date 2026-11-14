@@ -180,8 +180,10 @@ func smoke(m *app.Model) {
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
+	var phase string
+	mygo.RunOnMain(func() { phase = m.Phase() })
 	fields := map[string]any{
-		"root": root, "tabs": tabs, "backend": backend, "pid": os.Getpid(),
+		"root": root, "tabs": tabs, "backend": backend, "pid": os.Getpid(), "phase": phase,
 	}
 	if mode := os.Getenv("GOIDEA_SMOKE_TOOLS"); mode != "" && root != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)

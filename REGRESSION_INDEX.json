@@ -111,6 +111,7 @@
     {"id": "base.todo.settings", "label": "the editor.todo page opens, applies a pattern and restores the defaults", "feature": "TODO settings page and its stored patterns", "area": "settings", "gate": "main", "doc": "EDITOR.md"},
     {"id": "base.todo.highlight", "label": "the editor tinted the open file's TODO spans", "feature": "TODO editor highlight", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
     {"id": "base.todoError", "label": "todoError is absent", "feature": "TODO scan reports no error", "area": "workbench", "gate": "main", "doc": "EDITOR.md"},
+    {"id": "base.startup.phase", "label": "startup reached the ready phase", "feature": "Startup state machine", "area": "lifecycle", "gate": "main", "doc": "UPSTREAM_FEATURE_MATRIX.md"},
     {"id": "base.dock.moves", "label": "a window moved through all six dock slots with its content", "feature": "Six-slot dock manager", "area": "workbench", "gate": "main", "doc": "UPSTREAM_FEATURE_MATRIX.md"},
     {"id": "base.dock.hideAll", "label": "Hide All Tool Windows hid and restored the moved window", "feature": "Hide All Tool Windows", "area": "workbench", "gate": "main", "doc": "UPSTREAM_FEATURE_MATRIX.md"},
     {"id": "base.dock.pinned", "label": "a pinned window kept its slot while another took the split", "feature": "Pin Tool Window", "area": "workbench", "gate": "main", "doc": "UPSTREAM_FEATURE_MATRIX.md"},
