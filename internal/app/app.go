@@ -202,6 +202,7 @@ type Model struct {
 
 	// services is the Services bottom window.
 	services servicesPane
+	maven    mavenPane
 
 	// dock is the six-slot dock: the slots are the authority on where each
 	// registered tool window shows.

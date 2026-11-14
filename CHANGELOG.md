@@ -7,6 +7,7 @@ needs a `## <version>` section here, or its build fails.
 
 - 真实多模块 Maven/Spring Boot 项目已通过内置引擎完成构建，并可从 GoIDEA 启动与停止。
 - 后端进程意外退出会自动重启，并恢复原项目和已打开的文件。
+- 新增 **Maven** 工具窗口：列出反应堆模块与可展开的依赖树，数据来自后端构建模型。
 - **Database** 每次运行生成结果标签页，**Output** 保留运行日志，可关闭、关闭其他、切换上下一个结果。
 - Java/Spring Boot 运行配置会自动解析模块类路径与 JDK，不再把 `${classpath}` 原样交给进程。
 - 项目切换校验后端当前项目，失败时回到原项目，不会留下半打开状态。

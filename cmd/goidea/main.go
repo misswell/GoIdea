@@ -259,6 +259,15 @@ func smoke(m *app.Model) {
 			fields["switchError"] = swErr.Error()
 		}
 	}
+	if os.Getenv("GOIDEA_SMOKE_MAVEN") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		mv, mvErr := m.SmokeMaven(ctx)
+		cancel()
+		fields["maven"] = mv
+		if mvErr != nil {
+			fields["mavenError"] = mvErr.Error()
+		}
+	}
 	if os.Getenv("GOIDEA_SMOKE_TRUST") == "1" && root != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		tr, trErr := m.SmokeTrust(ctx)

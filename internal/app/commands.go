@@ -55,6 +55,7 @@ func builtinCommands() []appCommand {
 		{"editor.previousSplitter", "转到上一个编辑器组", "视图", "Alt+Shift+Tab", "go to previous splitter editor group pane", func(m *Model) { m.GoToPreviousSplitter() }},
 		{"editor.configureTabs", "配置编辑器标签页…", "文件", "", "configure editor tabs settings", func(m *Model) { m.OpenSettingsPage(settingsPageEditorTabs) }},
 		{"view.notifications", "Notifications", "视图", "", "notifications balloon history alerts unread", func(m *Model) { m.ToggleNotificationsWindow() }},
+		{"view.maven", "Maven", "视图", "", "maven tool window modules reactor", func(m *Model) { m.ToggleMaven() }},
 		{"view.services", "Services", "视图", "", "services build maven gradle run tools", func(m *Model) { m.ToggleServices() }},
 		{"view.moveToolToRight", "Move Tool Window to Right", "视图", "", "dock undock move tool window right", func(m *Model) { m.MoveToolToRight() }},
 		{"view.moveToolToBottom", "Move Tool Window to Bottom", "视图", "", "dock undock move tool window bottom", func(m *Model) { m.MoveToolToBottom() }},

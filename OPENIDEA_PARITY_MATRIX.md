@@ -1878,7 +1878,7 @@ Local-only commands and the per-command argument lists are in
 | `app_update_window_ready` | window | no |  | missing |
 | `apply_workspace_edit` | lsp | yes | yes | missing |
 | `build_compile_file` | build | yes |  | missing |
-| `build_model` | build | yes |  | missing |
+| `build_model` | build | yes | yes | missing |
 | `build_run` | build | yes | yes | missing |
 | `build_sync` | build | yes |  | missing |
 | `caches_local_data_info` | caches | no |  | missing |
@@ -2488,7 +2488,7 @@ Local-only commands and the per-command argument lists are in
 | `wsl_distros` | wsl | no |  | missing |
 | `wsl_resolve` | wsl | no |  | missing |
 
-476 commands are served over stdio and 95 are called by GoIDEA today. A command
+476 commands are served over stdio and 96 are called by GoIDEA today. A command
 that is registered only in the desktop shell needs an `ops` module before stdio
 can serve it; a GoIDEA check counts only when the UI path works end to end.
 

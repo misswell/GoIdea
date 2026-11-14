@@ -103,6 +103,13 @@ func init() {
 		render: func(m *Model, c *ui.Context, p *ui.Theme, _ oiColors) { m.logPanel(c, p) },
 	})
 	registerToolWindow(&toolWindowSpec{
+		id: "maven", title: "Maven", anchor: dockRight, order: 110, stripe: true,
+		open:   func(m *Model) { m.maven.visible = true; m.loadBuildModel() },
+		close:  func(m *Model) { m.maven.visible = false },
+		shown:  func(m *Model) bool { return m.maven.visible },
+		render: func(m *Model, c *ui.Context, p *ui.Theme, _ oiColors) { m.mavenPanel(c, p) },
+	})
+	registerToolWindow(&toolWindowSpec{
 		id: "find", title: "Find", anchor: dockBottom, order: 90,
 		open:  func(m *Model) { m.search.visible = true },
 		close: func(m *Model) { m.search.visible = false },

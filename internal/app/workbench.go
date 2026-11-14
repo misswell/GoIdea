@@ -670,7 +670,7 @@ func (m *Model) rightStripe(c *ui.Context, p *ui.Theme, oi oiColors) {
 			if spec == nil || spec.anchor != dockRight || id == "hierarchy" || id == "notifications" {
 				continue
 			}
-			if _, ok := m.dockSlotOf(id); !ok {
+			if _, shown := m.dockSlotOf(id); !shown && !spec.stripe {
 				continue
 			}
 			m.stripeButton(c, p, oi, id, iconStructure, spec.title,
