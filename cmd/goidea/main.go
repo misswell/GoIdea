@@ -259,6 +259,15 @@ func smoke(m *app.Model) {
 			fields["switchError"] = swErr.Error()
 		}
 	}
+	if os.Getenv("GOIDEA_SMOKE_TRUST") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		tr, trErr := m.SmokeTrust(ctx)
+		cancel()
+		fields["trust"] = tr
+		if trErr != nil {
+			fields["trustError"] = trErr.Error()
+		}
+	}
 	if os.Getenv("GOIDEA_SMOKE_SCAFFOLD") == "1" && root != "" {
 		dir, err := os.MkdirTemp("", "goidea-scaffold-")
 		if err == nil {
