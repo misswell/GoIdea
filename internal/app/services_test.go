@@ -114,3 +114,16 @@ func TestServicesShowsTheRunningProcessAndItsStop(t *testing.T) {
 		}
 	}
 }
+
+func TestServicesBuildRowsComeFromTheBuildModel(t *testing.T) {
+	m := &Model{}
+	m.maven = mavenPane{model: buildModel{Maven: &mavenModel{Projects: []mavenProject{
+		{Dir: "a", ArtifactID: "a"}, {Dir: "b", ArtifactID: "b"},
+	}}}}
+	rows := m.serviceRows()
+	for _, r := range rows {
+		if r.label == "Maven" && r.detail != "2 modules" {
+			t.Fatalf("Maven row detail = %q", r.detail)
+		}
+	}
+}

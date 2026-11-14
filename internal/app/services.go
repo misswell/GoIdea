@@ -27,8 +27,12 @@ type serviceRow struct {
 	run     func(m *Model)
 }
 
-// ShowServices opens Services in the bottom area.
-func (m *Model) ShowServices() { m.DockShow("services") }
+// ShowServices opens Services in the bottom area and reads the build model so
+// the build rows come from the engine rather than from file detection.
+func (m *Model) ShowServices() {
+	m.DockShow("services")
+	m.loadBuildModel()
+}
 
 // CloseServices hides it without running a toggle's side effects.
 func (m *Model) CloseServices() { m.DockHide("services") }
@@ -56,11 +60,27 @@ func (m *Model) serviceRows() []serviceRow {
 			status = "last build failed"
 		}
 	}
-	if has("pom.xml") {
+	if model := m.maven.model; model.Maven != nil && len(model.Maven.Projects) > 0 {
+		detail := fmt.Sprintf("%d modules", len(model.Maven.Projects))
+		if status != "" {
+			detail += " · " + status
+		}
+		rows = append(rows, serviceRow{section: "Build", label: "Maven", detail: detail,
+			run: func(m *Model) { m.BuildProject() }})
+	} else if has("pom.xml") {
 		rows = append(rows, serviceRow{section: "Build", label: "Maven", detail: status,
 			run: func(m *Model) { m.BuildProject() }})
 	}
-	if has("build.gradle") || has("build.gradle.kts") {
+	if model := m.maven.model; len(model.Gradle) > 0 {
+		for _, g := range model.Gradle {
+			label := g.Dir
+			if label == "" {
+				label = "Gradle"
+			}
+			rows = append(rows, serviceRow{section: "Build", label: label, detail: "Gradle " + status,
+				run: func(m *Model) { m.BuildProject() }})
+		}
+	} else if has("build.gradle") || has("build.gradle.kts") {
 		rows = append(rows, serviceRow{section: "Build", label: "Gradle", detail: status,
 			run: func(m *Model) { m.BuildProject() }})
 	}
