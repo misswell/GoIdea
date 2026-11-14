@@ -248,6 +248,15 @@ func smoke(m *app.Model) {
 			fields["todoError"] = todoErr.Error()
 		}
 	}
+	if os.Getenv("GOIDEA_SMOKE_RECOVERY") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		rec, recErr := m.SmokeRecovery(ctx)
+		cancel()
+		fields["recovery"] = rec
+		if recErr != nil {
+			fields["recoveryError"] = recErr.Error()
+		}
+	}
 	if os.Getenv("GOIDEA_SMOKE_DOCK") == "1" && root != "" {
 		fields["dock"] = m.SmokeDock()
 	}

@@ -6,6 +6,7 @@ needs a `## <version>` section here, or its build fails.
 ## Unreleased
 
 - 真实多模块 Maven/Spring Boot 项目已通过内置引擎完成构建，并可从 GoIDEA 启动与停止。
+- 后端进程意外退出会自动重启，并恢复原项目和已打开的文件。
 - Java 语言服务与调试器已在 v0.1.44 引擎上跑通：补全、悬停、跳转、重命名、诊断与单步调试。
 - 上游同步到 **OpenIDEA v0.1.44**：源码、Server 与 RPC 清单一起升级并重新生成 IPC/Parity 清单。
 - 启动前检查 Server 是否存在、可执行、架构匹配、校验和与版本/协议，不满足时给出明确原因。
