@@ -117,32 +117,7 @@ func (m *Model) SelectNewProjectGenerator(id string) {
 	st.fields = append([]scaffoldField(nil), g.Fields...)
 	st.gitInit = st.gitInit && g.Git
 	m.invalidate()
-	if !g.Dynamic || m.ctx == nil || m.mgr == nil {
-		return
-	}
-	seq := st.seq
-	request := m.nextRequest()
-	values := map[string]string{"server": st.values["server"]}
-	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
-		defer cancel()
-		raw, err := m.mgr.Invoke(ctx, "goidea", "scaffold_options", map[string]any{
-			"generator": id, "values": values, "request": request,
-		})
-		var fields []scaffoldField
-		if err == nil {
-			err = json.Unmarshal(raw, &fields)
-		}
-		m.post(func() {
-			if m.newProject.seq != seq || m.newProject.generator != id {
-				return
-			}
-			if err == nil {
-				m.newProject.fields = append(m.newProject.fields, fields...)
-			}
-			m.invalidate()
-		})
-	}()
+	m.refreshScaffoldOptions()
 }
 
 // scaffoldValue is a field's value: the user's edit, else its rendered
@@ -170,7 +145,47 @@ func (m *Model) setScaffoldValue(id, value string) {
 		m.newProject.values = map[string]string{}
 	}
 	m.newProject.values[id] = value
+	// A dynamic generator's fields depend on its server URL; ask again when it
+	// changes, as NewProject.tsx does.
+	if id == "server" && m.scaffoldGenerator(m.newProject.generator) != nil &&
+		m.scaffoldGenerator(m.newProject.generator).Dynamic {
+		m.refreshScaffoldOptions()
+	}
 	m.invalidate()
+}
+
+// refreshScaffoldOptions refetches a dynamic generator's fields for the
+// current server URL, replacing the ones it added before.
+func (m *Model) refreshScaffoldOptions() {
+	st := &m.newProject
+	g := m.scaffoldGenerator(st.generator)
+	if g == nil || !g.Dynamic || m.ctx == nil || m.mgr == nil {
+		return
+	}
+	st.fields = append([]scaffoldField(nil), g.Fields...)
+	seq, id := st.seq, st.generator
+	request := m.nextRequest()
+	values := map[string]string{"server": st.scaffoldValue("server")}
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
+		defer cancel()
+		raw, err := m.mgr.Invoke(ctx, "goidea", "scaffold_options", map[string]any{
+			"generator": id, "values": values, "request": request,
+		})
+		var fields []scaffoldField
+		if err == nil {
+			err = json.Unmarshal(raw, &fields)
+		}
+		m.post(func() {
+			if m.newProject.seq != seq || m.newProject.generator != id {
+				return
+			}
+			if err == nil {
+				m.newProject.fields = append(m.newProject.fields, fields...)
+			}
+			m.invalidate()
+		})
+	}()
 }
 
 // scaffoldFieldError checks a text field's pattern.
