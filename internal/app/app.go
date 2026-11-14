@@ -180,6 +180,8 @@ type Model struct {
 
 	// searchHistory is Search Everywhere's recent queries, most recent first.
 	searchHistory []string
+	// seFilters is Search Everywhere's funnel, mirrored into the prefs.
+	seFilters seFilters
 
 	// notify is the notification center: the balloons and their history.
 	notify notifier
@@ -486,6 +488,9 @@ func New(cfg Config) *Model {
 	ctx, off := context.WithCancel(context.Background())
 	m := &Model{cfg: cfg, ctx: ctx, off: off, bottomHeight: bottomDefaultHeight}
 	m.prefs = LoadPreferences(cfg.SettingsPath)
+	if m.prefs.SearchFilters != nil {
+		m.seFilters = *m.prefs.SearchFilters
+	}
 	m.applyPreferences()
 	session := LoadSession(cfg.SessionPath)
 	m.recents = sessionRecents(session)

@@ -455,6 +455,8 @@ type Preferences struct {
 	Keymap map[string][]string `json:"keymap,omitempty"`
 	// MainToolbar is the title bar's saved layout, nil for the default one.
 	MainToolbar *toolbarLayout `json:"mainToolbar,omitempty"`
+	// SearchFilters is Search Everywhere's funnel, kept across starts.
+	SearchFilters *seFilters `json:"searchFilters,omitempty"`
 	// Plugins are each plugin's settings, by name, under the same "plugins"
 	// key Mayoi uses; a plugin's "enabled" lives there.
 	Plugins map[string]json.RawMessage `json:"plugins,omitempty"`

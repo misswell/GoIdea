@@ -130,6 +130,10 @@ type sePane struct {
 	fileReq   uint32
 	symbolReq uint32
 	textCh    uint32
+
+	// filters is the funnel's state, and filterOpen whether its panel is up.
+	filters    seFilters
+	filterOpen bool
 }
 
 // seQueryTimeout bounds one backend lookup of the overlay.
@@ -140,7 +144,7 @@ func (m *Model) OpenSearchEverywhere() {
 	if m.se != nil {
 		return
 	}
-	m.se = &sePane{open: true, tab: seTabAll, extra: map[seSection]int{}}
+	m.se = &sePane{open: true, tab: seTabAll, extra: map[seSection]int{}, filters: m.seFilters}
 	m.refreshSearchEverywhere()
 	m.invalidate()
 }
@@ -174,6 +178,7 @@ func (m *Model) SetSearchEverywhereTab(tab seTab) {
 	}
 	m.se.tab = tab
 	m.se.sel = 0
+	m.se.filterOpen = false
 	m.refreshSearchEverywhere()
 	m.invalidate()
 }
@@ -501,10 +506,13 @@ func (m *Model) seRows() []seRow {
 		}
 		return items
 	}
-	symbolItems := func(typesOnly bool) []seItem {
+	symbolItems := func(tab seTab, typesOnly bool) []seItem {
 		items := make([]seItem, 0, len(s.symbols))
 		for _, sym := range s.symbols {
 			if typesOnly && !isTypeKind(sym.Kind) {
+				continue
+			}
+			if s.filters.kindExcluded(tab, sym.Kind) {
 				continue
 			}
 			detail := filepath.Dir(sym.Location.Path)
@@ -525,6 +533,9 @@ func (m *Model) seRows() []seRow {
 	textItems := func() []seItem {
 		items := make([]seItem, 0, seTextMatchLimit)
 		for _, f := range s.text {
+			if !seTextMaskMatches(s.filters.Text, f.Path) {
+				continue
+			}
 			for _, hit := range f.Matches {
 				col := 0
 				if len(hit.Ranges) > 0 {
@@ -561,11 +572,11 @@ func (m *Model) seRows() []seRow {
 		case seRecentActions:
 			add(section, m.seRecentActionItems())
 		case seClasses:
-			add(section, symbolItems(true))
+			add(section, symbolItems(seTabClasses, true))
 		case seFiles:
 			add(section, fileItems())
 		case seSymbols:
-			add(section, symbolItems(false))
+			add(section, symbolItems(seTabSymbols, false))
 		case seActions:
 			add(section, m.seActionItems(strings.TrimSpace(s.query)))
 		case seText:
@@ -719,7 +730,25 @@ func (m *Model) searchEverywhereDialog(c *ui.Context, p *ui.Theme) {
 					})
 					b.OnClick(func() { m.SetSearchEverywhereTab(t.id) })
 				}
+				if seFilterTab(s.tab) {
+					ui.Spacer(c)
+					b := ui.ButtonBase(c.Key("se:filter")).Height(24).Padding(0, 8).
+						Radius(6).AlignItems(ui.Center).Cursor(ui.CursorPointer)
+					if s.filterOpen || s.filters.active(s.tab) {
+						b.Background(p.SurfaceHover)
+					} else if b.Hovered() {
+						b.Background(p.SurfaceHover)
+					}
+					b.Tooltip("Filter")
+					b.Children(func() {
+						ui.Text(c, "Filter").FontSize(11.5).TextColor(p.TextMuted).SingleLine()
+					})
+					b.OnClick(func() { s.filterOpen = !s.filterOpen })
+				}
 			})
+			if s.filterOpen && seFilterTab(s.tab) {
+				m.seFilterPanel(c, p, s)
+			}
 			in := ui.TextInput(c, &s.query).AutoFocus()
 			in.OnChange(func() {
 				m.refreshSearchEverywhere()
