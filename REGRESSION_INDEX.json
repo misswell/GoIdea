@@ -181,6 +181,7 @@
     {"id": "debug.mainClass", "label": "main class resolved", "feature": "Launch resolver picks the main class", "area": "debugger", "gate": "release", "doc": "BUILD_AND_DEBUG.md"},
     {"id": "debug.vars", "label": "variables were read", "feature": "Variables view", "area": "debugger", "gate": "release", "doc": "BUILD_AND_DEBUG.md"},
     {"id": "debug.watch", "label": "watch expression evaluated", "feature": "Watch expressions", "area": "debugger", "gate": "release", "doc": "BUILD_AND_DEBUG.md"},
+    {"id": "debug.runToCursor", "label": "Run to Cursor paused at the caret line", "feature": "Run to Cursor", "area": "debugger", "gate": "release", "doc": "BUILD_AND_DEBUG.md"},
     {"id": "debug.step.paused", "label": "step over paused again", "feature": "Step over", "area": "debugger", "gate": "release", "doc": "BUILD_AND_DEBUG.md"},
     {"id": "debug.step.line", "label": "step moved to the next line", "feature": "Step advances the frame", "area": "debugger", "gate": "release", "doc": "BUILD_AND_DEBUG.md"},
     {"id": "debug.ended", "label": "program ran to the end", "feature": "Debug session termination", "area": "debugger", "gate": "release", "doc": "BUILD_AND_DEBUG.md"},

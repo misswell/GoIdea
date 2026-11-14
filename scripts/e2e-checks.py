@@ -196,6 +196,7 @@ CHECKS = {
         ("mainClass", "main class resolved", lambda d: (get(d, "debug.mainClass") == "com.example.App", get(d, "debug.mainClass"))),
         ("vars", "variables were read", lambda d: ((get(d, "debug.vars") or 0) > 0, get(d, "debug.vars"))),
         ("watch", "watch expression evaluated", lambda d: (get(d, "debug.watch") == "4", get(d, "debug.watch"))),
+        ("runToCursor", "Run to Cursor paused at the caret line", lambda d: (get(d, "debug.runToPaused") is True, [get(d, "debug.runToLine"), get(d, "debug.frameLine")])),
         ("step.paused", "step over paused again", lambda d: (get(d, "debug.afterStepPaused") is True, get(d, "debug.afterStepPaused"))),
         ("step.line", "step moved to the next line", lambda d: ((get(d, "debug.afterStepLine") or 0) > (get(d, "debug.frameLine") or 0), [get(d, "debug.frameLine"), get(d, "debug.afterStepLine")])),
         ("ended", "program ran to the end", lambda d: (get(d, "debug.ended") is True, get(d, "debug.ended"))),

@@ -151,6 +151,8 @@ func builtinCommands() []appCommand {
 		{"run.stepOver", "步过", "运行", "F8", "step over", func(m *Model) { m.StepOver() }},
 		{"run.stepInto", "步入", "运行", "F7", "step into", func(m *Model) { m.StepInto() }},
 		{"run.stepOut", "步出", "运行", "Shift+F8", "step out", func(m *Model) { m.StepOut() }},
+		{"run.runToCursor", "运行到光标", "运行", "Alt+F9", "run to cursor continue", func(m *Model) { m.RunToCursor(false) }},
+		{"run.forceRunToCursor", "强制运行到光标", "运行", "Cmd+Alt+F9", "force run to cursor ignore breakpoints", func(m *Model) { m.ForceRunToCursor() }},
 		{"run.continue", "继续", "运行", "", "continue resume", func(m *Model) { m.DebugContinue() }},
 		{"run.pause", "暂停", "运行", "", "pause suspend", func(m *Model) { m.DebugPause() }},
 		{"run.trust", "信任此项目并启用运行", "运行", "", "trust project", func(m *Model) { m.TrustProject() }},

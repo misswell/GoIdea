@@ -614,6 +614,39 @@ func (m *Model) StepOver() { m.DebugStep("over") }
 func (m *Model) StepInto() { m.DebugStep("into") }
 func (m *Model) StepOut()  { m.DebugStep("out") }
 
+// RunToCursor continues to the caret's line (Alt+F9); force ignores
+// breakpoints on the way (Cmd+Alt+F9).
+func (m *Model) RunToCursor(force bool) {
+	if m.debug.session == 0 || !m.debug.paused || m.debug.stopThread == 0 {
+		return
+	}
+	t := m.tab()
+	if t == nil {
+		m.debug.err = "没有打开的文件，无法运行到光标"
+		m.invalidate()
+		return
+	}
+	path := t.doc.Path()
+	line := t.state.CursorPos().Line
+	session, thread := m.debug.session, m.debug.stopThread
+	m.debug.status = "运行到光标…"
+	m.debug.paused = false
+	m.refreshDecorations()
+	m.invalidate()
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, 2*time.Minute)
+		defer cancel()
+		if _, err := m.mgr.Invoke(ctx, Window, "debug_run_to", map[string]any{
+			"session": session, "threadId": thread, "path": path, "line": line, "force": force,
+		}); err != nil {
+			m.post(func() { m.debug.err = "运行到光标失败：" + err.Error(); m.invalidate() })
+		}
+	}()
+}
+
+// ForceRunToCursor runs to the caret ignoring breakpoints.
+func (m *Model) ForceRunToCursor() { m.RunToCursor(true) }
+
 // StopDebug ends the session.
 func (m *Model) StopDebug() {
 	if m.debug.session == 0 || m.debug.ended {
@@ -1137,6 +1170,32 @@ func (m *Model) SmokeDebug(ctx context.Context) (map[string]any, error) {
 			return out, ctx.Err()
 		case <-time.After(200 * time.Millisecond):
 		}
+	}
+
+	// Run to Cursor to the loop body: the same pause must arrive at that line
+	// through debug_run_to, as Alt+F9 does in the UI.
+	runTo := -1
+	m.post(func() {
+		if t := m.tab(); t != nil {
+			for i, l := range strings.Split(t.doc.Text(), "\n") {
+				if i > line && strings.Contains(l, "total += i") {
+					runTo = i
+					t.state.GoTo(editor.Pos{Line: i, Col: 0})
+					break
+				}
+			}
+		}
+	})
+	if runTo >= 0 {
+		m.post(func() { m.RunToCursor(false) })
+		m.waitDebug(ctx, func(d *DebugPane) bool {
+			return d.ended || (d.paused && d.stopLine == runTo)
+		}, 60*time.Second)
+		m.post(func() {
+			out["runToLine"] = runTo + 1
+			out["runToPaused"] = m.debug.paused && m.debug.stopLine == runTo
+			out["runToStatus"] = m.debug.status
+		})
 	}
 
 	// Step over the println: the frame moves and the session pauses again.

@@ -209,6 +209,8 @@ func mainMenuGroups() []menuEntry {
 			action("Step Over", "run.stepOver", "F8"),
 			action("Step Into", "run.stepInto", "F7"),
 			action("Step Out", "run.stepOut", "Shift+F8"),
+			action("Run to Cursor", "run.runToCursor", "Alt+F9"),
+			action("Force Run to Cursor", "run.forceRunToCursor", "Cmd+Alt+F9"),
 			action("Resume Program", "run.continue", ""),
 			action("Pause Program", "run.pause", ""),
 			rule(),

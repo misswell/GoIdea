@@ -1958,7 +1958,7 @@ Local-only commands and the per-command argument lists are in
 | `debug_redefine_classes` | debug | yes |  | missing |
 | `debug_restart_frame` | debug | yes |  | missing |
 | `debug_resume` | debug | yes | yes | missing |
-| `debug_run_to` | debug | yes |  | missing |
+| `debug_run_to` | debug | yes | yes | missing |
 | `debug_scopes` | debug | yes | yes | missing |
 | `debug_send_input` | debug | yes |  | missing |
 | `debug_sessions` | debug | yes |  | missing |
@@ -2488,7 +2488,7 @@ Local-only commands and the per-command argument lists are in
 | `wsl_distros` | wsl | no |  | missing |
 | `wsl_resolve` | wsl | no |  | missing |
 
-476 commands are served over stdio and 102 are called by GoIDEA today. A command
+476 commands are served over stdio and 103 are called by GoIDEA today. A command
 that is registered only in the desktop shell needs an `ops` module before stdio
 can serve it; a GoIDEA check counts only when the UI path works end to end.
 
