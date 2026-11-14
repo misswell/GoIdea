@@ -37,9 +37,92 @@ type dbView struct {
 	running  bool
 	err      string
 	outcomes []openidea.DBOutcome
+	// results are the run result tabs (v0.1.44's result tabs); active is the
+	// selected one, -1 for the Output tab. outcomes mirrors the active result
+	// for the smoke and older callers.
+	results []dbResult
+	active  int
+	outLog  []string
+	seq     int
 
 	// gen drops replies that a newer request for the same list superseded.
 	gen uint64
+}
+
+// dbResult is one run's result tab.
+type dbResult struct {
+	id       int
+	title    string
+	outcomes []openidea.DBOutcome
+	err      string
+}
+
+// addDBResult puts a new result tab in front, caps the strip and selects it.
+func (v *dbView) addDBResult(title string, outcomes []openidea.DBOutcome, errText string) {
+	v.seq++
+	v.results = append([]dbResult{{id: v.seq, title: title, outcomes: outcomes, err: errText}}, v.results...)
+	if len(v.results) > 10 {
+		v.results = v.results[:10]
+	}
+	v.active = 0
+	v.outcomes, v.err = outcomes, errText
+}
+
+// selectDBResult activates a result tab, or the Output tab for -1.
+func (m *Model) selectDBResult(i int) {
+	v := m.db
+	if v == nil {
+		return
+	}
+	if i < -1 || i >= len(v.results) {
+		return
+	}
+	v.active = i
+	if i == -1 {
+		v.outcomes, v.err = nil, ""
+	} else {
+		v.outcomes, v.err = v.results[i].outcomes, v.results[i].err
+	}
+	m.invalidate()
+}
+
+// CloseDBResult closes one result tab; the Output tab is not closable.
+func (m *Model) CloseDBResult(i int) {
+	v := m.db
+	if v == nil || i < 0 || i >= len(v.results) {
+		return
+	}
+	v.results = append(v.results[:i], v.results[i+1:]...)
+	if v.active >= len(v.results) {
+		v.active = len(v.results) - 1
+	}
+	if v.active < 0 {
+		v.active = -1
+	}
+	m.selectDBResult(v.active)
+}
+
+// CloseOtherDBResults keeps one result tab.
+func (m *Model) CloseOtherDBResults(i int) {
+	v := m.db
+	if v == nil || i < 0 || i >= len(v.results) {
+		return
+	}
+	kept := v.results[i]
+	v.results = []dbResult{kept}
+	m.selectDBResult(0)
+}
+
+// StepDBResult cycles the Output and result tabs.
+func (m *Model) StepDBResult(delta int) {
+	v := m.db
+	if v == nil || len(v.results) == 0 {
+		return
+	}
+	ids := len(v.results) + 1
+	cur := v.active + 1 // 0 = Output
+	next := ((cur+delta)%ids + ids) % ids
+	m.selectDBResult(next - 1)
 }
 
 // OpenDatabase opens the database sheet and lists the data sources.
@@ -299,6 +382,11 @@ func (m *Model) RunDB() {
 	v.running = true
 	v.err = ""
 	v.outcomes = nil
+	v.active = 0
+	v.outLog = append(v.outLog, "运行："+oneLine(sql))
+	if len(v.outLog) > 200 {
+		v.outLog = v.outLog[len(v.outLog)-200:]
+	}
 	request := m.chanSeq.Add(1)
 	id, schema := v.source, v.schema
 	m.invalidate()
@@ -315,13 +403,25 @@ func (m *Model) RunDB() {
 				return
 			}
 			v.running = false
+			title := oneLine(sql)
+			if i := strings.IndexAny(title, " ;"); i > 0 {
+				title = title[:i]
+			}
 			switch {
 			case err != nil:
-				v.err = "执行失败：" + err.Error()
+				v.addDBResult(title, nil, "执行失败："+err.Error())
+				v.outLog = append(v.outLog, "执行失败："+err.Error())
 			case len(statements) == 0:
-				v.err = "没有可执行的语句"
+				v.addDBResult(title, outcomes, "没有可执行的语句")
+				v.outLog = append(v.outLog, "没有可执行的语句")
 			default:
-				v.outcomes = outcomes
+				v.addDBResult(title, outcomes, "")
+				for _, o := range outcomes {
+					v.outLog = append(v.outLog, oneLine(o.Statement.Text)+" · "+dbOutcomeSummary(o))
+				}
+			}
+			if len(v.outLog) > 200 {
+				v.outLog = v.outLog[len(v.outLog)-200:]
 			}
 			m.loadDBTables(id, schema)
 			m.invalidate()
@@ -500,11 +600,60 @@ func (m *Model) dbDialog(c *ui.Context, p *ui.Theme) {
 						ui.Text(c, "Cmd+Enter 运行，结果最多显示前 50 行").FontSize(10.5).
 							TextColor(p.TextMuted).SingleLine()
 					})
+					ui.Row(c).Gap(2).Children(func() {
+						for i := -1; i < len(v.results); i++ {
+							i := i
+							title := "Output"
+							if i >= 0 {
+								title = v.results[i].title
+							}
+							on := v.active == i
+							b := ui.ButtonBase(c.Key(fmt.Sprintf("dbresult:%d", i))).Height(22).
+								Padding(0, 8).Radius(4).AlignItems(ui.Center).Cursor(ui.CursorPointer)
+							if on {
+								b.Background(p.SurfaceHover)
+								b.BorderWidth(0, 0, 1, 0).BorderColor(p.Accent)
+							} else if b.Hovered() {
+								b.Background(p.SurfaceHover)
+							}
+							b.Children(func() {
+								ui.Text(c, title).FontSize(11).TextColor(p.TextMuted).
+									SingleLine().Ellipsis("…")
+							})
+							b.OnClick(func() { m.selectDBResult(i) })
+							if i >= 0 {
+								b.ContextMenu(func(menu *ui.Menu) {
+									if menu.Item("Close").Chosen() {
+										m.CloseDBResult(i)
+									}
+									if menu.Item("Close Others").Chosen() {
+										m.CloseOtherDBResults(i)
+									}
+									menu.Separator()
+									if menu.Item("Next Result").Chosen() {
+										m.StepDBResult(1)
+									}
+									if menu.Item("Previous Result").Chosen() {
+										m.StepDBResult(-1)
+									}
+								})
+							}
+						}
+					})
 					if v.err != "" {
 						ui.Text(c, v.err).FontSize(11).TextColor(p.Danger).
 							SingleLine().Ellipsis("…")
 					}
 					ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
+						if v.active < 0 {
+							ui.Column(c).Padding(4, 6).Gap(2).Children(func() {
+								for _, line := range v.outLog {
+									ui.Text(c, line).FontSize(10.5).TextColor(p.TextMuted).
+										SingleLine().Ellipsis("…")
+								}
+							})
+							return
+						}
 						ui.Column(c).Gap(8).Children(func() {
 							for i, o := range v.outcomes {
 								i, o := i, o
@@ -718,4 +867,12 @@ func (m *Model) SmokeDatabase(ctx context.Context) (map[string]any, error) {
 		out["closed"] = !v.open
 	})
 	return out, nil
+}
+
+// dbActiveResult is the selected result tab index, -1 for Output or none.
+func (m *Model) dbActiveResult() int {
+	if m.db == nil {
+		return -1
+	}
+	return m.db.active
 }
