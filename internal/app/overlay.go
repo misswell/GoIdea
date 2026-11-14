@@ -7,6 +7,7 @@ package app
 // that drifts from the fields it reads.
 
 import (
+	"slices"
 	"sort"
 
 	"github.com/egoist/mygo/ui"
@@ -96,10 +97,34 @@ func (m *Model) openOverlays() []*Overlay {
 	return out
 }
 
-// renderOverlays draws every open overlay in registry order.
+// renderOverlays draws every open overlay in registry order and hands the
+// keyboard back to the editor when the last one closes.
 func (m *Model) renderOverlays(c *ui.Context, p *ui.Theme) {
-	for _, o := range m.openOverlays() {
+	open := m.openOverlays()
+	ids := make([]string, 0, len(open))
+	modal := false
+	for _, o := range open {
+		ids = append(ids, o.ID)
+		modal = modal || o.Modal
 		o.Render(m, c, p)
+	}
+	m.overlayFocusSettle(ids, modal)
+}
+
+// overlayFocusSettle restores the editor's keyboard when the last overlay
+// closed, as OpenIDEA does after a popup: the editor focuses itself on the
+// next frame. A modal still up keeps the focus where it is.
+func (m *Model) overlayFocusSettle(ids []string, modal bool) {
+	closed := false
+	for _, was := range m.overlayIDs {
+		if !slices.Contains(ids, was) {
+			closed = true
+			break
+		}
+	}
+	m.overlayIDs = append([]string(nil), ids...)
+	if closed && !modal {
+		m.focusApply = true
 	}
 }
 

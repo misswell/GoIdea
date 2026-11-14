@@ -93,3 +93,26 @@ func TestOverlayUnregister(t *testing.T) {
 		t.Fatal("the overlay was removed twice")
 	}
 }
+
+func TestOverlayCloseHandsTheKeyboardBack(t *testing.T) {
+	m := &Model{}
+	m.overlayFocusSettle([]string{"rename"}, true)
+	if m.focusApply {
+		t.Fatal("the editor focused while the dialog was up")
+	}
+	m.overlayFocusSettle(nil, false)
+	if !m.focusApply {
+		t.Fatal("closing the last overlay did not restore the editor")
+	}
+	m.focusApply = false
+	m.overlayIDs = []string{"a"}
+	m.overlayFocusSettle([]string{"b"}, true)
+	if m.focusApply {
+		t.Fatal("a different dialog took the keyboard to the editor")
+	}
+	m.overlayIDs = []string{"a"}
+	m.overlayFocusSettle([]string{"a"}, false)
+	if m.focusApply {
+		t.Fatal("an open overlay restored the editor")
+	}
+}

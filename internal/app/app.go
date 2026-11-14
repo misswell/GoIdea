@@ -183,6 +183,10 @@ type Model struct {
 	// seFilters is Search Everywhere's funnel, mirrored into the prefs.
 	seFilters seFilters
 
+	// overlayIDs is the overlays the last frame drew, so closing the last one
+	// hands the keyboard back to the editor.
+	overlayIDs []string
+
 	// dockDragID, dockDragSlot and dockDragArmed carry a dragged tool window
 	// button: the slot under the pointer and whether letting go moves it.
 	dockDragID    string
