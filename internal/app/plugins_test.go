@@ -25,6 +25,7 @@ func pluginFixture(t *testing.T, settingsPath, name string) string {
 		"author":      "Tester",
 		"contributes": map[string]any{
 			"commands": []map[string]any{{"id": name + ".run", "title": "Demo: Run"}},
+			"views":    []map[string]any{{"id": "demo.side", "title": "Demo View", "location": "sidebar"}},
 			"languages": []map[string]any{{
 				"id": "demo", "extensions": []string{".demo"},
 			}},
@@ -184,5 +185,38 @@ func TestPluginStatusItemJoinsTheStatusBar(t *testing.T) {
 	h.clearStatus("demo")
 	if indexOf(statusIDs(m.statusSide("right")), id) != -1 {
 		t.Fatal("disabling the plugin left its status item")
+	}
+}
+
+func TestPluginViewBecomesAToolWindow(t *testing.T) {
+	settingsPath := filepath.Join(t.TempDir(), "settings.json")
+	pluginFixture(t, settingsPath, "demo")
+	m := &Model{cfg: Config{SettingsPath: settingsPath}, welcomePage: "plugins"}
+	pg := m.pluginsPage()
+	full := pluginViewPrefix + "demo:demo.side"
+	if dockSpec(full) == nil {
+		t.Fatal("the contributed view is not a tool window")
+	}
+	p := pg.reg.Plugin("demo")
+	tree := `{"id":"demo.side","tree":{"type":"stack","children":[` +
+		`{"type":"text","text":"Plugin says hi"},` +
+		`{"type":"list","items":[{"label":"one","description":"d"}]}]}}`
+	if _, err := pg.host.Call(p, "views.render", json.RawMessage(tree)); err != nil {
+		t.Fatal(err)
+	}
+	m.DockToggle(full)
+	tt := workbenchTester(t, m)
+	if !tt.HasText("Plugin says hi") {
+		t.Fatalf("the plugin view is blank: %q", tt.Texts())
+	}
+	if !tt.HasText("• one") {
+		t.Fatalf("the list item did not draw: %q", tt.Texts())
+	}
+	m.setPluginEnabled("demo", false)
+	if dockSpec(full) != nil {
+		t.Fatal("a disabled plugin kept its tool window")
+	}
+	if m.dockWindowShown(full) {
+		t.Fatal("a disabled plugin's view is still open")
 	}
 }

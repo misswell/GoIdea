@@ -75,6 +75,21 @@ func registerToolWindow(spec *toolWindowSpec) {
 	toolWindowRegistry[spec.id] = spec
 }
 
+// unregisterToolWindow removes a window from the registry, for a plugin's
+// view going away. The caller closes any slot that held it.
+func unregisterToolWindow(id string) {
+	if _, ok := toolWindowRegistry[id]; !ok {
+		return
+	}
+	delete(toolWindowRegistry, id)
+	for i, x := range toolWindowOrder {
+		if x == id {
+			toolWindowOrder = append(toolWindowOrder[:i], toolWindowOrder[i+1:]...)
+			break
+		}
+	}
+}
+
 // dockState is the six slots and what the workbench remembers between runs.
 type dockState struct {
 	slots [dockSlotCount]string

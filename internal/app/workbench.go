@@ -9,6 +9,7 @@ package app
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/egoist/mygo/ui"
 )
@@ -312,6 +313,21 @@ func (m *Model) toolStripe(c *ui.Context, p *ui.Theme, oi oiColors) {
 		m.stripeButton(c, p, oi, "bookmarks", iconBookmark, "Bookmarks", m.dockWindowShown("bookmarks"), func() {
 			m.splitClick("bookmarks")
 		})
+		// Plugin views have a stripe button of their own, under the built-in
+		// ones, as a Mayoi sidebar view does.
+		for _, id := range toolWindowOrder {
+			if !strings.HasPrefix(id, pluginViewPrefix) {
+				continue
+			}
+			spec := dockSpec(id)
+			if spec == nil || !spec.stripe {
+				continue
+			}
+			id, title := id, spec.title
+			m.stripeButton(c, p, oi, id, iconStructure, title, m.dockWindowShown(id), func() {
+				m.DockToggle(id)
+			})
+		}
 		ui.Spacer(c)
 		m.stripeButton(c, p, oi, "commands", iconWelcomeSearch, "Search Everywhere", false, func() {
 			m.OpenCommands()

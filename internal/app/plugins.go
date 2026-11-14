@@ -33,6 +33,10 @@ type goideaPluginHost struct {
 	// status are the status bar items the plugins set, by their full id.
 	statusMu sync.Mutex
 	status   map[string]pluginStatusItem
+
+	// views are the latest trees the plugins rendered, by their full id.
+	viewMu sync.Mutex
+	views  map[string]json.RawMessage
 }
 
 // pluginStatusItem is one plugin's status bar line.
@@ -59,6 +63,7 @@ func (h *goideaPluginHost) Call(p *plugin.Plugin, method string, args json.RawMe
 		Arg  json.RawMessage `json:"arg"`
 		Path string          `json:"path"`
 		Item json.RawMessage `json:"item"`
+		Tree json.RawMessage `json:"tree"`
 	}
 	if len(args) > 0 {
 		_ = json.Unmarshal(args, &in)
@@ -118,6 +123,19 @@ func (h *goideaPluginHost) Call(p *plugin.Plugin, method string, args json.RawMe
 			item = &pluginStatusItem{text: raw.Text, tooltip: raw.Tooltip, command: raw.Command}
 		}
 		h.setStatus(p, in.ID, item)
+		return nil, nil
+	case "views.render":
+		if p == nil || in.ID == "" {
+			return nil, errors.New("views.render needs an id")
+		}
+		full := pluginViewPrefix + p.Name + ":" + in.ID
+		h.viewMu.Lock()
+		if h.views == nil {
+			h.views = map[string]json.RawMessage{}
+		}
+		h.views[full] = append(json.RawMessage(nil), in.Tree...)
+		h.viewMu.Unlock()
+		h.m.invalidate()
 		return nil, nil
 	}
 	return nil, fmt.Errorf("GoIDEA does not support the plugin API %q yet", method)
@@ -298,8 +316,10 @@ type pluginPage struct {
 	indexErr   string
 
 	// actions are the palette action ids registered for the plugins'
-	// commands, so a reload can take the old ones out first.
+	// commands, so a reload can take the old ones out first, and views are
+	// the tool window ids of their contributed views.
 	actions []string
+	views   []string
 }
 
 // pluginDirs are where GoIDEA keeps its plugins: beside its settings file,
@@ -339,7 +359,7 @@ func (m *Model) pluginsPage() *pluginPage {
 		// on their own goroutine.
 		pg.reg.Toggled(p.Name)
 	}
-	pg.refreshActions(m)
+	pg.sync(m)
 	return pg
 }
 
@@ -347,10 +367,179 @@ func (m *Model) pluginsPage() *pluginPage {
 // point's own actions in the palette.
 const pluginActionPrefix = "plugin:"
 
+// pluginViewPrefix is the tool window id of a view a plugin contributes.
+const pluginViewPrefix = "plugin.view:"
+
 // refreshActions mirrors the enabled plugins' commands into the action
 // registry, so the palette, menus and shortcuts run them exactly once.
 func (pg *pluginPage) refreshActions(m *Model) {
 	pg.syncActions(m, pg.reg.Commands(""))
+}
+
+// sync refreshes everything a plugin contributes to the workbench.
+func (pg *pluginPage) sync(m *Model) {
+	pg.syncActions(m, pg.reg.Commands(""))
+	pg.syncViews(m)
+}
+
+// syncViews registers each enabled plugin's contributed views as tool windows
+// on the left area's split slot, under Project, and takes the windows of a
+// disabled or removed plugin down first.
+func (pg *pluginPage) syncViews(m *Model) {
+	for _, id := range pg.views {
+		if _, ok := m.dockSlotOf(id); ok {
+			m.DockHide(id)
+		}
+		unregisterToolWindow(id)
+	}
+	pg.views = nil
+	for _, pl := range pg.reg.Enabled() {
+		pl := pl
+		for _, v := range pl.Contributes.Views {
+			full := pluginViewPrefix + pl.Name + ":" + v.ID
+			title := v.Title
+			if title == "" {
+				title = v.ID
+			}
+			registerToolWindow(&toolWindowSpec{
+				id: full, title: title, anchor: dockLeftSplit, order: 1000, stripe: true,
+				open:  func(*Model) {},
+				close: func(*Model) {},
+				render: func(mm *Model, c *ui.Context, p *ui.Theme, oi oiColors) {
+					mm.pluginsPage().host.renderView(c, p, oi, full)
+				},
+				renderGrow: func(mm *Model, c *ui.Context, p *ui.Theme, oi oiColors, grow float32) {
+					mm.pluginsPage().host.renderView(c, p, oi, full)
+				},
+			})
+			pg.views = append(pg.views, full)
+		}
+	}
+}
+
+// pluginViewNode is a node of the tree a plugin renders.
+type pluginViewNode struct {
+	Type     string           `json:"type"`
+	Text     string           `json:"text"`
+	Label    string           `json:"label"`
+	Muted    bool             `json:"muted"`
+	Bold     bool             `json:"bold"`
+	Size     float32          `json:"size"`
+	Gap      float32          `json:"gap"`
+	Children []pluginViewNode `json:"children"`
+	Items    []pluginViewItem `json:"items"`
+	Empty    string           `json:"empty"`
+	Value    float32          `json:"value"`
+	Primary  bool             `json:"primary"`
+	Options  []string         `json:"options"`
+	Checked  bool             `json:"checked"`
+}
+
+// pluginViewItem is a list or tree row.
+type pluginViewItem struct {
+	Label       string           `json:"label"`
+	Description string           `json:"description"`
+	Open        bool             `json:"open"`
+	Children    []pluginViewItem `json:"children"`
+}
+
+// renderView draws the last tree a plugin rendered for one view, or a hint
+// until it does.
+func (h *goideaPluginHost) renderView(c *ui.Context, p *ui.Theme, oi oiColors, id string) {
+	h.viewMu.Lock()
+	raw := h.views[id]
+	h.viewMu.Unlock()
+	ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Background(p.Surface).Padding(6, 8).
+		Children(func() {
+			if len(raw) == 0 {
+				emptyState(c, p, "插件视图尚未渲染")
+				return
+			}
+			var node pluginViewNode
+			if err := json.Unmarshal(raw, &node); err != nil {
+				errorState(c, p, "插件视图无法解析："+err.Error())
+				return
+			}
+			h.drawViewNode(c, p, oi, node, 0)
+		})
+}
+
+func (h *goideaPluginHost) drawViewNode(c *ui.Context, p *ui.Theme, oi oiColors, n pluginViewNode, depth int) {
+	if depth > 12 {
+		return
+	}
+	switch n.Type {
+	case "row":
+		ui.Row(c).Gap(n.Gap).Children(func() {
+			for _, ch := range n.Children {
+				h.drawViewNode(c, p, oi, ch, depth+1)
+			}
+		})
+	case "stack", "":
+		ui.Column(c).Gap(n.Gap).Children(func() {
+			for _, ch := range n.Children {
+				h.drawViewNode(c, p, oi, ch, depth+1)
+			}
+		})
+	case "text", "code", "markdown":
+		text := n.Text
+		if text == "" {
+			text = n.Label
+		}
+		size := n.Size
+		if size <= 0 {
+			size = oiFontSizeM
+		}
+		tone := oi.text
+		if n.Muted {
+			tone = oi.textMuted
+		}
+		t := ui.Text(c, text).FontSize(size).TextColor(tone)
+		if n.Bold {
+			t.Bold()
+		}
+	case "divider":
+		ui.Row(c).Height(1).Background(oi.border)
+	case "empty":
+		emptyState(c, p, n.Text)
+	case "progress":
+		ui.Text(c, fmt.Sprintf("%d%%", int(n.Value*100))).
+			FontSize(oiFontSizeM).TextColor(oi.textMuted)
+	case "list", "tree":
+		if len(n.Items) == 0 {
+			if n.Empty != "" {
+				emptyState(c, p, n.Empty)
+			}
+			return
+		}
+		for _, it := range n.Items {
+			h.drawViewItem(c, oi, it, depth+1)
+		}
+	case "button":
+		ui.Text(c, n.Label).FontSize(oiFontSizeM).TextColor(oi.text)
+	default:
+		if n.Text != "" {
+			ui.Text(c, n.Text).FontSize(oiFontSizeM).TextColor(oi.text)
+		} else if n.Label != "" {
+			ui.Text(c, n.Label).FontSize(oiFontSizeM).TextColor(oi.text)
+		}
+	}
+}
+
+func (h *goideaPluginHost) drawViewItem(c *ui.Context, oi oiColors, it pluginViewItem, depth int) {
+	if depth > 12 {
+		return
+	}
+	ui.Row(c).Height(22).Padding(0, 4).Gap(6).AlignItems(ui.Center).Children(func() {
+		ui.Text(c, "• "+it.Label).FontSize(oiFontSizeM).TextColor(oi.text).SingleLine()
+		ui.Spacer(c)
+		if it.Description != "" {
+			ui.Text(c, it.Description).FontSize(oiFontSizeS).TextColor(oi.textMuted).SingleLine()
+		}
+	})
+	for _, ch := range it.Children {
+		h.drawViewItem(c, oi, ch, depth+1)
+	}
 }
 
 // syncActions replaces the plugin-command actions with cmds.
@@ -436,7 +625,7 @@ func (m *Model) setPluginEnabled(name string, on bool) {
 	if !on {
 		pg.host.clearStatus(name)
 	}
-	pg.refreshActions(m)
+	pg.sync(m)
 	pg.err = ""
 	m.invalidate()
 }
@@ -458,7 +647,7 @@ func (m *Model) removePlugin(name string) {
 	pg.host.setSettings(m.prefs.Plugins)
 	pg.reg.Load()
 	pg.host.clearStatus(name)
-	pg.refreshActions(m)
+	pg.sync(m)
 	m.invalidate()
 }
 
@@ -519,7 +708,7 @@ func (m *Model) pluginInstallDone(name string, err error) {
 			return
 		}
 		pg.reg.Load()
-		pg.refreshActions(m)
+		pg.sync(m)
 		pg.tab, pg.selected, pg.query = 0, name, ""
 		m.invalidate()
 	})
@@ -706,7 +895,7 @@ func (m *Model) pluginGear(c *ui.Context, oi oiColors, pg *pluginPage) {
 			m.welcomeGearItem(c, oi, "Reload Installed Plugins", func() {
 				pg.gearOpen = false
 				pg.reg.Load()
-				pg.refreshActions(m)
+				pg.sync(m)
 				m.invalidate()
 			})
 		})
@@ -997,7 +1186,7 @@ func (m *Model) pluginHeader(c *ui.Context, oi oiColors, pg *pluginPage, p *plug
 		ui.Row(c).Shrink(0).Gap(6).AlignItems(ui.Center).Children(func() {
 			m.pluginButton(c, oi, "Reload", false, func() {
 				pg.reg.Restart(p.Name)
-				pg.refreshActions(m)
+				pg.sync(m)
 				m.invalidate()
 			})
 			if !p.Bundled {
