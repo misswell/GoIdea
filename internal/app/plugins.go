@@ -36,7 +36,14 @@ type goideaPluginHost struct {
 
 	// views are the latest trees the plugins rendered, by their full id.
 	viewMu sync.Mutex
-	views  map[string]json.RawMessage
+	views  map[string]pluginViewTree
+}
+
+// pluginViewTree is one view's last tree and the plugin that owns it, for
+// dispatching the handlers its nodes carry.
+type pluginViewTree struct {
+	plugin *plugin.Plugin
+	tree   json.RawMessage
 }
 
 // pluginStatusItem is one plugin's status bar line.
@@ -131,9 +138,9 @@ func (h *goideaPluginHost) Call(p *plugin.Plugin, method string, args json.RawMe
 		full := pluginViewPrefix + p.Name + ":" + in.ID
 		h.viewMu.Lock()
 		if h.views == nil {
-			h.views = map[string]json.RawMessage{}
+			h.views = map[string]pluginViewTree{}
 		}
-		h.views[full] = append(json.RawMessage(nil), in.Tree...)
+		h.views[full] = pluginViewTree{plugin: p, tree: append(json.RawMessage(nil), in.Tree...)}
 		h.viewMu.Unlock()
 		h.m.invalidate()
 		return nil, nil
@@ -433,6 +440,7 @@ type pluginViewNode struct {
 	Primary  bool             `json:"primary"`
 	Options  []string         `json:"options"`
 	Checked  bool             `json:"checked"`
+	OnClick  *pluginViewRef   `json:"onClick"`
 }
 
 // pluginViewItem is a list or tree row.
@@ -441,14 +449,21 @@ type pluginViewItem struct {
 	Description string           `json:"description"`
 	Open        bool             `json:"open"`
 	Children    []pluginViewItem `json:"children"`
+	OnClick     *pluginViewRef   `json:"onClick"`
+}
+
+// pluginViewRef is a handler the prelude bound to a node.
+type pluginViewRef struct {
+	H string `json:"$h"`
 }
 
 // renderView draws the last tree a plugin rendered for one view, or a hint
 // until it does.
 func (h *goideaPluginHost) renderView(c *ui.Context, p *ui.Theme, oi oiColors, id string) {
 	h.viewMu.Lock()
-	raw := h.views[id]
+	view := h.views[id]
 	h.viewMu.Unlock()
+	raw := view.tree
 	ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Background(p.Surface).Padding(6, 8).
 		Children(func() {
 			if len(raw) == 0 {
@@ -460,11 +475,11 @@ func (h *goideaPluginHost) renderView(c *ui.Context, p *ui.Theme, oi oiColors, i
 				errorState(c, p, "插件视图无法解析："+err.Error())
 				return
 			}
-			h.drawViewNode(c, p, oi, node, 0)
+			h.drawViewNode(c, p, oi, node, 0, view.plugin)
 		})
 }
 
-func (h *goideaPluginHost) drawViewNode(c *ui.Context, p *ui.Theme, oi oiColors, n pluginViewNode, depth int) {
+func (h *goideaPluginHost) drawViewNode(c *ui.Context, p *ui.Theme, oi oiColors, n pluginViewNode, depth int, owner *plugin.Plugin) {
 	if depth > 12 {
 		return
 	}
@@ -472,13 +487,13 @@ func (h *goideaPluginHost) drawViewNode(c *ui.Context, p *ui.Theme, oi oiColors,
 	case "row":
 		ui.Row(c).Gap(n.Gap).Children(func() {
 			for _, ch := range n.Children {
-				h.drawViewNode(c, p, oi, ch, depth+1)
+				h.drawViewNode(c, p, oi, ch, depth+1, owner)
 			}
 		})
 	case "stack", "":
 		ui.Column(c).Gap(n.Gap).Children(func() {
 			for _, ch := range n.Children {
-				h.drawViewNode(c, p, oi, ch, depth+1)
+				h.drawViewNode(c, p, oi, ch, depth+1, owner)
 			}
 		})
 	case "text", "code", "markdown":
@@ -513,10 +528,14 @@ func (h *goideaPluginHost) drawViewNode(c *ui.Context, p *ui.Theme, oi oiColors,
 			return
 		}
 		for _, it := range n.Items {
-			h.drawViewItem(c, oi, it, depth+1)
+			h.drawViewItem(c, oi, it, depth+1, owner)
 		}
 	case "button":
-		ui.Text(c, n.Label).FontSize(oiFontSizeM).TextColor(oi.text)
+		b := ui.Button(c, n.Label)
+		if n.OnClick != nil && n.OnClick.H != "" && owner != nil {
+			owner, ref := owner, n.OnClick.H
+			b.OnClick(func() { h.dispatchHandler(owner, ref, "") })
+		}
 	default:
 		if n.Text != "" {
 			ui.Text(c, n.Text).FontSize(oiFontSizeM).TextColor(oi.text)
@@ -526,11 +545,21 @@ func (h *goideaPluginHost) drawViewNode(c *ui.Context, p *ui.Theme, oi oiColors,
 	}
 }
 
-func (h *goideaPluginHost) drawViewItem(c *ui.Context, oi oiColors, it pluginViewItem, depth int) {
+func (h *goideaPluginHost) drawViewItem(c *ui.Context, oi oiColors, it pluginViewItem, depth int, owner *plugin.Plugin) {
 	if depth > 12 {
 		return
 	}
-	ui.Row(c).Height(22).Padding(0, 4).Gap(6).AlignItems(ui.Center).Children(func() {
+	r := ui.Row(c).Height(22).Padding(0, 4).Gap(6).AlignItems(ui.Center)
+	if it.OnClick != nil && it.OnClick.H != "" && owner != nil {
+		r.Cursor(ui.CursorPointer)
+		if r.Hovered() {
+			r.Background(oi.hover)
+		}
+		handler := owner
+		ref := it.OnClick.H
+		r.OnClick(func() { h.dispatchHandler(handler, ref, "") })
+	}
+	r.Children(func() {
 		ui.Text(c, "• "+it.Label).FontSize(oiFontSizeM).TextColor(oi.text).SingleLine()
 		ui.Spacer(c)
 		if it.Description != "" {
@@ -538,8 +567,26 @@ func (h *goideaPluginHost) drawViewItem(c *ui.Context, oi oiColors, it pluginVie
 		}
 	})
 	for _, ch := range it.Children {
-		h.drawViewItem(c, oi, ch, depth+1)
+		h.drawViewItem(c, oi, ch, depth+1, owner)
 	}
+}
+
+// dispatchHandler calls the handler the prelude bound to a view node, on the
+// plugin's own goroutine, as a click on it does.
+func (h *goideaPluginHost) dispatchHandler(p *plugin.Plugin, handler, value string) {
+	if p == nil || handler == "" {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if _, err := p.Request(ctx, "handler", map[string]any{"id": handler, "value": value}); err != nil {
+			h.m.post(func() {
+				h.m.status = "插件视图回调失败：" + err.Error()
+				h.m.invalidate()
+			})
+		}
+	}()
 }
 
 // syncActions replaces the plugin-command actions with cmds.

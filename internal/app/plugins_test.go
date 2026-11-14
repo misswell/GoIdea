@@ -200,7 +200,8 @@ func TestPluginViewBecomesAToolWindow(t *testing.T) {
 	p := pg.reg.Plugin("demo")
 	tree := `{"id":"demo.side","tree":{"type":"stack","children":[` +
 		`{"type":"text","text":"Plugin says hi"},` +
-		`{"type":"list","items":[{"label":"one","description":"d"}]}]}}`
+		`{"type":"list","items":[{"label":"one","description":"d","onClick":{"$h":"h1"}}]},` +
+		`{"type":"button","label":"Run demo","onClick":{"$h":"h2"}}]}}`
 	if _, err := pg.host.Call(p, "views.render", json.RawMessage(tree)); err != nil {
 		t.Fatal(err)
 	}
@@ -211,6 +212,9 @@ func TestPluginViewBecomesAToolWindow(t *testing.T) {
 	}
 	if !tt.HasText("• one") {
 		t.Fatalf("the list item did not draw: %q", tt.Texts())
+	}
+	if !tt.HasText("Run demo") {
+		t.Fatalf("the view button did not draw: %q", tt.Texts())
 	}
 	m.setPluginEnabled("demo", false)
 	if dockSpec(full) != nil {

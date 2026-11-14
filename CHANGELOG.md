@@ -71,7 +71,7 @@ needs a `## <version>` section here, or its build fails.
 - **Problems** 和 **TODO** 可在右侧与底部之间移动：**Window › Move Tool Window to Right / Bottom**。
 - 移到右侧的 **Problems**、**TODO** 不再显示空白；右侧上下可各放一个窗口，中间分隔线可拖动调整比例。
 - **Customize Main Toolbar** 加入的操作现在真的出现在标题栏，以操作标题显示，上下文不可用时自动隐藏。
-- 插件的 `views` 出现在侧边工具窗口，带自己的条纹按钮，内容由插件实时渲染。
+- 插件的 `views` 出现在侧边工具窗口，带条纹按钮，点击按钮或列表项会回调插件。
 - 插件可向状态栏添加条目：文本、提示和点击命令，禁用或移除插件时自动消失。
 - **Plugins** 启动时加载已启用的插件，插件命令自动进入命令面板，并可读取项目内文件。
 - **Settings › Notifications** 新增 **Play sound**，气泡弹出时播放系统提示音，被静音的分组不响。
