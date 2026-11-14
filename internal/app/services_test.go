@@ -74,3 +74,43 @@ func TestServiceRowsListRunConfigurations(t *testing.T) {
 func openideaRunConfig(name, kind string) openidea.RunConfig {
 	return openidea.RunConfig{Name: name, Kind: kind}
 }
+
+func TestServicesShowsTheRunningProcessAndItsStop(t *testing.T) {
+	m := &Model{}
+	m.run.configs = []openidea.RunConfig{{Name: "App", Kind: "java", Detected: true}}
+	m.run.sel = 0
+	m.run.running = true
+	rows := m.serviceRows()
+	var stop *serviceRow
+	seen := false
+	for i := range rows {
+		if rows[i].label == "App" {
+			seen = true
+			if rows[i].detail != "running" {
+				t.Fatalf("the running row says %q", rows[i].detail)
+			}
+		}
+		if rows[i].label == "Stop App" {
+			stop = &rows[i]
+		}
+	}
+	if !seen || stop == nil || stop.detail != "running" {
+		t.Fatalf("the running process is not listed with its stop: %+v", rows)
+	}
+	stop.run(m)
+	if m.run.err != "进程尚未启动" {
+		t.Fatalf("the stop row did not reach StopRun: %q", m.run.err)
+	}
+
+	m.run.running = false
+	code := int32(3)
+	m.run.exitCode = &code
+	for _, r := range m.serviceRows() {
+		if r.label == "App" && r.detail != "exit 3" {
+			t.Fatalf("the finished row says %q", r.detail)
+		}
+		if r.label == "Stop App" {
+			t.Fatal("a stopped process still lists its stop")
+		}
+	}
+}

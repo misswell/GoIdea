@@ -7,6 +7,7 @@ package app
 // that hold the JDK.
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -73,11 +74,24 @@ func (m *Model) serviceRows() []serviceRow {
 		if cfg.Detected {
 			detail += " · detected"
 		}
+		running := m.run.running && i == m.run.sel
+		switch {
+		case running:
+			detail = "running"
+		case m.run.exitCode != nil && i == m.run.sel:
+			detail = fmt.Sprintf("exit %d", *m.run.exitCode)
+		}
 		rows = append(rows, serviceRow{section: "Run", label: cfg.Name, detail: detail,
 			run: func(m *Model) {
 				m.run.sel = i
 				m.Run()
 			}})
+		if running {
+			// The running configuration's process is a row of its own, as
+			// OpenIDEA lists a service with its stop control.
+			rows = append(rows, serviceRow{section: "Run", label: "Stop " + cfg.Name,
+				detail: "running", run: func(m *Model) { m.StopRun() }})
+		}
 	}
 	if len(m.run.configs) == 0 {
 		rows = append(rows, serviceRow{section: "Run", label: "Run configurations…", detail: "",
