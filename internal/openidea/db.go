@@ -65,7 +65,8 @@ type DBColumnInfo struct {
 	PrimaryKey bool    `json:"primaryKey"`
 }
 
-// DBTableDetails is the schema of a table: its columns and indexes.
+// DBTableDetails is the schema of a table: its columns, indexes, foreign
+// keys and triggers.
 type DBTableDetails struct {
 	Columns []DBColumnInfo `json:"columns"`
 	Indexes []struct {
@@ -73,6 +74,19 @@ type DBTableDetails struct {
 		Unique  bool     `json:"unique"`
 		Columns []string `json:"columns"`
 	} `json:"indexes"`
+	ForeignKeys []struct {
+		Schema     string   `json:"schema"`
+		Table      string   `json:"table"`
+		Columns    []string `json:"columns"`
+		RefSchema  string   `json:"refSchema"`
+		RefTable   string   `json:"refTable"`
+		RefColumns []string `json:"refColumns"`
+	} `json:"foreignKeys"`
+	Triggers []struct {
+		Name   string `json:"name"`
+		Timing string `json:"timing"`
+		Events string `json:"events"`
+	} `json:"triggers"`
 }
 
 // DBTablePage is one page of a table's rows with its details.

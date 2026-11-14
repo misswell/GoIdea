@@ -106,3 +106,32 @@ func TestDBHistoryLabel(t *testing.T) {
 		t.Fatalf("long label = %q", got)
 	}
 }
+
+func TestDBTableDetailLines(t *testing.T) {
+	d := openidea.DBTableDetails{}
+	d.Columns = []openidea.DBColumnInfo{
+		{Name: "id", DataType: "INTEGER", PrimaryKey: true},
+		{Name: "name", DataType: "TEXT", Nullable: true},
+	}
+	d.Indexes = []struct {
+		Name    string   `json:"name"`
+		Unique  bool     `json:"unique"`
+		Columns []string `json:"columns"`
+	}{{Name: "ix_name", Columns: []string{"name"}}}
+	lines := dbTableDetailLines(d)
+	if lines[0] != "列（2）" {
+		t.Fatalf("header = %q", lines[0])
+	}
+	if !strings.Contains(lines[1], "id  INTEGER · 主键 · 非空") {
+		t.Fatalf("column line = %q", lines[1])
+	}
+	found := false
+	for _, l := range lines {
+		if strings.Contains(l, "ix_name (name)") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("index line missing: %+v", lines)
+	}
+}

@@ -884,6 +884,14 @@ func (m *Model) SmokeDatabase(ctx context.Context) (map[string]any, error) {
 		}
 		out["tableRows"] = len(s.page.Result.Rows)
 		out["tableColumns"] = len(s.page.Result.Columns)
+		out["tableIndexes"] = len(s.page.Details.Indexes)
+		pk := 0
+		for _, c := range s.page.Details.Columns {
+			if c.PrimaryKey {
+				pk++
+			}
+		}
+		out["tablePrimaryKeys"] = pk
 		if s.err != "" {
 			out["tableError"] = s.err
 		}
@@ -947,20 +955,21 @@ func (m *Model) SmokeDatabase(ctx context.Context) (map[string]any, error) {
 
 // dbTableSheet is the open table data page.
 type dbTableSheet struct {
-	open    bool
-	source  string
-	schema  string
-	table   string
-	offset  int
-	limit   int
-	page    openidea.DBTablePage
-	loading bool
-	err     string
-	ddl     string
-	ddlErr  string
-	showDDL bool
-	ddlLoad bool
-	gen     uint64
+	open        bool
+	source      string
+	schema      string
+	table       string
+	offset      int
+	limit       int
+	page        openidea.DBTablePage
+	loading     bool
+	err         string
+	ddl         string
+	ddlErr      string
+	showDDL     bool
+	showDetails bool
+	ddlLoad     bool
+	gen         uint64
 }
 
 // OpenDBTable shows the data page of a table of the selected source.
@@ -1040,6 +1049,7 @@ func (m *Model) ToggleDBTableDDL() {
 		return
 	}
 	s.showDDL = !s.showDDL
+	s.showDetails = false
 	if !s.showDDL || s.ddl != "" || s.ddlLoad {
 		m.invalidate()
 		return
@@ -1064,6 +1074,61 @@ func (m *Model) ToggleDBTableDDL() {
 			m.invalidate()
 		})
 	}()
+}
+
+// ToggleDBTableDetails shows the table's columns, indexes, foreign keys and
+// triggers, which the page already carries.
+func (m *Model) ToggleDBTableDetails() {
+	s := m.dbTable
+	if s == nil {
+		return
+	}
+	s.showDetails = !s.showDetails
+	s.showDDL = false
+	m.invalidate()
+}
+
+// dbTableDetailLines lists a table's schema as the details view shows it.
+func dbTableDetailLines(d openidea.DBTableDetails) []string {
+	out := []string{fmt.Sprintf("列（%d）", len(d.Columns))}
+	for _, c := range d.Columns {
+		flags := ""
+		if c.PrimaryKey {
+			flags += " · 主键"
+		}
+		if !c.Nullable {
+			flags += " · 非空"
+		}
+		if c.Default != nil && *c.Default != "" {
+			flags += " · 默认 " + *c.Default
+		}
+		out = append(out, fmt.Sprintf("  %s  %s%s", c.Name, c.DataType, flags))
+	}
+	if len(d.Indexes) > 0 {
+		out = append(out, fmt.Sprintf("索引（%d）", len(d.Indexes)))
+		for _, ix := range d.Indexes {
+			kind := ""
+			if ix.Unique {
+				kind = " · 唯一"
+			}
+			out = append(out, fmt.Sprintf("  %s (%s)%s", ix.Name, strings.Join(ix.Columns, ", "), kind))
+		}
+	}
+	if len(d.ForeignKeys) > 0 {
+		out = append(out, fmt.Sprintf("外键（%d）", len(d.ForeignKeys)))
+		for _, fk := range d.ForeignKeys {
+			ref := fk.RefSchema + "." + fk.RefTable
+			out = append(out, fmt.Sprintf("  %s → %s(%s)",
+				strings.Join(fk.Columns, ", "), ref, strings.Join(fk.RefColumns, ", ")))
+		}
+	}
+	if len(d.Triggers) > 0 {
+		out = append(out, fmt.Sprintf("触发器（%d）", len(d.Triggers)))
+		for _, tg := range d.Triggers {
+			out = append(out, fmt.Sprintf("  %s  %s %s", tg.Name, tg.Timing, tg.Events))
+		}
+	}
+	return out
 }
 
 // dbTableRange labels the rows a page shows.
@@ -1098,6 +1163,7 @@ func (m *Model) dbTableDialog(c *ui.Context, p *ui.Theme) {
 					OnClick(func() { m.DBTableStepPage(-1) })
 				ui.Button(c, "下一页").Disabled(!s.page.Result.HasMore || s.loading).
 					OnClick(func() { m.DBTableStepPage(1) })
+				ui.Button(c, "详情").OnClick(func() { m.ToggleDBTableDetails() })
 				ui.Button(c, "DDL").OnClick(func() { m.ToggleDBTableDDL() })
 				ui.Button(c, "关闭").OnClick(func() { m.closeDBTable() })
 			})
@@ -1111,6 +1177,16 @@ func (m *Model) dbTableDialog(c *ui.Context, p *ui.Theme) {
 							ui.Text(c, s.ddlErr).FontSize(11).TextColor(p.Danger)
 						}
 						for _, line := range strings.Split(strings.TrimRight(s.ddl, "\n"), "\n") {
+							ui.Text(c, line).FontSize(11.5).Font("monospace").TextColor(p.Text).SingleLine()
+						}
+					})
+				})
+				return
+			}
+			if s.showDetails {
+				ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
+					ui.Column(c).Padding(8, 8).Children(func() {
+						for _, line := range dbTableDetailLines(s.page.Details) {
 							ui.Text(c, line).FontSize(11.5).Font("monospace").TextColor(p.Text).SingleLine()
 						}
 					})
