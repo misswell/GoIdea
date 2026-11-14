@@ -78,6 +78,7 @@ needs a `## <version>` section here, or its build fails.
 - 最近项目会记住打开时间、分支和所属分组，旧会话首次读取时自动迁移。
 - **File › New Project…** 改为真实对话框：名称、位置、**Browse…** 与 **Create Git repository**，创建后直接打开项目。
 - 空目录会被复用，非空目录会提示冲突；创建失败在对话框内显示错误。
+- **Welcome › Customize** 新增 **Accent color**、**Keymap** 入口和 **Startup**（重开上次项目 / 显示 Welcome），即时生效并保存。
 - **Navigate > Call Hierarchy**（`Ctrl+Alt+H`）和 **Type Hierarchy**（`Ctrl+H`）在右侧列出调用链，可逐级展开。
 - **查找**（`Cmd+3`）和**查找用法**（`Alt+F7`）的结果改在底部工具窗口显示，不再占用侧边栏。
 - **结构**窗口（`Cmd+7`）在侧边栏列出当前文件的成员，可过滤、折叠，点击跳到声明。

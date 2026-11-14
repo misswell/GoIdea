@@ -624,6 +624,7 @@ func (m *Model) start() {
 	}
 	m.setRoot(root)
 	m.openProject(root, files)
+	m.applyStartupBehaviour()
 }
 
 func (m *Model) session() Session {

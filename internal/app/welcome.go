@@ -619,6 +619,41 @@ func (m *Model) welcomeCustomize(c *ui.Context, oi oiColors) {
 					}
 				})
 			})
+			m.welcomeSection(c, oi, "Appearance", func() {
+				m.welcomeField(c, oi, "Accent color", func() {
+					label := accentLabelOf(m.prefs.Accent)
+					labels := make([]string, 0, len(accentChoices))
+					for _, a := range accentChoices {
+						labels = append(labels, a.label)
+					}
+					sel := ui.Select(c, &label, labels).Width(160)
+					if sel.Changed() {
+						m.SetAccentPref(accentIDOf(label))
+					}
+				})
+				m.welcomeField(c, oi, "Keymap", func() {
+					ui.Text(c, keymapPreset()).FontSize(13).TextColor(oi.text).SingleLine()
+					open := ui.Text(c, "Open Settings…").FontSize(12.5).TextColor(oi.link).
+						Cursor(ui.CursorPointer)
+					if open.Clicked() {
+						m.OpenSettingsPage(settingsPageKeymap)
+					}
+				})
+				m.welcomeField(c, oi, "Startup", func() {
+					mode := "Reopen last project"
+					if m.prefs.Startup == "welcome" {
+						mode = "Show Welcome screen"
+					}
+					sel := ui.Select(c, &mode, []string{"Reopen last project", "Show Welcome screen"}).Width(200)
+					if sel.Changed() {
+						if mode == "Show Welcome screen" {
+							m.SetStartupPref("welcome")
+						} else {
+							m.SetStartupPref("")
+						}
+					}
+				})
+			})
 			m.welcomeSection(c, oi, "Accessibility", func() {
 				m.welcomeField(c, oi, "Editor font", func() {
 					size := fmt.Sprintf("%.0f", m.prefs.fontSize())

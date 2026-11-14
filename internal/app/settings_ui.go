@@ -157,7 +157,7 @@ func (m *Model) setFontSize(size int) {
 // applyPreferences puts the stored settings on the model: the theme the
 // window draws with and the font size of every open editor.
 func (m *Model) applyPreferences() {
-	m.theme = m.prefs.themePreference()
+	m.theme = m.prefs.themeWithAccent()
 	m.zen = m.prefs.Zen
 	m.crumbs = m.prefs.Breadcrumbs
 	m.tabPrefs = m.prefs.Tabs
@@ -287,3 +287,52 @@ func (m *Model) javaToolsSection(c *ui.Context, p *ui.Theme) {
 		ui.Text(c, "Java 编辑、构建与调试可用").FontSize(10.5).TextColor(p.Success).SingleLine()
 	}
 }
+
+// SetAccentPref stores the appearance's accent colour and redraws the window
+// with it at once; an unknown id is ignored.
+func (m *Model) SetAccentPref(id string) {
+	known := false
+	for _, c := range accentChoices {
+		if c.id == id {
+			known = true
+			break
+		}
+	}
+	if !known || m.prefs.Accent == id {
+		return
+	}
+	m.prefs.Accent = id
+	m.applyPreferences()
+	m.savePreferences()
+	m.status = "强调色已更新"
+	m.invalidate()
+}
+
+// SetStartupPref stores what a start shows: "" reopens the last project,
+// "welcome" shows the Welcome screen.
+func (m *Model) SetStartupPref(mode string) {
+	if mode != "" && mode != "welcome" {
+		return
+	}
+	if m.prefs.Startup == mode {
+		return
+	}
+	m.prefs.Startup = mode
+	m.savePreferences()
+	m.invalidate()
+}
+
+// startupShowsWelcome is the stored startup choice, as read at start.
+func (m *Model) startupShowsWelcome() bool { return m.prefs.Startup == "welcome" }
+
+// applyStartupBehaviour shows the Welcome screen when the appearance chose it
+// for startup; the last project is still loaded behind it.
+func (m *Model) applyStartupBehaviour() {
+	if !m.startupShowsWelcome() {
+		return
+	}
+	m.post(func() { m.showWelcome() })
+}
+
+// keymapPreset is the keymap the build ships, shown in Appearance.
+func keymapPreset() string { return keymapPresetTitle }

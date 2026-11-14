@@ -442,6 +442,11 @@ type Preferences struct {
 	// ScratchRecent are the languages New Scratch File lists first, most
 	// recent first.
 	ScratchRecent []string `json:"scratchRecent,omitempty"`
+	// Accent is the appearance's accent colour id ("" for OpenIDEA blue), and
+	// Startup is "welcome" to show the Welcome screen at start, "" to reopen
+	// the last project.
+	Accent  string `json:"accent,omitempty"`
+	Startup string `json:"startup,omitempty"`
 	// Keymap maps an action id to the user's bindings, replacing the default
 	// ones; an empty list removes the shortcut. Nil means every default.
 	Keymap map[string][]string `json:"keymap,omitempty"`
@@ -644,6 +649,23 @@ func (p Preferences) Save(path string) error {
 // follow the system's appearance.
 func (p Preferences) themePreference() *ui.Theme {
 	return themeForName(p.Theme)
+}
+
+// themeWithAccent is the chosen appearance with the accent the user picked;
+// nil still follows the system's appearance, with the accent applied by the
+// same override when the window draws.
+func (p Preferences) themeWithAccent() *ui.Theme {
+	t := p.themePreference()
+	if t == nil {
+		return nil
+	}
+	if c, ok := accentColorOf(p.Accent, t.Dark); ok {
+		t.Accent = c
+		t.AccentHover = c.Mix(t.Text, 0.14)
+		t.AccentPressed = c.Mix(ui.Hex("#000000"), 0.2)
+		t.Focus = c
+	}
+	return t
 }
 
 // fontSize returns the editor font size to use, with the default standing in

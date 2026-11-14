@@ -106,7 +106,17 @@ func openideaColors(dark bool) oiColors {
 }
 
 // oiPaletteOf is the Islands palette of the theme in use.
-func oiPaletteOf(p *ui.Theme) oiColors { return openideaColors(p != nil && p.Dark) }
+func oiPaletteOf(p *ui.Theme) oiColors {
+	dark := p != nil && p.Dark
+	oi := openideaColors(dark)
+	// The appearance setting's accent reaches the Islands tokens too, so the
+	// title bar, links and selection follow it as the CSS variables do.
+	if p != nil && p.Accent != (ui.Color{}) {
+		oi.accent = p.Accent
+		oi.link = p.Accent
+	}
+	return oi
+}
 
 // openideaTheme is the palette OpenIDEA draws with: the dark workbench of a
 // New UI window, and its light counterpart, mapped onto ui.Theme's fields.
@@ -173,4 +183,57 @@ func projectColorIndex(name string) int {
 func projectColors(name string) (start, end ui.Color) {
 	pair := projectColorPairs[projectColorIndex(name)-1]
 	return pair[0], pair[1]
+}
+
+// accentChoices are the Appearance page's accent colours, OpenIDEA blue first.
+var accentChoices = []struct {
+	id    string
+	label string
+	dark  string
+	light string
+}{
+	{"", "Blue", "#3871e1", "#3871e1"},
+	{"green", "Green", "#4f9e6a", "#3d8256"},
+	{"purple", "Purple", "#8a63d2", "#7a52c4"},
+	{"orange", "Orange", "#c47c3c", "#b06a2c"},
+	{"red", "Red", "#d15b62", "#c2474e"},
+	{"teal", "Teal", "#3a9a9a", "#2f8181"},
+}
+
+// accentColorOf is the stored accent id as a colour for the theme's shade,
+// and whether it differs from the default.
+func accentColorOf(id string, dark bool) (ui.Color, bool) {
+	for _, c := range accentChoices {
+		if c.id != id {
+			continue
+		}
+		if id == "" {
+			return ui.Color{}, false
+		}
+		if dark {
+			return ui.Hex(c.dark), true
+		}
+		return ui.Hex(c.light), true
+	}
+	return ui.Color{}, false
+}
+
+// accentLabelOf and accentIDOf map a stored accent id to the Appearance
+// select's label and back.
+func accentLabelOf(id string) string {
+	for _, c := range accentChoices {
+		if c.id == id {
+			return c.label
+		}
+	}
+	return "Blue"
+}
+
+func accentIDOf(label string) string {
+	for _, c := range accentChoices {
+		if c.label == label {
+			return c.id
+		}
+	}
+	return ""
 }
