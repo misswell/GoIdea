@@ -516,6 +516,8 @@ func (m *Model) acceptChunk(id uint32, data json.RawMessage) {
 		m.acceptSearchEverywhereEvent(data)
 	case id != 0 && id == m.search.channel:
 		m.acceptSearchEvent(data)
+	case id != 0 && id == m.impl.request:
+		m.acceptImplementationChunk(data)
 	case id != 0 && id == m.usages.channel:
 		m.acceptUsages(id, data)
 	case id != 0 && id == m.todo.channel:

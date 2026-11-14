@@ -2102,7 +2102,7 @@ Local-only commands and the per-command argument lists are in
 | `lsp_execute_command` | lsp | yes |  | missing |
 | `lsp_format` | lsp | yes | yes | missing |
 | `lsp_goto` | lsp | yes | yes | missing |
-| `lsp_goto_implementation` | lsp | yes |  | missing |
+| `lsp_goto_implementation` | lsp | yes | yes | missing |
 | `lsp_hierarchy_members` | lsp | yes |  | missing |
 | `lsp_hierarchy_refactor` | lsp | yes |  | missing |
 | `lsp_hover` | lsp | yes | yes | missing |
@@ -2488,7 +2488,7 @@ Local-only commands and the per-command argument lists are in
 | `wsl_distros` | wsl | no |  | missing |
 | `wsl_resolve` | wsl | no |  | missing |
 
-476 commands are served over stdio and 97 are called by GoIDEA today. A command
+476 commands are served over stdio and 98 are called by GoIDEA today. A command
 that is registered only in the desktop shell needs an `ops` module before stdio
 can serve it; a GoIDEA check counts only when the UI path works end to end.
 

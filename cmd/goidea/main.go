@@ -277,6 +277,15 @@ func smoke(m *app.Model) {
 			fields["pomGotoError"] = pgErr.Error()
 		}
 	}
+	if os.Getenv("GOIDEA_SMOKE_IMPL") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		im, imErr := m.SmokeImplementation(ctx, os.Getenv("GOIDEA_SMOKE_IMPL_FILE"), os.Getenv("GOIDEA_SMOKE_IMPL_NEEDLE"))
+		cancel()
+		fields["implementation"] = im
+		if imErr != nil {
+			fields["implementationError"] = imErr.Error()
+		}
+	}
 	if os.Getenv("GOIDEA_SMOKE_TRUST") == "1" && root != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		tr, trErr := m.SmokeTrust(ctx)

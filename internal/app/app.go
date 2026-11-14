@@ -203,6 +203,8 @@ type Model struct {
 	// services is the Services bottom window.
 	services servicesPane
 	maven    mavenPane
+	// impl is the Go to Implementation(s) search and chooser.
+	impl implChooser
 
 	// dock is the six-slot dock: the slots are the authority on where each
 	// registered tool window shows.
@@ -1850,6 +1852,19 @@ func (m *Model) shortcuts(c *ui.Context) {
 		}
 		if c.Shortcut(ui.Modifiers(0), ui.KeyEnter) {
 			m.CreateScratchSelected()
+		}
+		return
+	}
+	// The implementations chooser steps its rows with the arrow keys.
+	if m.impl.open {
+		if c.Shortcut(ui.Modifiers(0), ui.KeyDown) {
+			m.stepImplementation(1)
+		}
+		if c.Shortcut(ui.Modifiers(0), ui.KeyUp) {
+			m.stepImplementation(-1)
+		}
+		if c.Shortcut(ui.Modifiers(0), ui.KeyEnter) {
+			m.chooseImplementation(m.impl.sel)
 		}
 		return
 	}

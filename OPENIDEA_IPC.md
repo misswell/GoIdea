@@ -59,7 +59,7 @@ release can be called today.
 | hotkeys | `hotkeys` | 0 | 1 | 0 |
 | HTTP client | `http` | 0 | 11 | 0 |
 | Java | `java` | 3 | 0 | 2 |
-| Language services | `lsp` | 43 | 1 | 16 |
+| Language services | `lsp` | 43 | 1 | 17 |
 | MCP | `mcp` | 3 | 4 | 0 |
 | Navigation and index | `nav` | 15 | 1 | 2 |
 | Notebooks | `notebook` | 12 | 0 | 0 |
@@ -88,7 +88,7 @@ release can be called today.
 ## Served by `openidea-server --stdio`
 
 476 commands. `GoIDEA` marks the ones a non-test Go source invokes today
-(97 of 476).
+(98 of 476).
 
 | Command | Domain | Arguments | GoIDEA |
 | --- | --- | --- | --- |
@@ -297,7 +297,7 @@ release can be called today.
 | `lsp_execute_command` | Language services | `command`, `doc` | — |
 | `lsp_format` | Language services | `doc`, `options`, `range` | yes |
 | `lsp_goto` | Language services | `doc`, `kind`, `pos` | yes |
-| `lsp_goto_implementation` | Language services | `doc`, `onPartial`, `pos`, `request` | — |
+| `lsp_goto_implementation` | Language services | `doc`, `onPartial`, `pos`, `request` | yes |
 | `lsp_hierarchy_members` | Language services | `doc`, `kind`, `pos`, `request` | — |
 | `lsp_hierarchy_refactor` | Language services | `choices`, `doc`, `kind`, `pos`, `request`, `target` | — |
 | `lsp_hover` | Language services | `doc`, `pos`, `request` | yes |
@@ -782,7 +782,7 @@ GoIDEA needs to do for each:
 
 ## What this means for GoIDEA
 
-476 remote commands are available today; GoIDEA uses 97. The parity work is
+476 remote commands are available today; GoIDEA uses 98. The parity work is
 first to cover the remote surface OpenIDEA's own frontend uses, then to move
 `shared-op`/`host`/`crate` commands onto stdio through the OpenIDEA fork
 (a submodule bump and a server release), and to implement `desktop` commands

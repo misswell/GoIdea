@@ -9,6 +9,7 @@ needs a `## <version>` section here, or its build fails.
 - 后端进程意外退出会自动重启，并恢复原项目和已打开的文件。
 - 新增 **Maven** 工具窗口：列出反应堆模块与可展开的依赖树，数据来自后端构建模型。
 - 在 `pom.xml` 中对 `${属性}`、依赖、插件或 `<parent>` 跳转声明，父 POM 可从本地仓库打开。
+- `Cmd+Alt+B` 转到实现：结果边查找边显示，多个候选弹出选择列表，关闭即取消查找。
 - **Services** 的 Maven/Gradle 构建行改用同一构建模型（模块数量），离线读取失败时才回退到文件检测。
 - **Database** 每次运行生成结果标签页，**Output** 保留运行日志，可关闭、关闭其他、切换上下一个结果。
 - Java/Spring Boot 运行配置会自动解析模块类路径与 JDK，不再把 `${classpath}` 原样交给进程。

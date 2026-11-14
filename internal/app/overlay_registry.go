@@ -22,6 +22,9 @@ func init() {
 	reg("symbols", overlayLayerPopup, 20, false,
 		func(m *Model) bool { return m.symbols != nil },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.symbolsDialog(c, p) })
+	reg("implementation", overlayLayerPopup, 25, true,
+		func(m *Model) bool { return m.impl.open },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.implementationDialog(c, p) })
 	reg("intentions", overlayLayerPopup, 30, false,
 		func(m *Model) bool { return m.intents != nil },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.intentionsDialog(c, p) })
