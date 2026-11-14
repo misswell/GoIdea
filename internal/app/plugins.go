@@ -29,6 +29,15 @@ type goideaPluginHost struct {
 	folder atomic.Pointer[string]
 	logMu  sync.Mutex
 	logs   map[string][]plugin.LogLine
+
+	// status are the status bar items the plugins set, by their full id.
+	statusMu sync.Mutex
+	status   map[string]pluginStatusItem
+}
+
+// pluginStatusItem is one plugin's status bar line.
+type pluginStatusItem struct {
+	text, tooltip, command string
 }
 
 func (h *goideaPluginHost) setSettings(all map[string]json.RawMessage) {
@@ -49,6 +58,7 @@ func (h *goideaPluginHost) Call(p *plugin.Plugin, method string, args json.RawMe
 		ID   string          `json:"id"`
 		Arg  json.RawMessage `json:"arg"`
 		Path string          `json:"path"`
+		Item json.RawMessage `json:"item"`
 	}
 	if len(args) > 0 {
 		_ = json.Unmarshal(args, &in)
@@ -94,8 +104,99 @@ func (h *goideaPluginHost) Call(p *plugin.Plugin, method string, args json.RawMe
 		}
 		h.m.post(func() { h.m.RunCommand(in.ID) })
 		return nil, nil
+	case "status.set":
+		var item *pluginStatusItem
+		if len(in.Item) > 0 && string(in.Item) != "null" {
+			var raw struct {
+				Text    string `json:"text"`
+				Tooltip string `json:"tooltip"`
+				Command string `json:"command"`
+			}
+			if err := json.Unmarshal(in.Item, &raw); err != nil {
+				return nil, err
+			}
+			item = &pluginStatusItem{text: raw.Text, tooltip: raw.Tooltip, command: raw.Command}
+		}
+		h.setStatus(p, in.ID, item)
+		return nil, nil
 	}
 	return nil, fmt.Errorf("GoIDEA does not support the plugin API %q yet", method)
+}
+
+// setStatus adds, updates or removes the status bar item a plugin set. The
+// item is registered once and redrawn from the stored text, so an update is
+// cheap and keeps the bar's order.
+func (h *goideaPluginHost) setStatus(p *plugin.Plugin, id string, item *pluginStatusItem) {
+	if p == nil || id == "" {
+		return
+	}
+	full := "plugin.status:" + p.Name + ":" + id
+	h.statusMu.Lock()
+	if h.status == nil {
+		h.status = map[string]pluginStatusItem{}
+	}
+	if item == nil {
+		delete(h.status, full)
+		h.statusMu.Unlock()
+		unregisterStatusItem(full)
+		h.m.invalidate()
+		return
+	}
+	_, existed := h.status[full]
+	h.status[full] = *item
+	h.statusMu.Unlock()
+	if !existed {
+		registerStatusItem(&StatusItem{ID: full, Side: "right", Order: 100,
+			Render: func(m *Model, c *ui.Context, theme *ui.Theme, oi oiColors) {
+				h.renderStatus(c, oi, full)
+			}})
+	}
+	h.m.invalidate()
+}
+
+func (h *goideaPluginHost) renderStatus(c *ui.Context, oi oiColors, id string) {
+	h.statusMu.Lock()
+	it, ok := h.status[id]
+	h.statusMu.Unlock()
+	if !ok || it.text == "" {
+		return
+	}
+	if it.command == "" {
+		ui.Text(c, it.text).FontSize(oiFontSizeM).TextColor(oi.textMuted).SingleLine()
+		return
+	}
+	b := ui.ButtonBase(c.Key("status:"+id)).Height(18).Padding(0, oiSpaceS).
+		Radius(oiRadiusS).Cursor(ui.CursorPointer)
+	if b.Hovered() {
+		b.Background(oi.toolbarHover)
+	}
+	if it.tooltip != "" {
+		b.Tooltip(it.tooltip)
+	}
+	b.Children(func() {
+		ui.Text(c, it.text).FontSize(oiFontSizeM).TextColor(oi.textMuted).SingleLine()
+	})
+	if b.Clicked() {
+		h.m.RunCommand(it.command)
+	}
+}
+
+// clearStatus takes a plugin's status items down, as disabling or removing it
+// does.
+func (h *goideaPluginHost) clearStatus(name string) {
+	prefix := "plugin.status:" + name + ":"
+	h.statusMu.Lock()
+	var ids []string
+	for id := range h.status {
+		if strings.HasPrefix(id, prefix) {
+			ids = append(ids, id)
+			delete(h.status, id)
+		}
+	}
+	h.statusMu.Unlock()
+	for _, id := range ids {
+		unregisterStatusItem(id)
+	}
 }
 
 // projectPath resolves a plugin's workspace path, refusing one outside the
@@ -332,6 +433,9 @@ func (m *Model) setPluginEnabled(name string, on bool) {
 	m.savePreferences()
 	pg.host.setSettings(m.prefs.Plugins)
 	pg.reg.Toggled(name)
+	if !on {
+		pg.host.clearStatus(name)
+	}
 	pg.refreshActions(m)
 	pg.err = ""
 	m.invalidate()
@@ -353,6 +457,7 @@ func (m *Model) removePlugin(name string) {
 	m.savePreferences()
 	pg.host.setSettings(m.prefs.Plugins)
 	pg.reg.Load()
+	pg.host.clearStatus(name)
 	pg.refreshActions(m)
 	m.invalidate()
 }

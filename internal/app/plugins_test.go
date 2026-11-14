@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"mayoi/internal/plugin"
 )
 
 // pluginFixture writes one installed plugin under the data folder of path,
@@ -148,5 +150,39 @@ func TestPluginHostServesTheWorkspace(t *testing.T) {
 	}
 	if _, err := h.Call(nil, "editor.active", nil); err == nil {
 		t.Fatal("an unsupported API answered without an error")
+	}
+}
+
+func TestPluginStatusItemJoinsTheStatusBar(t *testing.T) {
+	m := &Model{}
+	h := &goideaPluginHost{m: m}
+	p := &plugin.Plugin{Name: "demo"}
+	set := func(item string) {
+		t.Helper()
+		if _, err := h.Call(p, "status.set", json.RawMessage(item)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	const id = "plugin.status:demo:count"
+	set(`{"id":"count","item":{"text":"3 files","tooltip":"Files","command":"view.problems"}}`)
+	if indexOf(statusIDs(m.statusSide("right")), id) == -1 {
+		t.Fatal("the plugin's status item is not on the bar")
+	}
+	r, ok := workbenchTester(t, m).Find("3 files")
+	if !ok || r.Y < 900-oiStatusBarHeight {
+		t.Fatalf("the plugin status is not in the status bar: %+v, %v", r, ok)
+	}
+	set(`{"id":"count","item":{"text":"4 files"}}`)
+	if _, ok := workbenchTester(t, m).Find("4 files"); !ok {
+		t.Fatal("updating the item did not redraw it")
+	}
+	set(`{"id":"count","item":null}`)
+	if indexOf(statusIDs(m.statusSide("right")), id) != -1 {
+		t.Fatal("hiding the item left it on the bar")
+	}
+	set(`{"id":"count","item":{"text":"5 files"}}`)
+	h.clearStatus("demo")
+	if indexOf(statusIDs(m.statusSide("right")), id) != -1 {
+		t.Fatal("disabling the plugin left its status item")
 	}
 }
