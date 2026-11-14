@@ -39,13 +39,7 @@ func isToolbarAction(id string) bool { return strings.HasPrefix(id, toolbarActio
 
 func toolbarAction(id string) string { return strings.TrimPrefix(id, toolbarActionPrefix) }
 
-func toolbarDefaultSide(id string) string {
-	switch id {
-	case toolbarProject, toolbarVCS:
-		return "left"
-	}
-	return "right"
-}
+func toolbarDefaultSide(id string) string { return titleWidgetSide(id) }
 
 // resolveToolbar is the entries to show per side: the saved order, plus the
 // widgets registered since (not listed, not removed) at their default side's
@@ -123,13 +117,8 @@ func toggleToolbarEntry(layout toolbarLayout, id string) toolbarLayout {
 
 // toolbarTitle names an entry the way Customize Main Toolbar lists it.
 func toolbarTitle(id string) string {
-	switch id {
-	case toolbarProject:
-		return "Project Widget"
-	case toolbarVCS:
-		return "VCS Widget"
-	case toolbarRun:
-		return "Run"
+	if w := titleWidgetFor(id); w != nil {
+		return w.Title
 	}
 	if isToolbarAction(id) {
 		return commandTitle(toolbarAction(id))

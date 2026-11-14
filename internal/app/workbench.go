@@ -55,29 +55,43 @@ func (m *Model) titleBar(c *ui.Context, p *ui.Theme) {
 	})
 }
 
-// toolbarEntry draws one title bar entry of the saved layout. An entry this
-// build has no widget for is skipped, as a contribution that is not
-// registered is.
+// toolbarEntry draws one title bar entry of the saved layout. A widget this
+// build has no contribution for is skipped, and an action entry draws the
+// action's title, so the customization can add any registered action.
 func (m *Model) toolbarEntry(c *ui.Context, p *ui.Theme, oi oiColors, id string) {
-	switch id {
-	case toolbarProject:
-		m.projectWidget(c, p, oi)
-	case toolbarVCS:
-		if label := m.branchLabel(); label != "" {
-			m.branchWidget(c, p, oi, label)
-		} else {
-			m.vcsFallbackWidget(c, p, oi)
+	if w := titleWidgetFor(id); w != nil {
+		if w.Visible != nil && !w.Visible(m) {
+			return
 		}
-	case toolbarRun:
-		m.runWidget(c, p, oi)
-	case toolbarSearch:
-		m.titleTool(c, p, oi, "search", "Search Everywhere", iconWelcomeSearch, func() {
-			m.RunCommand(toolbarAction(toolbarSearch))
-		})
-	case toolbarTerminal:
-		m.titleTool(c, p, oi, "term", "Terminal", iconTerminal, func() {
-			m.RunCommand(toolbarAction(toolbarTerminal))
-		})
+		w.Render(m, c, p, oi)
+		return
+	}
+	if isToolbarAction(id) {
+		m.actionTitleTool(c, p, oi, toolbarAction(id))
+	}
+}
+
+// actionTitleTool is an action the customization added that has no icon of its
+// own: a compact text button running the same registry action as every other
+// entrance. An action whose context is closed is not drawn, so the toolbar
+// never shows a dead control.
+func (m *Model) actionTitleTool(c *ui.Context, p *ui.Theme, oi oiColors, id string) {
+	title := commandTitle(id)
+	if title == "" || !m.ActionEnabled(id) {
+		return
+	}
+	tk := oiTokensOf(p)
+	b := ui.ButtonBase(c.Key("title:"+id)).Height(tk.ButtonHeight).Padding(0, tk.SpaceL).
+		Radius(tk.RadiusM).Justify(ui.Center).AlignItems(ui.Center).Cursor(ui.CursorPointer)
+	if b.Hovered() {
+		b.Background(oi.toolbarHover)
+	}
+	b.Tooltip(title)
+	b.Children(func() {
+		ui.Text(c, title).FontSize(tk.FontSizeM).TextColor(oi.text).SingleLine().Ellipsis("…")
+	})
+	if b.Clicked() {
+		m.RunAction(id)
 	}
 }
 

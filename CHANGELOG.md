@@ -70,6 +70,7 @@ needs a `## <version>` section here, or its build fails.
 - 新增 **Services** 工具窗口（**Window › Tool Windows › Services**），列出构建系统、运行配置与工具设置，双击即执行。
 - **Problems** 和 **TODO** 可在右侧与底部之间移动：**Window › Move Tool Window to Right / Bottom**。
 - 移到右侧的 **Problems**、**TODO** 不再显示空白；右侧上下可各放一个窗口，中间分隔线可拖动调整比例。
+- **Customize Main Toolbar** 加入的操作现在真的出现在标题栏，以操作标题显示，上下文不可用时自动隐藏。
 - 工具窗口的位置、隐藏与恢复按六个插槽保存，旧会话打开项目时会自动迁移。
 - 全部工具窗口（Run、Debug、Build、Terminal、Git Log、Find、Usages、Structure、Bookmarks）改用同一套插槽与注册表，移动或隐藏不会清空内容。
 - **Settings › Keymap** 显示实际生效的键位，标出冲突，可逐项移除或**恢复默认键位**。
