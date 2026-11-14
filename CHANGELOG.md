@@ -71,6 +71,7 @@ needs a `## <version>` section here, or its build fails.
 - **Problems** 和 **TODO** 可在右侧与底部之间移动：**Window › Move Tool Window to Right / Bottom**。
 - 移到右侧的 **Problems**、**TODO** 不再显示空白；右侧上下可各放一个窗口，中间分隔线可拖动调整比例。
 - **Customize Main Toolbar** 加入的操作现在真的出现在标题栏，以操作标题显示，上下文不可用时自动隐藏。
+- **Search Everywhere** 无结果时显示居中的空、加载或错误状态，与其他面板一致。
 - 关闭最后一个弹窗后键盘焦点自动回到编辑器，不再停留在空处。
 - 按住工具窗口条纹按钮拖到工作区边缘即可停靠，下半部或右侧会落到副插槽。
 - **Window › Pin Tool Window** 固定当前窗口：别的窗口会占用同侧另一半，两侧都固定时提示等待。

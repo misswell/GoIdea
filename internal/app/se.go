@@ -765,23 +765,21 @@ func (m *Model) searchEverywhereDialog(c *ui.Context, p *ui.Theme) {
 			if s.sel >= len(rows) {
 				s.sel = 0
 			}
-			hint := ""
-			switch {
-			case s.err != "":
-				hint = s.err
-			case s.seEmpty() && s.tab == seTabAll:
-				hint = "输入以搜索类、文件、符号、操作和文本"
-			case len(rows) == 0 && s.tab == seTabText && s.textBusy:
-				hint = "正在搜索…"
-			case len(rows) == 0:
-				hint = "没有匹配的结果"
-			default:
-				hint = fmt.Sprintf("%d 个结果", m.seItemCount(rows))
-			}
-			ui.Text(c, hint).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
 			if len(rows) == 0 {
+				switch {
+				case s.err != "":
+					errorState(c, p, s.err)
+				case s.tab == seTabText && s.textBusy:
+					loadingState(c, p, "正在搜索")
+				case s.seEmpty() && s.tab == seTabAll:
+					emptyState(c, p, "输入以搜索类、文件、符号、操作和文本")
+				default:
+					emptyState(c, p, "没有匹配的结果")
+				}
 				return
 			}
+			ui.Text(c, fmt.Sprintf("%d 个结果", m.seItemCount(rows))).
+				FontSize(10.5).TextColor(p.TextMuted).SingleLine()
 			ui.Scroll(c).Height(380).Children(func() {
 				ui.Column(c).Children(func() {
 					for i, row := range rows {
