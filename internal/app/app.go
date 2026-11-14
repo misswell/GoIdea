@@ -548,13 +548,24 @@ func New(cfg Config) *Model {
 		if root == "" {
 			return nil
 		}
+		fail := func(err error) error {
+			m.post(func() {
+				m.setStartPhase("failed")
+				m.status = "后端重启后恢复项目失败"
+				m.banner = "后端重启后恢复项目失败：" + err.Error()
+				m.bannerPath = ""
+				m.notifyError("backend-restore", "后端已重启，但项目恢复失败", err.Error())
+				m.invalidate()
+			})
+			return err
+		}
 		m.setStartPhase("restoring")
 		m.post(func() { m.status = "后端已重启，正在恢复项目…"; m.invalidate() })
 		if err := m.openBackendProject(ctx, root); err != nil {
-			return err
+			return fail(err)
 		}
 		if err := m.reg.ReopenAll(ctx); err != nil {
-			return err
+			return fail(err)
 		}
 		m.post(func() {
 			m.run.running = false
@@ -947,10 +958,15 @@ func (m *Model) openProject(dir string, files []string) {
 	m.closeCommands()
 	m.diff = nil
 	m.db = nil
+	mavenVisible := m.maven.visible
+	m.maven = mavenPane{visible: mavenVisible}
 	m.refactor, m.redoRefactor = nil, nil
 	m.busy = true
 	m.status = "正在打开 " + filepath.Base(dir) + "…"
 	m.setRoot(dir)
+	if mavenVisible {
+		m.loadBuildModel()
+	}
 	m.invalidate()
 
 	go func() {
@@ -964,9 +980,6 @@ func (m *Model) openProject(dir string, files []string) {
 		}
 		for _, id := range oldTerms {
 			_, _ = m.mgr.Invoke(ctx, Window, "term_kill", map[string]any{"id": id})
-		}
-		for _, t := range old {
-			_ = m.reg.Close(ctx, t.doc.Path())
 		}
 		if err := m.openBackendProjectAt(ctx, dir, prevRoot); err != nil {
 			m.post(func() {
@@ -989,6 +1002,9 @@ func (m *Model) openProject(dir string, files []string) {
 				m.invalidate()
 			})
 			return
+		}
+		for _, t := range old {
+			_ = m.reg.Close(ctx, t.doc.Path())
 		}
 		m.post(func() { m.setStartPhase("restoring") })
 		var docs []*docbridge.Document

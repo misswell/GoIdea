@@ -30,7 +30,6 @@ type Manager struct {
 	closed   bool
 	started  bool
 	restarts int
-	lastErr  error
 	state    State
 
 	notify   chan Notification
@@ -181,7 +180,6 @@ func (m *Manager) Ensure(ctx context.Context) (*Server, error) {
 		}
 		err = launchErr
 		m.mu.Lock()
-		m.lastErr = launchErr
 		m.state = State{Err: launchErr, Restarts: m.restarts, Phase: "failed"}
 		m.mu.Unlock()
 		m.publish()
@@ -207,7 +205,6 @@ func (m *Manager) adopt(s *Server) {
 		m.restarts++
 	}
 	m.started = true
-	m.lastErr = nil
 	m.state = State{Running: true, Info: s.Info(), Restarts: m.restarts, Phase: "running"}
 	restore := m.onRestart
 	m.mu.Unlock()
@@ -221,11 +218,7 @@ func (m *Manager) adopt(s *Server) {
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 			defer cancel()
-			if err := restore(ctx); err != nil {
-				m.mu.Lock()
-				m.lastErr = err
-				m.mu.Unlock()
-			}
+			_ = restore(ctx)
 		}()
 	}
 }
@@ -259,7 +252,9 @@ func (m *Manager) watch(s *Server) {
 	}
 	closed := m.closed
 	err := s.conn.Err()
-	m.state = State{Err: err, Restarts: m.restarts, Phase: "restarting"}
+	if wasCurrent {
+		m.state = State{Err: err, Restarts: m.restarts, Phase: "restarting"}
+	}
 	m.mu.Unlock()
 	if wasCurrent {
 		m.publish()

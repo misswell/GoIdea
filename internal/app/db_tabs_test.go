@@ -1,6 +1,10 @@
 package app
 
-import "testing"
+import (
+	"testing"
+
+	"mayoi/internal/openidea"
+)
 
 func TestDBResultTabsCycleCloseAndCloseOthers(t *testing.T) {
 	m := &Model{db: &dbView{}}
@@ -43,6 +47,15 @@ func TestDBResultTabsCycleCloseAndCloseOthers(t *testing.T) {
 		t.Fatalf("close others: %+v", v.results)
 	}
 	m.CloseDBResult(-1) // Output is not closable
+
+	// A tables reply for the source the sheet left must not touch the new one.
+	v.source = "b"
+	v.schema = "b.schema"
+	v.tables = []openidea.DBTable{{Name: "kept"}}
+	m.loadDBTables("a", "a.schema")
+	if len(v.tables) != 1 || v.tables[0].Name != "kept" || v.schema != "b.schema" {
+		t.Fatalf("stale tables reply changed the sheet: %+v %q", v.tables, v.schema)
+	}
 	if len(v.results) != 1 {
 		t.Fatal("closing Output removed a result")
 	}

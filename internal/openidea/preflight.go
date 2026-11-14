@@ -6,6 +6,7 @@ import (
 	"debug/elf"
 	"debug/macho"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -116,24 +117,32 @@ func executable(path string, info os.FileInfo) error {
 // one built for another CPU, which would fail with a cryptic exec error.
 func checkArch(path string) error {
 	want := runtime.GOARCH
+	cpuOK := func(cpu macho.Cpu) bool {
+		return want == "arm64" && cpu == macho.CpuArm64 || want == "amd64" && cpu == macho.CpuAmd64
+	}
 	switch runtime.GOOS {
 	case "darwin":
 		f, err := macho.Open(path)
 		if err != nil {
-			if strings.Contains(err.Error(), "not a Mach-O") {
+			// A universal binary is a fat Mach-O, which macho.Open rejects.
+			if fat, ferr := macho.OpenFat(path); ferr == nil {
+				defer fat.Close()
+				for _, a := range fat.Arches {
+					if cpuOK(a.Cpu) {
+						return nil
+					}
+				}
+				return &PreflightError{Kind: "arch", Path: path,
+					Detail: fmt.Sprintf("universal binary without a %s slice", want)}
+			}
+			var formatErr *macho.FormatError
+			if errors.As(err, &formatErr) {
 				return &PreflightError{Kind: "arch", Path: path, Detail: "not a Mach-O binary"}
 			}
 			return &PreflightError{Kind: "arch", Path: path, Detail: err.Error()}
 		}
 		defer f.Close()
-		var ok bool
-		switch want {
-		case "arm64":
-			ok = f.Cpu == macho.CpuArm64
-		case "amd64":
-			ok = f.Cpu == macho.CpuAmd64
-		}
-		if !ok {
+		if !cpuOK(f.Cpu) {
 			return &PreflightError{Kind: "arch", Path: path,
 				Detail: fmt.Sprintf("built for %v, this Mac runs %s", f.Cpu, want)}
 		}

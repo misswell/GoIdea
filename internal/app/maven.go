@@ -93,10 +93,16 @@ func (m *Model) loadBuildModel() {
 			err = json.Unmarshal(raw, &model)
 		}
 		m.post(func() {
-			if m.maven.gen != gen || m.Root() != root {
+			if m.maven.gen != gen {
 				return
 			}
 			m.maven.loading = false
+			if m.Root() != root {
+				m.maven.model = buildModel{}
+				m.maven.err = ""
+				m.invalidate()
+				return
+			}
 			if err != nil {
 				m.maven.err = "读取构建模型失败：" + err.Error()
 			} else {
@@ -246,10 +252,13 @@ func (m *Model) SmokeMaven(ctx context.Context) (map[string]any, error) {
 	for {
 		var loading bool
 		var errText string
-		var n, deps int
+		var n, deps, gradle int
+		var visible bool
 		m.post(func() {
 			loading, errText = m.maven.loading, m.maven.err
+			visible = m.maven.visible
 			n = len(m.maven.model.MavenProjects())
+			gradle = len(m.maven.model.Gradle)
 			for _, p := range m.maven.model.MavenProjects() {
 				deps += len(p.Dependencies)
 			}
@@ -259,8 +268,8 @@ func (m *Model) SmokeMaven(ctx context.Context) (map[string]any, error) {
 		}
 		if !loading {
 			out["modules"], out["dependencies"] = n, deps
-			out["gradle"] = len(m.maven.model.Gradle)
-			out["visible"] = m.maven.visible
+			out["gradle"] = gradle
+			out["visible"] = visible
 			return out, nil
 		}
 		if time.Now().After(deadline) {

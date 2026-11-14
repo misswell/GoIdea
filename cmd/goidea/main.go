@@ -317,6 +317,15 @@ func smoke(m *app.Model) {
 			fields["recoveryError"] = recErr.Error()
 		}
 	}
+	if os.Getenv("GOIDEA_SMOKE_ROLLBACK") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		rb, rbErr := m.SmokeRollback(ctx)
+		cancel()
+		fields["rollback"] = rb
+		if rbErr != nil {
+			fields["rollbackError"] = rbErr.Error()
+		}
+	}
 	if os.Getenv("GOIDEA_SMOKE_DOCK") == "1" && root != "" {
 		fields["dock"] = m.SmokeDock()
 	}

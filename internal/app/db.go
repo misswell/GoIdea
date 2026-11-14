@@ -330,7 +330,7 @@ func (m *Model) loadDBSchemas(id string) {
 
 func (m *Model) loadDBTables(id, schema string) {
 	v := m.db
-	if v == nil || id == "" || schema == "" {
+	if v == nil || id == "" || schema == "" || v.source != id {
 		return
 	}
 	v.schema = schema

@@ -8,7 +8,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -23,7 +25,8 @@ func (m *Model) SmokeRecovery(ctx context.Context) (map[string]any, error) {
 		return out, fmt.Errorf("后端未运行")
 	}
 	root := m.Root()
-	tabs := len(m.tabs)
+	var tabs int
+	m.post(func() { tabs = len(m.tabs) })
 	restarts := m.BackendState().Restarts
 	out["pid"] = s.PID()
 	out["rootBefore"] = root
@@ -71,13 +74,71 @@ func (m *Model) SmokeRecovery(ctx context.Context) (map[string]any, error) {
 	out["restartsAfter"] = m.BackendState().Restarts
 	out["rootAfter"] = restoredRoot
 	out["rootRestored"] = restored
-	out["tabsAfter"] = len(m.tabs)
-	out["docsKept"] = len(m.tabs) == tabs
+	var after int
+	m.post(func() { after = len(m.tabs) })
+	out["tabsAfter"] = after
+	out["docsKept"] = after == tabs
 	out["elapsedMs"] = time.Since(started).Milliseconds()
 	if !restored {
 		return out, fmt.Errorf("后端 90 秒内没有恢复项目")
 	}
 	return out, nil
+}
+
+// SmokeRollback opens a folder that cannot be a project and reports that the
+// open project's tabs and documents survived the failed switch, for the
+// real-server acceptance run.
+func (m *Model) SmokeRollback(ctx context.Context) (map[string]any, error) {
+	out := map[string]any{}
+	root := m.Root()
+	if root == "" {
+		return out, fmt.Errorf("没有打开项目")
+	}
+	var tabs int
+	var firstDoc string
+	m.post(func() {
+		tabs = len(m.tabs)
+		if t := m.tab(); t != nil {
+			firstDoc = t.doc.Path()
+		}
+	})
+	out["rootBefore"], out["tabsBefore"], out["docBefore"] = root, tabs, firstDoc
+	bad := filepath.Join(os.TempDir(), "goidea-no-such-project-4d2c", "missing")
+	m.post(func() { m.openProject(bad, nil) })
+	deadline := time.Now().Add(90 * time.Second)
+	for {
+		var busy bool
+		var after int
+		var rootAfter, banner string
+		var docAlive bool
+		m.post(func() {
+			busy, after, rootAfter = m.busy, len(m.tabs), m.Root()
+			banner = m.banner
+			docAlive = firstDoc != "" && m.reg.Get(firstDoc) != nil
+		})
+		if !busy {
+			out["rootAfter"], out["tabsAfter"], out["docAlive"], out["banner"] = rootAfter, after, docAlive, banner
+			switch {
+			case layoutKey(rootAfter) != layoutKey(root):
+				return out, fmt.Errorf("失败切换后不在原项目")
+			case banner == "":
+				return out, fmt.Errorf("失败切换没有报错")
+			case after != tabs:
+				return out, fmt.Errorf("标签页没有恢复：%d → %d", tabs, after)
+			case firstDoc != "" && !docAlive:
+				return out, fmt.Errorf("原项目的文档已关闭")
+			}
+			return out, nil
+		}
+		if time.Now().After(deadline) {
+			return out, fmt.Errorf("失败切换没有结束")
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
 }
 
 // SmokeSwitch opens another project through the normal transactional path and

@@ -38,7 +38,7 @@ func init() {
 	})
 	registerToolWindow(&toolWindowSpec{
 		id: "services", title: "Services", anchor: dockBottom, order: 80,
-		open:  func(m *Model) { m.services.visible = true },
+		open:  func(m *Model) { m.services.visible = true; m.loadBuildModel() },
 		close: func(m *Model) { m.services.visible = false },
 		shown: func(m *Model) bool { return m.services.visible },
 		render: func(m *Model, c *ui.Context, p *ui.Theme, _ oiColors) {

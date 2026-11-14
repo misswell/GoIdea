@@ -58,7 +58,7 @@ func (m *Model) resolveJVMConfig(ctx context.Context, raw json.RawMessage, root 
 	})
 	if err != nil {
 		m.post(func() {
-			m.status = "Java 项目尚未导入，改用原始运行配置：请确认 JDK 与语言服务已安装"
+			m.status = "Java 项目尚未导入，改用原始运行配置：" + err.Error()
 			m.invalidate()
 		})
 		return raw, nil

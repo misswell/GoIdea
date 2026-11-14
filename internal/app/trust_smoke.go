@@ -39,18 +39,20 @@ func (m *Model) SmokeTrust(ctx context.Context) (map[string]any, error) {
 	for {
 		var trusted, loaded bool
 		var errText string
+		var configs int
 		m.post(func() {
-			trusted, loaded, errText = m.run.trusted, m.run.loaded && len(m.run.configs) > 0, m.run.trustErr
+			trusted, loaded = m.run.trusted, m.run.loaded && len(m.run.configs) > 0
+			errText, configs = m.run.trustErr, len(m.run.configs)
 		})
 		if errText != "" {
 			return out, fmt.Errorf("%s", errText)
 		}
 		if trusted && loaded {
-			out["trusted"], out["configs"] = true, len(m.run.configs)
+			out["trusted"], out["configs"] = true, configs
 			break
 		}
 		if time.Now().After(deadline) {
-			out["trusted"], out["configs"] = trusted, len(m.run.configs)
+			out["trusted"], out["configs"] = trusted, configs
 			return out, fmt.Errorf("授权后未加载运行配置")
 		}
 		select {
