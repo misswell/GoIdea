@@ -8,16 +8,12 @@ on:
 permissions:
   contents: read
 
+# One command list: the workflow calls the same scripts/gate.sh the release
+# machine runs, so CI and local gating cannot drift.
+
 jobs:
-  test:
-    strategy:
-      fail-fast: false
-      matrix:
-        # GitHub hosted macOS runners are not available to this account: the
-        # job is cancelled before a runner is assigned. Set the ENABLE_MACOS_CI
-        # repository variable once they are.
-        os: ${{ fromJSON(vars.ENABLE_MACOS_CI == 'true' && '["ubuntu-latest","macos-14"]' || '["ubuntu-latest"]') }}
-    runs-on: ${{ matrix.os }}
+  pr:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
         with:
@@ -25,27 +21,14 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-      - name: Format
-        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
-      - name: Vet
-        run: CGO_ENABLED=0 go vet ./...
-      - name: Test
-        # TestTerminalMovesToLockedRightColumn fails on unmodified Mayoi
-        # 89bc891 in this environment (the typed exit never reaches the moved
-        # terminal); it covers Mayoi's own window, not GoIDEA. Everything else
-        # in both trees gates.
-        run: CGO_ENABLED=0 go test ./... -skip TestTerminalMovesToLockedRightColumn
-      - name: Build
-        run: CGO_ENABLED=0 go build -o /tmp/goidea ./cmd/goidea
-      - name: Licenses
-        run: scripts/check-licenses.sh
-      - name: Regression index
-        run: python3 scripts/check-regression-index.py
+      - name: PR gate
+        run: scripts/gate.sh pr
 
-  e2e:
-    # The main gate: real openidea-server, real JDK and Maven, a hidden window.
-    # It needs a GUI session and the shipped macos-aarch64 server, so it waits
-    # for hosted macOS runners like the macOS unit tests do.
+  # GitHub hosted macOS runners are not available to this account yet: the
+  # jobs wait for the ENABLE_MACOS_CI repository variable instead of being
+  # cancelled before a runner is assigned. The goal requires a real macOS
+  # runner for JDT, the debugger and the e2e; a Linux-only run is not that.
+  main:
     if: vars.ENABLE_MACOS_CI == 'true' && github.event_name != 'pull_request'
     runs-on: macos-14
     steps:
@@ -59,7 +42,26 @@ jobs:
         run: scripts/fetch-server.sh
         env:
           GH_TOKEN: ${{ github.token }}
-      - name: End-to-end gate
+      - name: Main gate
         run: scripts/gate.sh main
+        env:
+          GOIDEA_E2E_DATA: ${{ runner.temp }}/goidea-e2e-data
+
+  release:
+    if: vars.ENABLE_MACOS_CI == 'true' && github.event_name != 'pull_request'
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Fetch pinned server
+        run: scripts/fetch-server.sh
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Release gate (toolchain, JDT, debugger)
+        run: scripts/gate.sh release
         env:
           GOIDEA_E2E_DATA: ${{ runner.temp }}/goidea-e2e-data

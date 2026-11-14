@@ -22,7 +22,12 @@ pr_gate() {
     say "PR gate：格式、静态检查、单元测试、构建、许可证、回归索引、OpenIDEA 清单"
     test -z "$(gofmt -l .)" || { gofmt -l .; echo "gofmt: 上面这些文件需要格式化" >&2; exit 1; }
     CGO_ENABLED=0 go vet ./...
-    CGO_ENABLED=0 go test ./... -skip TestTerminalMovesToLockedRightColumn
+    # GoIDEA's own tree runs whole. The inherited Mayoi command package has one
+    # known upstream failure (a typed exit never reaches a terminal moved to a
+    # locked column, in Mayoi's own window); it is isolated by name instead of
+    # skipping every package, so the rest of that package still gates.
+    CGO_ENABLED=0 go test $(go list ./... | grep -v '/cmd/mayoi$')
+    CGO_ENABLED=0 go test ./cmd/mayoi -skip '^TestTerminalMovesToLockedRightColumn$' 
     CGO_ENABLED=0 go build -o build/goidea ./cmd/goidea
     scripts/check-licenses.sh
     python3 scripts/check-regression-index.py
