@@ -35,3 +35,19 @@ func TestOpeningAnUntrustedProjectAsksOnce(t *testing.T) {
 		t.Fatal("an untrusted project does not ask to be trusted")
 	}
 }
+
+func TestStartupPhasesReport(t *testing.T) {
+	m := &Model{}
+	m.setStartPhase("server")
+	if m.Phase() != "server" {
+		t.Fatalf("phase = %q", m.Phase())
+	}
+	ids := statusIDs(m.statusSide("left"))
+	if indexOf(ids, "status.startup") == -1 {
+		t.Fatal("a starting app does not show its phase")
+	}
+	m.setStartPhase("ready")
+	if indexOf(statusIDs(m.statusSide("left")), "status.startup") != -1 {
+		t.Fatal("a ready app still shows a startup phase")
+	}
+}

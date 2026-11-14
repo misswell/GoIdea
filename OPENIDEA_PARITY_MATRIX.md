@@ -3,7 +3,7 @@
 OpenIDEA is the product specification, Mayoi/MyGo is the frontend base and the
 OpenIDEA Rust core is the engine. This document enumerates everything the pinned
 OpenIDEA source registers and maps each item to GoIDEA. It is generated from
-`551428267deddd600b367fa01d2b80c6146f1576`; `scripts/openidea-parity.py --check` fails when it is stale.
+`bf36cc08019a1be78c151245c67dcd872a9c37b5`; `scripts/openidea-parity.py --check` fails when it is stale.
 
 ## How to read the status
 
@@ -26,42 +26,42 @@ new action, tool window, page or command appears automatically.
 
 | Kind | Items | Integrated | Partial | Engine | Blocked | Missing |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Feature folders | 43 | 0 | 12 | 0 | 0 | 31 |
-| Actions | 647 | 43 | 87 | 0 | 1 | 516 |
+| Feature folders | 44 | 0 | 12 | 0 | 0 | 32 |
+| Actions | 673 | 43 | 87 | 0 | 1 | 542 |
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
 | Tool windows | 30 | 10 | 7 | 0 | 0 | 13 |
 | Overlays | 56 | 1 | 0 | 0 | 0 | 55 |
-| Editor contributions | 35 | 0 | 1 | 0 | 0 | 34 |
+| Editor contributions | 37 | 0 | 1 | 0 | 0 | 36 |
 | Editor kinds | 4 | 0 | 0 | 0 | 0 | 4 |
 | File editor providers | 4 | 0 | 0 | 0 | 0 | 4 |
-| Settings pages | 81 | 1 | 9 | 0 | 0 | 71 |
-| Settings keys | 445 | 0 | 1 | 0 | 0 | 444 |
-| Languages | 80 | 1 | 0 | 0 | 0 | 79 |
-| Backend crates | 38 | 0 | 0 | 31 | 0 | 7 |
-| Events | 30 | 0 | 0 | 0 | 0 | 30 |
+| Settings pages | 84 | 1 | 9 | 0 | 0 | 74 |
+| Settings keys | 470 | 0 | 1 | 0 | 0 | 469 |
+| Languages | 82 | 1 | 0 | 0 | 0 | 81 |
+| Backend crates | 43 | 0 | 0 | 35 | 0 | 8 |
+| Events | 31 | 0 | 0 | 0 | 0 | 31 |
 | Plugin worlds | 37 | 0 | 0 | 0 | 0 | 37 |
 | Plugin exports | 21 | 0 | 0 | 0 | 0 | 21 |
-| IPC commands | 624 | - | - | - | - | see [OPENIDEA_IPC.md](OPENIDEA_IPC.md) |
+| IPC commands | 668 | - | - | - | - | see [OPENIDEA_IPC.md](OPENIDEA_IPC.md) |
 
 ## Frontend feature folders
 
-Every directory under `src/features` (43). Counts are the contributions that
+Every directory under `src/features` (44). Counts are the contributions that
 directory registers.
 
 | Feature | Actions | Tool windows | Overlays | Editor | Settings pages | Status |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
-| `agents` | 7 | 0 | 0 | 0 | 0 | missing |
+| `agents` | 9 | 0 | 0 | 0 | 0 | missing |
 | `analysis` | 6 | 2 | 1 | 0 | 0 | missing |
 | `app` | 2 | 0 | 6 | 0 | 0 | partial - internal/app/update.go CheckForUpdates GitHub releases check with version compare and result dialog; download and install are not ported; internal/app/gear_test.go |
 | `build` | 6 | 1 | 0 | 0 | 0 | missing |
-| `build-tools` | 21 | 2 | 1 | 2 | 0 | missing |
+| `build-tools` | 23 | 2 | 1 | 3 | 0 | missing |
 | `code-insight` | 6 | 3 | 1 | 0 | 0 | partial - lsp.references.count, lsp.symbols |
 | `color-preview` | 0 | 0 | 0 | 1 | 0 | missing |
 | `coverage` | 6 | 1 | 1 | 1 | 0 | missing |
-| `database` | 40 | 1 | 1 | 1 | 0 | partial - UPSTREAM_FEATURE_MATRIX.md database console; db_* commands |
-| `debugger` | 32 | 1 | 1 | 1 | 0 | partial - debug.paused, debug.step.paused, debug.vars |
+| `database` | 46 | 1 | 1 | 1 | 0 | partial - UPSTREAM_FEATURE_MATRIX.md database console; db_* commands |
+| `debugger` | 40 | 1 | 1 | 1 | 0 | partial - debug.paused, debug.step.paused, debug.vars |
 | `dependencies` | 0 | 0 | 0 | 1 | 0 | missing |
-| `deployment` | 11 | 1 | 1 | 0 | 0 | missing |
+| `deployment` | 12 | 1 | 1 | 0 | 0 | missing |
 | `dotnet` | 11 | 1 | 0 | 0 | 0 | missing |
 | `github` | 6 | 1 | 1 | 1 | 1 | missing |
 | `graphql` | 6 | 0 | 1 | 1 | 0 | missing |
@@ -73,16 +73,16 @@ directory registers.
 | `notebook` | 0 | 0 | 0 | 0 | 0 | missing |
 | `perf` | 0 | 0 | 1 | 0 | 0 | missing |
 | `plugins` | 10 | 0 | 2 | 5 | 0 | missing |
-| `profiler` | 2 | 1 | 0 | 0 | 0 | missing |
+| `profiler` | 4 | 1 | 0 | 0 | 0 | missing |
 | `project-tree` | 31 | 1 | 3 | 0 | 0 | partial - internal/workspace tree tests; base.tabs; internal/app/tree_ops.go treeGitMenu ports the Git submenu (Commit…/Commit File…, Add, Add to .gitignore, Annotate, Show Diff, Show History, Rollback…, Branches…) when the project's Git status loads, tree_ops_test.go TestTreeGitSubmenuFollowsTheSelection; limits: the branch/revision compares, push/pull/fetch, merge/rebase, new branch/tag, reset and stash entries have no GoIDEA view and stay out |
 | `project-trust` | 5 | 0 | 1 | 0 | 1 | missing |
 | `remote-dev` | 4 | 1 | 1 | 0 | 0 | missing |
-| `run` | 27 | 1 | 5 | 2 | 0 | partial - base.run.config, base.run.exit, base.run.build |
+| `run` | 28 | 1 | 5 | 2 | 0 | partial - base.run.config, base.run.exit, base.run.build |
 | `run-anything` | 1 | 0 | 1 | 0 | 0 | partial - internal/app/run_anything.go Run Anything popup with Recent and Run Configurations sections, Clear History, per-project history and shell command lines; gear menu action:runAnything.show; Ctrl Ctrl keymap deferred, MyGo has no KeyControl constant; internal/app/run_anything_test.go |
 | `scratch` | 1 | 0 | 1 | 0 | 0 | missing |
 | `search` | 24 | 3 | 6 | 2 | 0 | partial - base.search.done, base.search.files, base.search.matches; internal/app/se.go Search Everywhere: All/Classes/Files/Symbols/Actions/Text, section order and limits, Recent Files/Recent Actions on an empty query, Tab/Shift+Tab cycling; e2e searchEverywhere.*; still missing the per-tab filter funnel, search history, the Endpoints section and the double-Shift binding (MyGo exposes no modifier-only key event) |
 | `services` | 20 | 1 | 1 | 2 | 0 | missing |
-| `settings` | 11 | 0 | 3 | 0 | 74 | partial - internal/app/settings_window.go; OpenIDEA's 980 DIP sheet: page tree built like model/pages.ts with group folders, search filtering with ancestors, breadcrumbs, Back/Forward history, Reset and Cancel/Apply/OK staging; internal/app/settings_test.go |
+| `settings` | 11 | 0 | 3 | 0 | 77 | partial - internal/app/settings_window.go; OpenIDEA's 980 DIP sheet: page tree built like model/pages.ts with group folders, search filtering with ancestors, breadcrumbs, Back/Forward history, Reset and Cancel/Apply/OK staging; internal/app/settings_test.go |
 | `ssh` | 2 | 0 | 1 | 0 | 0 | missing |
 | `templates` | 5 | 0 | 3 | 1 | 3 | missing |
 | `terminal` | 14 | 1 | 0 | 0 | 0 | partial - internal/app/term.go tab groups over backend PTYs, SplitTerm/UnsplitTerm, ShowTermFind scrollback search, per-tab channel routing and exit by id; base.term.output, base.term.tabs, base.term.split, base.term.find; UPSTREAM_FEATURE_MATRIX.md Terminal |
@@ -91,15 +91,16 @@ directory registers.
 | `vcs` | 33 | 3 | 2 | 2 | 1 | partial - base.vcs.changes, base.diff.rows, base.commit.id, base.log.commits, base.log.details, base.log.changes; internal/app/branch.go branchLabel and branchesDialog, base.branch.head, base.branch.list, base.branch.checkout; internal/app/vcs.go vcsStaged, vcsUnstaged, StageChange, UnstageChange, AskRollback, AddToIgnore over vcs_add_to_ignore with the .gitignore and .git/info/exclude destinations, base.stage.roundtrip, base.stage.discard; the project view's Git submenu, tabGitMenu, changes view and tab menu reach the same functions |
 | `viewers` | 0 | 0 | 0 | 1 | 0 | missing |
 | `vim` | 3 | 0 | 0 | 1 | 0 | missing |
-| `web` | 2 | 0 | 0 | 0 | 0 | missing |
+| `web` | 2 | 0 | 0 | 1 | 0 | missing |
 | `welcome` | 2 | 0 | 1 | 0 | 0 | missing |
+| `whats-new` | 1 | 0 | 0 | 0 | 0 | missing |
 
 Infrastructure folders (`src/editor`, `src/workbench`, `src/platform`, `src/ui`)
 are not product features; the contributions they host are listed below.
 
 ## Actions
 
-455 registered action ids, plus 192 ids that only presets bind (374 in total).
+480 registered action ids, plus 193 ids that only presets bind (376 in total).
 Registered ids are listed by feature folder; keymap-only ids follow.
 
 ### agents
@@ -107,6 +108,8 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | Action | Title | Source | Status |
 | --- | --- | --- | --- |
 | `agents.addAgent` | More Agents… | `src/features/agents/index.ts` | missing |
+| `agents.closeAndNewTask` | Close and New Agent Task | `src/features/agents/index.ts` | missing |
+| `agents.closeTask` | Close Agent Task | `src/features/agents/index.ts` | missing |
 | `agents.findInConversation` | Find in Conversation | `src/features/agents/index.ts` | missing |
 | `agents.mcpServers` | External MCP Servers… | `src/features/agents/index.ts` | missing |
 | `agents.newTask` | New Agent Task | `src/features/agents/index.ts` | missing |
@@ -155,6 +158,7 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `gradle.linkProjects` | Link Gradle Projects | `src/features/build-tools/index.ts` | missing |
 | `gradle.reload` | Reload All Gradle Projects | `src/features/build-tools/index.ts` | missing |
 | `gradle.toggleOffline` | Toggle Offline Mode | `src/features/build-tools/index.ts` | missing |
+| `gradle.toggleSkipTests` | Toggle 'Skip Tests' Mode | `src/features/build-tools/index.ts` | missing |
 | `gradle.unlinkProjects` | Unlink Gradle Project | `src/features/build-tools/index.ts` | missing |
 | `maven.addProjects` | Add Maven Projects | `src/features/build-tools/index.ts` | missing |
 | `maven.analyzeDependencies` | Analyze Dependencies… | `src/features/build-tools/index.ts` | missing |
@@ -163,6 +167,7 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `maven.executeGoal` | Execute Maven Goal… | `src/features/build-tools/index.ts` | missing |
 | `maven.expandAll` | Expand All | `src/features/build-tools/index.ts` | missing |
 | `maven.generateSources` | Generate Sources and Update Folders For All Projects | `src/features/build-tools/index.ts` | missing |
+| `maven.importExternal` | Import Module from Existing Sources | `src/features/build-tools/index.ts` | missing |
 | `maven.reload` | Reload All Maven Projects | `src/features/build-tools/index.ts` | missing |
 | `maven.settings` | Maven Settings… | `src/features/build-tools/index.ts` | missing |
 | `maven.toggleOffline` | Toggle Offline Mode | `src/features/build-tools/index.ts` | missing |
@@ -195,6 +200,9 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 
 | Action | Title | Source | Status |
 | --- | --- | --- | --- |
+| `db.closeAllResultTabs` | Close All | `src/features/database/resultTabActions.ts` | missing |
+| `db.closeOtherResultTabs` | Close Others | `src/features/database/resultTabActions.ts` | missing |
+| `db.closeResultTab` | Close | `src/features/database/resultTabActions.ts` | missing |
 | `db.collapseAll` | Collapse All | `src/features/database/treeActions.ts` | missing |
 | `db.copyReference` | Copy Reference | `src/features/database/treeActions.ts` | missing |
 | `db.ddlToClipboard` | Generate DDL to Clipboard | `src/features/database/treeActions.ts` | missing |
@@ -204,12 +212,14 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `db.duplicateSource` | Duplicate | `src/features/database/treeActions.ts` | missing |
 | `db.editData` | Edit Data | `src/features/database/treeActions.ts` | missing |
 | `db.execute` | Execute SQL Statement | `src/features/database/index.ts` | missing |
+| `db.executeScript` | Execute SQL Script | `src/features/database/index.ts` | missing |
 | `db.explainPlan` | Explain Plan | `src/features/database/index.ts` | missing |
 | `db.findInValue` | Find | `src/features/database/valueEditorActions.ts` | missing |
 | `db.goToColumn` | Go to Column | `src/features/database/index.ts` | missing |
 | `db.goToDdl` | Go to DDL | `src/features/database/treeActions.ts` | missing |
 | `db.goToReferencedTable` | Go to Referenced Table | `src/features/database/treeActions.ts` | missing |
 | `db.importData` | Import Data from File… | `src/features/database/treeActions.ts` | missing |
+| `db.introspect` | Introspect All Databases | `src/features/database/treeActions.ts` | missing |
 | `db.jumpToConsole` | Jump to Query Console… | `src/features/database/treeActions.ts` | missing |
 | `db.modifyTable` | Modify Table… | `src/features/database/treeActions.ts` | missing |
 | `db.new` | New… | `src/features/database/treeActions.ts` | missing |
@@ -225,6 +235,7 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `db.reformatValue` | Reformat | `src/features/database/valueEditorActions.ts` | missing |
 | `db.refresh` | Refresh | `src/features/database/treeActions.ts` | missing |
 | `db.rename` | Rename… | `src/features/database/treeActions.ts` | missing |
+| `db.renameResultTab` | Rename Tab | `src/features/database/resultTabActions.ts` | missing |
 | `db.revertChanges` | Revert | `src/features/database/index.ts` | missing |
 | `db.runSqlScript` | Run SQL Script… | `src/features/database/treeActions.ts` | missing |
 | `db.separateProceduresAndFunctions` | Separate Procedures and Functions | `src/features/database/treeActions.ts` | missing |
@@ -248,9 +259,17 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `debug.forceRunToCursor` | Force Run to Cursor | `src/features/debugger/actions.ts` | missing |
 | `debug.forceStepInto` | Force Step Into | `src/features/debugger/actions.ts` | missing |
 | `debug.forceStepOver` | Force Step Over | `src/features/debugger/actions.ts` | missing |
+| `debug.heap.capture` | Capture Heap Snapshot | `src/features/debugger/actions.ts` | missing |
+| `debug.heap.open` | Open Heap Dump… | `src/features/debugger/actions.ts` | missing |
+| `debug.heap.saveDump` | Save Heap Dump As… | `src/features/debugger/actions.ts` | missing |
 | `debug.hotReload` | Hot Reload | `src/features/debugger/actions.ts` | missing |
 | `debug.hotRestart` | Hot Restart | `src/features/debugger/actions.ts` | missing |
 | `debug.jumpToSource` | Jump to Source | `src/features/debugger/actions.ts` | missing |
+| `debug.memory.closeInstances` | Close Instances | `src/features/debugger/actions.ts` | missing |
+| `debug.memory.jumpToSource` | Jump to Source | `src/features/debugger/actions.ts` | missing |
+| `debug.memory.refresh` | Refresh Memory View | `src/features/debugger/actions.ts` | missing |
+| `debug.memory.showInstances` | Show Instances | `src/features/debugger/actions.ts` | missing |
+| `debug.memory.showReferrers` | Show Referrers | `src/features/debugger/actions.ts` | missing |
 | `debug.muteBreakpoints` | Mute Breakpoints | `src/features/debugger/actions.ts` | missing |
 | `debug.pause` | Pause Program | `src/features/debugger/actions.ts` | missing |
 | `debug.pluginStart` | Debug Plugin Configuration | `src/features/debugger/actions.ts` | missing |
@@ -282,6 +301,7 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `deployment.deleteFromServer` | Delete from Server | `src/features/deployment/actions.tsx` | missing |
 | `deployment.downloadFrom` | Download from… | `src/features/deployment/actions.tsx` | missing |
 | `deployment.downloadFromDefault` | Download from Default Server | `src/features/deployment/actions.tsx` | missing |
+| `deployment.downloadRemoteInto` | Download Remote Files Into Folder | `src/features/deployment/actions.tsx` | missing |
 | `deployment.openInBrowser` | Open in Browser (Deployed) | `src/features/deployment/actions.tsx` | missing |
 | `deployment.syncWith` | Sync with Deployed to… | `src/features/deployment/actions.tsx` | missing |
 | `deployment.syncWithDefault` | Sync with Deployed to Default Server | `src/features/deployment/actions.tsx` | missing |
@@ -378,7 +398,9 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | Action | Title | Source | Status |
 | --- | --- | --- | --- |
 | `run.profile` | Profile | `src/features/profiler/index.ts` | missing |
+| `run.profileAllocations` | Profile Allocations | `src/features/profiler/index.ts` | missing |
 | `run.profileContext` | Profile Context Configuration | `src/features/profiler/index.ts` | missing |
+| `run.profileLiveObjects` | Profile Live Objects | `src/features/profiler/index.ts` | missing |
 
 ### project-tree
 
@@ -442,6 +464,7 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `analyze.stackTrace` | Analyze Stack Trace or Thread Dump… | `src/features/run/stackTrace.tsx` | missing |
 | `go.generate.${scope}` |  | `src/features/run/goActions.ts` | missing |
 | `php.composerInstall` | Composer Install | `src/features/run/composerInstall.ts` | missing |
+| `run.agentStart` | Run Agent Command | `src/features/run/index.ts` | missing |
 | `run.chooseConfig` | Select Run/Debug Configuration… | `src/features/run/index.ts` | missing |
 | `run.chooseDebugConfig` | Debug… | `src/features/run/index.ts` | missing |
 | `run.createConfig` | Create Run Configuration | `src/features/run/index.ts` | missing |
@@ -661,6 +684,12 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `file.openRecent` | Open Recent… | `src/features/welcome/index.ts` | missing |
 | `welcome.recentProjects` | Recent Projects… | `src/features/welcome/index.ts` | missing |
 
+### whats-new
+
+| Action | Title | Source | Status |
+| --- | --- | --- | --- |
+| `app.whatsNew` | What's New | `src/features/whats-new/index.ts` | missing |
+
 ### infrastructure
 
 | Action | Title | Source | Status |
@@ -700,6 +729,7 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `editor.splitDown` | Split Down | `src/editor/core/actions.ts` | partial - internal/app/editor_split.go SplitEditorDown/splitEditor with Model.splitDown drawing the stacked split; Window › Editor Tabs and the tab context menu in internal/app/menu.go and internal/app/workbench.go; internal/app/commands.go editor.splitDown; internal/app/editor_groups_test.go. The IntelliJ macOS keymap leaves editor.splitDown unbound, so GoIDEA has no default key |
 | `editor.splitRight` | Split Right | `src/editor/core/actions.ts` | partial - internal/app/editor_split.go SplitEditorRight/splitEditor copies the active tab into the second window group over the shared docbridge document, so both panes edit one buffer and one undo history; Cmd+\ in internal/app/app.go; Window › Editor Tabs in internal/app/menu.go and the tab context menu's Split Right with its shortcut label in internal/app/workbench.go; internal/app/commands.go editor.splitRight; internal/app/editor_groups_test.go TestFocusGroupSwapsThePanesAndTheirPositions. GoIDEA keeps at most one other window group, so a further split adds its copy beside the first; dragging a tab to the editor edge to split is not ported |
 | `editor.toggleColumnSelection` | Column Selection Mode | `src/editor/core/actions.ts` | missing |
+| `editor.toggleRenderedDocs` | Render Documentation Comments | `src/editor/core/actions.ts` | missing |
 | `editor.toggleSoftWrap` | Soft-Wrap | `src/editor/core/actions.ts` | missing |
 | `editor.unsplit` | Unsplit | `src/editor/core/actions.ts` | partial - internal/app/editor_split.go Unsplit closes the focused group's tabs through the dirty guard and leaves the other group as the editor; Window › Editor Tabs and the tab context menu; internal/app/commands.go editor.unsplit; internal/app/editor_groups_test.go TestSettleGroupsCollapsesAnEmptyPane |
 | `editor.unsplitAll` | Unsplit All | `src/editor/core/actions.ts` | partial - internal/app/editor_split.go UnsplitAll closes the other group's tabs through the dirty guard and keeps the active group; Window › Editor Tabs and the tab context menu; internal/app/commands.go editor.unsplitAll; internal/app/editor_groups_test.go |
@@ -735,6 +765,7 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `toolwindow.jumpToLast` | Jump to Last Tool Window | `src/workbench/toolwindows/actions.ts` | integrated - internal/app/toolwindow.go JumpToLastToolWindow; internal/app/toolwindow_test.go |
 | `toolwindow.maximize` | Maximize Tool Window | `src/workbench/toolwindows/actions.ts` | integrated - internal/app/toolwindow.go ToggleMaximizeToolWindow; internal/app/app.go View; internal/app/maximize_test.go |
 | `toolwindow.resize${dir[0]!.toUpperCase()}${dir.slice(1)}` |  | `src/workbench/toolwindows/actions.ts` | missing |
+| `toolwindow.viewMode.${mode}` |  | `src/workbench/toolwindows/actions.ts` | missing |
 | `view.backgroundTasks` | Background Tasks | `src/workbench/shellActions.ts` | missing |
 | `view.notifications` | Notifications | `src/workbench/shellActions.ts` | missing |
 | `view.quickSwitchScheme` | Quick Switch Scheme… | `src/workbench/shellActions.ts` | missing |
@@ -930,6 +961,7 @@ expected to come from a plugin or a hidden registration.
 | `vcs.rollback` | eclipse-macos, intellij-macos, intellij-windows, vscode-macos | integrated - internal/app/vcs.go AskRollback and ConfirmRollback over vcs_discard with a confirmation, from the changes view, the tab menu's Git › Rollback… and the project view's Git › Rollback…; SmokeStage |
 | `vcs.shelf.rename` | eclipse-windows | missing |
 | `vcs.showDiff` | intellij-macos, intellij-windows, vscode-macos | integrated - internal/app/diff.go ShowDiff over vcs_file_at with the buffer text, opened from the changes view, the tab menu's Git › Show Diff and the project view's Git › Show Diff; SmokeDiff |
+| `vcs.showDiffInNewWindow` | intellij-macos, intellij-windows, vscode-macos | missing |
 | `vcs.showMessageHistory` | intellij-macos, intellij-windows, vscode-macos | missing |
 | `vcs.toggleAmend` | intellij-macos, intellij-windows, vscode-macos | missing |
 | `vcs.update` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
@@ -946,11 +978,11 @@ expected to come from a plugin or a hidden registration.
 
 | Preset | Bindings | Status |
 | --- | ---: | --- |
-| `eclipse-macos` | 146 | missing |
-| `eclipse-windows` | 147 | missing |
-| `intellij-macos` | 368 | missing |
-| `intellij-windows` | 368 | missing |
-| `vscode-macos` | 370 | missing |
+| `eclipse-macos` | 147 | missing |
+| `eclipse-windows` | 148 | missing |
+| `intellij-macos` | 370 | missing |
+| `intellij-windows` | 370 | missing |
+| `vscode-macos` | 372 | missing |
 | `vscode-windows` | 41 | missing |
 
 Counts are the bindings written literally in a preset file. A preset may spread
@@ -1061,6 +1093,7 @@ same bindings until a check records it.
 
 | Contribution | Source | Status |
 | --- | --- | --- |
+| `build-tools.pomCompletion` | `src/features/build-tools/index.ts` | missing |
 | `build-tools.pomNavigation` | `src/features/build-tools/index.ts` | missing |
 | `build-tools.versionCatalog` | `src/features/build-tools/index.ts` | missing |
 | `colorPreview.gutter` | `src/features/color-preview/index.ts` | missing |
@@ -1096,6 +1129,7 @@ same bindings until a check records it.
 | `vcs.marks` | `src/editor/api.ts` | missing |
 | `viewers.markdownLive` | `src/features/viewers/markdown/live.ts` | missing |
 | `vim` | `src/features/vim/index.ts` | missing |
+| `web.djangoContent` | `src/features/web/index.ts` | missing |
 
 ### Editor kinds (file editor types)
 
@@ -1143,6 +1177,7 @@ The plain text editor is the workbench default and is not registered through
 | `editor.codeStyle` | Code Style | Editor | `src/features/settings/pages/editor/codeStyle.tsx` | missing |
 | `editor.codeStyle.other` | Other File Types |  | `src/features/settings/pages/editor/codeStyle.tsx` | missing |
 | `editor.colorScheme` | Color Scheme |  | `src/features/settings/pages/editor/colorScheme.tsx` | missing |
+| `editor.colorScheme.console-colors` | Console Colors |  | `src/features/settings/pages/editor/colorScheme.tsx` | missing |
 | `editor.colorScheme.debugger` | Debugger |  | `src/features/settings/pages/editor/colorScheme.tsx` | missing |
 | `editor.colorScheme.general` | General |  | `src/features/settings/pages/editor/colorScheme.tsx` | missing |
 | `editor.colorScheme.language-defaults` | Language Defaults |  | `src/features/settings/pages/editor/colorScheme.tsx` | missing |
@@ -1185,13 +1220,15 @@ The plain text editor is the workbench default and is not registered through
 | `languages.php` | PHP |  | `src/features/settings/pages/languages.tsx` | missing |
 | `languages.prettier` | Prettier |  | `src/features/settings/pages/languages.tsx` | missing |
 | `languages.ruby` | Ruby |  | `src/features/settings/pages/languages.tsx` | missing |
-| `languages.ruff` | Ruff |  | `src/features/settings/pages/languages.tsx` | missing |
 | `languages.rust` | Rust |  | `src/features/settings/pages/languages.tsx` | missing |
 | `languages.typescript` | TypeScript |  | `src/features/settings/pages/languages.tsx` | missing |
 | `notifications` | Notifications |  | `src/features/settings/pages/behavior.tsx` | missing |
-| `projectStructure` | Project Structure |  | `src/features/settings/pages/languages.tsx` | missing |
 | `projectTrust` | Project Trust | Security | `src/features/project-trust/index.tsx` | missing |
-| `python.interpreter` | Python Interpreter |  | `src/features/settings/pages/languages.tsx` | missing |
+| `python` | Python |  | `src/features/settings/pages/languages.tsx` | missing |
+| `python.docstrings` | Docstrings |  | `src/features/settings/pages/languages.tsx` | missing |
+| `python.interpreter` | Dependencies |  | `src/features/settings/pages/languages.tsx` | missing |
+| `python.interpreters` | All Interpreters |  | `src/features/settings/pages/languages.tsx` | missing |
+| `python.ruff` | Ruff |  | `src/features/settings/pages/languages.tsx` | missing |
 | `tools.actionsOnSave` | Actions on Save |  | `src/features/settings/pages/tools.tsx` | missing |
 | `tools.externalTools` | External Tools |  | `src/features/settings/pages/tools.tsx` | missing |
 | `tools.sshConfigurations` | SSH Configurations |  | `src/features/settings/pages/ssh.tsx` | missing |
@@ -1218,11 +1255,15 @@ settings.
 | `actionsOnSave` |  | missing |
 | `actionsOnSave.cleanup` |  | missing |
 | `actionsOnSave.optimizeImports` |  | missing |
+| `agentSecurity` |  | missing |
+| `agentSecurity.allowedCommands` |  | missing |
+| `agentSecurity.blockedCommands` |  | missing |
 | `agents` |  | missing |
 | `agents.defaults` |  | missing |
 | `agents.expandToolOutput` | agents.chat | missing |
 | `agents.foldTurns` | agents.chat | missing |
 | `agents.mcpServers` |  | missing |
+| `agents.newTaskApprovals` | agents.chat | missing |
 | `agents.sendWith` | agents.chat | missing |
 | `agents.showContextUsage` | agents.chat | missing |
 | `agents.showCost` | agents.chat | missing |
@@ -1234,7 +1275,6 @@ settings.
 | `agents.whileRunning` | agents.chat | missing |
 | `appearance` |  | missing |
 | `appearance.accent` |  | missing |
-| `appearance.alwaysShowMainMenu` |  | missing |
 | `appearance.compactMode` |  | missing |
 | `appearance.contrastScrollbars` | appearance | missing |
 | `appearance.differentToolWindowBackground` |  | missing |
@@ -1277,6 +1317,12 @@ settings.
 | `console.bufferKb` |  | missing |
 | `console.encoding` | build.console | missing |
 | `console.foldPatterns` |  | missing |
+| `console.logColors.debug` |  | missing |
+| `console.logColors.enabled` |  | missing |
+| `console.logColors.error` |  | missing |
+| `console.logColors.info` |  | missing |
+| `console.logColors.trace` |  | missing |
+| `console.logColors.warn` |  | missing |
 | `console.overrideBuffer` |  | missing |
 | `console.softWrap` | build.console | missing |
 | `customKeymaps` |  | missing |
@@ -1310,9 +1356,11 @@ settings.
 | `editor.appearance.hardWrapGuides` |  | missing |
 | `editor.appearance.indentGuides` |  | missing |
 | `editor.appearance.intentionBulb` |  | missing |
+| `editor.appearance.lineNumberMode` |  | missing |
 | `editor.appearance.lineNumbers` |  | missing |
 | `editor.appearance.methodSeparators` |  | missing |
 | `editor.appearance.rainbowIndentGuides` |  | missing |
+| `editor.appearance.renderDocComments` |  | missing |
 | `editor.appearance.smoothCaretBlinking` |  | missing |
 | `editor.appearance.smoothCaretMovement` |  | missing |
 | `editor.appearance.whitespaceInner` |  | missing |
@@ -1386,7 +1434,10 @@ settings.
 | `editor.general.wheelZoom` |  | missing |
 | `editor.gutterIconsDisabled` |  | missing |
 | `editor.inlay.codeVisionAuthor` |  | missing |
+| `editor.inlay.codeVisionAuthorPosition` |  | missing |
+| `editor.inlay.codeVisionNoUsages` |  | missing |
 | `editor.inlay.codeVisionUsages` |  | missing |
+| `editor.inlay.codeVisionUsagesPosition` |  | missing |
 | `editor.inlay.disabledLanguages` |  | missing |
 | `editor.inlay.other` |  | missing |
 | `editor.inlay.parameters` |  | missing |
@@ -1436,6 +1487,7 @@ settings.
 | `editor.tabs.tabLimit` |  | missing |
 | `externalTools` |  | missing |
 | `files` |  | missing |
+| `files.associatedApplications` |  | missing |
 | `files.autoSave` | general | missing |
 | `files.composeFileOverrides` |  | missing |
 | `files.ensureFinalNewline` | editor.general | missing |
@@ -1458,11 +1510,13 @@ settings.
 | `general.dateFormat.use24Hour` |  | missing |
 | `general.defaultProjectDirectory` |  | missing |
 | `general.idleSeconds` |  | missing |
+| `general.lastRunVersion` |  | missing |
 | `general.openProjectIn` |  | missing |
 | `general.powerSaveMode` |  | missing |
 | `general.projectName` |  | missing |
 | `general.reopenLastProject` | general | missing |
 | `general.saveOnIdle` |  | missing |
+| `general.showWhatsNewAfterUpdate` | general.updates | missing |
 | `general.updateSource` | general.updates | missing |
 | `inspections` |  | missing |
 | `inspections.default` |  | missing |
@@ -1503,6 +1557,7 @@ settings.
 | `languages.java.languageLevel` |  | missing |
 | `languages.java.maven.activeProfiles` |  | missing |
 | `languages.java.maven.daemon` |  | missing |
+| `languages.java.maven.delegateBuild` |  | missing |
 | `languages.java.maven.home` |  | missing |
 | `languages.java.maven.linkedProjects` |  | missing |
 | `languages.java.maven.localRepository` |  | missing |
@@ -1534,7 +1589,11 @@ settings.
 | `languages.prettier.prefer` |  | missing |
 | `languages.prettier.runOnSave` |  | missing |
 | `languages.python.activateVirtualenv` |  | missing |
+| `languages.python.hiddenInterpreters` |  | missing |
+| `languages.python.hideOtherProjectInterpreters` |  | missing |
 | `languages.python.interpreter` |  | missing |
+| `languages.python.interpreters` |  | missing |
+| `languages.python.showInterpreterPaths` |  | missing |
 | `languages.ruby.interpreter` |  | missing |
 | `languages.ruff.configurationDirectory` |  | missing |
 | `languages.ruff.languages` |  | missing |
@@ -1548,7 +1607,10 @@ settings.
 | `languages.rust.toolchain` |  | missing |
 | `languages.typescript.version` |  | missing |
 | `mcpServer` |  | missing |
+| `mcpServer.agentArchiveLimit` | agents.mcpServer | missing |
+| `mcpServer.agentTabLimit` | agents.mcpServer | missing |
 | `mcpServer.enabled` | agents.mcpServer | missing |
+| `mcpServer.runWithoutConfirmation` | agents.mcpServer | missing |
 | `notifications` |  | missing |
 | `notifications.balloons` | notifications | missing |
 | `notifications.groups` |  | missing |
@@ -1678,6 +1740,7 @@ settings.
 | D | `d` |  |  | missing |
 | Dart | `dart` | `dart` | yes | missing |
 | Diff | `diff` |  |  | missing |
+| Django Template | `django-html` | `html` |  | missing |
 | Dockerfile | `dockerfile` |  |  | missing |
 | .env | `dotenv` |  |  | missing |
 | Elixir | `elixir` | `elixir` | yes | missing |
@@ -1722,6 +1785,7 @@ settings.
 | PHP | `php` | `php` | yes | missing |
 | Plain Text | `plaintext` |  |  | missing |
 | PowerShell | `powershell` |  |  | missing |
+| Prisma | `prisma` | `prisma` |  | missing |
 | Properties | `properties` |  |  | missing |
 | Protocol Buffers | `proto` | `proto` |  | missing |
 | Python | `python` | `python` | yes | missing |
@@ -1748,23 +1812,28 @@ settings.
 
 ## IPC commands
 
-All 624 commands the desktop shell registers. `stdio` is whether the pinned
+All 668 commands the desktop shell registers. `stdio` is whether the pinned
 `openidea-server` serves the command; `GoIDEA` is whether GoIDEA calls it.
 Local-only commands and the per-command argument lists are in
 [OPENIDEA_IPC.md](OPENIDEA_IPC.md).
 
 | Command | Module | stdio | GoIDEA | Status |
 | --- | --- | --- | --- | --- |
+| `agent_accept_changes` | agent | yes |  | missing |
 | `agent_archive` | agent | yes |  | missing |
 | `agent_base_text` | agent | yes |  | missing |
 | `agent_cancel` | agent | yes |  | missing |
 | `agent_changes` | agent | yes |  | missing |
 | `agent_commands` | agent | yes |  | missing |
 | `agent_create` | agent | yes |  | missing |
+| `agent_custom_import` | agent | no |  | missing |
+| `agent_custom_remove` | agent | no |  | missing |
+| `agent_custom_save` | agent | no |  | missing |
 | `agent_delete` | agent | yes |  | missing |
 | `agent_entries` | agent | yes |  | missing |
 | `agent_external_sessions` | agent | yes |  | missing |
 | `agent_fork` | agent | yes |  | missing |
+| `agent_grouped_changes` | agent | yes |  | missing |
 | `agent_import_session` | agent | yes |  | missing |
 | `agent_mcp_import` | agent | yes |  | missing |
 | `agent_mcp_list` | agent | yes |  | missing |
@@ -1802,6 +1871,7 @@ Local-only commands and the per-command argument lists are in
 | `app_log_location` | window | no |  | missing |
 | `app_metrics` | perf | no |  | missing |
 | `app_quit` | window | no |  | missing |
+| `app_release_notes` | window | no |  | missing |
 | `app_restart` | caches | no |  | missing |
 | `app_update_announcement` | window | no |  | missing |
 | `app_update_status` | window | no |  | missing |
@@ -1811,7 +1881,9 @@ Local-only commands and the per-command argument lists are in
 | `build_model` | build | yes |  | missing |
 | `build_run` | build | yes | yes | missing |
 | `build_sync` | build | yes |  | missing |
+| `caches_local_data_info` | caches | no |  | missing |
 | `caches_schedule_invalidation` | caches | no |  | missing |
+| `caches_set_local_data_dir` | caches | no |  | missing |
 | `cancel_request` | app | yes | yes | missing |
 | `cancel_task` | app | yes |  | missing |
 | `clear_caches` | perf | no |  | missing |
@@ -1819,6 +1891,7 @@ Local-only commands and the per-command argument lists are in
 | `clipboard_has_files` | clipboard | no |  | missing |
 | `clipboard_image` | clipboard | no |  | missing |
 | `clipboard_set_file_list` | clipboard | no |  | missing |
+| `clipboard_text` | clipboard | no |  | missing |
 | `clipboard_write_text` | clipboard | no |  | missing |
 | `close_project` | app | yes |  | missing |
 | `coverage_collect` | coverage | yes |  | missing |
@@ -1829,6 +1902,7 @@ Local-only commands and the per-command argument lists are in
 | `db_connect` | db | yes | yes | missing |
 | `db_connected` | db | yes | yes | missing |
 | `db_console_path` | db | yes |  | missing |
+| `db_database_catalog` | db | yes |  | missing |
 | `db_databases` | db | yes |  | missing |
 | `db_ddl` | db | yes |  | missing |
 | `db_disconnect` | db | yes | yes | missing |
@@ -1839,9 +1913,12 @@ Local-only commands and the per-command argument lists are in
 | `db_history` | db | yes |  | missing |
 | `db_object_ddl` | db | yes |  | missing |
 | `db_remove_history` | db | yes |  | missing |
+| `db_retain_catalog` | db | yes |  | missing |
 | `db_save_sources` | db | yes | yes | missing |
+| `db_saved_catalog` | db | yes |  | missing |
 | `db_schema_objects` | db | yes |  | missing |
 | `db_schemas` | db | yes | yes | missing |
+| `db_session_context` | db | yes |  | missing |
 | `db_set_manual_commit` | db | yes |  | missing |
 | `db_set_password` | db | yes |  | missing |
 | `db_set_ssh_secret` | db | yes |  | missing |
@@ -1862,8 +1939,20 @@ Local-only commands and the per-command argument lists are in
 | `debug_exception_filters` | debug | yes |  | missing |
 | `debug_force_step_over` | debug | yes |  | missing |
 | `debug_free_port` | debug | yes |  | missing |
+| `debug_heap_capture` | heap | yes |  | missing |
+| `debug_heap_classes` | heap | yes |  | missing |
+| `debug_heap_close` | heap | yes |  | missing |
+| `debug_heap_compare` | heap | yes |  | missing |
+| `debug_heap_dominators` | heap | yes |  | missing |
+| `debug_heap_open` | heap | yes |  | missing |
+| `debug_heap_path` | heap | yes |  | missing |
+| `debug_heap_save` | heap | yes |  | missing |
 | `debug_hot_reload` | debug | no |  | missing |
 | `debug_hot_restart` | debug | no |  | missing |
+| `debug_jvm_memory_classes` | debug | yes |  | missing |
+| `debug_jvm_memory_fields` | debug | yes |  | missing |
+| `debug_jvm_memory_instances` | debug | yes |  | missing |
+| `debug_jvm_memory_referrers` | debug | yes |  | missing |
 | `debug_listen_for_jvm` | debug | yes |  | missing |
 | `debug_pause` | debug | yes | yes | missing |
 | `debug_redefine_classes` | debug | yes |  | missing |
@@ -1906,6 +1995,7 @@ Local-only commands and the per-command argument lists are in
 | `doc_save` | doc | yes | yes | missing |
 | `doc_save_all` | doc | yes |  | missing |
 | `doc_selection_ranges` | doc | yes |  | missing |
+| `doc_set_bom` | doc | yes |  | missing |
 | `doc_set_encoding` | doc | yes |  | missing |
 | `doc_set_line_ending` | doc | yes |  | missing |
 | `doc_snapshot` | doc | yes | yes | missing |
@@ -1942,6 +2032,7 @@ Local-only commands and the per-command argument lists are in
 | `fs_create_file_bytes` | fs | yes |  | missing |
 | `fs_delete` | fs | yes | yes | missing |
 | `fs_entry_kind` | fs | yes |  | missing |
+| `fs_open_with_system` | fs | no |  | missing |
 | `fs_probe` | bytes | yes |  | missing |
 | `fs_read_dir` | fs | yes | yes | missing |
 | `fs_read_image` | bytes | yes |  | missing |
@@ -1982,6 +2073,7 @@ Local-only commands and the per-command argument lists are in
 | `http_history_clear` | http | no |  | missing |
 | `http_history_get` | http | no |  | missing |
 | `http_requests` | http | no |  | missing |
+| `http_variable_definitions` | http | no |  | missing |
 | `index_file_extensions` | nav | yes |  | missing |
 | `index_status` | nav | yes |  | missing |
 | `inspect_code` | analysis | yes |  | missing |
@@ -1992,6 +2084,7 @@ Local-only commands and the per-command argument lists are in
 | `jdk_download_location` | tools | yes |  | missing |
 | `jdk_download_releases` | tools | yes |  | missing |
 | `jdk_download_vendors` | tools | yes |  | missing |
+| `jdtls_required_java` | tools | yes |  | missing |
 | `jvm_file_presentations` | syntax | yes |  | missing |
 | `languages` | app | no |  | missing |
 | `light_edit_open` | app | no |  | missing |
@@ -2034,9 +2127,11 @@ Local-only commands and the per-command argument lists are in
 | `lsp_virtual_document` | lsp | yes |  | missing |
 | `lsp_workspace_symbols` | lsp | yes | yes | missing |
 | `mark_recent` | nav | yes | yes | missing |
+| `maven_dependency_completion` | build | yes |  | missing |
 | `maven_dependency_declaration` | build | yes |  | missing |
 | `maven_exclude_dependency` | build | yes |  | missing |
 | `maven_goto_declaration` | build | yes |  | missing |
+| `mcp_agent_run_closed` | mcp | no |  | missing |
 | `mcp_report_problems` | mcp | yes |  | missing |
 | `mcp_respond` | mcp | no |  | missing |
 | `mcp_server_status` | mcp | no |  | missing |
@@ -2049,6 +2144,7 @@ Local-only commands and the per-command argument lists are in
 | `menu_set_disabled` | window | no |  | missing |
 | `nav_index_definitions` | nav | yes |  | missing |
 | `nav_resolve_module` | nav | yes |  | missing |
+| `notebook_cell_docs` | notebook | yes |  | missing |
 | `notebook_close` | notebook | yes |  | missing |
 | `notebook_edit` | notebook | yes |  | missing |
 | `notebook_execute` | notebook | yes |  | missing |
@@ -2135,6 +2231,7 @@ Local-only commands and the per-command argument lists are in
 | `plugin_web_save_file` | plugin | no |  | missing |
 | `prepare_workspace_edit` | lsp | yes |  | missing |
 | `profiler_collect` | profiler | no |  | missing |
+| `profiler_gc_before_stop` | profiler | no |  | missing |
 | `profiler_prepare` | profiler | no |  | missing |
 | `project_current` | app | yes | yes | missing |
 | `project_rename` | app | no |  | missing |
@@ -2159,6 +2256,7 @@ Local-only commands and the per-command argument lists are in
 | `remote_current` | remote_dev | no |  | missing |
 | `remote_delete` | deploy | yes |  | missing |
 | `remote_disconnect` | remote_dev | no |  | missing |
+| `remote_download_into` | deploy | yes |  | missing |
 | `remote_forward_port` | remote_dev | no |  | missing |
 | `remote_forwarded_ports` | remote_dev | no |  | missing |
 | `remote_import_local` | remote_dev | no |  | missing |
@@ -2169,6 +2267,8 @@ Local-only commands and the per-command argument lists are in
 | `remote_open` | deploy | yes |  | missing |
 | `remote_rename` | deploy | yes |  | missing |
 | `remote_stop_forwarding` | remote_dev | no |  | missing |
+| `remote_trust_set` | remote_dev | no |  | missing |
+| `remote_trust_status` | remote_dev | no |  | missing |
 | `remove_recent` | nav | yes |  | missing |
 | `remove_recent_project` | app | no |  | missing |
 | `replace_in_files` | search | yes |  | missing |
@@ -2201,6 +2301,10 @@ Local-only commands and the per-command argument lists are in
 | `run_tomcat_sync` | run | yes |  | missing |
 | `run_tomcat_update` | run | yes |  | missing |
 | `run_without_derived` | run | yes |  | missing |
+| `scaffold_catalog` | scaffold | yes |  | missing |
+| `scaffold_create` | scaffold | yes |  | missing |
+| `scaffold_options` | scaffold | yes |  | missing |
+| `scaffold_requirements` | scaffold | yes |  | missing |
 | `sdk_detect` | sdk | yes |  | missing |
 | `sdk_locate_tools` | sdk | yes |  | missing |
 | `sdk_php_composer_install` | sdk | yes |  | missing |
@@ -2213,6 +2317,7 @@ Local-only commands and the per-command argument lists are in
 | `sdk_python_interpreter` | sdk | yes |  | missing |
 | `sdk_python_packages` | sdk | yes |  | missing |
 | `sdk_python_pip` | sdk | yes |  | missing |
+| `sdk_python_project_interpreters` | sdk | yes |  | missing |
 | `search_start` | search | yes | yes | missing |
 | `search_validate` | search | yes |  | missing |
 | `set_recent_project_groups` | app | no |  | missing |
@@ -2230,8 +2335,8 @@ Local-only commands and the per-command argument lists are in
 | `ssh_connected` | ssh | no |  | missing |
 | `ssh_disconnect` | ssh | no |  | missing |
 | `ssh_needs_secret` | ssh | no |  | missing |
+| `ssh_open_terminal` | ssh | no |  | missing |
 | `ssh_set_secret` | ssh | no |  | missing |
-| `ssh_terminal_command` | ssh | no |  | missing |
 | `ssh_test` | ssh | no |  | missing |
 | `ssh_trust_host` | ssh | no |  | missing |
 | `structural_languages` | analysis | yes |  | missing |
@@ -2246,6 +2351,7 @@ Local-only commands and the per-command argument lists are in
 | `syntax_structural_ranges` | syntax | yes |  | missing |
 | `syntax_support` | syntax | yes |  | missing |
 | `system_font_families` | fonts | no |  | missing |
+| `system_probe_hotkeys` | hotkeys | no |  | missing |
 | `term_available_shells` | term | yes |  | missing |
 | `term_default_shell` | term | yes | yes | missing |
 | `term_is_busy` | term | yes |  | missing |
@@ -2290,6 +2396,7 @@ Local-only commands and the per-command argument lists are in
 | `vcs_discard` | vcs | yes | yes | missing |
 | `vcs_edit_remote` | vcs | yes |  | missing |
 | `vcs_file_at` | vcs | yes | yes | missing |
+| `vcs_file_mode` | vcs | yes |  | missing |
 | `vcs_git_version` | vcs | yes |  | missing |
 | `vcs_has_hook` | vcs | yes |  | missing |
 | `vcs_init` | vcs | yes | yes | missing |
@@ -2344,7 +2451,7 @@ Local-only commands and the per-command argument lists are in
 | `web_goto` | nav | yes |  | missing |
 | `web_open` | web | no |  | missing |
 | `web_unresolved_references` | nav | yes |  | missing |
-| `web_url` | web | no |  | missing |
+| `web_url` | web | yes |  | missing |
 | `window_close_context` | window | no |  | missing |
 | `window_complete_launch` | window | no |  | missing |
 | `window_cycle` | window | no |  | missing |
@@ -2362,6 +2469,7 @@ Local-only commands and the per-command argument lists are in
 | `window_new` | window | no |  | missing |
 | `window_open_comparison` | window | no |  | missing |
 | `window_open_deployment` | window | no |  | missing |
+| `window_open_diff` | window | no |  | missing |
 | `window_open_file_in_new_window` | window | no |  | missing |
 | `window_open_files` | window | no |  | missing |
 | `window_open_project` | window | no |  | missing |
@@ -2380,7 +2488,7 @@ Local-only commands and the per-command argument lists are in
 | `wsl_distros` | wsl | no |  | missing |
 | `wsl_resolve` | wsl | no |  | missing |
 
-446 commands are served over stdio and 91 are called by GoIDEA today. A command
+476 commands are served over stdio and 91 are called by GoIDEA today. A command
 that is registered only in the desktop shell needs an `ops` module before stdio
 can serve it; a GoIDEA check counts only when the UI path works end to end.
 
@@ -2420,6 +2528,7 @@ can serve it; a GoIDEA check counts only when the UI path works end to end.
 | IdeEvent | `NotebookKernel` | `notebookKernel` | missing |
 | McpUiRequest | `Confirm` | `confirm` | missing |
 | McpUiRequest | `OpenFile` | `openFile` | missing |
+| McpUiRequest | `AgentRun` | `agentRun` | missing |
 
 The desktop shell forwards these as one Tauri event (`ide://event`). Over stdio
 they are `event` notifications; high-volume streams use `channel` notifications
@@ -2434,6 +2543,8 @@ instead (RPC_PROTOCOL.md).
 | `build_compile_file` | `onEvent` | missing |
 | `build_run` | `onEvent` | missing |
 | `build_sync` | `onProgress` | missing |
+| `debug_heap_capture` | `onProgress` | missing |
+| `debug_heap_open` | `onProgress` | missing |
 | `fs_compare_directories` | `onProgress` | missing |
 | `inspect_code` | `onEvent` | missing |
 | `jdk_download` | `onEvent` | missing |
@@ -2447,6 +2558,7 @@ instead (RPC_PROTOCOL.md).
 | `replace_in_files` | `onEvent` | missing |
 | `replace_preview` | `only` | missing |
 | `run_start` | `onOutput` | missing |
+| `scaffold_create` | `onEvent` | missing |
 | `sdk_project_libraries` | `onGroups` | missing |
 | `sdk_python_create_venv` | `onOutput` | missing |
 | `sdk_python_pip` | `onOutput` | missing |
@@ -2477,10 +2589,14 @@ instead (RPC_PROTOCOL.md).
 | `ide-extension` | Plugin manifest, extension points, contribution registry and capability model (no Wasm runtime) | yes | engine-only - linked into ide-host |
 | `ide-fonts` | Font families installed on this machine, for the font pickers: CoreText, DirectWrite or fontconfig | no | missing |
 | `ide-github` | GitHub pull requests through the gh CLI | no | missing |
+| `ide-heap` | HotSpot .hprof parser and heap-snapshot analysis for the debugger's JVM Memory view | yes | engine-only - linked into ide-host |
 | `ide-host` | The IDE backend without a UI toolkit: projects per window, terminals, processes, and the JSON-RPC server for remote development | yes | engine-only - linked into ide-host |
 | `ide-http` | HTTP Client: .http request files, environments, execution and response history | yes | engine-only - linked into ide-host |
 | `ide-index` | Background project index: files and symbols, persisted in redb, fuzzy queried with nucleo | yes | engine-only - linked into ide-host |
+| `ide-jdwp` | JDWP codec and a transparent debugger link that counts every object ID it receives, so it can release them exactly | no | missing |
 | `ide-jsonrpc` | Content-Length framed transport and JSON-RPC 2.0 peer shared by LSP and DAP clients | yes | engine-only - linked into ide-host |
+| `ide-jvm-attach` | HotSpot attach-socket client and class-histogram parser for the debugger's JVM Memory view | yes | engine-only - linked into ide-host |
+| `ide-jvm-inspect` | Shared types and the JvmInspector trait for inspecting live JVM instances while a debug session is suspended | no | missing |
 | `ide-language` | Language registry (languages/*.toml), detection, and tree-sitter powered outline/folding/symbol tags | yes | engine-only - linked into ide-host |
 | `ide-lsp` | Language server manager: lifecycle, document sync, feature requests mapped to IDE types | yes | engine-only - linked into ide-host |
 | `ide-mcp` | The IDE's MCP server: Streamable HTTP on 127.0.0.1 for AI agents outside the IDE, its discovery file and the stdio bridge | yes | engine-only - linked into ide-host |
@@ -2489,17 +2605,18 @@ instead (RPC_PROTOCOL.md).
 | `ide-profiler` | Run with Profiler: sampling-profiler launch plans (Node.js --cpu-prof, py-spy, async-profiler, Linux perf) and a common call-tree model from .cpuprofile, collapsed stacks and perf script output | no | missing |
 | `ide-remote` | Remote work over SSH: SFTP deployment (mappings, upload, download, sync) and run targets (SSH, Docker, Compose) | yes | engine-only - linked into ide-host |
 | `ide-run` | Run configurations: detection, persistence, process lifecycle and output streaming | yes | engine-only - linked into ide-host |
+| `ide-scaffold` | New Project generators: the generator catalog (`generators/*.toml`), project templates, official framework CLIs and initializr-style project services | yes | engine-only - linked into ide-host |
 | `ide-sdk` | SDKs / toolchains: interpreter discovery (Python, Node.js, Rust, Go, TypeScript), virtualenvs, pip, and applying the selected toolchain to language servers, run configurations and terminals | yes | engine-only - linked into ide-host |
 | `ide-search` | Find / Replace in Files built on the ripgrep engine crates | yes | engine-only - linked into ide-host |
 | `ide-spell` | Spell checking (Proofreading › Typo): word extraction from comments, strings and declared names, Hunspell en_US / en_GB dictionary, programming terms, user dictionaries | yes | engine-only - linked into ide-host |
-| `ide-ssh` | SSH connections: configurations, host keys, authentication, remote commands, SFTP, port forwarding and askpass | yes | engine-only - linked into ide-host |
+| `ide-ssh` | SSH connections: configurations, host keys, authentication, remote commands, SFTP and FTP files, port forwarding and askpass | yes | engine-only - linked into ide-host |
 | `ide-syntax` | Tree-sitter structure service: node/expression lookup, syntax errors, scopes & locals, identifier occurrences, structural ranges (LSP fallback) | yes | engine-only - linked into ide-host |
 | `ide-terminal` | Integrated terminal PTY sessions | yes | engine-only - linked into ide-host |
 | `ide-text` | Rope-backed documents, change sets and UTF-16/byte coordinate conversion | yes | engine-only - linked into ide-host |
 | `ide-tools` | Installer for language servers and debug adapters: registry, detection, download/extract, managed tools dir | yes | engine-only - linked into ide-host |
 | `ide-vcs` | Git integration: gitoxide for fast reads, git CLI for writes | yes | engine-only - linked into ide-host |
 | `ide-vfs` | File system access: directory listing, text loading/saving with encoding detection, watching, project walking | yes | engine-only - linked into ide-host |
-| `ide-web` | Web browsers: the built-in static web server that serves project files on 127.0.0.1 (IDEA's built-in server) and detection / launching of installed browsers | no | missing |
+| `ide-web` | Web browsers: the built-in static web server that serves project files on 127.0.0.1 (IDEA's built-in server) and detection / launching of installed browsers | yes | engine-only - linked into ide-host |
 | `ide-workspace` | Project model: open documents, settings layering, recent projects, session state, local history | yes | engine-only - linked into ide-host |
 
 `engine-only` means the crate is linked into the stdio host, so its logic can be
@@ -2641,6 +2758,7 @@ They cannot be enumerated from source; the product item is the call site itself.
 | `registerActions` | `src/features/settings/index.ts` | `settingsActions((page, newProjects) => relaunch({ page, newProjects: !` |
 | `registerActions` | `src/features/vcs/actions.tsx` | `actions` |
 | `registerActions` | `src/features/vcs/historyActions.tsx` | `actions` |
+| `registerActions` | `src/features/vcs/index.ts` | `openOnRemoteActions` |
 | `registerActions` | `src/features/viewers/index.ts` | `[...imageActions(), ...markdownActions()]` |
 | `registerActions` | `src/platform/actions.ts` | `actions: Action[]` |
 | `registerToolWindow` | `src/features/agents/index.ts` | `{ id: TOOL_WINDOW, title: "Agents", icon: "toolwindow-agents", anchor:` |
@@ -2651,6 +2769,7 @@ They cannot be enumerated from source; the product item is the call site itself.
 | `registerEditorKind` | `src/features/agents/index.ts` | `{ kind: HOME_KIND, component: lazyComponent(() => import("./HomeEditor` |
 | `registerEditorKind` | `src/features/build-tools/index.ts` | `{ kind: ANALYZER_KIND, component: lazyComponent(() => import("./Depend` |
 | `registerEditorKind` | `src/features/database/index.ts` | `{ kind: TABLE_KIND, component: lazyComponent(() => import("./TableEdit` |
+| `registerEditorKind` | `src/features/debugger/index.ts` | `heapEditorKind` |
 | `registerEditorKind` | `src/features/github/index.ts` | `{ kind: TIMELINE_KIND, component: lazyComponent(() => import("./timeli` |
 | `registerEditorKind` | `src/features/plugins/uiPoints.tsx` | `{ kind: CUSTOM_EDITOR_KIND, component: CustomEditor, title: (input) =>` |
 | `registerEditorKind` | `src/features/plugins/uiPoints.tsx` | `{ kind: PLUGIN_LOG_EDITOR_KIND, component: PluginLogEditor, keepAlive:` |
@@ -2662,6 +2781,7 @@ They cannot be enumerated from source; the product item is the call site itself.
 | `registerEditorKind` | `src/features/vcs/index.ts` | `{ kind: SELECTION_HISTORY_KIND, component: lazyComponent(() => import(` |
 | `registerEditorKind` | `src/features/viewers/index.ts` | `{ kind: IMAGE_KIND, component: ImageViewer, title: titleOf, icon: icon` |
 | `registerEditorKind` | `src/features/viewers/index.ts` | `{ kind: BINARY_KIND, component: HexViewer, title: titleOf, icon: iconO` |
+| `registerEditorKind` | `src/features/whats-new/index.ts` | `{ kind: WHATS_NEW_KIND, component: WhatsNewPage, title: () => t("app.w` |
 | `registerFileEditorProvider` | `src/workbench/contributions.ts` | `p: FileEditorProvider` |
 | `registerSettingsPage` | `src/features/plugins/index.ts` | `{ id: SETTINGS_PAGE_ID, title: "Plugins", // After Editor, as in Intel` |
 | `registerSettingsPage` | `src/features/plugins/settings.tsx` | `{ id, title: decl.title, projectScope: true, keywords: ["plugin", plug` |

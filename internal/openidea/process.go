@@ -25,6 +25,11 @@ type LaunchConfig struct {
 	Log io.Writer
 	// Protocol is the version required from the server; 0 means 2.
 	Protocol uint32
+	// MinVersion is the oldest server this client accepts, e.g. "0.1.44".
+	MinVersion string
+	// ExpectedSHA256 is the release checksum of the binary, when one is
+	// shipped beside it; empty skips the comparison.
+	ExpectedSHA256 string
 	// StartupTimeout bounds initialize plus commands; 0 means 15s.
 	StartupTimeout time.Duration
 	// QueueSize bounds the notification queue.
@@ -43,6 +48,7 @@ type Server struct {
 	stderr io.ReadCloser
 
 	info     ServerInfo
+	report   Report
 	commands []string
 
 	waitCh  chan error
@@ -65,8 +71,9 @@ func Launch(ctx context.Context, cfg LaunchConfig) (*Server, error) {
 	if cfg.Log == nil {
 		cfg.Log = os.Stderr
 	}
-	if _, err := os.Stat(cfg.ServerPath); err != nil {
-		return nil, fmt.Errorf("openidea: server binary: %w", err)
+	report, err := Preflight(cfg)
+	if err != nil {
+		return nil, err
 	}
 
 	cmd := exec.Command(cfg.ServerPath, "--stdio")
@@ -140,6 +147,7 @@ func Launch(ctx context.Context, cfg LaunchConfig) (*Server, error) {
 		return nil, fmt.Errorf("openidea: commands reply: %w", err)
 	}
 	s.info = info
+	s.report = report
 	s.commands = commands
 	return s, nil
 }
@@ -149,6 +157,9 @@ func (s *Server) Conn() *Conn { return s.conn }
 
 // Info returns the server's initialize reply.
 func (s *Server) Info() ServerInfo { return s.info }
+
+// Report is what the preflight measured: checksum, version, protocol, size.
+func (s *Server) Report() Report { return s.report }
 
 // PID is the server process id, for logs and crash-recovery tests.
 func (s *Server) PID() int { return s.cmd.Process.Pid }

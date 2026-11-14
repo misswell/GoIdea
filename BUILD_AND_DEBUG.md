@@ -52,7 +52,7 @@ counted in the console but reach the editors and Problems view as the backend's
 passes the previous build's message files as `clear`. Compiler messages are
 those of the engine; GoIDEA does not run `mvn` or `gradle` itself.
 
-**编译文件** (`build.compileFile`) is not ported: the pinned v0.1.41 server
+**编译文件** (`build.compileFile`) is not ported: the pinned v0.1.44 server
 does not serve `build_compile_file` (it exists only in the pinned source), so
 the action is recorded `blocked` in `OPENIDEA_PARITY_MATRIX.md` until a server
 release or submodule bump ships it.

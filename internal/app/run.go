@@ -218,8 +218,6 @@ func (m *Model) ReloadRunConfigs() {
 	m.invalidate()
 }
 
-// pickRunConfig prefers a non-test configuration, so Run starts the build
-// rather than the test suite.
 // pickRunConfig prefers the program over the build tool: a detected Java
 // application, then any non-test configuration. `mvn package` is a build, so
 // it should not be what the Run button starts when an application is known.
@@ -301,6 +299,7 @@ func (m *Model) startRunWith(raw json.RawMessage, name string) bool {
 		return false
 	}
 	tabs := append([]*Tab(nil), m.tabs...)
+	root := m.Root()
 	ch := m.nextChannel()
 	m.run.visible = true
 	m.occupyBottom("run")
@@ -342,6 +341,19 @@ func (m *Model) startRunWith(raw json.RawMessage, name string) bool {
 			err = json.Unmarshal(raw, &info)
 		}
 		m.post(func() {
+			if m.Root() != root || m.run.channel != ch {
+				// The project changed while run_start was in flight: the
+				// process belongs to the old one, so stop it and keep the
+				// new project's run state untouched.
+				if err == nil && info.ID != 0 {
+					go func(id uint32) {
+						ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
+						defer cancel()
+						_, _ = m.mgr.Invoke(ctx, Window, "run_stop", map[string]any{"id": id})
+					}(info.ID)
+				}
+				return
+			}
 			m.run.busy = false
 			if err != nil {
 				m.run.awaiting = false

@@ -9,7 +9,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-platform="${1:-macos-$(uname -m | sed 's/arm64/aarch64/;s/x86_64/x86_64/')}"
+if [[ $# -ge 1 ]]; then
+    platform="$1"
+else
+    platform="macos-$(uname -m | sed 's/arm64/aarch64/;s/x86_64/x86_64/')"
+fi
 out="resources/openidea-server"
 if [[ "${2:-}" == "--out" ]]; then
     test -n "${3:-}" || { echo "fetch-server.sh: --out needs a path" >&2; exit 1; }
@@ -25,7 +29,7 @@ field() { # <key> in the openidea.server block
 }
 release="$(field release)"
 asset="$(field asset)"
-if [[ -n "$1" ]]; then
+if [[ $# -ge 1 ]]; then
   asset="openidea-server-${platform}.gz"
 fi
 test -n "$release" && test -n "$asset" || { echo "UPSTREAMS.yml has no openidea.server pin" >&2; exit 1; }
@@ -39,4 +43,5 @@ test "$want" = "$got" || { echo "$asset: sha256 $got, release says $want" >&2; e
 gunzip -c "$tmp/$asset" > "$out.tmp"
 chmod 755 "$out.tmp"
 mv "$out.tmp" "$out"
+printf '%s  %s\n' "$got" "$(basename "$out")" > "$out.sha256"
 echo "$out: $release $asset (sha256 $got)"

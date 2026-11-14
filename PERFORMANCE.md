@@ -70,8 +70,7 @@ pixels of the text are not inspected offscreen.
 ## Measured
 
 First recorded run: 2026-11-13, macOS 27.2.0 arm64, Go 1.27.3, server
-`openidea-server-macos-aarch64.gz` from v0.1.41 (sha256
-`650828f430a59f6d9cc8bc5553887a1ad821f8686cf68c052f1c4822878a5f4f`),
+`openidea-server-macos-aarch64.gz` from v0.1.44 (sha256 `01d79a70bebf034ba0771134b7700ac10f08b5956678d08b2e526d0c3cd90748`),
 `build/bench/20261113-160605/`.
 
 | Path | Target | Measured |

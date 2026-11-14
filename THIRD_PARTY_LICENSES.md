@@ -12,7 +12,7 @@ into the app (`Contents/Resources/licenses`).
 ### openidea-server — Apache-2.0
 
 - Project: OpenIDEA, https://github.com/l0ng-ai/openidea
-- Version: 0.1.41, release `v0.1.41` (commit `108da53`)
+- Version: 0.1.44, release `v0.1.44` (commit `bf36cc0`)
 - Component: `openidea-server-macos-aarch64.gz`, the official prebuilt release
   asset for Apple silicon, verified against the release's SHA-256
 - Modification: none; the binary is redistributed unmodified
@@ -23,7 +23,7 @@ into the app (`Contents/Resources/licenses`).
 - Project: https://github.com/l0ng-ai/openidea
 - Fork: https://github.com/misswell/openidea
 - Pin: submodule `third_party/openidea` at commit `5514282` (the source the RPC
-  client is tested against; the shipped server is the later v0.1.41 build below)
+  client is tested against; the shipped server is the v0.1.44 release build below)
 - Modification: none; the submodule is the fork's untouched commit
 - Attribution: the submodule's own `LICENSE` and `NOTICE`
 

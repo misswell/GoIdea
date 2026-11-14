@@ -12,6 +12,23 @@ import (
 )
 
 func init() {
+	registerStatusItem(&StatusItem{ID: "status.startup", Side: "left", Order: 1,
+		Visible: func(m *Model) bool {
+			p := m.Phase()
+			return p != "" && p != "ready"
+		},
+		Render: func(m *Model, c *ui.Context, p *ui.Theme, oi oiColors) {
+			text := map[string]string{
+				"preflight": "检查 openidea-server…",
+				"server":    "启动 openidea-server…",
+				"opening":   "正在打开项目…",
+				"restoring": "正在恢复文件…",
+				"failed":    "启动失败",
+			}[m.Phase()]
+			if text != "" {
+				ui.Text(c, text).FontSize(13).TextColor(oi.warning).SingleLine()
+			}
+		}})
 	registerStatusItem(&StatusItem{ID: "status.file", Side: "left", Order: 10,
 		Render: func(m *Model, c *ui.Context, p *ui.Theme, oi oiColors) {
 			if t := m.tab(); t != nil {

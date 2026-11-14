@@ -9,7 +9,7 @@ package app
 
 import (
 	"context"
-	"errors"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -36,6 +36,10 @@ type Config struct {
 	SessionPath  string
 	SettingsPath string
 	Log          *os.File
+	// ServerMinVersion and ServerSHA256 pin the backend the client was
+	// tested against; the preflight refuses an older or different binary.
+	ServerMinVersion string
+	ServerSHA256     string
 }
 
 // Tab is one open file: its backend document, the editor state editing the
@@ -380,19 +384,22 @@ type Model struct {
 
 	// trustAsk is the Trust Project prompt a project opens with until the
 	// user allows building and running it.
-	trustAsk  bool
-	run       RunPane
-	debug     DebugPane
-	build     BuildPane
-	term      TermPane
-	vcs       VCSPane
-	branch    BranchPane
-	log       LogPane
-	problems  ProblemsPane
-	search    SearchPane
-	usages    UsagesPane
-	todo      TodoPane
-	structure StructurePane
+	trustAsk bool
+	// startMu guards startPhase, the startup state machine the window shows.
+	startMu    sync.RWMutex
+	startPhase string
+	run        RunPane
+	debug      DebugPane
+	build      BuildPane
+	term       TermPane
+	vcs        VCSPane
+	branch     BranchPane
+	log        LogPane
+	problems   ProblemsPane
+	search     SearchPane
+	usages     UsagesPane
+	todo       TodoPane
+	structure  StructurePane
 
 	// tool is the bottom tool window the shortcuts last opened, "" once it
 	// closed; toolStash is what Hide All hid, restored by the next press.
@@ -515,9 +522,11 @@ func New(cfg Config) *Model {
 	}
 	m.runHistory = normalizeRunHistory(session.RunHistory)
 	m.mgr = openidea.NewManager(openidea.LaunchConfig{
-		ServerPath: cfg.ServerPath,
-		Home:       cfg.Home,
-		Log:        cfg.Log,
+		ServerPath:     cfg.ServerPath,
+		Home:           cfg.Home,
+		Log:            cfg.Log,
+		MinVersion:     cfg.ServerMinVersion,
+		ExpectedSHA256: cfg.ServerSHA256,
 	})
 	m.reg = docbridge.NewRegistry(openidea.Docs{M: m.mgr, Window: Window}, Window)
 	m.reg.SetErrorHandler(func(path string, err error) {
@@ -536,6 +545,8 @@ func New(cfg Config) *Model {
 		if root == "" {
 			return nil
 		}
+		m.setStartPhase("restoring")
+		m.post(func() { m.status = "后端已重启，正在恢复项目…"; m.invalidate() })
 		if err := m.openBackendProject(ctx, root); err != nil {
 			return err
 		}
@@ -571,6 +582,7 @@ func New(cfg Config) *Model {
 			if m.run.trusted {
 				m.loadRunConfigs()
 			}
+			m.setStartPhase("ready")
 			m.invalidate()
 		})
 		return nil
@@ -596,6 +608,21 @@ func (m *Model) OpenFilesAtStartup(paths []string) { m.startupFiles = paths }
 // whether the backend is up.
 func (m *Model) Snapshot() (root string, tabs int, backend bool) {
 	return m.Root(), len(m.tabs), m.BackendState().Running
+}
+
+// startPhase is where startup is: preflight, server, opening, restoring,
+// ready or failed.
+func (m *Model) setStartPhase(phase string) {
+	m.startMu.Lock()
+	m.startPhase = phase
+	m.startMu.Unlock()
+}
+
+// Phase reports the startup state machine's current phase.
+func (m *Model) Phase() string {
+	m.startMu.RLock()
+	defer m.startMu.RUnlock()
+	return m.startPhase
 }
 
 // Start restores the last session in the background.
@@ -624,6 +651,7 @@ func (m *Model) start() {
 	// Start the plugin engine once the window loop is up: enabled plugins
 	// activate on their own goroutines and their commands join the palette.
 	m.pluginsPage()
+	m.setStartPhase("server")
 	root := m.startupRoot
 	var files []string
 	if root == "" {
@@ -644,9 +672,11 @@ func (m *Model) start() {
 		}
 	}
 	if root == "" {
+		m.setStartPhase("ready")
 		m.post(func() { m.busy = false; m.status = "请打开一个 Java 项目" })
 		return
 	}
+	m.setStartPhase("opening")
 	m.setRoot(root)
 	m.openProject(root, files)
 	m.applyStartupBehaviour()
@@ -708,6 +738,7 @@ func (m *Model) watchState() {
 			m.post(func() {
 				switch {
 				case state.Err != nil:
+					m.setStartPhase("failed")
 					m.status = "后端不可用：" + state.Err.Error()
 					m.run.running = false
 					m.run.awaiting = false
@@ -825,6 +856,9 @@ func (m *Model) openProject(dir string, files []string) {
 		}
 		m.layouts[layoutKey(prev)] = m.currentLayout()
 	}
+	prevRoot := m.Root()
+	prevTabs, prevActive := m.tabs, m.active
+	prevSplit, prevSplitDown, prevSplitFirst := m.split, m.splitDown, m.splitFirst
 	old := m.allTabs()
 	pinned := map[string]bool{}
 	for _, p := range m.session().Pinned {
@@ -915,10 +949,29 @@ func (m *Model) openProject(dir string, files []string) {
 		for _, t := range old {
 			_ = m.reg.Close(ctx, t.doc.Path())
 		}
-		if err := m.openBackendProject(ctx, dir); err != nil {
-			m.post(func() { m.busy = false; m.fail("", fmt.Errorf("打开项目失败：%w", err)) })
+		if err := m.openBackendProjectAt(ctx, dir, prevRoot); err != nil {
+			m.post(func() {
+				// The backend and the UI stay on the project that was open:
+				// documents were not closed yet, so the tabs come back as they
+				// were and the failure only reports itself.
+				m.tabs, m.active = prevTabs, prevActive
+				m.split, m.splitDown, m.splitFirst = prevSplit, prevSplitDown, prevSplitFirst
+				if prevRoot != "" {
+					m.setRoot(prevRoot)
+				}
+				m.busy = false
+				name := "Welcome"
+				if prevRoot != "" {
+					name = filepath.Base(prevRoot)
+				}
+				m.status = "打开 " + filepath.Base(dir) + " 失败，仍在 " + name
+				m.banner = "打开项目失败：" + err.Error()
+				m.bannerPath = ""
+				m.invalidate()
+			})
 			return
 		}
+		m.post(func() { m.setStartPhase("restoring") })
 		var docs []*docbridge.Document
 		var failed []string
 		for _, p := range files {
@@ -1007,28 +1060,76 @@ func (m *Model) openProject(dir string, files []string) {
 			m.checkTrust(dir)
 			m.RefreshVCS()
 			m.RefreshBranch()
+			m.setStartPhase("ready")
 			m.invalidate()
 		})
 	}()
 }
 
 func (m *Model) openBackendProject(ctx context.Context, dir string) error {
+	return m.openBackendProjectAt(ctx, dir, "")
+}
+
+// openBackendProjectAt opens dir and waits until the backend's project_current
+// reports that exact root, so a project that fails to open cannot leave the UI
+// on a project the backend does not have. On failure restoreTo, the project
+// that was open, is opened again.
+func (m *Model) openBackendProjectAt(ctx context.Context, dir, restoreTo string) error {
 	if _, err := m.mgr.Invoke(ctx, Window, "open_project", map[string]any{"path": dir}); err != nil {
+		m.restoreBackendProject(ctx, restoreTo, dir)
 		return err
 	}
 	deadline := time.Now().Add(60 * time.Second)
 	for {
 		raw, err := m.mgr.Invoke(ctx, Window, "project_current", nil)
-		if err == nil && strings.TrimSpace(string(raw)) != "null" {
-			return nil
+		if err == nil {
+			if got, ok := projectRootOf(raw); ok && layoutKey(got) == layoutKey(dir) {
+				return nil
+			}
 		}
 		if time.Now().After(deadline) {
-			return errors.New("openidea-server 未在 60 秒内就绪")
+			m.restoreBackendProject(ctx, restoreTo, dir)
+			return fmt.Errorf("openidea-server 未在 60 秒内把 %s 设为当前项目", filepath.Base(dir))
 		}
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-time.After(60 * time.Millisecond):
+		}
+	}
+}
+
+// projectRootOf reads the root of a project_current reply.
+func projectRootOf(raw []byte) (string, bool) {
+	var info struct {
+		Root string `json:"root"`
+	}
+	if json.Unmarshal(raw, &info) != nil || info.Root == "" {
+		return "", false
+	}
+	return info.Root, true
+}
+
+// restoreBackendProject reopens the project that was current before a failed
+// switch, best effort: the UI reports the failure either way.
+func (m *Model) restoreBackendProject(ctx context.Context, root, failed string) {
+	if root == "" || layoutKey(root) == layoutKey(failed) || m.mgr == nil {
+		return
+	}
+	if _, err := m.mgr.Invoke(ctx, Window, "open_project", map[string]any{"path": root}); err != nil {
+		return
+	}
+	for deadline := time.Now().Add(30 * time.Second); time.Now().Before(deadline); {
+		raw, err := m.mgr.Invoke(ctx, Window, "project_current", nil)
+		if err == nil {
+			if got, ok := projectRootOf(raw); ok && layoutKey(got) == layoutKey(root) {
+				return
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(80 * time.Millisecond):
 		}
 	}
 }
@@ -1647,6 +1748,9 @@ func (m *Model) finishQuit(save bool) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		m.reg.CloseAll(ctx)
+		if m.plugins != nil {
+			m.plugins.reg.Close()
+		}
 		_ = m.mgr.Close()
 		m.post(func() {
 			if m.restartPending {

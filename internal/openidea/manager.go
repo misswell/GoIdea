@@ -2,6 +2,7 @@ package openidea
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 )
@@ -13,6 +14,9 @@ type State struct {
 	Info     ServerInfo
 	Err      error
 	Restarts int
+	// Phase is where startup is: "preflight", "starting", "running",
+	// "restarting", "failed" or "stopped".
+	Phase string
 }
 
 // Manager owns one openidea-server for the application and survives its
@@ -68,6 +72,18 @@ func (m *Manager) OnRestart(fn func(context.Context) error) {
 func (m *Manager) Start(ctx context.Context) error {
 	_, err := m.Ensure(ctx)
 	return err
+}
+
+// setPhase records a startup phase; it keeps the last error of a failed
+// launch visible while the next attempt runs.
+func (m *Manager) setPhase(phase string) {
+	m.mu.Lock()
+	m.state.Phase = phase
+	if phase != "failed" {
+		m.state.Err = nil
+	}
+	m.mu.Unlock()
+	m.publish()
 }
 
 // Server returns the running server, or nil.
@@ -153,9 +169,11 @@ func (m *Manager) Ensure(ctx context.Context) (*Server, error) {
 	if closed {
 		return nil, ErrClosed
 	}
+	m.setPhase("preflight")
 
 	var err error
 	for attempt := 1; attempt <= 3; attempt++ {
+		m.setPhase("starting")
 		s, launchErr := Launch(ctx, m.cfg)
 		if launchErr == nil {
 			m.adopt(s)
@@ -164,9 +182,15 @@ func (m *Manager) Ensure(ctx context.Context) (*Server, error) {
 		err = launchErr
 		m.mu.Lock()
 		m.lastErr = launchErr
-		m.state = State{Err: launchErr, Restarts: m.restarts}
+		m.state = State{Err: launchErr, Restarts: m.restarts, Phase: "failed"}
 		m.mu.Unlock()
 		m.publish()
+		// A preflight refusal (missing, not executable, wrong arch or
+		// version) will not change between attempts.
+		var preflight *PreflightError
+		if errors.As(launchErr, &preflight) {
+			return nil, launchErr
+		}
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
@@ -184,18 +208,25 @@ func (m *Manager) adopt(s *Server) {
 	}
 	m.started = true
 	m.lastErr = nil
-	m.state = State{Running: true, Info: s.Info(), Restarts: m.restarts}
+	m.state = State{Running: true, Info: s.Info(), Restarts: m.restarts, Phase: "running"}
 	restore := m.onRestart
 	m.mu.Unlock()
 	m.publish()
 	m.forward(s)
 	go m.watch(s)
 	if restore != nil {
-		if err := restore(context.Background()); err != nil {
-			m.mu.Lock()
-			m.lastErr = err
-			m.mu.Unlock()
-		}
+		// The callback reopens projects and documents through Invoke, which
+		// takes startMu: it must not run inside Ensure's critical section or
+		// the restart would deadlock on its own launch lock.
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			defer cancel()
+			if err := restore(ctx); err != nil {
+				m.mu.Lock()
+				m.lastErr = err
+				m.mu.Unlock()
+			}
+		}()
 	}
 }
 
@@ -228,7 +259,7 @@ func (m *Manager) watch(s *Server) {
 	}
 	closed := m.closed
 	err := s.conn.Err()
-	m.state = State{Err: err, Restarts: m.restarts}
+	m.state = State{Err: err, Restarts: m.restarts, Phase: "restarting"}
 	m.mu.Unlock()
 	if wasCurrent {
 		m.publish()
@@ -246,6 +277,10 @@ func (m *Manager) watch(s *Server) {
 			return
 		}
 	}
+	m.mu.Lock()
+	m.state.Phase = "failed"
+	m.mu.Unlock()
+	m.publish()
 }
 
 func (m *Manager) publish() {

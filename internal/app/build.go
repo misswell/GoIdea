@@ -87,6 +87,7 @@ func (m *Model) startBuild(kind string, file *string) {
 		return
 	}
 	tabs := append([]*Tab(nil), m.tabs...)
+	root := m.Root()
 	req := m.nextRequest()
 	ch := m.nextChannel()
 	clear := append([]string(nil), m.build.files...)
@@ -121,6 +122,9 @@ func (m *Model) startBuild(kind string, file *string) {
 		defer cancel()
 		if err := saveAll(ctx, tabs, p); err != nil {
 			m.post(func() {
+				if m.build.channel != ch || m.Root() != root {
+					return
+				}
 				m.build.busy = false
 				m.build.err = "保存后再构建失败：" + err.Error()
 				m.invalidate()
@@ -133,6 +137,9 @@ func (m *Model) startBuild(kind string, file *string) {
 			err = json.Unmarshal(raw, &result)
 		}
 		m.post(func() {
+			if m.build.channel != ch || m.Root() != root {
+				return
+			}
 			m.build.busy = false
 			if err != nil {
 				m.build.err = "构建失败：" + err.Error()

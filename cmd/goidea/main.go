@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -42,11 +43,13 @@ func main() {
 	logFile := openLog(filepath.Join(dataDir, "openidea-server.log"))
 
 	cfg := app.Config{
-		ServerPath:   serverPath,
-		Home:         home,
-		SessionPath:  filepath.Join(dataDir, "session.json"),
-		SettingsPath: filepath.Join(dataDir, "settings.json"),
-		Log:          logFile,
+		ServerPath:       serverPath,
+		Home:             home,
+		SessionPath:      filepath.Join(dataDir, "session.json"),
+		SettingsPath:     filepath.Join(dataDir, "settings.json"),
+		Log:              logFile,
+		ServerMinVersion: serverMinVersion,
+		ServerSHA256:     serverChecksum(serverPath),
 	}
 	// File › Invalidate Caches… scheduled what the backend must forget; the
 	// caches go before the server starts and takes them into use.
@@ -471,6 +474,24 @@ func resolveServer() (string, error) {
 		return p, nil
 	}
 	return "", fmt.Errorf("未找到 openidea-server：请设置 GOIDEA_SERVER 或把它放到可执行文件旁")
+}
+
+// serverMinVersion is the OpenIDEA release this client speaks to; it moves
+// with the pin in UPSTREAMS.yml and the shipped server.
+const serverMinVersion = "0.1.44"
+
+// serverChecksum reads the release checksum shipped beside the binary, when
+// fetch-server.sh wrote one; a hand-placed server skips the comparison.
+func serverChecksum(path string) string {
+	data, err := os.ReadFile(path + ".sha256")
+	if err != nil {
+		return ""
+	}
+	fields := strings.Fields(string(data))
+	if len(fields) == 0 {
+		return ""
+	}
+	return fields[0]
 }
 
 func openLog(path string) *os.File {

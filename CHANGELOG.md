@@ -5,6 +5,9 @@ needs a `## <version>` section here, or its build fails.
 
 ## Unreleased
 
+- 上游同步到 **OpenIDEA v0.1.44**：源码、Server 与 RPC 清单一起升级并重新生成 IPC/Parity 清单。
+- 启动前检查 Server 是否存在、可执行、架构匹配、校验和与版本/协议，不满足时给出明确原因。
+- 启动状态机显示检查、启动、打开项目与恢复进度；项目打不开时留在原项目并报错。
 - **Settings**（`Cmd+,`）改为 OpenIDEA 的设置窗：左侧页面树和搜索，右侧面包屑和页面，可后退和前进。
 - 设置窗底部是 **Cancel** / **Apply** / **OK**，改动会先预览，**Apply** 和 **OK** 才写入，**Cancel** 恢复原样。
 - 设置页按 OpenIDEA 分组：**Appearance**、**Keymap**、**Editor > Appearance / Font**、**Languages & Frameworks > Java**。
