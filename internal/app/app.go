@@ -652,6 +652,22 @@ func (m *Model) start() {
 	// activate on their own goroutines and their commands join the palette.
 	m.pluginsPage()
 	m.setStartPhase("server")
+	// The backend's preflight and initialize run before a project is opened,
+	// so Welcome is served by a live server and a broken binary fails here.
+	startCtx, cancelStart := context.WithTimeout(m.ctx, 60*time.Second)
+	_, startErr := m.mgr.Ensure(startCtx)
+	cancelStart()
+	if startErr != nil {
+		m.setStartPhase("failed")
+		m.post(func() {
+			m.busy = false
+			m.status = "openidea-server 启动失败"
+			m.banner = "openidea-server 启动失败：" + startErr.Error()
+			m.notifyError("backend", "openidea-server failed to start", startErr.Error())
+			m.invalidate()
+		})
+		return
+	}
 	root := m.startupRoot
 	var files []string
 	if root == "" {
