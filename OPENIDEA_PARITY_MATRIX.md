@@ -2301,9 +2301,9 @@ Local-only commands and the per-command argument lists are in
 | `run_tomcat_sync` | run | yes |  | missing |
 | `run_tomcat_update` | run | yes |  | missing |
 | `run_without_derived` | run | yes |  | missing |
-| `scaffold_catalog` | scaffold | yes |  | missing |
-| `scaffold_create` | scaffold | yes |  | missing |
-| `scaffold_options` | scaffold | yes |  | missing |
+| `scaffold_catalog` | scaffold | yes | yes | missing |
+| `scaffold_create` | scaffold | yes | yes | missing |
+| `scaffold_options` | scaffold | yes | yes | missing |
 | `scaffold_requirements` | scaffold | yes |  | missing |
 | `sdk_detect` | sdk | yes |  | missing |
 | `sdk_locate_tools` | sdk | yes |  | missing |
@@ -2488,7 +2488,7 @@ Local-only commands and the per-command argument lists are in
 | `wsl_distros` | wsl | no |  | missing |
 | `wsl_resolve` | wsl | no |  | missing |
 
-476 commands are served over stdio and 91 are called by GoIDEA today. A command
+476 commands are served over stdio and 94 are called by GoIDEA today. A command
 that is registered only in the desktop shell needs an `ops` module before stdio
 can serve it; a GoIDEA check counts only when the UI path works end to end.
 

@@ -69,7 +69,7 @@ release can be called today.
 | Refactoring | `refactor` | 5 | 0 | 0 |
 | Remote development | `remote_dev` | 0 | 11 | 0 |
 | Run configurations | `run` | 28 | 0 | 3 |
-| scaffold | `scaffold` | 4 | 0 | 0 |
+| scaffold | `scaffold` | 4 | 0 | 3 |
 | SDKs | `sdk` | 13 | 0 | 0 |
 | Search | `search` | 4 | 0 | 1 |
 | Spelling | `spell` | 2 | 0 | 0 |
@@ -88,7 +88,7 @@ release can be called today.
 ## Served by `openidea-server --stdio`
 
 476 commands. `GoIDEA` marks the ones a non-test Go source invokes today
-(91 of 476).
+(94 of 476).
 
 | Command | Domain | Arguments | GoIDEA |
 | --- | --- | --- | --- |
@@ -436,9 +436,9 @@ release can be called today.
 | `run_tomcat_sync` | Run configurations | `classPaths`, `config`, `module`, `resourcesOnly` | — |
 | `run_tomcat_update` | Run configurations | `config`, `mode` | — |
 | `run_without_derived` | Run configurations | `configs` | — |
-| `scaffold_catalog` | scaffold | — | — |
-| `scaffold_create` | scaffold | `onEvent`, `req`, `request` | — |
-| `scaffold_options` | scaffold | `generator`, `request`, `values` | — |
+| `scaffold_catalog` | scaffold | — | yes |
+| `scaffold_create` | scaffold | `onEvent`, `req`, `request` | yes |
+| `scaffold_options` | scaffold | `generator`, `request`, `values` | yes |
 | `scaffold_requirements` | scaffold | `generator`, `values` | — |
 | `sdk_detect` | SDKs | `kind` | — |
 | `sdk_locate_tools` | SDKs | `names`, `near` | — |
@@ -782,7 +782,7 @@ GoIDEA needs to do for each:
 
 ## What this means for GoIDEA
 
-476 remote commands are available today; GoIDEA uses 91. The parity work is
+476 remote commands are available today; GoIDEA uses 94. The parity work is
 first to cover the remote surface OpenIDEA's own frontend uses, then to move
 `shared-op`/`host`/`crate` commands onto stdio through the OpenIDEA fork
 (a submodule bump and a server release), and to implement `desktop` commands
