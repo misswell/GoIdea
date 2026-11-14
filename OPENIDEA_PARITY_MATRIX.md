@@ -2352,7 +2352,7 @@ Local-only commands and the per-command argument lists are in
 | `syntax_support` | syntax | yes |  | missing |
 | `system_font_families` | fonts | no |  | missing |
 | `system_probe_hotkeys` | hotkeys | no |  | missing |
-| `term_available_shells` | term | yes |  | missing |
+| `term_available_shells` | term | yes | yes | missing |
 | `term_default_shell` | term | yes | yes | missing |
 | `term_is_busy` | term | yes |  | missing |
 | `term_kill` | term | yes | yes | missing |
@@ -2488,7 +2488,7 @@ Local-only commands and the per-command argument lists are in
 | `wsl_distros` | wsl | no |  | missing |
 | `wsl_resolve` | wsl | no |  | missing |
 
-476 commands are served over stdio and 103 are called by GoIDEA today. A command
+476 commands are served over stdio and 104 are called by GoIDEA today. A command
 that is registered only in the desktop shell needs an `ops` module before stdio
 can serve it; a GoIDEA check counts only when the UI path works end to end.
 

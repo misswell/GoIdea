@@ -75,7 +75,7 @@ release can be called today.
 | Spelling | `spell` | 2 | 0 | 0 |
 | SSH | `ssh` | 0 | 10 | 0 |
 | Syntax trees | `syntax` | 9 | 0 | 0 |
-| Terminal | `term` | 8 | 0 | 4 |
+| Terminal | `term` | 8 | 0 | 5 |
 | Toolchains | `tools` | 8 | 0 | 3 |
 | Version control | `vcs` | 83 | 0 | 18 |
 | Web preview | `web` | 1 | 2 | 0 |
@@ -88,7 +88,7 @@ release can be called today.
 ## Served by `openidea-server --stdio`
 
 476 commands. `GoIDEA` marks the ones a non-test Go source invokes today
-(103 of 476).
+(104 of 476).
 
 | Command | Domain | Arguments | GoIDEA |
 | --- | --- | --- | --- |
@@ -470,7 +470,7 @@ release can be called today.
 | `syntax_node_at` | Syntax trees | `doc`, `range`, `request` | — |
 | `syntax_structural_ranges` | Syntax trees | `doc`, `pos`, `request` | — |
 | `syntax_support` | Syntax trees | `language` | — |
-| `term_available_shells` | Terminal | — | — |
+| `term_available_shells` | Terminal | — | yes |
 | `term_default_shell` | Terminal | — | yes |
 | `term_is_busy` | Terminal | `id` | — |
 | `term_kill` | Terminal | `id` | yes |
@@ -782,7 +782,7 @@ GoIDEA needs to do for each:
 
 ## What this means for GoIDEA
 
-476 remote commands are available today; GoIDEA uses 103. The parity work is
+476 remote commands are available today; GoIDEA uses 104. The parity work is
 first to cover the remote surface OpenIDEA's own frontend uses, then to move
 `shared-op`/`host`/`crate` commands onto stdio through the OpenIDEA fork
 (a submodule bump and a server release), and to implement `desktop` commands

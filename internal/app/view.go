@@ -569,6 +569,7 @@ func (m *Model) termPanel(c *ui.Context, p *ui.Theme) {
 			}
 			ui.Spacer(c)
 			ui.Button(c, "新建").OnClick(func() { m.OpenTermTab() })
+			ui.Button(c, "⌄").OnClick(func() { m.OpenTermShellPicker() })
 			ui.Button(c, "拆分").OnClick(func() { m.SplitTermRight() })
 			ui.Button(c, "拆分↓").OnClick(func() { m.SplitTermDown() })
 			if t.split != "" {

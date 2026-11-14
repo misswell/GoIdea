@@ -91,6 +91,7 @@ func builtinCommands() []appCommand {
 		{"navigate.typeDeclaration", "转到类型声明", "导航", "Cmd+Shift+B", "type declaration class type goto", func(m *Model) { m.GoToTypeDeclaration() }},
 		{"view.terminal", "显示终端", "视图", "Alt+F12", "terminal shell", func(m *Model) { m.ShowTerm() }},
 		{"term.new", "新建终端标签", "终端", "Cmd+T", "terminal new tab shell", func(m *Model) { m.OpenTermTab() }},
+		{"term.newWithShell", "新建终端标签（选择 Shell）…", "终端", "", "terminal new tab choose shell list", func(m *Model) { m.OpenTermShellPicker() }},
 		{"term.splitRight", "向右拆分终端", "终端", "", "terminal split right pane group", func(m *Model) { m.SplitTermRight() }},
 		{"term.splitDown", "向下拆分终端", "终端", "", "terminal split down pane group", func(m *Model) { m.SplitTermDown() }},
 		{"term.unsplit", "合并终端拆分", "终端", "", "terminal unsplit merge pane group", func(m *Model) { m.UnsplitTerm() }},

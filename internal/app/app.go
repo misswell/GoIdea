@@ -404,14 +404,16 @@ type Model struct {
 	debug      DebugPane
 	build      BuildPane
 	term       TermPane
-	vcs        VCSPane
-	branch     BranchPane
-	log        LogPane
-	problems   ProblemsPane
-	search     SearchPane
-	usages     UsagesPane
-	todo       TodoPane
-	structure  StructurePane
+	// termShell is the New Terminal Tab shell list.
+	termShell *termShellPicker
+	vcs       VCSPane
+	branch    BranchPane
+	log       LogPane
+	problems  ProblemsPane
+	search    SearchPane
+	usages    UsagesPane
+	todo      TodoPane
+	structure StructurePane
 
 	// tool is the bottom tool window the shortcuts last opened, "" once it
 	// closed; toolStash is what Hide All hid, restored by the next press.
@@ -1906,6 +1908,19 @@ func (m *Model) shortcuts(c *ui.Context) {
 		}
 		if c.Shortcut(ui.Modifiers(0), ui.KeyEnter) {
 			m.ChooseDBHistory(m.dbHist.sel)
+		}
+		return
+	}
+	// The shell list steps with the arrow keys too.
+	if m.termShell != nil && m.termShell.open {
+		if c.Shortcut(ui.Modifiers(0), ui.KeyDown) {
+			m.StepTermShell(1)
+		}
+		if c.Shortcut(ui.Modifiers(0), ui.KeyUp) {
+			m.StepTermShell(-1)
+		}
+		if c.Shortcut(ui.Modifiers(0), ui.KeyEnter) {
+			m.ChooseTermShell(m.termShell.sel)
 		}
 		return
 	}

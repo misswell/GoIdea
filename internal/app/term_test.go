@@ -94,3 +94,29 @@ func TestTermChunksLandInTheirOwnTab(t *testing.T) {
 		t.Fatalf("exit did not land: %+v", s)
 	}
 }
+
+func TestTermShellLabelsDisambiguate(t *testing.T) {
+	shells := []string{"/bin/zsh", "/usr/local/bin/zsh", "/bin/bash"}
+	if got := termShellLabel(shells, 0); got != "zsh (/bin/zsh)" {
+		t.Fatalf("duplicate label = %q", got)
+	}
+	if got := termShellLabel(shells, 2); got != "bash" {
+		t.Fatalf("unique label = %q", got)
+	}
+}
+
+func TestTermShellSelectionWraps(t *testing.T) {
+	m := &Model{termShell: &termShellPicker{open: true, shells: []string{"a", "b"}}}
+	m.StepTermShell(1)
+	if m.termShell.sel != 1 {
+		t.Fatalf("down = %d", m.termShell.sel)
+	}
+	m.StepTermShell(1)
+	if m.termShell.sel != 0 {
+		t.Fatalf("wrap = %d", m.termShell.sel)
+	}
+	m.StepTermShell(-1)
+	if m.termShell.sel != 1 {
+		t.Fatalf("up wrap = %d", m.termShell.sel)
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -177,7 +178,7 @@ func (p *TermPane) total() int {
 // maxTermLines bounds the scrollback each tab keeps.
 const maxTermLines = 4000
 
-func (m *Model) resetTerm() { m.term = TermPane{} }
+func (m *Model) resetTerm() { m.term = TermPane{}; m.termShell = nil }
 
 // ShowTerm toggles the terminal; opening it starts a shell on first use.
 func (m *Model) ShowTerm() { m.dockActivate("term") }
@@ -283,20 +284,29 @@ func (m *Model) UnsplitTerm() {
 // spawnTermSession adds a tab to group g and starts its login shell in cwd,
 // which belongs to the project at root.
 func (m *Model) spawnTermSession(root, cwd string, g int) {
+	m.spawnTermSessionShell(root, cwd, g, "")
+}
+
+// spawnTermSessionShell starts a login shell (or shell) in cwd as a new tab.
+func (m *Model) spawnTermSessionShell(root, cwd string, g int, shell string) {
 	ch := m.nextChannel()
 	s := m.term.add(g)
 	s.starting = true
 	s.channel = ch
 	m.term.err = ""
 	m.invalidate()
+	opts := map[string]any{
+		"cwd": cwd, "args": []string{}, "env": map[string]string{},
+		"cols": 100, "rows": 30, "shellIntegration": true,
+	}
+	if shell != "" {
+		opts["shell"] = shell
+	}
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 		defer cancel()
 		raw, err := m.mgr.Invoke(ctx, Window, "term_spawn", map[string]any{
-			"options": map[string]any{
-				"cwd": cwd, "args": []string{}, "env": map[string]string{},
-				"cols": 100, "rows": 30, "shellIntegration": true,
-			},
+			"options":  opts,
 			"onOutput": map[string]any{"$channel": ch},
 		})
 		var info openidea.TerminalInfo
@@ -598,6 +608,20 @@ func (m *Model) SmokeTerm(ctx context.Context) (map[string]any, error) {
 		}
 	}
 	ch := m.nextChannel()
+	// The shells the New Terminal Tab picker offers; the smoke starts one of
+	// them through the same spawn options the picker uses.
+	var chosen string
+	var shells []string
+	if rawShells, err := m.mgr.Invoke(ctx, Window, "term_available_shells", nil); err != nil {
+		out["shellsError"] = err.Error()
+	} else if json.Unmarshal(rawShells, &shells) != nil {
+		out["shellsError"] = "shell 列表格式不符"
+	}
+	out["shells"] = len(shells)
+	if len(shells) > 0 {
+		chosen = shells[0]
+		out["chosenShell"] = filepath.Base(chosen)
+	}
 	m.post(func() {
 		m.term = TermPane{visible: true}
 		// The smoke supplies its own shell: register it before the window
@@ -608,11 +632,15 @@ func (m *Model) SmokeTerm(ctx context.Context) (map[string]any, error) {
 		m.DockShow("term")
 		m.invalidate()
 	})
+	spawnOpts := map[string]any{
+		"cwd": root, "args": []string{}, "env": map[string]string{},
+		"cols": 100, "rows": 30, "shellIntegration": false,
+	}
+	if chosen != "" {
+		spawnOpts["shell"] = chosen
+	}
 	raw, err := m.mgr.Invoke(ctx, Window, "term_spawn", map[string]any{
-		"options": map[string]any{
-			"cwd": root, "args": []string{}, "env": map[string]string{},
-			"cols": 100, "rows": 30, "shellIntegration": false,
-		},
+		"options":  spawnOpts,
 		"onOutput": map[string]any{"$channel": ch},
 	})
 	if err != nil {
@@ -809,4 +837,148 @@ func (m *Model) waitTermSplit(ctx context.Context, ch uint32) (int, bool) {
 // text is the scrollback, one line per entry.
 func (p *termSession) text() string {
 	return strings.Join(p.lines, "\n")
+}
+
+// termShellPicker is the open shell list of New Terminal Tab.
+type termShellPicker struct {
+	open    bool
+	loading bool
+	err     string
+	shells  []string
+	sel     int
+	gen     uint64
+}
+
+// OpenTermShellPicker lists the shells a new terminal tab can run.
+func (m *Model) OpenTermShellPicker() {
+	if m.termShell == nil {
+		m.termShell = &termShellPicker{open: true}
+		m.loadTermShells()
+		return
+	}
+	m.termShell.open = true
+	if len(m.termShell.shells) == 0 && !m.termShell.loading {
+		m.loadTermShells()
+	}
+	m.invalidate()
+}
+
+// loadTermShells asks the backend for the installed login shells.
+func (m *Model) loadTermShells() {
+	p := m.termShell
+	if p == nil || p.loading {
+		return
+	}
+	p.loading = true
+	p.err = ""
+	p.gen++
+	gen := p.gen
+	m.invalidate()
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, 20*time.Second)
+		defer cancel()
+		raw, err := m.mgr.Invoke(ctx, Window, "term_available_shells", nil)
+		var shells []string
+		if err == nil {
+			err = json.Unmarshal(raw, &shells)
+		}
+		m.post(func() {
+			if m.termShell != p || p.gen != gen {
+				return
+			}
+			p.loading = false
+			if err != nil {
+				p.err = "读取 shell 列表失败：" + err.Error()
+			} else {
+				p.shells = shells
+			}
+			m.invalidate()
+		})
+	}()
+}
+
+// StepTermShell moves the shell selection, wrapping around.
+func (m *Model) StepTermShell(delta int) {
+	p := m.termShell
+	if p == nil || len(p.shells) == 0 {
+		return
+	}
+	p.sel = (p.sel + delta + len(p.shells)) % len(p.shells)
+	m.invalidate()
+}
+
+// ChooseTermShell opens a tab running the selected shell.
+func (m *Model) ChooseTermShell(i int) {
+	p := m.termShell
+	if p == nil || i < 0 || i >= len(p.shells) {
+		return
+	}
+	shell := p.shells[i]
+	m.closeTermShell()
+	root := m.Root()
+	m.spawnTermSessionShell(root, root, m.term.active, shell)
+}
+
+// closeTermShell drops the shell list.
+func (m *Model) closeTermShell() { m.termShell = nil; m.invalidate() }
+
+// termShellLabel names a shell in the list; duplicate names carry their path.
+func termShellLabel(shells []string, i int) string {
+	base := filepath.Base(shells[i])
+	dup := false
+	for j, s := range shells {
+		if j != i && filepath.Base(s) == base {
+			dup = true
+			break
+		}
+	}
+	if dup {
+		return base + " (" + shells[i] + ")"
+	}
+	return base
+}
+
+// termShellDialog draws the shell list.
+func (m *Model) termShellDialog(c *ui.Context, p *ui.Theme) {
+	pk := m.termShell
+	if pk == nil {
+		return
+	}
+	open := pk.open
+	jump := -1
+	ui.Modal(c, &open, func() {
+		ui.Column(c).Width(480).Gap(8).Children(func() {
+			ui.Text(c, "新建终端标签页").FontSize(13).Bold().TextColor(p.Text).SingleLine()
+			switch {
+			case pk.loading:
+				ui.Text(c, "读取 shell…").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+			case pk.err != "":
+				ui.Text(c, pk.err).FontSize(11).TextColor(p.Danger).SingleLine().Ellipsis("…")
+			case len(pk.shells) == 0:
+				ui.Text(c, "没有找到可用的 shell。").FontSize(11).TextColor(p.TextMuted).SingleLine()
+			}
+			for i := range pk.shells {
+				i := i
+				row := ui.Row(c.Key(fmt.Sprintf("termshell:%d", i))).Height(24).Padding(0, 8).
+					AlignItems(ui.Center)
+				if i == pk.sel || row.Hovered() {
+					row.Background(p.SurfaceHover)
+				}
+				row.Children(func() {
+					ui.Text(c, termShellLabel(pk.shells, i)).FontSize(12).TextColor(p.Text).
+						SingleLine().Ellipsis("…")
+				})
+				if row.Clicked() {
+					jump = i
+					pk.sel = i
+				}
+			}
+		})
+	})
+	if !open && m.termShell != nil {
+		m.closeTermShell()
+	}
+	if jump >= 0 {
+		m.ChooseTermShell(jump)
+	}
 }

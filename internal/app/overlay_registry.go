@@ -34,6 +34,9 @@ func init() {
 	reg("dbPlan", overlayLayerDialog, 57, true,
 		func(m *Model) bool { return m.dbPlan != nil && m.dbPlan.open },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.dbPlanDialog(c, p) })
+	reg("termShell", overlayLayerPopup, 58, true,
+		func(m *Model) bool { return m.termShell != nil && m.termShell.open },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.termShellDialog(c, p) })
 	reg("intentions", overlayLayerPopup, 30, false,
 		func(m *Model) bool { return m.intents != nil },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.intentionsDialog(c, p) })
