@@ -182,7 +182,7 @@ func (m *Model) SmokeShots(ctx context.Context, dir string) (map[string]any, err
 	// Welcome: empty, then with recents, Customize and Plugins.
 	m.post(func() { m.showWelcome() })
 	wait(func() bool { return m.showingWelcome }, 30*time.Second)
-	var recents []string
+	var recents []RecentProject
 	m.post(func() { recents = m.recents; m.recents = nil })
 	shot("welcome-empty")
 	m.post(func() { m.recents = recents })

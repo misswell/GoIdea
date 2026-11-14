@@ -55,7 +55,7 @@ func TestWelcomeLandingRenders(t *testing.T) {
 func TestWelcomeRecentProjectsRenders(t *testing.T) {
 	dir := t.TempDir()
 	m := &Model{
-		recents:         []string{dir},
+		recents:         []RecentProject{{Path: dir}},
 		welcomeBranches: map[string]string{dir: "main"},
 	}
 	tt := welcomeTester(t, m, true)

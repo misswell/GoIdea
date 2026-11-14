@@ -18,7 +18,7 @@ func TestRememberProjectPutsTheFolderFirst(t *testing.T) {
 	m.rememberProject(a)
 	m.rememberProject(b)
 	m.rememberProject(a)
-	if len(m.recents) != 2 || m.recents[0] != a || m.recents[1] != b {
+	if len(m.recents) != 2 || m.recents[0].Path != a || m.recents[1].Path != b {
 		t.Fatalf("recents = %v, want %s then %s", m.recents, a, b)
 	}
 	m.rememberProject(filepath.Join(base, "gone"))
@@ -44,16 +44,16 @@ func TestRecentsKeepTheCap(t *testing.T) {
 	if len(m.recents) != maxRecentProjects {
 		t.Fatalf("recents = %d, want %d", len(m.recents), maxRecentProjects)
 	}
-	if m.recents[0] != dirs[len(dirs)-1] {
-		t.Fatalf("recents[0] = %s, want %s", m.recents[0], dirs[len(dirs)-1])
+	if m.recents[0].Path != dirs[len(dirs)-1] {
+		t.Fatalf("recents[0] = %s, want %s", m.recents[0].Path, dirs[len(dirs)-1])
 	}
 }
 
 func TestFilteredRecentsSearchesThePath(t *testing.T) {
-	m := &Model{recents: []string{"/work/shop", "/work/notes", "/tmp/shop"}}
+	m := &Model{recents: []RecentProject{{Path: "/work/shop"}, {Path: "/work/notes"}, {Path: "/tmp/shop"}}}
 	m.welcomeQuery = "SHOP"
 	got := m.filteredRecents()
-	if len(got) != 2 || got[0] != "/work/shop" || got[1] != "/tmp/shop" {
+	if len(got) != 2 || got[0].project.Path != "/work/shop" || got[1].project.Path != "/tmp/shop" {
 		t.Fatalf("filtered = %v, want the two shop folders", got)
 	}
 	m.welcomeQuery = "  "

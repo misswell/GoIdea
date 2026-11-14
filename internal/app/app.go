@@ -429,12 +429,22 @@ type Model struct {
 	// has a tab without touching the user's session.
 	startupFiles []string
 
-	// recents are the folders the Welcome screen lists, most recent first,
-	// welcomeQuery filters them, and welcomePage is the rail page shown:
-	// "" for projects, or "customize" or "plugins".
-	recents      []string
+	// recents are the Welcome screen's projects, most recent first, and
+	// recentGroups the headings it lists them under; welcomeQuery filters
+	// them, welcomeSel is the row Enter opens, and welcomePage is the rail
+	// page shown: "" for projects, "customize" or "plugins".
+	recents      []RecentProject
+	recentGroups []RecentGroup
 	welcomeQuery string
+	welcomeSel   int
 	welcomePage  string
+	// welcomeGroupPath is the project the New Group prompt was opened from.
+	welcomeGroupPath string
+
+	// welcomeGroupDlg is the New Group / Rename Group prompt while it is up:
+	// the name being typed, the group being renamed ("" for a new one) and
+	// the project the new group's menu was opened for.
+	welcomeGroupDlg welcomeGroupDialog
 
 	// layouts are each project's saved workbench layout, by folder, as
 	// OpenIDEA keeps one per project root; sessionSeq orders the session
@@ -472,7 +482,8 @@ func New(cfg Config) *Model {
 	m.prefs = LoadPreferences(cfg.SettingsPath)
 	m.applyPreferences()
 	session := LoadSession(cfg.SessionPath)
-	m.recents = normalizeRecents(session.RecentProjects)
+	m.recents = sessionRecents(session)
+	m.recentGroups = session.RecentGroups
 	m.layouts = map[string]Layout{}
 	for root, l := range session.Layouts {
 		m.layouts[layoutKey(root)] = normalizeLayout(l)
@@ -1422,7 +1433,7 @@ func (m *Model) SmokeRoundTrip(ctx context.Context) (edited, undone bool) {
 // writes it never reads state the user is still changing.
 func (m *Model) sessionSnapshot() (Session, bool) {
 	root := m.Root()
-	if root == "" && len(m.tabs) == 0 {
+	if root == "" && len(m.tabs) == 0 && len(m.recents) == 0 && len(m.recentGroups) == 0 {
 		// Nothing to remember; keep the previous session rather than
 		// writing an empty one after a failed start.
 		return Session{}, false
@@ -1455,7 +1466,12 @@ func (m *Model) sessionSnapshot() (Session, bool) {
 	if root != "" && !m.layoutHold {
 		layouts[layoutKey(root)] = m.currentLayout()
 	}
-	keep := append([]string{root}, m.recents...)
+	keepPaths := make([]string, 0, len(m.recents)+1)
+	keepPaths = append(keepPaths, root)
+	for _, p := range m.recents {
+		keepPaths = append(keepPaths, p.Path)
+	}
+	keep := keepPaths
 	return Session{Root: root, Files: normalizeFiles(files), Focus: focus,
 		Pinned:         pinned,
 		SplitFiles:     normalizeFiles(splitFiles),
@@ -1466,7 +1482,9 @@ func (m *Model) sessionSnapshot() (Session, bool) {
 		PathBookmarks:  append([]PathBookmark(nil), m.pathBookmarks...),
 		BookmarkLists:  append([]BookmarkList(nil), m.bookmarkLists...),
 		DefaultList:    m.defaultList,
-		RecentProjects: append([]string(nil), m.recents...),
+		RecentProjects: recentPaths(m.recents),
+		Recents:        append([]RecentProject(nil), m.recents...),
+		RecentGroups:   append([]RecentGroup(nil), m.recentGroups...),
 		Layouts:        pruneLayouts(layouts, keep),
 		RunHistory:     pruneRunHistory(cloneRunHistory(m.runHistory), keep)}, true
 }

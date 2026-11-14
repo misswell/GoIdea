@@ -36,8 +36,14 @@ type Session struct {
 	BookmarkLists []BookmarkList `json:"bookmarkLists,omitempty"`
 	DefaultList   string         `json:"defaultList,omitempty"`
 	// RecentProjects are the folders the Welcome screen lists, most recent
-	// first.
+	// first, kept for sessions written before Recents carried their model.
 	RecentProjects []string `json:"recentProjects,omitempty"`
+	// Recents are the Welcome screen's projects with what the row shows:
+	// name, when it was opened, its branch and remote, and its group.
+	Recents []RecentProject `json:"recents,omitempty"`
+	// RecentGroups are the user's Welcome groups, in their order, with the
+	// collapsed ones remembered.
+	RecentGroups []RecentGroup `json:"recentGroups,omitempty"`
 	// Layouts are each project's workbench layout, by project folder, so a
 	// project comes back the way it was left, as OpenIDEA stores a tool
 	// window layout per project root.
@@ -45,6 +51,47 @@ type Session struct {
 	// RunHistory is each project's Run Anything history, by project folder,
 	// most recent first, as OpenIDEA keeps it per project root.
 	RunHistory map[string][]string `json:"runHistory,omitempty"`
+}
+
+// RecentProject is one project of the Welcome screen.
+type RecentProject struct {
+	Path     string `json:"path"`
+	Name     string `json:"name,omitempty"`
+	OpenedAt int64  `json:"openedAt,omitempty"`
+	Branch   string `json:"branch,omitempty"`
+	Remote   string `json:"remote,omitempty"`
+	Group    string `json:"group,omitempty"`
+}
+
+// RecentGroup is one Welcome group: the heading the recent list shows and
+// whether it is collapsed.
+type RecentGroup struct {
+	Name      string `json:"name"`
+	Collapsed bool   `json:"collapsed,omitempty"`
+}
+
+// normalizeRecentProjects drops missing, duplicate and unnamed projects,
+// caps the list, and fills the name when a session left it out.
+func normalizeRecentProjects(list []RecentProject) []RecentProject {
+	seen := map[string]bool{}
+	out := make([]RecentProject, 0, len(list))
+	for _, p := range list {
+		if p.Path == "" || seen[p.Path] {
+			continue
+		}
+		if st, err := os.Stat(p.Path); err != nil || !st.IsDir() {
+			continue
+		}
+		seen[p.Path] = true
+		if p.Name == "" {
+			p.Name = filepath.Base(p.Path)
+		}
+		out = append(out, p)
+		if len(out) == maxRecentProjects {
+			break
+		}
+	}
+	return out
 }
 
 // Layout is how one project had its workbench arranged, as OpenIDEA keeps a

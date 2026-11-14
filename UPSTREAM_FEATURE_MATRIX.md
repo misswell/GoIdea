@@ -20,7 +20,7 @@ reimplementing it. A row is `INTEGRATED` only when the GoIDEA product
 | Feature | Status | Where in GoIDEA |
 | --- | --- | --- |
 | Native window, menus, dialogs, theme | INTEGRATED | `mygo` app + `internal/app/menu.go` as the native menu bar; OpenIDEA's palette in both appearances (`internal/app/theme.go`) |
-| Welcome screen with recent projects | INTEGRATED | `internal/app/welcome.go` mirrors WelcomeView.tsx: brand rail, Projects/Customize/Plugins, search and actions, recent projects with branch and menus, clone and remove dialogs; offscreen render in `welcome_render_test.go` |
+| Welcome screen with recent projects | PARTIAL | `internal/app/welcome.go` mirrors WelcomeView.tsx: brand rail, Projects/Customize/Plugins, actions, clone and remove dialogs; recent projects are `RecentProject` records (name, opened time, branch, remote, group) with fuzzy name/path matching, highlighted letters, keyboard selection and user groups that persist through the one session writer (`welcome_recents.go`, `welcome_recents_test.go`). Still missing: Open in New Window (single-instance app), the group model's upstream drag/drop and ordering polish, and a real New Project that creates a folder instead of choosing one |
 | Plugin manager page (Welcome › Plugins) | INTEGRATED | `internal/app/plugins.go` over `internal/plugin`: Available/Installed lists, details, enable state under `plugins.<name>`, Git install, reload and remove; tests in `plugins_test.go` |
 | Editor buffer, selections, undo/redo | INTEGRATED | `ui/editor` state per tab; `internal/docbridge` syncs it |
 | Syntax highlighting | INTEGRATED | mygo editor's language for the file, set per document in `internal/docbridge` (Java, Kotlin, XML, YAML…) |

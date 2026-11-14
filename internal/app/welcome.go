@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 	"unicode"
 
 	"github.com/egoist/mygo"
@@ -194,10 +195,78 @@ func (m *Model) welcomeProjects(c *ui.Context, oi oiColors) {
 					Padding(8, 10)
 				return
 			}
-			for _, dir := range list {
-				m.welcomeRecentRow(c, oi, dir)
+			if m.welcomeSel >= len(list) {
+				m.welcomeSel = len(list) - 1
+			}
+			// Ungrouped projects first, then each group with its heading.
+			index := 0
+			for _, mt := range list {
+				if mt.project.Group != "" {
+					continue
+				}
+				m.welcomeRecentRow(c, oi, mt, index == m.welcomeSel)
+				index++
+			}
+			for _, g := range m.recentGroups {
+				shown := make([]recentMatch, 0, 4)
+				for _, mt := range list {
+					if mt.project.Group == g.Name {
+						shown = append(shown, mt)
+					}
+				}
+				if len(shown) == 0 {
+					continue
+				}
+				m.welcomeGroupRow(c, oi, g, len(shown))
+				if g.Collapsed {
+					continue
+				}
+				for _, mt := range shown {
+					m.welcomeRecentRow(c, oi, mt, index == m.welcomeSel)
+					index++
+				}
+			}
+			// Projects in a group the user deleted again land ungrouped.
+			for _, mt := range list {
+				if mt.project.Group == "" || m.groupExists(mt.project.Group) {
+					continue
+				}
+				m.welcomeRecentRow(c, oi, mt, index == m.welcomeSel)
+				index++
 			}
 		})
+	})
+}
+
+// groupExists reports a stored group by name.
+func (m *Model) groupExists(name string) bool {
+	_, _, ok := m.recentGroupNamed(name)
+	return ok
+}
+
+// welcomeGroupRow is one group heading: the caret, the name, its project
+// count, and the menu that renames or deletes it.
+func (m *Model) welcomeGroupRow(c *ui.Context, oi oiColors, g RecentGroup, count int) {
+	r := ui.Row(c.Key("welcomeGroup:"+g.Name)).Height(28).Padding(8, 10).Gap(6).
+		AlignItems(ui.Center).Radius(6).Cursor(ui.CursorPointer)
+	if r.Hovered() {
+		r.Background(oi.hoverTint)
+	}
+	r.Children(func() {
+		ui.Icon(c, iconChevronDown).Size(10, 10).TextColor(oi.textMuted)
+		ui.Text(c, g.Name).FontSize(11.5).Bold().TextColor(oi.textMuted).SingleLine()
+		ui.Text(c, "("+fmt.Sprintf("%d", count)+")").FontSize(11).TextColor(oi.textFaint).SingleLine()
+	})
+	if r.Clicked() {
+		m.ToggleRecentGroup(g.Name)
+	}
+	r.ContextMenu(func(menu *ui.Menu) {
+		if menu.Item("Rename Group…").Chosen() {
+			m.openRecentGroupDialog(g.Name)
+		}
+		if menu.Item("Delete Group").Chosen() {
+			m.DeleteRecentGroup(g.Name)
+		}
 	})
 }
 
@@ -212,13 +281,15 @@ func (m *Model) welcomeHeader(c *ui.Context, oi oiColors) {
 						MarginEnd(4)
 					input := ui.TextInputBase(c, &m.welcomeQuery).Grow(1).AutoFocus()
 					input.Placeholder("Search projects")
+					input.OnShortcut(0, ui.KeyDown, func() { m.WelcomeSelect(1) })
+					input.OnShortcut(0, ui.KeyUp, func() { m.WelcomeSelect(-1) })
+					input.OnShortcut(0, ui.KeyEscape, func() { m.WelcomeClearQuery() })
 					if input.Changed() {
+						m.welcomeSel = 0
 						m.invalidate()
 					}
 					if input.Submitted() {
-						if list := m.filteredRecents(); len(list) > 0 {
-							m.confirmSwitch(list[0])
-						}
+						m.WelcomeOpenSelected()
 					}
 				})
 			ui.Row(c).Gap(8).Children(func() {
@@ -313,12 +384,19 @@ func (m *Model) welcomeLandingAction(c *ui.Context, oi oiColors, label string, i
 
 // welcomeRecentRow is one recent project: its initials over the name, the
 // folder and the branch, and the menu that shows on hover.
-func (m *Model) welcomeRecentRow(c *ui.Context, oi oiColors, dir string) {
-	name := filepath.Base(dir)
+func (m *Model) welcomeRecentRow(c *ui.Context, oi oiColors, mt recentMatch, selected bool) {
+	dir := mt.project.Path
+	name := mt.project.Name
+	if name == "" {
+		name = filepath.Base(dir)
+	}
 	r := ui.Row(c.Key("welcomeRecent:"+dir)).Padding(8, 10).Gap(12).
 		AlignItems(ui.Start).Radius(8)
 	hovered := r.Hovered()
-	if hovered {
+	switch {
+	case selected:
+		r.Background(oi.hoverTint)
+	case hovered:
 		r.Background(oi.hoverTint)
 	}
 	moreClicked := false
@@ -331,7 +409,7 @@ func (m *Model) welcomeRecentRow(c *ui.Context, oi oiColors, dir string) {
 				TextColor(ui.Hex("#ffffff")).LetterSpacing(0.02).SingleLine()
 		})
 		ui.Column(c).Grow(1).MinWidth(0).Children(func() {
-			ui.Text(c, name).FontSize(13).TextColor(oi.textStrong).SingleLine().Ellipsis("…")
+			m.welcomeName(c, oi, name, mt.nameIdx)
 			ui.Text(c, shortenHome(dir)).FontSize(13).TextColor(oi.textMuted).
 				SingleLine().Ellipsis("…")
 			if branch := m.branchOf(dir); branch != "" {
@@ -362,12 +440,68 @@ func (m *Model) welcomeRecentRow(c *ui.Context, oi oiColors, dir string) {
 	}
 }
 
+// welcomeName draws the project name, with the search's matched letters in
+// the accent colour; the runs between them keep the normal tone.
+func (m *Model) welcomeName(c *ui.Context, oi oiColors, name string, indices []int) {
+	if len(indices) == 0 {
+		ui.Text(c, name).FontSize(13).TextColor(oi.textStrong).SingleLine().Ellipsis("…")
+		return
+	}
+	matched := map[int]bool{}
+	for _, i := range indices {
+		matched[i] = true
+	}
+	ui.Row(c).Gap(0).Children(func() {
+		start := 0
+		inRun := false
+		flush := func(end int, hit bool) {
+			if end <= start {
+				return
+			}
+			tone := oi.textStrong
+			if hit {
+				tone = oi.accent
+			}
+			ui.Text(c, name[start:end]).FontSize(13).TextColor(tone).SingleLine()
+		}
+		for i := 0; i < len(name); i++ {
+			hit := matched[i]
+			if i == 0 {
+				inRun = hit
+				start = 0
+				continue
+			}
+			if hit != inRun {
+				flush(i, inRun)
+				start = i
+				inRun = hit
+			}
+		}
+		flush(len(name), inRun)
+	})
+}
+
 // welcomeRecentMenu is the row's menu, from the hover button and the
 // context menu alike.
 func (m *Model) welcomeRecentMenu(menu *ui.Menu, dir string) {
 	if menu.Item("Open").Chosen() {
 		m.confirmSwitch(dir)
 	}
+	menu.Submenu("Move to Group", func(sub *ui.Menu) {
+		if sub.Item("No Group").Chosen() {
+			m.MoveRecentToGroup(dir, "")
+		}
+		for _, g := range m.recentGroups {
+			g := g
+			if sub.Item(g.Name).Chosen() {
+				m.MoveRecentToGroup(dir, g.Name)
+			}
+		}
+		sub.Separator()
+		if sub.Item("New Group…").Chosen() {
+			m.openRecentGroupDialogForPath(dir)
+		}
+	})
 	if menu.Item(revealLabel()).Chosen() {
 		revealPath(dir)
 	}
@@ -416,6 +550,11 @@ func (m *Model) branchOf(dir string) string {
 	if b, ok := m.welcomeBranches[dir]; ok {
 		return b
 	}
+	for _, p := range m.recents {
+		if p.Path == dir && p.Branch != "" {
+			return p.Branch
+		}
+	}
 	if m.welcomeBranchLoading == nil {
 		m.welcomeBranchLoading = map[string]bool{}
 	}
@@ -434,6 +573,12 @@ func (m *Model) branchOf(dir string) string {
 			}
 			m.welcomeBranches[dir] = name
 			delete(m.welcomeBranchLoading, dir)
+			for i := range m.recents {
+				if m.recents[i].Path == dir && m.recents[i].Branch != name {
+					m.recents[i].Branch = name
+					m.saveRecents()
+				}
+			}
 			m.invalidate()
 		})
 	}()
@@ -773,57 +918,115 @@ func (m *Model) forgetProject(dir string) {
 	if dir == "" {
 		return
 	}
-	var list []string
+	kept := m.recents[:0]
 	for _, p := range m.recents {
-		if p != dir {
-			list = append(list, p)
+		if p.Path != dir {
+			kept = append(kept, p)
 		}
 	}
-	m.recents = list
+	m.recents = kept
 	delete(m.welcomeBranches, dir)
 	delete(m.welcomeBranchLoading, dir)
 	m.saveRecents()
 	m.invalidate()
 }
 
-func (m *Model) saveRecents() {
-	path := m.cfg.SessionPath
-	if path == "" {
-		return
-	}
-	s := LoadSession(path)
-	s.RecentProjects = m.recents
-	go func() { _ = s.Save(path) }()
-}
+// saveRecents writes the recent projects and their groups through the one
+// session writer, so a slow write never overwrites a newer snapshot and the
+// recents never clobber the layout saved beside them.
+func (m *Model) saveRecents() { m.saveSession() }
 
-// filteredRecents is the Welcome screen's list, filtered by its search field.
-func (m *Model) filteredRecents() []string {
-	q := strings.ToLower(strings.TrimSpace(m.welcomeQuery))
-	if q == "" {
-		return m.recents
-	}
-	var out []string
-	for _, dir := range m.recents {
-		if strings.Contains(strings.ToLower(dir), q) {
-			out = append(out, dir)
-		}
-	}
-	return out
-}
-
-// rememberProject puts dir first in the Welcome screen's recents.
+// rememberProject puts dir first in the Welcome screen's recents, keeping what
+// the row already knew about it.
 func (m *Model) rememberProject(dir string) {
 	if dir == "" {
 		return
 	}
 	dir = filepath.Clean(dir)
-	list := []string{dir}
+	entry := RecentProject{Path: dir, Name: filepath.Base(dir), OpenedAt: time.Now().UnixMilli()}
 	for _, p := range m.recents {
-		if p != dir {
+		if p.Path == dir {
+			entry.Branch, entry.Remote, entry.Group = p.Branch, p.Remote, p.Group
+			break
+		}
+	}
+	list := []RecentProject{entry}
+	for _, p := range m.recents {
+		if p.Path != dir {
 			list = append(list, p)
 		}
 	}
-	m.recents = normalizeRecents(list)
+	m.recents = normalizeRecentProjects(list)
+}
+
+// openRecentGroupDialog asks for a group name: a new group, or a new name for
+// rename.
+func (m *Model) openRecentGroupDialog(rename string) {
+	m.welcomeGroupDlg = welcomeGroupDialog{open: true, rename: rename, text: rename}
+	m.invalidate()
+}
+
+// openRecentGroupDialogForPath asks for a new group and puts path in it.
+func (m *Model) openRecentGroupDialogForPath(path string) {
+	m.openRecentGroupDialog("")
+	m.welcomeGroupDlg.rename = ""
+	m.welcomeGroupPath = path
+	m.invalidate()
+}
+
+// recentGroupDialog draws the prompt; Enter and Create commit it.
+func (m *Model) recentGroupDialog(c *ui.Context, p *ui.Theme) {
+	d := &m.welcomeGroupDlg
+	if !d.open {
+		return
+	}
+	open := d.open
+	title := "New Group"
+	if d.rename != "" {
+		title = "Rename Group"
+	}
+	ui.Modal(c, &open, func() {
+		ui.Column(c).Width(420).Gap(12).Children(func() {
+			ui.Text(c, title).FontSize(14).Bold().TextColor(p.Text).SingleLine()
+			in := ui.TextInput(c, &d.text).AutoFocus()
+			in.Placeholder("Group name")
+			if in.Submitted() {
+				m.commitRecentGroupDialog()
+			}
+			ui.Row(c).Justify(ui.End).Gap(8).Children(func() {
+				if ui.Button(c, "Cancel").Clicked() {
+					d.open = false
+					m.invalidate()
+				}
+				if ui.PrimaryButton(c, "OK").Clicked() {
+					m.commitRecentGroupDialog()
+				}
+			})
+		})
+	})
+	if !open {
+		d.open = false
+	}
+}
+
+// commitRecentGroupDialog creates or renames the group and closes the prompt.
+func (m *Model) commitRecentGroupDialog() {
+	d := &m.welcomeGroupDlg
+	name := strings.TrimSpace(d.text)
+	if name == "" {
+		return
+	}
+	if d.rename != "" {
+		m.RenameRecentGroup(d.rename, name)
+	} else {
+		m.CreateRecentGroup(name)
+		if m.welcomeGroupPath != "" {
+			m.MoveRecentToGroup(m.welcomeGroupPath, name)
+			m.welcomeGroupPath = ""
+		}
+	}
+	d.open = false
+	m.invalidate()
 }
 
 // projectInitials is the two letters of a project's avatar, as OpenIDEA's
