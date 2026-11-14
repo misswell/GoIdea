@@ -17,14 +17,10 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
+          # Fetch all history: the pin checks compare the source against the
+          # release commit, and a shallow submodule lacks that commit.
+          fetch-depth: 0
           submodules: recursive
-      # The pin checks compare the source against the release commit in the
-      # submodule's history; actions/checkout clones submodules shallow.
-      - name: Full OpenIDEA history for the pin checks
-        run: |
-          if [ "$(git -C third_party/openidea rev-parse --is-shallow-repository)" = "true" ]; then
-            git -C third_party/openidea fetch --unshallow
-          fi
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
@@ -41,12 +37,10 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
+          # Fetch all history: the pin checks compare the source against the
+          # release commit, and a shallow submodule lacks that commit.
+          fetch-depth: 0
           submodules: recursive
-      - name: Full OpenIDEA history for the pin checks
-        run: |
-          if [ "$(git -C third_party/openidea rev-parse --is-shallow-repository)" = "true" ]; then
-            git -C third_party/openidea fetch --unshallow
-          fi
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
@@ -65,12 +59,10 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
+          # Fetch all history: the pin checks compare the source against the
+          # release commit, and a shallow submodule lacks that commit.
+          fetch-depth: 0
           submodules: recursive
-      - name: Full OpenIDEA history for the pin checks
-        run: |
-          if [ "$(git -C third_party/openidea rev-parse --is-shallow-repository)" = "true" ]; then
-            git -C third_party/openidea fetch --unshallow
-          fi
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
