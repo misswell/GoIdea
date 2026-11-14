@@ -152,6 +152,18 @@ func (m *Model) SmokeShots(ctx context.Context, dir string) (map[string]any, err
 	shot("search-everywhere")
 	m.post(func() { m.CloseSearchEverywhere() })
 
+	// The left tool window: Structure in the split area below Project.
+	m.post(func() { m.ShowStructure() })
+	wait(func() bool { return m.leftSplit == "structure" && m.structure.visible }, 30*time.Second)
+	shot("left-structure")
+	m.post(func() { m.CloseStructure() })
+
+	// A dialog: File › Invalidate Caches….
+	m.post(func() { m.OpenInvalidateCaches() })
+	wait(func() bool { return m.invalidateDlg != nil }, 30*time.Second)
+	shot("dialog")
+	m.post(func() { m.closeInvalidateCaches() })
+
 	// Notifications: the bottom-right balloons and the tool window's history.
 	m.post(func() { m.notifyGroupSample() })
 	shot("balloons")
