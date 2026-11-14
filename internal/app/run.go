@@ -325,7 +325,7 @@ func (m *Model) startRunWith(raw json.RawMessage, name string) bool {
 	}
 	p := m.prefs.SaveFiles
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, 60*time.Second)
+		ctx, cancel := context.WithTimeout(m.ctx, 5*time.Minute)
 		defer cancel()
 		// The backend builds from disk, so unsaved text must be written first.
 		if err := saveAll(ctx, tabs, p); err != nil {
@@ -337,6 +337,17 @@ func (m *Model) startRunWith(raw json.RawMessage, name string) bool {
 			})
 			return
 		}
+		resolved, err := m.resolveJVMConfig(ctx, raw, root)
+		if err != nil {
+			m.post(func() {
+				m.run.busy = false
+				m.run.awaiting = false
+				m.run.err = "启动失败：" + err.Error()
+				m.invalidate()
+			})
+			return
+		}
+		args["config"] = resolved
 		raw, err := m.mgr.Invoke(ctx, Window, "run_start", args)
 		var info openidea.RunInfo
 		if err == nil {
@@ -646,8 +657,13 @@ func (m *Model) SmokeRun(ctx context.Context) (config string, code *int32, outpu
 		m.run.truncated = false
 		m.invalidate()
 	})
+	resolved, err := m.resolveJVMConfig(ctx, json.RawMessage(cfg.Raw()), root)
+	if err != nil {
+		m.post(func() { m.run.busy = false; m.run.awaiting = false })
+		return cfg.Name, nil, "", err
+	}
 	args := map[string]any{
-		"config":   json.RawMessage(cfg.Raw()),
+		"config":   resolved,
 		"onOutput": map[string]any{"$channel": channel},
 		"request":  nil,
 	}
