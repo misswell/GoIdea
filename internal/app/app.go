@@ -1622,14 +1622,6 @@ func (m *Model) ShowProject() {
 
 // overlayOpen reports whether a sheet owns the keyboard, so a shortcut that
 // would also act in the background leaves it alone.
-func (m *Model) overlayOpen() bool {
-	return m.rename != nil || m.symbols != nil || m.intents != nil || m.files != nil ||
-		m.diff != nil || m.palette != nil || m.runAnything != nil || m.commit != nil || m.branch.open ||
-		m.rollback != nil || m.bookmarksView != nil || m.mnemonics != nil || m.newList != nil ||
-		m.deleteList != nil || m.move != nil || m.editDesc != nil || m.treeOp != nil ||
-		m.history != nil || m.dirCompare != nil || m.invalidateDlg != nil || m.scratch != nil ||
-		m.se != nil
-}
 
 // QuitImmediately closes the backend and quits without asking about changes,
 // for the offscreen smoke run. Call it on the main thread.
@@ -1674,33 +1666,7 @@ func (m *Model) View(c *ui.Context) {
 		}
 		m.workbench(c, p)
 	})
-	m.renameDialog(c, p)
-	m.symbolsDialog(c, p)
-	m.intentionsDialog(c, p)
-	m.filesDialog(c, p)
-	m.branchesDialog(c, p)
-	m.rollbackDialog(c, p)
-	m.bookmarksDialog(c, p)
-	m.mnemonicDialog(c, p)
-	m.newListDialog(c, p)
-	m.deleteListDialog(c, p)
-	m.moveBookmarkDialog(c, p)
-	m.bookmarkDescriptionDialog(c, p)
-	m.treeOpDialog(c, p)
-	m.historyDialog(c, p)
-	m.dirCompareDialog(c, p)
-	m.commandsDialog(c, p)
-	m.searchEverywhereDialog(c, p)
-	m.runAnythingDialog(c, p)
-	m.diffDialog(c, p)
-	m.annotateDialog(c, p)
-	m.dbDialog(c, p)
-	m.commitDialog(c, p)
-	m.settingsDialog(c, p)
-	m.toolbarCustomizeDialog(c, p)
-	m.updateDialog(c, p)
-	m.invalidateCachesDialog(c, p)
-	m.scratchChooserDialog(c, p)
+	m.renderOverlays(c, p)
 }
 
 func (m *Model) shortcuts(c *ui.Context) {
@@ -1718,7 +1684,7 @@ func (m *Model) shortcuts(c *ui.Context) {
 		return
 	}
 	// A modal sheet owns the keyboard; only its own dismiss keys apply.
-	if m.settingsOpen || m.toolbarCustomize || m.update.Open || m.invalidateDlg != nil || (m.db != nil && m.db.open) {
+	if m.modalOverlayOpen() {
 		return
 	}
 	// The Bookmarks popup steps its rows with the arrow keys.
