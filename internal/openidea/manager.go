@@ -175,7 +175,9 @@ func (m *Manager) Ensure(ctx context.Context) (*Server, error) {
 		m.setPhase("starting")
 		s, launchErr := Launch(ctx, m.cfg)
 		if launchErr == nil {
-			m.adopt(s)
+			if !m.adopt(s) {
+				return nil, ErrClosed
+			}
 			return s, nil
 		}
 		err = launchErr
@@ -198,8 +200,16 @@ func (m *Manager) Ensure(ctx context.Context) (*Server, error) {
 	return nil, err
 }
 
-func (m *Manager) adopt(s *Server) {
+// adopt makes s the manager's server. A launch that finishes after Close is
+// closed again here instead of being adopted, so shutdown cannot leave a
+// backend running that nothing will stop.
+func (m *Manager) adopt(s *Server) bool {
 	m.mu.Lock()
+	if m.closed {
+		m.mu.Unlock()
+		_ = s.Close()
+		return false
+	}
 	m.srv = s
 	if m.started {
 		m.restarts++
@@ -221,6 +231,7 @@ func (m *Manager) adopt(s *Server) {
 			_ = restore(ctx)
 		}()
 	}
+	return true
 }
 
 // forward relays a server's notifications to the manager's consumer.
