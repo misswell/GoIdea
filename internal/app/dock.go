@@ -7,6 +7,8 @@ package app
 // mirrors kept for the code that still reads them.
 
 import (
+	"sort"
+
 	"github.com/egoist/mygo/ui"
 )
 
@@ -87,6 +89,9 @@ type dockState struct {
 	hiddenMax    bool
 	hasHidden    bool
 	max          bool
+	// pinned windows keep their slot: a window opened into the same area
+	// takes the area's other slot instead, and when both are pinned it waits.
+	pinned map[string]bool
 }
 
 // dockSpec returns a registered window.
@@ -205,9 +210,76 @@ func (m *Model) dockCloseOccupant(s dockSlot) {
 	}
 }
 
+// dockSibling is the area's other slot.
+func dockSibling(s dockSlot) dockSlot {
+	switch s {
+	case dockLeft:
+		return dockLeftSplit
+	case dockLeftSplit:
+		return dockLeft
+	case dockBottom:
+		return dockBottomSplit
+	case dockBottomSplit:
+		return dockBottom
+	case dockRight:
+		return dockRightSplit
+	case dockRightSplit:
+		return dockRight
+	}
+	return s
+}
+
+// dockPlacement is where id may open: its target unless a pinned window holds
+// it, then the area's other slot. ok is false when both are pinned.
+func (m *Model) dockPlacement(id string, target dockSlot) (dockSlot, bool) {
+	occ := m.dockOccupant(target)
+	if occ == "" || occ == id || !m.dockPinned(occ) {
+		return target, true
+	}
+	sib := dockSibling(target)
+	if other := m.dockOccupant(sib); !m.dockPinned(other) {
+		return sib, true
+	}
+	return target, false
+}
+
+// dockPinned reports whether a window is pinned to its slot.
+func (m *Model) dockPinned(id string) bool { return id != "" && m.dock.pinned[id] }
+
+// SetToolWindowPinned pins or unpins a window, as OpenIDEA's tool window Pin
+// does; a pinned window is not replaced by another window of its area.
+func (m *Model) SetToolWindowPinned(id string, pinned bool) {
+	if dockSpec(id) == nil {
+		return
+	}
+	if m.dock.pinned == nil {
+		m.dock.pinned = map[string]bool{}
+	}
+	if pinned {
+		m.dock.pinned[id] = true
+	} else {
+		delete(m.dock.pinned, id)
+	}
+	m.rememberLayout()
+	m.invalidate()
+}
+
+// ToggleToolWindowPin pins or unpins the active window.
+func (m *Model) ToggleToolWindowPin() {
+	id := m.tool
+	if dockSpec(id) == nil || !m.toolVisible(id) {
+		id = m.dock.active
+	}
+	if dockSpec(id) == nil || !m.toolVisible(id) {
+		return
+	}
+	m.SetToolWindowPinned(id, !m.dockPinned(id))
+}
+
 // DockShow shows a registered window in its home slot (or where it already
 // sits), taking that slot from whatever held it. The content opens even when
-// it moves areas, so no slot is ever blank.
+// it moves areas, so no slot is ever blank. A pinned window keeps its slot:
+// the newcomer takes the area's other one.
 func (m *Model) DockShow(id string) {
 	spec := dockSpec(id)
 	if spec == nil {
@@ -221,10 +293,16 @@ func (m *Model) DockShow(id string) {
 		m.invalidate()
 		return
 	}
+	target, ok := m.dockPlacement(id, spec.anchor)
+	if !ok {
+		m.status = spec.title + " 所在区域已固定，先取消 Pin"
+		m.invalidate()
+		return
+	}
 	release := m.holdLayout()
-	m.dockEvictArea(spec.anchor, id)
+	m.dockEvictArea(target, id)
 	m.dockOpenContent(id)
-	m.dock.slots[spec.anchor] = id
+	m.dock.slots[target] = id
 	m.dockTouch(id)
 	release()
 	m.dockSyncMirrors()
@@ -281,6 +359,12 @@ func (m *Model) DockMove(id string, target dockSlot) {
 		return
 	}
 	from, shown := m.dockSlotOf(id)
+	target, ok := m.dockPlacement(id, target)
+	if !ok {
+		m.status = dockSpec(id).title + " 的目标区域已固定，先取消 Pin"
+		m.invalidate()
+		return
+	}
 	if shown && from == target {
 		return
 	}
@@ -399,6 +483,8 @@ type DockLayout struct {
 	Last    []string          `json:"last,omitempty"`
 	Hidden  map[string]string `json:"hidden,omitempty"`
 	Max     bool              `json:"maximized,omitempty"`
+	// Pinned are the windows a Pin keeps in their slot.
+	Pinned []string `json:"pinned,omitempty"`
 }
 
 const dockLayoutVersion = 2
@@ -431,7 +517,13 @@ func (m *Model) currentDockLayout() *DockLayout {
 			}
 		}
 	}
-	if len(l.Slots) == 0 && len(l.Last) == 0 && !l.Max {
+	for id := range m.dock.pinned {
+		if dockSpec(id) != nil {
+			l.Pinned = append(l.Pinned, id)
+		}
+	}
+	sort.Strings(l.Pinned)
+	if len(l.Slots) == 0 && len(l.Last) == 0 && !l.Max && len(l.Pinned) == 0 {
 		l.Slots = map[string]string{}
 	}
 	return l
@@ -467,6 +559,15 @@ func (m *Model) applyDockLayout(d *DockLayout) {
 	m.dock.active = d.Active
 	m.dock.last = append([]string(nil), d.Last...)
 	m.dock.max = d.Max && m.visibleTool() != ""
+	for _, id := range d.Pinned {
+		if dockSpec(id) == nil {
+			continue
+		}
+		if m.dock.pinned == nil {
+			m.dock.pinned = map[string]bool{}
+		}
+		m.dock.pinned[id] = true
+	}
 	for name, id := range d.Hidden {
 		s, ok := dockSlotOfName(name)
 		if !ok || id == "" || dockSpec(id) == nil {

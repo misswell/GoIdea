@@ -62,6 +62,7 @@ func builtinCommands() []appCommand {
 		{"view.moveToolToLeftSplit", "Move Tool Window to Left Bottom", "视图", "", "dock move tool window left bottom split", func(m *Model) { m.MoveToolToLeftSplit() }},
 		{"view.moveToolToRightSplit", "Move Tool Window to Right Bottom", "视图", "", "dock move tool window right bottom split", func(m *Model) { m.MoveToolToRightSplit() }},
 		{"view.moveToolToBottomSplit", "Move Tool Window to Bottom Right", "视图", "", "dock move tool window bottom right split", func(m *Model) { m.MoveToolToBottomSplit() }},
+		{"view.pinToolWindow", "Pin Tool Window", "视图", "", "dock pin tool window keep slot", func(m *Model) { m.ToggleToolWindowPin() }},
 		{"notifications.clear", "Clear All Notifications", "视图", "", "clear all notifications history", func(m *Model) { m.ClearNotifications() }},
 		{"vcs.show", "显示 Git 更改", "Git", "Cmd+9", "git vcs changes status", func(m *Model) { m.ShowVCS() }},
 		{"vcs.log", "显示 Git 日志", "Git", "", "git vcs log history commits", func(m *Model) { m.ShowLog() }},

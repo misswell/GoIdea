@@ -81,6 +81,7 @@ func mainMenuGroups() []menuEntry {
 		action("Move Tool Window to Right", "view.moveToolToRight", ""),
 		action("Move Tool Window to Right Bottom", "view.moveToolToRightSplit", ""),
 		action("Move Tool Window to Bottom", "view.moveToolToBottom", ""),
+		actionChecked("Pin Tool Window", "view.pinToolWindow", func(m *Model) bool { return m.dockPinned(m.tool) }),
 		rule(),
 		action("Hide All Tool Windows", "view.hideAll", "CmdOrCtrl+Shift+F12"),
 	)

@@ -241,6 +241,15 @@ func (m *Model) applyLayout(root string) {
 				m.dock.hasHidden = true
 			}
 		}
+		for _, id := range l.Dock.Pinned {
+			if dockSpec(id) == nil {
+				continue
+			}
+			if m.dock.pinned == nil {
+				m.dock.pinned = map[string]bool{}
+			}
+			m.dock.pinned[id] = true
+		}
 	} else {
 		// Sessions from before the dock: split the old lists the way the
 		// old workbench read them.

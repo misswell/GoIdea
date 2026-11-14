@@ -71,6 +71,7 @@ needs a `## <version>` section here, or its build fails.
 - **Problems** 和 **TODO** 可在右侧与底部之间移动：**Window › Move Tool Window to Right / Bottom**。
 - 移到右侧的 **Problems**、**TODO** 不再显示空白；右侧上下可各放一个窗口，中间分隔线可拖动调整比例。
 - **Customize Main Toolbar** 加入的操作现在真的出现在标题栏，以操作标题显示，上下文不可用时自动隐藏。
+- **Window › Pin Tool Window** 固定当前窗口：别的窗口会占用同侧另一半，两侧都固定时提示等待。
 - **Search Everywhere** 页签新增 **Filter**：按符号种类筛选，**Text** 页可填文件掩码，设置会保存。
 - **Services** 显示运行配置的状态和退出码，运行中的进程多出一行 **Stop** 可直接停止。
 - **Search Everywhere** 空查询时先列 **Search History**，最近搜索词可回车重放并随会话保存。
