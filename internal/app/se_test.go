@@ -13,7 +13,7 @@ func TestSectionsForMatchesOpenIDEA(t *testing.T) {
 		empty bool
 		want  []seSection
 	}{
-		{seTabAll, true, []seSection{seRecentFiles, seRecentActions}},
+		{seTabAll, true, []seSection{seHistory, seRecentFiles, seRecentActions}},
 		{seTabFiles, true, []seSection{seRecentFiles}},
 		{seTabActions, true, []seSection{seRecentActions}},
 		{seTabClasses, true, nil},
@@ -196,4 +196,32 @@ func TestSearchEverywhereSelectionSkipsHeaders(t *testing.T) {
 	if m.se.sel <= 0 || rows[m.se.sel].header {
 		t.Fatalf("stepping back landed on a header: %d", m.se.sel)
 	}
+}
+
+func TestSearchHistoryRemembersAndReplaysQueries(t *testing.T) {
+	m := &Model{}
+	m.rememberSearchQuery("Widget")
+	m.rememberSearchQuery("button")
+	m.rememberSearchQuery("widget")
+	if len(m.searchHistory) != 2 || m.searchHistory[0] != "widget" || m.searchHistory[1] != "button" {
+		t.Fatalf("the history is %v", m.searchHistory)
+	}
+	if snap, ok := m.sessionSnapshot(); !ok || len(snap.SearchHistory) != 2 {
+		t.Fatalf("the history is not in the session: %+v, %v", snap.SearchHistory, ok)
+	}
+
+	m.OpenSearchEverywhere()
+	rows := m.seRows()
+	if len(rows) == 0 || !rows[0].header || rows[0].section != seHistory {
+		t.Fatalf("Search History is not the first section: %+v", rows)
+	}
+	if len(rows) < 2 || rows[1].item.kind != "history" || rows[1].item.title != "widget" {
+		t.Fatalf("the newest query is not the first row: %+v", rows)
+	}
+	m.se.sel = 1
+	m.ActivateSearchEverywhere()
+	if m.se == nil || m.se.query != "widget" {
+		t.Fatalf("the history row did not replay the query: %+v", m.se)
+	}
+	m.CloseSearchEverywhere()
 }

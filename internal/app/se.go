@@ -33,6 +33,7 @@ const (
 type seSection string
 
 const (
+	seHistory       seSection = "history"
 	seRecentFiles   seSection = "recent"
 	seRecentActions seSection = "recentActions"
 	seClasses       seSection = "classes"
@@ -56,6 +57,7 @@ var seTabs = []struct {
 }
 
 var seSectionTitles = map[seSection]string{
+	seHistory:       "Search History",
 	seRecentFiles:   "Recent Files",
 	seRecentActions: "Recent Actions",
 	seClasses:       "Classes",
@@ -81,7 +83,9 @@ const (
 	seTextFileLimit    = 40
 	seTextMatchLimit   = 200
 	seRecentActionCap  = 15
-	seDebounce         = 120 * time.Millisecond
+	// seHistoryCap bounds the remembered Search Everywhere queries.
+	seHistoryCap = 10
+	seDebounce   = 120 * time.Millisecond
 )
 
 // seItem is one result row before it is drawn.
@@ -197,7 +201,7 @@ func sectionsFor(tab seTab, emptyQuery bool) []seSection {
 	if emptyQuery {
 		switch tab {
 		case seTabAll:
-			return []seSection{seRecentFiles, seRecentActions}
+			return []seSection{seHistory, seRecentFiles, seRecentActions}
 		case seTabFiles:
 			return []seSection{seRecentFiles}
 		case seTabActions:
@@ -215,9 +219,9 @@ func sectionsFor(tab seTab, emptyQuery bool) []seSection {
 // seSectionLimit is how many rows a section shows before a More row.
 func (s *sePane) seSectionLimit(section seSection) int {
 	base := seTabLimit
-	if s.tab == seTabAll && section != seRecentFiles && section != seRecentActions {
+	if s.tab == seTabAll && section != seRecentFiles && section != seRecentActions && section != seHistory {
 		base = seAllLimit
-	} else if section == seRecentFiles || section == seRecentActions {
+	} else if section == seRecentFiles || section == seRecentActions || section == seHistory {
 		base = seRecentLimit
 	}
 	return base + s.extra[section]
@@ -541,8 +545,17 @@ func (m *Model) seRows() []seRow {
 		}
 		return items
 	}
+	historyItems := func() []seItem {
+		items := make([]seItem, 0, len(m.searchHistory))
+		for _, q := range m.searchHistory {
+			items = append(items, seItem{kind: "history", title: q})
+		}
+		return items
+	}
 	for _, section := range sectionsFor(s.tab, s.seEmpty()) {
 		switch section {
+		case seHistory:
+			add(section, historyItems())
 		case seRecentFiles:
 			add(section, fileItems())
 		case seRecentActions:
@@ -626,16 +639,41 @@ func (m *Model) ActivateSearchEverywhere() {
 	}
 	item := row.item
 	switch item.kind {
+	case "history":
+		s.query = item.title
+		s.sel = 0
+		s.extra = map[seSection]int{}
+		m.refreshSearchEverywhere()
 	case "action":
 		m.rememberRecentAction(item.action)
 		m.CloseSearchEverywhere()
 		m.RunCommand(item.action)
 	case "file", "symbol", "text":
+		m.rememberSearchQuery(strings.TrimSpace(s.query))
 		m.CloseSearchEverywhere()
 		m.revealAt(item.path, item.line, item.col)
 	default:
 		m.invalidate()
 	}
+}
+
+// rememberSearchQuery puts an executed query first in the search history,
+// once, as OpenIDEA's Search Everywhere history does.
+func (m *Model) rememberSearchQuery(query string) {
+	if query == "" {
+		return
+	}
+	list := []string{query}
+	for _, old := range m.searchHistory {
+		if !strings.EqualFold(old, query) {
+			list = append(list, old)
+		}
+	}
+	if len(list) > seHistoryCap {
+		list = list[:seHistoryCap]
+	}
+	m.searchHistory = list
+	m.saveSession()
 }
 
 // rememberRecentAction puts a run command first in the recent list.

@@ -178,6 +178,9 @@ type Model struct {
 	se            *sePane
 	recentActions []string
 
+	// searchHistory is Search Everywhere's recent queries, most recent first.
+	searchHistory []string
+
 	// notify is the notification center: the balloons and their history.
 	notify notifier
 
@@ -487,6 +490,7 @@ func New(cfg Config) *Model {
 	session := LoadSession(cfg.SessionPath)
 	m.recents = sessionRecents(session)
 	m.recentGroups = session.RecentGroups
+	m.searchHistory = append([]string(nil), session.SearchHistory...)
 	m.layouts = map[string]Layout{}
 	for root, l := range session.Layouts {
 		m.layouts[layoutKey(root)] = normalizeLayout(l)
@@ -1437,7 +1441,8 @@ func (m *Model) SmokeRoundTrip(ctx context.Context) (edited, undone bool) {
 // writes it never reads state the user is still changing.
 func (m *Model) sessionSnapshot() (Session, bool) {
 	root := m.Root()
-	if root == "" && len(m.tabs) == 0 && len(m.recents) == 0 && len(m.recentGroups) == 0 {
+	if root == "" && len(m.tabs) == 0 && len(m.recents) == 0 && len(m.recentGroups) == 0 &&
+		len(m.searchHistory) == 0 {
 		// Nothing to remember; keep the previous session rather than
 		// writing an empty one after a failed start.
 		return Session{}, false
@@ -1489,6 +1494,7 @@ func (m *Model) sessionSnapshot() (Session, bool) {
 		RecentProjects: recentPaths(m.recents),
 		Recents:        append([]RecentProject(nil), m.recents...),
 		RecentGroups:   append([]RecentGroup(nil), m.recentGroups...),
+		SearchHistory:  append([]string(nil), m.searchHistory...),
 		Layouts:        pruneLayouts(layouts, keep),
 		RunHistory:     pruneRunHistory(cloneRunHistory(m.runHistory), keep)}, true
 }

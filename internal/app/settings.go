@@ -51,6 +51,9 @@ type Session struct {
 	// RunHistory is each project's Run Anything history, by project folder,
 	// most recent first, as OpenIDEA keeps it per project root.
 	RunHistory map[string][]string `json:"runHistory,omitempty"`
+	// SearchHistory is Search Everywhere's recent queries, most recent first,
+	// as OpenIDEA keeps the search history across starts.
+	SearchHistory []string `json:"searchHistory,omitempty"`
 }
 
 // RecentProject is one project of the Welcome screen.
