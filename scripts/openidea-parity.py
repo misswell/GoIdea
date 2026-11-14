@@ -458,7 +458,7 @@ def status_doc(items, key, status):
 def commit():
     try:
         out = subprocess.check_output(
-            ["git", "-C", str(OPENIDEA), "rev-parse", "--short", "HEAD"], text=True
+            ["git", "-C", str(OPENIDEA), "rev-parse", "HEAD"], text=True
         ).strip()
         return out
     except Exception:

@@ -3,7 +3,7 @@
 OpenIDEA is the product specification, Mayoi/MyGo is the frontend base and the
 OpenIDEA Rust core is the engine. This document enumerates everything the pinned
 OpenIDEA source registers and maps each item to GoIDEA. It is generated from
-`55142826`; `scripts/openidea-parity.py --check` fails when it is stale.
+`551428267deddd600b367fa01d2b80c6146f1576`; `scripts/openidea-parity.py --check` fails when it is stale.
 
 ## How to read the status
 

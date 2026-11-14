@@ -265,7 +265,7 @@ def render(server=None):
     local = {name: classify_local(bodies.get(name)) for name in names if name not in remote}
 
     commit = subprocess.run(
-        ["git", "-C", OPENIDEA, "rev-parse", "--short", "HEAD"], capture_output=True, text=True
+        ["git", "-C", OPENIDEA, "rev-parse", "HEAD"], capture_output=True, text=True
     ).stdout.strip()
     pin_commit, version, release, release_commit = upstream_pin()
     released = release_remote(release_commit)
