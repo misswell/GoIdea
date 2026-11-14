@@ -35,18 +35,18 @@ func TestDockTodoRightAndBack(t *testing.T) {
 	}
 }
 
-func TestDockRefusesOtherWindows(t *testing.T) {
+func TestDockMovesBuildAndKeepsItsContent(t *testing.T) {
 	m := &Model{}
 	m.ShowBuild()
 	m.MoveToolToRight()
-	if m.rightTool != "" || !m.build.visible {
-		t.Fatalf("Build left its area: right=%q visible=%v", m.rightTool, m.build.visible)
+	if m.rightTool != "build" || !m.build.visible {
+		t.Fatalf("Build did not dock right: right=%q visible=%v", m.rightTool, m.build.visible)
 	}
-	if m.status == "" {
-		t.Fatalf("no status explained the refusal")
+	if m.primaryTool() == "build" {
+		t.Fatalf("Build stayed in the bottom area")
 	}
 	m.MoveToolToBottom()
-	if m.rightTool != "" {
-		t.Fatalf("MoveToolToBottom changed the right area: %q", m.rightTool)
+	if m.rightTool != "" || m.primaryTool() != "build" || !m.build.visible {
+		t.Fatalf("Build did not return: right=%q primary=%q", m.rightTool, m.primaryTool())
 	}
 }

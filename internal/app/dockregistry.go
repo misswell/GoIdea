@@ -46,6 +46,104 @@ func init() {
 		},
 	})
 	registerToolWindow(&toolWindowSpec{
+		id: "run", title: "Run", anchor: dockBottom, order: 10,
+		open: func(m *Model) {
+			m.run.visible = true
+			if m.run.trusted && !m.run.loaded && m.ctx != nil && m.mgr != nil {
+				m.loadRunConfigs()
+			}
+		},
+		close:  func(m *Model) { m.run.visible = false },
+		shown:  func(m *Model) bool { return m.run.visible },
+		render: func(m *Model, c *ui.Context, p *ui.Theme, _ oiColors) { m.runPanel(c, p) },
+	})
+	registerToolWindow(&toolWindowSpec{
+		id: "debug", title: "Debug", anchor: dockBottom, order: 20,
+		open:  func(m *Model) { m.debug.visible = true },
+		close: func(m *Model) { m.debug.visible = false },
+		shown: func(m *Model) bool { return m.debug.visible },
+		render: func(m *Model, c *ui.Context, p *ui.Theme, _ oiColors) {
+			m.debugPanel(c, p)
+		},
+	})
+	registerToolWindow(&toolWindowSpec{
+		id: "build", title: "Build", anchor: dockBottom, order: 30,
+		open:  func(m *Model) { m.build.visible = true },
+		close: func(m *Model) { m.build.visible = false },
+		shown: func(m *Model) bool { return m.build.visible },
+		render: func(m *Model, c *ui.Context, p *ui.Theme, _ oiColors) {
+			m.buildPanel(c, p)
+		},
+	})
+	registerToolWindow(&toolWindowSpec{
+		id: "term", title: "Terminal", anchor: dockBottom, order: 40,
+		open: func(m *Model) {
+			m.term.visible = true
+			if m.ctx == nil || m.mgr == nil {
+				return
+			}
+			if s := m.term.current(); s == nil || (s.id == 0 && !s.starting && !s.ended) {
+				m.SpawnTerm()
+			}
+		},
+		close:  func(m *Model) { m.term.visible = false },
+		shown:  func(m *Model) bool { return m.term.visible },
+		render: func(m *Model, c *ui.Context, p *ui.Theme, _ oiColors) { m.termPanel(c, p) },
+	})
+	registerToolWindow(&toolWindowSpec{
+		id: "log", title: "Git Log", anchor: dockBottom, order: 50,
+		open: func(m *Model) {
+			m.log.visible = true
+			if m.Root() != "" && m.ctx != nil && m.mgr != nil {
+				m.RefreshLog()
+			}
+		},
+		close:  func(m *Model) { m.log.visible = false },
+		shown:  func(m *Model) bool { return m.log.visible },
+		render: func(m *Model, c *ui.Context, p *ui.Theme, _ oiColors) { m.logPanel(c, p) },
+	})
+	registerToolWindow(&toolWindowSpec{
+		id: "find", title: "Find", anchor: dockBottom, order: 90,
+		open:  func(m *Model) { m.search.visible = true },
+		close: func(m *Model) { m.search.visible = false },
+		shown: func(m *Model) bool { return m.search.visible },
+		render: func(m *Model, c *ui.Context, p *ui.Theme, _ oiColors) {
+			m.searchPanel(c, p)
+		},
+	})
+	registerToolWindow(&toolWindowSpec{
+		id: "usages", title: "Find Usages", anchor: dockBottom, order: 100,
+		open:  func(m *Model) { m.usages.visible = true },
+		close: func(m *Model) { m.usages.visible = false },
+		shown: func(m *Model) bool { return m.usages.visible },
+		render: func(m *Model, c *ui.Context, p *ui.Theme, _ oiColors) {
+			m.usagesPanel(c, p)
+		},
+	})
+	registerToolWindow(&toolWindowSpec{
+		id: "structure", title: "Structure", anchor: dockLeftSplit, order: 20, stripe: true,
+		open: func(m *Model) {
+			m.structure.visible = true
+			m.leftHidden = false
+			m.refreshStructure()
+		},
+		close: func(m *Model) { m.structure.visible = false },
+		shown: func(m *Model) bool { return m.structure.visible },
+		renderGrow: func(m *Model, c *ui.Context, p *ui.Theme, oi oiColors, grow float32) {
+			m.leftSplitIsland(c, p, oi, grow)
+		},
+	})
+	registerToolWindow(&toolWindowSpec{
+		id: "bookmarks", title: "Bookmarks", anchor: dockLeftSplit, order: 30, stripe: true,
+		open: func(m *Model) {
+			m.structure.visible = false
+			m.leftHidden = false
+		},
+		renderGrow: func(m *Model, c *ui.Context, p *ui.Theme, oi oiColors, grow float32) {
+			m.leftSplitIsland(c, p, oi, grow)
+		},
+	})
+	registerToolWindow(&toolWindowSpec{
 		id: "notifications", title: "Notifications", anchor: dockRight, order: 10, stripe: true,
 		open: func(m *Model) { m.markNotificationsRead() },
 		render: func(m *Model, c *ui.Context, p *ui.Theme, oi oiColors) {

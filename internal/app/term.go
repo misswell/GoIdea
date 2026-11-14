@@ -180,19 +180,7 @@ const maxTermLines = 4000
 func (m *Model) resetTerm() { m.term = TermPane{} }
 
 // ShowTerm toggles the terminal; opening it starts a shell on first use.
-func (m *Model) ShowTerm() {
-	if m.term.visible {
-		m.hideTool("term")
-		m.invalidate()
-		return
-	}
-	m.term.visible = true
-	m.occupyBottom("term")
-	if s := m.term.current(); s == nil || (s.id == 0 && !s.starting && !s.ended) {
-		m.SpawnTerm()
-	}
-	m.invalidate()
-}
+func (m *Model) ShowTerm() { m.dockActivate("term") }
 
 // SpawnTerm starts the user's login shell in a tab, when the active one has no
 // shell left to use.
@@ -612,10 +600,12 @@ func (m *Model) SmokeTerm(ctx context.Context) (map[string]any, error) {
 	ch := m.nextChannel()
 	m.post(func() {
 		m.term = TermPane{visible: true}
-		m.occupyBottom("term")
+		// The smoke supplies its own shell: register it before the window
+		// opens, so the dock's opener has nothing to spawn.
 		s := m.term.add(0)
 		s.starting = true
 		s.channel = ch
+		m.DockShow("term")
 		m.invalidate()
 	})
 	raw, err := m.mgr.Invoke(ctx, Window, "term_spawn", map[string]any{

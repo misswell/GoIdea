@@ -47,16 +47,7 @@ const maxBuildLines = 20000
 func (m *Model) resetBuild() { m.build = BuildPane{} }
 
 // ShowBuild toggles the Build tool window.
-func (m *Model) ShowBuild() {
-	if m.build.visible {
-		m.hideTool("build")
-		m.invalidate()
-		return
-	}
-	m.build.visible = true
-	m.occupyBottom("build")
-	m.invalidate()
-}
+func (m *Model) ShowBuild() { m.dockActivate("build") }
 
 // BuildProject compiles the project's sources and tests.
 func (m *Model) BuildProject() { m.startBuild("build", nil) }

@@ -44,9 +44,7 @@ func (m *Model) resetSearch() { m.search = SearchPane{} }
 // query field runs it.
 func (m *Model) ShowSearch() {
 	m.search.scopePath = ""
-	m.search.visible = true
-	m.occupyBottom("find")
-	m.invalidate()
+	m.DockShow("find")
 }
 
 // ShowSearchInFolder opens the Find window limited to dir, as Find/Replace in
@@ -56,9 +54,7 @@ func (m *Model) ShowSearchInFolder(dir string) {
 		return
 	}
 	m.search.scopePath = dir
-	m.search.visible = true
-	m.occupyBottom("find")
-	m.invalidate()
+	m.DockShow("find")
 }
 
 // FindInFolderSelected scopes Find to the folder selected in the project view,

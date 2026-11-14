@@ -44,11 +44,7 @@ func (m *Model) resetUsages() {
 }
 
 // showUsages opens the Find Usages window in the bottom side.
-func (m *Model) showUsages() {
-	m.usages.visible = true
-	m.occupyBottom("usages")
-	m.invalidate()
-}
+func (m *Model) showUsages() { m.DockShow("usages") }
 
 // FindUsages looks up every use of the symbol at the caret and shows the
 // result in OpenIDEA's Find Usages window, which sits in the bottom side. The

@@ -87,7 +87,8 @@ func TestWorkbenchStripeTogglesTheIsland(t *testing.T) {
 }
 
 func TestWorkbenchToolWindowTitles(t *testing.T) {
-	m := &Model{leftSplit: "structure"}
+	m := &Model{}
+	m.ShowStructure()
 	tt := workbenchTester(t, m)
 	project, ok := tt.Find("Project")
 	if !ok {
@@ -111,7 +112,8 @@ func leftGapY() float32 {
 }
 
 func TestWorkbenchLeftSplitHandleMovesTheLine(t *testing.T) {
-	m := &Model{leftSplit: "structure"}
+	m := &Model{}
+	m.ShowStructure()
 	tt := workbenchTester(t, m)
 	before, ok := tt.Find("Structure")
 	if !ok {

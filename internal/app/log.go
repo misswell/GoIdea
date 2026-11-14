@@ -40,17 +40,11 @@ func (m *Model) ShowLog() {
 	if m.Root() == "" {
 		return
 	}
-	m.log.visible = true
-	m.occupyBottom("log")
-	m.invalidate()
-	m.RefreshLog()
+	m.DockShow("log")
 }
 
 // CloseLog hides the Git log panel; the next open reloads it.
-func (m *Model) CloseLog() {
-	m.log.visible = false
-	m.invalidate()
-}
+func (m *Model) CloseLog() { m.DockHide("log") }
 
 // RefreshLog reloads the commit list in the background.
 func (m *Model) RefreshLog() {

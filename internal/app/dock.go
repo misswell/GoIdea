@@ -52,7 +52,10 @@ type toolWindowSpec struct {
 	open   func(m *Model)
 	close  func(m *Model)
 	render func(m *Model, c *ui.Context, p *ui.Theme, oi oiColors)
-	shown  func(m *Model) bool
+	// renderGrow draws a window that shares its side with another, at its
+	// share of the room (the left split's two islands).
+	renderGrow func(m *Model, c *ui.Context, p *ui.Theme, oi oiColors, grow float32)
+	shown      func(m *Model) bool
 }
 
 // toolWindowRegistry is every registered window by id.
@@ -251,6 +254,16 @@ func (m *Model) DockHide(id string) {
 	m.invalidate()
 }
 
+// dockActivate is the shortcut and menu behaviour of the show actions: a
+// window that shows closes, anything else opens.
+func (m *Model) dockActivate(id string) {
+	if m.dockWindowShown(id) {
+		m.DockHide(id)
+		return
+	}
+	m.DockShow(id)
+}
+
 // DockToggle shows a window or hides it when it already shows.
 func (m *Model) DockToggle(id string) {
 	if m.dockWindowShown(id) {
@@ -307,6 +320,9 @@ func (m *Model) dockSyncMirrors() {
 	m.rightHidden = !m.dockRightShown()
 	if id := m.dock.slots[dockLeftSplit]; id != "" {
 		m.leftSplit = id
+	} else if dockSpec(m.leftSplit) != nil {
+		// Registered split windows leave the legacy mirror when they close.
+		m.leftSplit = ""
 	}
 	if m.splitNames == nil {
 		m.splitNames = map[string]bool{}
@@ -332,6 +348,9 @@ func (m *Model) dockSyncMirrors() {
 // dockHideAll stashes every occupied slot, closes the windows and remembers
 // the arrangement.
 func (m *Model) dockHideAll() {
+	if m.maximized {
+		m.maximized = false
+	}
 	m.dock.hidden = m.dock.slots
 	m.dock.hiddenActive = m.dock.active
 	m.dock.hiddenMax = m.dock.max

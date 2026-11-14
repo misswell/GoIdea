@@ -404,22 +404,12 @@ func buildJavaLaunch(name string, target javaTarget, root string, info openidea.
 func (m *Model) nextRequest() uint32 { return m.reqSeq.Add(1) }
 
 // ShowDebug toggles the Debug tool window.
-func (m *Model) ShowDebug() {
-	if m.debug.visible {
-		m.hideTool("debug")
-		m.invalidate()
-		return
-	}
-	m.debug.visible = true
-	m.occupyBottom("debug")
-	m.invalidate()
-}
+func (m *Model) ShowDebug() { m.dockActivate("debug") }
 
 // Debug starts a java-debug session for the active Java file.
 func (m *Model) Debug() {
 	root := m.Root()
-	m.debug.visible = true
-	m.occupyBottom("debug")
+	m.DockShow("debug")
 	if root == "" || m.busy {
 		m.invalidate()
 		return

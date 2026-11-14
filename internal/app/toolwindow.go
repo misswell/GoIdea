@@ -311,8 +311,8 @@ func (m *Model) applyLayout(root string) {
 			}
 			continue
 		}
-		if slot == dockLeft || slot == dockLeftSplit {
-			// Registered windows have no left slot yet; keep the old mirror.
+		if slot == dockLeft {
+			// The left primary area keeps its own field (Project / Commit).
 			continue
 		}
 		m.dockOpenContent(id)
@@ -341,8 +341,12 @@ func (m *Model) ResetToolWindowLayout() {
 	release := m.holdLayout()
 	for _, name := range toolWindows {
 		if dockSpec(name) != nil {
-			if s, ok := m.dockSlotOf(name); ok && s != dockSpec(name).anchor {
-				m.DockMove(name, dockSpec(name).anchor)
+			if s, ok := m.dockSlotOf(name); ok {
+				if s == dockBottomSplit {
+					m.DockHide(name)
+				} else if s != dockSpec(name).anchor {
+					m.DockMove(name, dockSpec(name).anchor)
+				}
 			}
 			continue
 		}

@@ -245,24 +245,11 @@ func (p *RunPane) current() *openidea.RunConfig {
 }
 
 // ShowRun toggles the Run tool window.
-func (m *Model) ShowRun() {
-	if m.run.visible {
-		m.hideTool("run")
-		m.invalidate()
-		return
-	}
-	m.run.visible = true
-	m.occupyBottom("run")
-	if m.run.trusted && !m.run.loaded {
-		m.loadRunConfigs()
-	}
-	m.invalidate()
-}
+func (m *Model) ShowRun() { m.dockActivate("run") }
 
 // Run starts the selected configuration, after saving what the build must see.
 func (m *Model) Run() {
-	m.run.visible = true
-	m.occupyBottom("run")
+	m.DockShow("run")
 	if m.busy {
 		m.invalidate()
 		return

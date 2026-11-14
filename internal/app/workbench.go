@@ -292,10 +292,10 @@ func (m *Model) toolStripe(c *ui.Context, p *ui.Theme, oi oiColors) {
 		m.stripeButton(c, p, oi, "vcs", iconWelcomeBranch, "Commit", m.sideMode == "vcs" && !m.leftHidden, func() {
 			m.modeClick("vcs")
 		})
-		m.stripeButton(c, p, oi, "structure", iconStructure, "Structure", m.leftSplit == "structure", func() {
+		m.stripeButton(c, p, oi, "structure", iconStructure, "Structure", m.dockWindowShown("structure"), func() {
 			m.splitClick("structure")
 		})
-		m.stripeButton(c, p, oi, "bookmarks", iconBookmark, "Bookmarks", m.leftSplit == "bookmarks", func() {
+		m.stripeButton(c, p, oi, "bookmarks", iconBookmark, "Bookmarks", m.dockWindowShown("bookmarks"), func() {
 			m.splitClick("bookmarks")
 		})
 		ui.Spacer(c)
@@ -370,7 +370,7 @@ func (m *Model) stripeButton(c *ui.Context, p *ui.Theme, oi oiColors, key string
 // leftShown reports whether the left side draws: a window in either of its
 // areas.
 func (m *Model) leftShown() bool {
-	return !m.leftHidden || m.leftSplit != ""
+	return !m.leftHidden || m.dockOccupant(dockLeftSplit) != ""
 }
 
 // leftSide is the left side's two areas: the primary island and, below it,
@@ -381,7 +381,8 @@ func (m *Model) leftSide(c *ui.Context, p *ui.Theme, oi oiColors) {
 	if !m.leftShown() {
 		return
 	}
-	both := !m.leftHidden && m.leftSplit != ""
+	splitID := m.dockOccupant(dockLeftSplit)
+	both := !m.leftHidden && splitID != ""
 	primaryGrow, splitGrow := float32(1), float32(1)
 	if both {
 		primaryGrow = m.leftShare()
@@ -399,8 +400,10 @@ func (m *Model) leftSide(c *ui.Context, p *ui.Theme, oi oiColors) {
 		if both {
 			m.leftSplitHandle(c, oi, room)
 		}
-		if m.leftSplit != "" {
-			m.leftSplitIsland(c, p, oi, splitGrow)
+		if splitID != "" {
+			if spec := dockSpec(splitID); spec != nil && spec.renderGrow != nil {
+				spec.renderGrow(m, c, p, oi, splitGrow)
+			}
 		}
 	})
 }
@@ -884,12 +887,9 @@ func (m *Model) leftSplitIsland(c *ui.Context, p *ui.Theme, oi oiColors, grow fl
 			ui.Text(c, title).FontSize(13).TextColor(oi.textStrong).SingleLine().Ellipsis("…")
 			ui.Spacer(c)
 			m.headerIcon(c, p, oi, "split-hide", "Hide", iconClose, func() {
-				if m.leftSplit == "structure" {
-					m.structure.visible = false
+				if id := m.dockOccupant(dockLeftSplit); id != "" {
+					m.DockHide(id)
 				}
-				m.leftSplit = ""
-				m.rememberLayout()
-				m.invalidate()
 			})
 		})
 		ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {

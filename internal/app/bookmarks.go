@@ -546,13 +546,7 @@ func setBookmarkDescription(list []Bookmark, path string, line int, text string)
 
 // ShowBookmarksWindow reveals the Bookmarks tool window in the left side's
 // split area, the slot OpenIDEA gives it below the Project window (Cmd+2).
-func (m *Model) ShowBookmarksWindow() {
-	m.structure.visible = false
-	m.leftSplit = "bookmarks"
-	m.leftHidden = false
-	m.rememberLayout()
-	m.invalidate()
-}
+func (m *Model) ShowBookmarksWindow() { m.DockShow("bookmarks") }
 
 // ToggleFileBookmark marks or unmarks the active editor's file, which is the
 // target OpenIDEA's Toggle File Bookmark uses when no project view selection
@@ -1006,15 +1000,7 @@ func (m *Model) deleteListDialog(c *ui.Context, p *ui.Theme) {
 }
 
 // ToggleBookmarksWindow hides the tool window when it is already showing.
-func (m *Model) ToggleBookmarksWindow() {
-	if m.leftSplit == "bookmarks" {
-		m.leftSplit = ""
-		m.rememberLayout()
-		m.invalidate()
-		return
-	}
-	m.ShowBookmarksWindow()
-}
+func (m *Model) ToggleBookmarksWindow() { m.DockToggle("bookmarks") }
 
 // bookmarkWindowRows draws the Bookmarks tool window: each list with its
 // bookmarked files and lines, a click Opening one, and a chip that removes it.
