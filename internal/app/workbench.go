@@ -518,6 +518,10 @@ func (m *Model) rightSide(c *ui.Context, p *ui.Theme, oi oiColors) {
 		switch m.rightTool {
 		case "notifications":
 			m.notificationsView(c, p, oi)
+		case "problems":
+			m.problemsPanel(c, p)
+		case "todo":
+			m.todoPanel(c, p)
 		default:
 			m.hierarchyRightView(c, p, oi)
 		}

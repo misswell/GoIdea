@@ -65,7 +65,7 @@ reimplementing it. A row is `INTEGRATED` only when the GoIDEA product
 | Maven tool window | MISSING | no GoIDEA view; the backend serves only Maven dependency commands today, so a project model has to land before a tree can be honest |
 | Gradle tool window | MISSING | same as Maven: `gradle_*` dependency commands exist, no project model |
 | Window Group Tabs (multiple project windows) | MISSING | OpenIDEA's WindowGroupTabs lists project windows; GoIDEA holds one project per app instance |
-| Tool window Dock/Undock between areas | PARTIAL | Move to Bottom Right moves a bottom window into the split slot, and the left split and right area host fixed windows; OpenIDEA's move-to-left/right/bottom menu and detached windows are not ported |
+| Tool window Dock/Undock between areas | PARTIAL | Move to Bottom Right moves a bottom window into the split slot, and **Window › Move Tool Window to Right / Bottom** docks Problems and TODO into the right area and back, with the layout saved per project; OpenIDEA's move-to-left and detached windows are not ported; `internal/app/dock_test.go` |
 | Tool window pin/unpin | MISSING | GoIDEA never auto-hides a tool window on focus change, so pinning has nothing to hold |
 | Remote Development | MISSING | the backend exposes `remote_*`; no GoIDEA UI |
 | Agents | MISSING | OpenIDEA's Agents panel has no GoIDEA view; the backend ops are unverified over remote IPC |

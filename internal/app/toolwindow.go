@@ -328,6 +328,44 @@ func (m *Model) activateTool(name string) {
 	m.rememberLayout()
 }
 
+// MoveToolToRight docks a bottom window into the right area, as OpenIDEA's
+// tool window menu moves a window between areas. Problems and TODO render in
+// either area; the others keep their home.
+func (m *Model) MoveToolToRight() {
+	name := m.tool
+	if name != "problems" && name != "todo" {
+		if m.rightTool == "problems" || m.rightTool == "todo" {
+			name = m.rightTool
+		} else {
+			m.status = "该工具窗口不能移到右侧"
+			m.invalidate()
+			return
+		}
+	}
+	m.hideTool(name)
+	m.rightTool = name
+	m.rightHidden = false
+	m.rememberLayout()
+	m.invalidate()
+}
+
+// MoveToolToBottom docks a right-area window back into the bottom area.
+func (m *Model) MoveToolToBottom() {
+	switch m.rightTool {
+	case "problems":
+		m.rightHidden = true
+		m.rememberLayout()
+		m.ShowProblems()
+	case "todo":
+		m.rightHidden = true
+		m.rememberLayout()
+		m.ShowTodo()
+	default:
+		m.status = "该工具窗口不能移到底部"
+		m.invalidate()
+	}
+}
+
 // HideActiveToolWindow is OpenIDEA's Shift+Escape: the tool window the
 // shortcuts last showed goes away and the editor keeps the keyboard.
 func (m *Model) HideActiveToolWindow() {

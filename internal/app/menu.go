@@ -76,6 +76,8 @@ func mainMenuGroups() []menuEntry {
 		action("Terminal", "view.terminal", "Alt+F12"),
 		action("Database", "view.database", ""),
 		action("Services", "view.services", ""),
+		action("Move Tool Window to Right", "view.moveToolToRight", ""),
+		action("Move Tool Window to Bottom", "view.moveToolToBottom", ""),
 		rule(),
 		action("Hide All Tool Windows", "view.hideAll", "CmdOrCtrl+Shift+F12"),
 	)
