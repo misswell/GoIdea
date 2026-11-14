@@ -76,6 +76,8 @@ needs a `## <version>` section here, or its build fails.
 - **Welcome** 最近项目可分组：新建、重命名、删除、移入移出，分组可折叠并随会话保存。
 - **Welcome** 搜索改为名称与路径的模糊匹配，命中字母高亮，方向键选择、Enter 打开、Esc 清空。
 - 最近项目会记住打开时间、分支和所属分组，旧会话首次读取时自动迁移。
+- **File › New Project…** 改为真实对话框：名称、位置、**Browse…** 与 **Create Git repository**，创建后直接打开项目。
+- 空目录会被复用，非空目录会提示冲突；创建失败在对话框内显示错误。
 - **Navigate > Call Hierarchy**（`Ctrl+Alt+H`）和 **Type Hierarchy**（`Ctrl+H`）在右侧列出调用链，可逐级展开。
 - **查找**（`Cmd+3`）和**查找用法**（`Alt+F7`）的结果改在底部工具窗口显示，不再占用侧边栏。
 - **结构**窗口（`Cmd+7`）在侧边栏列出当前文件的成员，可过滤、折叠，点击跳到声明。

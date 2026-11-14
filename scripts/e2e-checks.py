@@ -27,7 +27,7 @@ def get(data, dotted, default=None):
 SHOT_STATES = {
     "workbench", "editor", "bottom-todo", "split", "settings", "palette",
     "popup-quick-files", "search-everywhere", "balloons", "notifications",
-    "left-structure", "services", "dialog", "welcome-empty", "welcome",
+    "left-structure", "services", "new-project", "dialog", "welcome-empty", "welcome",
     "welcome-customize", "welcome-plugins",
 }
 
@@ -58,6 +58,10 @@ CHECKS = {
         ("searchError", *absent("searchError")),
         ("diff.rows", "Git diff has rows", lambda d: ((get(d, "diff.rows") or 0) > 0, get(d, "diff.rows"))),
         ("diffError", *absent("diffError")),
+        ("newProject.created", "New Project created a folder with Git", lambda d: (get(d, "newProject.created") is True and get(d, "newProject.inPlace") is True and get(d, "newProject.git") is True, {k: get(d, "newProject." + k) for k in ("created", "inPlace", "git", "createError")})),
+        ("newProject.reused", "an empty folder was reused", lambda d: (get(d, "newProject.reused") is True, get(d, "newProject.reused"))),
+        ("newProject.refused", "a non-empty folder was refused", lambda d: (get(d, "newProject.refused") is True, get(d, "newProject.refused"))),
+        ("newProjectError", *absent("newProject.error")),
         ("notify.count", "notifications recorded every level", lambda d: ((get(d, "notifications.count") or 0) >= 3, get(d, "notifications.count"))),
         ("notify.balloons", "the balloon stack held three", lambda d: (get(d, "notifications.balloons") == 3, get(d, "notifications.balloons"))),
         ("notify.sticky", "errors stayed until dismissed", lambda d: ((get(d, "notifications.sticky") or 0) >= 1, get(d, "notifications.sticky"))),

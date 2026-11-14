@@ -1943,7 +1943,7 @@ Local-only commands and the per-command argument lists are in
 | `fs_delete` | fs | yes | yes | missing |
 | `fs_entry_kind` | fs | yes |  | missing |
 | `fs_probe` | bytes | yes |  | missing |
-| `fs_read_dir` | fs | yes |  | missing |
+| `fs_read_dir` | fs | yes | yes | missing |
 | `fs_read_image` | bytes | yes |  | missing |
 | `fs_read_range` | bytes | yes |  | missing |
 | `fs_read_text` | fs | yes |  | missing |
@@ -2292,7 +2292,7 @@ Local-only commands and the per-command argument lists are in
 | `vcs_file_at` | vcs | yes | yes | missing |
 | `vcs_git_version` | vcs | yes |  | missing |
 | `vcs_has_hook` | vcs | yes |  | missing |
-| `vcs_init` | vcs | yes |  | missing |
+| `vcs_init` | vcs | yes | yes | missing |
 | `vcs_line_hunks` | vcs | yes |  | missing |
 | `vcs_log` | vcs | yes | yes | missing |
 | `vcs_log_details` | vcs | yes | yes | missing |
@@ -2380,7 +2380,7 @@ Local-only commands and the per-command argument lists are in
 | `wsl_distros` | wsl | no |  | missing |
 | `wsl_resolve` | wsl | no |  | missing |
 
-446 commands are served over stdio and 89 are called by GoIDEA today. A command
+446 commands are served over stdio and 91 are called by GoIDEA today. A command
 that is registered only in the desktop shell needs an `ops` module before stdio
 can serve it; a GoIDEA check counts only when the UI path works end to end.
 

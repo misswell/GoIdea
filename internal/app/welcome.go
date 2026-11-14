@@ -1108,8 +1108,6 @@ func shortenHome(path string) string {
 
 // NewProject asks for the folder of a new project and opens it, as OpenIDEA's
 // New Project picks the folder of the project it creates.
-func (m *Model) NewProject() { m.chooseProjectDialog("New Project", "Create") }
-
 // chooseProject asks for a folder and opens it.
 func (m *Model) chooseProject() { m.chooseProjectDialog("Open Project", "Open") }
 

@@ -441,6 +441,9 @@ type Model struct {
 	// welcomeGroupPath is the project the New Group prompt was opened from.
 	welcomeGroupPath string
 
+	// newProject is File › New Project… while it is up.
+	newProject newProjectState
+
 	// welcomeGroupDlg is the New Group / Rename Group prompt while it is up:
 	// the name being typed, the group being renamed ("" for a new one) and
 	// the project the new group's menu was opened for.

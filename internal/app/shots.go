@@ -163,6 +163,11 @@ func (m *Model) SmokeShots(ctx context.Context, dir string) (map[string]any, err
 	shot("left-structure")
 	m.post(func() { m.CloseStructure() })
 
+	// File › New Project… as a real dialog.
+	m.post(func() { m.NewProject() })
+	shot("new-project")
+	m.post(func() { m.CloseNewProject() })
+
 	// A dialog: File › Invalidate Caches….
 	m.post(func() { m.OpenInvalidateCaches() })
 	wait(func() bool { return m.invalidateDlg != nil }, 30*time.Second)

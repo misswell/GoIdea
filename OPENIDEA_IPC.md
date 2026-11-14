@@ -55,7 +55,7 @@ GoIDEA can rely on it; code that calls it must check `commands` first.
 | Environment | `env` | 1 | 0 | 0 |
 | File dialogs | `file_dialog` | 0 | 2 | 0 |
 | Fonts | `fonts` | 0 | 1 | 0 |
-| File system | `fs` | 12 | 0 | 6 |
+| File system | `fs` | 12 | 0 | 7 |
 | GitHub | `github` | 0 | 11 | 0 |
 | Local history | `history` | 3 | 0 | 3 |
 | HTTP client | `http` | 0 | 10 | 0 |
@@ -77,7 +77,7 @@ GoIDEA can rely on it; code that calls it must check `commands` first.
 | Syntax trees | `syntax` | 9 | 0 | 0 |
 | Terminal | `term` | 8 | 0 | 4 |
 | Toolchains | `tools` | 7 | 0 | 3 |
-| Version control | `vcs` | 82 | 0 | 17 |
+| Version control | `vcs` | 82 | 0 | 18 |
 | Web preview | `web` | 0 | 3 | 0 |
 | Window and menu | `window` | 0 | 33 | 0 |
 | Window drag | `window_drag` | 0 | 1 | 0 |
@@ -88,7 +88,7 @@ GoIDEA can rely on it; code that calls it must check `commands` first.
 ## Served by `openidea-server --stdio`
 
 446 commands. `GoIDEA` marks the ones a non-test Go source invokes today
-(89 of 446).
+(91 of 446).
 
 | Command | Domain | Arguments | GoIDEA |
 | --- | --- | --- | --- |
@@ -237,7 +237,7 @@ GoIDEA can rely on it; code that calls it must check `commands` first.
 | `fs_delete` | File system | `path` | yes |
 | `fs_entry_kind` | File system | `path` | — |
 | `fs_probe` | Binary file reads | `path` | — |
-| `fs_read_dir` | File system | `path` | — |
+| `fs_read_dir` | File system | `path` | yes |
 | `fs_read_image` | Binary file reads | `path` | — |
 | `fs_read_range` | Binary file reads | `len`, `offset`, `path` | — |
 | `fs_read_text` | File system | `path` | — |
@@ -488,7 +488,7 @@ GoIDEA can rely on it; code that calls it must check `commands` first.
 | `vcs_file_at` | Version control | `path`, `rev` | yes |
 | `vcs_git_version` | Version control | `path` | — |
 | `vcs_has_hook` | Version control | `name`, `repo` | — |
-| `vcs_init` | Version control | `dir` | — |
+| `vcs_init` | Version control | `dir` | yes |
 | `vcs_line_hunks` | Version control | `path` | — |
 | `vcs_log` | Version control | `query`, `repo` | yes |
 | `vcs_log_details` | Version control | `repo`, `revision` | yes |
@@ -738,7 +738,7 @@ GoIDEA needs to do for each:
 
 ## What this means for GoIDEA
 
-446 remote commands are available today; GoIDEA uses 89. The parity work is
+446 remote commands are available today; GoIDEA uses 91. The parity work is
 first to cover the remote surface OpenIDEA's own frontend uses, then to move
 `shared-op`/`host`/`crate` commands onto stdio through the OpenIDEA fork
 (a submodule bump and a server release), and to implement `desktop` commands
