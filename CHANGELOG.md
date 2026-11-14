@@ -87,6 +87,7 @@ needs a `## <version>` section here, or its build fails.
 - **Search Everywhere** 无结果时显示居中的空、加载或错误状态，与其他面板一致。
 - 关闭最后一个弹窗后键盘焦点自动回到编辑器，不再停留在空处。
 - 按住工具窗口条纹按钮拖到工作区边缘即可停靠，下半部或右侧会落到副插槽。
+- **Window › View Mode** 新增 **Dock Pinned / Dock Unpinned**：未固定窗口在焦点移开时自动隐藏并随项目保存。
 - **Window › Pin Tool Window** 固定当前窗口：别的窗口会占用同侧另一半，两侧都固定时提示等待。
 - **Search Everywhere** 页签新增 **Filter**：按符号种类筛选，**Text** 页可填文件掩码，设置会保存。
 - **Services** 显示运行配置的状态和退出码，运行中的进程多出一行 **Stop** 可直接停止。

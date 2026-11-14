@@ -107,6 +107,9 @@ type dockState struct {
 	// pinned windows keep their slot: a window opened into the same area
 	// takes the area's other slot instead, and when both are pinned it waits.
 	pinned map[string]bool
+	// viewModes is OpenIDEA v0.1.44's per-window View Mode other than Dock
+	// Pinned: "dockUnpinned" hides the window when focus moves away.
+	viewModes map[string]string
 }
 
 // dockSpec returns a registered window.
@@ -357,6 +360,50 @@ func (m *Model) dockDragGhost(id string, x, y, w, h float32, held bool) {
 	m.DockMove(id, m.dockDragSlot)
 }
 
+// toolViewMode is OpenIDEA v0.1.44's per-window View Mode: "dockPinned" by
+// default, or "dockUnpinned" when the window hides as focus moves away.
+func (m *Model) toolViewMode(id string) string {
+	if m.dock.viewModes[id] == "dockUnpinned" {
+		return "dockUnpinned"
+	}
+	return "dockPinned"
+}
+
+// SetToolViewMode stores a window's View Mode. Undock needs floating native
+// windows GoIDEA does not have yet, so it says so instead of pretending.
+func (m *Model) SetToolViewMode(id, mode string) {
+	if dockSpec(id) == nil {
+		return
+	}
+	switch mode {
+	case "dockPinned":
+		if m.dock.viewModes != nil {
+			delete(m.dock.viewModes, id)
+		}
+	case "dockUnpinned":
+		if m.dock.viewModes == nil {
+			m.dock.viewModes = map[string]string{}
+		}
+		m.dock.viewModes[id] = mode
+	case "undock":
+		m.status = "分离窗口（Undock）尚未移植：MyGo 目前只有单窗口"
+		m.invalidate()
+		return
+	}
+	m.rememberLayout()
+	m.invalidate()
+}
+
+// hideUnpinnedWindows hides every dockUnpinned window except the one that
+// just took focus, as OpenIDEA's Dock Unpinned mode does.
+func (m *Model) hideUnpinnedWindows(except string) {
+	for id, mode := range m.dock.viewModes {
+		if mode == "dockUnpinned" && id != except && m.dockWindowShown(id) {
+			m.DockHide(id)
+		}
+	}
+}
+
 // DockShow shows a registered window in its home slot (or where it already
 // sits), taking that slot from whatever held it. The content opens even when
 // it moves areas, so no slot is ever blank. A pinned window keeps its slot:
@@ -387,6 +434,7 @@ func (m *Model) DockShow(id string) {
 	m.dockTouch(id)
 	release()
 	m.dockSyncMirrors()
+	m.hideUnpinnedWindows(id)
 	m.rememberLayout()
 	m.invalidate()
 }
@@ -563,7 +611,10 @@ type DockLayout struct {
 	Active  string            `json:"active,omitempty"`
 	Last    []string          `json:"last,omitempty"`
 	Hidden  map[string]string `json:"hidden,omitempty"`
-	Max     bool              `json:"maximized,omitempty"`
+	// ViewModes are the windows whose View Mode is not Dock Pinned
+	// (v0.1.44's dockUnpinned).
+	ViewModes map[string]string `json:"viewModes,omitempty"`
+	Max       bool              `json:"maximized,omitempty"`
 	// Pinned are the windows a Pin keeps in their slot.
 	Pinned []string `json:"pinned,omitempty"`
 }
@@ -601,6 +652,14 @@ func (m *Model) currentDockLayout() *DockLayout {
 	for id := range m.dock.pinned {
 		if dockSpec(id) != nil {
 			l.Pinned = append(l.Pinned, id)
+		}
+	}
+	for id, mode := range m.dock.viewModes {
+		if dockSpec(id) != nil && mode == "dockUnpinned" {
+			if l.ViewModes == nil {
+				l.ViewModes = map[string]string{}
+			}
+			l.ViewModes[id] = mode
 		}
 	}
 	sort.Strings(l.Pinned)
@@ -648,6 +707,15 @@ func (m *Model) applyDockLayout(d *DockLayout) {
 			m.dock.pinned = map[string]bool{}
 		}
 		m.dock.pinned[id] = true
+	}
+	for id, mode := range d.ViewModes {
+		if dockSpec(id) == nil || mode != "dockUnpinned" {
+			continue
+		}
+		if m.dock.viewModes == nil {
+			m.dock.viewModes = map[string]string{}
+		}
+		m.dock.viewModes[id] = mode
 	}
 	for name, id := range d.Hidden {
 		s, ok := dockSlotOfName(name)

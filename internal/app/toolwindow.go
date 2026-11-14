@@ -250,6 +250,15 @@ func (m *Model) applyLayout(root string) {
 			}
 			m.dock.pinned[id] = true
 		}
+		for id, mode := range l.Dock.ViewModes {
+			if dockSpec(id) == nil || mode != "dockUnpinned" {
+				continue
+			}
+			if m.dock.viewModes == nil {
+				m.dock.viewModes = map[string]string{}
+			}
+			m.dock.viewModes[id] = mode
+		}
 	} else {
 		// Sessions from before the dock: split the old lists the way the
 		// old workbench read them.

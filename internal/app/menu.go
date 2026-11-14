@@ -82,6 +82,11 @@ func mainMenuGroups() []menuEntry {
 		action("Move Tool Window to Right Bottom", "view.moveToolToRightSplit", ""),
 		action("Move Tool Window to Bottom", "view.moveToolToBottom", ""),
 		actionChecked("Pin Tool Window", "view.pinToolWindow", func(m *Model) bool { return m.dockPinned(m.tool) }),
+		submenu("View Mode",
+			actionChecked("Dock Pinned", "view.viewModePinned", func(m *Model) bool { return m.toolViewMode(m.tool) == "dockPinned" }),
+			actionChecked("Dock Unpinned", "view.viewModeUnpinned", func(m *Model) bool { return m.toolViewMode(m.tool) == "dockUnpinned" }),
+			action("Undock", "view.viewModeUndock", ""),
+		),
 		rule(),
 		action("Hide All Tool Windows", "view.hideAll", "CmdOrCtrl+Shift+F12"),
 	)
