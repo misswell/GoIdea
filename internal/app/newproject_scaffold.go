@@ -243,12 +243,12 @@ func (m *Model) createScaffoldProject() {
 			values[f.ID] = v
 		}
 	}
-	values["name"] = strings.TrimSpace(st.name)
 	st.busy, st.err, st.steps = true, "", nil
 	st.seq++
 	seq := st.seq
 	channel := m.nextChannel()
-	st.channel = channel
+	request := m.nextRequest()
+	st.channel, st.request = channel, request
 	m.invalidate()
 	req := map[string]any{
 		"generator": st.generator,
@@ -261,7 +261,7 @@ func (m *Model) createScaffoldProject() {
 		ctx, cancel := context.WithTimeout(m.ctx, 15*time.Minute)
 		defer cancel()
 		raw, err := m.mgr.Invoke(ctx, "goidea", "scaffold_create", map[string]any{
-			"req": req, "request": m.nextRequest(), "onEvent": map[string]any{"$channel": channel},
+			"req": req, "request": request, "onEvent": map[string]any{"$channel": channel},
 		})
 		var dir string
 		if err == nil {
@@ -272,7 +272,7 @@ func (m *Model) createScaffoldProject() {
 				return
 			}
 			m.newProject.busy = false
-			m.newProject.channel = 0
+			m.newProject.channel, m.newProject.request = 0, 0
 			if err != nil {
 				m.newProject.err = "创建失败：" + err.Error()
 				m.invalidate()

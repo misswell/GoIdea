@@ -42,6 +42,8 @@ type newProjectState struct {
 	// steps are the creation output lines the backend streamed.
 	steps   []string
 	channel uint32
+	// request is the scaffold_create request, cancelled when the dialog closes.
+	request uint32
 }
 
 // projectNameError is why name cannot be a project folder, or "".
@@ -111,6 +113,10 @@ func (m *Model) BrowseNewProjectLocation() {
 // CloseNewProject dismisses the dialog; a creation in flight is dropped
 // rather than opening over the dialog the user closed.
 func (m *Model) CloseNewProject() {
+	if m.newProject.request != 0 && m.ctx != nil && m.mgr != nil {
+		m.cancelRequest(m.newProject.request)
+	}
+	m.newProject.request = 0
 	m.newProject.open = false
 	m.newProject.busy = false
 	m.newProject.seq++
