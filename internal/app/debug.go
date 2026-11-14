@@ -525,6 +525,16 @@ func (m *Model) Debug() {
 			return
 		}
 		m.post(func() {
+			if m.Root() != root {
+				// The project changed while the session started: stop the
+				// old project's debugger and leave the new state alone.
+				go func(id uint32) {
+					ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
+					defer cancel()
+					_, _ = m.mgr.Invoke(ctx, Window, "debug_stop", map[string]any{"session": id})
+				}(session)
+				return
+			}
 			m.debug.starting = false
 			if m.debug.session == 0 {
 				m.debug.session = session

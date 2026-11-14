@@ -23,7 +23,8 @@ into the app (`Contents/Resources/licenses`).
 - Project: https://github.com/l0ng-ai/openidea
 - Fork: https://github.com/misswell/openidea
 - Pin: submodule `third_party/openidea` at commit `5514282` (the source the RPC
-  client is tested against; the shipped server is the v0.1.44 release build below)
+  client is tested against; the shipped server is the v0.1.44 release build below, or a release build
+  of that same commit when the release asset host is unreachable)
 - Modification: none; the submodule is the fork's untouched commit
 - Attribution: the submodule's own `LICENSE` and `NOTICE`
 

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -611,6 +613,18 @@ func (m *Model) SmokeRun(ctx context.Context) (config string, code *int32, outpu
 		return "", nil, "", errors.New("项目没有可运行的配置")
 	}
 	sel := pickRunConfig(configs)
+	if want := strings.TrimSpace(os.Getenv("GOIDEA_SMOKE_RUN_CONFIG")); want != "" {
+		sel = -1
+		for i, c := range configs {
+			if c.Name == want {
+				sel = i
+				break
+			}
+		}
+		if sel < 0 {
+			return "", nil, "", fmt.Errorf("没有名为 %s 的运行配置", want)
+		}
+	}
 	cfg := configs[sel]
 	channel := m.nextChannel()
 	m.post(func() {
@@ -654,6 +668,14 @@ func (m *Model) SmokeRun(ctx context.Context) (config string, code *int32, outpu
 		m.run.running = info.Running
 		m.invalidate()
 	})
+
+	if ms, err := strconv.Atoi(os.Getenv("GOIDEA_SMOKE_RUN_STOP_MS")); err == nil && ms > 0 {
+		select {
+		case <-ctx.Done():
+		case <-time.After(time.Duration(ms) * time.Millisecond):
+			m.StopRun()
+		}
+	}
 
 	tick := time.NewTicker(200 * time.Millisecond)
 	defer tick.Stop()
