@@ -116,3 +116,35 @@ func TestStatusSideIsStableAcrossCalls(t *testing.T) {
 		}
 	}
 }
+
+func TestStatusBarShowsBranchAndBuild(t *testing.T) {
+	m := &Model{}
+	if indexOf(statusIDs(m.statusSide("right")), "status.vcs") != -1 {
+		t.Fatal("a repository-less project shows a branch")
+	}
+	if indexOf(statusIDs(m.statusSide("left")), "status.build") != -1 {
+		t.Fatal("an idle project shows a build")
+	}
+
+	head := "main"
+	m.branch.head = &head
+	m.build.busy = true
+	if indexOf(statusIDs(m.statusSide("right")), "status.vcs") == -1 {
+		t.Fatal("the branch item is hidden while a branch is checked out")
+	}
+	if indexOf(statusIDs(m.statusSide("left")), "status.build") == -1 {
+		t.Fatal("the build item is hidden while a build runs")
+	}
+
+	// Without the title bar widgets the only "main" left is the status bar.
+	m.prefs.MainToolbar = &toolbarLayout{Hidden: []string{
+		toolbarProject, toolbarVCS, toolbarRun, toolbarSearch, toolbarTerminal}}
+	tt := workbenchTester(t, m)
+	if r, ok := tt.Find("main"); !ok || r.Y < 900-oiStatusBarHeight {
+		t.Fatalf("the branch is not in the status bar: %+v, %v", r, ok)
+	}
+	if r, ok := tt.Find("Building…"); !ok || r.Y < 900-oiStatusBarHeight {
+		t.Fatalf("the build state is not in the status bar: %+v, %v", r, ok)
+	}
+	m.prefs.MainToolbar = nil
+}

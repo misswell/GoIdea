@@ -40,6 +40,31 @@ func init() {
 				ui.Text(c, text).FontSize(13).TextColor(tone).SingleLine()
 			}
 		}})
+	registerStatusItem(&StatusItem{ID: "status.vcs", Side: "right", Order: 5,
+		Visible: func(m *Model) bool { return m.branchLabel() != "" },
+		Render: func(m *Model, c *ui.Context, p *ui.Theme, oi oiColors) {
+			label := m.branchLabel()
+			tk := oiTokensOf(p)
+			b := ui.ButtonBase(c.Key("status:branch")).Height(tk.StatusBarHeight-tk.SpaceL).
+				Padding(0, tk.SpaceM).Radius(tk.RadiusS).Gap(tk.SpaceS).
+				AlignItems(ui.Center).Cursor(ui.CursorPointer)
+			if b.Hovered() {
+				b.Background(oi.toolbarHover)
+			}
+			b.Tooltip("Git branches")
+			b.Children(func() {
+				ui.Icon(c, iconWelcomeBranch).Size(14, 14).TextColor(oi.textMuted)
+				ui.Text(c, label).FontSize(tk.FontSizeM).TextColor(oi.textMuted).SingleLine()
+			})
+			if b.Clicked() {
+				m.ToggleBranches()
+			}
+		}})
+	registerStatusItem(&StatusItem{ID: "status.build", Side: "left", Order: 30,
+		Visible: func(m *Model) bool { return m.build.busy },
+		Render: func(m *Model, c *ui.Context, p *ui.Theme, oi oiColors) {
+			ui.Text(c, "Building…").FontSize(13).TextColor(oi.warning).SingleLine()
+		}})
 	registerStatusItem(&StatusItem{ID: "status.problems", Side: "right", Order: 10,
 		Render: func(m *Model, c *ui.Context, p *ui.Theme, oi oiColors) {
 			m.problemsStatus(c, p)
