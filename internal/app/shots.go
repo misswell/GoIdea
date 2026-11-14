@@ -152,6 +152,16 @@ func (m *Model) SmokeShots(ctx context.Context, dir string) (map[string]any, err
 	shot("search-everywhere")
 	m.post(func() { m.CloseSearchEverywhere() })
 
+	// Notifications: the bottom-right balloons and the tool window's history.
+	m.post(func() { m.notifyGroupSample() })
+	shot("balloons")
+	m.post(func() { m.ShowNotifications() })
+	shot("notifications")
+	m.post(func() {
+		m.CloseNotifications()
+		m.ClearNotifications()
+	})
+
 	// Welcome: empty, then with recents, Customize and Plugins.
 	m.post(func() { m.showWelcome() })
 	wait(func() bool { return m.showingWelcome }, 30*time.Second)

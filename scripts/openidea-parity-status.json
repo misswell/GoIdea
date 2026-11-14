@@ -169,6 +169,10 @@
       "status": "integrated",
       "evidence": "internal/app/bookmarks.go bookmarkWindowRows, ShowBookmarksWindow Cmd+2, move chooser 移动 with OpenMoveBookmark/OpenNewBookmarkListForMove and folder rows; Cmd+F3 popup edit description (F2) in bookmarksDialog; internal/app/view.go sidebar tab and project tree 书签 chip; base.bookmark.window, base.bookmark.popup, base.bookmark.move, base.bookmark.folder"
     },
+    "toolwindow:notifications": {
+      "status": "partial",
+      "evidence": "internal/app/notifications.go balloons (3 newest, 10 s fade, sticky errors, hover pause, keyed replacement, actions) and notificationsView history with unread badge and Clear All; build results and failures notify; base.notify.* in the e2e; missing Settings › Notifications groups, sound and verbatim plugin text"
+    },
     "toolwindow:git": {
       "status": "partial",
       "evidence": "base.vcs.changes, base.diff.rows, internal/app/log.go logPanel, base.log.commits, base.log.details, base.log.changes; internal/app/branch.go branchLabel, base.branch.head, base.branch.list, base.branch.checkout; internal/app/vcs.go vcsRows staging groups, StageChange, UnstageChange, AskRollback, base.stage.roundtrip, base.stage.discard"

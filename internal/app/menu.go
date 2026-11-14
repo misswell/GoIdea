@@ -71,6 +71,7 @@ func mainMenuGroups() []menuEntry {
 		action("Structure", "view.structure", "CmdOrCtrl+7"),
 		action("TODO", "view.todo", ""),
 		action("Commit", "view.commit", "CmdOrCtrl+0"),
+		action("Notifications", "view.notifications", ""),
 		action("Git", "vcs.show", "CmdOrCtrl+9"),
 		action("Terminal", "view.terminal", "Alt+F12"),
 		action("Database", "view.database", ""),

@@ -308,6 +308,9 @@ func smoke(m *app.Model) {
 	if os.Getenv("GOIDEA_SMOKE_COMMANDS") == "1" {
 		fields["commands"] = m.SmokeCommands()
 	}
+	if os.Getenv("GOIDEA_SMOKE_NOTIFY") == "1" {
+		fields["notifications"] = m.SmokeNotifications()
+	}
 	if os.Getenv("GOIDEA_SMOKE_SETTINGS") == "1" {
 		fields["settings"] = m.SmokeSettings()
 	}

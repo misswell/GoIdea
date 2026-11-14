@@ -29,7 +29,7 @@ new action, tool window, page or command appears automatically.
 | Feature folders | 43 | 0 | 12 | 0 | 0 | 31 |
 | Actions | 647 | 43 | 87 | 0 | 1 | 516 |
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
-| Tool windows | 30 | 10 | 5 | 0 | 0 | 15 |
+| Tool windows | 30 | 10 | 6 | 0 | 0 | 14 |
 | Overlays | 56 | 1 | 0 | 0 | 0 | 55 |
 | Editor contributions | 35 | 0 | 1 | 0 | 0 | 34 |
 | Editor kinds | 4 | 0 | 0 | 0 | 0 | 4 |
@@ -980,7 +980,7 @@ same bindings until a check records it.
 | `inspection` | Inspection Results | bottom | `src/features/analysis/index.ts` | missing |
 | `logcat` | Logcat | bottom | `src/features/logcat/index.ts` | missing |
 | `maven` | Maven | right | `src/features/build-tools/index.ts` | missing |
-| `notifications` | Notifications | right | `src/workbench/activate.ts` | missing |
+| `notifications` | Notifications | right | `src/workbench/activate.ts` | partial - internal/app/notifications.go balloons (3 newest, 10 s fade, sticky errors, hover pause, keyed replacement, actions) and notificationsView history with unread badge and Clear All; build results and failures notify; base.notify.* in the e2e; missing Settings › Notifications groups, sound and verbatim plugin text |
 | `problems` | Problems | bottom | `src/features/code-insight/index.ts` | integrated - internal/app/problems.go problemsPanel; lsp.problems.errors, lsp.problems.rows, lsp.problems.visible; internal/app/problems_test.go |
 | `profiler` | Profiler | bottom | `src/features/profiler/index.ts` | missing |
 | `project` | Project | left | `src/features/project-tree/index.ts` | integrated - internal/workspace tree tests; base.tabs |

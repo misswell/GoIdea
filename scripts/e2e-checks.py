@@ -26,8 +26,8 @@ def get(data, dotted, default=None):
 # server, so only the online phases add it.
 SHOT_STATES = {
     "workbench", "editor", "bottom-todo", "split", "settings", "palette",
-    "popup-quick-files", "search-everywhere", "welcome-empty", "welcome",
-    "welcome-customize", "welcome-plugins",
+    "popup-quick-files", "search-everywhere", "balloons", "notifications",
+    "welcome-empty", "welcome", "welcome-customize", "welcome-plugins",
 }
 
 
@@ -57,6 +57,13 @@ CHECKS = {
         ("searchError", *absent("searchError")),
         ("diff.rows", "Git diff has rows", lambda d: ((get(d, "diff.rows") or 0) > 0, get(d, "diff.rows"))),
         ("diffError", *absent("diffError")),
+        ("notify.count", "notifications recorded every level", lambda d: ((get(d, "notifications.count") or 0) >= 3, get(d, "notifications.count"))),
+        ("notify.balloons", "the balloon stack held three", lambda d: (get(d, "notifications.balloons") == 3, get(d, "notifications.balloons"))),
+        ("notify.sticky", "errors stayed until dismissed", lambda d: ((get(d, "notifications.sticky") or 0) >= 1, get(d, "notifications.sticky"))),
+        ("notify.replace", "a keyed notification replaced the earlier one", lambda d: (get(d, "notifications.afterReplace") == 3, get(d, "notifications.afterReplace"))),
+        ("notify.window", "the Notifications window opened on the right", lambda d: (get(d, "notifications.window") is True, get(d, "notifications.window"))),
+        ("notify.read", "opening the list marked it read", lambda d: (get(d, "notifications.unreadAfterOpen") == 0, get(d, "notifications.unreadAfterOpen"))),
+        ("notify.cleared", "Clear All emptied the history", lambda d: (get(d, "notifications.cleared") == 0, get(d, "notifications.cleared"))),
         ("commands", "command palette is populated", lambda d: ((get(d, "commands.all") or 0) >= 30, get(d, "commands.all"))),
         ("commands.invalidate", "the Invalidate Caches dialog opens, stages an option and closes", lambda d: (get(d, "commands.invalidateOpen") is True and get(d, "commands.invalidateStaged") is True and get(d, "commands.invalidateClosed") is True, {"open": get(d, "commands.invalidateOpen"), "staged": get(d, "commands.invalidateStaged"), "closed": get(d, "commands.invalidateClosed")})),
         ("settings.opened", "settings sheet opened", lambda d: (get(d, "settings.opened") is True, get(d, "settings.opened"))),

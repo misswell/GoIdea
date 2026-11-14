@@ -178,6 +178,9 @@ type Model struct {
 	se            *sePane
 	recentActions []string
 
+	// notify is the notification center: the balloons and their history.
+	notify notifier
+
 	// runAnything is the open Run Anything popup, or nil.
 	runAnything *runAnythingState
 
@@ -678,6 +681,7 @@ func (m *Model) fail(path string, err error) {
 	}
 	m.banner = err.Error()
 	m.bannerPath = path
+	m.notifyError("fail:"+path, "Error", notifySuffix(err.Error()))
 	m.invalidate()
 }
 

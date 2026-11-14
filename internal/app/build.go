@@ -145,6 +145,7 @@ func (m *Model) startBuild(kind string, file *string) {
 			if err != nil {
 				m.build.err = "构建失败：" + err.Error()
 				m.status = "构建请求失败"
+				m.notifyError("build", "Build failed", notifySuffix(err.Error()))
 				m.invalidate()
 				return
 			}
@@ -161,6 +162,15 @@ func (m *Model) startBuild(kind string, file *string) {
 				m.build.system = result.System
 			}
 			m.status = buildSummary(result)
+			show := notifyAction{label: "Show Build Output", run: func(m *Model) { m.ShowBuild() }}
+			switch {
+			case !ok:
+				m.notifyError("build", "Build failed", buildSummary(result), show)
+			case result.Warnings > 0:
+				m.notifyWarning("build", "Build finished with warnings", buildSummary(result), show)
+			default:
+				m.notifyInfo("build", "Build finished", buildSummary(result), show)
+			}
 			m.invalidate()
 		})
 	}()

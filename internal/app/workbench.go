@@ -266,6 +266,7 @@ func (m *Model) workbench(c *ui.Context, p *ui.Theme) {
 				m.rightStripe(c, p, oi)
 			})
 		}
+		m.balloons(c, p)
 		m.statusBar(c, p)
 	})
 }
@@ -514,13 +515,19 @@ func (m *Model) rightWidthHandle(c *ui.Context, oi oiColors) {
 func (m *Model) rightSide(c *ui.Context, p *ui.Theme, oi oiColors) {
 	ui.Column(c).Key("right:side").Width(m.rightSideWidth()).Shrink(0).
 		MinHeight(0).AlignItems(ui.Stretch).Children(func() {
-		m.hierarchyRightView(c, p, oi)
+		switch m.rightTool {
+		case "notifications":
+			m.notificationsView(c, p, oi)
+		default:
+			m.hierarchyRightView(c, p, oi)
+		}
 	})
 }
 
 // rightStripe is the right edge's stripe of tool window buttons, mirroring the
 // left one. Hierarchy joins it on use, as OpenIDEA registers that window with
-// stripe: "onUse"; its button stays while the window has a tree.
+// stripe: "onUse"; its button stays while the window has a tree. The bell is
+// OpenIDEA's Notifications window and carries the unread count.
 func (m *Model) rightStripe(c *ui.Context, p *ui.Theme, oi oiColors) {
 	ui.Column(c).Width(oiStripeWidth).Shrink(0).Padding(5, oiIslandGap, 6, 4).
 		Gap(oiStripeGap).Children(func() {
@@ -529,7 +536,40 @@ func (m *Model) rightStripe(c *ui.Context, p *ui.Theme, oi oiColors) {
 			m.stripeButton(c, p, oi, "hierarchy", iconStructure, "Hierarchy",
 				m.rightShown() && m.rightTool == "hierarchy", m.ToggleHierarchyWindow)
 		}
+		m.stripeBell(c, p, oi)
 	})
+}
+
+// stripeBell is the Notifications stripe button with its unread badge.
+func (m *Model) stripeBell(c *ui.Context, p *ui.Theme, oi oiColors) {
+	active := m.rightShown() && m.rightTool == "notifications"
+	b := ui.ButtonBase(c.Key("stripe:notifications")).Size(oiStripeButton, oiStripeButton).
+		Radius(6).Justify(ui.Center).AlignItems(ui.Center).Cursor(ui.CursorPointer)
+	switch {
+	case active && !m.leftHidden:
+		b.Background(oi.stripeSelected)
+	case b.Hovered():
+		b.Background(oi.stripeHover)
+	}
+	b.Tooltip("Notifications")
+	tone := oi.textMuted
+	if active && !m.leftHidden {
+		tone = oi.text
+	}
+	b.Children(func() {
+		ui.Icon(c, notifyIcon).Size(20, 20).TextColor(tone)
+		if n := m.unreadNotifications(); n > 0 {
+			ui.Row(c).Absolute().Left(20).Top(4).MinWidth(13).Height(13).
+				Padding(0, 3).Radius(7).Background(p.Danger).Justify(ui.Center).
+				AlignItems(ui.Center).Children(func() {
+				ui.Text(c, fmt.Sprintf("%d", n)).FontSize(9).Bold().
+					TextColor(ui.Hex("#ffffff")).SingleLine()
+			})
+		}
+	})
+	if b.Clicked() {
+		m.ToggleNotificationsWindow()
+	}
 }
 
 // hideLeftSide closes both of the left side's areas, which a drag of its gap

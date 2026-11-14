@@ -148,7 +148,7 @@ func normalizeLayout(l Layout) Layout {
 		out.BottomHeight = l.BottomHeight
 	}
 	switch l.Right {
-	case "hierarchy":
+	case "hierarchy", "notifications":
 		out.Right = l.Right
 		out.RightHidden = l.RightHidden
 	}

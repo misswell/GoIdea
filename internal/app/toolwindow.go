@@ -327,7 +327,11 @@ func (m *Model) activateTool(name string) {
 func (m *Model) HideActiveToolWindow() {
 	if m.tool == "" || !m.toolVisible(m.tool) {
 		if m.rightShown() {
-			m.CloseHierarchyWindow()
+			if m.rightTool == "notifications" {
+				m.CloseNotifications()
+			} else {
+				m.CloseHierarchyWindow()
+			}
 		}
 		return
 	}
