@@ -1525,48 +1525,13 @@ func (m *Model) statusBar(c *ui.Context, p *ui.Theme) {
 	oi := oiPaletteOf(p)
 	ui.Row(c).Height(oiStatusBarHeight).Shrink(0).Padding(0, 10, 0, 12).
 		Gap(4).AlignItems(ui.Center).Children(func() {
-		if t := m.tab(); t != nil {
-			ui.Text(c, shortenHome(t.doc.Path())).FontSize(13).TextColor(oi.textMuted).
-				SingleLine().Ellipsis("…")
-		} else if m.status != "" {
-			ui.Text(c, m.status).FontSize(13).TextColor(oi.textMuted).
-				SingleLine().Ellipsis("…")
+		for _, it := range m.statusSide("left") {
+			it.Render(m, c, p, oi)
 		}
 		ui.Spacer(c)
-		if m.run.visible {
-			text := ""
-			tone := oi.textMuted
-			switch {
-			case m.run.running:
-				text = "Running"
-			case m.run.exitCode != nil && *m.run.exitCode == 0:
-				text = "Done"
-			case m.run.exitCode != nil:
-				text = fmt.Sprintf("Exit code %d", *m.run.exitCode)
-				tone = oi.warning
-			}
-			if text != "" {
-				ui.Text(c, text).FontSize(13).TextColor(tone).SingleLine()
-			}
+		for _, it := range m.statusSide("right") {
+			it.Render(m, c, p, oi)
 		}
-		m.problemsStatus(c, p)
-		if t := m.tab(); t != nil {
-			pos := t.state.CursorPos()
-			ui.Text(c, fmt.Sprintf("Ln %d, Col %d", pos.Line+1, pos.Col+1)).
-				FontSize(13).TextColor(oi.textMuted).SingleLine()
-		}
-		info := "UTF-8"
-		if t := m.tab(); t != nil {
-			if enc := t.doc.Info().Encoding; enc != "" {
-				info = enc
-			}
-		}
-		ui.Text(c, info).FontSize(13).TextColor(oi.textMuted).SingleLine()
-		state := "openidea-server connected"
-		if !m.BackendState().Running {
-			state = "openidea-server offline"
-		}
-		ui.Text(c, state).FontSize(13).TextColor(oi.textMuted).SingleLine()
 	})
 }
 
