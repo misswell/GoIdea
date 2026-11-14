@@ -100,6 +100,7 @@ needs a `## <version>` section here, or its build fails.
 - **Welcome** 最近项目可分组：新建、重命名、删除、移入移出，分组可折叠并随会话保存。
 - **Welcome** 搜索改为名称与路径的模糊匹配，命中字母高亮，方向键选择、Enter 打开、Esc 清空。
 - 最近项目会记住打开时间、分支和所属分组，旧会话首次读取时自动迁移。
+- **File › New Project…** 现在列出 OpenIDEA v0.1.44 的 38 个项目模板（Java、Spring Boot、Kotlin、Go、Rust 等），按模板字段创建并打开真实工程。
 - **File › New Project…** 改为真实对话框：名称、位置、**Browse…** 与 **Create Git repository**，创建后直接打开项目。
 - 空目录会被复用，非空目录会提示冲突；创建失败在对话框内显示错误。
 - **Welcome › Customize** 新增 **Accent color**、**Keymap** 入口和 **Startup**（重开上次项目 / 显示 Welcome），即时生效并保存。

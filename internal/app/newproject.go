@@ -30,6 +30,18 @@ type newProjectState struct {
 	err      string
 	// seq drops a reply whose dialog was closed.
 	seq int
+	// catalog are the backend's project generators; empty leaves the local
+	// folder creation below in charge (offline or no backend yet).
+	catalog    []scaffoldGenerator
+	catalogErr string
+	generator  string
+	// values are the user's edits of the selected generator's fields.
+	values map[string]string
+	// fields are the generator's fields plus its dynamic ones.
+	fields []scaffoldField
+	// steps are the creation output lines the backend streamed.
+	steps   []string
+	channel uint32
 }
 
 // projectNameError is why name cannot be a project folder, or "".
@@ -57,7 +69,9 @@ func (m *Model) NewProject() {
 	} else if home, err := os.UserHomeDir(); err == nil {
 		location = home
 	}
-	m.newProject = newProjectState{open: true, name: "untitled", location: location, gitInit: true}
+	m.newProject = newProjectState{open: true, name: "untitled", location: location, gitInit: true,
+		values: map[string]string{}}
+	m.loadScaffoldCatalog()
 	m.invalidate()
 }
 
@@ -112,6 +126,10 @@ func (m *Model) CreateNewProject() {
 	}
 	path := m.NewProjectPath()
 	if path == "" {
+		return
+	}
+	if st.scaffoldReady() && m.ctx != nil && m.mgr != nil {
+		m.createScaffoldProject()
 		return
 	}
 	st.busy = true
@@ -233,8 +251,9 @@ func (m *Model) newProjectDialog(c *ui.Context, p *ui.Theme) {
 	nameErr := projectNameError(st.name)
 	path := m.NewProjectPath()
 	ui.Modal(c, &open, func() {
-		ui.Column(c).Width(520).Gap(12).Children(func() {
+		ui.Column(c).Width(760).Gap(12).Children(func() {
 			ui.Text(c, "New Project").FontSize(15).Bold().TextColor(p.Text).SingleLine()
+			m.newProjectScaffoldPanel(c, p)
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "Name:").FontSize(12).TextColor(p.Text).Width(64).SingleLine()
 				in := ui.TextInput(c, &st.name).AutoFocus()
@@ -269,11 +288,18 @@ func (m *Model) newProjectDialog(c *ui.Context, p *ui.Theme) {
 				if ui.Button(c, "Cancel").Clicked() {
 					m.CloseNewProject()
 				}
-				b := ui.PrimaryButton(c, "Create")
-				if nameErr != "" || path == "" || st.busy {
-					b.Tooltip(nameErr)
+				badField := ""
+				for _, f := range st.fields {
+					if e := st.scaffoldFieldError(f); e != "" {
+						badField = f.Label + " " + e
+						break
+					}
 				}
-				if b.Clicked() && nameErr == "" && path != "" && !st.busy {
+				b := ui.PrimaryButton(c, "Create")
+				if nameErr != "" || path == "" || st.busy || badField != "" {
+					b.Tooltip(nameErr + badField)
+				}
+				if b.Clicked() && nameErr == "" && path != "" && !st.busy && badField == "" {
 					m.CreateNewProject()
 				}
 				if st.busy {

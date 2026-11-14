@@ -257,6 +257,19 @@ func smoke(m *app.Model) {
 			fields["switchError"] = swErr.Error()
 		}
 	}
+	if os.Getenv("GOIDEA_SMOKE_SCAFFOLD") == "1" && root != "" {
+		dir, err := os.MkdirTemp("", "goidea-scaffold-")
+		if err == nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
+			sc, scErr := m.SmokeScaffoldProject(ctx, dir)
+			cancel()
+			fields["scaffold"] = sc
+			if scErr != nil {
+				fields["scaffoldError"] = scErr.Error()
+			}
+			_ = os.RemoveAll(dir)
+		}
+	}
 	if os.Getenv("GOIDEA_SMOKE_RECOVERY") == "1" && root != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		rec, recErr := m.SmokeRecovery(ctx)
