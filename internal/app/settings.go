@@ -395,6 +395,9 @@ type Preferences struct {
 	// ScratchRecent are the languages New Scratch File lists first, most
 	// recent first.
 	ScratchRecent []string `json:"scratchRecent,omitempty"`
+	// Keymap maps an action id to the user's bindings, replacing the default
+	// ones; an empty list removes the shortcut. Nil means every default.
+	Keymap map[string][]string `json:"keymap,omitempty"`
 	// MainToolbar is the title bar's saved layout, nil for the default one.
 	MainToolbar *toolbarLayout `json:"mainToolbar,omitempty"`
 	// Plugins are each plugin's settings, by name, under the same "plugins"

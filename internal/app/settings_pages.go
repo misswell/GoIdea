@@ -423,17 +423,74 @@ func (m *Model) settingsKeymapBody(c *ui.Context, oi oiColors) {
 		ui.Text(c, "The actions this build carries, with the keys of the IntelliJ macOS map.").
 			FontSize(10.5).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
 	})
+	conflicts := m.KeymapConflicts()
+	conflicted := map[string]bool{}
+	for _, c := range conflicts {
+		for _, id := range c.Actions {
+			conflicted[id] = true
+		}
+	}
+	if len(conflicts) > 0 {
+		ui.Row(c).Padding(0, 0, 6, 0).Children(func() {
+			ui.Text(c, fmt.Sprintf("%d 个快捷键冲突；同一按键被两个 Action 使用。", len(conflicts))).
+				FontSize(10.5).TextColor(oi.danger).SingleLine().Ellipsis("…")
+		})
+	}
+	reset := ui.Button(c, "恢复默认键位").OnClick(func() {
+		m.KeymapSetOverrides(nil)
+		m.saveKeymapPrefs()
+	})
+	_ = reset
 	for _, cmd := range commands() {
-		if cmd.shortcut == "" {
+		bindings := m.KeymapBindings(cmd.id)
+		if len(bindings) == 0 && cmd.shortcut == "" {
 			continue
 		}
 		ui.Row(c.Key("keymap:"+cmd.id)).Height(24).Padding(0, 6).Gap(8).
 			AlignItems(ui.Center).Children(func() {
-			ui.Text(c, cmd.title).FontSize(12).TextColor(oi.text).
+			tone := oi.text
+			if conflicted[cmd.id] {
+				tone = oi.danger
+			}
+			ui.Text(c, cmd.title).FontSize(12).TextColor(tone).
 				SingleLine().Ellipsis("…").Grow(1)
-			ui.Text(c, cmd.shortcut).FontSize(10.5).TextColor(oi.textMuted).SingleLine()
+			label := strings.Join(bindings, " / ")
+			if label == "" {
+				label = "未绑定"
+			}
+			ui.Text(c, label).FontSize(10.5).TextColor(oi.textMuted).SingleLine()
+			if _, custom := m.keymapUserBindings()[cmd.id]; custom {
+				x := ui.ButtonBase(c.Key("keymap:clear:"+cmd.id)).Size(18, 18).Radius(4).
+					Justify(ui.Center).AlignItems(ui.Center).Cursor(ui.CursorPointer)
+				if x.Hovered() {
+					x.Background(oi.stripeHover)
+				}
+				x.Tooltip("Remove shortcut")
+				x.Children(func() {
+					ui.Text(c, "×").FontSize(12).TextColor(oi.textMuted).SingleLine()
+				})
+				x.OnClick(func() {
+					overrides := map[string][]string{}
+					for id, b := range m.keymapUserBindings() {
+						overrides[id] = b
+					}
+					overrides[cmd.id] = []string{}
+					m.KeymapSetOverrides(overrides)
+					m.saveKeymapPrefs()
+				})
+			}
 		})
 	}
+}
+
+// saveKeymapPrefs writes the keymap overrides, when there is a settings file.
+func (m *Model) saveKeymapPrefs() {
+	if path := m.settingsWritePath(); path != "" {
+		if err := m.prefs.Save(path); err != nil {
+			m.notifyError("keymap:save", "Couldn't save the keymap", notifySuffix(err.Error()))
+		}
+	}
+	m.invalidate()
 }
 
 // todoColorLabels are the colour names the TODO page's select offers, in the

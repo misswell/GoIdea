@@ -72,6 +72,7 @@ needs a `## <version>` section here, or its build fails.
 - 移到右侧的 **Problems**、**TODO** 不再显示空白；右侧上下可各放一个窗口，中间分隔线可拖动调整比例。
 - 工具窗口的位置、隐藏与恢复按六个插槽保存，旧会话打开项目时会自动迁移。
 - 全部工具窗口（Run、Debug、Build、Terminal、Git Log、Find、Usages、Structure、Bookmarks）改用同一套插槽与注册表，移动或隐藏不会清空内容。
+- **Settings › Keymap** 显示实际生效的键位，标出冲突，可逐项移除或**恢复默认键位**。
 - **Navigate > Call Hierarchy**（`Ctrl+Alt+H`）和 **Type Hierarchy**（`Ctrl+H`）在右侧列出调用链，可逐级展开。
 - **查找**（`Cmd+3`）和**查找用法**（`Alt+F7`）的结果改在底部工具窗口显示，不再占用侧边栏。
 - **结构**窗口（`Cmd+7`）在侧边栏列出当前文件的成员，可过滤、折叠，点击跳到声明。

@@ -20,10 +20,10 @@ type appCommand struct {
 	run      func(*Model)
 }
 
-// commands is every action the palette offers, in the order it lists them.
-// The registry is the palette's only source, so the menu stays the place for
-// platform roles while this is where actions are discovered.
-func commands() []appCommand {
+// builtinCommands is the built-in contribution of the action registry: the
+// commands this build ships. They are registered into the registry at start,
+// which is what every entry point reads.
+func builtinCommands() []appCommand {
 	return []appCommand{
 		{"project.new", "新建项目…", "文件", "Cmd+N", "new project create", func(m *Model) { m.NewProject() }},
 		{"file.newScratchFile", "New Scratch File…", "文件", "Cmd+Shift+N", "scratch temporary buffer new file language", func(m *Model) { m.OpenScratchChooser() }},
@@ -173,24 +173,46 @@ func commands() []appCommand {
 
 // Command returns the registry's command with id, the one entry the menu, the
 // title bar and the palette run a feature through.
-func Command(id string) (appCommand, bool) {
-	for _, cmd := range commands() {
-		if cmd.id == id {
-			return cmd, true
-		}
+// commands is every action the palette offers, in registration order: the
+// registry's built-ins and anything registered since.
+func commands() []appCommand {
+	list := actionList()
+	out := make([]appCommand, 0, len(list))
+	for _, a := range list {
+		out = append(out, commandOf(a))
 	}
-	return appCommand{}, false
+	return out
+}
+
+// Command looks an action up by id.
+func Command(id string) (appCommand, bool) {
+	a, ok := actionGet(id)
+	if !ok {
+		return appCommand{}, false
+	}
+	return commandOf(a), true
+}
+
+// commandOf adapts a registry action to the palette's row, with the shortcut
+// the keymap gives it.
+func commandOf(a *Action) appCommand {
+	return appCommand{
+		id:       a.ID,
+		title:    a.Title,
+		group:    a.Category,
+		shortcut: keymapShortcutLabel(a.ID),
+		keywords: a.Keywords,
+		run:      a.Run,
+	}
 }
 
 // RunCommand runs the registry command with id and reports whether the
 // registry knew it.
 func (m *Model) RunCommand(id string) bool {
-	cmd, ok := Command(id)
-	if !ok {
+	if !m.RunAction(id) {
 		return false
 	}
 	m.rememberRecentAction(id)
-	cmd.run(m)
 	return true
 }
 
