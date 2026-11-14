@@ -230,6 +230,8 @@ type Model struct {
 
 	// db is the open database sheet, or nil.
 	db *dbView
+	// dbTable is the open table data page.
+	dbTable *dbTableSheet
 
 	// intents is the open intentions prompt, or nil.
 	intents *intentPane
@@ -962,6 +964,7 @@ func (m *Model) openProject(dir string, files []string) {
 	m.closeCommands()
 	m.diff = nil
 	m.db = nil
+	m.dbTable = nil
 	mavenVisible := m.maven.visible
 	m.maven = mavenPane{visible: mavenVisible}
 	m.refactor, m.redoRefactor = nil, nil

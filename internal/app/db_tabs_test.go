@@ -60,3 +60,17 @@ func TestDBResultTabsCycleCloseAndCloseOthers(t *testing.T) {
 		t.Fatal("closing Output removed a result")
 	}
 }
+
+func TestDBTableRange(t *testing.T) {
+	if got := dbTableRange(nil); got != "没有行" {
+		t.Fatalf("nil sheet = %q", got)
+	}
+	s := &dbTableSheet{offset: 100}
+	if got := dbTableRange(s); got != "没有行" {
+		t.Fatalf("empty page = %q", got)
+	}
+	s.page.Result.Rows = [][]*string{nil, nil, nil}
+	if got := dbTableRange(s); got != "101–103 行" {
+		t.Fatalf("range = %q", got)
+	}
+}

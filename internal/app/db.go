@@ -580,13 +580,16 @@ func (m *Model) dbDialog(c *ui.Context, p *ui.Theme) {
 									ui.Text(c, t.Name).FontSize(12).TextColor(p.Text).
 										SingleLine().Ellipsis("…")
 								})
-								if r.Clicked() || r.DoubleClicked() {
+								if r.Clicked() {
 									table := t.Name
 									if v.schema != "" && v.schema != "main" && v.schema != "public" {
 										table = v.schema + "." + t.Name
 									}
 									v.sql = "SELECT * FROM " + table
 									m.invalidate()
+								}
+								if r.DoubleClicked() {
+									m.OpenDBTable(v.schema, t.Name)
 								}
 							}
 						})
@@ -863,10 +866,242 @@ func (m *Model) SmokeDatabase(ctx context.Context) (map[string]any, error) {
 				out["people"] = true
 			}
 		}
+		m.OpenDBTable(v.schema, "people")
+	})
+	wait("tablePage", func() bool {
+		s := m.dbTable
+		return s != nil && !s.loading && (s.err != "" || len(s.page.Result.Rows) > 0)
+	})
+	mygo.RunOnMain(func() {
+		s := m.dbTable
+		if s == nil {
+			return
+		}
+		out["tableRows"] = len(s.page.Result.Rows)
+		out["tableColumns"] = len(s.page.Result.Columns)
+		if s.err != "" {
+			out["tableError"] = s.err
+		}
+		m.ToggleDBTableDDL()
+	})
+	wait("ddl", func() bool {
+		s := m.dbTable
+		return s != nil && !s.ddlLoad && (s.ddl != "" || s.ddlErr != "")
+	})
+	mygo.RunOnMain(func() {
+		if s := m.dbTable; s != nil {
+			out["tableDDL"] = strings.Contains(strings.ToUpper(s.ddl), "CREATE")
+			if s.ddlErr != "" {
+				out["tableDDLError"] = s.ddlErr
+			}
+			m.closeDBTable()
+			out["tableClosed"] = m.dbTable == nil
+		}
 		m.closeDatabase()
-		out["closed"] = !v.open
+		out["closed"] = m.db == nil || !m.db.open
 	})
 	return out, nil
+}
+
+// dbTableSheet is the open table data page.
+type dbTableSheet struct {
+	open    bool
+	source  string
+	schema  string
+	table   string
+	offset  int
+	limit   int
+	page    openidea.DBTablePage
+	loading bool
+	err     string
+	ddl     string
+	ddlErr  string
+	showDDL bool
+	ddlLoad bool
+	gen     uint64
+}
+
+// OpenDBTable shows the data page of a table of the selected source.
+func (m *Model) OpenDBTable(schema, table string) {
+	if m.db == nil || m.db.source == "" || table == "" {
+		return
+	}
+	if schema == "" {
+		schema = m.db.schema
+	}
+	m.dbTable = &dbTableSheet{
+		open: true, source: m.db.source, schema: schema, table: table, limit: 100,
+	}
+	m.loadDBTablePage()
+}
+
+// closeDBTable drops the data page.
+func (m *Model) closeDBTable() {
+	if m.dbTable != nil {
+		m.dbTable.gen++
+	}
+	m.dbTable = nil
+	m.invalidate()
+}
+
+// loadDBTablePage asks the backend for the page at the sheet's offset.
+func (m *Model) loadDBTablePage() {
+	s := m.dbTable
+	if s == nil || s.loading {
+		return
+	}
+	s.loading = true
+	s.err = ""
+	s.gen++
+	gen := s.gen
+	source, schema, table := s.source, s.schema, s.table
+	offset, limit := s.offset, s.limit
+	m.invalidate()
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, 60*time.Second)
+		defer cancel()
+		page, err := m.mgr.DBTablePageData(ctx, Window, m.nextRequest(), source, schema, table,
+			uint32(offset), uint32(limit))
+		m.post(func() {
+			if m.dbTable != s || s.gen != gen {
+				return
+			}
+			s.loading = false
+			if err != nil {
+				s.err = "读取表数据失败：" + err.Error()
+			} else {
+				s.page = page
+			}
+			m.invalidate()
+		})
+	}()
+}
+
+// DBTablePage moves the data page by whole pages, -1 previous, 1 next.
+func (m *Model) DBTableStepPage(delta int) {
+	s := m.dbTable
+	if s == nil || s.loading {
+		return
+	}
+	next := s.offset + delta*s.limit
+	if next < 0 || (delta > 0 && !s.page.Result.HasMore) {
+		return
+	}
+	s.offset = next
+	m.loadDBTablePage()
+}
+
+// ToggleDBTableDDL shows the table's CREATE statement, loading it once.
+func (m *Model) ToggleDBTableDDL() {
+	s := m.dbTable
+	if s == nil {
+		return
+	}
+	s.showDDL = !s.showDDL
+	if !s.showDDL || s.ddl != "" || s.ddlLoad {
+		m.invalidate()
+		return
+	}
+	s.ddlLoad = true
+	gen := s.gen
+	source, schema, table := s.source, s.schema, s.table
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
+		defer cancel()
+		ddl, err := m.mgr.DBTableDDL(ctx, Window, source, schema, table)
+		m.post(func() {
+			if m.dbTable != s || s.gen != gen {
+				return
+			}
+			s.ddlLoad = false
+			if err != nil {
+				s.ddlErr = "读取 DDL 失败：" + err.Error()
+			} else {
+				s.ddl = ddl
+			}
+			m.invalidate()
+		})
+	}()
+}
+
+// dbTableRange labels the rows a page shows.
+func dbTableRange(s *dbTableSheet) string {
+	if s == nil || len(s.page.Result.Rows) == 0 {
+		return "没有行"
+	}
+	from := s.offset + 1
+	to := s.offset + len(s.page.Result.Rows)
+	return fmt.Sprintf("%d–%d 行", from, to)
+}
+
+// dbTableDialog draws the data page.
+func (m *Model) dbTableDialog(c *ui.Context, p *ui.Theme) {
+	s := m.dbTable
+	if s == nil {
+		return
+	}
+	open := s.open
+	ui.Modal(c, &open, func() {
+		ui.Column(c).Width(860).Height(520).Gap(8).Children(func() {
+			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, "表数据："+s.table).FontSize(13).Bold().TextColor(p.Text).SingleLine()
+				if s.loading {
+					ui.Text(c, "读取中…").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+				} else {
+					ui.Text(c, dbTableRange(s)).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+				}
+				ui.Spacer(c)
+				ui.Button(c, "刷新").OnClick(func() { m.loadDBTablePage() })
+				ui.Button(c, "上一页").Disabled(s.offset == 0 || s.loading).
+					OnClick(func() { m.DBTableStepPage(-1) })
+				ui.Button(c, "下一页").Disabled(!s.page.Result.HasMore || s.loading).
+					OnClick(func() { m.DBTableStepPage(1) })
+				ui.Button(c, "DDL").OnClick(func() { m.ToggleDBTableDDL() })
+				ui.Button(c, "关闭").OnClick(func() { m.closeDBTable() })
+			})
+			if s.err != "" {
+				ui.Text(c, s.err).FontSize(11).TextColor(p.Danger).SingleLine().Ellipsis("…")
+			}
+			if s.showDDL {
+				ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
+					ui.Column(c).Padding(8, 8).Children(func() {
+						if s.ddlErr != "" {
+							ui.Text(c, s.ddlErr).FontSize(11).TextColor(p.Danger)
+						}
+						for _, line := range strings.Split(strings.TrimRight(s.ddl, "\n"), "\n") {
+							ui.Text(c, line).FontSize(11.5).Font("monospace").TextColor(p.Text).SingleLine()
+						}
+					})
+				})
+				return
+			}
+			ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
+				ui.Column(c).Children(func() {
+					ui.Row(c).Height(24).Children(func() {
+						for _, col := range s.page.Result.Columns {
+							ui.Text(c, col.Name).FontSize(10.5).Bold().TextColor(p.TextMuted).
+								Width(140).SingleLine().Ellipsis("…")
+						}
+					})
+					for _, row := range s.page.Result.Rows {
+						ui.Row(c).Height(22).Children(func() {
+							for _, cell := range row {
+								text, tone := "NULL", p.TextMuted
+								if cell != nil {
+									text, tone = *cell, p.Text
+								}
+								ui.Text(c, text).FontSize(11).TextColor(tone).
+									Width(140).SingleLine().Ellipsis("…")
+							}
+						})
+					}
+				})
+			})
+		})
+	})
+	if !open && m.dbTable != nil {
+		m.closeDBTable()
+	}
 }
 
 // dbActiveResult is the selected result tab index, -1 for Output or none.

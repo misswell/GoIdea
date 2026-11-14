@@ -1904,7 +1904,7 @@ Local-only commands and the per-command argument lists are in
 | `db_console_path` | db | yes |  | missing |
 | `db_database_catalog` | db | yes |  | missing |
 | `db_databases` | db | yes |  | missing |
-| `db_ddl` | db | yes |  | missing |
+| `db_ddl` | db | yes | yes | missing |
 | `db_disconnect` | db | yes | yes | missing |
 | `db_execute` | db | yes | yes | missing |
 | `db_explain` | db | yes |  | missing |
@@ -1925,7 +1925,7 @@ Local-only commands and the per-command argument lists are in
 | `db_sources` | db | yes | yes | missing |
 | `db_statements` | db | yes | yes | missing |
 | `db_table_details` | db | yes |  | missing |
-| `db_table_page` | db | yes |  | missing |
+| `db_table_page` | db | yes | yes | missing |
 | `db_tables` | db | yes | yes | missing |
 | `db_test` | db | yes |  | missing |
 | `db_trust_ssh_host` | db | yes |  | missing |
@@ -2488,7 +2488,7 @@ Local-only commands and the per-command argument lists are in
 | `wsl_distros` | wsl | no |  | missing |
 | `wsl_resolve` | wsl | no |  | missing |
 
-476 commands are served over stdio and 98 are called by GoIDEA today. A command
+476 commands are served over stdio and 100 are called by GoIDEA today. A command
 that is registered only in the desktop shell needs an `ops` module before stdio
 can serve it; a GoIDEA check counts only when the UI path works end to end.
 

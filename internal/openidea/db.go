@@ -56,6 +56,62 @@ type DBOutcome struct {
 	Error     string         `json:"error"`
 }
 
+// DBColumnInfo is one column of a table, as the table's details report it.
+type DBColumnInfo struct {
+	Name       string  `json:"name"`
+	DataType   string  `json:"dataType"`
+	Nullable   bool    `json:"nullable"`
+	Default    *string `json:"default"`
+	PrimaryKey bool    `json:"primaryKey"`
+}
+
+// DBTableDetails is the schema of a table: its columns and indexes.
+type DBTableDetails struct {
+	Columns []DBColumnInfo `json:"columns"`
+	Indexes []struct {
+		Name    string   `json:"name"`
+		Unique  bool     `json:"unique"`
+		Columns []string `json:"columns"`
+	} `json:"indexes"`
+}
+
+// DBTablePage is one page of a table's rows with its details.
+type DBTablePage struct {
+	Result  DBQueryResult  `json:"result"`
+	Details DBTableDetails `json:"details"`
+	Offset  float64        `json:"offset"`
+}
+
+// DBTablePageData reads one page of a table's rows and details; request is
+// the backend request id, so a long read can be cancelled.
+func (m *Manager) DBTablePageData(ctx context.Context, window string, request uint32, id, schema, table string, offset, limit uint32) (DBTablePage, error) {
+	raw, err := m.Invoke(ctx, window, "db_table_page", map[string]any{
+		"request": request, "id": id, "schema": schema, "table": table,
+		"offset": offset, "limit": limit, "sort": []map[string]any{},
+	})
+	if err != nil {
+		return DBTablePage{}, err
+	}
+	var out DBTablePage
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return DBTablePage{}, err
+	}
+	return out, nil
+}
+
+// DBTableDDL is the CREATE statement of a table.
+func (m *Manager) DBTableDDL(ctx context.Context, window, id, schema, table string) (string, error) {
+	raw, err := m.Invoke(ctx, window, "db_ddl", map[string]any{"id": id, "schema": schema, "table": table})
+	if err != nil {
+		return "", err
+	}
+	var out string
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return "", err
+	}
+	return out, nil
+}
+
 // DBSources lists the project's data sources.
 func (m *Manager) DBSources(ctx context.Context, window string) ([]DataSource, error) {
 	raw, err := m.Invoke(ctx, window, "db_sources", nil)
