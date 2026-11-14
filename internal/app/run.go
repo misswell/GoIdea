@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egoist/mygo/ui"
+
 	"mayoi/internal/openidea"
 )
 
@@ -26,6 +28,9 @@ type RunPane struct {
 	loading bool
 	// pendingStart runs the selected configuration once run_configs lands.
 	pendingStart bool
+	// pendingTrust is a Run the user asked for before trusting the project;
+	// it starts once the grant lands.
+	pendingTrust bool
 	// inline is a configuration that is not in the detected list, such as the
 	// command line Run Anything starts; current() reports it while it is set.
 	inline *openidea.RunConfig
@@ -84,6 +89,7 @@ func (m *Model) checkTrust(dir string) {
 				m.loadRunConfigs()
 			} else {
 				m.status += " · 未信任（运行前需授权）"
+				m.trustAsk = true
 			}
 			m.invalidate()
 		})
@@ -135,6 +141,10 @@ func (m *Model) TrustProject() {
 			m.run.trusted = status.Trusted
 			if m.run.trusted {
 				m.status = "已信任此项目，可以构建和运行"
+				if m.run.pendingTrust {
+					m.run.pendingTrust = false
+					m.run.pendingStart = true
+				}
 				m.loadRunConfigs()
 			}
 			if reopenErr != nil {
@@ -255,6 +265,9 @@ func (m *Model) Run() {
 		return
 	}
 	if !m.run.trusted {
+		m.run.pendingTrust = true
+		m.trustAsk = true
+		m.status = "项目未信任：请在弹窗中信任后再运行"
 		m.invalidate()
 		return
 	}
@@ -651,5 +664,41 @@ func (m *Model) SmokeRun(ctx context.Context) (config string, code *int32, outpu
 			return cfg.Name, nil, txt, ctx.Err()
 		case <-tick.C:
 		}
+	}
+}
+
+// trustDialog asks whether a project may build and run. It opens when an
+// untrusted project is opened and when Run, Build or Debug is asked for
+// before the grant.
+func (m *Model) trustDialog(c *ui.Context, p *ui.Theme) {
+	open := m.trustAsk
+	oi := oiPaletteOf(p)
+	ui.Modal(c, &open, func() {
+		ui.Column(c).Width(460).Gap(10).Children(func() {
+			ui.Text(c, "Trust Project").FontSize(14).Bold().TextColor(oi.text).SingleLine()
+			ui.Text(c, "此项目来自外部来源。构建、运行、调试和语言服务会执行项目中的代码。").
+				FontSize(12).TextColor(oi.textMuted)
+			if m.run.trustErr != "" {
+				ui.Text(c, m.run.trustErr).FontSize(11).TextColor(oi.danger)
+			}
+			ui.Row(c).Gap(8).Children(func() {
+				ui.Spacer(c)
+				ui.Button(c, "Cancel").OnClick(func() {
+					m.trustAsk = false
+					m.run.pendingTrust = false
+					m.invalidate()
+				})
+				ui.Button(c, "Trust Project").OnClick(func() {
+					m.trustAsk = false
+					m.TrustProject()
+					m.invalidate()
+				})
+			})
+		})
+	})
+	if !open {
+		m.trustAsk = false
+		m.run.pendingTrust = false
+		m.invalidate()
 	}
 }

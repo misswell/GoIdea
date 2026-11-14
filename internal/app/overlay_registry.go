@@ -97,4 +97,9 @@ func init() {
 	reg("scratchChooser", overlayLayerDialog, 270, false,
 		func(m *Model) bool { return m.scratch != nil },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.scratchChooserDialog(c, p) })
+	// The Trust Project question, shown for a project the user has not
+	// allowed to build and run.
+	reg("trust", overlayLayerDialog, 265, true,
+		func(m *Model) bool { return m.trustAsk },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.trustDialog(c, p) })
 }

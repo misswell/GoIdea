@@ -82,6 +82,7 @@ func (m *Model) startBuild(kind string, file *string) {
 	}
 	if !m.run.trusted {
 		m.build.err = "未信任的项目不会构建"
+		m.trustAsk = true
 		m.invalidate()
 		return
 	}

@@ -378,6 +378,9 @@ type Model struct {
 	// annotate is the open Annotate sheet, or nil.
 	annotate *annotateState
 
+	// trustAsk is the Trust Project prompt a project opens with until the
+	// user allows building and running it.
+	trustAsk  bool
 	run       RunPane
 	debug     DebugPane
 	build     BuildPane
