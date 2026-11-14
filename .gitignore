@@ -27,3 +27,6 @@ __pycache__/
 resources/licenses/
 mygo.json.release-backup
 mygo.json.release-new
+
+# A bare ./goidea from a manual build
+/goidea
