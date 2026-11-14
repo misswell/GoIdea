@@ -42,6 +42,7 @@ const (
 	settingsPageCodeFolding      = "editor.general.codeFolding"
 	settingsPageEditorFont       = "editor.font"
 	settingsPageTodo             = "editor.todo"
+	settingsPageNotifications    = "notifications"
 	settingsPageJava             = "languages.java"
 )
 
@@ -98,6 +99,24 @@ type settingsDraft struct {
 	todoPatterns      []TodoPattern
 	todoCaseSensitive bool
 	todoCommentsOnly  bool
+	// The Notifications page stages the global balloon switch and each
+	// group's display and log choice.
+	notifyBalloons bool
+	notifyGroups   map[string]NotifyGroupPrefs
+}
+
+// notifyPrefs is the staged Notifications page as the preferences store it.
+func (d settingsDraft) notifyPrefs() *NotifyPrefs {
+	groups := map[string]NotifyGroupPrefs{}
+	for k, v := range d.notifyGroups {
+		if v != (NotifyGroupPrefs{}) {
+			groups[k] = v
+		}
+	}
+	if d.notifyBalloons && len(groups) == 0 {
+		return nil
+	}
+	return &NotifyPrefs{NoBalloons: !d.notifyBalloons, Groups: groups}
 }
 
 // appearance is the staged switches as the editor stores them.
@@ -216,6 +235,17 @@ func settingsPages() []settingsPageSpec {
 			},
 			labels:  []string{"Theme", "Sync with OS", "Light", "Dark"},
 			section: "appearance",
+		},
+		{
+			id:    settingsPageNotifications,
+			title: "Notifications",
+			group: "Appearance & Behavior",
+			order: 5,
+			keywords: []string{
+				"notifications", "balloons", "popup", "sticky", "log", "groups",
+			},
+			labels:  []string{"Display balloon notifications"},
+			section: "notifications",
 		},
 		{
 			id:    settingsPageKeymap,
@@ -751,6 +781,8 @@ func (m *Model) settingsDraftFromPrefs() settingsDraft {
 		todoPatterns:              todoPatterns,
 		todoCaseSensitive:         todoCase,
 		todoCommentsOnly:          todoComments,
+		notifyBalloons:            m.prefs.Notify == nil || !m.prefs.Notify.NoBalloons,
+		notifyGroups:              m.prefs.notifyGroups(),
 	}
 }
 
@@ -1173,7 +1205,7 @@ func (m *Model) settingsPending() bool {
 	for _, key := range []string{
 		settingsPageAppearance, settingsPageEditorFont, settingsPageEditorAppearance,
 		settingsPageBreadcrumbs, settingsPageCodeFolding, settingsPageGeneral,
-		settingsPageEditorTabs, settingsPageTodo,
+		settingsPageEditorTabs, settingsPageTodo, settingsPageNotifications,
 	} {
 		if m.settingsDirtyPage(key) {
 			return true
@@ -1208,6 +1240,9 @@ func (m *Model) settingsDirtyPage(key string) bool {
 			m.settingsDraft.savePrefs() != m.prefs.SaveFiles
 	case settingsPageEditorTabs:
 		return m.settingsDraft.tabPrefs() != m.prefs.Tabs
+	case settingsPageNotifications:
+		return m.settingsDraft.notifyBalloons != (m.prefs.Notify == nil || !m.prefs.Notify.NoBalloons) ||
+			!sameNotifyGroups(m.settingsDraft.notifyGroups, m.prefs.notifyGroups())
 	case settingsPageTodo:
 		patterns, caseSensitive, commentsOnly := m.prefs.todoSettings()
 		return !sameTodoPatterns(m.settingsDraft.todoPatterns, patterns) ||
@@ -1260,6 +1295,9 @@ func (m *Model) settingsResetPage() {
 		m.settingsDraft.multipleRows = false
 		m.settingsDraft.squeezeTabs = false
 		m.settingsDraft.showFileIcon = true
+	case settingsPageNotifications:
+		m.settingsDraft.notifyBalloons = true
+		m.settingsDraft.notifyGroups = map[string]NotifyGroupPrefs{}
 	case settingsPageTodo:
 		m.settingsDraft.todoPatterns = append([]TodoPattern(nil), defaultTodoPatterns...)
 		m.settingsDraft.todoCaseSensitive = true
@@ -1281,6 +1319,7 @@ func (m *Model) applySettings() {
 	m.prefs.Tabs = m.settingsDraft.tabPrefs()
 	m.prefs.SaveFiles = m.settingsDraft.savePrefs()
 	m.prefs.Todo = m.settingsDraft.todoPrefs()
+	m.prefs.Notify = m.settingsDraft.notifyPrefs()
 	m.settingsErr = ""
 	if err := m.prefs.Save(m.settingsWritePath()); err != nil {
 		m.settingsErr = err.Error()

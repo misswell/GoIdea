@@ -39,6 +39,8 @@ func (m *Model) settingsPageBody(c *ui.Context, p *ui.Theme, oi oiColors, node s
 		m.settingsKeymapBody(c, oi)
 	case "todo":
 		m.settingsTodoBody(c, oi)
+	case "notifications":
+		m.settingsNotificationsBody(c, oi)
 	case "java":
 		m.javaToolsSection(c, p)
 	}
@@ -555,4 +557,61 @@ func (m *Model) settingsPageSummary() []string {
 			strings.Repeat("  ", row.depth), row.node.title))
 	}
 	return out
+}
+
+// settingsNotificationsBody is Appearance & Behavior › Notifications: the
+// global balloon switch and each group's popup choice and log switch, as
+// notificationPrefs() reads them.
+func (m *Model) settingsNotificationsBody(c *ui.Context, oi oiColors) {
+	balloons := m.settingsDraft.notifyBalloons
+	if ui.Checkbox(c, &balloons, "Display balloon notifications").Changed() {
+		m.settingsDraft.notifyBalloons = balloons
+	}
+	choices := []struct{ id, label string }{
+		{"balloon", "Balloon"},
+		{"sticky", "Sticky"},
+		{"none", "No popup"},
+	}
+	for _, g := range notificationGroupTitles {
+		g := g
+		prefs := m.settingsDraft.notifyGroups[g.id]
+		ui.Row(c).MaxWidth(720).Height(28).Gap(8).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, g.title).FontSize(12).TextColor(oi.text).SingleLine()
+			ui.Spacer(c)
+			for _, opt := range choices {
+				opt := opt
+				on := prefs.Display == opt.id || (opt.id == "balloon" && prefs.Display == "")
+				b := ui.ButtonBase(c.Key("settings:notify:"+g.id+":"+opt.id)).
+					Height(20).Padding(0, 7).Radius(4).AlignItems(ui.Center).
+					Cursor(ui.CursorPointer)
+				if on {
+					b.Background(oi.stripeSelected)
+				} else if b.Hovered() {
+					b.Background(oi.stripeHover)
+				}
+				b.Children(func() {
+					tone := oi.textMuted
+					if on {
+						tone = oi.text
+					}
+					ui.Text(c, opt.label).FontSize(11).TextColor(tone).SingleLine()
+				})
+				b.OnClick(func() {
+					p := m.settingsDraft.notifyGroups[g.id]
+					p.Display = opt.id
+					if p.Display == "balloon" {
+						p.Display = ""
+					}
+					m.settingsDraft.notifyGroups[g.id] = p
+					m.invalidate()
+				})
+			}
+			log := !prefs.NoLog
+			if ui.Checkbox(c, &log, "Log").Changed() {
+				p := m.settingsDraft.notifyGroups[g.id]
+				p.NoLog = !log
+				m.settingsDraft.notifyGroups[g.id] = p
+			}
+		})
+	}
 }

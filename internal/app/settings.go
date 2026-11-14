@@ -672,3 +672,39 @@ var notificationGroupTitles = []struct {
 	{"updates", "IDE Updates"},
 	{"distractionFree", "Distraction Free Mode"},
 }
+
+// notifyGroups copies the stored notification groups, never nil so the
+// settings page can stage into it.
+func (p Preferences) notifyGroups() map[string]NotifyGroupPrefs {
+	out := map[string]NotifyGroupPrefs{}
+	if p.Notify != nil {
+		for k, v := range p.Notify.Groups {
+			out[k] = v
+		}
+	}
+	return out
+}
+
+// sameNotifyGroups reports the staged groups equal to the stored ones,
+// ignoring empty entries.
+func sameNotifyGroups(a, b map[string]NotifyGroupPrefs) bool {
+	norm := func(m map[string]NotifyGroupPrefs) map[string]NotifyGroupPrefs {
+		out := map[string]NotifyGroupPrefs{}
+		for k, v := range m {
+			if v != (NotifyGroupPrefs{}) {
+				out[k] = v
+			}
+		}
+		return out
+	}
+	a, b = norm(a), norm(b)
+	if len(a) != len(b) {
+		return false
+	}
+	for k, v := range a {
+		if b[k] != v {
+			return false
+		}
+	}
+	return true
+}

@@ -134,3 +134,23 @@ func TestSuppressGroupKeepsHistory(t *testing.T) {
 	}
 	m.ClearNotifications()
 }
+
+func TestNotifyPrefsDraftRoundTrip(t *testing.T) {
+	m := &Model{}
+	d := m.settingsDraftFromPrefs()
+	if !d.notifyBalloons || len(d.notifyGroups) != 0 {
+		t.Fatalf("the default draft is %+v", d)
+	}
+	if p := d.notifyPrefs(); p != nil {
+		t.Fatalf("the default draft stores %+v, want nil", p)
+	}
+	d.notifyBalloons = false
+	d.notifyGroups["lsp"] = NotifyGroupPrefs{Display: "none", NoLog: true}
+	p := d.notifyPrefs()
+	if p == nil || !p.NoBalloons || p.Groups["lsp"] != (NotifyGroupPrefs{Display: "none", NoLog: true}) {
+		t.Fatalf("the draft stored %+v", p)
+	}
+	if !sameNotifyGroups(d.notifyGroups, p.Groups) {
+		t.Fatalf("the staged groups do not compare equal to the stored ones")
+	}
+}

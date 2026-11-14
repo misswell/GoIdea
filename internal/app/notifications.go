@@ -353,9 +353,14 @@ func (m *Model) balloonView(c *ui.Context, p *ui.Theme, n ideNotification) {
 				ui.Text(c, n.body).FontSize(11.5).TextColor(p.TextMuted).
 					SingleLine().Ellipsis("…")
 			}
-			if len(n.actions) > 0 {
+			actions := n.actions
+			if m.canSuppress(n) {
+				actions = append(append([]notifyAction(nil), actions...),
+					notifyAction{label: "Don't Show Again", run: func(m *Model) { m.SuppressGroup(n.group) }})
+			}
+			if len(actions) > 0 {
 				ui.Row(c).Gap(6).Children(func() {
-					for i, a := range n.actions {
+					for i, a := range actions {
 						a := a
 						b := ui.ButtonBase(c.Key(fmt.Sprintf("balloon:act:%d:%d", n.id, i))).
 							Height(20).Padding(0, 6).Radius(4).AlignItems(ui.Center).
