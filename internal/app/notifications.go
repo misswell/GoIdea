@@ -38,6 +38,12 @@ type ideNotification struct {
 	actions []notifyAction
 	at      time.Time
 	read    bool
+	// group is Settings › Notifications' group, logged whether it is listed
+	// in the tool window, and userInitiated the answer to a command the user
+	// ran (it pops up even with balloons off).
+	group         string
+	logged        bool
+	userInitiated bool
 	// balloon is whether it still shows in the corner; sticky is whether it
 	// may fade on its own at all.
 	balloon bool
@@ -78,8 +84,16 @@ func (m *Model) postNotification(n ideNotification) {
 	n.id = m.notify.seq + 1
 	m.notify.seq = n.id
 	n.at = time.Now()
-	n.balloon = true
-	n.sticky = n.level == "error"
+	n.group = notifyGroupOf(n)
+	prefs := m.notifyPrefsFor(n.group)
+	n.balloon = n.userInitiated || (!m.notifyOff() && prefs.Display != "none")
+	n.sticky = prefs.Display == "sticky" || n.level == "error"
+	n.logged = !prefs.NoLog
+	// Neither popped nor listed: dropped, as IDEA's "No popup" and no log.
+	if !n.balloon && !n.logged {
+		m.invalidate()
+		return
+	}
 	if n.key != "" {
 		kept := m.notify.items[:0]
 		for _, old := range m.notify.items {
@@ -184,7 +198,7 @@ func (m *Model) SetBalloonHover(id int, hover bool) {
 func (m *Model) unreadNotifications() int {
 	n := 0
 	for _, it := range m.notify.items {
-		if !it.read {
+		if !it.read && it.logged {
 			n++
 		}
 	}
@@ -382,7 +396,8 @@ func (m *Model) notificationsView(c *ui.Context, p *ui.Theme, oi oiColors) {
 				})
 				clear.OnClick(func() { m.ClearNotifications() })
 			})
-		if len(m.notify.items) == 0 {
+		logged := m.loggedNotifications()
+		if len(logged) == 0 {
 			ui.Column(c).Grow(1).Justify(ui.Center).AlignItems(ui.Center).Gap(8).Children(func() {
 				ui.Icon(c, notifyIcon).Size(24, 24).TextColor(p.TextMuted)
 				ui.Text(c, "No notifications").FontSize(11.5).TextColor(p.TextMuted).SingleLine()
@@ -391,7 +406,7 @@ func (m *Model) notificationsView(c *ui.Context, p *ui.Theme, oi oiColors) {
 		}
 		ui.Scroll(c).Grow(1).Children(func() {
 			ui.Column(c).Padding(8, 8).Gap(6).Children(func() {
-				for _, it := range m.notify.items {
+				for _, it := range logged {
 					it := it
 					card := ui.Column(c.Key(fmt.Sprintf("notify:%d", it.id))).Padding(8, 10).
 						Gap(3).Radius(8).Background(p.Surface).
@@ -497,4 +512,92 @@ func (m *Model) SmokeNotifications() map[string]any {
 	m.ClearNotifications()
 	out["cleared"] = len(m.notify.items)
 	return out
+}
+
+// notifyGroupOf maps a notification to Settings' group, as groupOf does: the
+// key's prefix picks the group unless it was set.
+func notifyGroupOf(n ideNotification) string {
+	if n.group != "" {
+		return n.group
+	}
+	switch {
+	case strings.HasPrefix(n.key, "build"), strings.HasPrefix(n.key, "run"):
+		return "run"
+	case strings.HasPrefix(n.key, "lsp"):
+		return "lsp"
+	case strings.HasPrefix(n.key, "vcs"):
+		return "vcs"
+	}
+	return "system"
+}
+
+// notifyPrefsFor is one group's Settings choice.
+func (m *Model) notifyPrefsFor(group string) NotifyGroupPrefs {
+	if p := m.prefs.Notify; p != nil {
+		return p.Groups[group]
+	}
+	return NotifyGroupPrefs{}
+}
+
+// notifyOff is Settings' global "Display balloon notifications" turned off.
+func (m *Model) notifyOff() bool {
+	return m.prefs.Notify != nil && m.prefs.Notify.NoBalloons
+}
+
+// loggedNotifications is the tool window's list: the entries whose group logs.
+func (m *Model) loggedNotifications() []ideNotification {
+	out := make([]ideNotification, 0, len(m.notify.items))
+	for _, it := range m.notify.items {
+		if it.logged {
+			out = append(out, it)
+		}
+	}
+	return out
+}
+
+// canSuppress reports whether a balloon offers "Don't Show Again": errors
+// always show, and a group already silenced has no balloon to offer it on.
+func (m *Model) canSuppress(n ideNotification) bool {
+	return n.level != "error" && m.notifyPrefsFor(n.group).Display != "none"
+}
+
+// SuppressGroup is "Don't Show Again": the group stops popping up but keeps
+// logging, as Settings › Notifications › No popup does.
+func (m *Model) SuppressGroup(group string) {
+	p := NotifyPrefs{}
+	if m.prefs.Notify != nil {
+		p.NoBalloons = m.prefs.Notify.NoBalloons
+		if m.prefs.Notify.Groups != nil {
+			p.Groups = make(map[string]NotifyGroupPrefs, len(m.prefs.Notify.Groups))
+			for k, v := range m.prefs.Notify.Groups {
+				p.Groups[k] = v
+			}
+		}
+	}
+	if p.Groups == nil {
+		p.Groups = map[string]NotifyGroupPrefs{}
+	}
+	g := p.Groups[group]
+	g.Display = "none"
+	p.Groups[group] = g
+	m.prefs.Notify = &p
+	if path := m.settingsWritePath(); path != "" {
+		if err := m.prefs.Save(path); err != nil {
+			m.notifyError("notify:save", "Couldn't save notification settings", notifySuffix(err.Error()))
+		}
+	}
+	kept := m.notify.items[:0]
+	for _, it := range m.notify.items {
+		if it.group != group {
+			kept = append(kept, it)
+			continue
+		}
+		stopNotifyTimer(&it)
+		if it.logged {
+			it.balloon = false
+			kept = append(kept, it)
+		}
+	}
+	m.notify.items = kept
+	m.invalidate()
 }

@@ -91,3 +91,46 @@ func TestNotificationLayoutRoundTrips(t *testing.T) {
 		t.Fatalf("normalizeLayout changed the right window: %+v", n)
 	}
 }
+
+func TestNotificationGroupPrefsSilenceAndLog(t *testing.T) {
+	m := &Model{prefs: Preferences{Notify: &NotifyPrefs{Groups: map[string]NotifyGroupPrefs{
+		"system": {Display: "none"},
+	}}}}
+	m.notifyInfo("sys:a", "Silenced", "")
+	if len(m.notify.items) != 1 {
+		t.Fatalf("a silenced group was dropped from the log: %d entries", len(m.notify.items))
+	}
+	if m.notify.items[0].balloon {
+		t.Fatalf("a silenced group still popped up")
+	}
+	if !m.notify.items[0].logged || m.unreadNotifications() != 1 {
+		t.Fatalf("a silenced group lost its log entry or unread count")
+	}
+	m.notifyInfo("sys:b", "Sticky", "")
+	m.prefs.Notify.Groups["system"] = NotifyGroupPrefs{Display: "sticky"}
+	m.notifyInfo("sys:c", "Sticky again", "")
+	if !m.notify.items[0].balloon || !m.notify.items[0].sticky {
+		t.Fatalf("a sticky group did not pop as sticky: %+v", m.notify.items[0])
+	}
+	m.ClearNotifications()
+
+	m.prefs.Notify = &NotifyPrefs{NoBalloons: true}
+	m.notifyWarning("run:w", "Off", "")
+	if m.notify.items[0].balloon {
+		t.Fatalf("balloons stayed on with the global switch off")
+	}
+	m.ClearNotifications()
+}
+
+func TestSuppressGroupKeepsHistory(t *testing.T) {
+	m := &Model{}
+	m.notifyWarning("lsp:w", "Language server", "")
+	m.SuppressGroup("lsp")
+	if got := m.notifyPrefsFor("lsp").Display; got != "none" {
+		t.Fatalf("SuppressGroup stored display %q", got)
+	}
+	if len(m.notify.items) != 1 || m.notify.items[0].balloon || !m.notify.items[0].logged {
+		t.Fatalf("suppression dropped or kept the balloon: %+v", m.notify.items)
+	}
+	m.ClearNotifications()
+}

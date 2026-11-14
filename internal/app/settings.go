@@ -354,6 +354,9 @@ type Preferences struct {
 	// Todo are Settings › Editor › TODO, nil until the page is applied, which
 	// keeps OpenIDEA's built-in patterns.
 	Todo *TodoPrefs `json:"todo,omitempty"`
+	// Notify are Settings › Appearance & Behavior › Notifications: the global
+	// balloon switch and each group's display and log choice.
+	Notify *NotifyPrefs `json:"notifications,omitempty"`
 	// ScratchRecent are the languages New Scratch File lists first, most
 	// recent first.
 	ScratchRecent []string `json:"scratchRecent,omitempty"`
@@ -633,4 +636,39 @@ func normalizeFiles(paths []string) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// NotifyPrefs is Settings › Appearance & Behavior › Notifications. The zero
+// value is OpenIDEA's default: balloons on, every group balloons and logs.
+type NotifyPrefs struct {
+	// NoBalloons turns balloons off everywhere; the answer to a command the
+	// user ran still pops up, as userInitiated does upstream.
+	NoBalloons bool `json:"noBalloons,omitempty"`
+	// Groups holds each group's choice; a group with no entry balloons and
+	// logs.
+	Groups map[string]NotifyGroupPrefs `json:"groups,omitempty"`
+}
+
+// NotifyGroupPrefs is one notification group's display and log choice.
+type NotifyGroupPrefs struct {
+	// Display is "balloon", "sticky" or "none"; empty is "balloon".
+	Display string `json:"display,omitempty"`
+	// NoLog keeps the group out of the Notifications tool window.
+	NoLog bool `json:"noLog,omitempty"`
+}
+
+// notificationGroupTitles is OpenIDEA's Settings list, in its order.
+var notificationGroupTitles = []struct {
+	id    string
+	title string
+}{
+	{"system", "System Messages"},
+	{"lsp", "Language Servers"},
+	{"vcs", "Version Control"},
+	{"run", "Run and Debug"},
+	{"tools", "External Tools"},
+	{"search", "Find in Files"},
+	{"plugins", "Plugins"},
+	{"updates", "IDE Updates"},
+	{"distractionFree", "Distraction Free Mode"},
 }
