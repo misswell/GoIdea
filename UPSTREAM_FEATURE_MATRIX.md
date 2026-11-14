@@ -62,6 +62,14 @@ reimplementing it. A row is `INTEGRATED` only when the GoIDEA product
 | Problems tool window (File / Project) | INTEGRATED | `internal/app/problems.go`; per-file diagnostics, status-bar counts, `lsp.problems.*` in the release e2e |
 | Structure tool window (Cmd+7) | INTEGRATED | `internal/app/structure.go`; opens in the left side's split island below Project, filter, collapse, click-to-jump, `lsp.structure.*` in the release e2e |
 | Notifications | PARTIAL | `internal/app/notifications.go`; bottom-right balloons with info/warning/error levels, 10 s fade, sticky errors (5 min when listed), hover pause, keyed replacement, actions and close; the **Notifications** right-stripe window with unread badge, history and **Clear All**; build results and failures raise them; `base.notify.*` in the e2e. Settings › Appearance & Behavior › Notifications carries the global balloon switch and each group's Balloon/Sticky/No popup and Log, and a balloon offers **Don't Show Again**; still missing sound, verbatim plugin text and history persistence across restarts |
+| Maven tool window | MISSING | no GoIDEA view; the backend serves only Maven dependency commands today, so a project model has to land before a tree can be honest |
+| Gradle tool window | MISSING | same as Maven: `gradle_*` dependency commands exist, no project model |
+| Window Group Tabs (multiple project windows) | MISSING | OpenIDEA's WindowGroupTabs lists project windows; GoIDEA holds one project per app instance |
+| Tool window Dock/Undock between areas | PARTIAL | Move to Bottom Right moves a bottom window into the split slot, and the left split and right area host fixed windows; OpenIDEA's move-to-left/right/bottom menu and detached windows are not ported |
+| Tool window pin/unpin | MISSING | GoIDEA never auto-hides a tool window on focus change, so pinning has nothing to hold |
+| Remote Development | MISSING | the backend exposes `remote_*`; no GoIDEA UI |
+| Agents | MISSING | OpenIDEA's Agents panel has no GoIDEA view; the backend ops are unverified over remote IPC |
+| Coverage, Profiler, Logcat, Notebook, GraphQL, HTTP Client | MISSING | backend ops or upstream features without a GoIDEA view |
 | Services tool window | PARTIAL | `internal/app/services.go`; a bottom-window tree over the detected build system (Maven/Gradle from pom.xml/build.gradle), the backend's run configurations and the Java/Notifications settings, with each row running its action; `internal/app/services_test.go`. Still missing the compose/plugin service model and per-service logs |
 | Search Everywhere | PARTIAL | `internal/app/se.go`; All/Classes/Files/Symbols/Actions/Text tabs over `find_files`, `lsp_workspace_symbols`, the command registry and a streamed `search_start`, with section headers, Recent Files / Recent Actions on an empty query and More rows; `se.*` in the release e2e. Still missing: the per-tab filter funnel, search history, the Endpoints section and the double-Shift binding (MyGo exposes no modifier-only key event) |
 | Hierarchy tool window (Ctrl+Alt+H / Ctrl+H) | INTEGRATED | `internal/app/hierarchy.go`; right-anchored window with Call/Type direction tabs, lazily loaded children per node and recursion leaves, click-to-open, width drag, per-project layout; `lsp_call_hierarchy` / `lsp_type_hierarchy`; `hierarchy.*` in the release e2e |
@@ -102,7 +110,7 @@ reimplementing it. A row is `INTEGRATED` only when the GoIDEA product
 | Table editing, DDL view, history, explain | IMPLEMENTED (backend) / ADAPTING (UI) | next UI increment |
 | HTTP client UI | ADAPTING | backend ops exist, no sheet yet |
 | Agent UI | ADAPTING | backend ops exist, no panel yet |
-| Plugin management UI | ADAPTING | backend ops exist, no sheet yet |
+| Plugin management UI (Welcome › Plugins) | INTEGRATED | `internal/app/plugins.go` over `internal/plugin`: Available/Installed, details, enable state, Git install, reload and remove; `internal/app/plugins_test.go`; plugin *code* is still not started in `cmd/goidea` (the JS runtime row above) |
 | Remote development and containers | NOT_AVAILABLE | `openidea-server --connect` supported; no UI |
 | Java toolchain download on first use | INTEGRATED | settings sheet + palette install JDT LS/java-debug with progress, cancel and retry into GoIDEA's own data dir; `GOIDEA_SMOKE_TOOLS` |
 | Spring Boot application run/stop | IMPLEMENTED (backend) / ADAPTING (coverage) | backend detects `spring-boot` configs and GoIDEA prefers application configs; no gate runs one yet |
