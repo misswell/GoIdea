@@ -245,6 +245,9 @@ func smoke(m *app.Model) {
 			fields["todoError"] = todoErr.Error()
 		}
 	}
+	if os.Getenv("GOIDEA_SMOKE_DOCK") == "1" && root != "" {
+		fields["dock"] = m.SmokeDock()
+	}
 	if os.Getenv("GOIDEA_SMOKE_SCRATCH") == "1" && root != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		scratch, scratchErr := m.SmokeScratch(ctx)
