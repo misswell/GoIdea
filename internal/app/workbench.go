@@ -123,6 +123,9 @@ func (m *Model) projectWidget(c *ui.Context, p *ui.Theme, oi oiColors) {
 		ui.Icon(c, iconChevronDown).Size(12, 12).TextColor(oi.textMuted)
 	})
 	w.Menu(func(menu *ui.Menu) {
+		if menu.Item("New Project…").Chosen() {
+			m.RunCommand("project.new")
+		}
 		if menu.Item("Open…").Chosen() {
 			m.RunCommand("project.open")
 		}
