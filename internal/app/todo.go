@@ -223,17 +223,7 @@ func (m *Model) refreshTodoHighlights(now time.Time, p *ui.Theme) {
 
 // ShowTodo opens the TODO tool window, scanning the project the first time so
 // the other tabs have their index, as installing the index does at startup.
-func (m *Model) ShowTodo() {
-	m.todo.visible = true
-	m.occupyBottom("todo")
-	if m.Root() != "" {
-		m.RefreshVCS()
-	}
-	if !m.todo.running && !m.todo.scannedOnce {
-		m.RunTodo()
-	}
-	m.invalidate()
-}
+func (m *Model) ShowTodo() { m.DockShow("todo") }
 
 // ShowTodoCurrentFile is the action todo.showCurrentFile: the window opens on
 // the Current File tab.
@@ -243,19 +233,10 @@ func (m *Model) ShowTodoCurrentFile() {
 }
 
 // ToggleTodo opens the window and a second press from the editor closes it.
-func (m *Model) ToggleTodo() {
-	if m.todo.visible {
-		m.CloseTodo()
-		return
-	}
-	m.ShowTodo()
-}
+func (m *Model) ToggleTodo() { m.DockToggle("todo") }
 
 // CloseTodo hides the tool window; its scan stays for the next open.
-func (m *Model) CloseTodo() {
-	m.todo.visible = false
-	m.invalidate()
-}
+func (m *Model) CloseTodo() { m.DockHide("todo") }
 
 // todoRegex is upstream's todoRegexSource: \b(TODO|FIXME|HACK|XXX)\b.*, or ""
 // when every pattern is off.
@@ -853,9 +834,6 @@ func (m *Model) todoTone(keyword string, p *ui.Theme) ui.Color {
 // todoPanel draws the tool window: a header with the tabs, the keyword
 // filters and the actions, then the TODO items grouped by file.
 func (m *Model) todoPanel(c *ui.Context, p *ui.Theme) {
-	if !m.todo.visible {
-		return
-	}
 	groups := m.todoGroups()
 	col := ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Background(p.Surface).
 		BorderWidth(1, 0, 0, 0).BorderColor(p.Border)

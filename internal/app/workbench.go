@@ -511,21 +511,99 @@ func (m *Model) rightWidthHandle(c *ui.Context, oi oiColors) {
 	m.invalidate()
 }
 
-// rightSide is the right area's island, showing its window.
+// rightSide is the right side's two areas: the primary slot's window and,
+// below it, the split slot's, with the gap between them the pointer drags. A
+// lone window takes the whole side, as the left side does.
 func (m *Model) rightSide(c *ui.Context, p *ui.Theme, oi oiColors) {
-	ui.Column(c).Key("right:side").Width(m.rightSideWidth()).Shrink(0).
-		MinHeight(0).AlignItems(ui.Stretch).Children(func() {
-		switch m.rightTool {
-		case "notifications":
-			m.notificationsView(c, p, oi)
-		case "problems":
-			m.problemsPanel(c, p)
-		case "todo":
-			m.todoPanel(c, p)
-		default:
-			m.hierarchyRightView(c, p, oi)
+	top := m.dockOccupant(dockRight)
+	bottom := m.dockOccupant(dockRightSplit)
+	if top == "" && !m.rightHidden && dockSpec(m.rightTool) != nil {
+		// A session or a test can still name the right window the old way.
+		top = m.rightTool
+	}
+	if bottom == "" && !m.rightHidden && dockSpec(m.rightSplitTool) != nil {
+		bottom = m.rightSplitTool
+	}
+	if top == "" && bottom == "" {
+		return
+	}
+	both := top != "" && bottom != ""
+	primaryGrow, splitGrow := float32(1), float32(1)
+	if both {
+		primaryGrow = m.rightShare()
+		splitGrow = 1 - primaryGrow
+	}
+	side := ui.Column(c).Key("right:side").Width(m.rightSideWidth()).Shrink(0).
+		MinHeight(0).AlignItems(ui.Stretch)
+	room := side.Bounds().H - oiIslandGap
+	side.Children(func() {
+		if top != "" {
+			m.rightIsland(c, p, oi, top, primaryGrow)
+		}
+		if both {
+			m.rightSplitHandle(c, oi, room)
+		}
+		if bottom != "" {
+			m.rightIsland(c, p, oi, bottom, splitGrow)
 		}
 	})
+}
+
+// rightIsland draws one registered window in the right side, at its share of
+// the side's room.
+func (m *Model) rightIsland(c *ui.Context, p *ui.Theme, oi oiColors, id string, grow float32) {
+	spec := dockSpec(id)
+	if spec == nil || spec.render == nil {
+		return
+	}
+	ui.Column(c).Key("right:island:" + id).Grow(grow).MinHeight(0).
+		MinWidth(0).AlignItems(ui.Stretch).Children(func() {
+		spec.render(m, c, p, oi)
+	})
+}
+
+// rightShare is the share of the right side the primary slot takes; a ratio
+// no drag reaches keeps the default divide.
+func (m *Model) rightShare() float32 {
+	if m.rightRatio < leftRatioMin || m.rightRatio > leftRatioMax {
+		return leftRatioDefault
+	}
+	return m.rightRatio
+}
+
+// rightSplitHandle is the gap between the right side's two windows. Dragging
+// it moves their shared line, as OpenIDEA's SplitHandle does, and the ratio is
+// kept once the pointer lets go.
+func (m *Model) rightSplitHandle(c *ui.Context, oi oiColors, room float32) {
+	h := ui.Row(c).Key("right:split-handle").Height(oiIslandGap).Shrink(0).
+		Cursor(ui.CursorResizeRow)
+	_, dy, held := h.Dragged()
+	if !held {
+		if m.rightDragging {
+			m.rightDragging = false
+			m.rememberLayout()
+		}
+		return
+	}
+	if !m.rightDragging {
+		m.rightDragging = true
+		m.rightDragTotal = room
+	}
+	if dy == 0 || m.rightDragTotal <= 0 {
+		return
+	}
+	lo, hi := leftRatioRange(m.rightDragTotal)
+	ratio := m.rightShare() + dy/m.rightDragTotal
+	if ratio < lo {
+		ratio = lo
+	}
+	if ratio > hi {
+		ratio = hi
+	}
+	if ratio != m.rightRatio {
+		m.rightRatio = ratio
+		m.invalidate()
+	}
 }
 
 // rightStripe is the right edge's stripe of tool window buttons, mirroring the
@@ -541,6 +619,17 @@ func (m *Model) rightStripe(c *ui.Context, p *ui.Theme, oi oiColors) {
 				m.rightShown() && m.rightTool == "hierarchy", m.ToggleHierarchyWindow)
 		}
 		m.stripeBell(c, p, oi)
+		for _, id := range toolWindowOrder {
+			spec := dockSpec(id)
+			if spec == nil || spec.anchor != dockRight || id == "hierarchy" || id == "notifications" {
+				continue
+			}
+			if _, ok := m.dockSlotOf(id); !ok {
+				continue
+			}
+			m.stripeButton(c, p, oi, id, iconStructure, spec.title,
+				m.dockWindowShown(id), func() { m.DockToggle(id) })
+		}
 	})
 }
 

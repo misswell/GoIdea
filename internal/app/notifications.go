@@ -214,32 +214,17 @@ func (m *Model) markNotificationsRead() {
 }
 
 // ShowNotifications opens the Notifications tool window on the right.
-func (m *Model) ShowNotifications() {
-	m.rightTool = "notifications"
-	m.rightHidden = false
-	m.markNotificationsRead()
-	m.rememberLayout()
-	m.invalidate()
-}
+func (m *Model) ShowNotifications() { m.DockShow("notifications") }
 
 // CloseNotifications hides the right area without forgetting its window.
 func (m *Model) CloseNotifications() {
-	if m.rightTool != "notifications" {
-		return
+	if m.dockWindowShown("notifications") {
+		m.DockHide("notifications")
 	}
-	m.rightHidden = true
-	m.rememberLayout()
-	m.invalidate()
 }
 
 // ToggleNotificationsWindow is the stripe button's action.
-func (m *Model) ToggleNotificationsWindow() {
-	if m.rightTool == "notifications" && !m.rightHidden {
-		m.CloseNotifications()
-		return
-	}
-	m.ShowNotifications()
-}
+func (m *Model) ToggleNotificationsWindow() { m.DockToggle("notifications") }
 
 // ClearNotifications empties the history, as the tool window's trash does.
 func (m *Model) ClearNotifications() {
@@ -252,7 +237,7 @@ func (m *Model) ClearNotifications() {
 
 // notificationsShown reports whether the right area currently shows the list.
 func (m *Model) notificationsShown() bool {
-	return m.rightTool == "notifications" && !m.rightHidden
+	return m.dockWindowShown("notifications")
 }
 
 // balloonItems is the corner stack: the newest three notifications still

@@ -41,27 +41,14 @@ func (m *Model) resetProblems() {
 
 // ShowProblems opens the Problems tool window on the scope it last showed,
 // the current file the first time, as OpenIDEA's window keeps its tab.
-func (m *Model) ShowProblems() {
-	m.problems.visible = true
-	m.occupyBottom("problems")
-	m.invalidate()
-}
+func (m *Model) ShowProblems() { m.DockShow("problems") }
 
 // ToggleProblems is Cmd+6: the window opens, and a second press from the
 // editor closes it, as OpenIDEA's activateToolWindow does.
-func (m *Model) ToggleProblems() {
-	if m.problems.visible {
-		m.CloseProblems()
-		return
-	}
-	m.ShowProblems()
-}
+func (m *Model) ToggleProblems() { m.DockToggle("problems") }
 
 // CloseProblems hides the tool window.
-func (m *Model) CloseProblems() {
-	m.problems.visible = false
-	m.invalidate()
-}
+func (m *Model) CloseProblems() { m.DockHide("problems") }
 
 // problemRows flattens the window's rows in the order it draws them.
 func (m *Model) problemRows() []Problem {
@@ -316,9 +303,6 @@ func (m *Model) problemsStatus(c *ui.Context, p *ui.Theme) {
 // problemsPanel draws the Problems tool window as OpenIDEA's bottom panel does:
 // a header with the counts and severity filters, then the problems by file.
 func (m *Model) problemsPanel(c *ui.Context, p *ui.Theme) {
-	if !m.problems.visible {
-		return
-	}
 	errors, warnings, infos := m.problemCounts()
 	groups := m.problemList()
 	col := ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Background(p.Surface).

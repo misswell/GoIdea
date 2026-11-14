@@ -69,6 +69,8 @@ needs a `## <version>` section here, or its build fails.
 - 设置新增 **Appearance & Behavior › Notifications**：全局气泡开关、每组 Balloon/Sticky/No popup 和 Log。
 - 新增 **Services** 工具窗口（**Window › Tool Windows › Services**），列出构建系统、运行配置与工具设置，双击即执行。
 - **Problems** 和 **TODO** 可在右侧与底部之间移动：**Window › Move Tool Window to Right / Bottom**。
+- 移到右侧的 **Problems**、**TODO** 不再显示空白；右侧上下可各放一个窗口，中间分隔线可拖动调整比例。
+- 工具窗口的位置、隐藏与恢复按六个插槽保存，旧会话打开项目时会自动迁移。
 - **Navigate > Call Hierarchy**（`Ctrl+Alt+H`）和 **Type Hierarchy**（`Ctrl+H`）在右侧列出调用链，可逐级展开。
 - **查找**（`Cmd+3`）和**查找用法**（`Alt+F7`）的结果改在底部工具窗口显示，不再占用侧边栏。
 - **结构**窗口（`Cmd+7`）在侧边栏列出当前文件的成员，可过滤、折叠，点击跳到声明。

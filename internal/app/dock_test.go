@@ -9,8 +9,8 @@ func TestDockProblemsRightAndBack(t *testing.T) {
 		t.Fatalf("Problems did not open at the bottom")
 	}
 	m.MoveToolToRight()
-	if m.problems.visible {
-		t.Fatalf("Problems stayed in the bottom area")
+	if !m.problems.visible {
+		t.Fatalf("Problems lost its content when it moved")
 	}
 	if m.rightTool != "problems" || m.rightHidden || !m.rightShown() {
 		t.Fatalf("the right area shows tool=%q hidden=%v shown=%v", m.rightTool, m.rightHidden, m.rightShown())
@@ -26,12 +26,12 @@ func TestDockTodoRightAndBack(t *testing.T) {
 	m := &Model{}
 	m.ShowTodo()
 	m.MoveToolToRight()
-	if m.todo.visible || m.rightTool != "todo" {
+	if !m.todo.visible || m.rightTool != "todo" {
 		t.Fatalf("TODO did not dock to the right: visible=%v tool=%q", m.todo.visible, m.rightTool)
 	}
 	m.MoveToolToBottom()
-	if !m.todo.visible {
-		t.Fatalf("TODO did not return to the bottom")
+	if !m.todo.visible || m.tool != "todo" {
+		t.Fatalf("TODO did not return to the bottom: visible=%v tool=%q", m.todo.visible, m.tool)
 	}
 }
 

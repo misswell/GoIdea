@@ -79,6 +79,13 @@ type Layout struct {
 	Right       string `json:"right,omitempty"`
 	RightHidden bool   `json:"rightHidden,omitempty"`
 	RightWidth  int    `json:"rightWidth,omitempty"`
+	// RightSplit is the window in the right side's split slot and RightRatio
+	// the share of the side its primary slot takes.
+	RightSplit string  `json:"rightSplit,omitempty"`
+	RightRatio float64 `json:"rightRatio,omitempty"`
+	// Dock is the versioned six-slot record; sessions written before it have
+	// only the fields above and are migrated when read.
+	Dock *DockLayout `json:"dock,omitempty"`
 }
 
 // clone copies a layout, so a saved snapshot never shares maps with the one
@@ -86,6 +93,21 @@ type Layout struct {
 func (l Layout) clone() Layout {
 	out := l
 	out.Bottom = append([]string(nil), l.Bottom...)
+	if l.Dock != nil {
+		d := *l.Dock
+		d.Last = append([]string(nil), l.Dock.Last...)
+		d.Slots = map[string]string{}
+		for k, v := range l.Dock.Slots {
+			d.Slots[k] = v
+		}
+		if l.Dock.Hidden != nil {
+			d.Hidden = map[string]string{}
+			for k, v := range l.Dock.Hidden {
+				d.Hidden[k] = v
+			}
+		}
+		out.Dock = &d
+	}
 	if l.Split != nil {
 		out.Split = make(map[string]bool, len(l.Split))
 		for name, split := range l.Split {
@@ -154,6 +176,19 @@ func normalizeLayout(l Layout) Layout {
 	}
 	if l.RightWidth >= rightWidthStoredMin && l.RightWidth <= rightWidthStoredMax {
 		out.RightWidth = l.RightWidth
+	}
+	switch l.RightSplit {
+	case "hierarchy", "notifications", "problems", "todo", "services":
+		out.RightSplit = l.RightSplit
+	}
+	if l.RightRatio >= leftRatioMin && l.RightRatio <= leftRatioMax {
+		out.RightRatio = l.RightRatio
+	}
+	if l.Dock != nil && l.Dock.Version >= dockLayoutVersion {
+		out.Dock = l.clone().Dock
+		if out.Dock.Slots == nil {
+			out.Dock.Slots = map[string]string{}
+		}
 	}
 	return out
 }

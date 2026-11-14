@@ -102,9 +102,7 @@ func (m *Model) openHierarchy(mode string) {
 		failed:    map[string]string{},
 		gen:       1,
 	}
-	m.rightTool = "hierarchy"
-	m.rightHidden = false
-	m.rememberLayout()
+	m.DockShow("hierarchy")
 	m.loadHierarchy(hierarchyRoot, t, openidea.OutlinePos{Line: uint32(m.hierarchy.rootLine), Col: uint32(m.hierarchy.rootCol)})
 	m.invalidate()
 }
@@ -355,11 +353,7 @@ func (m *Model) OpenHierarchyItem(id string) {
 }
 
 // CloseHierarchyWindow hides the right window; its tree stays for the stripe.
-func (m *Model) CloseHierarchyWindow() {
-	m.rightHidden = true
-	m.rememberLayout()
-	m.invalidate()
-}
+func (m *Model) CloseHierarchyWindow() { m.DockHide("hierarchy") }
 
 // ShowHierarchyWindow shows the right window again.
 func (m *Model) ShowHierarchyWindow() {
@@ -367,24 +361,25 @@ func (m *Model) ShowHierarchyWindow() {
 		m.OpenCallHierarchy()
 		return
 	}
-	m.rightTool = "hierarchy"
-	m.rightHidden = false
-	m.rememberLayout()
-	m.invalidate()
+	m.DockShow("hierarchy")
 }
 
 // ToggleHierarchyWindow is the stripe button: it closes the window when it
 // shows, and shows it otherwise.
 func (m *Model) ToggleHierarchyWindow() {
-	if m.rightShown() {
+	if m.dockWindowShown("hierarchy") {
 		m.CloseHierarchyWindow()
 		return
 	}
 	m.ShowHierarchyWindow()
 }
 
-// rightShown reports whether the right area is showing a window.
+// rightShown reports whether the right side shows anything: either of its
+// slots occupied, or a legacy window still recorded in the old fields.
 func (m *Model) rightShown() bool {
+	if m.dockRightShown() {
+		return true
+	}
 	return m.rightTool != "" && !m.rightHidden
 }
 

@@ -184,6 +184,18 @@ type Model struct {
 	// services is the Services bottom window.
 	services servicesPane
 
+	// dock is the six-slot dock: the slots are the authority on where each
+	// registered tool window shows.
+	dock dockState
+	// rightSplitTool mirrors the window the right side's split slot shows.
+	rightSplitTool string
+	// rightRatio is the share of the right side the primary slot takes when
+	// both are occupied; rightDragging and rightDragTotal carry a drag of the
+	// gap between its two windows.
+	rightRatio     float32
+	rightDragging  bool
+	rightDragTotal float32
+
 	// runAnything is the open Run Anything popup, or nil.
 	runAnything *runAnythingState
 

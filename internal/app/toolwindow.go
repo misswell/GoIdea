@@ -5,8 +5,12 @@ package app
 // list, as toolwindows/store.ts does for its slots.
 var toolWindows = []string{"run", "debug", "build", "term", "log", "problems", "todo", "find", "usages", "services"}
 
-// toolVisible reports whether a bottom tool window is showing.
+// toolVisible reports whether a tool window is showing. Registered windows
+// answer from the dock, which is the authority on their placement.
 func (m *Model) toolVisible(name string) bool {
+	if dockSpec(name) != nil {
+		return m.dockWindowShown(name)
+	}
 	switch name {
 	case "run":
 		return m.run.visible
@@ -70,8 +74,17 @@ func (m *Model) hideTool(name string) {
 // window. The closed window keeps its contents, as a tab does: the terminal's
 // shell and a run's output are still there.
 func (m *Model) occupyBottom(name string) {
+	if dockSpec(name) != nil {
+		m.DockShow(name)
+		return
+	}
 	area := m.toolArea(name)
 	release := m.holdLayout()
+	target := dockBottom
+	if area == "split" {
+		target = dockBottomSplit
+	}
+	m.dockEvictArea(target, name)
 	for _, other := range toolWindows {
 		if other != name && m.toolArea(other) == area {
 			m.hideTool(other)
@@ -117,8 +130,25 @@ func (m *Model) currentLayout() Layout {
 		Right:        m.rightTool,
 		RightHidden:  m.rightHidden || m.rightTool == "",
 		RightWidth:   int(m.rightWidth + 0.5),
+		RightSplit:   m.rightSplitTool,
+		RightRatio:   float64(m.rightRatio),
+		Dock:         m.currentDockLayout(),
 	}
 	for _, name := range toolWindows {
+		if dockSpec(name) != nil {
+			s, ok := m.dockSlotOf(name)
+			if !ok {
+				continue
+			}
+			l.Bottom = append(l.Bottom, name)
+			if s == dockBottomSplit {
+				if l.Split == nil {
+					l.Split = map[string]bool{}
+				}
+				l.Split[name] = true
+			}
+			continue
+		}
 		if m.toolVisible(name) {
 			l.Bottom = append(l.Bottom, name)
 		}
@@ -164,8 +194,17 @@ func (m *Model) applyLayout(root string) {
 	l := m.layoutFor(root)
 	release := m.holdLayout()
 	defer release()
+
+	// Reset the dock and the legacy mirrors it feeds.
 	m.structure.visible = false
 	m.leftSplit = ""
+	m.problems.visible = false
+	m.todo.visible = false
+	m.services.visible = false
+	m.hierarchy = hierarchyPane{}
+	m.dock = dockState{}
+	m.rightTool, m.rightSplitTool = "", ""
+	m.rightHidden = true
 	m.leftRatio = float32(l.LeftRatio)
 	m.leftDragging = false
 	m.leftWidth = float32(l.LeftWidth)
@@ -173,39 +212,123 @@ func (m *Model) applyLayout(root string) {
 	m.leftDragCollapse = false
 	m.bottomDragging = false
 	m.bottomDragCollapse = false
-	switch l.Side {
+	m.rightWidth = float32(l.RightWidth)
+	m.rightWidthDragging = false
+	m.rightRatio = float32(l.RightRatio)
+	m.rightDragging = false
+	m.bottomHeight = l.BottomHeight
+	m.splitNames = nil
+	m.tool = ""
+	m.toolStash = nil
+	m.toolStashMax = false
+	m.maximized = false
+
+	// The slots to restore: the versioned record when it is there, the old
+	// fields otherwise. Both end in the same map.
+	slots := map[string]string{}
+	if l.Dock != nil && l.Dock.Version >= dockLayoutVersion {
+		for k, v := range l.Dock.Slots {
+			if v != "" {
+				slots[k] = v
+			}
+		}
+		m.dock.active = l.Dock.Active
+		m.dock.last = append([]string(nil), l.Dock.Last...)
+		m.maximized = l.Dock.Max && len(slots) > 0
+		for k, v := range l.Dock.Hidden {
+			if s, ok := dockSlotOfName(k); ok && v != "" {
+				m.dock.hidden[s] = v
+				m.dock.hasHidden = true
+			}
+		}
+	} else {
+		// Sessions from before the dock: split the old lists the way the
+		// old workbench read them.
+		if l.Side != "" {
+			slots["left"] = l.Side
+		}
+		if l.LeftTool != "" {
+			slots["leftSplit"] = l.LeftTool
+		}
+		primary := false
+		for _, name := range l.Bottom {
+			if l.Split[name] {
+				slots["bottomSplit"] = name
+				continue
+			}
+			if !primary {
+				slots["bottom"] = name
+				primary = true
+			}
+		}
+		if l.Right != "" {
+			slots["right"] = l.Right
+		}
+		if l.RightSplit != "" {
+			slots["rightSplit"] = l.RightSplit
+		}
+		m.dock.last = append([]string(nil), l.Bottom...)
+		m.dock.active = l.Tool
+	}
+
+	switch slots["left"] {
 	case "vcs":
 		m.sideMode = "vcs"
 	default:
 		m.sideMode = ""
 	}
-	switch l.LeftTool {
-	case "structure":
-		m.ShowStructure()
-	case "bookmarks":
-		m.ShowBookmarksWindow()
-	}
 	m.leftHidden = l.LeftHidden
-	m.bottomHeight = l.BottomHeight
-	m.splitNames = nil
-	if len(l.Split) > 0 {
-		m.splitNames = make(map[string]bool, len(l.Split))
-		for name := range l.Split {
-			m.splitNames[name] = true
+
+	// Legacy windows need their area known before they open, or occupyBottom
+	// would put a split window back in the primary area.
+	for name, id := range slots {
+		if name == "bottomSplit" && id != "" && dockSpec(id) == nil {
+			if m.splitNames == nil {
+				m.splitNames = map[string]bool{}
+			}
+			m.splitNames[id] = true
 		}
 	}
-	m.tool = ""
-	m.toolStash = nil
-	m.toolStashMax = false
-	m.maximized = false
-	for _, name := range l.Bottom {
-		m.activateTool(name)
+
+	// Windows that are not registered yet restore through their old openers;
+	// registered ones open their content and take the recorded slot.
+	for name, id := range slots {
+		if id == "" {
+			continue
+		}
+		slot, ok := dockSlotOfName(name)
+		if !ok {
+			continue
+		}
+		if dockSpec(id) == nil {
+			switch {
+			case isToolWindow(id):
+				m.activateTool(id)
+			case slot == dockLeftSplit && id == "structure":
+				m.ShowStructure()
+			case slot == dockLeftSplit && id == "bookmarks":
+				m.ShowBookmarksWindow()
+			}
+			continue
+		}
+		if slot == dockLeft || slot == dockLeftSplit {
+			// Registered windows have no left slot yet; keep the old mirror.
+			continue
+		}
+		m.dockOpenContent(id)
+		m.dock.slots[slot] = id
+		m.dock.last = append(m.dock.last, id)
 	}
-	m.tool = l.Tool
-	m.rightTool = l.Right
-	m.rightHidden = l.Right == "" || l.RightHidden
-	m.rightWidth = float32(l.RightWidth)
-	m.rightWidthDragging = false
+
+	m.dockSyncMirrors()
+	if isToolWindow(l.Tool) && m.toolVisible(l.Tool) {
+		m.tool = l.Tool
+	} else if m.tool == "" {
+		m.tool = m.primaryTool()
+	}
+	if m.dock.active == "" {
+		m.dock.active = m.tool
+	}
 	m.invalidate()
 }
 
@@ -217,6 +340,12 @@ func (m *Model) ResetToolWindowLayout() {
 	primary := m.primaryTool()
 	release := m.holdLayout()
 	for _, name := range toolWindows {
+		if dockSpec(name) != nil {
+			if s, ok := m.dockSlotOf(name); ok && s != dockSpec(name).anchor {
+				m.DockMove(name, dockSpec(name).anchor)
+			}
+			continue
+		}
 		if m.splitNames[name] {
 			m.hideTool(name)
 		}
@@ -232,6 +361,12 @@ func (m *Model) ResetToolWindowLayout() {
 
 // toolArea is the bottom side area a window sits in, "primary" or "split".
 func (m *Model) toolArea(name string) string {
+	if dockSpec(name) != nil {
+		if s, ok := m.dockSlotOf(name); ok && s == dockBottomSplit {
+			return "split"
+		}
+		return "primary"
+	}
 	if m.splitNames[name] {
 		return "split"
 	}
@@ -241,6 +376,12 @@ func (m *Model) toolArea(name string) string {
 // primaryTool is the window the bottom primary area shows, "" when it is empty.
 func (m *Model) primaryTool() string {
 	for _, name := range toolWindows {
+		if dockSpec(name) != nil {
+			if s, ok := m.dockSlotOf(name); ok && s == dockBottom {
+				return name
+			}
+			continue
+		}
 		if m.toolArea(name) == "primary" && m.toolVisible(name) {
 			return name
 		}
@@ -251,6 +392,12 @@ func (m *Model) primaryTool() string {
 // splitTool is the window the bottom split area shows, "" when it is empty.
 func (m *Model) splitTool() string {
 	for _, name := range toolWindows {
+		if dockSpec(name) != nil {
+			if s, ok := m.dockSlotOf(name); ok && s == dockBottomSplit {
+				return name
+			}
+			continue
+		}
 		if m.toolArea(name) == "split" && m.toolVisible(name) {
 			return name
 		}
@@ -268,6 +415,14 @@ func (m *Model) MoveActiveToolWindowToBottom() { m.moveActiveTool(false) }
 
 func (m *Model) moveActiveTool(split bool) {
 	if m.tool == "" || !m.toolVisible(m.tool) {
+		return
+	}
+	if dockSpec(m.tool) != nil {
+		target := dockBottom
+		if split {
+			target = dockBottomSplit
+		}
+		m.DockMove(m.tool, target)
 		return
 	}
 	if m.splitNames[m.tool] == split {
@@ -332,6 +487,14 @@ func (m *Model) activateTool(name string) {
 // tool window menu moves a window between areas. Problems and TODO render in
 // either area; the others keep their home.
 func (m *Model) MoveToolToRight() {
+	if dockSpec(m.tool) != nil && m.toolVisible(m.tool) {
+		m.DockMove(m.tool, dockRight)
+		return
+	}
+	if top := m.dockOccupant(dockRight); top != "" {
+		m.DockMove(top, dockBottom)
+		return
+	}
 	name := m.tool
 	if name != "problems" && name != "todo" {
 		if m.rightTool == "problems" || m.rightTool == "todo" {
@@ -351,6 +514,14 @@ func (m *Model) MoveToolToRight() {
 
 // MoveToolToBottom docks a right-area window back into the bottom area.
 func (m *Model) MoveToolToBottom() {
+	if id := m.dockOccupant(dockRight); id != "" {
+		m.DockMove(id, dockBottom)
+		return
+	}
+	if id := m.dockOccupant(dockRightSplit); id != "" {
+		m.DockMove(id, dockBottomSplit)
+		return
+	}
 	switch m.rightTool {
 	case "problems":
 		m.rightHidden = true
@@ -370,6 +541,10 @@ func (m *Model) MoveToolToBottom() {
 // shortcuts last showed goes away and the editor keeps the keyboard.
 func (m *Model) HideActiveToolWindow() {
 	if m.tool == "" || !m.toolVisible(m.tool) {
+		if dockSpec(m.rightTool) != nil && m.dockWindowShown(m.rightTool) {
+			m.DockHide(m.rightTool)
+			return
+		}
 		if m.rightShown() {
 			if m.rightTool == "notifications" {
 				m.CloseNotifications()
@@ -377,6 +552,10 @@ func (m *Model) HideActiveToolWindow() {
 				m.CloseHierarchyWindow()
 			}
 		}
+		return
+	}
+	if dockSpec(m.tool) != nil {
+		m.DockHide(m.tool)
 		return
 	}
 	m.hideTool(m.tool)
@@ -387,6 +566,12 @@ func (m *Model) HideActiveToolWindow() {
 // window, and a second press brings back exactly what it hid, maximized again
 // if it was.
 func (m *Model) HideAllToolWindows() {
+	dockAny := false
+	for s := dockSlot(0); s < dockSlotCount; s++ {
+		if m.dock.slots[s] != "" {
+			dockAny = true
+		}
+	}
 	any := m.rightShown()
 	for _, name := range toolWindows {
 		if m.toolVisible(name) {
@@ -399,7 +584,13 @@ func (m *Model) HideAllToolWindows() {
 		m.toolStashMax = m.maximized
 		m.rightStash = m.rightShown()
 		release := m.holdLayout()
+		if dockAny {
+			m.dockHideAll()
+		}
 		for _, name := range toolWindows {
+			if dockSpec(name) != nil {
+				continue
+			}
 			m.toolStash[name] = m.toolVisible(name)
 			m.hideTool(name)
 		}
@@ -407,14 +598,20 @@ func (m *Model) HideAllToolWindows() {
 			m.rightHidden = true
 		}
 		release()
-	} else if m.toolStash != nil || m.rightStash {
+	} else if m.toolStash != nil || m.rightStash || m.dock.hasHidden {
 		stash := m.toolStash
 		m.toolStash = nil
 		release := m.holdLayout()
 		for _, name := range toolWindows {
+			if dockSpec(name) != nil {
+				continue
+			}
 			if stash[name] {
 				m.activateTool(name)
 			}
+		}
+		if m.dock.hasHidden {
+			m.dockRestoreAll()
 		}
 		if m.rightStash {
 			m.rightHidden = false

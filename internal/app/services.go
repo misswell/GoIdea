@@ -27,27 +27,13 @@ type serviceRow struct {
 }
 
 // ShowServices opens Services in the bottom area.
-func (m *Model) ShowServices() {
-	m.services.visible = true
-	m.occupyBottom("services")
-	m.invalidate()
-}
+func (m *Model) ShowServices() { m.DockShow("services") }
 
 // CloseServices hides it without running a toggle's side effects.
-func (m *Model) CloseServices() {
-	m.services.visible = false
-	m.hideTool("services")
-	m.invalidate()
-}
+func (m *Model) CloseServices() { m.DockHide("services") }
 
 // ToggleServices is the Window menu and command palette action.
-func (m *Model) ToggleServices() {
-	if m.services.visible {
-		m.CloseServices()
-		return
-	}
-	m.ShowServices()
-}
+func (m *Model) ToggleServices() { m.DockToggle("services") }
 
 // serviceRows reads the project's services: its build systems, the backend's
 // run configurations and the Java tooling settings.
