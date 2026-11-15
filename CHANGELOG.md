@@ -3,6 +3,13 @@
 The update window shows the section of the version it offers. Every release
 needs a `## <version>` section here, or its build fails.
 
+## Unreleased
+
+- 新增 **选择运行/调试配置…**（`Ctrl+Alt+R`）弹出配置选择器：Enter 运行、`Shift+Enter` 调试、`Ctrl+Alt+D` 直接进入调试模式。
+- **调试**（`F9`）现在调试所选的运行配置，**调试当前文件**移至 `Ctrl+Shift+D`；两者共用同一套启动准备。
+- 修复项目切换时误报“后端重启后恢复项目失败”的缺陷：首次启动不再运行重启恢复回调。
+- 新增运行准备负向回归：缺少 JDTLS、运行中切换项目、Server 在准备期间被杀——全部验证拒绝启动且无孤儿进程。
+
 ## 0.1.2
 
 - 新增 **编辑运行配置…**（`Ctrl+Alt+Shift+R`）：编辑名称、命令、实参、工作目录、环境变量、模块与启动前构建，保存即写入 `.openidea/run.toml`。
