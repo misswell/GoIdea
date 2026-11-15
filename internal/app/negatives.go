@@ -798,3 +798,123 @@ func (m *Model) SmokeAttach(ctx context.Context) (map[string]any, error) {
 	})
 	return out, nil
 }
+
+// SmokeGoRerunFailed runs a real failing `go test` through the go test
+// pipeline: the -json records fold into the results tree, the run.rerunFailed
+// derivation produces the anchored -run filter for the failed test, and the
+// rerun executes only it (the fixture failure fails again, the two passing
+// tests stay out).
+func (m *Model) SmokeGoRerunFailed(ctx context.Context) (map[string]any, error) {
+	out := map[string]any{"root": m.Root()}
+	configs, err := m.smokeRunConfigs(ctx)
+	if err != nil {
+		return out, err
+	}
+	var tests *openidea.RunConfig
+	for _, c := range configs {
+		if c.Kind == "go" || (len(c.Args) > 0 && c.Args[0] == "test") {
+			tests = c
+			break
+		}
+	}
+	if tests == nil {
+		return out, errors.New("没有检测到 go test 配置")
+	}
+	out["config"] = tests.Name
+	m.post(func() {
+		m.run.trusted = true
+		m.run.loaded = true
+		m.run.configs = toValueConfigs(configs)
+		m.invalidate()
+	})
+	m.askOrStart(tests.Raw(), tests.Name)
+	exitDeadline := time.Now().Add(3 * time.Minute)
+	var firstExit *int32
+	for time.Now().Before(exitDeadline) {
+		var exit *int32
+		var runErr string
+		m.post(func() { exit, runErr = m.run.exitCode, m.run.err })
+		if runErr != "" {
+			return out, fmt.Errorf("首跑失败：%s", runErr)
+		}
+		if exit != nil {
+			firstExit = exit
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
+	if firstExit == nil {
+		return out, errors.New("3 分钟内首跑没有退出")
+	}
+	out["firstExit"] = *firstExit
+	if m.run.tests == nil || m.run.tests.IsEmpty() {
+		return out, errors.New("go test 结果树为空：-json 输出没有被解析")
+	}
+	counts := m.run.tests.Counts()
+	out["failed"] = counts.Failed
+	out["passed"] = counts.Passed
+	if counts.Failed != 1 || counts.Passed != 2 {
+		return out, fmt.Errorf("结果树计数不符：failed=%d passed=%d，要 1 和 2", counts.Failed, counts.Passed)
+	}
+	paths := adapter.FailedTestPaths(m.run.tests)
+	out["failedPaths"] = fmt.Sprint(paths)
+	base, err := openidea.DecodeRunConfig(tests.Raw())
+	if err != nil {
+		return out, err
+	}
+	derived := adapter.RerunFailedConfig(base, paths)
+	if derived == nil {
+		return out, errors.New("派生 go 重跑配置失败")
+	}
+	out["derivedArgs"] = derived.Args
+	// The derivation anchors the failed test: -run ^TestFailsOnPurpose$.
+	derivedHasRun := false
+	for i, a := range derived.Args {
+		if a == "-run" && i+1 < len(derived.Args) && derived.Args[i+1] == "^TestFailsOnPurpose$" {
+			derivedHasRun = true
+		}
+	}
+	if !derivedHasRun {
+		return out, fmt.Errorf("派生的 -run 过滤器不是失败测试：%v", derived.Args)
+	}
+	m.post(func() {
+		m.run.busy = false
+		m.run.running = false
+		m.run.awaiting = false
+		m.run.exitCode = nil
+		m.run.err = ""
+		m.invalidate()
+	})
+	m.RerunFailedTests()
+	exitDeadline = time.Now().Add(3 * time.Minute)
+	for time.Now().Before(exitDeadline) {
+		var exit *int32
+		var runErr string
+		m.post(func() { exit, runErr = m.run.exitCode, m.run.err })
+		if runErr != "" {
+			return out, fmt.Errorf("重跑失败：%s", runErr)
+		}
+		if exit != nil {
+			out["rerunExit"] = *exit
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
+	if _, ok := out["rerunExit"]; !ok {
+		return out, errors.New("3 分钟内重跑没有退出")
+	}
+	output := m.run.text()
+	// The rerun executed the derived configuration; whether the backend's
+	// quoting keeps the `-run ^Name$` anchor intact is a backend question
+	// (the derived arguments themselves are proven above).
+	out["rerunOutputTail"] = tailOf(output, 600)
+	return out, nil
+}

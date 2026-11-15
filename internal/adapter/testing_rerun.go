@@ -46,9 +46,12 @@ func FailedTestPaths(results *TestResults) [][]string {
 	return out
 }
 
-// escapeRegExp escapes a string for use in a filter regular expression.
+// escapeRegExp escapes a string for use in a filter regular expression
+// (rerun.ts escapeRegExp: backslash before every metacharacter).
 func escapeRegExp(s string) string {
-	return regexp.MustCompile(`[.*+?^${}()|[\]\\]`).ReplaceAllString(s, "\\$&")
+	return regexp.MustCompile(`[.*+?^${}()|[\]\\]`).ReplaceAllStringFunc(s, func(c string) string {
+		return "\\" + c
+	})
 }
 
 // splitDashDash splits args at the first `--` (rerun.ts).
@@ -161,16 +164,108 @@ func jvmArgs(config *openidea.RunConfig, paths [][]string) []string {
 	return args
 }
 
+// goSinglePackage returns the one package all paths belong to, "" when they
+// span several (rerun.ts's grouping key).
+func goSinglePackage(paths [][]string) string {
+	pkg := ""
+	for _, p := range paths {
+		if len(p) == 0 {
+			continue
+		}
+		if pkg == "" {
+			pkg = p[0]
+		} else if pkg != p[0] {
+			return ""
+		}
+	}
+	return pkg
+}
+
+// goArgs derives the arguments that run only the selected go tests
+// (rerun.ts goArgs): one package per invocation, `-run` with the anchored
+// test-name pattern, benchmarks on `-bench`.
+func goArgs(base []string, paths [][]string, file string) []string {
+	pkgs := map[string]bool{}
+	var order []string
+	for _, p := range paths {
+		if len(p) > 0 && p[0] != "" && !pkgs[p[0]] {
+			pkgs[p[0]] = true
+			order = append(order, p[0])
+		}
+	}
+	if len(pkgs) != 1 {
+		return nil
+	}
+	parts := GoTestParts(base)
+	targets := order
+	if file != "" {
+		targets = []string{file}
+	} else if pkgs["command-line-arguments"] {
+		targets = parts.Targets
+	}
+	onlyPackage := false
+	for _, p := range paths {
+		if len(p) == 1 {
+			onlyPackage = true
+		}
+	}
+	if onlyPackage {
+		return append([]string{"test"}, append(parts.Flags, append(targets, parts.Program...)...)...)
+	}
+	pattern := func(selected [][]string) string {
+		seen := map[string]bool{}
+		var uniq []string
+		for _, path := range selected {
+			names := path[1:]
+			for i := range names {
+				names[i] = "^" + escapeRegExp(names[i]) + "$"
+			}
+			joined := strings.Join(names, "/")
+			if !seen[joined] {
+				seen[joined] = true
+				uniq = append(uniq, joined)
+			}
+		}
+		return strings.Join(uniq, "|")
+	}
+	var tests, benchmarks [][]string
+	for _, p := range paths {
+		if len(p) > 1 && strings.HasPrefix(p[1], "Benchmark") {
+			benchmarks = append(benchmarks, p)
+		} else {
+			tests = append(tests, p)
+		}
+	}
+	args := []string{"test"}
+	args = append(args, WithoutGoSelection(parts.Flags)...)
+	run := "^$"
+	if len(tests) > 0 {
+		run = pattern(tests)
+	}
+	args = append(args, "-run", run)
+	if len(benchmarks) > 0 {
+		args = append(args, "-bench", pattern(benchmarks))
+	}
+	args = append(args, targets...)
+	args = append(args, WithoutGoSelection(parts.Program)...)
+	return args
+}
+
 // FrameworkFor is the testing framework of a configuration (testing/index.ts
-// frameworkFor's jvm branch, the one GoIDEA parses today).
+// frameworkFor's jvm and go branches, the ones GoIDEA parses today).
 func FrameworkFor(config *openidea.RunConfig) string {
 	switch config.Kind {
 	case "maven", "gradle":
 		return "jvm"
+	case "go":
+		return "go"
 	}
 	cmd := config.Command + " " + strings.Join(config.Args, " ")
 	if regexp.MustCompile(`\b(gradlew?|mvnw?)\b`).MatchString(cmd) {
 		return "jvm"
+	}
+	if regexp.MustCompile(`\bgo\s+test\b`).MatchString(cmd) {
+		return "go"
 	}
 	return ""
 }
@@ -180,10 +275,23 @@ func FrameworkFor(config *openidea.RunConfig) string {
 // marked detected so it disappears from the user's list. nil when the
 // framework or the paths are not supported.
 func RerunFailedConfig(config *openidea.RunConfig, paths [][]string) *openidea.RunConfig {
-	if FrameworkFor(config) != "jvm" || len(paths) == 0 {
-		return nil
+	var args []string
+	switch FrameworkFor(config) {
+	case "jvm":
+		args = jvmArgs(config, paths)
+	case "go":
+		// Go filters apply to every package in an invocation, so each
+		// package keeps its own selection; a single package reruns directly.
+		if pkg := goSinglePackage(paths); pkg != "" {
+			var selected [][]string
+			for _, p := range paths {
+				if len(p) > 0 && p[0] == pkg {
+					selected = append(selected, p)
+				}
+			}
+			args = goArgs(config.Args, selected, "")
+		}
 	}
-	args := jvmArgs(config, paths)
 	if args == nil {
 		return nil
 	}

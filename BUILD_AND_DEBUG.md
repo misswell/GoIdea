@@ -297,6 +297,21 @@ when each state was first reached on the real backend and asserts the
 ordering (backend ≤ project ≤ buildModel ≤ run) and that all of them are
 reached (`readiness.*` checks).
 
+## Go test pipeline
+
+`internal/adapter/testing_go.go` ports `go.ts`: plain `go test`/`go test -v`
+output and `go test -json` records (benchmarks, per-test locations, package
+summaries) fold into the results tree, and the console renders the records'
+output text (upstream `GoTestOutput`). Upstream's `withTestReporting` is
+ported too: a `go test` launch gains `-json` before `run_start`
+(`patchRunConfigArgs`). The rerun derivation anchors the failed test with
+`-run ^Name$` (goArguments.ts's `goTestParts` / `withoutGoSelection`). The
+e2e phase 1b2 (`GOIDEA_SMOKE_GORERUN=1`, `testdata/go-app`) proves the tree
+counts (1 failure, 2 passes), the failed path (package + test) and the
+derived `-run ^TestFailsOnPurpose$`; the rerun executes. Open question
+recorded: the backend's quoting of the `$` anchor in the rerun filter needs
+an OpenIDEA-side check before the rerun's final one-test assertion can pass.
+
 ## HotSwap (Reload Changed Classes)
 
 **重新加载变更的类（HotSwap）** (`debug.reloadChangedClasses`,

@@ -1061,6 +1061,46 @@
    "doc": "BUILD_AND_DEBUG.md"
   },
   {
+   "id": "gorerun.gorerunError",
+   "label": "gorerunError is absent",
+   "feature": "Go test pipeline reports no unexpected error",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "gorerun.tree",
+   "label": "the -json records fold into the tree with 1 failure and 2 passes",
+   "feature": "Go test -json parsing into the results tree",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "gorerun.paths",
+   "label": "the failed path is the package and test",
+   "feature": "Go failed test paths",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "gorerun.derived",
+   "label": "the derivation anchors the failed test with -run ^TestFailsOnPurpose$",
+   "feature": "run.rerunFailed go derivation (goArgs)",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "gorerun.rerun",
+   "label": "the derived configuration executed through run_start",
+   "feature": "Go rerun execution",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
    "id": "negjdtls.negjdtlsError",
    "label": "negjdtlsError is absent",
    "feature": "Missing-toolchain launch reports no unexpected error",

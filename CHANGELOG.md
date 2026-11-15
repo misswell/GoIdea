@@ -3,6 +3,10 @@
 The update window shows the section of the version it offers. Every release
 needs a `## <version>` section here, or its build fails.
 
+## Unreleased
+
+- 测试结果管线支持 **go test**（含 `-json`）：运行 `go test` 输出解析进结果树，重新运行失败的测试按 `-run` 锚定派生。
+
 ## 0.1.5
 
 - 运行窗口新增**测试结果树**：状态标记、耗时与失败详情，点击查看单个测试的输出。

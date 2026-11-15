@@ -186,6 +186,13 @@ CHECKS = {
         ("one", "the rerun executed only the failed method (Tests run: 1)", lambda d: (get(d, "rerunfail.rerunRanOneTest") is True, get(d, "rerunfail.rerunRanOneTest"))),
         ("tree", "the results tree view lists the class and the failed method with failure marks", lambda d: (any("✗" in r and "CalculatorTest" in r for r in (get(d, "rerunfail.tree") or [])) and any("✗" in r and "failsOnPurpose" in r for r in (get(d, "rerunfail.tree") or [])), get(d, "rerunfail.tree"))),
     ],
+    "gorerun": [
+        ("gorerunError", *absent("gorerunError")),
+        ("tree", "the -json records fold into the tree with 1 failure and 2 passes", lambda d: ((get(d, "gorerun.failed") or 0) == 1 and (get(d, "gorerun.passed") or 0) == 2, {"failed": get(d, "gorerun.failed"), "passed": get(d, "gorerun.passed")})),
+        ("paths", "the failed path is the package and test", lambda d: (get(d, "gorerun.failedPaths") == "[[goidea.example/goapp TestFailsOnPurpose]]", get(d, "gorerun.failedPaths"))),
+        ("derived", "the derivation anchors the failed test with -run ^TestFailsOnPurpose$", lambda d: ("-run" in (get(d, "gorerun.derivedArgs") or []) and "^TestFailsOnPurpose$" in (get(d, "gorerun.derivedArgs") or []), get(d, "gorerun.derivedArgs"))),
+        ("rerun", "the derived configuration executed through run_start", lambda d: (get(d, "gorerun.rerunExit") == 0, get(d, "gorerun.rerunExit"))),
+    ],
     "readiness": [
         ("readinessError", *absent("readinessError")),
         ("ordered", "the six states arrive in order (backend ≤ project ≤ buildModel ≤ run)", lambda d: (get(d, "readiness.ordered") is True, get(d, "readiness"))),

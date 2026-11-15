@@ -62,6 +62,7 @@ type RunPane struct {
 	// output Maven Surefire and Gradle report per test.
 	tests      *adapter.TestResults
 	testParser *adapter.JvmParser
+	testGo     *adapter.GoParser
 	testStdout *adapter.TestStdoutBuffer
 	// selTest is the selected node of the results tree view.
 	selTest string
@@ -312,18 +313,46 @@ func (m *Model) startRunWith(raw json.RawMessage, name string) bool {
 		ID string `json:"id"`
 	}
 	_ = json.Unmarshal(raw, &probe)
+	// withTestReporting (testing/index.ts): a `go test` run reports per test
+	// only with -json, which the parser consumes; the console shows the
+	// records' output text.
+	if probeCfg, rerr := openidea.DecodeRunConfig(raw); rerr == nil && adapter.FrameworkFor(probeCfg) == "go" &&
+		len(probeCfg.Args) > 0 && probeCfg.Args[0] == "test" {
+		hasJSON := false
+		for _, a := range probeCfg.Args {
+			if a == "-json" || strings.HasPrefix(a, "-json=") {
+				hasJSON = true
+				break
+			}
+		}
+		if !hasJSON {
+			if patched, ok := patchRunConfigArgs(raw, append([]string{"test", "-json"}, probeCfg.Args[1:]...)); ok {
+				raw = patched
+			}
+		}
+	}
 	m.run.lastID = probe.ID
 	m.run.lastRaw = append(json.RawMessage(nil), raw...)
 	m.run.lastName = name
-	// A JVM configuration's output reports tests per test: fold it into the
-	// results tree the rerun-failed action works from.
-	if probeCfg, err := openidea.DecodeRunConfig(raw); err == nil && adapter.FrameworkFor(probeCfg) == "jvm" {
-		m.run.tests = adapter.NewTestResults()
-		m.run.testParser = adapter.NewJvmParser()
-		m.run.testStdout = adapter.NewTestStdoutBuffer()
-	} else {
-		m.run.tests = nil
+	// A JVM or Go configuration's output reports tests per test: fold it
+	// into the results tree the rerun-failed action works from. Upstream's
+	// withTestReporting turns `go test` into `go test -json` so passed tests
+	// reach the tree.
+	if probeCfg, err := openidea.DecodeRunConfig(raw); err == nil {
+		switch adapter.FrameworkFor(probeCfg) {
+		case "jvm":
+			m.run.tests = adapter.NewTestResults()
+			m.run.testParser = adapter.NewJvmParser()
+			m.run.testStdout = adapter.NewTestStdoutBuffer()
+		case "go":
+			m.run.tests = adapter.NewTestResults()
+			m.run.testGo = adapter.NewGoParser()
+			m.run.testStdout = adapter.NewTestStdoutBuffer()
+		}
+	}
+	if m.run.tests == nil {
 		m.run.testParser = nil
+		m.run.testGo = nil
 		m.run.testStdout = nil
 	}
 	tabs := append([]*Tab(nil), m.tabs...)
@@ -532,7 +561,9 @@ func (m *Model) acceptChunk(id uint32, data json.RawMessage) {
 		if json.Unmarshal(data, &chunk) != nil {
 			return
 		}
-		m.feedRunTests(chunk.Text)
+		if display := m.feedRunTests(chunk.Text); display != chunk.Text {
+			chunk.Text = display
+		}
 		m.run.append(chunk)
 		m.invalidate()
 	case id != 0 && id == m.build.channel:
@@ -619,17 +650,44 @@ func (p *RunPane) treeLines() []testTreeLine {
 	return out
 }
 
+// patchRunConfigArgs writes new arguments into a configuration's raw
+// object, keeping the fields GoIDEA does not model.
+func patchRunConfigArgs(raw json.RawMessage, args []string) (json.RawMessage, bool) {
+	obj := map[string]any{}
+	if json.Unmarshal(raw, &obj) != nil {
+		return raw, false
+	}
+	obj["args"] = args
+	out, err := json.Marshal(obj)
+	if err != nil {
+		return raw, false
+	}
+	return out, true
+}
+
 // feedRunTests feeds the run's output lines to the test parser (types.ts
 // TestStdout: complete unsplit lines), folding the events into the tree. The
 // parser matches plain text, so ANSI is stripped first, exactly as the
-// console strips it.
-func (m *Model) feedRunTests(text string) {
-	if m.run.testParser == nil || m.run.testStdout == nil || m.run.tests == nil {
-		return
+// console strips it. `go test -json` records render as their Output text.
+func (m *Model) feedRunTests(text string) string {
+	if m.run.testStdout == nil || m.run.tests == nil {
+		return text
 	}
+	var display []string
 	for _, line := range m.run.testStdout.Feed(stripANSI(text)) {
-		m.run.tests.Apply(m.run.testParser.Feed(line))
+		var events []adapter.TestEvent
+		if m.run.testGo != nil {
+			events = m.run.testGo.Feed(line)
+			display = append(display, adapter.GoConsoleText(line))
+		} else if m.run.testParser != nil {
+			events = m.run.testParser.Feed(line)
+		}
+		m.run.tests.Apply(events)
 	}
+	if m.run.testGo != nil {
+		return strings.Join(display, "")
+	}
+	return text
 }
 
 func (m *Model) acceptExit(e openidea.RunExitedEvent) {
