@@ -3,7 +3,7 @@
 The update window shows the section of the version it offers. Every release
 needs a `## <version>` section here, or its build fails.
 
-## Unreleased
+## 0.1.7
 
 - 编辑器右键菜单新增 **Local History**：显示历史时间线与**添加标签…**，标签行可一键把目录内所有文件恢复到标签时刻。
 
