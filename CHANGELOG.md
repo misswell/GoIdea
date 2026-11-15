@@ -3,7 +3,7 @@
 The update window shows the section of the version it offers. Every release
 needs a `## <version>` section here, or its build fails.
 
-## Unreleased
+## 0.1.8
 
 - 测试结果管线支持 **cargo test**（libtest 与 nextest）：输出解析进结果树，重新运行失败的测试按 `--exact` 过滤派生。
 - 新增**开箱即用全链路回归**：全新数据目录从工具链安装到六态就绪再到真实 Maven 运行（发布门禁）。
