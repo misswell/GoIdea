@@ -3,7 +3,7 @@
 The update window shows the section of the version it offers. Every release
 needs a `## <version>` section here, or its build fails.
 
-## Unreleased
+## 0.1.5
 
 - 运行窗口新增**测试结果树**：状态标记、耗时与失败详情，点击查看单个测试的输出。
 - 新增 **附加到进程…**（`Alt+Shift+F5`）：枚举可附加的 Java（JDWP）进程并附加到运行中的 JVM，挂起启动的 VM 附加后自动恢复。
