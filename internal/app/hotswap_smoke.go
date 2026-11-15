@@ -82,6 +82,22 @@ func (m *Model) SmokeHotSwap(ctx context.Context) (map[string]any, error) {
 		}
 		m.debug.bps[path] = []int{4}
 		m.invalidate()
+	})
+	// Debug requires Java Ready (section 8): wait for the import.
+	readyDeadline := time.Now().Add(4 * time.Minute)
+	for time.Now().Before(readyDeadline) {
+		if m.readinessNow(ctx).Java {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
+	m.refreshReadiness()
+	time.Sleep(300 * time.Millisecond)
+	m.post(func() {
 		m.DebugContext()
 	})
 	deadline := time.Now().Add(4 * time.Minute)
