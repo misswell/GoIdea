@@ -3,7 +3,7 @@
 The update window shows the section of the version it offers. Every release
 needs a `## <version>` section here, or its build fails.
 
-## Unreleased
+## 0.1.9
 
 - 测试结果管线支持 **pytest**（`-v` 详细行、摘要与失败段落）：输出解析进结果树，重新运行失败的测试按 node id 派生。
 
