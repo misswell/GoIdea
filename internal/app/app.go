@@ -301,6 +301,9 @@ type Model struct {
 	rerunAsk  *rerunAsk
 	chooser   *runChooser
 	attach    *attachDlg
+	// pendingJump is a line an open should land on once its tab exists: a
+	// test tree's failing node opened before the document finished loading.
+	pendingJump map[string]int
 	// ready is the cached six-state readiness snapshot (section 8), refreshed
 	// when the project opens, after the run configs and the build model land,
 	// and by the readiness smoke.
@@ -1325,6 +1328,12 @@ func (m *Model) openWith(path string, spec openSpec) {
 			}
 			m.applyActive()
 			m.applyReveal(m.tabs[m.active])
+			// A jump requested before the document was ready (a test tree's
+			// failing node) lands once its tab exists.
+			if line, ok := m.pendingJump[path]; ok {
+				delete(m.pendingJump, path)
+				m.tabs[m.active].state.GoTo(editor.Pos{Line: line, Col: 0})
+			}
 			m.status = "已打开 " + filepath.Base(path)
 			m.applyActive()
 			m.saveSession()

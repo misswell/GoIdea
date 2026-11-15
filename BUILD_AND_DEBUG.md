@@ -308,11 +308,14 @@ as an anchored `-t` regular expression over the test names, and
 (`GOIDEA_SMOKE_JSRERUN=1`, `testdata/node-app` with real `npm install
 jest`) proves the tree counts (1 failure, 2 passes), the anchored `-t`
 derivation, and that the rerun executes only the failed test
-(`jsrerun.*` checks). Known parsing defect, recorded: jest's verbose
-failure line (`✕ fails on purpose (1 ms)`) and the `● ` fail header both
-produce results, so the tree shows a duplicated node whose name mixes the
-two — the derivation and the rerun still work; the duplicate needs a fix
-in the detail-section state machine.
+(`jsrerun.*` checks). Two parser details matter and are covered by
+`internal/adapter/testing_javascript_test.go`: the status marks are
+multi-byte runes (`✓` `✕` `○`) and must be decoded as characters — a
+byte-wise read turns them into describe headers — and the `● ` fail header
+names the test (`suite › test`) so its path is the file plus those names,
+which lands on the node the verbose line already made instead of a nested
+duplicate. jest's `-t` filter still lists the file's other tests but marks
+them skipped, so a rerun reports `N skipped`, not fewer tests.
 
 ## Pytest pipeline
 

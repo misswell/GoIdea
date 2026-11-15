@@ -1061,6 +1061,14 @@
    "doc": "BUILD_AND_DEBUG.md"
   },
   {
+   "id": "rerunfail.jump",
+   "label": "double-clicking the failed node opens its source at the failure's line",
+   "feature": "Test results tree: jump to the failing test",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
    "id": "gorerun.gorerunError",
    "label": "gorerunError is absent",
    "feature": "Go test pipeline reports no unexpected error",

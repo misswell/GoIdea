@@ -153,14 +153,59 @@ func (m *Model) SmokeRerunFailed(ctx context.Context) (map[string]any, error) {
 	ranOnce := strings.Contains(output, "Tests run: 1")
 	out["rerunRanOneTest"] = ranOnce
 	// The results tree view: rows carry the status marks and both the class
-	// and the failed method.
+	// and the failed method, and the failing test's node carries its source
+	// position for the double-click jump.
 	var tree []string
+	var locPath string
+	var locLine int
 	m.post(func() {
 		for _, line := range m.run.treeLines() {
 			tree = append(tree, line.mark+" "+strings.TrimSpace(line.text))
+			if line.loc != nil && strings.Contains(line.text, "failsOnPurpose") {
+				locPath, locLine = line.loc.Path, line.loc.Line
+			}
 		}
 	})
 	out["tree"] = tree
+	out["locationPath"] = locPath
+	out["locationLine"] = locLine
+	if locPath == "" || locLine == 0 {
+		return out, errors.New("失败测试节点没有源码位置：双击跳转无法工作")
+	}
+	// The jump opens the file at the failure's line.
+	m.post(func() {
+		m.openTestLocation(&adapter.TestLocation{Path: locPath, Line: locLine, Col: 1, Resolve: "name"})
+	})
+	// The document loads asynchronously, so the line lands with its tab
+	// (pendingJump); poll for both.
+	var opened string
+	var cursorLine int
+	jumpDeadline := time.Now().Add(60 * time.Second)
+	for time.Now().Before(jumpDeadline) {
+		opened, cursorLine = "", 0
+		m.post(func() {
+			if t := m.tab(); t != nil {
+				opened = t.doc.Path()
+				cursorLine = t.state.CursorPos().Line + 1
+			}
+		})
+		if strings.HasSuffix(opened, "CalculatorTest.java") && cursorLine == locLine {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(200 * time.Millisecond):
+		}
+	}
+	out["openedPath"] = opened
+	out["cursorLine"] = cursorLine
+	if !strings.HasSuffix(opened, "CalculatorTest.java") {
+		return out, fmt.Errorf("跳转没有打开失败测试的源文件：%s", opened)
+	}
+	if cursorLine != locLine {
+		return out, fmt.Errorf("跳转后光标在第 %d 行，失败在第 %d 行", cursorLine, locLine)
+	}
 	if !ranOnce {
 		return out, fmt.Errorf("重跑没有只运行失败的方法；输出尾部：%s", tailOf(output, 800))
 	}
@@ -1454,8 +1499,10 @@ func (m *Model) SmokeJsRerunFailed(ctx context.Context) (map[string]any, error) 
 		return out, errors.New("5 分钟内重跑没有退出")
 	}
 	output := m.run.text()
-	// Only the failed test ran again: the two passing tests are absent.
-	ranOne := strings.Contains(output, "fails on purpose") && !strings.Contains(output, "adds ok")
+	// Only the failed test ran again: jest's -t filter still lists the file's
+	// other tests but marks them skipped, so the run reports them skipped
+	// instead of passed.
+	ranOne := strings.Contains(output, "2 skipped") && !strings.Contains(output, "2 passed")
 	out["rerunRanOneTest"] = ranOne
 	if !ranOne {
 		return out, fmt.Errorf("重跑没有只运行失败测试；输出尾部：%s", tailOf(output, 800))

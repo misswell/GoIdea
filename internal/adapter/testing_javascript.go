@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"mayoi/internal/openidea"
 )
@@ -186,9 +187,12 @@ func (p *JsParser) Feed(raw string) []TestEvent {
 		}
 		return events
 	}
-	mark := trimmed[0:1]
+	// The marks are multi-byte runes (`✕` is 3 bytes): decode the first
+	// character, not its first byte.
+	first, size := utf8.DecodeRuneInString(trimmed)
+	mark := string(first)
 	var status TestStatus
-	if len(trimmed) > 1 && trimmed[1] == ' ' {
+	if size < len(trimmed) && trimmed[size] == ' ' {
 		status = jsMarkStatus(mark)
 	}
 
@@ -256,7 +260,14 @@ func (p *JsParser) Feed(raw string) []TestEvent {
 				p.startFailure([]string{p.file})
 			}
 		} else {
-			path := p.jsPath(names)
+			// The fail header names the test itself (`suite › test`), not a
+			// nested describe: the path is the file plus those names, so it
+			// lands on the node the verbose line made (js.ts).
+			var path []string
+			if p.file != "" {
+				path = append(path, p.file)
+			}
+			path = append(path, names...)
 			events = append(events, TestEvent{Kind: "result", Path: path, Status: TestFailed})
 			p.startFailure(path)
 		}

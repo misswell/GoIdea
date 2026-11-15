@@ -185,6 +185,7 @@ CHECKS = {
         ("derived", "the derived configuration filters with Maven's -Dtest= on the failed method", lambda d: ("-Dtest=com.example.CalculatorTest#failsOnPurpose" in (get(d, "rerunfail.derivedArgs") or []), get(d, "rerunfail.derivedArgs"))),
         ("one", "the rerun executed only the failed method (Tests run: 1)", lambda d: (get(d, "rerunfail.rerunRanOneTest") is True, get(d, "rerunfail.rerunRanOneTest"))),
         ("tree", "the results tree view lists the class and the failed method with failure marks", lambda d: (any("✗" in r and "CalculatorTest" in r for r in (get(d, "rerunfail.tree") or [])) and any("✗" in r and "failsOnPurpose" in r for r in (get(d, "rerunfail.tree") or [])), get(d, "rerunfail.tree"))),
+        ("jump", "double-clicking the failed node opens its source at the failure's line", lambda d: ((get(d, "rerunfail.openedPath") or "").endswith("CalculatorTest.java") and get(d, "rerunfail.cursorLine") == get(d, "rerunfail.locationLine") and (get(d, "rerunfail.locationLine") or 0) > 0, {"opened": get(d, "rerunfail.openedPath"), "cursor": get(d, "rerunfail.cursorLine"), "line": get(d, "rerunfail.locationLine")})),
     ],
     "gorerun": [
         ("gorerunError", *absent("gorerunError")),

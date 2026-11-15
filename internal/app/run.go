@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/editor"
 
 	"mayoi/internal/adapter"
 	"mayoi/internal/openidea"
@@ -643,11 +645,12 @@ func (p *RunPane) append(c openidea.OutputChunk) {
 }
 
 // testTreeLine is one row of the results tree view: its node id, the status
-// mark and the display text.
+// mark, the display text and the node's source position when it has one.
 type testTreeLine struct {
 	id   string
 	mark string
 	text string
+	loc  *adapter.TestLocation
 }
 
 // treeLines flattens the results tree for the view: one row per node, roots
@@ -676,7 +679,7 @@ func (p *RunPane) treeLines() []testTreeLine {
 		if n.DurationMs != nil {
 			text += fmt.Sprintf(" (%.1f ms)", *n.DurationMs)
 		}
-		out = append(out, testTreeLine{id: n.ID, mark: mark(n), text: text})
+		out = append(out, testTreeLine{id: n.ID, mark: mark(n), text: text, loc: n.Location})
 		for _, ch := range n.Children {
 			walk(ch, depth+1)
 		}
@@ -700,6 +703,53 @@ func patchRunConfigArgs(raw json.RawMessage, args []string) (json.RawMessage, bo
 		return raw, false
 	}
 	return out, true
+}
+
+// openTestLocation opens the file of a test node's location at its line,
+// resolving a bare file name against the project the way the parsers record
+// it (`name` resolutions) and an absolute path directly.
+func (m *Model) openTestLocation(loc *adapter.TestLocation) {
+	if loc == nil || loc.Path == "" {
+		return
+	}
+	path := loc.Path
+	if loc.Resolve == "name" || !filepath.IsAbs(path) {
+		// The parsers record a source file's name relative to the project
+		// root; the backend's index resolves it.
+		raw, err := m.invoke(m.ctx, "find_files", map[string]any{"query": filepath.Base(path), "limit": 20})
+		if err == nil {
+			var files []openidea.FileMatch
+			if json.Unmarshal(raw, &files) == nil {
+				for _, f := range files {
+					if strings.HasSuffix(filepath.ToSlash(f.RelPath), filepath.ToSlash(path)) ||
+						strings.HasSuffix(filepath.ToSlash(f.RelPath), "/"+filepath.Base(path)) {
+						path = f.Path
+						break
+					}
+				}
+			}
+		}
+	}
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(m.Root(), path)
+	}
+	if line := loc.Line - 1; line > 0 {
+		// The jump must survive the document load: record it first, so the
+		// open's completion lands on the failure's line, then apply it too
+		// when the tab already exists.
+		if m.pendingJump == nil {
+			m.pendingJump = map[string]int{}
+		}
+		m.pendingJump[realPath(path)] = line
+	}
+	m.openFile(path)
+	if line := loc.Line - 1; line > 0 {
+		if t := m.tab(); t != nil && t.doc.Path() == realPath(path) {
+			delete(m.pendingJump, realPath(path))
+			t.state.GoTo(editor.Pos{Line: line, Col: max(loc.Col-1, 0)})
+		}
+	}
+	m.invalidate()
 }
 
 // feedRunTests feeds the run's output lines to the test parser (types.ts

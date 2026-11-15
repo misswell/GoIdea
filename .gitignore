@@ -6,10 +6,12 @@ mygo_windows_*.syso
 /mayoi
 /cmd/mayoi/mayoi
 *.test
-# Java fixtures build in place during the E2E run.
+# Fixtures build in place during the E2E run; the jest fixture installs its
+# packages at e2e time, so node_modules is never committed.
 testdata/**/target/
 testdata/**/build/
 testdata/**/.gradle/
+testdata/**/node_modules/
 /.agents/
 /.claude/worktrees/
 /.qoder/worktrees/

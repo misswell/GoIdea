@@ -408,6 +408,11 @@ func (m *Model) runPanel(c *ui.Context, p *ui.Theme) {
 							m.run.selTest = line.id
 							m.invalidate()
 						})
+						// A double click jumps to the test's source position,
+						// as IDEA's test tree opens the failing test.
+						if row.DoubleClicked() {
+							m.openTestLocation(line.loc)
+						}
 						row.Children(func() {
 							ui.Text(c, line.mark+" "+line.text).FontSize(11.5).TextColor(p.Text).SingleLine().Ellipsis("…")
 						})
