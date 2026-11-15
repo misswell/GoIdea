@@ -3,7 +3,7 @@
 The update window shows the section of the version it offers. Every release
 needs a `## <version>` section here, or its build fails.
 
-## Unreleased
+## 0.1.2
 
 - 新增 **编辑运行配置…**（`Ctrl+Alt+Shift+R`）：编辑名称、命令、实参、工作目录、环境变量、模块与启动前构建，保存即写入 `.openidea/run.toml`。
 - 运行中的配置可以**重新运行**（`Cmd+R`）：按 OpenIDEA 原版先确认“进程正在运行”，停止并等待退出后再启动，“不再询问”会被记住。
