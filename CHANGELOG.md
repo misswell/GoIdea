@@ -3,7 +3,7 @@
 The update window shows the section of the version it offers. Every release
 needs a `## <version>` section here, or its build fails.
 
-## Unreleased
+## 0.1.4
 
 - 运行窗口新增**重跑失败测试**：按原版解析 surefire 输出生成结果树，重跑只带失败的方法（`-Dtest=类#方法`）。
 - 新增 **重新加载变更的类（HotSwap）**：jdtls 编译后把变更类重定义进运行中的 java-debug 会话，jdtls 自动构建完成会提示重载。
