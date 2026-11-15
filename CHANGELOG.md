@@ -3,11 +3,15 @@
 The update window shows the section of the version it offers. Every release
 needs a `## <version>` section here, or its build fails.
 
+## Unreleased
+
+- 新增 **编辑运行配置…**（`Ctrl+Alt+Shift+R`）：编辑名称、命令、实参、工作目录、环境变量、模块与启动前构建，保存即写入 `.openidea/run.toml`。
+- 运行中的配置可以**重新运行**（`Cmd+R`）：按 OpenIDEA 原版先确认“进程正在运行”，停止并等待退出后再启动，“不再询问”会被记住。
+- 启动前构建（Build Before Launch）对齐原版：Maven/Gradle 的 Rebuild 预置 `clean`，Maven 的“构建、不检查错误”附加 failOnError 开关。
+- 新增 **PARITY_AUDIT.md** 功能继承审计：全部未集成项按目标五大领域分组并标注复用后端 / 移植流程 / 原生界面 / 上游受阻。
+
 ## 0.1.1
 
-- Java/Spring Boot 启动准备完全对齐 OpenIDEA 原版：解析失败、模块未导入、构建失败或 classpath 为空时直接报错，不再继续启动注定失败的命令。
-- 运行与调试共用同一套 Java 模块识别与 classpath 解析；调试现在保留 VM 参数、程序参数与 `.env` 环境变量。
-- 新增多模块 Maven/Spring Boot 运行回归：嵌套模块解析、真实 classpath、启动标志、停止与无孤儿 JVM 全部进入发布门禁。
 - 真实多模块 Maven/Spring Boot 项目已通过内置引擎完成构建，并可从 GoIDEA 启动与停止。
 - 后端进程意外退出会自动重启，并恢复原项目和已打开的文件。
 - 新增 **Maven** 工具窗口：列出反应堆模块与可展开的依赖树，数据来自后端构建模型。
