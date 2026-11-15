@@ -48,6 +48,12 @@ type RunPane struct {
 	exitCode *int32
 	err      string
 
+	// lastID/lastRaw/lastName remember the configuration this pane started,
+	// so Rerun launches it as saved now (upstream rerunConfig).
+	lastID   string
+	lastRaw  json.RawMessage
+	lastName string
+
 	output    []outputLine
 	truncated bool
 }
@@ -170,7 +176,7 @@ func (m *Model) loadRunConfigs() {
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 60*time.Second)
 		defer cancel()
-		raw, err := m.mgr.Invoke(ctx, Window, "run_configs", nil)
+		raw, err := m.invoke(ctx, "run_configs", nil)
 		var configs []openidea.RunConfig
 		if err == nil {
 			configs, err = openidea.DecodeRunConfigs(raw)
@@ -302,6 +308,14 @@ func (m *Model) startRunWith(raw json.RawMessage, name string) bool {
 	if m.run.busy || m.run.running {
 		return false
 	}
+	// Rerun launches this configuration as saved now (upstream rerunConfig).
+	var probe struct {
+		ID string `json:"id"`
+	}
+	_ = json.Unmarshal(raw, &probe)
+	m.run.lastID = probe.ID
+	m.run.lastRaw = append(json.RawMessage(nil), raw...)
+	m.run.lastName = name
 	tabs := append([]*Tab(nil), m.tabs...)
 	root := m.Root()
 	ch := m.nextChannel()
@@ -406,7 +420,7 @@ func (m *Model) StopRun() {
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
 		defer cancel()
-		if _, err := m.mgr.Invoke(ctx, Window, "run_stop", map[string]any{"id": id}); err != nil {
+		if _, err := m.invoke(ctx, "run_stop", map[string]any{"id": id}); err != nil {
 			m.post(func() {
 				m.run.err = "停止失败：" + err.Error()
 				m.invalidate()
@@ -993,6 +1007,185 @@ func tailOf(text string, n int) string {
 		return text
 	}
 	return text[len(text)-n:]
+}
+
+// SmokeRunConfigEdit exercises the Edit Configurations flow against the real
+// backend: duplicate the first configuration into a user copy, save it,
+// verify run_configs serves it back with the edit, verify the build policy
+// rewrites a Maven command line at launch, and delete it again.
+func (m *Model) SmokeRunConfigEdit(ctx context.Context) (map[string]any, error) {
+	root := m.Root()
+	out := map[string]any{"root": root}
+	if root == "" {
+		return out, errors.New("没有打开项目")
+	}
+	if _, err := m.mgr.Invoke(ctx, Window, "project_trust_set", map[string]any{
+		"path": root, "trusted": true, "folder": true,
+	}); err != nil {
+		return out, err
+	}
+	fetch := func() ([]*openidea.RunConfig, error) {
+		raw, err := m.invoke(ctx, "run_configs", nil)
+		if err != nil {
+			return nil, err
+		}
+		configs, err := openidea.DecodeRunConfigs(raw)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]*openidea.RunConfig, len(configs))
+		for i := range configs {
+			out[i] = &configs[i]
+		}
+		return out, nil
+	}
+	configs, err := fetch()
+	if err != nil {
+		return out, err
+	}
+	if len(configs) == 0 {
+		return out, errors.New("项目没有可运行的配置")
+	}
+	// Editing the first detected configuration produces a user copy with its
+	// id, a new name, and a Build Before Launch policy (upstream upsertConfig).
+	source := configs[0]
+	duplicate, err := adapter.DuplicateConfig(source, configs)
+	if err != nil {
+		return out, err
+	}
+	editedName := "GoIDEA-E2E-Edited"
+	duplicate.Name = editedName
+	policy := "rebuild"
+	duplicate.BuildPolicy = &policy
+	items := adapter.UpsertConfig(configs, duplicate)
+	if err := adapter.SaveUserConfigs(ctx, javaBackend{m}, adapter.UserConfigs(items), nil); err != nil {
+		out["saveError"] = err.Error()
+		return out, err
+	}
+	merged, err := fetch()
+	if err != nil {
+		return out, err
+	}
+	var saved *openidea.RunConfig
+	for _, c := range merged {
+		if c.ID == duplicate.ID {
+			saved = c
+		}
+	}
+	if saved == nil {
+		return out, fmt.Errorf("保存后 run_configs 没有返回用户配置 %s", duplicate.ID)
+	}
+	if saved.Detected || saved.Name != editedName {
+		return out, fmt.Errorf("保存的配置未按编辑内容返回：name=%s detected=%v", saved.Name, saved.Detected)
+	}
+	out["saved"] = true
+	out["savedName"] = saved.Name
+
+	// The build policy rewrites a Maven command line at launch: rebuild
+	// prepends clean (upstream applyBuildPolicyToCommand).
+	resolved, err := m.resolveJVMConfig(ctx, saved.Raw(), root, nil)
+	if err != nil {
+		return out, fmt.Errorf("解析构建策略失败：%w", err)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal(resolved, &obj); err != nil {
+		return out, err
+	}
+	args := toStrings(obj["args"])
+	out["policyArgs"] = args
+	if len(args) == 0 || args[0] != "clean" {
+		return out, fmt.Errorf("rebuild 策略没有在启动前重写 Maven 命令行：%v", args)
+	}
+	out["policyApplied"] = true
+
+	// The user copy runs like any other configuration, then is deleted again;
+	// its id does not come back.
+	if code, err := m.runByName(ctx, saved); err != nil {
+		return out, err
+	} else {
+		out["exitCode"] = *code
+	}
+	if err := adapter.SaveConfigs(ctx, javaBackend{m}, adapter.UserConfigs(adapter.RemoveConfig(merged, duplicate.ID)), nil); err != nil {
+		return out, err
+	}
+	merged, err = fetch()
+	if err != nil {
+		return out, err
+	}
+	for _, c := range merged {
+		if c.ID == duplicate.ID {
+			return out, errors.New("删除后 run_configs 仍返回该配置")
+		}
+	}
+	out["removed"] = true
+	return out, nil
+}
+
+// runByName runs a configuration object through the real run path and waits
+// for its exit, the way SmokeRun does for the selected one.
+func (m *Model) runByName(ctx context.Context, cfg *openidea.RunConfig) (*int32, error) {
+	channel := m.nextChannel()
+	m.post(func() {
+		m.run.visible = true
+		m.occupyBottom("run")
+		m.run.trusted = true
+		m.run.loaded = true
+		m.run.busy = true
+		m.run.awaiting = true
+		m.run.running = false
+		m.run.runID = 0
+		m.run.channel = channel
+		m.run.pid = nil
+		m.run.exitCode = nil
+		m.run.err = ""
+		m.run.output = nil
+		m.run.truncated = false
+		m.invalidate()
+	})
+	resolved, err := m.resolveJVMConfig(ctx, cfg.Raw(), m.Root(), m.reportRunConsole(m.Root(), channel))
+	if err != nil {
+		m.post(func() { m.run.busy = false; m.run.awaiting = false })
+		return nil, err
+	}
+	args := map[string]any{
+		"config":   resolved,
+		"onOutput": map[string]any{"$channel": channel},
+		"request":  nil,
+	}
+	rawInfo, err := m.mgr.Invoke(ctx, Window, "run_start", args)
+	if err != nil {
+		m.post(func() { m.run.busy = false; m.run.awaiting = false })
+		return nil, err
+	}
+	var info openidea.RunInfo
+	if err := json.Unmarshal(rawInfo, &info); err != nil {
+		return nil, err
+	}
+	m.post(func() {
+		m.run.busy = false
+		m.run.runID = info.ID
+		m.run.pid = info.PID
+		m.run.running = info.Running
+		m.invalidate()
+	})
+	tick := time.NewTicker(200 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		var exit *int32
+		var runErr string
+		m.post(func() { exit = m.run.exitCode; runErr = m.run.err })
+		if exit != nil {
+			return exit, nil
+		}
+		if runErr != "" {
+			return nil, errors.New(runErr)
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-tick.C:
+		}
+	}
 }
 
 // trustDialog asks whether a project may build and run. It opens when an

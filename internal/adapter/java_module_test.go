@@ -23,6 +23,7 @@ type fakeBackend struct {
 	configsErr error
 
 	resolveCalls []resolveCall
+	saved        []savedConfigs
 }
 
 type resolveCall struct {
@@ -30,6 +31,11 @@ type resolveCall struct {
 	test    bool
 	policy  string
 	request uint32
+}
+
+type savedConfigs struct {
+	configs            []map[string]any
+	removedDetectedIDs any
 }
 
 func (f *fakeBackend) FindFiles(ctx context.Context, query string, limit int) ([]openidea.FileMatch, error) {
@@ -62,6 +68,11 @@ func (f *fakeBackend) ResolveLaunch(ctx context.Context, module string, test boo
 		})
 	}
 	return f.resolve(module, test, policy, request)
+}
+
+func (f *fakeBackend) SaveRunConfigs(ctx context.Context, configs []map[string]any, removedDetectedIDs any) (json.RawMessage, error) {
+	f.saved = append(f.saved, savedConfigs{configs, removedDetectedIDs})
+	return json.Marshal(nil)
 }
 
 func appConfig(args ...string) *openidea.RunConfig {

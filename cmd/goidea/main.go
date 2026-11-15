@@ -223,6 +223,15 @@ func smoke(m *app.Model) {
 			fields["springError"] = springErr.Error()
 		}
 	}
+	if os.Getenv("GOIDEA_SMOKE_RUNCFG") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+		runcfg, runcfgErr := m.SmokeRunConfigEdit(ctx)
+		cancel()
+		fields["runcfg"] = runcfg
+		if runcfgErr != nil {
+			fields["runcfgError"] = runcfgErr.Error()
+		}
+	}
 	if os.Getenv("GOIDEA_SMOKE_BUILD") == "1" && root != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		build, buildErr := m.SmokeBuild(ctx)

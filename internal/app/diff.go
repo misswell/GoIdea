@@ -452,10 +452,20 @@ func (m *Model) SmokeDiff(ctx context.Context) (map[string]any, error) {
 		return out, err
 	}
 	var target *openidea.FileStatus
+	// An untracked file has no base to compare against (its diff view is
+	// empty), so a tracked modification makes the better smoke target.
 	for i := range files {
-		if files[i].Unstaged != nil {
+		if files[i].Unstaged != nil && *files[i].Unstaged != "untracked" {
 			target = &files[i]
 			break
+		}
+	}
+	if target == nil {
+		for i := range files {
+			if files[i].Unstaged != nil {
+				target = &files[i]
+				break
+			}
 		}
 	}
 	if target == nil && len(files) > 0 {

@@ -33,6 +33,7 @@ pr_gate() {
     python3 scripts/check-regression-index.py
     python3 scripts/openidea-ipc.py --check
     python3 scripts/openidea-parity.py --check
+    python3 scripts/parity-audit.py --check
 }
 
 main_gate() {

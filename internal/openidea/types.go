@@ -170,6 +170,9 @@ type RunConfig struct {
 	Module      *string  `json:"module"`
 	BuildPolicy *string  `json:"buildPolicy"`
 	EnvFiles    []string `json:"envFiles"`
+	// AllowParallel lets Run on a running configuration start another
+	// instance instead of restarting it.
+	AllowParallel bool `json:"allowParallel,omitempty"`
 
 	raw json.RawMessage
 }

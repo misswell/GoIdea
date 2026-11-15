@@ -223,7 +223,7 @@
     },
     "feature:run": {
       "status": "partial",
-      "evidence": "base.run.config, base.run.exit, base.run.build; internal/adapter/java_launch.go and java_module.go port OpenIDEA's platform/javaLaunch.ts (prepareJavaLaunch, findJavaModule, resolveJavaCommand, formatCompileErrors) and Run and Debug share it; spring.* release-gate checks run the detected Spring Boot configuration of testdata/java-spring-multimodule: nested service module, resolved classpath with no placeholder, real JVM start, GREETING marker from the sibling lib module, run_stop, no orphan JVM"
+      "evidence": "base.run.config, base.run.exit, base.run.build; internal/adapter/java_launch.go and java_module.go port OpenIDEA's platform/javaLaunch.ts and Run and Debug share it; spring.* release-gate checks run the detected Spring Boot configuration of testdata/java-spring-multimodule; internal/adapter/run_config.go ports configs.ts (upsert/merge/validate/unique), buildCommand.ts (applyBuildPolicyToCommand) and store.ts saveUserConfigs, and internal/app/run_config_dialog.go carries Edit Configurations (action:run.editConfigs) and Rerun with the confirm dialog (action:run.rerun); base.runcfg.* proves the save/policy/run/remove round trip; Build Before Launch is buildCommand.ts's applyBuildPolicyToCommand (internal/adapter/run_config.go), applied at launch for build-tool configs and through BuildPolicyOf for JVM ones, proven by base.runcfg.policy"
     },
     "feature:run-anything": {
       "status": "partial",
@@ -696,6 +696,18 @@
     "action:toolbar.customize": {
       "status": "integrated",
       "evidence": "internal/app/toolbar.go OpenToolbarCustomize/toolbarCustomizeDialog draft with Add/Remove/Move/side switch and Restore Defaults; internal/app/gear_test.go TestToolbarDraftEdits"
+    },
+    "action:run.rerun": {
+      "status": "partial",
+      "evidence": "internal/app/run_config_dialog.go Rerun over the run widget's rerun button (⌘R, run.rerun in internal/app/commands.go): rerunConfig semantics (the configuration as saved now), the Process 'x' Is Running confirm (dialogs.tsx confirmRerun) with 不再询问 persisted under run.confirmRerun in internal/app/settings.go RunPrefs, stop + wait for exit + restart; limits: allowParallel restarts instead of a second instance (single run session)"
+    },
+    "action:run.editConfigs": {
+      "status": "partial",
+      "evidence": "internal/app/run_config_dialog.go runConfigsDialog (Ctrl+Alt+Shift+R, run.editConfigs): the ConfigForm fields GoIDEA edits (name, command, program args via adapter.ParseArgs/FormatArgs, working directory, environment, module with save-time resolution, Build select with per-kind options), configs.ts validation and upsertConfig override semantics, saveUserConfigs through run_save_configs with removedDetectedIds; base.runcfg.* proves the round trip on the real server; limits: no per-template Add menu, no before-launch task editor, no compound editor"
+    },
+    "overlay:run.editConfigs": {
+      "status": "partial",
+      "evidence": "internal/app/run_config_dialog.go runConfigsDialog drawn by the overlay registry (internal/app/overlay_registry.go runConfigs)"
     }
   }
 }

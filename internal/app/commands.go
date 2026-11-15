@@ -146,6 +146,8 @@ func builtinCommands() []appCommand {
 		{"code.moveStatementDown", "下移语句", "代码", "Cmd+Shift+Down", "move statement down", func(m *Model) { m.runEditorCommand(editor.MoveLinesDown) }},
 		{"code.joinLines", "合并行", "代码", "Ctrl+Shift+J", "join lines", func(m *Model) { m.runEditorCommand(editor.JoinLines) }},
 		{"run.start", "运行", "运行", "F5", "run main class", func(m *Model) { m.Run() }},
+		{"run.rerun", "重新运行", "运行", "Cmd+R", "rerun restart process", func(m *Model) { m.Rerun() }},
+		{"run.editConfigs", "编辑运行配置…", "运行", "Ctrl+Alt+Shift+R", "edit run debug configurations dialog", func(m *Model) { m.OpenRunConfigs() }},
 		{"run.debug", "调试", "运行", "F9", "debug session", func(m *Model) { m.Debug() }},
 		{"run.stop", "停止", "运行", "Shift+F5", "stop terminate", func(m *Model) { m.StopRun(); m.StopDebug() }},
 		{"run.breakpoint", "切换断点", "运行", "Cmd+F8", "toggle breakpoint", func(m *Model) { m.ToggleBreakpoint() }},

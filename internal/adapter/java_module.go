@@ -29,6 +29,10 @@ type Backend interface {
 	// ResolveLaunch is commands.javaResolveLaunch: the raw reply stays raw so
 	// a malformed one is an error, not a zero value.
 	ResolveLaunch(ctx context.Context, module string, test bool, policy string, request uint32) (json.RawMessage, error)
+	// SaveRunConfigs is commands.runSaveConfigs: user configurations persist
+	// in `.openidea/run.toml`; removedDetectedIDs stops the backend from
+	// regenerating detected configurations the user deleted.
+	SaveRunConfigs(ctx context.Context, configs []map[string]any, removedDetectedIDs any) (json.RawMessage, error)
 }
 
 // JavaBuildFailedError is a build stopped the launch: the message is ready

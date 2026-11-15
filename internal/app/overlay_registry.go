@@ -109,6 +109,12 @@ func init() {
 	reg("invalidateCaches", overlayLayerDialog, 260, true,
 		func(m *Model) bool { return m.invalidateDlg != nil },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.invalidateCachesDialog(c, p) })
+	reg("runConfigs", overlayLayerDialog, 252, true,
+		func(m *Model) bool { return m.runCfgDlg != nil },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.runConfigsDialog(c, p) })
+	reg("rerunConfirm", overlayLayerDialog, 255, true,
+		func(m *Model) bool { return m.rerunAsk != nil },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.rerunConfirmDialog(c, p) })
 	reg("scratchChooser", overlayLayerDialog, 270, false,
 		func(m *Model) bool { return m.scratch != nil },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.scratchChooserDialog(c, p) })

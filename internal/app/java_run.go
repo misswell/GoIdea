@@ -60,6 +60,12 @@ func (b javaBackend) ResolveLaunch(ctx context.Context, module string, test bool
 	})
 }
 
+func (b javaBackend) SaveRunConfigs(ctx context.Context, configs []map[string]any, removedDetectedIDs any) (json.RawMessage, error) {
+	return b.m.invoke(ctx, "run_save_configs", map[string]any{
+		"configs": configs, "removedDetectedIds": removedDetectedIDs,
+	})
+}
+
 // invoke is the one place the app talks to the OpenIDEA backend's invoke
 // surface; tests set invokeHook instead of a live server.
 func (m *Model) invoke(ctx context.Context, cmd string, args any) (json.RawMessage, error) {
@@ -79,6 +85,16 @@ func (m *Model) resolveJVMConfig(ctx context.Context, raw json.RawMessage, root 
 		return nil, fmt.Errorf("运行配置无法解析：%w", err)
 	}
 	if !adapter.IsJVMApplication(cfg.Kind) {
+		// Maven and Gradle rewrite their own command from the build policy
+		// (upstream applyBuildPolicyToCommand); other kinds pass through.
+		if rewritten := adapter.ApplyBuildPolicyToCommand(cfg); rewritten != cfg {
+			var obj map[string]any
+			if err := json.Unmarshal(raw, &obj); err != nil {
+				return nil, fmt.Errorf("运行配置无法解析：%w", err)
+			}
+			obj["args"] = rewritten.Args
+			return json.Marshal(obj)
+		}
 		return raw, nil
 	}
 	prepared, err := adapter.PrepareJavaLaunch(ctx, javaBackend{m}, cfg, &adapter.Preparation{

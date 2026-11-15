@@ -27,10 +27,10 @@ new action, tool window, page or command appears automatically.
 | Kind | Items | Integrated | Partial | Engine | Blocked | Missing |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Feature folders | 44 | 0 | 12 | 0 | 0 | 32 |
-| Actions | 673 | 43 | 87 | 0 | 1 | 542 |
+| Actions | 673 | 43 | 89 | 0 | 1 | 540 |
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
 | Tool windows | 30 | 10 | 7 | 0 | 0 | 13 |
-| Overlays | 56 | 1 | 0 | 0 | 0 | 55 |
+| Overlays | 56 | 1 | 1 | 0 | 0 | 54 |
 | Editor contributions | 37 | 0 | 1 | 0 | 0 | 36 |
 | Editor kinds | 4 | 0 | 0 | 0 | 0 | 4 |
 | File editor providers | 4 | 0 | 0 | 0 | 0 | 4 |
@@ -77,7 +77,7 @@ directory registers.
 | `project-tree` | 31 | 1 | 3 | 0 | 0 | partial - internal/workspace tree tests; base.tabs; internal/app/tree_ops.go treeGitMenu ports the Git submenu (Commit…/Commit File…, Add, Add to .gitignore, Annotate, Show Diff, Show History, Rollback…, Branches…) when the project's Git status loads, tree_ops_test.go TestTreeGitSubmenuFollowsTheSelection; limits: the branch/revision compares, push/pull/fetch, merge/rebase, new branch/tag, reset and stash entries have no GoIDEA view and stay out |
 | `project-trust` | 5 | 0 | 1 | 0 | 1 | missing |
 | `remote-dev` | 4 | 1 | 1 | 0 | 0 | missing |
-| `run` | 28 | 1 | 5 | 2 | 0 | partial - base.run.config, base.run.exit, base.run.build; internal/adapter/java_launch.go and java_module.go port OpenIDEA's platform/javaLaunch.ts (prepareJavaLaunch, findJavaModule, resolveJavaCommand, formatCompileErrors) and Run and Debug share it; spring.* release-gate checks run the detected Spring Boot configuration of testdata/java-spring-multimodule: nested service module, resolved classpath with no placeholder, real JVM start, GREETING marker from the sibling lib module, run_stop, no orphan JVM |
+| `run` | 28 | 1 | 5 | 2 | 0 | partial - base.run.config, base.run.exit, base.run.build; internal/adapter/java_launch.go and java_module.go port OpenIDEA's platform/javaLaunch.ts and Run and Debug share it; spring.* release-gate checks run the detected Spring Boot configuration of testdata/java-spring-multimodule; internal/adapter/run_config.go ports configs.ts (upsert/merge/validate/unique), buildCommand.ts (applyBuildPolicyToCommand) and store.ts saveUserConfigs, and internal/app/run_config_dialog.go carries Edit Configurations (action:run.editConfigs) and Rerun with the confirm dialog (action:run.rerun); base.runcfg.* proves the save/policy/run/remove round trip; Build Before Launch is buildCommand.ts's applyBuildPolicyToCommand (internal/adapter/run_config.go), applied at launch for build-tool configs and through BuildPolicyOf for JVM ones, proven by base.runcfg.policy |
 | `run-anything` | 1 | 0 | 1 | 0 | 0 | partial - internal/app/run_anything.go Run Anything popup with Recent and Run Configurations sections, Clear History, per-project history and shell command lines; gear menu action:runAnything.show; Ctrl Ctrl keymap deferred, MyGo has no KeyControl constant; internal/app/run_anything_test.go |
 | `scratch` | 1 | 0 | 1 | 0 | 0 | missing |
 | `search` | 24 | 3 | 6 | 2 | 0 | partial - base.search.done, base.search.files, base.search.matches; internal/app/se.go Search Everywhere: All/Classes/Files/Symbols/Actions/Text, section order and limits, Recent Files/Recent Actions on an empty query, Tab/Shift+Tab cycling; e2e searchEverywhere.*; still missing the per-tab filter funnel, search history, the Endpoints section and the double-Shift binding (MyGo exposes no modifier-only key event) |
@@ -471,13 +471,13 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `run.debug` | Debug | `src/features/run/index.ts` | integrated - debug.paused, debug.step.paused |
 | `run.debugConfig` | Debug Configuration | `src/features/run/index.ts` | missing |
 | `run.debugContext` | Debug Context Configuration | `src/features/run/index.ts` | missing |
-| `run.editConfigs` | Edit Configurations… | `src/features/run/index.ts` | missing |
+| `run.editConfigs` | Edit Configurations… | `src/features/run/index.ts` | partial - internal/app/run_config_dialog.go runConfigsDialog (Ctrl+Alt+Shift+R, run.editConfigs): the ConfigForm fields GoIDEA edits (name, command, program args via adapter.ParseArgs/FormatArgs, working directory, environment, module with save-time resolution, Build select with per-kind options), configs.ts validation and upsertConfig override semantics, saveUserConfigs through run_save_configs with removedDetectedIds; base.runcfg.* proves the round trip on the real server; limits: no per-template Add menu, no before-launch task editor, no compound editor |
 | `run.importJetbrains` | Import Run Configurations from JetBrains (.run, .idea) | `src/features/run/index.ts` | missing |
 | `run.importVscodeLaunch` | Import Run Configurations from .vscode/launch.json | `src/features/run/index.ts` | missing |
 | `run.modifyContext` | Modify Run Configuration… | `src/features/run/index.ts` | missing |
 | `run.pluginStart` | Run Plugin Configuration | `src/features/run/index.ts` | missing |
 | `run.reloadConfigs` | Reload Run Configurations | `src/features/run/index.ts` | missing |
-| `run.rerun` | Rerun | `src/features/run/index.ts` | missing |
+| `run.rerun` | Rerun | `src/features/run/index.ts` | partial - internal/app/run_config_dialog.go Rerun over the run widget's rerun button (⌘R, run.rerun in internal/app/commands.go): rerunConfig semantics (the configuration as saved now), the Process 'x' Is Running confirm (dialogs.tsx confirmRerun) with 不再询问 persisted under run.confirmRerun in internal/app/settings.go RunPrefs, stop + wait for exit + restart; limits: allowParallel restarts instead of a second instance (single run session) |
 | `run.rerunFailed` | Rerun Failed Tests | `src/features/run/index.ts` | missing |
 | `run.run` | Run | `src/features/run/index.ts` | integrated - base.run.exit, base.run.build |
 | `run.runConfig` | Run Configuration | `src/features/run/index.ts` | missing |
@@ -1062,7 +1062,7 @@ same bindings until a check records it.
 | `remote.connect` | `src/features/remote-dev/index.ts` | missing |
 | `run.chooser` | `src/features/run/index.ts` | missing |
 | `run.dialogs` | `src/features/run/index.ts` | missing |
-| `run.editConfigs` | `src/features/run/index.ts` | missing |
+| `run.editConfigs` | `src/features/run/index.ts` | partial - internal/app/run_config_dialog.go runConfigsDialog drawn by the overlay registry (internal/app/overlay_registry.go runConfigs) |
 | `run.serviceImport` | `src/features/run/index.ts` | missing |
 | `run.stackTraceDialog` | `src/features/run/stackTrace.tsx` | missing |
 | `runAnything.popup` | `src/features/run-anything/index.ts` | integrated - internal/app/run_anything.go runAnythingDialog, drawn by View in internal/app/app.go; internal/app/run_anything_test.go |
@@ -2286,7 +2286,7 @@ Local-only commands and the per-command argument lists are in
 | `run_import_sources` | run | yes |  | missing |
 | `run_list` | run | yes | yes | missing |
 | `run_resize` | run | yes |  | missing |
-| `run_save_configs` | run | yes |  | missing |
+| `run_save_configs` | run | yes | yes | missing |
 | `run_save_templates` | run | yes |  | missing |
 | `run_start` | run | yes | yes | missing |
 | `run_stdin` | run | yes |  | missing |
@@ -2488,7 +2488,7 @@ Local-only commands and the per-command argument lists are in
 | `wsl_distros` | wsl | no |  | missing |
 | `wsl_resolve` | wsl | no |  | missing |
 
-476 commands are served over stdio and 107 are called by GoIDEA today. A command
+476 commands are served over stdio and 108 are called by GoIDEA today. A command
 that is registered only in the desktop shell needs an `ops` module before stdio
 can serve it; a GoIDEA check counts only when the UI path works end to end.
 

@@ -18,6 +18,37 @@ shows the output, and runs the DAP session. Everything below was verified with
   the backend, which keeps run and debug on one resolver
   (`run_configs` and `java_resolve_launch`).
 
+## Edit Configurations, Re-run and Build Before Launch
+
+- **编辑运行配置…** (`Ctrl+Alt+Shift+R`, `run.editConfigs`) opens the
+  Run/Debug Configurations dialog (`internal/app/run_config_dialog.go`), a
+  port of OpenIDEA's ConfigForm for the fields GoIDEA edits: name, command,
+  program arguments (parsed and formatted like upstream `parseArgs` /
+  `formatArgs`), working directory, environment variables, the JVM module
+  (left empty, it is resolved through the backend's indexed search at save),
+  and the **Build** select whose options follow the kind exactly as
+  `ConfigForm.tsx` filters them. Saving validates like `configs.ts`
+  (unique name, required command, environment and directory rules), then
+  persists the user configurations with `run_save_configs` and the ids of
+  deleted detected ones; editing a detected configuration makes a user copy
+  with its id, which overrides it (upstream `upsertConfig`).
+- **重新运行** (`Cmd+R`, `run.rerun`) launches the configuration the pane
+  started as saved now (`rerunConfig`), and when it is already running shows
+  OpenIDEA's "Process 'x' Is Running" confirm (`confirmRerun`) with
+  **不再询问** stored under `run.confirmRerun`; the answer stops the process,
+  waits for its exit and starts it again. A configuration with **Allow
+  multiple instances** restarts too, since GoIDEA runs one session per pane.
+- **Build Before Launch** is the configuration's `buildPolicy`. JVM
+  applications resolve it through the shared preparation
+  (`BuildPolicyOf`); Maven and Gradle rewrite their command at launch like
+  `buildCommand.ts` (`rebuild` prepends `clean`, Maven's
+  `makeAndContinueOnErrors` appends `-Dmaven.compiler.failOnError=false`).
+
+The e2e base phase runs `GOIDEA_SMOKE_RUNCFG=1`: duplicating the detected
+Maven configuration into a user copy, saving it, reading it back edited from
+`run_configs`, resolving `clean package` from the rebuild policy, running it
+for real and deleting it again.
+
 ## Running
 
 `run_start {config, onOutput, request:null}` streams output on the `channel`

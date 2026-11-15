@@ -155,6 +155,11 @@ CHECKS = {
         ("commit.staged", "the included unstaged file was staged", lambda d: ((get(d, "commit.staged") or 0) >= 1, get(d, "commit.staged"))),
         ("commit.clean", "the committed change left the status", lambda d: ((get(d, "commit.after") or 0) < (get(d, "commit.before") or 0) and "Greeter.java" not in (get(d, "commit.remaining") or []), {"before": get(d, "commit.before"), "after": get(d, "commit.after"), "remaining": get(d, "commit.remaining")})),
         ("commitError", *absent("commitError")),
+        ("runcfgError", *absent("runcfgError")),
+        ("runcfg.saved", "the edited configuration persisted through run_save_configs", lambda d: (get(d, "runcfg.saved") is True, get(d, "runcfg.saved"))),
+        ("runcfg.policy", "the build policy rewrote the Maven command line before launch", lambda d: (get(d, "runcfg.policyApplied") is True and (get(d, "runcfg.policyArgs") or [""])[0] == "clean", get(d, "runcfg.policyArgs"))),
+        ("runcfg.run", "the edited configuration ran through the real run path", lambda d: (get(d, "runcfg.exitCode") == 0, get(d, "runcfg.exitCode"))),
+        ("runcfg.removed", "the user copy was deleted and is gone from run_configs", lambda d: (get(d, "runcfg.removed") is True, get(d, "runcfg.removed"))),
     ],
     "spring": [
         ("springError", *absent("springError")),

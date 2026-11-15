@@ -442,6 +442,8 @@ type Preferences struct {
 	// Notify are Settings › Appearance & Behavior › Notifications: the global
 	// balloon switch and each group's display and log choice.
 	Notify *NotifyPrefs `json:"notifications,omitempty"`
+	// Run are the run flow's stored choices; nil keeps OpenIDEA's defaults.
+	Run *RunPrefs `json:"run,omitempty"`
 	// ScratchRecent are the languages New Scratch File lists first, most
 	// recent first.
 	ScratchRecent []string `json:"scratchRecent,omitempty"`
@@ -460,6 +462,22 @@ type Preferences struct {
 	// Plugins are each plugin's settings, by name, under the same "plugins"
 	// key Mayoi uses; a plugin's "enabled" lives there.
 	Plugins map[string]json.RawMessage `json:"plugins,omitempty"`
+}
+
+// RunPrefs carry the choices OpenIDEA keeps under run.*. ConfirmRerun is nil
+// for OpenIDEA's default (ask before stopping a running process); false
+// records the confirm dialog's "Do not ask again".
+type RunPrefs struct {
+	ConfirmRerun *bool `json:"confirmRerun,omitempty"`
+}
+
+// confirmRerunEnabled reports whether starting a configuration that already
+// runs asks before stopping it; OpenIDEA's run.confirmRerun defaults to on.
+func (m *Model) confirmRerunEnabled() bool {
+	if p := m.prefs.Run; p != nil && p.ConfirmRerun != nil {
+		return *p.ConfirmRerun
+	}
+	return true
 }
 
 // EditorAppearance is what Settings › Editor › Appearance, Breadcrumbs,

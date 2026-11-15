@@ -31,13 +31,15 @@ func (m *Model) runWidget(c *ui.Context, p *ui.Theme, oi oiColors) {
 					m.RunCommand("run.continue")
 				})
 			}
-			rerun := "run.start"
 			if debugging {
-				rerun = "run.debug"
+				m.runWidgetButton(c, p, oi, "rerun", titled("Rerun", name), iconRun, oi.success, func() {
+					m.RunCommand("run.debug")
+				})
+			} else {
+				m.runWidgetButton(c, p, oi, "rerun", titled("Rerun", name), iconRun, oi.success, func() {
+					m.Rerun()
+				})
 			}
-			m.runWidgetButton(c, p, oi, "rerun", titled("Rerun", name), iconRun, oi.success, func() {
-				m.RunCommand(rerun)
-			})
 			m.runWidgetButton(c, p, oi, "stop", titled("Stop", name), iconStop, oi.danger, func() {
 				m.RunCommand("run.stop")
 			})
@@ -95,6 +97,9 @@ func (m *Model) runConfigChooser(c *ui.Context, p *ui.Theme, oi oiColors) {
 			menu.Item("No configurations").Disabled(true)
 		}
 		menu.Separator()
+		if menu.Item("Edit Configurations…").Chosen() {
+			m.RunCommand("run.editConfigs")
+		}
 		if menu.Item("Reload Run Configurations").Chosen() {
 			m.RunCommand("run.reloadConfigs")
 		}
@@ -149,6 +154,9 @@ func (m *Model) runMoreButton(c *ui.Context, p *ui.Theme, oi oiColors) {
 			m.RunCommand("view.run")
 		}
 		menu.Separator()
+		if menu.Item("Edit Configurations…").Chosen() {
+			m.RunCommand("run.editConfigs")
+		}
 		if menu.Item("Reload Run Configurations").Chosen() {
 			m.RunCommand("run.reloadConfigs")
 		}
