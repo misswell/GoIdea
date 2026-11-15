@@ -193,6 +193,21 @@ func (m *Model) SmokeDebugSelectedConfig(ctx context.Context) (map[string]any, e
 		m.run.configs = toValueConfigs(configs)
 		m.invalidate()
 	})
+	// Debug requires Java Ready (section 8): wait for the import before
+	// the readiness gate would refuse the launch.
+	readyDeadline := time.Now().Add(4 * time.Minute)
+	for time.Now().Before(readyDeadline) {
+		if m.readinessNow(ctx).Java {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
+	m.refreshReadiness()
+	time.Sleep(300 * time.Millisecond)
 	m.DebugRunConfig(app)
 	deadline := time.Now().Add(4 * time.Minute)
 	for time.Now().Before(deadline) {
