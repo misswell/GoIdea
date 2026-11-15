@@ -3,7 +3,7 @@
 The update window shows the section of the version it offers. Every release
 needs a `## <version>` section here, or its build fails.
 
-## Unreleased
+## 0.1.1
 
 - Java/Spring Boot 启动准备完全对齐 OpenIDEA 原版：解析失败、模块未导入、构建失败或 classpath 为空时直接报错，不再继续启动注定失败的命令。
 - 运行与调试共用同一套 Java 模块识别与 classpath 解析；调试现在保留 VM 参数、程序参数与 `.env` 环境变量。
