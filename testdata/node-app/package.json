@@ -1,0 +1,11 @@
+{
+  "name": "node-app",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test": "jest --verbose"
+  },
+  "dependencies": {
+    "jest": "^30.5.2"
+  }
+}

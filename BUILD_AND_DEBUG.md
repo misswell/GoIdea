@@ -297,6 +297,23 @@ when each state was first reached on the real backend and asserts the
 ordering (backend ≤ project ≤ buildModel ≤ run) and that all of them are
 reached (`readiness.*` checks).
 
+## Jest pipeline
+
+`internal/adapter/testing_javascript.go` ports `js.ts`: Jest's PASS/FAIL
+file lines, verbose describe indentation, `● ` fail headers, Vitest's
+`>`-joined paths and console blocks, and the Tests:/Time: summaries fold
+into the results tree; `jsArgs` (rerun.ts) derives the failed-tests filter
+as an anchored `-t` regular expression over the test names, and
+`appendScriptArgs` forwards `--` for the npm family. The e2e phase 1b6
+(`GOIDEA_SMOKE_JSRERUN=1`, `testdata/node-app` with real `npm install
+jest`) proves the tree counts (1 failure, 2 passes), the anchored `-t`
+derivation, and that the rerun executes only the failed test
+(`jsrerun.*` checks). Known parsing defect, recorded: jest's verbose
+failure line (`✕ fails on purpose (1 ms)`) and the `● ` fail header both
+produce results, so the tree shows a duplicated node whose name mixes the
+two — the derivation and the rerun still work; the duplicate needs a fix
+in the detail-section state machine.
+
 ## Pytest pipeline
 
 `internal/adapter/testing_pytest.go` ports `pytest.ts`: `-v` verbose lines,

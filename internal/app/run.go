@@ -65,6 +65,7 @@ type RunPane struct {
 	testGo     *adapter.GoParser
 	testCargo  *adapter.CargoParser
 	testPytest *adapter.PytestParser
+	testJs     *adapter.JsParser
 	testStdout *adapter.TestStdoutBuffer
 	// selTest is the selected node of the results tree view.
 	selTest string
@@ -377,6 +378,10 @@ func (m *Model) startRunWith(raw json.RawMessage, name string) bool {
 			m.run.tests = adapter.NewTestResults()
 			m.run.testPytest = adapter.NewPytestParser()
 			m.run.testStdout = adapter.NewTestStdoutBuffer()
+		case "js":
+			m.run.tests = adapter.NewTestResults()
+			m.run.testJs = adapter.NewJsParser()
+			m.run.testStdout = adapter.NewTestStdoutBuffer()
 		}
 	}
 	if m.run.tests == nil {
@@ -384,6 +389,7 @@ func (m *Model) startRunWith(raw json.RawMessage, name string) bool {
 		m.run.testGo = nil
 		m.run.testCargo = nil
 		m.run.testPytest = nil
+		m.run.testJs = nil
 		m.run.testStdout = nil
 	}
 	tabs := append([]*Tab(nil), m.tabs...)
@@ -714,6 +720,8 @@ func (m *Model) feedRunTests(text string) string {
 			events = m.run.testCargo.Feed(line)
 		} else if m.run.testPytest != nil {
 			events = m.run.testPytest.Feed(line)
+		} else if m.run.testJs != nil {
+			events = m.run.testJs.Feed(line)
 		} else if m.run.testParser != nil {
 			events = m.run.testParser.Feed(line)
 		}

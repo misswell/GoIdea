@@ -286,6 +286,15 @@ func smoke(m *app.Model) {
 			fields["hotswapError"] = hsErr.Error()
 		}
 	}
+	if os.Getenv("GOIDEA_SMOKE_JSRERUN") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		jr, jrErr := m.SmokeJsRerunFailed(ctx)
+		cancel()
+		fields["jsrerun"] = jr
+		if jrErr != nil {
+			fields["jsrerunError"] = jrErr.Error()
+		}
+	}
 	if os.Getenv("GOIDEA_SMOKE_PYRERUN") == "1" && root != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		pr, prErr := m.SmokePytestRerunFailed(ctx)

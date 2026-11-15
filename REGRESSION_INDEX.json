@@ -1181,6 +1181,38 @@
    "doc": "BUILD_AND_DEBUG.md"
   },
   {
+   "id": "jsrerun.jsrerunError",
+   "label": "jsrerunError is absent",
+   "feature": "Jest pipeline reports no unexpected error",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "jsrerun.tree",
+   "label": "the jest verbose lines fold into the tree with 1 failure and 2 passes",
+   "feature": "jest verbose parsing into the results tree",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "jsrerun.derived",
+   "label": "the derivation anchors the failed test in the -t filter",
+   "feature": "run.rerunFailed js derivation (jsArgs)",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "jsrerun.one",
+   "label": "the rerun executed only the failed test",
+   "feature": "run.rerunFailed js rerun",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
    "id": "fresh.freshError",
    "label": "freshError is absent",
    "feature": "Clean-environment walkthrough reports no unexpected error",

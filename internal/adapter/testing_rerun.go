@@ -290,6 +290,8 @@ func FrameworkFor(config *openidea.RunConfig) string {
 		return "go"
 	case "cargo":
 		return "cargo"
+	case "npm", "deno", "bun", "node":
+		return "js"
 	case "pytest":
 		return "pytest"
 	case "phpunit":
@@ -309,6 +311,9 @@ func FrameworkFor(config *openidea.RunConfig) string {
 	}
 	if regexp.MustCompile(`\bpytest\b`).MatchString(cmd) {
 		return "pytest"
+	}
+	if regexp.MustCompile(`\b(jest|vitest|npm|pnpm|yarn|bun|npx|deno)\b`).MatchString(cmd) {
+		return "js"
 	}
 	return ""
 }
@@ -338,6 +343,8 @@ func RerunFailedConfig(config *openidea.RunConfig, paths [][]string) *openidea.R
 		args = CargoArgs(config.Args, paths)
 	case "pytest":
 		args = PytestArgs(config.Args, paths)
+	case "js":
+		args = JsArgs(config, paths)
 	}
 	if args == nil {
 		return nil

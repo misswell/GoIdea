@@ -3,7 +3,7 @@
 
 Usage: e2e-checks.py <phase> <smoke.json> [<smoke.json> ...]
        e2e-checks.py --list
-Phases: base | tools | fresh | lsp | debug | hotswap | spring | rerunfail | gorerun | cargorun | pyrerun | readiness | negjdtls | runswitch | runkill | dbgcfg | attach
+Phases: base | tools | fresh | lsp | debug | hotswap | spring | rerunfail | gorerun | cargorun | pyrerun | jsrerun | readiness | negjdtls | runswitch | runkill | dbgcfg | attach
 Every check has an id. REGRESSION_INDEX.json names the same ids, and --list
 lets scripts/check-regression-index.py prove the two never drift apart, so a
 check cannot be deleted without the index noticing. Every failed assertion is
@@ -223,6 +223,12 @@ CHECKS = {
         ("paths", "the failed path is the file and test", lambda d: (get(d, "pyrerun.failedPaths") == "[[test_calc.py test_fails_on_purpose]]", get(d, "pyrerun.failedPaths"))),
         ("derived", "the derivation appends the failed node id", lambda d: (any("test_fails_on_purpose" in a for a in (get(d, "pyrerun.derivedArgs") or [])), get(d, "pyrerun.derivedArgs"))),
         ("one", "the rerun executed only the failed test (one item collected)", lambda d: (get(d, "pyrerun.rerunRanOneTest") is True, get(d, "pyrerun.rerunRanOneTest"))),
+    ],
+    "jsrerun": [
+        ("jsrerunError", *absent("jsrerunError")),
+        ("tree", "the jest verbose lines fold into the tree with 1 failure and 2 passes", lambda d: ((get(d, "jsrerun.failed") or 0) == 1 and (get(d, "jsrerun.passed") or 0) == 2, {"failed": get(d, "jsrerun.failed"), "passed": get(d, "jsrerun.passed")})),
+        ("derived", "the derivation anchors the failed test in the -t filter", lambda d: (any("fails on purpose" in a for a in (get(d, "jsrerun.derivedArgs") or [])), get(d, "jsrerun.derivedArgs"))),
+        ("one", "the rerun executed only the failed test", lambda d: (get(d, "jsrerun.rerunRanOneTest") is True, get(d, "jsrerun.rerunRanOneTest"))),
     ],
     "dbgcfg": [
         ("dbgcfgError", *absent("dbgcfgError")),

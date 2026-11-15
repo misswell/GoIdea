@@ -140,6 +140,19 @@ JAVA=""
 smoke "$PYRUN_JSON" GOIDEA_SMOKE_PYRERUN=1
 python3 "$CHECKS" pyrerun "$PYRUN_JSON"
 unset GOIDEA_PYTEST
+python3 "$CHECKS" pyrerun "$PYRUN_JSON"
+
+say "阶段 1b6：jest 测试管线与重新运行失败的测试"
+JSRUN="$WORK/node-app"
+cp -R "$ROOT/testdata/node-app" "$JSRUN"
+rm -rf "$JSRUN/node_modules"
+say "用 npm 安装 jest（真实框架安装）"
+(cd "$JSRUN" && npm install --silent --no-audit --no-fund jest >/dev/null 2>&1)
+JSRUN_JSON="$WORK/jsrerun.json"
+PROJ="$JSRUN"
+JAVA=""
+smoke "$JSRUN_JSON" GOIDEA_SMOKE_JSRERUN=1
+python3 "$CHECKS" jsrerun "$JSRUN_JSON"
 PROJ="$PROJ_BASE"; JAVA="$JAVA_BASE"
 
 say "阶段 1b3：六态启动状态机（第八节）"

@@ -1327,3 +1327,138 @@ func (m *Model) SmokePytestRerunFailed(ctx context.Context) (map[string]any, err
 	}
 	return out, nil
 }
+
+// SmokeJsRerunFailed runs a real failing jest suite through the js
+// pipeline: the verbose lines fold into the results tree, the
+// run.rerunFailed derivation produces the -t anchored filter for the failed
+// test, and the rerun executes only it.
+func (m *Model) SmokeJsRerunFailed(ctx context.Context) (map[string]any, error) {
+	out := map[string]any{"root": m.Root()}
+	var configs []*openidea.RunConfig
+	var tests *openidea.RunConfig
+	var err error
+	deadline := time.Now().Add(3 * time.Minute)
+	for time.Now().Before(deadline) {
+		configs, err = m.smokeRunConfigs(ctx)
+		if err == nil {
+			for _, c := range configs {
+				if adapter.FrameworkFor(c) == "js" {
+					tests = c
+					break
+				}
+			}
+		}
+		if tests != nil {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
+	if err != nil {
+		return out, err
+	}
+	if tests == nil {
+		return out, errors.New("3 分钟内没有检测到 jest 配置")
+	}
+	out["config"] = tests.Name
+	m.post(func() {
+		m.run.trusted = true
+		m.run.loaded = true
+		m.run.configs = toValueConfigs(configs)
+		m.invalidate()
+	})
+	m.askOrStart(tests.Raw(), tests.Name)
+	exitDeadline := time.Now().Add(5 * time.Minute)
+	var firstExit *int32
+	for time.Now().Before(exitDeadline) {
+		var exit *int32
+		var runErr string
+		m.post(func() { exit, runErr = m.run.exitCode, m.run.err })
+		if runErr != "" {
+			return out, fmt.Errorf("首跑失败：%s", runErr)
+		}
+		if exit != nil {
+			firstExit = exit
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
+	if firstExit == nil {
+		return out, errors.New("5 分钟内首跑没有退出")
+	}
+	out["firstExit"] = *firstExit
+	if m.run.tests == nil || m.run.tests.IsEmpty() {
+		return out, errors.New("jest 结果树为空：输出没有被解析")
+	}
+	counts := m.run.tests.Counts()
+	out["failed"] = counts.Failed
+	out["passed"] = counts.Passed
+	if counts.Failed != 1 || counts.Passed != 2 {
+		return out, fmt.Errorf("结果树计数不符：failed=%d passed=%d，要 1 和 2", counts.Failed, counts.Passed)
+	}
+	paths := adapter.FailedTestPaths(m.run.tests)
+	out["failedPaths"] = fmt.Sprint(paths)
+	base, err := openidea.DecodeRunConfig(tests.Raw())
+	if err != nil {
+		return out, err
+	}
+	derived := adapter.RerunFailedConfig(base, paths)
+	if derived == nil {
+		return out, errors.New("派生 jest 重跑配置失败")
+	}
+	out["derivedArgs"] = derived.Args
+	hasFilter := false
+	for _, a := range derived.Args {
+		if strings.Contains(a, "fails on purpose") {
+			hasFilter = true
+		}
+	}
+	if !hasFilter {
+		return out, fmt.Errorf("派生的过滤器不是失败测试：%v", derived.Args)
+	}
+	m.post(func() {
+		m.run.busy = false
+		m.run.running = false
+		m.run.awaiting = false
+		m.run.exitCode = nil
+		m.run.err = ""
+		m.invalidate()
+	})
+	m.RerunFailedTests()
+	exitDeadline = time.Now().Add(5 * time.Minute)
+	for time.Now().Before(exitDeadline) {
+		var exit *int32
+		var runErr string
+		m.post(func() { exit, runErr = m.run.exitCode, m.run.err })
+		if runErr != "" {
+			return out, fmt.Errorf("重跑失败：%s", runErr)
+		}
+		if exit != nil {
+			out["rerunExit"] = *exit
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
+	if _, ok := out["rerunExit"]; !ok {
+		return out, errors.New("5 分钟内重跑没有退出")
+	}
+	output := m.run.text()
+	// Only the failed test ran again: the two passing tests are absent.
+	ranOne := strings.Contains(output, "fails on purpose") && !strings.Contains(output, "adds ok")
+	out["rerunRanOneTest"] = ranOne
+	if !ranOne {
+		return out, fmt.Errorf("重跑没有只运行失败测试；输出尾部：%s", tailOf(output, 800))
+	}
+	return out, nil
+}
