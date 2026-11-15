@@ -11,7 +11,7 @@
     },
     "action:navigate.findAction": {
       "status": "integrated",
-      "evidence": "internal/app/commands.go app.commandPalette Find Action… Cmd+Shift+A; internal/app/menu.go Navigate; internal/app/commands_test.go"
+      "evidence": "base.commands"
     },
     "action:navigate.typeHierarchy": {
       "status": "integrated",
@@ -223,7 +223,7 @@
     },
     "feature:run": {
       "status": "partial",
-      "evidence": "base.run.config, base.run.exit, base.run.build"
+      "evidence": "base.run.config, base.run.exit, base.run.build; internal/adapter/java_launch.go and java_module.go port OpenIDEA's platform/javaLaunch.ts (prepareJavaLaunch, findJavaModule, resolveJavaCommand, formatCompileErrors) and Run and Debug share it; spring.* release-gate checks run the detected Spring Boot configuration of testdata/java-spring-multimodule: nested service module, resolved classpath with no placeholder, real JVM start, GREETING marker from the sibling lib module, run_stop, no orphan JVM"
     },
     "feature:run-anything": {
       "status": "partial",
@@ -239,7 +239,7 @@
     },
     "feature:debugger": {
       "status": "partial",
-      "evidence": "debug.paused, debug.step.paused, debug.vars"
+      "evidence": "debug.paused, debug.step.paused, debug.vars; internal/app/debug.go builds the file's application config (upstream applicationConfig port) and calls the shared adapter.PrepareJavaLaunch, then java_debug_server + debug_start with the resolved classpaths, modulePaths, projectName, javaExec, VM and program arguments (upstream javaLaunchConfig java-debug branch); java-debug missing offers the one-click install"
     },
     "feature:terminal": {
       "status": "partial",
@@ -312,10 +312,6 @@
     "action:navigate.gotoFile": {
       "status": "integrated",
       "evidence": "internal/app/quickopen_test.go"
-    },
-    "action:navigate.findAction": {
-      "status": "integrated",
-      "evidence": "base.commands"
     },
     "action:navigate.searchText": {
       "status": "integrated",

@@ -1,204 +1,131 @@
 package app
 
-// Resolving a Java Application/Spring Boot run configuration before run_start:
-// OpenIDEA's frontend asks jdtls for the module classpath and the java
-// launcher, then substitutes ${classpath}/${testClasspath}. That glue belongs
-// to the client, so GoIDEA does the same instead of handing the placeholders
-// to the process.
+// Resolving a Java Application/Spring Boot run configuration before run_start.
+// The whole flow lives in internal/adapter (the port of OpenIDEA's
+// platform/javaLaunch.ts); this file only wires it to the GoIDEA Model: the
+// backend RPC surface, the run console report and the raw-config round trip.
+// A failed preparation is an error: run_start is never called with an
+// unresolved configuration.
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path"
-	"path/filepath"
 	"strings"
 
+	"mayoi/internal/adapter"
 	"mayoi/internal/openidea"
 )
 
-type jvmRunConfig struct {
-	Kind        string   `json:"kind"`
-	Command     string   `json:"command"`
-	Args        []string `json:"args"`
-	Module      *string  `json:"module"`
-	IsTest      bool     `json:"isTest"`
-	BuildPolicy *string  `json:"buildPolicy"`
+// javaBackend is adapter.Backend over the live OpenIDEA server. Every call
+// goes through Model.invoke, the seam tests use to inject a fake RPC client
+// and prove that a failed preparation never reaches run_start.
+type javaBackend struct{ m *Model }
+
+func (b javaBackend) FindFiles(ctx context.Context, query string, limit int) ([]openidea.FileMatch, error) {
+	raw, err := b.m.invoke(ctx, "find_files", map[string]any{"query": query, "limit": limit})
+	if err != nil {
+		return nil, err
+	}
+	var files []openidea.FileMatch
+	if err := json.Unmarshal(raw, &files); err != nil {
+		return nil, err
+	}
+	return files, nil
 }
 
-func isJVMApplication(kind string) bool {
-	return kind == "application" || kind == "spring-boot"
+func (b javaBackend) ReadText(ctx context.Context, path string) (string, error) {
+	raw, err := b.m.invoke(ctx, "fs_read_text", map[string]any{"path": path})
+	if err != nil {
+		return "", err
+	}
+	var text string
+	if err := json.Unmarshal(raw, &text); err != nil {
+		return "", err
+	}
+	return text, nil
+}
+
+func (b javaBackend) RunConfigs(ctx context.Context) ([]openidea.RunConfig, error) {
+	raw, err := b.m.invoke(ctx, "run_configs", nil)
+	if err != nil {
+		return nil, err
+	}
+	return openidea.DecodeRunConfigs(raw)
+}
+
+func (b javaBackend) ResolveLaunch(ctx context.Context, module string, test bool, policy string, request uint32) (json.RawMessage, error) {
+	return b.m.invoke(ctx, "java_resolve_launch", map[string]any{
+		"module": module, "test": test, "policy": policy, "request": request,
+	})
+}
+
+// invoke is the one place the app talks to the OpenIDEA backend's invoke
+// surface; tests set invokeHook instead of a live server.
+func (m *Model) invoke(ctx context.Context, cmd string, args any) (json.RawMessage, error) {
+	if m.invokeHook != nil {
+		return m.invokeHook(ctx, cmd, args)
+	}
+	return m.mgr.Invoke(ctx, Window, cmd, args)
 }
 
 // resolveJVMConfig returns the configuration with its classpath placeholders
 // and java launcher resolved through java_resolve_launch. A configuration of
-// another kind comes back unchanged. When the language server cannot resolve
-// it (no JDT yet), the raw configuration is kept so the failure stays visible
-// in the run console instead of blocking the launch here.
-func (m *Model) resolveJVMConfig(ctx context.Context, raw json.RawMessage, root string) (json.RawMessage, error) {
-	var cfg jvmRunConfig
-	if err := json.Unmarshal(raw, &cfg); err != nil || !isJVMApplication(cfg.Kind) {
+// another kind comes back unchanged. Every preparation failure is an error:
+// the caller shows it and does not start the process.
+func (m *Model) resolveJVMConfig(ctx context.Context, raw json.RawMessage, root string, report func(text, kind string)) (json.RawMessage, error) {
+	cfg, err := openidea.DecodeRunConfig(raw)
+	if err != nil {
+		return nil, fmt.Errorf("运行配置无法解析：%w", err)
+	}
+	if !adapter.IsJVMApplication(cfg.Kind) {
 		return raw, nil
 	}
-	mainClass := javaMainClass(cfg.Args)
-	module := ""
-	if cfg.Module != nil {
-		module = *cfg.Module
-	} else if mainClass != "" {
-		module = javaModuleOf(root, mainClass)
-	}
-	policy := "automatic"
-	if cfg.BuildPolicy != nil && *cfg.BuildPolicy != "" {
-		policy = *cfg.BuildPolicy
-	}
-	request := m.nextRequest()
-	rawInfo, err := m.mgr.Invoke(ctx, Window, "java_resolve_launch", map[string]any{
-		"module": module, "test": cfg.IsTest, "policy": policy, "request": request,
+	prepared, err := adapter.PrepareJavaLaunch(ctx, javaBackend{m}, cfg, &adapter.Preparation{
+		Request: m.nextRequest(),
+		Report:  report,
 	})
 	if err != nil {
-		m.post(func() {
-			m.status = "Java 项目尚未导入，改用原始运行配置：" + err.Error()
-			m.invalidate()
-		})
-		return raw, nil
+		return nil, err
 	}
-	var info openidea.JavaLaunchInfo
-	if err := json.Unmarshal(rawInfo, &info); err != nil {
-		return raw, nil
-	}
-	if info.Build != nil && (*info.Build == "failed" || *info.Build == "withErrors") {
-		detail := ""
-		if len(info.Errors) > 0 {
-			e := info.Errors[0]
-			detail = fmt.Sprintf("（%s:%d:%d %s）", e.Path, e.Line, e.Column, e.Message)
-		}
-		return raw, fmt.Errorf("构建失败，未启动 %s%s", mainClass, detail)
-	}
-	sep := info.PathListSeparator
-	if sep == "" {
-		sep = string(os.PathListSeparator)
-	}
-	classPath := strings.Join(info.ClassPaths, sep)
-	args := append([]string(nil), cfg.Args...)
-	for i, a := range args {
-		if a == "${classpath}" || a == "${testClasspath}" {
-			args[i] = classPath
-		}
-	}
-	if len(info.ModulePaths) > 0 && !hasJavaFlag(args, "-p", "--module-path") {
-		args = append([]string{"--module-path", strings.Join(info.ModulePaths, sep)}, args...)
-	}
-	if cfg.Kind == "spring-boot" && !strings.Contains(strings.Join(args, " "), "-Dspring.output.ansi.enabled=") {
-		args = append([]string{"-Dspring.output.ansi.enabled=always"}, args...)
-	}
-	command := cfg.Command
-	if command == "java" && info.JavaExec != nil && *info.JavaExec != "" {
-		command = *info.JavaExec
-	}
+	return resolvedRunConfig(raw, prepared.Command, prepared.Resolved)
+}
+
+// resolvedRunConfig writes the resolved command and arguments back into the
+// configuration exactly as the backend sent it, so run_start keeps every
+// field GoIDEA does not model.
+func resolvedRunConfig(raw json.RawMessage, command string, args []string) (json.RawMessage, error) {
 	var obj map[string]any
 	if err := json.Unmarshal(raw, &obj); err != nil {
-		return raw, nil
+		return nil, fmt.Errorf("运行配置无法解析：%w", err)
 	}
-	obj["args"], obj["command"] = args, command
+	obj["command"], obj["args"] = command, args
 	return json.Marshal(obj)
 }
 
-// javaMainClass reads the main class from a java command line.
-func javaMainClass(args []string) string {
-	for i := 0; i < len(args); i++ {
-		a := args[i]
-		if a == "-jar" {
-			return ""
-		}
-		if a == "-cp" || a == "-classpath" || a == "--class-path" {
-			i++
-			continue
-		}
-		if strings.HasPrefix(a, "-") {
-			if javaFlagTakesValue(a) {
-				i++
+// reportRunConsole appends preparation messages to the run console of the
+// project they belong to: a project switch during the preparation must not
+// leak text into the new project's empty console.
+func (m *Model) reportRunConsole(root string, ch uint32) func(text, kind string) {
+	return func(text, kind string) {
+		m.post(func() {
+			if m.Root() != root || m.run.channel != ch {
+				return
 			}
-			continue
-		}
-		return a
-	}
-	return ""
-}
-
-func javaFlagTakesValue(flag string) bool {
-	switch flag {
-	case "-p", "--module-path", "--add-modules", "--add-opens", "--add-exports", "--add-reads",
-		"--patch-module", "--limit-modules", "--upgrade-module-path", "--enable-native-access":
-		return true
-	}
-	return false
-}
-
-func hasJavaFlag(args []string, flags ...string) bool {
-	for _, a := range args {
-		for _, f := range flags {
-			if a == f {
-				return true
+			if kind == "" {
+				kind = "system"
 			}
-		}
-	}
-	return false
-}
-
-// javaModuleOf finds the module folder of a main class: the path before
-// src/main/java under the project root, "" for a single-module project.
-func javaModuleOf(root, mainClass string) string {
-	if root == "" || mainClass == "" {
-		return ""
-	}
-	pkg := mainClass
-	if i := strings.LastIndex(mainClass, "."); i >= 0 {
-		pkg = mainClass[:i]
-	}
-	simple := mainClass[strings.LastIndex(mainClass, ".")+1:]
-	name := simple + ".java"
-	var found string
-	_ = filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			if d != nil && d.IsDir() {
-				switch d.Name() {
-				case ".git", "target", "build", "node_modules", ".idea", ".openidea":
-					return filepath.SkipDir
+			for _, line := range strings.Split(strings.TrimSuffix(text, "\n"), "\n") {
+				if line == "" {
+					continue
 				}
+				m.run.output = append(m.run.output, outputLine{kind: kind, text: line})
 			}
-			return nil
-		}
-		if d.Name() != name {
-			return nil
-		}
-		rel, err := filepath.Rel(root, p)
-		if err != nil {
-			return nil
-		}
-		rel = filepath.ToSlash(rel)
-		marker := "/src/main/java/"
-		i := strings.Index("/"+rel, marker)
-		if i < 0 {
-			return nil
-		}
-		mod := ""
-		if i > 0 {
-			mod = strings.TrimSuffix(rel[:i], "/")
-			if mod == rel {
-				mod = ""
+			if over := len(m.run.output) - maxRunLines; over > 0 {
+				m.run.output = append(m.run.output[:0], m.run.output[over:]...)
+				m.run.truncated = true
 			}
-		}
-		if pkg != "" {
-			want := "/" + strings.ReplaceAll(pkg, ".", "/") + "/" + name
-			if !strings.HasSuffix("/"+rel, want) {
-				return nil
-			}
-		}
-		found = mod
-		return filepath.SkipAll
-	})
-	return found
+			m.invalidate()
+		})
+	}
 }
-
-var _ = path.Base

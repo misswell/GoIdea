@@ -31,6 +31,39 @@ The e2e base phase runs the detected Maven configuration on
 `testdata/java-maven`, requires exit code 0 and requires `BUILD SUCCESS` in the
 output. This is a real `mvn` process, not a recorded transcript.
 
+## Java launch preparation (shared by Run and Debug)
+
+`internal/adapter` ports OpenIDEA's `platform/javaLaunch.ts` function by
+function, and Run and Debug both go through `PrepareJavaLaunch` — the same
+shared preparation upstream's `prepareJavaLaunch` gives its Run store and
+debugger:
+
+- `ParseJavaArgs` splits VM options, the main class and program arguments, and
+  reads which classpath placeholder the configuration uses
+  (`${classpath}` vs `${testClasspath}`); the placeholder, not `isTest`,
+  decides the test classpath `java_resolve_launch` builds.
+- The module comes from the configuration's own `module` field, else from the
+  backend's indexed file search (`find_files`) plus the source file's package
+  statement — never from a local directory walk. A nested main class resolves
+  through its outer class; `FooKt` resolves through `Foo.kt`.
+- `java_resolve_launch` builds, resolves runtime/test classpaths and module
+  paths, and reports the JDK. Spring Boot launches add the console ANSI
+  property like IDEA's configurations do.
+- Every failure refuses the launch and reports the real reason in the run
+  console: an unimported Java module ("请等待 Java 项目导入完成…"), a failed
+  build with the compiler's `path:line:col` errors and hints, an empty
+  classpath, an unresolvable module, a malformed reply, an RPC failure, a
+  cancelled request. `makeAndContinueOnErrors` (Build, no error check) is the
+  only policy that continues with the last compiled classes, exactly as
+  upstream does.
+
+The e2e release phase `GOIDEA_SMOKE_SPRING=1` runs the detected Spring Boot
+configuration of `testdata/java-spring-multimodule` end to end: it waits for
+the Maven model and Java import, requires the nested `service` module (not the
+root), a real resolved classpath with no placeholder left, the JVM actually
+running, the `GREETING:` startup marker that proves the sibling `lib` module
+was on the classpath, a clean `run_stop` and no orphan JVM.
+
 ## Building
 
 OpenIDEA's Build actions run through the backend's build engine:
@@ -72,17 +105,25 @@ a dedicated test-run view.
    path and pushed wholesale with `debug_set_breakpoints`
    (`internal/app/debug.go:96-196`). The gutter and the paused line are drawn
    from that state.
-2. Starting a session saves all documents, then derives the module from
-   `src/main/java` or `src/test/java` and the main class from package and file
-   name (`debug.go:238-269`).
-3. `java_resolve_launch {module, test, policy:"automatic"}` returns the launch
-   plan — main class, classpaths, module paths, project name, VM flags. `policy`
-   may change: GoIDEA chooses the main class automatically today.
-4. `java_debug_server {module}` returns the DAP port.
+2. Starting a session saves all documents, builds the temporary Application
+   configuration the file belongs to (module from the run configs' modules and
+   the source layout, like upstream's `applicationConfig`), and calls the same
+   shared `adapter.PrepareJavaLaunch` Run uses — one module, build and
+   classpath resolver for both.
+3. `java_resolve_launch {module, test, policy}` inside that preparation returns
+   the launch plan — main class, classpaths, module paths, project root, JDK,
+   `shortenCommandLine`, compile errors and hints. A failed or erroneous build
+   stops the debug launch, unless the policy is `makeAndContinueOnErrors`.
+4. `java_debug_server {module}` returns the DAP port; when java-debug is
+   missing from jdtls the app offers the one-click install and re-raises the
+   error.
 5. `debug_start` launches with adapter `java-debug`, request `launch`, and the
-   resolved `debugServer`, `mainClass`, `classPaths`, `modulePaths`,
-   `shortenCommandLine`, console `internalConsole`, `stopOnEntry:false`
-   (`debug.go:344-395,498-531`).
+   resolved `debugServer`, `mainClass`, `classPaths` (the explicit `-cp` value
+   when the configuration sets one), `modulePaths`, `projectName` (the imported
+   project's name), the configuration's VM and program arguments, javaExec,
+   `shortenCommandLine`, console `internalConsole`, `stopOnEntry:false`. The
+   equivalent command line is echoed into the debug console, as upstream does,
+   because java-debug starts the JVM itself.
 6. DAP events (`started`, `stopped`, `continued`, `output`, `terminated`,
    `exited`, `hotCodeReplace`) drive the debug panel. On a stop the app reads
    threads, frames and the first non-expensive scope's variables; frame
@@ -92,8 +133,9 @@ a dedicated test-run view.
    (max 20) and evaluated per stopped frame with `debug_evaluate`
    (`debug.go:536-618,782-932`).
 
-The JDK is the backend's `javaExec`; when it is absent the client falls back to
-`$JAVA_HOME/bin/java` (`debug.go:373-380`).
+The JDK is the backend's `javaExec`; when the backend does not resolve one the
+launch keeps `java`, as upstream `resolveJavaCommand` does — there is no
+client-side fallback.
 
 ## What the gate proves
 
@@ -105,10 +147,21 @@ The JDK is the backend's `javaExec`; when it is absent the client falls back to
 - the program ending with no compile errors and `Hello, GoIDEA!` in the
   captured output.
 
+`GOIDEA_SMOKE_SPRING=1` (the release gate's `spring` phase) requires, on the
+real multi-module Maven project `testdata/java-spring-multimodule`:
+
+- a `spring-boot` configuration detected for the nested `service` module
+  (never the root) with main class `com.example.service.ServiceApplication`
+  and the `-cp ${classpath}` command line the backend detected;
+- `java_resolve_launch` resolving a runtime classpath with at least five
+  entries and no `${classpath}`/`${testClasspath}` placeholder left;
+- a resolved `java` executable, the process really running (`run_list`);
+- the `GREETING:Hello, GoIDEA!` marker, which only prints when Spring started
+  and the sibling `lib` module was on the resolved classpath;
+- `run_stop` ending the process and `pgrep` finding no orphan JVM.
+
 ## Gaps (deliberately not claimed)
 
-- Spring Boot application run/stop is not yet a gate check; the gate proves a
-  Maven goal and a plain Java main-class debug session.
 - Conditional, hit-count and log breakpoints are not sent (the protocol types
   exist upstream).
 - Attach mode, exception breakpoints, a thread chooser, a scope chooser,

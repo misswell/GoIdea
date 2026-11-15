@@ -1,191 +1,1336 @@
 {
-  "version": 1,
-  "updated": "2026-11-14",
-  "about": "Every end-to-end regression check GoIDEA runs, the feature it protects, the doc that describes it, and the gate that must pass before code lands. scripts/check-regression-index.py keeps the ids in sync with scripts/e2e-checks.py, so a check cannot be dropped or renamed silently.",
-  "gates": {
-    "pr": {
-      "when": "every pull request and every push",
-      "command": "scripts/gate.sh pr",
-      "steps": [
-        "gofmt -l . is empty",
-        "CGO_ENABLED=0 go vet ./...",
-        "CGO_ENABLED=0 go test ./... -skip TestTerminalMovesToLockedRightColumn",
-        "CGO_ENABLED=0 go build ./cmd/goidea",
-        "scripts/check-licenses.sh",
-        "scripts/check-regression-index.py"
-      ],
-      "runs_in": ".github/workflows/ci.yml (test job, ubuntu-latest)"
-    },
-    "main": {
-      "when": "a merge or push to main",
-      "command": "scripts/gate.sh main",
-      "steps": [
-        "the pr gate",
-        "scripts/e2e.sh offline: real openidea-server, real Maven build and run"
-      ],
-      "runs_in": ".github/workflows/ci.yml (e2e job, macOS, gated by the ENABLE_MACOS_CI variable)"
-    },
-    "release": {
-      "when": "scripts/release.sh, before signing and notarizing",
-      "command": "scripts/gate.sh release",
-      "steps": [
-        "the pr gate",
-        "scripts/e2e.sh online: toolchain install, JDT language server, debugger"
-      ],
-      "runs_in": "scripts/release.sh"
-    }
+ "version": 1,
+ "updated": "2026-11-15",
+ "about": "Every end-to-end regression check GoIDEA runs, the feature it protects, the doc that describes it, and the gate that must pass before code lands. scripts/check-regression-index.py keeps the ids in sync with scripts/e2e-checks.py, so a check cannot be dropped or renamed silently.",
+ "gates": {
+  "pr": {
+   "when": "every pull request and every push",
+   "command": "scripts/gate.sh pr",
+   "steps": [
+    "gofmt -l . is empty",
+    "CGO_ENABLED=0 go vet ./...",
+    "CGO_ENABLED=0 go test ./... -skip TestTerminalMovesToLockedRightColumn",
+    "CGO_ENABLED=0 go build ./cmd/goidea",
+    "scripts/check-licenses.sh",
+    "scripts/check-regression-index.py"
+   ],
+   "runs_in": ".github/workflows/ci.yml (test job, ubuntu-latest)"
   },
-  "checks": [
-    {"id": "base.backend", "label": "backend is up", "feature": "Backend process and RPC handshake", "area": "openidea-rpc", "gate": "main", "doc": "RPC_PROTOCOL.md"},
-    {"id": "base.tabs", "label": "a file is open in a tab", "feature": "Startup file restore", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.edited", "label": "edit reached the backend", "feature": "Buffer to doc_change sync", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.undone", "label": "undo round-tripped", "feature": "Backend undo mirrored into the buffer", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.outline", "label": "outline names the Java class", "feature": "Document outline", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.search.done", "label": "project search finished", "feature": "Project-wide search", "area": "search", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.search.files", "label": "project search scanned the sources", "feature": "Project-wide search covers the tree", "area": "search", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.search.matches", "label": "project search found matches", "feature": "Project-wide search returns hits", "area": "search", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.searchError", "label": "searchError is absent", "feature": "Project-wide search reports no error", "area": "search", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.diff.rows", "label": "Git diff has rows", "feature": "Diff view over a working-tree change", "area": "vcs", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.diffError", "label": "diffError is absent", "feature": "Diff view reports no error", "area": "vcs", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "shots.count", "label": "every visual-regression state was rendered in both themes", "feature": "Visual regression shots of the shell, tool windows and overlays", "area": "visual", "gate": "main", "doc": "README.md"},
-    {"id": "shots.bytes", "label": "each PNG is a real capture", "feature": "Visual regression shots are non-empty captures", "area": "visual", "gate": "main", "doc": "README.md"},
-    {"id": "goldens.references", "label": "the golden set holds reference images", "feature": "OpenIDEA v0.1.44 golden screenshots found", "area": "visual", "gate": "release", "doc": "README.md"},
-    {"id": "goldens.missing", "label": "every reference found a rendered frame", "feature": "Golden comparison covers every rendered state", "area": "visual", "gate": "release", "doc": "README.md"},
-    {"id": "goldens.match", "label": "every state is within its pixel tolerance", "feature": "Golden pixel comparison with masks and tolerance", "area": "visual", "gate": "release", "doc": "README.md"},
-    {"id": "shots.states", "label": "the baseline names every expected state in Dark and Light", "feature": "Visual baseline covers Welcome empty and recents, Customize, Plugins, the workbench, tool windows and overlays", "area": "visual", "gate": "main", "doc": "README.md"},
-    {"id": "shots.errors", "label": "no shot failed", "feature": "Visual regression render errors", "area": "visual", "gate": "main", "doc": "README.md"},
-    {"id": "lsp.hierarchy.rows", "label": "call hierarchy listed a level", "feature": "Call Hierarchy right tool window", "area": "code-insight", "gate": "release", "doc": "JAVA_SUPPORT.md"},
-    {"id": "lsp.hierarchy.visible", "label": "the hierarchy window showed on the right", "feature": "Hierarchy window anchoring", "area": "workbench", "gate": "release", "doc": "JAVA_SUPPORT.md"},
-    {"id": "lsp.hierarchyError", "label": "hierarchyError is absent", "feature": "Call Hierarchy reports no error", "area": "code-insight", "gate": "release", "doc": "JAVA_SUPPORT.md"},
-    {"id": "lsp.se.files", "label": "Search Everywhere listed files", "feature": "Search Everywhere Files and Recent Files", "area": "search", "gate": "release", "doc": "README.md"},
-    {"id": "lsp.se.symbols", "label": "Search Everywhere listed symbols from the language server", "feature": "Search Everywhere Classes and Symbols over JDT", "area": "code-insight", "gate": "release", "doc": "JAVA_SUPPORT.md"},
-    {"id": "lsp.se.actions", "label": "Search Everywhere listed actions", "feature": "Search Everywhere Actions and Recent Actions", "area": "workbench", "gate": "release", "doc": "README.md"},
-    {"id": "lsp.se.text", "label": "Search Everywhere listed text matches", "feature": "Search Everywhere Text section", "area": "search", "gate": "release", "doc": "README.md"},
-    {"id": "lsp.se.sections", "label": "the All tab carried the OpenIDEA sections", "feature": "Search Everywhere All tab section order", "area": "search", "gate": "release", "doc": "README.md"},
-    {"id": "base.newProject.created", "label": "New Project created a folder with Git", "feature": "Welcome › New Project creates a real folder and git init", "area": "welcome", "gate": "main", "doc": "README.md"},
-    {"id": "base.newProject.reused", "label": "an empty folder was reused", "feature": "New Project reuses an empty folder", "area": "welcome", "gate": "main", "doc": "README.md"},
-    {"id": "base.newProject.refused", "label": "a non-empty folder was refused", "feature": "New Project refuses a non-empty folder", "area": "welcome", "gate": "main", "doc": "README.md"},
-    {"id": "base.newProjectError", "label": "newProject.error is absent", "feature": "New Project reports no setup error", "area": "welcome", "gate": "main", "doc": "README.md"},
-    {"id": "base.notify.count", "label": "notifications recorded every level", "feature": "Notification center levels", "area": "workbench", "gate": "main", "doc": "README.md"},
-    {"id": "base.notify.balloons", "label": "the balloon stack held three", "feature": "Bottom-right balloon stack cap", "area": "workbench", "gate": "main", "doc": "README.md"},
-    {"id": "base.notify.sticky", "label": "errors stayed until dismissed", "feature": "Sticky error balloons", "area": "workbench", "gate": "main", "doc": "README.md"},
-    {"id": "base.notify.replace", "label": "a keyed notification replaced the earlier one", "feature": "Keyed notifications replace", "area": "workbench", "gate": "main", "doc": "README.md"},
-    {"id": "base.notify.window", "label": "the Notifications window opened on the right", "feature": "Notifications tool window", "area": "workbench", "gate": "main", "doc": "README.md"},
-    {"id": "base.notify.read", "label": "opening the list marked it read", "feature": "Notifications unread badge", "area": "workbench", "gate": "main", "doc": "README.md"},
-    {"id": "base.notify.cleared", "label": "Clear All emptied the history", "feature": "Notifications Clear All", "area": "workbench", "gate": "main", "doc": "README.md"},
-    {"id": "base.commands", "label": "command palette is populated", "feature": "Command palette", "area": "workbench", "gate": "main", "doc": "README.md"},
-    {"id": "base.commands.invalidate", "label": "the Invalidate Caches dialog opens, stages an option and closes", "feature": "File > Invalidate Caches dialog", "area": "workbench", "gate": "main", "doc": "README.md"},
-    {"id": "base.settings.opened", "label": "settings sheet opened", "feature": "Settings sheet", "area": "workbench", "gate": "main", "doc": "README.md"},
-    {"id": "base.settings.closed", "label": "settings sheet closed", "feature": "Settings sheet dismissal", "area": "workbench", "gate": "main", "doc": "README.md"},
-    {"id": "base.settings.theme", "label": "theme choice reached the disk", "feature": "Persisted theme preference", "area": "workbench", "gate": "main", "doc": "README.md"},
-    {"id": "base.watch.reloaded", "label": "external edit was reloaded", "feature": "File watching inside the IDE", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.watch.reloadAll", "label": "Reload All from Disk reread the clean buffer, and restoring it kept the file", "feature": "File > Reload All from Disk", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.vcs.changes", "label": "Git status reports the change", "feature": "Git status", "area": "vcs", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.branch.head", "label": "vcs_branch_info names the branch", "feature": "Title-bar branch widget", "area": "vcs", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.branch.list", "label": "vcs_branches lists the current branch", "feature": "Branches popup", "area": "vcs", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.branch.checkout", "label": "checkout switched branches and came back", "feature": "Checkout from the Branches popup", "area": "vcs", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.branchError", "label": "branchError is absent", "feature": "Branch widget reports no error", "area": "vcs", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.stage.roundtrip", "label": "vcs_stage staged the scratch file and vcs_unstage took it back", "feature": "Stage and Unstage in the changes view", "area": "vcs", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.stage.discard", "label": "vcs_discard removed the scratch file", "feature": "Rollback in the changes view", "area": "vcs", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.stageError", "label": "stageError is absent", "feature": "Change actions report no error", "area": "vcs", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.bookmark.added", "label": "F3 marked two lines", "feature": "Line bookmarks with F3", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.bookmark.gutter", "label": "bookmarks paint gutter marks", "feature": "Bookmark gutter marks", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.bookmark.next", "label": "Next Bookmark stepped to line 2 and then 5", "feature": "Next Bookmark", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.bookmark.prev", "label": "Previous Bookmark stepped back to line 2", "feature": "Previous Bookmark", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.bookmark.remove", "label": "F3 removed both marks", "feature": "Toggle Bookmark removes an existing mark", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.bookmark.mnemonic", "label": "Alt+F3 key reached its line and jumped there", "feature": "Bookmark mnemonics", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.bookmark.mnemonicUnique", "label": "assigning a key took it from the other line", "feature": "Bookmark mnemonic uniqueness", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.bookmark.window", "label": "Cmd+2 shows every bookmark in the sidebar", "feature": "Bookmarks tool window", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.bookmark.file", "label": "Toggle File Bookmark marked and unmarked the file", "feature": "File bookmarks", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.bookmark.list", "label": "a new list received the new bookmarks", "feature": "Bookmark lists", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.bookmark.listOps", "label": "a list renamed and its deletion took its bookmarks", "feature": "Bookmark list rename and delete", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.bookmark.popup", "label": "Cmd+F3 lists files and lines by list", "feature": "Bookmarks popup groups files and lines by list", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.bookmark.description", "label": "F2 in the popup edited the line's description", "feature": "Edit Bookmark Description", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.bookmark.move", "label": "the move chooser sent the line to another list, including a new one", "feature": "Move to Another List", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.bookmark.folder", "label": "a project folder was bookmarked and removed", "feature": "Folder bookmarks", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.bookmarkError", "label": "bookmarkError is absent", "feature": "Bookmarks report no error", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.todo.done", "label": "TODO scan finished", "feature": "TODO tool window project scan", "area": "workbench", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.todo.items", "label": "TODO scan found the marker comment", "feature": "TODO pattern matching over search_start", "area": "workbench", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.todo.openFiles", "label": "open-files scope returned the current file's item", "feature": "TODO Scope Based open files", "area": "workbench", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.todo.visible", "label": "the TODO window stayed open", "feature": "TODO tool window activation", "area": "workbench", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.todo.settings", "label": "the editor.todo page opens, applies a pattern and restores the defaults", "feature": "TODO settings page and its stored patterns", "area": "settings", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.todo.highlight", "label": "the editor tinted the open file's TODO spans", "feature": "TODO editor highlight", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.todoError", "label": "todoError is absent", "feature": "TODO scan reports no error", "area": "workbench", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.startup.phase", "label": "startup reached the ready phase", "feature": "Startup state machine", "area": "lifecycle", "gate": "main", "doc": "UPSTREAM_FEATURE_MATRIX.md"},
-    {"id": "base.dock.moves", "label": "a window moved through all six dock slots with its content", "feature": "Six-slot dock manager", "area": "workbench", "gate": "main", "doc": "UPSTREAM_FEATURE_MATRIX.md"},
-    {"id": "base.dock.hideAll", "label": "Hide All Tool Windows hid and restored the moved window", "feature": "Hide All Tool Windows", "area": "workbench", "gate": "main", "doc": "UPSTREAM_FEATURE_MATRIX.md"},
-    {"id": "base.dock.pinned", "label": "a pinned window kept its slot while another took the split", "feature": "Pin Tool Window", "area": "workbench", "gate": "main", "doc": "UPSTREAM_FEATURE_MATRIX.md"},
-    {"id": "base.dock.rendered", "label": "the moved windows rendered their headers", "feature": "Tool window rendering after dock moves", "area": "workbench", "gate": "main", "doc": "UPSTREAM_FEATURE_MATRIX.md"},
-    {"id": "base.scratch.languages", "label": "the scratch chooser listed the backend's languages", "feature": "New Scratch File language list", "area": "workbench", "gate": "main", "doc": "README.md"},
-    {"id": "base.scratch.opened", "label": "a scratch file was written in the data directory and opened", "feature": "New Scratch File creation and open", "area": "workbench", "gate": "main", "doc": "README.md"},
-    {"id": "base.scratchError", "label": "scratchError is absent", "feature": "New Scratch File reports no error", "area": "workbench", "gate": "main", "doc": "README.md"},
-    {"id": "base.term.output", "label": "a real shell ran echo in the terminal", "feature": "Terminal shell through term_spawn and term_write", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.term.tabs", "label": "a second terminal tab opened and closed", "feature": "Multiple terminal tabs", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.term.split", "label": "split right opened a second shell and unsplit merged it back", "feature": "Terminal split tab groups", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.term.find", "label": "find in the terminal marked the line with the query", "feature": "Find in Terminal", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.termError", "label": "termError is absent", "feature": "Terminal path reports no error", "area": "editor", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.files.menu", "label": "the project view menu names New, Rename, Delete and Clipboard actions", "feature": "Project view context menu", "area": "workspace", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.files.new", "label": "fs_create_dir and fs_create_file made a folder and a file", "feature": "New file and directory in the project view", "area": "workspace", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.files.rename", "label": "fs_rename renamed the file", "feature": "Rename in the project view", "area": "workspace", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.files.copy", "label": "fs_copy pasted the file into another folder", "feature": "Copy and paste in the project view", "area": "workspace", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.files.move", "label": "a cut and paste moved the file with fs_rename", "feature": "Cut and paste in the project view", "area": "workspace", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.files.delete", "label": "fs_delete removed the file and the folder", "feature": "Delete in the project view", "area": "workspace", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.files.expand", "label": "Collapse All folded the tree and Expand All reopened every folder", "feature": "Expand All and Collapse All in the project view", "area": "workspace", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.files.select", "label": "Select in Project View marked the active file", "feature": "Select in Project View", "area": "workspace", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.files.findInFolder", "label": "Find in Folder searched only the chosen folder", "feature": "Find in Folder from the project view", "area": "workspace", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.files.reload", "label": "Reload from Disk showed a file written behind the tree", "feature": "Reload from Disk in the project view", "area": "workspace", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.files.historyRestore", "label": "Local History restored the older snapshot of a saved file", "feature": "Local History restore from the project view", "area": "workspace", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.files.historyLabel", "label": "Put Label listed a named history point", "feature": "Local History Put Label", "area": "workspace", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.files.compareDirs", "label": "Compare Directories classified both folders and diffed a pair", "feature": "Compare Directories from the project view", "area": "workspace", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.filesError", "label": "filesError is absent", "feature": "Project view file operations report no error", "area": "workspace", "gate": "main", "doc": "EDITOR.md"},
-    {"id": "base.log.commits", "label": "vcs_log returned commits", "feature": "Git log through vcs_log", "area": "vcs", "gate": "main", "doc": "RPC_PROTOCOL.md"},
-    {"id": "base.log.details", "label": "vcs_log_details returned the message and a branch", "feature": "Commit details in the Git log", "area": "vcs", "gate": "main", "doc": "RPC_PROTOCOL.md"},
-    {"id": "base.log.changes", "label": "vcs_commits_changes returned the commit's files", "feature": "Changed files of a commit", "area": "vcs", "gate": "main", "doc": "RPC_PROTOCOL.md"},
-    {"id": "base.logError", "label": "logError is absent", "feature": "Git log path reports no error", "area": "vcs", "gate": "main", "doc": "RPC_PROTOCOL.md"},
-    {"id": "base.commit.id", "label": "vcs_commit returned a commit id", "feature": "Commit through vcs_commit", "area": "vcs", "gate": "main", "doc": "RPC_PROTOCOL.md"},
-    {"id": "base.commit.staged", "label": "the included unstaged file was staged", "feature": "Commit inclusion stages included files", "area": "vcs", "gate": "main", "doc": "RPC_PROTOCOL.md"},
-    {"id": "base.commit.clean", "label": "the committed change left the status", "feature": "Status after a commit", "area": "vcs", "gate": "main", "doc": "RPC_PROTOCOL.md"},
-    {"id": "base.commitError", "label": "commitError is absent", "feature": "Commit path reports no error", "area": "vcs", "gate": "main", "doc": "RPC_PROTOCOL.md"},
-    {"id": "base.run.config", "label": "a run configuration was detected", "feature": "Maven run configuration detection", "area": "build-run", "gate": "main", "doc": "BUILD_AND_DEBUG.md"},
-    {"id": "base.runError", "label": "runError is absent", "feature": "Run path reports no error", "area": "build-run", "gate": "main", "doc": "BUILD_AND_DEBUG.md"},
-    {"id": "base.run.exit", "label": "run exited 0", "feature": "Real Maven run exits cleanly", "area": "build-run", "gate": "main", "doc": "BUILD_AND_DEBUG.md"},
-    {"id": "base.run.build", "label": "Maven reported BUILD SUCCESS", "feature": "Real Maven build output", "area": "build-run", "gate": "main", "doc": "BUILD_AND_DEBUG.md"},
-    {"id": "base.build.success", "label": "build_run succeeded", "feature": "Build Project through build_run", "area": "build-run", "gate": "main", "doc": "BUILD_AND_DEBUG.md"},
-    {"id": "base.build.lines", "label": "build streamed console lines", "feature": "Build console streams BuildEvent output", "area": "build-run", "gate": "main", "doc": "BUILD_AND_DEBUG.md"},
-    {"id": "base.build.console", "label": "build console shows the engine's output", "feature": "Build console shows the build system's output", "area": "build-run", "gate": "main", "doc": "BUILD_AND_DEBUG.md"},
-    {"id": "base.buildError", "label": "buildError is absent", "feature": "Build path reports no error", "area": "build-run", "gate": "main", "doc": "BUILD_AND_DEBUG.md"},
-    {"id": "tools.toolsError", "label": "toolsError is absent", "feature": "Toolchain listing and install report no error", "area": "java-toolchain", "gate": "release", "doc": "JAVA_SUPPORT.md"},
-    {"id": "tools.jdtls", "label": "jdtls is installed", "feature": "Eclipse JDT LS install", "area": "java-toolchain", "gate": "release", "doc": "JAVA_SUPPORT.md"},
-    {"id": "tools.java-debug", "label": "java-debug is installed", "feature": "Java debug adapter install", "area": "java-toolchain", "gate": "release", "doc": "JAVA_SUPPORT.md"},
-    {"id": "lsp.lspError", "label": "lspError is absent", "feature": "Language service calls report no error", "area": "java-lsp", "gate": "release", "doc": "JAVA_SUPPORT.md"},
-    {"id": "lsp.jdtls.ready", "label": "jdtls is ready", "feature": "JDT LS lifecycle", "area": "java-lsp", "gate": "release", "doc": "JAVA_SUPPORT.md"},
-    {"id": "lsp.completion.items", "label": "completion returned items", "feature": "Completion over JDT", "area": "java-lsp", "gate": "release", "doc": "JAVA_SUPPORT.md"},
-    {"id": "lsp.completion.first", "label": "completion has a first label", "feature": "Completion item rendering", "area": "java-lsp", "gate": "release", "doc": "JAVA_SUPPORT.md"},
-    {"id": "lsp.hover", "label": "hover returned documentation", "feature": "Hover documentation", "area": "java-lsp", "gate": "release", "doc": "JAVA_SUPPORT.md"},
-    {"id": "lsp.definition", "label": "definition resolved to App.java", "feature": "Go to definition", "area": "java-lsp", "gate": "release", "doc": "JAVA_SUPPORT.md"},
-    {"id": "lsp.format", "label": "format changed the buffer", "feature": "Formatting through JDT", "area": "java-lsp", "gate": "release", "doc": "JAVA_SUPPORT.md"},
-    {"id": "lsp.references.count", "label": "find usages returned references", "feature": "Find usages", "area": "java-lsp", "gate": "release", "doc": "JAVA_SUPPORT.md"},
-    {"id": "lsp.references.done", "label": "find usages finished", "feature": "Find usages completes", "area": "java-lsp", "gate": "release", "doc": "JAVA_SUPPORT.md"},
-    {"id": "lsp.rename", "label": "rename was applied and undone", "feature": "Rename with undo", "area": "java-lsp", "gate": "release", "doc": "JAVA_SUPPORT.md"},
-    {"id": "lsp.symbols", "label": "go to symbol found the class", "feature": "Go to symbol", "area": "java-lsp", "gate": "release", "doc": "JAVA_SUPPORT.md"},
-    {"id": "lsp.diagnostics", "label": "JDT published diagnostics", "feature": "Diagnostics from JDT", "area": "java-lsp", "gate": "release", "doc": "JAVA_SUPPORT.md"},
-    {"id": "lsp.problems.errors", "label": "problems view counted the error", "feature": "Problems tool window counts", "area": "problems", "gate": "release", "doc": "EDITOR.md"},
-    {"id": "lsp.problems.rows", "label": "problems view built a row", "feature": "Problems tool window rows", "area": "problems", "gate": "release", "doc": "EDITOR.md"},
-    {"id": "lsp.problems.visible", "label": "problems tool window opened", "feature": "Problems tool window opens", "area": "problems", "gate": "release", "doc": "EDITOR.md"},
-    {"id": "lsp.structure.rows", "label": "structure view built rows", "feature": "Structure tool window rows", "area": "structure", "gate": "release", "doc": "EDITOR.md"},
-    {"id": "lsp.structure.first", "label": "structure view named the first symbol", "feature": "Structure lists the file's symbols", "area": "structure", "gate": "release", "doc": "EDITOR.md"},
-    {"id": "lsp.structure.visible", "label": "structure tool window opened", "feature": "Structure tool window opens on Cmd+7", "area": "structure", "gate": "release", "doc": "EDITOR.md"},
-    {"id": "debug.debugError", "label": "debugError is absent", "feature": "Debug session reports no error", "area": "debugger", "gate": "release", "doc": "BUILD_AND_DEBUG.md"},
-    {"id": "debug.paused", "label": "debugger paused at the breakpoint", "feature": "Breakpoint hit", "area": "debugger", "gate": "release", "doc": "BUILD_AND_DEBUG.md"},
-    {"id": "debug.breakpoint", "label": "breakpoint was set", "feature": "Breakpoint creation", "area": "debugger", "gate": "release", "doc": "BUILD_AND_DEBUG.md"},
-    {"id": "debug.mainClass", "label": "main class resolved", "feature": "Launch resolver picks the main class", "area": "debugger", "gate": "release", "doc": "BUILD_AND_DEBUG.md"},
-    {"id": "debug.vars", "label": "variables were read", "feature": "Variables view", "area": "debugger", "gate": "release", "doc": "BUILD_AND_DEBUG.md"},
-    {"id": "debug.watch", "label": "watch expression evaluated", "feature": "Watch expressions", "area": "debugger", "gate": "release", "doc": "BUILD_AND_DEBUG.md"},
-    {"id": "debug.runToCursor", "label": "Run to Cursor paused at the caret line", "feature": "Run to Cursor", "area": "debugger", "gate": "release", "doc": "BUILD_AND_DEBUG.md"},
-    {"id": "debug.step.paused", "label": "step over paused again", "feature": "Step over", "area": "debugger", "gate": "release", "doc": "BUILD_AND_DEBUG.md"},
-    {"id": "debug.step.line", "label": "step moved to the next line", "feature": "Step advances the frame", "area": "debugger", "gate": "release", "doc": "BUILD_AND_DEBUG.md"},
-    {"id": "debug.ended", "label": "program ran to the end", "feature": "Debug session termination", "area": "debugger", "gate": "release", "doc": "BUILD_AND_DEBUG.md"},
-    {"id": "debug.errors", "label": "project compiles with no errors", "feature": "Debug launch compiles the project", "area": "debugger", "gate": "release", "doc": "BUILD_AND_DEBUG.md"},
-    {"id": "debug.output", "label": "program output was captured", "feature": "Program output in the IDE", "area": "debugger", "gate": "release", "doc": "BUILD_AND_DEBUG.md"}
-  ]
+  "main": {
+   "when": "a merge or push to main",
+   "command": "scripts/gate.sh main",
+   "steps": [
+    "the pr gate",
+    "scripts/e2e.sh offline: real openidea-server, real Maven build and run"
+   ],
+   "runs_in": ".github/workflows/ci.yml (e2e job, macOS, gated by the ENABLE_MACOS_CI variable)"
+  },
+  "release": {
+   "when": "scripts/release.sh, before signing and notarizing",
+   "command": "scripts/gate.sh release",
+   "steps": [
+    "the pr gate",
+    "scripts/e2e.sh online: toolchain install, JDT language server, debugger"
+   ],
+   "runs_in": "scripts/release.sh"
+  }
+ },
+ "checks": [
+  {
+   "id": "base.backend",
+   "label": "backend is up",
+   "feature": "Backend process and RPC handshake",
+   "area": "openidea-rpc",
+   "gate": "main",
+   "doc": "RPC_PROTOCOL.md"
+  },
+  {
+   "id": "base.tabs",
+   "label": "a file is open in a tab",
+   "feature": "Startup file restore",
+   "area": "editor",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.edited",
+   "label": "edit reached the backend",
+   "feature": "Buffer to doc_change sync",
+   "area": "editor",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.undone",
+   "label": "undo round-tripped",
+   "feature": "Backend undo mirrored into the buffer",
+   "area": "editor",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.outline",
+   "label": "outline names the Java class",
+   "feature": "Document outline",
+   "area": "editor",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.search.done",
+   "label": "project search finished",
+   "feature": "Project-wide search",
+   "area": "search",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.search.files",
+   "label": "project search scanned the sources",
+   "feature": "Project-wide search covers the tree",
+   "area": "search",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.search.matches",
+   "label": "project search found matches",
+   "feature": "Project-wide search returns hits",
+   "area": "search",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.searchError",
+   "label": "searchError is absent",
+   "feature": "Project-wide search reports no error",
+   "area": "search",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.diff.rows",
+   "label": "Git diff has rows",
+   "feature": "Diff view over a working-tree change",
+   "area": "vcs",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.diffError",
+   "label": "diffError is absent",
+   "feature": "Diff view reports no error",
+   "area": "vcs",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "shots.count",
+   "label": "every visual-regression state was rendered in both themes",
+   "feature": "Visual regression shots of the shell, tool windows and overlays",
+   "area": "visual",
+   "gate": "main",
+   "doc": "README.md"
+  },
+  {
+   "id": "shots.bytes",
+   "label": "each PNG is a real capture",
+   "feature": "Visual regression shots are non-empty captures",
+   "area": "visual",
+   "gate": "main",
+   "doc": "README.md"
+  },
+  {
+   "id": "goldens.references",
+   "label": "the golden set holds reference images",
+   "feature": "OpenIDEA v0.1.44 golden screenshots found",
+   "area": "visual",
+   "gate": "release",
+   "doc": "README.md"
+  },
+  {
+   "id": "goldens.missing",
+   "label": "every reference found a rendered frame",
+   "feature": "Golden comparison covers every rendered state",
+   "area": "visual",
+   "gate": "release",
+   "doc": "README.md"
+  },
+  {
+   "id": "goldens.match",
+   "label": "every state is within its pixel tolerance",
+   "feature": "Golden pixel comparison with masks and tolerance",
+   "area": "visual",
+   "gate": "release",
+   "doc": "README.md"
+  },
+  {
+   "id": "shots.states",
+   "label": "the baseline names every expected state in Dark and Light",
+   "feature": "Visual baseline covers Welcome empty and recents, Customize, Plugins, the workbench, tool windows and overlays",
+   "area": "visual",
+   "gate": "main",
+   "doc": "README.md"
+  },
+  {
+   "id": "shots.errors",
+   "label": "no shot failed",
+   "feature": "Visual regression render errors",
+   "area": "visual",
+   "gate": "main",
+   "doc": "README.md"
+  },
+  {
+   "id": "lsp.hierarchy.rows",
+   "label": "call hierarchy listed a level",
+   "feature": "Call Hierarchy right tool window",
+   "area": "code-insight",
+   "gate": "release",
+   "doc": "JAVA_SUPPORT.md"
+  },
+  {
+   "id": "lsp.hierarchy.visible",
+   "label": "the hierarchy window showed on the right",
+   "feature": "Hierarchy window anchoring",
+   "area": "workbench",
+   "gate": "release",
+   "doc": "JAVA_SUPPORT.md"
+  },
+  {
+   "id": "lsp.hierarchyError",
+   "label": "hierarchyError is absent",
+   "feature": "Call Hierarchy reports no error",
+   "area": "code-insight",
+   "gate": "release",
+   "doc": "JAVA_SUPPORT.md"
+  },
+  {
+   "id": "lsp.se.files",
+   "label": "Search Everywhere listed files",
+   "feature": "Search Everywhere Files and Recent Files",
+   "area": "search",
+   "gate": "release",
+   "doc": "README.md"
+  },
+  {
+   "id": "lsp.se.symbols",
+   "label": "Search Everywhere listed symbols from the language server",
+   "feature": "Search Everywhere Classes and Symbols over JDT",
+   "area": "code-insight",
+   "gate": "release",
+   "doc": "JAVA_SUPPORT.md"
+  },
+  {
+   "id": "lsp.se.actions",
+   "label": "Search Everywhere listed actions",
+   "feature": "Search Everywhere Actions and Recent Actions",
+   "area": "workbench",
+   "gate": "release",
+   "doc": "README.md"
+  },
+  {
+   "id": "lsp.se.text",
+   "label": "Search Everywhere listed text matches",
+   "feature": "Search Everywhere Text section",
+   "area": "search",
+   "gate": "release",
+   "doc": "README.md"
+  },
+  {
+   "id": "lsp.se.sections",
+   "label": "the All tab carried the OpenIDEA sections",
+   "feature": "Search Everywhere All tab section order",
+   "area": "search",
+   "gate": "release",
+   "doc": "README.md"
+  },
+  {
+   "id": "base.newProject.created",
+   "label": "New Project created a folder with Git",
+   "feature": "Welcome › New Project creates a real folder and git init",
+   "area": "welcome",
+   "gate": "main",
+   "doc": "README.md"
+  },
+  {
+   "id": "base.newProject.reused",
+   "label": "an empty folder was reused",
+   "feature": "New Project reuses an empty folder",
+   "area": "welcome",
+   "gate": "main",
+   "doc": "README.md"
+  },
+  {
+   "id": "base.newProject.refused",
+   "label": "a non-empty folder was refused",
+   "feature": "New Project refuses a non-empty folder",
+   "area": "welcome",
+   "gate": "main",
+   "doc": "README.md"
+  },
+  {
+   "id": "base.newProjectError",
+   "label": "newProject.error is absent",
+   "feature": "New Project reports no setup error",
+   "area": "welcome",
+   "gate": "main",
+   "doc": "README.md"
+  },
+  {
+   "id": "base.notify.count",
+   "label": "notifications recorded every level",
+   "feature": "Notification center levels",
+   "area": "workbench",
+   "gate": "main",
+   "doc": "README.md"
+  },
+  {
+   "id": "base.notify.balloons",
+   "label": "the balloon stack held three",
+   "feature": "Bottom-right balloon stack cap",
+   "area": "workbench",
+   "gate": "main",
+   "doc": "README.md"
+  },
+  {
+   "id": "base.notify.sticky",
+   "label": "errors stayed until dismissed",
+   "feature": "Sticky error balloons",
+   "area": "workbench",
+   "gate": "main",
+   "doc": "README.md"
+  },
+  {
+   "id": "base.notify.replace",
+   "label": "a keyed notification replaced the earlier one",
+   "feature": "Keyed notifications replace",
+   "area": "workbench",
+   "gate": "main",
+   "doc": "README.md"
+  },
+  {
+   "id": "base.notify.window",
+   "label": "the Notifications window opened on the right",
+   "feature": "Notifications tool window",
+   "area": "workbench",
+   "gate": "main",
+   "doc": "README.md"
+  },
+  {
+   "id": "base.notify.read",
+   "label": "opening the list marked it read",
+   "feature": "Notifications unread badge",
+   "area": "workbench",
+   "gate": "main",
+   "doc": "README.md"
+  },
+  {
+   "id": "base.notify.cleared",
+   "label": "Clear All emptied the history",
+   "feature": "Notifications Clear All",
+   "area": "workbench",
+   "gate": "main",
+   "doc": "README.md"
+  },
+  {
+   "id": "base.commands",
+   "label": "command palette is populated",
+   "feature": "Command palette",
+   "area": "workbench",
+   "gate": "main",
+   "doc": "README.md"
+  },
+  {
+   "id": "base.commands.invalidate",
+   "label": "the Invalidate Caches dialog opens, stages an option and closes",
+   "feature": "File > Invalidate Caches dialog",
+   "area": "workbench",
+   "gate": "main",
+   "doc": "README.md"
+  },
+  {
+   "id": "base.settings.opened",
+   "label": "settings sheet opened",
+   "feature": "Settings sheet",
+   "area": "workbench",
+   "gate": "main",
+   "doc": "README.md"
+  },
+  {
+   "id": "base.settings.closed",
+   "label": "settings sheet closed",
+   "feature": "Settings sheet dismissal",
+   "area": "workbench",
+   "gate": "main",
+   "doc": "README.md"
+  },
+  {
+   "id": "base.settings.theme",
+   "label": "theme choice reached the disk",
+   "feature": "Persisted theme preference",
+   "area": "workbench",
+   "gate": "main",
+   "doc": "README.md"
+  },
+  {
+   "id": "base.watch.reloaded",
+   "label": "external edit was reloaded",
+   "feature": "File watching inside the IDE",
+   "area": "editor",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.watch.reloadAll",
+   "label": "Reload All from Disk reread the clean buffer, and restoring it kept the file",
+   "feature": "File > Reload All from Disk",
+   "area": "editor",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.vcs.changes",
+   "label": "Git status reports the change",
+   "feature": "Git status",
+   "area": "vcs",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.branch.head",
+   "label": "vcs_branch_info names the branch",
+   "feature": "Title-bar branch widget",
+   "area": "vcs",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.branch.list",
+   "label": "vcs_branches lists the current branch",
+   "feature": "Branches popup",
+   "area": "vcs",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.branch.checkout",
+   "label": "checkout switched branches and came back",
+   "feature": "Checkout from the Branches popup",
+   "area": "vcs",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.branchError",
+   "label": "branchError is absent",
+   "feature": "Branch widget reports no error",
+   "area": "vcs",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.stage.roundtrip",
+   "label": "vcs_stage staged the scratch file and vcs_unstage took it back",
+   "feature": "Stage and Unstage in the changes view",
+   "area": "vcs",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.stage.discard",
+   "label": "vcs_discard removed the scratch file",
+   "feature": "Rollback in the changes view",
+   "area": "vcs",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.stageError",
+   "label": "stageError is absent",
+   "feature": "Change actions report no error",
+   "area": "vcs",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.bookmark.added",
+   "label": "F3 marked two lines",
+   "feature": "Line bookmarks with F3",
+   "area": "editor",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.bookmark.gutter",
+   "label": "bookmarks paint gutter marks",
+   "feature": "Bookmark gutter marks",
+   "area": "editor",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.bookmark.next",
+   "label": "Next Bookmark stepped to line 2 and then 5",
+   "feature": "Next Bookmark",
+   "area": "editor",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.bookmark.prev",
+   "label": "Previous Bookmark stepped back to line 2",
+   "feature": "Previous Bookmark",
+   "area": "editor",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.bookmark.remove",
+   "label": "F3 removed both marks",
+   "feature": "Toggle Bookmark removes an existing mark",
+   "area": "editor",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.bookmark.mnemonic",
+   "label": "Alt+F3 key reached its line and jumped there",
+   "feature": "Bookmark mnemonics",
+   "area": "editor",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.bookmark.mnemonicUnique",
+   "label": "assigning a key took it from the other line",
+   "feature": "Bookmark mnemonic uniqueness",
+   "area": "editor",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.bookmark.window",
+   "label": "Cmd+2 shows every bookmark in the sidebar",
+   "feature": "Bookmarks tool window",
+   "area": "editor",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.bookmark.file",
+   "label": "Toggle File Bookmark marked and unmarked the file",
+   "feature": "File bookmarks",
+   "area": "editor",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.bookmark.list",
+   "label": "a new list received the new bookmarks",
+   "feature": "Bookmark lists",
+   "area": "editor",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.bookmark.listOps",
+   "label": "a list renamed and its deletion took its bookmarks",
+   "feature": "Bookmark list rename and delete",
+   "area": "editor",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.bookmark.popup",
+   "label": "Cmd+F3 lists files and lines by list",
+   "feature": "Bookmarks popup groups files and lines by list",
+   "area": "editor",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.bookmark.description",
+   "label": "F2 in the popup edited the line's description",
+   "feature": "Edit Bookmark Description",
+   "area": "editor",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.bookmark.move",
+   "label": "the move chooser sent the line to another list, including a new one",
+   "feature": "Move to Another List",
+   "area": "editor",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.bookmark.folder",
+   "label": "a project folder was bookmarked and removed",
+   "feature": "Folder bookmarks",
+   "area": "editor",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.bookmarkError",
+   "label": "bookmarkError is absent",
+   "feature": "Bookmarks report no error",
+   "area": "editor",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.todo.done",
+   "label": "TODO scan finished",
+   "feature": "TODO tool window project scan",
+   "area": "workbench",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.todo.items",
+   "label": "TODO scan found the marker comment",
+   "feature": "TODO pattern matching over search_start",
+   "area": "workbench",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.todo.openFiles",
+   "label": "open-files scope returned the current file's item",
+   "feature": "TODO Scope Based open files",
+   "area": "workbench",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.todo.visible",
+   "label": "the TODO window stayed open",
+   "feature": "TODO tool window activation",
+   "area": "workbench",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.todo.settings",
+   "label": "the editor.todo page opens, applies a pattern and restores the defaults",
+   "feature": "TODO settings page and its stored patterns",
+   "area": "settings",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.todo.highlight",
+   "label": "the editor tinted the open file's TODO spans",
+   "feature": "TODO editor highlight",
+   "area": "editor",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.todoError",
+   "label": "todoError is absent",
+   "feature": "TODO scan reports no error",
+   "area": "workbench",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.startup.phase",
+   "label": "startup reached the ready phase",
+   "feature": "Startup state machine",
+   "area": "lifecycle",
+   "gate": "main",
+   "doc": "UPSTREAM_FEATURE_MATRIX.md"
+  },
+  {
+   "id": "base.dock.moves",
+   "label": "a window moved through all six dock slots with its content",
+   "feature": "Six-slot dock manager",
+   "area": "workbench",
+   "gate": "main",
+   "doc": "UPSTREAM_FEATURE_MATRIX.md"
+  },
+  {
+   "id": "base.dock.hideAll",
+   "label": "Hide All Tool Windows hid and restored the moved window",
+   "feature": "Hide All Tool Windows",
+   "area": "workbench",
+   "gate": "main",
+   "doc": "UPSTREAM_FEATURE_MATRIX.md"
+  },
+  {
+   "id": "base.dock.pinned",
+   "label": "a pinned window kept its slot while another took the split",
+   "feature": "Pin Tool Window",
+   "area": "workbench",
+   "gate": "main",
+   "doc": "UPSTREAM_FEATURE_MATRIX.md"
+  },
+  {
+   "id": "base.dock.rendered",
+   "label": "the moved windows rendered their headers",
+   "feature": "Tool window rendering after dock moves",
+   "area": "workbench",
+   "gate": "main",
+   "doc": "UPSTREAM_FEATURE_MATRIX.md"
+  },
+  {
+   "id": "base.scratch.languages",
+   "label": "the scratch chooser listed the backend's languages",
+   "feature": "New Scratch File language list",
+   "area": "workbench",
+   "gate": "main",
+   "doc": "README.md"
+  },
+  {
+   "id": "base.scratch.opened",
+   "label": "a scratch file was written in the data directory and opened",
+   "feature": "New Scratch File creation and open",
+   "area": "workbench",
+   "gate": "main",
+   "doc": "README.md"
+  },
+  {
+   "id": "base.scratchError",
+   "label": "scratchError is absent",
+   "feature": "New Scratch File reports no error",
+   "area": "workbench",
+   "gate": "main",
+   "doc": "README.md"
+  },
+  {
+   "id": "base.term.output",
+   "label": "a real shell ran echo in the terminal",
+   "feature": "Terminal shell through term_spawn and term_write",
+   "area": "editor",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.term.tabs",
+   "label": "a second terminal tab opened and closed",
+   "feature": "Multiple terminal tabs",
+   "area": "editor",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.term.split",
+   "label": "split right opened a second shell and unsplit merged it back",
+   "feature": "Terminal split tab groups",
+   "area": "editor",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.term.find",
+   "label": "find in the terminal marked the line with the query",
+   "feature": "Find in Terminal",
+   "area": "editor",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.termError",
+   "label": "termError is absent",
+   "feature": "Terminal path reports no error",
+   "area": "editor",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.files.menu",
+   "label": "the project view menu names New, Rename, Delete and Clipboard actions",
+   "feature": "Project view context menu",
+   "area": "workspace",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.files.new",
+   "label": "fs_create_dir and fs_create_file made a folder and a file",
+   "feature": "New file and directory in the project view",
+   "area": "workspace",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.files.rename",
+   "label": "fs_rename renamed the file",
+   "feature": "Rename in the project view",
+   "area": "workspace",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.files.copy",
+   "label": "fs_copy pasted the file into another folder",
+   "feature": "Copy and paste in the project view",
+   "area": "workspace",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.files.move",
+   "label": "a cut and paste moved the file with fs_rename",
+   "feature": "Cut and paste in the project view",
+   "area": "workspace",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.files.delete",
+   "label": "fs_delete removed the file and the folder",
+   "feature": "Delete in the project view",
+   "area": "workspace",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.files.expand",
+   "label": "Collapse All folded the tree and Expand All reopened every folder",
+   "feature": "Expand All and Collapse All in the project view",
+   "area": "workspace",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.files.select",
+   "label": "Select in Project View marked the active file",
+   "feature": "Select in Project View",
+   "area": "workspace",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.files.findInFolder",
+   "label": "Find in Folder searched only the chosen folder",
+   "feature": "Find in Folder from the project view",
+   "area": "workspace",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.files.reload",
+   "label": "Reload from Disk showed a file written behind the tree",
+   "feature": "Reload from Disk in the project view",
+   "area": "workspace",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.files.historyRestore",
+   "label": "Local History restored the older snapshot of a saved file",
+   "feature": "Local History restore from the project view",
+   "area": "workspace",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.files.historyLabel",
+   "label": "Put Label listed a named history point",
+   "feature": "Local History Put Label",
+   "area": "workspace",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.files.compareDirs",
+   "label": "Compare Directories classified both folders and diffed a pair",
+   "feature": "Compare Directories from the project view",
+   "area": "workspace",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.filesError",
+   "label": "filesError is absent",
+   "feature": "Project view file operations report no error",
+   "area": "workspace",
+   "gate": "main",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "base.log.commits",
+   "label": "vcs_log returned commits",
+   "feature": "Git log through vcs_log",
+   "area": "vcs",
+   "gate": "main",
+   "doc": "RPC_PROTOCOL.md"
+  },
+  {
+   "id": "base.log.details",
+   "label": "vcs_log_details returned the message and a branch",
+   "feature": "Commit details in the Git log",
+   "area": "vcs",
+   "gate": "main",
+   "doc": "RPC_PROTOCOL.md"
+  },
+  {
+   "id": "base.log.changes",
+   "label": "vcs_commits_changes returned the commit's files",
+   "feature": "Changed files of a commit",
+   "area": "vcs",
+   "gate": "main",
+   "doc": "RPC_PROTOCOL.md"
+  },
+  {
+   "id": "base.logError",
+   "label": "logError is absent",
+   "feature": "Git log path reports no error",
+   "area": "vcs",
+   "gate": "main",
+   "doc": "RPC_PROTOCOL.md"
+  },
+  {
+   "id": "base.commit.id",
+   "label": "vcs_commit returned a commit id",
+   "feature": "Commit through vcs_commit",
+   "area": "vcs",
+   "gate": "main",
+   "doc": "RPC_PROTOCOL.md"
+  },
+  {
+   "id": "base.commit.staged",
+   "label": "the included unstaged file was staged",
+   "feature": "Commit inclusion stages included files",
+   "area": "vcs",
+   "gate": "main",
+   "doc": "RPC_PROTOCOL.md"
+  },
+  {
+   "id": "base.commit.clean",
+   "label": "the committed change left the status",
+   "feature": "Status after a commit",
+   "area": "vcs",
+   "gate": "main",
+   "doc": "RPC_PROTOCOL.md"
+  },
+  {
+   "id": "base.commitError",
+   "label": "commitError is absent",
+   "feature": "Commit path reports no error",
+   "area": "vcs",
+   "gate": "main",
+   "doc": "RPC_PROTOCOL.md"
+  },
+  {
+   "id": "base.run.config",
+   "label": "a run configuration was detected",
+   "feature": "Maven run configuration detection",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "base.runError",
+   "label": "runError is absent",
+   "feature": "Run path reports no error",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "base.run.exit",
+   "label": "run exited 0",
+   "feature": "Real Maven run exits cleanly",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "base.run.build",
+   "label": "Maven reported BUILD SUCCESS",
+   "feature": "Real Maven build output",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "base.build.success",
+   "label": "build_run succeeded",
+   "feature": "Build Project through build_run",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "base.build.lines",
+   "label": "build streamed console lines",
+   "feature": "Build console streams BuildEvent output",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "base.build.console",
+   "label": "build console shows the engine's output",
+   "feature": "Build console shows the build system's output",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "base.buildError",
+   "label": "buildError is absent",
+   "feature": "Build path reports no error",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "tools.toolsError",
+   "label": "toolsError is absent",
+   "feature": "Toolchain listing and install report no error",
+   "area": "java-toolchain",
+   "gate": "release",
+   "doc": "JAVA_SUPPORT.md"
+  },
+  {
+   "id": "tools.jdtls",
+   "label": "jdtls is installed",
+   "feature": "Eclipse JDT LS install",
+   "area": "java-toolchain",
+   "gate": "release",
+   "doc": "JAVA_SUPPORT.md"
+  },
+  {
+   "id": "tools.java-debug",
+   "label": "java-debug is installed",
+   "feature": "Java debug adapter install",
+   "area": "java-toolchain",
+   "gate": "release",
+   "doc": "JAVA_SUPPORT.md"
+  },
+  {
+   "id": "lsp.lspError",
+   "label": "lspError is absent",
+   "feature": "Language service calls report no error",
+   "area": "java-lsp",
+   "gate": "release",
+   "doc": "JAVA_SUPPORT.md"
+  },
+  {
+   "id": "lsp.jdtls.ready",
+   "label": "jdtls is ready",
+   "feature": "JDT LS lifecycle",
+   "area": "java-lsp",
+   "gate": "release",
+   "doc": "JAVA_SUPPORT.md"
+  },
+  {
+   "id": "lsp.completion.items",
+   "label": "completion returned items",
+   "feature": "Completion over JDT",
+   "area": "java-lsp",
+   "gate": "release",
+   "doc": "JAVA_SUPPORT.md"
+  },
+  {
+   "id": "lsp.completion.first",
+   "label": "completion has a first label",
+   "feature": "Completion item rendering",
+   "area": "java-lsp",
+   "gate": "release",
+   "doc": "JAVA_SUPPORT.md"
+  },
+  {
+   "id": "lsp.hover",
+   "label": "hover returned documentation",
+   "feature": "Hover documentation",
+   "area": "java-lsp",
+   "gate": "release",
+   "doc": "JAVA_SUPPORT.md"
+  },
+  {
+   "id": "lsp.definition",
+   "label": "definition resolved to App.java",
+   "feature": "Go to definition",
+   "area": "java-lsp",
+   "gate": "release",
+   "doc": "JAVA_SUPPORT.md"
+  },
+  {
+   "id": "lsp.format",
+   "label": "format changed the buffer",
+   "feature": "Formatting through JDT",
+   "area": "java-lsp",
+   "gate": "release",
+   "doc": "JAVA_SUPPORT.md"
+  },
+  {
+   "id": "lsp.references.count",
+   "label": "find usages returned references",
+   "feature": "Find usages",
+   "area": "java-lsp",
+   "gate": "release",
+   "doc": "JAVA_SUPPORT.md"
+  },
+  {
+   "id": "lsp.references.done",
+   "label": "find usages finished",
+   "feature": "Find usages completes",
+   "area": "java-lsp",
+   "gate": "release",
+   "doc": "JAVA_SUPPORT.md"
+  },
+  {
+   "id": "lsp.rename",
+   "label": "rename was applied and undone",
+   "feature": "Rename with undo",
+   "area": "java-lsp",
+   "gate": "release",
+   "doc": "JAVA_SUPPORT.md"
+  },
+  {
+   "id": "lsp.symbols",
+   "label": "go to symbol found the class",
+   "feature": "Go to symbol",
+   "area": "java-lsp",
+   "gate": "release",
+   "doc": "JAVA_SUPPORT.md"
+  },
+  {
+   "id": "lsp.diagnostics",
+   "label": "JDT published diagnostics",
+   "feature": "Diagnostics from JDT",
+   "area": "java-lsp",
+   "gate": "release",
+   "doc": "JAVA_SUPPORT.md"
+  },
+  {
+   "id": "lsp.problems.errors",
+   "label": "problems view counted the error",
+   "feature": "Problems tool window counts",
+   "area": "problems",
+   "gate": "release",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "lsp.problems.rows",
+   "label": "problems view built a row",
+   "feature": "Problems tool window rows",
+   "area": "problems",
+   "gate": "release",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "lsp.problems.visible",
+   "label": "problems tool window opened",
+   "feature": "Problems tool window opens",
+   "area": "problems",
+   "gate": "release",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "lsp.structure.rows",
+   "label": "structure view built rows",
+   "feature": "Structure tool window rows",
+   "area": "structure",
+   "gate": "release",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "lsp.structure.first",
+   "label": "structure view named the first symbol",
+   "feature": "Structure lists the file's symbols",
+   "area": "structure",
+   "gate": "release",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "lsp.structure.visible",
+   "label": "structure tool window opened",
+   "feature": "Structure tool window opens on Cmd+7",
+   "area": "structure",
+   "gate": "release",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "debug.debugError",
+   "label": "debugError is absent",
+   "feature": "Debug session reports no error",
+   "area": "debugger",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "debug.paused",
+   "label": "debugger paused at the breakpoint",
+   "feature": "Breakpoint hit",
+   "area": "debugger",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "debug.breakpoint",
+   "label": "breakpoint was set",
+   "feature": "Breakpoint creation",
+   "area": "debugger",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "debug.mainClass",
+   "label": "main class resolved",
+   "feature": "Launch resolver picks the main class",
+   "area": "debugger",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "debug.vars",
+   "label": "variables were read",
+   "feature": "Variables view",
+   "area": "debugger",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "debug.watch",
+   "label": "watch expression evaluated",
+   "feature": "Watch expressions",
+   "area": "debugger",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "debug.runToCursor",
+   "label": "Run to Cursor paused at the caret line",
+   "feature": "Run to Cursor",
+   "area": "debugger",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "debug.step.paused",
+   "label": "step over paused again",
+   "feature": "Step over",
+   "area": "debugger",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "debug.step.line",
+   "label": "step moved to the next line",
+   "feature": "Step advances the frame",
+   "area": "debugger",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "debug.ended",
+   "label": "program ran to the end",
+   "feature": "Debug session termination",
+   "area": "debugger",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "debug.errors",
+   "label": "project compiles with no errors",
+   "feature": "Debug launch compiles the project",
+   "area": "debugger",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "debug.output",
+   "label": "program output was captured",
+   "feature": "Program output in the IDE",
+   "area": "debugger",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "spring.springError",
+   "label": "springError is absent",
+   "feature": "Multi-module Spring Boot run path reports no error",
+   "area": "build-run",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "spring.kind",
+   "label": "the backend detected a spring-boot configuration",
+   "feature": "Spring Boot run configuration detection",
+   "area": "build-run",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "spring.module",
+   "label": "the configuration names the nested service module, not the root",
+   "feature": "Multi-module Maven module resolution",
+   "area": "build-run",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "spring.mainClass",
+   "label": "the main class is the nested module's ServiceApplication",
+   "feature": "Run configuration main class",
+   "area": "build-run",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "spring.args",
+   "label": "the raw configuration runs java with the classpath placeholder",
+   "feature": "Java Application launch with classpath placeholder",
+   "area": "build-run",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "spring.classpath",
+   "label": "java_resolve_launch produced a real runtime classpath",
+   "feature": "java_resolve_launch classpath resolution",
+   "area": "build-run",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "spring.command",
+   "label": "the java launcher was resolved",
+   "feature": "Java executable resolution",
+   "area": "build-run",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "spring.started",
+   "label": "Spring Boot started and the sibling module answered",
+   "feature": "Real Spring Boot startup with cross-module classpath",
+   "area": "build-run",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "spring.process",
+   "label": "the process really ran",
+   "feature": "Run process lifecycle",
+   "area": "build-run",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "spring.exit",
+   "label": "run_stop stopped the process",
+   "feature": "Run stop",
+   "area": "build-run",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "spring.orphans",
+   "label": "no orphan JVM outlived the stop",
+   "feature": "No orphan JVM after stop",
+   "area": "build-run",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  }
+ ]
 }

@@ -48,7 +48,7 @@ jobs:
         run: scripts/fetch-server.sh
         env:
           GH_TOKEN: ${{ github.token }}
-      - name: Main gate
+      - name: Main gate (real server, Maven build and Java run)
         run: scripts/gate.sh main
         env:
           GOIDEA_E2E_DATA: ${{ runner.temp }}/goidea-e2e-data
@@ -70,7 +70,7 @@ jobs:
         run: scripts/fetch-server.sh
         env:
           GH_TOKEN: ${{ github.token }}
-      - name: Release gate (toolchain, JDT, debugger)
+      - name: Release gate (toolchain, JDT, debugger, multi-module Spring Boot run)
         run: scripts/gate.sh release
         env:
           GOIDEA_E2E_DATA: ${{ runner.temp }}/goidea-e2e-data

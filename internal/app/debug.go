@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
 
+	"mayoi/internal/adapter"
 	"mayoi/internal/openidea"
 )
 
@@ -328,27 +330,98 @@ func javaProjectName(dir string) string {
 	return filepath.Base(dir)
 }
 
-// joinJavaArgs quotes program / VM arguments the way java-debug expects them:
-// one string, empty and spaced values quoted.
-func joinJavaArgs(args []string) string {
-	parts := make([]string, 0, len(args))
-	for _, a := range args {
-		switch {
-		case a == "":
-			parts = append(parts, `""`)
-		case strings.ContainsAny(a, " \t\""):
-			parts = append(parts, `"`+strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(a)+`"`)
-		default:
-			parts = append(parts, a)
-		}
+// relPathUnder is the file's path relative to the project root, slash-form.
+func relPathUnder(root, path string) string {
+	rel := path
+	if r, err := filepath.Rel(root, path); err == nil {
+		rel = filepath.ToSlash(r)
 	}
-	return strings.Join(parts, " ")
+	return strings.TrimPrefix(rel, "./")
 }
 
-// buildJavaLaunch is the java-debug LaunchConfig: it connects to the DAP
-// server inside jdtls (debugServer) and starts the JVM itself.
-func buildJavaLaunch(name string, target javaTarget, root string, info openidea.JavaLaunchInfo, port uint16) (openidea.DebugLaunchConfig, error) {
+// applicationConfig ports upstream applicationConfig: the temporary
+// "Application" configuration that runs a file's main class. The module comes
+// from jvmModuleDir (the run configs the build knows, then the source
+// layout); the classpath placeholder decides runtime vs test classpath.
+func applicationConfig(target javaTarget, module string) *openidea.RunConfig {
+	outer := target.mainClass
+	if i := strings.Index(outer, "$"); i >= 0 {
+		outer = outer[:i]
+	}
+	simple := outer[strings.LastIndex(outer, ".")+1:]
+	placeholder := adapter.Classpath
+	if target.test {
+		placeholder = adapter.TestClasspath
+	}
+	return &openidea.RunConfig{
+		ID:      "application:" + module + ":" + target.mainClass,
+		Name:    simple,
+		Kind:    "application",
+		Command: "java",
+		Args:    []string{"-cp", placeholder, target.mainClass},
+		Module:  &module,
+	}
+}
+
+// javaDebugMissing is the server verdict that java-debug is not loaded into
+// jdtls, matched like upstream offerInstall does.
+var javaDebugMissing = regexp.MustCompile(`(?i)java-debug|debugger`)
+
+// javaDebugLaunch ports upstream javaLaunchConfig's java-debug branch: the
+// DAP launch configuration built from the shared preparation result.
+// java-debug starts the JVM itself, bypassing the Run process that echoes its
+// command line, so the equivalent launch is echoed for Debug and Run to stay
+// comparable.
+func (m *Model) javaDebugLaunch(ctx context.Context, rc *openidea.RunConfig, root string, prepared *adapter.PreparedJavaLaunch, report func(text, kind string)) (openidea.DebugLaunchConfig, error) {
+	rc, err := m.withEnvFiles(ctx, rc, root)
+	if err != nil {
+		return openidea.DebugLaunchConfig{}, err
+	}
+	info := &prepared.Info
+	parsed := prepared.Parsed
+	if info.ErrorCount > 0 && report == nil {
+		m.post(func() {
+			m.notifyWarning("debug.java-compile-errors",
+				"'"+rc.Name+"' 有编译错误；调试最后一次编译的类",
+				strings.TrimRight(adapter.FormatCompileErrors(info), "\n"))
+		})
+	}
+	if report != nil {
+		report(adapter.JoinJavaArgs(append([]string{prepared.Command}, prepared.Resolved...))+"\n", "system")
+	}
+	rawPort, err := m.invoke(ctx, "java_debug_server", map[string]any{"module": prepared.Module})
+	if err != nil {
+		// java-debug missing from jdtls: offer the one-click install; jdtls
+		// restarts with the bundle.
+		if openidea.ErrorKind(err) == "unavailable" && javaDebugMissing.MatchString(err.Error()) {
+			m.post(func() {
+				m.notifyWarning("debug.java-debug-missing", "Java 调试器未安装",
+					"调试 Java 需要 jdtls 内的 Microsoft java-debug。安装并等 jdtls 重启后再调试。",
+					notifyAction{label: "安装", run: func(m *Model) { m.InstallJavaToolchain() }})
+			})
+		}
+		return openidea.DebugLaunchConfig{}, err
+	}
+	var port uint16
+	if err := json.Unmarshal(rawPort, &port); err != nil {
+		return openidea.DebugLaunchConfig{}, fmt.Errorf("读取 java-debug 端口失败：%w", err)
+	}
+	// java-debug resolves the Java project for Evaluate on its own from
+	// `mainClass` only when the class belongs to a project it knows; name the
+	// project it imported so that works for classes compiled outside the
+	// language server's build.
+	projectRoot := root
+	if info.ProjectRoot != nil && *info.ProjectRoot != "" {
+		projectRoot = *info.ProjectRoot
+	}
+	cwd := root
+	if rel := rc.CwdOr(""); rel != "" {
+		cwd = filepath.Join(root, filepath.FromSlash(rel))
+	}
 	classPaths := info.ClassPaths
+	if parsed.ExplicitClasspath != "" {
+		classPaths = strings.Split(parsed.ExplicitClasspath, info.PathListSeparator)
+	}
 	if classPaths == nil {
 		classPaths = []string{}
 	}
@@ -360,44 +433,106 @@ func buildJavaLaunch(name string, target javaTarget, root string, info openidea.
 	if info.ShortenCommandLine != nil && *info.ShortenCommandLine != "" {
 		shorten = *info.ShortenCommandLine
 	}
-	cwd := root
-	if target.module != "" {
-		cwd = filepath.Join(root, filepath.FromSlash(target.module))
-	}
+	vmArgs := append(adapter.ConsoleVMArgs(rc.Kind, rc.Args), parsed.VMArgs...)
 	extra := map[string]any{
-		"debugServer":        int(port),
-		"mainClass":          target.mainClass,
-		"classPaths":         classPaths,
-		"modulePaths":        modulePaths,
-		"projectName":        javaProjectName(cwd),
-		"vmArgs":             "",
-		"args":               "",
+		"debugServer": int(port),
+		"mainClass":   parsed.MainClass,
+		"classPaths":  classPaths,
+		"modulePaths": modulePaths,
+		"projectName": javaProjectName(projectRoot),
+		"vmArgs":      adapter.JoinJavaArgs(vmArgs),
+		"args":        adapter.JoinJavaArgs(parsed.ProgramArgs),
+		// java-debug spawns the JVM itself: it must shorten a classpath too
+		// long for the OS the same way Run does.
 		"shortenCommandLine": shorten,
 		"console":            "internalConsole",
 		"stopOnEntry":        false,
 	}
-	if info.JavaExec != nil && *info.JavaExec != "" {
-		extra["javaExec"] = *info.JavaExec
-	} else if home := os.Getenv("JAVA_HOME"); home != "" {
-		java := filepath.Join(home, "bin", "java")
-		if st, err := os.Stat(java); err == nil && !st.IsDir() {
-			extra["javaExec"] = java
-		}
+	if prepared.Command != "java" {
+		extra["javaExec"] = prepared.Command
 	}
 	rawExtra, err := json.Marshal(extra)
 	if err != nil {
 		return openidea.DebugLaunchConfig{}, err
 	}
 	s := string(rawExtra)
+	env := rc.Env
+	if env == nil {
+		env = map[string]string{}
+	}
 	return openidea.DebugLaunchConfig{
-		Name:      name,
+		Name:      rc.Name,
 		Adapter:   "java-debug",
 		Request:   "launch",
+		Program:   nil,
 		Args:      []string{},
 		Cwd:       cwd,
-		Env:       map[string]string{},
+		Env:       env,
 		ExtraJSON: &s,
 	}, nil
+}
+
+// withEnvFiles is upstream launch.ts's withEnvFiles: rc with its .env files
+// loaded underneath its explicit variables (mirrors Run). Absolute paths go
+// to the backend, which parses with the same loader runs use.
+func (m *Model) withEnvFiles(ctx context.Context, rc *openidea.RunConfig, root string) (*openidea.RunConfig, error) {
+	var files []string
+	for _, f := range rc.EnvFiles {
+		if strings.TrimSpace(f) != "" {
+			files = append(files, f)
+		}
+	}
+	if len(files) == 0 {
+		return rc, nil
+	}
+	paths := make([]string, 0, len(files))
+	for _, f := range files {
+		paths = append(paths, filepath.Join(root, filepath.FromSlash(f)))
+	}
+	raw, err := m.invoke(ctx, "run_env_files", map[string]any{"files": paths})
+	if err != nil {
+		return nil, err
+	}
+	var loaded map[string]string
+	if err := json.Unmarshal(raw, &loaded); err != nil {
+		return nil, err
+	}
+	env := make(map[string]string, len(loaded)+len(rc.Env))
+	for k, v := range loaded {
+		env[k] = v
+	}
+	for k, v := range rc.Env {
+		env[k] = v
+	}
+	merged := *rc
+	merged.Env = env
+	return &merged, nil
+}
+
+// reportDebugConsole appends preparation messages to the Debug tool window's
+// adapter output of the project they belong to.
+func (m *Model) reportDebugConsole(root string) func(text, kind string) {
+	return func(text, kind string) {
+		m.post(func() {
+			if m.Root() != root {
+				return
+			}
+			if kind == "" {
+				kind = "system"
+			}
+			for _, line := range strings.Split(strings.TrimSuffix(text, "\n"), "\n") {
+				if line == "" {
+					continue
+				}
+				m.debug.output = append(m.debug.output, outputLine{kind: kind, text: line})
+			}
+			if over := len(m.debug.output) - maxDebugLines; over > 0 {
+				m.debug.output = append(m.debug.output[:0], m.debug.output[over:]...)
+				m.debug.truncated = true
+			}
+			m.invalidate()
+		})
+	}
 }
 
 // nextRequest allocates an id for a cancellable backend request.
@@ -439,6 +574,8 @@ func (m *Model) Debug() {
 		m.invalidate()
 		return
 	}
+	rel := relPathUnder(root, t.doc.Path())
+	rc := applicationConfig(target, adapter.JVMModuleDir(rel, m.run.configs, nil))
 	tabs := append([]*Tab(nil), m.tabs...)
 	m.debug.starting = true
 	m.debug.session = 0
@@ -480,38 +617,26 @@ func (m *Model) Debug() {
 			return
 		}
 		_ = m.pushBreakpoints(ctx, "")
-		rawInfo, err := m.mgr.Invoke(ctx, Window, "java_resolve_launch", map[string]any{
-			"module": target.module, "test": target.test, "policy": "automatic", "request": m.nextRequest(),
+		// Run and Debug share one preparation: module, build and classpath
+		// through java_resolve_launch, exactly like OpenIDEA's
+		// prepareJavaLaunch. A failure stops the launch here.
+		prepared, err := adapter.PrepareJavaLaunch(ctx, javaBackend{m}, rc, &adapter.Preparation{
+			Request: m.nextRequest(),
+			Report:  m.reportDebugConsole(root),
 		})
 		if err != nil {
-			fail("构建项目失败", err)
+			fail(err.Error(), nil)
 			return
 		}
-		var info openidea.JavaLaunchInfo
-		if err := json.Unmarshal(rawInfo, &info); err != nil {
-			fail("读取构建结果失败", err)
-			return
+		if prepared.Info.ErrorCount > 0 {
+			m.post(func() {
+				m.debug.status = "有编译错误，调试最后一次编译的类"
+				m.invalidate()
+			})
 		}
-		if info.Build != nil && *info.Build == "failed" {
-			fail("构建失败，未启动调试", nil)
-			return
-		}
-		if info.Build != nil && *info.Build == "withErrors" {
-			m.post(func() { m.debug.status = "有编译错误，调试最后一次编译的类" })
-		}
-		rawPort, err := m.mgr.Invoke(ctx, Window, "java_debug_server", map[string]any{"module": target.module})
+		launch, err := m.javaDebugLaunch(ctx, rc, root, prepared, m.reportDebugConsole(root))
 		if err != nil {
-			fail("启动 java-debug 失败", err)
-			return
-		}
-		var port uint16
-		if err := json.Unmarshal(rawPort, &port); err != nil {
-			fail("读取 java-debug 端口失败", err)
-			return
-		}
-		launch, err := buildJavaLaunch(target.mainClass, target, root, info, port)
-		if err != nil {
-			fail("构造调试配置失败", err)
+			fail(err.Error(), nil)
 			return
 		}
 		rawSession, err := m.mgr.Invoke(ctx, Window, "debug_start", map[string]any{"config": launch})
@@ -1023,7 +1148,8 @@ func (m *Model) SmokeDebug(ctx context.Context) (map[string]any, error) {
 		return out, errors.New("当前文件不是 Java 主类：" + path)
 	}
 	out["mainClass"] = target.mainClass
-	out["module"] = target.module
+	rc := applicationConfig(target, adapter.JVMModuleDir(relPathUnder(root, path), nil, nil))
+	out["module"] = *rc.Module
 	for i, l := range strings.Split(text, "\n") {
 		if strings.Contains(l, "System.out.println") {
 			line = i
@@ -1048,39 +1174,26 @@ func (m *Model) SmokeDebug(ctx context.Context) (map[string]any, error) {
 		m.invalidate()
 	})
 
-	rawInfo, err := m.mgr.Invoke(ctx, Window, "java_resolve_launch", map[string]any{
-		"module": target.module, "test": target.test, "policy": "automatic", "request": m.nextRequest(),
+	// The same shared preparation Run and Debug use: no smoke-only shortcut.
+	prepared, err := adapter.PrepareJavaLaunch(ctx, javaBackend{m}, rc, &adapter.Preparation{
+		Request: m.nextRequest(),
+		Report:  m.reportDebugConsole(root),
 	})
 	if err != nil {
 		m.post(func() { m.debug.starting = false })
-		return out, fmt.Errorf("java_resolve_launch: %w", err)
-	}
-	var info openidea.JavaLaunchInfo
-	if err := json.Unmarshal(rawInfo, &info); err != nil {
-		m.post(func() { m.debug.starting = false })
 		return out, err
 	}
-	if info.Build != nil {
-		out["build"] = *info.Build
+	if prepared.Info.Build != nil {
+		out["build"] = *prepared.Info.Build
 	}
-	out["classPaths"] = len(info.ClassPaths)
-	out["errorCount"] = info.ErrorCount
-	rawPort, err := m.mgr.Invoke(ctx, Window, "java_debug_server", map[string]any{"module": target.module})
-	if err != nil {
-		m.post(func() { m.debug.starting = false })
-		return out, fmt.Errorf("java_debug_server: %w", err)
-	}
-	var port uint16
-	if err := json.Unmarshal(rawPort, &port); err != nil {
-		m.post(func() { m.debug.starting = false })
-		return out, err
-	}
-	out["debugServer"] = port
-	launch, err := buildJavaLaunch(target.mainClass, target, root, info, port)
+	out["classPaths"] = len(prepared.Info.ClassPaths)
+	out["errorCount"] = prepared.Info.ErrorCount
+	launch, err := m.javaDebugLaunch(ctx, rc, root, prepared, m.reportDebugConsole(root))
 	if err != nil {
 		m.post(func() { m.debug.starting = false })
 		return out, err
 	}
+	out["debugServer"] = true
 	out["extraJson"] = *launch.ExtraJSON
 	rawSession, err := m.mgr.Invoke(ctx, Window, "debug_start", map[string]any{"config": launch})
 	if err != nil {

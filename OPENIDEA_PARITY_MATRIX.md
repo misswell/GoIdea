@@ -59,7 +59,7 @@ directory registers.
 | `color-preview` | 0 | 0 | 0 | 1 | 0 | missing |
 | `coverage` | 6 | 1 | 1 | 1 | 0 | missing |
 | `database` | 46 | 1 | 1 | 1 | 0 | partial - UPSTREAM_FEATURE_MATRIX.md database console; db_* commands |
-| `debugger` | 40 | 1 | 1 | 1 | 0 | partial - debug.paused, debug.step.paused, debug.vars |
+| `debugger` | 40 | 1 | 1 | 1 | 0 | partial - debug.paused, debug.step.paused, debug.vars; internal/app/debug.go builds the file's application config (upstream applicationConfig port) and calls the shared adapter.PrepareJavaLaunch, then java_debug_server + debug_start with the resolved classpaths, modulePaths, projectName, javaExec, VM and program arguments (upstream javaLaunchConfig java-debug branch); java-debug missing offers the one-click install |
 | `dependencies` | 0 | 0 | 0 | 1 | 0 | missing |
 | `deployment` | 12 | 1 | 1 | 0 | 0 | missing |
 | `dotnet` | 11 | 1 | 0 | 0 | 0 | missing |
@@ -77,7 +77,7 @@ directory registers.
 | `project-tree` | 31 | 1 | 3 | 0 | 0 | partial - internal/workspace tree tests; base.tabs; internal/app/tree_ops.go treeGitMenu ports the Git submenu (Commit…/Commit File…, Add, Add to .gitignore, Annotate, Show Diff, Show History, Rollback…, Branches…) when the project's Git status loads, tree_ops_test.go TestTreeGitSubmenuFollowsTheSelection; limits: the branch/revision compares, push/pull/fetch, merge/rebase, new branch/tag, reset and stash entries have no GoIDEA view and stay out |
 | `project-trust` | 5 | 0 | 1 | 0 | 1 | missing |
 | `remote-dev` | 4 | 1 | 1 | 0 | 0 | missing |
-| `run` | 28 | 1 | 5 | 2 | 0 | partial - base.run.config, base.run.exit, base.run.build |
+| `run` | 28 | 1 | 5 | 2 | 0 | partial - base.run.config, base.run.exit, base.run.build; internal/adapter/java_launch.go and java_module.go port OpenIDEA's platform/javaLaunch.ts (prepareJavaLaunch, findJavaModule, resolveJavaCommand, formatCompileErrors) and Run and Debug share it; spring.* release-gate checks run the detected Spring Boot configuration of testdata/java-spring-multimodule: nested service module, resolved classpath with no placeholder, real JVM start, GREETING marker from the sibling lib module, run_stop, no orphan JVM |
 | `run-anything` | 1 | 0 | 1 | 0 | 0 | partial - internal/app/run_anything.go Run Anything popup with Recent and Run Configurations sections, Clear History, per-project history and shell command lines; gear menu action:runAnything.show; Ctrl Ctrl keymap deferred, MyGo has no KeyControl constant; internal/app/run_anything_test.go |
 | `scratch` | 1 | 0 | 1 | 0 | 0 | missing |
 | `search` | 24 | 3 | 6 | 2 | 0 | partial - base.search.done, base.search.files, base.search.matches; internal/app/se.go Search Everywhere: All/Classes/Files/Symbols/Actions/Text, section order and limits, Recent Files/Recent Actions on an empty query, Tab/Shift+Tab cycling; e2e searchEverywhere.*; still missing the per-tab filter funnel, search history, the Endpoints section and the double-Shift binding (MyGo exposes no modifier-only key event) |
@@ -2037,7 +2037,7 @@ Local-only commands and the per-command argument lists are in
 | `fs_read_dir` | fs | yes | yes | missing |
 | `fs_read_image` | bytes | yes |  | missing |
 | `fs_read_range` | bytes | yes |  | missing |
-| `fs_read_text` | fs | yes |  | missing |
+| `fs_read_text` | fs | yes | yes | missing |
 | `fs_rename` | fs | yes | yes | missing |
 | `fs_resolve_reference` | nav | yes |  | missing |
 | `fs_set_writable` | fs | yes |  | missing |
@@ -2279,12 +2279,12 @@ Local-only commands and the per-command argument lists are in
 | `run_close_stdin` | run | yes |  | missing |
 | `run_configs` | run | yes | yes | missing |
 | `run_dotnet_resolve` | run | yes |  | missing |
-| `run_env_files` | run | yes |  | missing |
+| `run_env_files` | run | yes | yes | missing |
 | `run_gradle_init_script` | run | yes |  | missing |
 | `run_gradle_jvm_args_script` | run | yes |  | missing |
 | `run_import_configs` | run | yes |  | missing |
 | `run_import_sources` | run | yes |  | missing |
-| `run_list` | run | yes |  | missing |
+| `run_list` | run | yes | yes | missing |
 | `run_resize` | run | yes |  | missing |
 | `run_save_configs` | run | yes |  | missing |
 | `run_save_templates` | run | yes |  | missing |
@@ -2488,7 +2488,7 @@ Local-only commands and the per-command argument lists are in
 | `wsl_distros` | wsl | no |  | missing |
 | `wsl_resolve` | wsl | no |  | missing |
 
-476 commands are served over stdio and 104 are called by GoIDEA today. A command
+476 commands are served over stdio and 107 are called by GoIDEA today. A command
 that is registered only in the desktop shell needs an `ops` module before stdio
 can serve it; a GoIDEA check counts only when the UI path works end to end.
 

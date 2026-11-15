@@ -214,6 +214,15 @@ func smoke(m *app.Model) {
 			fields["runError"] = runErr.Error()
 		}
 	}
+	if os.Getenv("GOIDEA_SMOKE_SPRING") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		spring, springErr := m.SmokeSpringRun(ctx)
+		cancel()
+		fields["spring"] = spring
+		if springErr != nil {
+			fields["springError"] = springErr.Error()
+		}
+	}
 	if os.Getenv("GOIDEA_SMOKE_BUILD") == "1" && root != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		build, buildErr := m.SmokeBuild(ctx)

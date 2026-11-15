@@ -111,9 +111,15 @@ type Model struct {
 	cfg Config
 	win *mygo.Window
 	mgr *openidea.Manager
-	reg *docbridge.Registry
-	ctx context.Context
-	off context.CancelFunc
+	// invokeHook replaces the manager's invoke surface in tests; nil means
+	// the live server.
+	invokeHook func(ctx context.Context, cmd string, args any) (json.RawMessage, error)
+	// postHook replaces RunOnMain in tests, which run without the event
+	// loop; nil means the real main-thread hop.
+	postHook func(fn func())
+	reg      *docbridge.Registry
+	ctx      context.Context
+	off      context.CancelFunc
 
 	rootMu sync.RWMutex
 	root   string
@@ -767,7 +773,14 @@ func (m *Model) setRoot(root string) {
 }
 
 // post runs fn on the main thread and waits for it.
-func (m *Model) post(fn func()) { mygo.RunOnMain(fn) }
+func (m *Model) post(fn func()) {
+	// Tests run without the mygo event loop; postHook executes inline.
+	if m.postHook != nil {
+		m.postHook(fn)
+		return
+	}
+	mygo.RunOnMain(fn)
+}
 
 // watchState follows the backend so the status bar says when it is down.
 func (m *Model) watchState() {

@@ -52,7 +52,7 @@ release can be called today.
 | Environment | `env` | 1 | 0 | 0 |
 | File dialogs | `file_dialog` | 0 | 2 | 0 |
 | Fonts | `fonts` | 0 | 1 | 0 |
-| File system | `fs` | 12 | 1 | 7 |
+| File system | `fs` | 12 | 1 | 8 |
 | GitHub | `github` | 0 | 11 | 0 |
 | heap | `heap` | 8 | 0 | 0 |
 | Local history | `history` | 3 | 0 | 3 |
@@ -68,7 +68,7 @@ release can be called today.
 | Profiler | `profiler` | 0 | 3 | 0 |
 | Refactoring | `refactor` | 5 | 0 | 0 |
 | Remote development | `remote_dev` | 0 | 11 | 0 |
-| Run configurations | `run` | 28 | 0 | 3 |
+| Run configurations | `run` | 28 | 0 | 5 |
 | scaffold | `scaffold` | 4 | 0 | 3 |
 | SDKs | `sdk` | 13 | 0 | 0 |
 | Search | `search` | 4 | 0 | 1 |
@@ -88,7 +88,7 @@ release can be called today.
 ## Served by `openidea-server --stdio`
 
 476 commands. `GoIDEA` marks the ones a non-test Go source invokes today
-(104 of 476).
+(107 of 476).
 
 | Command | Domain | Arguments | GoIDEA |
 | --- | --- | --- | --- |
@@ -259,7 +259,7 @@ release can be called today.
 | `fs_read_dir` | File system | `path` | yes |
 | `fs_read_image` | Binary file reads | `path` | — |
 | `fs_read_range` | Binary file reads | `len`, `offset`, `path` | — |
-| `fs_read_text` | File system | `path` | — |
+| `fs_read_text` | File system | `path` | yes |
 | `fs_rename` | File system | `from`, `to` | yes |
 | `fs_resolve_reference` | Navigation and index | `from`, `value` | — |
 | `fs_set_writable` | File system | `path`, `writable` | — |
@@ -414,12 +414,12 @@ release can be called today.
 | `run_close_stdin` | Run configurations | `id` | — |
 | `run_configs` | Run configurations | — | yes |
 | `run_dotnet_resolve` | Run configurations | `config`, `debug` | — |
-| `run_env_files` | Run configurations | `files` | — |
+| `run_env_files` | Run configurations | `files` | yes |
 | `run_gradle_init_script` | Run configurations | `name`, `text` | — |
 | `run_gradle_jvm_args_script` | Run configurations | `jvmArgs` | — |
 | `run_import_configs` | Run configurations | `existing`, `source` | — |
 | `run_import_sources` | Run configurations | — | — |
-| `run_list` | Run configurations | — | — |
+| `run_list` | Run configurations | — | yes |
 | `run_resize` | Run configurations | `cols`, `id`, `rows` | — |
 | `run_save_configs` | Run configurations | — | — |
 | `run_save_templates` | Run configurations | `templates` | — |
@@ -782,7 +782,7 @@ GoIDEA needs to do for each:
 
 ## What this means for GoIDEA
 
-476 remote commands are available today; GoIDEA uses 104. The parity work is
+476 remote commands are available today; GoIDEA uses 107. The parity work is
 first to cover the remote surface OpenIDEA's own frontend uses, then to move
 `shared-op`/`host`/`crate` commands onto stdio through the OpenIDEA fork
 (a submodule bump and a server release), and to implement `desktop` commands

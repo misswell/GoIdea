@@ -6,12 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/egoist/mygo/ui"
 
+	"mayoi/internal/adapter"
 	"mayoi/internal/openidea"
 )
 
@@ -337,7 +339,7 @@ func (m *Model) startRunWith(raw json.RawMessage, name string) bool {
 			})
 			return
 		}
-		resolved, err := m.resolveJVMConfig(ctx, raw, root)
+		resolved, err := m.resolveJVMConfig(ctx, raw, root, m.reportRunConsole(root, ch))
 		if err != nil {
 			m.post(func() {
 				m.run.busy = false
@@ -661,7 +663,7 @@ func (m *Model) SmokeRun(ctx context.Context) (config string, code *int32, outpu
 		m.run.truncated = false
 		m.invalidate()
 	})
-	resolved, err := m.resolveJVMConfig(ctx, json.RawMessage(cfg.Raw()), root)
+	resolved, err := m.resolveJVMConfig(ctx, json.RawMessage(cfg.Raw()), root, m.reportRunConsole(root, channel))
 	if err != nil {
 		m.post(func() { m.run.busy = false; m.run.awaiting = false })
 		return cfg.Name, nil, "", err
@@ -719,6 +721,278 @@ func (m *Model) SmokeRun(ctx context.Context) (config string, code *int32, outpu
 		case <-tick.C:
 		}
 	}
+}
+
+// SmokeSpringRun runs the detected Spring Boot configuration of a real
+// multi-module Maven project end to end: Maven model and Java import finish,
+// the nested service module's configuration is discovered, java_resolve_launch
+// resolves a classpath with no placeholder left, run_start starts a real JVM,
+// the Spring Boot startup marker appears, the process is stopped and no
+// orphan JVM is left behind.
+func (m *Model) SmokeSpringRun(ctx context.Context) (map[string]any, error) {
+	out := map[string]any{"root": m.Root()}
+	root := m.Root()
+	if root == "" {
+		return out, errors.New("没有打开项目")
+	}
+	if _, err := m.mgr.Invoke(ctx, Window, "project_trust_set", map[string]any{
+		"path": root, "trusted": true, "folder": true,
+	}); err != nil {
+		return out, err
+	}
+
+	// The configuration appears once the Maven model is loaded and detected;
+	// a fresh project's Java import can take minutes, so poll for it.
+	var cfg *openidea.RunConfig
+	var configs []openidea.RunConfig
+	deadline := time.Now().Add(6 * time.Minute)
+	for {
+		raw, err := m.mgr.Invoke(ctx, Window, "run_configs", nil)
+		if err == nil {
+			configs, err = openidea.DecodeRunConfigs(raw)
+		}
+		if err == nil {
+			for i := range configs {
+				if configs[i].Kind == "spring-boot" {
+					cfg = &configs[i]
+					break
+				}
+			}
+		}
+		if cfg != nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			names := make([]string, 0, len(configs))
+			for _, c := range configs {
+				names = append(names, c.Kind+":"+c.Name)
+			}
+			return out, fmt.Errorf("6 分钟内没有发现 spring-boot 运行配置；检测到：%s",
+				strings.Join(names, ", "))
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
+	out["configKind"] = cfg.Kind
+	out["configName"] = cfg.Name
+	var rawCfg map[string]any
+	if err := json.Unmarshal(cfg.Raw(), &rawCfg); err != nil {
+		return out, err
+	}
+	module := ""
+	if cfg.Module != nil {
+		module = *cfg.Module
+	}
+	out["configModule"] = module
+	if module == "" {
+		return out, errors.New("多模块项目必须解析出子模块，而不是项目根目录")
+	}
+	out["configArgs"] = rawCfg["args"]
+	mainClass := adapter.ParseJavaArgs(cfg.Args).MainClass
+	out["mainClass"] = mainClass
+
+	// The run console shows the whole preparation; the resolution must leave
+	// no placeholder and an executable java launcher.
+	channel := m.nextChannel()
+	m.post(func() {
+		m.run.visible = true
+		m.occupyBottom("run")
+		m.run.trusted = true
+		m.run.loaded = true
+		m.run.configs = configs
+		m.run.sel = -1
+		m.run.busy = true
+		m.run.awaiting = true
+		m.run.running = false
+		m.run.runID = 0
+		m.run.channel = channel
+		m.run.pid = nil
+		m.run.exitCode = nil
+		m.run.err = ""
+		m.run.output = nil
+		m.run.truncated = false
+		m.invalidate()
+	})
+	resolved, err := m.resolveJVMConfig(ctx, json.RawMessage(cfg.Raw()), root, m.reportRunConsole(root, channel))
+	if err != nil {
+		m.post(func() { m.run.busy = false; m.run.awaiting = false })
+		out["resolveError"] = err.Error()
+		return out, err
+	}
+	resolvedText := string(resolved)
+	if strings.Contains(resolvedText, "${classpath}") || strings.Contains(resolvedText, "${testClasspath}") {
+		m.post(func() { m.run.busy = false; m.run.awaiting = false })
+		return out, errors.New("解析后的配置仍带有 classpath 占位符：" + resolvedText)
+	}
+	var resolvedCfg map[string]any
+	if err := json.Unmarshal(resolved, &resolvedCfg); err != nil {
+		return out, err
+	}
+	resolvedArgs := toStrings(resolvedCfg["args"])
+	out["resolvedCommand"] = resolvedCfg["command"]
+	entries := 0
+	for i, a := range resolvedArgs {
+		if a == "-cp" || a == "-classpath" || a == "--class-path" {
+			if i+1 < len(resolvedArgs) {
+				sep := string(os.PathListSeparator)
+				entries = len(strings.Split(resolvedArgs[i+1], sep))
+			}
+		}
+	}
+	out["classPathEntries"] = entries
+	if entries == 0 {
+		return out, errors.New("解析后的 classpath 为空")
+	}
+
+	args := map[string]any{
+		"config":   resolved,
+		"onOutput": map[string]any{"$channel": channel},
+		"request":  nil,
+	}
+	rawInfo, err := m.mgr.Invoke(ctx, Window, "run_start", args)
+	if err != nil {
+		m.post(func() { m.run.busy = false; m.run.awaiting = false })
+		return out, err
+	}
+	var info openidea.RunInfo
+	if err := json.Unmarshal(rawInfo, &info); err != nil {
+		return out, err
+	}
+	m.post(func() {
+		m.run.busy = false
+		m.run.runID = info.ID
+		m.run.pid = info.PID
+		m.run.running = info.Running
+		m.invalidate()
+	})
+	if info.PID != nil {
+		out["pid"] = *info.PID
+	}
+
+	// Wait for the real Spring Boot startup: the marker proves Spring came up
+	// and the sibling lib module was on the resolved classpath.
+	marker := strings.TrimSpace(os.Getenv("GOIDEA_SMOKE_SPRING_MARKER"))
+	if marker == "" {
+		marker = "GREETING:Hello, GoIDEA!"
+	}
+	waitDeadline := time.Now().Add(4 * time.Minute)
+	started := false
+	var text string
+	for {
+		m.post(func() { text = m.run.text() })
+		if strings.Contains(text, marker) {
+			started = true
+			break
+		}
+		if time.Now().After(waitDeadline) {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(200 * time.Millisecond):
+		}
+	}
+	out["started"] = started
+	if !started {
+		return out, fmt.Errorf("4 分钟内没有等到 Spring Boot 启动标志 %q；输出尾部：%s", marker, tailOf(text, 1200))
+	}
+
+	// The process must really be running, not just reported.
+	rawList, err := m.mgr.Invoke(ctx, Window, "run_list", nil)
+	if err != nil {
+		return out, err
+	}
+	var list []openidea.RunInfo
+	if err := json.Unmarshal(rawList, &list); err != nil {
+		return out, err
+	}
+	running := false
+	for _, r := range list {
+		if r.ID == info.ID && r.Running {
+			running = true
+		}
+	}
+	out["processRunning"] = running
+	if !running {
+		return out, errors.New("Spring Boot 启动标志出现，但进程已不在运行")
+	}
+
+	m.StopRun()
+	for {
+		var exit *int32
+		m.post(func() { exit = m.run.exitCode })
+		if exit != nil {
+			out["exitCode"] = *exit
+			break
+		}
+		if time.Now().After(waitDeadline) {
+			return out, errors.New("run_stop 后进程没有退出")
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(200 * time.Millisecond):
+		}
+	}
+	// Killing the run must kill the JVM: no orphan may outlive the stop.
+	stopDeadline := time.Now().Add(15 * time.Second)
+	for {
+		orphans := probeOrphanJVMs(mainClass)
+		if len(orphans) == 0 {
+			out["orphans"] = 0
+			break
+		}
+		if time.Now().After(stopDeadline) {
+			out["orphans"] = len(orphans)
+			return out, fmt.Errorf("run_stop 后仍有 %d 个孤立的 JVM 进程：%s", len(orphans), strings.Join(orphans, ", "))
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
+	return out, nil
+}
+
+// probeOrphanJVMs lists the processes whose command line still names the main
+// class; an empty list means run_stop left no orphan JVM.
+func probeOrphanJVMs(mainClass string) []string {
+	if mainClass == "" {
+		return nil
+	}
+	out, err := exec.Command("pgrep", "-f", mainClass).Output()
+	if err != nil {
+		// pgrep exits 1 when nothing matches: no orphan.
+		return nil
+	}
+	return strings.Fields(string(out))
+}
+
+func toStrings(v any) []string {
+	items, ok := v.([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		if s, ok := item.(string); ok {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// tailOf keeps the last n characters of a run console dump.
+func tailOf(text string, n int) string {
+	if len(text) <= n {
+		return text
+	}
+	return text[len(text)-n:]
 }
 
 // trustDialog asks whether a project may build and run. It opens when an

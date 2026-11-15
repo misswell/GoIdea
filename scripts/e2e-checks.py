@@ -3,7 +3,7 @@
 
 Usage: e2e-checks.py <phase> <smoke.json> [<smoke.json> ...]
        e2e-checks.py --list
-Phases: base | tools | lsp | debug
+Phases: base | tools | lsp | debug | spring
 Every check has an id. REGRESSION_INDEX.json names the same ids, and --list
 lets scripts/check-regression-index.py prove the two never drift apart, so a
 check cannot be deleted without the index noticing. Every failed assertion is
@@ -155,6 +155,19 @@ CHECKS = {
         ("commit.staged", "the included unstaged file was staged", lambda d: ((get(d, "commit.staged") or 0) >= 1, get(d, "commit.staged"))),
         ("commit.clean", "the committed change left the status", lambda d: ((get(d, "commit.after") or 0) < (get(d, "commit.before") or 0) and "Greeter.java" not in (get(d, "commit.remaining") or []), {"before": get(d, "commit.before"), "after": get(d, "commit.after"), "remaining": get(d, "commit.remaining")})),
         ("commitError", *absent("commitError")),
+    ],
+    "spring": [
+        ("springError", *absent("springError")),
+        ("kind", "the backend detected a spring-boot configuration", lambda d: (get(d, "spring.configKind") == "spring-boot", get(d, "spring.configKind"))),
+        ("module", "the configuration names the nested service module, not the root", lambda d: (get(d, "spring.configModule") == "service", get(d, "spring.configModule"))),
+        ("mainClass", "the main class is the nested module's ServiceApplication", lambda d: (get(d, "spring.mainClass") == "com.example.service.ServiceApplication", get(d, "spring.mainClass"))),
+        ("args", "the raw configuration runs java with the classpath placeholder", lambda d: ("${classpath}" in (get(d, "spring.configArgs") or []) and "-cp" in (get(d, "spring.configArgs") or []), get(d, "spring.configArgs"))),
+        ("classpath", "java_resolve_launch produced a real runtime classpath", lambda d: ((get(d, "spring.classPathEntries") or 0) >= 5, get(d, "spring.classPathEntries"))),
+        ("command", "the java launcher was resolved", lambda d: (bool(get(d, "spring.resolvedCommand")), get(d, "spring.resolvedCommand"))),
+        ("started", "Spring Boot started and the sibling module answered", lambda d: (get(d, "spring.started") is True, get(d, "spring.started"))),
+        ("process", "the process really ran", lambda d: (get(d, "spring.processRunning") is True, get(d, "spring.processRunning"))),
+        ("exit", "run_stop stopped the process", lambda d: (get(d, "spring.exitCode") is not None, get(d, "spring.exitCode"))),
+        ("orphans", "no orphan JVM outlived the stop", lambda d: (get(d, "spring.orphans") == 0, get(d, "spring.orphans"))),
     ],
     "tools": [
         ("toolsError", *absent("toolsError")),

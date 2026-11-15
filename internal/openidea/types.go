@@ -152,15 +152,34 @@ type OutputChunk struct {
 // whole object so run_start gets back every field, including the ones GoIDEA
 // does not model.
 type RunConfig struct {
-	ID           string  `json:"id"`
-	Name         string  `json:"name"`
-	Kind         string  `json:"kind"`
-	Command      string  `json:"command"`
-	Detected     bool    `json:"detected"`
-	IsTest       bool    `json:"isTest"`
-	DebugAdapter *string `json:"debugAdapter"`
+	ID      string   `json:"id"`
+	Name    string   `json:"name"`
+	Kind    string   `json:"kind"`
+	Command string   `json:"command"`
+	Args    []string `json:"args"`
+	// Cwd is the working directory relative to the project root; nil is the
+	// root, "" the same.
+	Cwd          *string           `json:"cwd"`
+	Env          map[string]string `json:"env"`
+	Detected     bool              `json:"detected"`
+	IsTest       bool              `json:"isTest"`
+	DebugAdapter *string           `json:"debugAdapter"`
+	// Module is the owning module, independent of the working directory; it
+	// also supplies a JVM application's classpath. nil keeps it unset; ""
+	// means the project root.
+	Module      *string  `json:"module"`
+	BuildPolicy *string  `json:"buildPolicy"`
+	EnvFiles    []string `json:"envFiles"`
 
 	raw json.RawMessage
+}
+
+// CwdOr returns the configuration's working directory, def for an unset one.
+func (r RunConfig) CwdOr(def string) string {
+	if r.Cwd != nil && *r.Cwd != "" {
+		return *r.Cwd
+	}
+	return def
 }
 
 // Raw is the configuration exactly as the backend sent it.
@@ -182,6 +201,16 @@ func DecodeRunConfigs(raw json.RawMessage) ([]RunConfig, error) {
 		out = append(out, cfg)
 	}
 	return out, nil
+}
+
+// DecodeRunConfig decodes one run configuration object.
+func DecodeRunConfig(raw json.RawMessage) (*RunConfig, error) {
+	var cfg RunConfig
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		return nil, err
+	}
+	cfg.raw = raw
+	return &cfg, nil
 }
 
 // RunInfo is the reply to run_start.

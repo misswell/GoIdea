@@ -1,7 +1,9 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,8 +11,11 @@ import (
 	"strings"
 	"testing"
 
+	"mayoi/internal/adapter"
 	"mayoi/internal/openidea"
 )
+
+func strPtr(s string) *string { return &s }
 
 func TestJavaTargetForMavenLayout(t *testing.T) {
 	root := "/p"
@@ -93,22 +98,38 @@ func TestJoinJavaArgs(t *testing.T) {
 		{[]string{`p"q\r`}, `"p\"q\\r"`},
 	}
 	for _, c := range cases {
-		if got := joinJavaArgs(c.in); got != c.want {
-			t.Errorf("joinJavaArgs(%q) = %q, want %q", c.in, got, c.want)
+		if got := adapter.JoinJavaArgs(c.in); got != c.want {
+			t.Errorf("JoinJavaArgs(%q) = %q, want %q", c.in, got, c.want)
 		}
 	}
 }
 
-func TestBuildJavaLaunch(t *testing.T) {
+func TestJavaDebugLaunch(t *testing.T) {
+	m := &Model{invokeHook: func(ctx context.Context, cmd string, args any) (json.RawMessage, error) {
+		if cmd == "java_debug_server" {
+			return json.Marshal(5005)
+		}
+		return nil, errors.New("unexpected invoke: " + cmd)
+	}}
 	exec := "/jdk/bin/java"
-	info := openidea.JavaLaunchInfo{
-		ClassPaths:        []string{"/p/target/classes"},
-		ModulePaths:       nil,
-		PathListSeparator: ":",
-		JavaExec:          &exec,
+	rc := &openidea.RunConfig{
+		Name: "Hello", Kind: "application", Command: "java", Module: strPtr(""),
+		Args: []string{"-cp", "${classpath}", "demo.Hello"},
 	}
-	target := javaTarget{module: "", mainClass: "demo.Hello"}
-	launch, err := buildJavaLaunch("demo.Hello", target, "/p", info, 5005)
+	prepared := &adapter.PreparedJavaLaunch{
+		Module:   "",
+		Parsed:   adapter.ParseJavaArgs(rc.Args),
+		Command:  exec,
+		Resolved: []string{"-cp", "/p/target/classes", "demo.Hello"},
+		Info: openidea.JavaLaunchInfo{
+			ClassPaths:        []string{"/p/target/classes"},
+			ModulePaths:       nil,
+			PathListSeparator: ":",
+			JavaExec:          &exec,
+			ProjectRoot:       strPtr("/p"),
+		},
+	}
+	launch, err := m.javaDebugLaunch(context.Background(), rc, "/p", prepared, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,6 +149,8 @@ func TestBuildJavaLaunch(t *testing.T) {
 		"classPaths":         []any{"/p/target/classes"},
 		"modulePaths":        []any{},
 		"javaExec":           "/jdk/bin/java",
+		"vmArgs":             "",
+		"args":               "",
 		"shortenCommandLine": "none",
 		"console":            "internalConsole",
 		"stopOnEntry":        false,

@@ -80,7 +80,7 @@ smoke() {
 
 command -v mvn >/dev/null || { echo "缺少 mvn：本测试用真实 Maven 构建 Java 项目" >&2; exit 1; }
 
-say "阶段 1/4：编辑、搜索、Git、设置、外观、Maven 构建运行"
+say "阶段 1：编辑、搜索、Git、设置、外观、Maven 构建运行"
 BASE="$WORK/base.json"
 smoke "$BASE" \
     GOIDEA_SMOKE_EDIT=1 GOIDEA_SMOKE_CODEINTEL=1 GOIDEA_SMOKE_SEARCH=1 GOIDEA_SMOKE_TODO=1 \
@@ -100,7 +100,7 @@ python3 "$CHECKS" shots "$SHOTS_JSON"
 if [ "$OFFLINE" = "1" ]; then
     skip "Java 工具安装、JDT 语言服务与调试（GOIDEA_E2E_OFFLINE=1）"
 else
-    say "阶段 2/4：安装 jdtls 与 java-debug"
+    say "阶段 2：安装 jdtls 与 java-debug"
     TOOLS="$WORK/tools.json"
     smoke "$TOOLS" GOIDEA_SMOKE_TOOLS=install
     python3 "$CHECKS" tools "$TOOLS"
@@ -115,15 +115,26 @@ else
         say "SKIP：OpenIDEA Golden 截图未提供（设置 GOIDEA_GOLDEN_DIR）"
     fi
 
-    say "阶段 3/4：JDT 补全、悬停、跳转、格式化、用法、重命名、诊断"
+    say "阶段 3：JDT 补全、悬停、跳转、格式化、用法、重命名、诊断"
     LSP="$WORK/lsp.json"
     smoke "$LSP" GOIDEA_SMOKE_LSP=1 GOIDEA_SMOKE_HIERARCHY=1 GOIDEA_SMOKE_SE=1
     python3 "$CHECKS" lsp "$LSP"
 
-    say "阶段 4/4：断点、变量、求值、步过、运行结束"
+    say "阶段 4：断点、变量、求值、步过、运行结束"
     DEBUG="$WORK/debug.json"
     smoke "$DEBUG" GOIDEA_SMOKE_DEBUG=1
     python3 "$CHECKS" debug "$DEBUG"
+
+    say "阶段 5：多模块 Maven 的 Spring Boot 运行"
+    SPRING="$WORK/java-spring-multimodule"
+    cp -R "$ROOT/testdata/java-spring-multimodule" "$SPRING"
+    say "用真实 Maven 预构建 Spring 多模块夹具"
+    (cd "$SPRING" && mvn -q package -DskipTests) || { echo "Spring 多模块夹具构建失败" >&2; exit 1; }
+    SPRING_JSON="$WORK/spring.json"
+    PROJ="$SPRING"
+    JAVA=""
+    smoke "$SPRING_JSON" GOIDEA_SMOKE_SPRING=1
+    python3 "$CHECKS" spring "$SPRING_JSON"
 fi
 
 if [ "${GOIDEA_E2E_FIXTURES:-0}" = "1" ]; then
