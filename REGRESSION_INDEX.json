@@ -957,6 +957,46 @@
    "doc": "BUILD_AND_DEBUG.md"
   },
   {
+   "id": "rerunfail.rerunfailError",
+   "label": "rerunfailError is absent",
+   "feature": "Test results pipeline reports no unexpected error",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "rerunfail.failed",
+   "label": "the surefire output folded into a results tree with one failure",
+   "feature": "JVM test output parsing (surefire)",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "rerunfail.paths",
+   "label": "the failed test path is the class and method",
+   "feature": "Failed test paths from the results tree",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "rerunfail.derived",
+   "label": "the derived configuration filters with Maven's -Dtest= on the failed method",
+   "feature": "run.rerunFailed configuration derivation (jvmArgs)",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "rerunfail.one",
+   "label": "the rerun executed only the failed method (Tests run: 1)",
+   "feature": "run.rerunFailed reruns only failed tests",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
    "id": "negjdtls.negjdtlsError",
    "label": "negjdtlsError is absent",
    "feature": "Missing-toolchain launch reports no unexpected error",
@@ -1384,6 +1424,38 @@
    "id": "debug.output",
    "label": "program output was captured",
    "feature": "Program output in the IDE",
+   "area": "debugger",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "hotswap.hotswapError",
+   "label": "hotswapError is absent",
+   "feature": "HotSwap path reports no unexpected error",
+   "area": "debugger",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "hotswap.paused",
+   "label": "the debugger paused at the breakpoint before the println",
+   "feature": "HotSwap prerequisite: a suspended session",
+   "area": "debugger",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "hotswap.reloaded",
+   "label": "the changed class was compiled and reloaded into the session",
+   "feature": "HotSwap: java_build_workspace + debug_redefine_classes",
+   "area": "debugger",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "hotswap.newText",
+   "label": "the reloaded code printed the new text after resume",
+   "feature": "Reloaded code actually runs",
    "area": "debugger",
    "gate": "release",
    "doc": "BUILD_AND_DEBUG.md"

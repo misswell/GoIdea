@@ -343,6 +343,16 @@ type DebugEvent struct {
 	Path              string `json:"path"`
 	Code              *int32 `json:"code"`
 	Message           string `json:"message"`
+	// HotSwap ("Reload Changed Classes"): java-debug's `redefineClasses`
+	// request.
+	ChangeType string `json:"changeType"`
+}
+
+// HotSwapResult is the reply to debug_redefine_classes: the classes reloaded
+// (empty: nothing had changed) and java-debug's error, if any.
+type HotSwapResult struct {
+	ChangedClasses []string `json:"changedClasses"`
+	ErrorMessage   *string  `json:"errorMessage"`
 }
 
 // LineMatch is one line a search matched: 0-based line, its text, and the

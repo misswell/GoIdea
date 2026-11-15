@@ -27,7 +27,7 @@ new action, tool window, page or command appears automatically.
 | Kind | Items | Integrated | Partial | Engine | Blocked | Missing |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Feature folders | 44 | 0 | 12 | 0 | 0 | 32 |
-| Actions | 673 | 42 | 93 | 0 | 1 | 537 |
+| Actions | 673 | 42 | 96 | 0 | 1 | 534 |
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
 | Tool windows | 30 | 10 | 7 | 0 | 0 | 13 |
 | Overlays | 56 | 1 | 1 | 0 | 0 | 54 |
@@ -59,7 +59,7 @@ directory registers.
 | `color-preview` | 0 | 0 | 0 | 1 | 0 | missing |
 | `coverage` | 6 | 1 | 1 | 1 | 0 | missing |
 | `database` | 46 | 1 | 1 | 1 | 0 | partial - UPSTREAM_FEATURE_MATRIX.md database console; db_* commands |
-| `debugger` | 40 | 1 | 1 | 1 | 0 | partial - debug.paused, debug.step.paused, debug.vars; internal/app/debug.go builds the file's application config (upstream applicationConfig port) and calls the shared adapter.PrepareJavaLaunch, then java_debug_server + debug_start with the resolved classpaths, modulePaths, projectName, javaExec, VM and program arguments (upstream javaLaunchConfig java-debug branch); java-debug missing offers the one-click install |
+| `debugger` | 40 | 1 | 1 | 1 | 0 | partial - debug.paused, debug.step.paused, debug.vars; internal/app/debug.go builds the file's application config (upstream applicationConfig port) and calls the shared adapter.PrepareJavaLaunch, then java_debug_server + debug_start with the resolved classpaths, modulePaths, projectName, javaExec, VM and program arguments (upstream javaLaunchConfig java-debug branch); java-debug missing offers the one-click install; HotSwap (internal/app/hotswap.go) compiles with java_build_workspace and redefines via debug_redefine_classes, proven by hotswap.* release-gate checks (the reloaded code prints the new text) |
 | `dependencies` | 0 | 0 | 0 | 1 | 0 | missing |
 | `deployment` | 12 | 1 | 1 | 0 | 0 | missing |
 | `dotnet` | 11 | 1 | 0 | 0 | 0 | missing |
@@ -77,7 +77,7 @@ directory registers.
 | `project-tree` | 31 | 1 | 3 | 0 | 0 | partial - internal/workspace tree tests; base.tabs; internal/app/tree_ops.go treeGitMenu ports the Git submenu (Commit…/Commit File…, Add, Add to .gitignore, Annotate, Show Diff, Show History, Rollback…, Branches…) when the project's Git status loads, tree_ops_test.go TestTreeGitSubmenuFollowsTheSelection; limits: the branch/revision compares, push/pull/fetch, merge/rebase, new branch/tag, reset and stash entries have no GoIDEA view and stay out |
 | `project-trust` | 5 | 0 | 1 | 0 | 1 | missing |
 | `remote-dev` | 4 | 1 | 1 | 0 | 0 | missing |
-| `run` | 28 | 1 | 5 | 2 | 0 | partial - base.run.config, base.run.exit, base.run.build; internal/adapter/java_launch.go and java_module.go port OpenIDEA's platform/javaLaunch.ts and Run and Debug share it; spring.* release-gate checks run the detected Spring Boot configuration of testdata/java-spring-multimodule; internal/adapter/run_config.go ports configs.ts (upsert/merge/validate/unique), buildCommand.ts (applyBuildPolicyToCommand) and store.ts saveUserConfigs, and internal/app/run_config_dialog.go carries Edit Configurations (action:run.editConfigs) and Rerun with the confirm dialog (action:run.rerun); base.runcfg.* proves the save/policy/run/remove round trip; Build Before Launch is buildCommand.ts's applyBuildPolicyToCommand (internal/adapter/run_config.go), applied at launch for build-tool configs and through BuildPolicyOf for JVM ones, proven by base.runcfg.policy |
+| `run` | 28 | 1 | 5 | 2 | 0 | partial - base.run.config, base.run.exit, base.run.build; internal/adapter/java_launch.go and java_module.go port OpenIDEA's platform/javaLaunch.ts and Run and Debug share it; spring.* release-gate checks run the detected Spring Boot configuration of testdata/java-spring-multimodule; internal/adapter/run_config.go ports configs.ts (upsert/merge/validate/unique), buildCommand.ts (applyBuildPolicyToCommand) and store.ts saveUserConfigs, and internal/app/run_config_dialog.go carries Edit Configurations (action:run.editConfigs) and Rerun with the confirm dialog (action:run.rerun); base.runcfg.* proves the save/policy/run/remove round trip; Build Before Launch is buildCommand.ts's applyBuildPolicyToCommand (internal/adapter/run_config.go), applied at launch for build-tool configs and through BuildPolicyOf for JVM ones, proven by base.runcfg.policy; the testing pipeline port (internal/adapter/testing_*.go) folds surefire/Gradle output into the results tree and run.rerunFailed derives the -Dtest=/--tests filter (rerunfail.* main-gate checks) |
 | `run-anything` | 1 | 0 | 1 | 0 | 0 | partial - internal/app/run_anything.go Run Anything popup with Recent and Run Configurations sections, Clear History, per-project history and shell command lines; gear menu action:runAnything.show; Ctrl Ctrl keymap deferred, MyGo has no KeyControl constant; internal/app/run_anything_test.go |
 | `scratch` | 1 | 0 | 1 | 0 | 0 | missing |
 | `search` | 24 | 3 | 6 | 2 | 0 | partial - base.search.done, base.search.files, base.search.matches; internal/app/se.go Search Everywhere: All/Classes/Files/Symbols/Actions/Text, section order and limits, Recent Files/Recent Actions on an empty query, Tab/Shift+Tab cycling; e2e searchEverywhere.*; still missing the per-tab filter funnel, search history, the Endpoints section and the double-Shift binding (MyGo exposes no modifier-only key event) |
@@ -274,7 +274,7 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `debug.pause` | Pause Program | `src/features/debugger/actions.ts` | missing |
 | `debug.pluginStart` | Debug Plugin Configuration | `src/features/debugger/actions.ts` | missing |
 | `debug.quickEvaluate` | Quick Evaluate Expression | `src/features/debugger/actions.ts` | missing |
-| `debug.reloadChangedClasses` | Reload Changed Classes | `src/features/debugger/actions.ts` | missing |
+| `debug.reloadChangedClasses` | Reload Changed Classes | `src/features/debugger/actions.ts` | partial - internal/app/hotswap.go HotSwapReload ports hotswap.ts: saveAll, java_build_workspace over the session's cwd, debug_redefine_classes into the session, hotSwapMessage wording (nothing to reload / N classes reloaded / obsolete methods warning / failure refuses), and the hotCodeReplace BUILD_COMPLETE event offers the reload (IDEA's Ask); hotswap.* release-gate checks pause at a breakpoint, reload the edited Greeter class and require the NEW text in the program's output; limits: no per-session caps gate, no Reset Frame action, no cancel-build UI |
 | `debug.removeAllBreakpoints` | Remove All Breakpoints | `src/features/debugger/actions.ts` | missing |
 | `debug.rerun` | Rerun | `src/features/debugger/actions.ts` | missing |
 | `debug.resetFrame` | Reset Frame | `src/features/debugger/actions.ts` | missing |
@@ -478,9 +478,9 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `run.pluginStart` | Run Plugin Configuration | `src/features/run/index.ts` | missing |
 | `run.reloadConfigs` | Reload Run Configurations | `src/features/run/index.ts` | missing |
 | `run.rerun` | Rerun | `src/features/run/index.ts` | partial - internal/app/run_config_dialog.go Rerun over the run widget's rerun button (⌘R, run.rerun in internal/app/commands.go): rerunConfig semantics (the configuration as saved now), the Process 'x' Is Running confirm (dialogs.tsx confirmRerun) with 不再询问 persisted under run.confirmRerun in internal/app/settings.go RunPrefs, stop + wait for exit + restart; limits: allowParallel restarts instead of a second instance (single run session) |
-| `run.rerunFailed` | Rerun Failed Tests | `src/features/run/index.ts` | missing |
+| `run.rerunFailed` | Rerun Failed Tests | `src/features/run/index.ts` | partial - internal/adapter/testing_results.go, testing_jvm.go and testing_rerun.go port the testing pipeline's results.ts, jvm.ts (surefire 2/3 failure lines, class/total summaries, Gradle logging, TeamCity init-script messages) and rerun.ts's jvmArgs (Maven -Dtest=Class#m1+m2, Gradle --tests); internal/app/run.go folds the run output into the tree and internal/app/run_config_dialog.go RerunFailedTests is the action (run.rerunFailed, the run pane's 重跑失败测试 button); rerunfail.* checks run a real failing JUnit method and prove the derived -Dtest=com.example.CalculatorTest#failsOnPurpose reruns Tests run: 1; limits: the results TREE view is not drawn yet, and the other frameworks' parsers (go/pytest/phpunit/ruby/dotnet/cargo/js) are not ported |
 | `run.run` | Run | `src/features/run/index.ts` | integrated - base.run.exit, base.run.build |
-| `run.runConfig` | Run Configuration | `src/features/run/index.ts` | missing |
+| `run.runConfig` | Run Configuration | `src/features/run/index.ts` | partial - internal/app/run_anything.go runAnythingLine executes a run configuration by its exact name (upstream runConfigsRunAnything.execute) with the same multi-word filter and prefix-first ordering as upstream matchingConfigs (runAnythingConfigs); limits: the chooser's debug executor and RunWidget per-kind icons differ |
 | `run.runContext` | Run Context Configuration | `src/features/run/index.ts` | missing |
 | `run.sampleOutput` | Stream Sample Output | `src/features/run/index.ts` | missing |
 | `run.services.addType` | Add Service | `src/features/run/services.tsx` | missing |
@@ -1955,7 +1955,7 @@ Local-only commands and the per-command argument lists are in
 | `debug_jvm_memory_referrers` | debug | yes |  | missing |
 | `debug_listen_for_jvm` | debug | yes |  | missing |
 | `debug_pause` | debug | yes | yes | missing |
-| `debug_redefine_classes` | debug | yes |  | missing |
+| `debug_redefine_classes` | debug | yes | yes | missing |
 | `debug_restart_frame` | debug | yes |  | missing |
 | `debug_resume` | debug | yes | yes | missing |
 | `debug_run_to` | debug | yes | yes | missing |
@@ -2077,7 +2077,7 @@ Local-only commands and the per-command argument lists are in
 | `index_file_extensions` | nav | yes |  | missing |
 | `index_status` | nav | yes |  | missing |
 | `inspect_code` | analysis | yes |  | missing |
-| `java_build_workspace` | java | yes |  | missing |
+| `java_build_workspace` | java | yes | yes | missing |
 | `java_debug_server` | java | yes | yes | missing |
 | `java_resolve_launch` | java | yes | yes | missing |
 | `jdk_download` | tools | yes |  | missing |
@@ -2488,7 +2488,7 @@ Local-only commands and the per-command argument lists are in
 | `wsl_distros` | wsl | no |  | missing |
 | `wsl_resolve` | wsl | no |  | missing |
 
-476 commands are served over stdio and 108 are called by GoIDEA today. A command
+476 commands are served over stdio and 110 are called by GoIDEA today. A command
 that is registered only in the desktop shell needs an `ops` module before stdio
 can serve it; a GoIDEA check counts only when the UI path works end to end.
 

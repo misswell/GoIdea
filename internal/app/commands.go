@@ -147,6 +147,8 @@ func builtinCommands() []appCommand {
 		{"code.joinLines", "合并行", "代码", "Ctrl+Shift+J", "join lines", func(m *Model) { m.runEditorCommand(editor.JoinLines) }},
 		{"run.start", "运行", "运行", "F5", "run main class", func(m *Model) { m.Run() }},
 		{"run.rerun", "重新运行", "运行", "Cmd+R", "rerun restart process", func(m *Model) { m.Rerun() }},
+		{"run.rerunFailed", "重新运行失败的测试", "运行", "", "rerun failed tests", func(m *Model) { m.RerunFailedTests() }},
+		{"debug.reloadChangedClasses", "重新加载变更的类（HotSwap）", "运行", "", "hotswap hot swap reload changed classes hot code replace", func(m *Model) { m.HotSwapReload() }},
 		{"run.chooseConfig", "选择运行/调试配置…", "运行", "Ctrl+Alt+R", "choose run configuration select popup", func(m *Model) { m.OpenRunChooser("run") }},
 		{"run.chooseDebugConfig", "选择要调试的配置…", "运行", "Ctrl+Alt+D", "choose debug configuration popup", func(m *Model) { m.OpenRunChooser("debug") }},
 		{"run.editConfigs", "编辑运行配置…", "运行", "Ctrl+Alt+Shift+R", "edit run debug configurations dialog", func(m *Model) { m.OpenRunConfigs() }},

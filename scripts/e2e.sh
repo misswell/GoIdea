@@ -97,6 +97,20 @@ grep -q "TODO: visual shot" "$JAVA" || printf '\n// TODO: visual shot\n' >> "$JA
 smoke "$SHOTS_JSON" GOIDEA_SMOKE_SHOTS="$SHOTS"
 python3 "$CHECKS" shots "$SHOTS_JSON"
 
+say "阶段 1b2：测试结果管线与重新运行失败的测试（真实 surefire 输出）"
+REFAIL="$WORK/java-junit-failed"
+cp -R "$ROOT/testdata/java-junit-failed" "$REFAIL"
+rm -rf "$REFAIL/target"
+say "用真实 Maven 预热 JUnit 夹具依赖"
+(cd "$REFAIL" && mvn -q test >/dev/null 2>&1 || true)
+REFAIL_JSON="$WORK/rerunfail.json"
+PROJ_BASE="$PROJ"; JAVA_BASE="$JAVA"
+PROJ="$REFAIL"
+JAVA=""
+smoke "$REFAIL_JSON" GOIDEA_SMOKE_RERUNFAIL=1
+python3 "$CHECKS" rerunfail "$REFAIL_JSON"
+PROJ="$PROJ_BASE"; JAVA="$JAVA_BASE"
+
 say "阶段 1c：运行准备负向回归（任何准备失败都不得调用 run_start）"
 # A: a data directory without the Java toolchain — the application
 # configuration's preparation must fail with the real reason.
@@ -153,6 +167,11 @@ else
     DEBUG="$WORK/debug.json"
     smoke "$DEBUG" GOIDEA_SMOKE_DEBUG=1
     python3 "$CHECKS" debug "$DEBUG"
+
+    say "阶段 4b：HotSwap（重新加载变更的类）"
+    HOTSWAP="$WORK/hotswap.json"
+    smoke "$HOTSWAP" GOIDEA_SMOKE_HOTSWAP=1
+    python3 "$CHECKS" hotswap "$HOTSWAP"
 
     say "阶段 5：多模块 Maven 的 Spring Boot 运行"
     SPRING="$WORK/java-spring-multimodule"

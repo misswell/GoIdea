@@ -42,6 +42,14 @@ type DebugPane struct {
 	lastID   string
 	lastRaw  json.RawMessage
 	lastKind string
+	// launchCwd is the session's working directory (its module dir); the
+	// HotSwap compile covers it.
+	launchCwd string
+	// reloading guards HotSwapReload against concurrent compiles; hotSwapBuild
+	// remembers the last HotSwap compile's status for the acceptance run.
+	reloading    bool
+	hotSwapBuild string
+	hotSwapStage string
 
 	paused     bool
 	ended      bool
@@ -466,6 +474,7 @@ func (m *Model) javaDebugLaunch(ctx context.Context, rc *openidea.RunConfig, roo
 	if env == nil {
 		env = map[string]string{}
 	}
+	m.debug.launchCwd = cwd
 	return openidea.DebugLaunchConfig{
 		Name:      rc.Name,
 		Adapter:   "java-debug",
@@ -1071,7 +1080,12 @@ func (m *Model) acceptDebugEvent(session uint32, raw json.RawMessage) {
 		// Verification is refetched by the file's next push; nothing to do
 		// in this panel yet.
 	case "hotCodeReplace":
-		if e.Message != "" {
+		// java-debug reports after redefineClasses and after jdtls's own
+		// build (BUILD_COMPLETE): offer the reload, as IDEA's default
+		// "Reload classes after compilation: Ask" does.
+		if e.ChangeType == "BUILD_COMPLETE" {
+			m.offerHotSwapAfterBuild()
+		} else if e.Message != "" {
 			d.status = "热替换：" + e.Message
 		}
 	}

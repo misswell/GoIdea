@@ -56,6 +56,13 @@ type RunPane struct {
 
 	output    []outputLine
 	truncated bool
+
+	// tests folds the run's test output into a results tree (testing
+	// feature), and testParser feeds it; set for JVM configurations, whose
+	// output Maven Surefire and Gradle report per test.
+	tests      *adapter.TestResults
+	testParser *adapter.JvmParser
+	testStdout *adapter.TestStdoutBuffer
 }
 
 type outputLine struct {
@@ -305,6 +312,17 @@ func (m *Model) startRunWith(raw json.RawMessage, name string) bool {
 	m.run.lastID = probe.ID
 	m.run.lastRaw = append(json.RawMessage(nil), raw...)
 	m.run.lastName = name
+	// A JVM configuration's output reports tests per test: fold it into the
+	// results tree the rerun-failed action works from.
+	if probeCfg, err := openidea.DecodeRunConfig(raw); err == nil && adapter.FrameworkFor(probeCfg) == "jvm" {
+		m.run.tests = adapter.NewTestResults()
+		m.run.testParser = adapter.NewJvmParser()
+		m.run.testStdout = adapter.NewTestStdoutBuffer()
+	} else {
+		m.run.tests = nil
+		m.run.testParser = nil
+		m.run.testStdout = nil
+	}
 	tabs := append([]*Tab(nil), m.tabs...)
 	root := m.Root()
 	ch := m.nextChannel()
@@ -511,6 +529,7 @@ func (m *Model) acceptChunk(id uint32, data json.RawMessage) {
 		if json.Unmarshal(data, &chunk) != nil {
 			return
 		}
+		m.feedRunTests(chunk.Text)
 		m.run.append(chunk)
 		m.invalidate()
 	case id != 0 && id == m.build.channel:
@@ -552,6 +571,19 @@ func (p *RunPane) append(c openidea.OutputChunk) {
 	}
 }
 
+// feedRunTests feeds the run's output lines to the test parser (types.ts
+// TestStdout: complete unsplit lines), folding the events into the tree. The
+// parser matches plain text, so ANSI is stripped first, exactly as the
+// console strips it.
+func (m *Model) feedRunTests(text string) {
+	if m.run.testParser == nil || m.run.testStdout == nil || m.run.tests == nil {
+		return
+	}
+	for _, line := range m.run.testStdout.Feed(stripANSI(text)) {
+		m.run.tests.Apply(m.run.testParser.Feed(line))
+	}
+}
+
 func (m *Model) acceptExit(e openidea.RunExitedEvent) {
 	if !m.run.awaiting {
 		return
@@ -563,6 +595,14 @@ func (m *Model) acceptExit(e openidea.RunExitedEvent) {
 	m.run.running = false
 	m.run.busy = false
 	m.run.exitCode = e.Code
+	// The test results tree finishes with the process (results.ts finish).
+	if m.run.tests != nil {
+		code := 0
+		if e.Code != nil {
+			code = int(*e.Code)
+		}
+		m.run.tests.Finish(code)
+	}
 	switch {
 	case e.Code == nil:
 		m.status = "运行已结束"

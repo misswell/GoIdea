@@ -8,6 +8,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
 
+	"mayoi/internal/adapter"
 	"mayoi/internal/openidea"
 )
 
@@ -524,6 +525,11 @@ func (m *Model) runHeader(c *ui.Context, p *ui.Theme) {
 		if m.run.running || m.run.awaiting {
 			ui.Button(c, "停止").OnClick(func() { m.StopRun() })
 		} else {
+			// The failed-tests rerun sits next to Run, as upstream RunView's
+			// toolbar does when the run reported tests.
+			if m.run.tests != nil && len(adapter.FailedTestPaths(m.run.tests)) > 0 {
+				ui.Button(c, "重跑失败测试").OnClick(func() { m.RerunFailedTests() })
+			}
 			ui.Button(c, "运行").OnClick(func() { m.Run() })
 		}
 		ui.Button(c, "清空").OnClick(func() { m.ClearRun() })

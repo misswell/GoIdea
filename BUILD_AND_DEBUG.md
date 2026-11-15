@@ -239,6 +239,40 @@ real multi-module Maven project `testdata/java-spring-multimodule`:
   and the sibling `lib` module was on the resolved classpath;
 - `run_stop` ending the process and `pgrep` finding no orphan JVM.
 
+## Test results and rerun failed tests
+
+`internal/adapter/testing_results.go`, `testing_jvm.go` and `testing_rerun.go`
+port the testing pipeline's `results.ts`, `jvm.ts` and `rerun.ts` (JVM
+branch): Maven Surefire's failure lines and summaries (Surefire 2 and 3
+formats), Gradle's test logging and its init script's TeamCity service
+messages fold into a results tree (`TestResults`, with aggregated statuses,
+counts and the first failure). The run pane feeds the process output to the
+parser and finishes the tree with the process. **重新运行失败的测试**
+(`run.rerunFailed`, the run pane's button next to Run) derives a
+configuration named `Failed: <name>` with Maven's `-Dtest=Class#m1+m2` or
+Gradle's `--tests` filter and starts it like any configuration. The e2e
+phase 1b2 (`GOIDEA_SMOKE_RERUNFAIL=1`) runs a real failing JUnit method in
+`testdata/java-junit-failed`: the tree reports one failure, the derivation
+produces `-Dtest=com.example.CalculatorTest#failsOnPurpose`, and the rerun's
+surefire reports `Tests run: 1`. Not ported yet: the results **tree view**
+(the console shows the failure details), the other frameworks' parsers, and
+Gradle's init-script wiring (`run_gradle_jvm_args_script`).
+
+## HotSwap (Reload Changed Classes)
+
+**重新加载变更的类（HotSwap）** (`debug.reloadChangedClasses`,
+`internal/app/hotswap.go`) ports `hotswap.ts`: save the open documents,
+compile the session's module incrementally with `java_build_workspace`, then
+reload through `debug_redefine_classes` into the running java-debug session.
+The result wording follows IDEA: nothing to reload, `N` classes reloaded,
+"JVM contains obsolete methods" as a warning with the re-entry hint, and a
+failed compilation refuses the reload instead of applying stale classes.
+jdtls finishing a build on its own (`hotCodeReplace` `BUILD_COMPLETE`) offers
+the reload, as IDEA's default "Reload classes after compilation: Ask" does.
+The e2e release phase 4b (`GOIDEA_SMOKE_HOTSWAP=1`) pauses at a breakpoint,
+edits `Greeter.java` through the document bridge, reloads (1 class) and
+requires the resumed program to print the NEW text.
+
 ## Gaps (deliberately not claimed)
 
 - Conditional, hit-count and log breakpoints are not sent (the protocol types

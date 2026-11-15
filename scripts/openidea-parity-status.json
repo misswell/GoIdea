@@ -223,7 +223,7 @@
     },
     "feature:run": {
       "status": "partial",
-      "evidence": "base.run.config, base.run.exit, base.run.build; internal/adapter/java_launch.go and java_module.go port OpenIDEA's platform/javaLaunch.ts and Run and Debug share it; spring.* release-gate checks run the detected Spring Boot configuration of testdata/java-spring-multimodule; internal/adapter/run_config.go ports configs.ts (upsert/merge/validate/unique), buildCommand.ts (applyBuildPolicyToCommand) and store.ts saveUserConfigs, and internal/app/run_config_dialog.go carries Edit Configurations (action:run.editConfigs) and Rerun with the confirm dialog (action:run.rerun); base.runcfg.* proves the save/policy/run/remove round trip; Build Before Launch is buildCommand.ts's applyBuildPolicyToCommand (internal/adapter/run_config.go), applied at launch for build-tool configs and through BuildPolicyOf for JVM ones, proven by base.runcfg.policy"
+      "evidence": "base.run.config, base.run.exit, base.run.build; internal/adapter/java_launch.go and java_module.go port OpenIDEA's platform/javaLaunch.ts and Run and Debug share it; spring.* release-gate checks run the detected Spring Boot configuration of testdata/java-spring-multimodule; internal/adapter/run_config.go ports configs.ts (upsert/merge/validate/unique), buildCommand.ts (applyBuildPolicyToCommand) and store.ts saveUserConfigs, and internal/app/run_config_dialog.go carries Edit Configurations (action:run.editConfigs) and Rerun with the confirm dialog (action:run.rerun); base.runcfg.* proves the save/policy/run/remove round trip; Build Before Launch is buildCommand.ts's applyBuildPolicyToCommand (internal/adapter/run_config.go), applied at launch for build-tool configs and through BuildPolicyOf for JVM ones, proven by base.runcfg.policy; the testing pipeline port (internal/adapter/testing_*.go) folds surefire/Gradle output into the results tree and run.rerunFailed derives the -Dtest=/--tests filter (rerunfail.* main-gate checks)"
     },
     "feature:run-anything": {
       "status": "partial",
@@ -239,7 +239,7 @@
     },
     "feature:debugger": {
       "status": "partial",
-      "evidence": "debug.paused, debug.step.paused, debug.vars; internal/app/debug.go builds the file's application config (upstream applicationConfig port) and calls the shared adapter.PrepareJavaLaunch, then java_debug_server + debug_start with the resolved classpaths, modulePaths, projectName, javaExec, VM and program arguments (upstream javaLaunchConfig java-debug branch); java-debug missing offers the one-click install"
+      "evidence": "debug.paused, debug.step.paused, debug.vars; internal/app/debug.go builds the file's application config (upstream applicationConfig port) and calls the shared adapter.PrepareJavaLaunch, then java_debug_server + debug_start with the resolved classpaths, modulePaths, projectName, javaExec, VM and program arguments (upstream javaLaunchConfig java-debug branch); java-debug missing offers the one-click install; HotSwap (internal/app/hotswap.go) compiles with java_build_workspace and redefines via debug_redefine_classes, proven by hotswap.* release-gate checks (the reloaded code prints the new text)"
     },
     "feature:terminal": {
       "status": "partial",
@@ -720,6 +720,18 @@
     "action:run.debugContext": {
       "status": "partial",
       "evidence": "internal/app/debug.go DebugContext (Ctrl+Shift+D): the active file's applicationConfig over the shared PrepareJavaLaunch; the debug e2e phase proves the flow (debug.paused, debug.vars, debug.watch)"
+    },
+    "action:run.rerunFailed": {
+      "status": "partial",
+      "evidence": "internal/adapter/testing_results.go, testing_jvm.go and testing_rerun.go port the testing pipeline's results.ts, jvm.ts (surefire 2/3 failure lines, class/total summaries, Gradle logging, TeamCity init-script messages) and rerun.ts's jvmArgs (Maven -Dtest=Class#m1+m2, Gradle --tests); internal/app/run.go folds the run output into the tree and internal/app/run_config_dialog.go RerunFailedTests is the action (run.rerunFailed, the run pane's 重跑失败测试 button); rerunfail.* checks run a real failing JUnit method and prove the derived -Dtest=com.example.CalculatorTest#failsOnPurpose reruns Tests run: 1; limits: the results TREE view is not drawn yet, and the other frameworks' parsers (go/pytest/phpunit/ruby/dotnet/cargo/js) are not ported"
+    },
+    "action:debug.reloadChangedClasses": {
+      "status": "partial",
+      "evidence": "internal/app/hotswap.go HotSwapReload ports hotswap.ts: saveAll, java_build_workspace over the session's cwd, debug_redefine_classes into the session, hotSwapMessage wording (nothing to reload / N classes reloaded / obsolete methods warning / failure refuses), and the hotCodeReplace BUILD_COMPLETE event offers the reload (IDEA's Ask); hotswap.* release-gate checks pause at a breakpoint, reload the edited Greeter class and require the NEW text in the program's output; limits: no per-session caps gate, no Reset Frame action, no cancel-build UI"
+    },
+    "action:run.runConfig": {
+      "status": "partial",
+      "evidence": "internal/app/run_anything.go runAnythingLine executes a run configuration by its exact name (upstream runConfigsRunAnything.execute) with the same multi-word filter and prefix-first ordering as upstream matchingConfigs (runAnythingConfigs); limits: the chooser's debug executor and RunWidget per-kind icons differ"
     }
   }
 }

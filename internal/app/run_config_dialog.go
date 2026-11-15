@@ -377,6 +377,40 @@ func (m *Model) runConfigsDialog(c *ui.Context, p *ui.Theme) {
 	}
 }
 
+// RerunFailedTests is run.rerunFailed (store.ts rerunFailed): reruns only
+// the failed tests of the pane's last run, in the same tab; the process
+// must have exited and a derived configuration must be supported.
+func (m *Model) RerunFailedTests() {
+	if m.run.busy || m.run.running || m.run.awaiting {
+		return
+	}
+	raw, _ := m.rerunTarget()
+	if raw == nil {
+		m.notifyInfo("run-rerun-failed", "没有可重跑的失败测试", "本次会话还没有运行过配置")
+		m.invalidate()
+		return
+	}
+	base, err := openidea.DecodeRunConfig(raw)
+	if err != nil {
+		m.notifyInfo("run-rerun-failed", "没有可重跑的失败测试", err.Error())
+		m.invalidate()
+		return
+	}
+	if m.run.tests == nil {
+		m.notifyInfo("run-rerun-failed", "没有可重跑的失败测试", "该配置的输出没有按测试报告")
+		m.invalidate()
+		return
+	}
+	paths := adapter.FailedTestPaths(m.run.tests)
+	derived := adapter.RerunFailedConfig(base, paths)
+	if derived == nil {
+		m.notifyInfo("run-rerun-failed", "没有可重跑的失败测试", "没有失败测试，或该配置的框架不支持按测试过滤")
+		m.invalidate()
+		return
+	}
+	m.askOrStart(derived.Raw(), derived.Name)
+}
+
 // askOrStart starts a configuration, applying the rerun confirm when it is
 // already running: upstream startRun's confirm-and-stop flow.
 func (m *Model) askOrStart(raw json.RawMessage, name string) {

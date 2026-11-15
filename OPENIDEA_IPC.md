@@ -44,7 +44,7 @@ release can be called today.
 | Clipboard | `clipboard` | 0 | 6 | 0 |
 | Coverage | `coverage` | 3 | 0 | 0 |
 | Database | `db` | 31 | 1 | 13 |
-| Debugger | `debug` | 36 | 2 | 12 |
+| Debugger | `debug` | 36 | 2 | 13 |
 | Dependencies | `dependencies` | 1 | 0 | 0 |
 | Deployment | `deploy` | 16 | 0 | 0 |
 | Documents | `doc` | 18 | 0 | 6 |
@@ -58,7 +58,7 @@ release can be called today.
 | Local history | `history` | 3 | 0 | 3 |
 | hotkeys | `hotkeys` | 0 | 1 | 0 |
 | HTTP client | `http` | 0 | 11 | 0 |
-| Java | `java` | 3 | 0 | 2 |
+| Java | `java` | 3 | 0 | 3 |
 | Language services | `lsp` | 43 | 1 | 17 |
 | MCP | `mcp` | 3 | 4 | 0 |
 | Navigation and index | `nav` | 15 | 1 | 2 |
@@ -88,7 +88,7 @@ release can be called today.
 ## Served by `openidea-server --stdio`
 
 476 commands. `GoIDEA` marks the ones a non-test Go source invokes today
-(108 of 476).
+(110 of 476).
 
 | Command | Domain | Arguments | GoIDEA |
 | --- | --- | --- | --- |
@@ -195,7 +195,7 @@ release can be called today.
 | `debug_jvm_memory_referrers` | Debugger | `limit`, `object`, `session` | — |
 | `debug_listen_for_jvm` | Debugger | `host`, `port`, `request` | — |
 | `debug_pause` | Debugger | `session`, `threadId` | yes |
-| `debug_redefine_classes` | Debugger | `session` | — |
+| `debug_redefine_classes` | Debugger | `session` | yes |
 | `debug_restart_frame` | Debugger | `frameId`, `session` | — |
 | `debug_resume` | Debugger | `session`, `threadId` | yes |
 | `debug_run_to` | Debugger | `force`, `line`, `path`, `session`, `threadId` | yes |
@@ -275,7 +275,7 @@ release can be called today.
 | `index_file_extensions` | Navigation and index | — | — |
 | `index_status` | Navigation and index | — | — |
 | `inspect_code` | Code analysis | `onEvent`, `request`, `scope` | — |
-| `java_build_workspace` | Java | `module`, `request` | — |
+| `java_build_workspace` | Java | `module`, `request` | yes |
 | `java_debug_server` | Java | `module` | yes |
 | `java_resolve_launch` | Java | `module`, `policy`, `request`, `test` | yes |
 | `jdk_download` | Toolchains | `location`, `onEvent`, `request`, `vendor`, `version` | — |
@@ -782,7 +782,7 @@ GoIDEA needs to do for each:
 
 ## What this means for GoIDEA
 
-476 remote commands are available today; GoIDEA uses 108. The parity work is
+476 remote commands are available today; GoIDEA uses 110. The parity work is
 first to cover the remote surface OpenIDEA's own frontend uses, then to move
 `shared-op`/`host`/`crate` commands onto stdio through the OpenIDEA fork
 (a submodule bump and a server release), and to implement `desktop` commands

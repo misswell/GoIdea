@@ -14,10 +14,148 @@ import (
 	"os/exec"
 	"runtime"
 	"strconv"
+	"strings"
 	"time"
 
+	"mayoi/internal/adapter"
 	"mayoi/internal/openidea"
 )
+
+// SmokeRerunFailed runs a real JUnit test suite whose last method fails
+// (exit 1), lets the test pipeline fold the surefire output into the results
+// tree, then calls run.rerunFailed: the derived configuration filters with
+// Maven's `-Dtest=Class#method`, and the rerun executes only the failed
+// method (surefire reports Tests run: 1) and fails again.
+func (m *Model) SmokeRerunFailed(ctx context.Context) (map[string]any, error) {
+	out := map[string]any{"root": m.Root()}
+	configs, err := m.smokeRunConfigs(ctx)
+	if err != nil {
+		return out, err
+	}
+	var tests *openidea.RunConfig
+	for _, c := range configs {
+		// The test configuration runs `mvn test`, whose surefire output the
+		// pipeline parses per test.
+		if c.IsTest {
+			tests = c
+			break
+		}
+	}
+	if tests == nil {
+		for _, c := range configs {
+			if c.Kind == "maven" || c.Kind == "gradle" {
+				tests = c
+				break
+			}
+		}
+	}
+	if tests == nil {
+		return out, errors.New("没有检测到测试配置")
+	}
+	out["config"] = tests.Name
+	m.post(func() {
+		m.run.trusted = true
+		m.run.loaded = true
+		m.run.configs = toValueConfigs(configs)
+		m.invalidate()
+	})
+	m.askOrStart(tests.Raw(), tests.Name)
+	// The run parses its own output; wait for its exit.
+	exitDeadline := time.Now().Add(5 * time.Minute)
+	var firstExit *int32
+	for time.Now().Before(exitDeadline) {
+		var exit *int32
+		var runErr string
+		m.post(func() { exit, runErr = m.run.exitCode, m.run.err })
+		if runErr != "" {
+			return out, fmt.Errorf("首跑失败：%s", runErr)
+		}
+		if exit != nil {
+			firstExit = exit
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
+	if firstExit == nil {
+		return out, errors.New("5 分钟内首跑没有退出")
+	}
+	out["firstExit"] = *firstExit
+	// The pipeline must have folded the surefire output into the tree.
+	if m.run.tests == nil || m.run.tests.IsEmpty() {
+		return out, errors.New("测试结果树为空：输出没有被解析")
+	}
+	counts := m.run.tests.Counts()
+	out["failed"] = counts.Failed
+	out["passed"] = counts.Passed
+	if counts.Failed == 0 {
+		return out, errors.New("夹具应当产生一个失败测试")
+	}
+	paths := adapter.FailedTestPaths(m.run.tests)
+	out["failedPaths"] = fmt.Sprint(paths)
+	// The derivation matches upstream jvmArgs: -Dtest=Class#method.
+	base, err := openidea.DecodeRunConfig(tests.Raw())
+	if err != nil {
+		return out, err
+	}
+	derived := adapter.RerunFailedConfig(base, paths)
+	if derived == nil {
+		return out, errors.New("派生重跑配置失败")
+	}
+	derivedArgs := derived.Args
+	out["derivedArgs"] = derivedArgs
+	filterIdx := -1
+	for i, a := range derivedArgs {
+		if strings.HasPrefix(a, "-Dtest=") {
+			filterIdx = i
+		}
+	}
+	if filterIdx < 0 || derivedArgs[filterIdx] != "-Dtest=com.example.CalculatorTest#failsOnPurpose" {
+		return out, fmt.Errorf("派生的过滤器不是失败的方法：%v", derivedArgs)
+	}
+	// The real action reruns only the failed tests.
+	m.post(func() {
+		m.run.busy = false
+		m.run.running = false
+		m.run.awaiting = false
+		m.run.exitCode = nil
+		m.run.err = ""
+		m.invalidate()
+	})
+	m.RerunFailedTests()
+	exitDeadline = time.Now().Add(5 * time.Minute)
+	for time.Now().Before(exitDeadline) {
+		var exit *int32
+		var runErr string
+		m.post(func() { exit, runErr = m.run.exitCode, m.run.err })
+		if runErr != "" {
+			return out, fmt.Errorf("重跑失败：%s", runErr)
+		}
+		if exit != nil {
+			out["rerunExit"] = *exit
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
+	if _, ok := out["rerunExit"]; !ok {
+		return out, errors.New("5 分钟内重跑没有退出")
+	}
+	output := m.run.text()
+	// Only the failed method ran again: surefire reports a single test.
+	ranOnce := strings.Contains(output, "Tests run: 1")
+	out["rerunRanOneTest"] = ranOnce
+	if !ranOnce {
+		return out, fmt.Errorf("重跑没有只运行失败的方法；输出尾部：%s", tailOf(output, 800))
+	}
+	return out, nil
+}
 
 // SmokeDebugSelectedConfig debugs the detected application run configuration
 // itself — the run.debug entry, not the current-file context: the shared
@@ -423,6 +561,9 @@ func (m *Model) SmokeRunKill(ctx context.Context) (map[string]any, error) {
 		m.post(func() { exit, runErr = m.run.exitCode, m.run.err })
 		if exit != nil {
 			out["rerunExit"] = *exit
+			var output string
+			m.post(func() { output = m.run.text() })
+			out["rerunOutputTail"] = tailOf(output, 600)
 			return out, nil
 		}
 		if runErr != "" {

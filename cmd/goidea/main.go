@@ -268,6 +268,24 @@ func smoke(m *app.Model) {
 			fields["dbgcfgError"] = dbgcfgErr.Error()
 		}
 	}
+	if os.Getenv("GOIDEA_SMOKE_RERUNFAIL") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 12*time.Minute)
+		rf, rfErr := m.SmokeRerunFailed(ctx)
+		cancel()
+		fields["rerunfail"] = rf
+		if rfErr != nil {
+			fields["rerunfailError"] = rfErr.Error()
+		}
+	}
+	if os.Getenv("GOIDEA_SMOKE_HOTSWAP") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		hs, hsErr := m.SmokeHotSwap(ctx)
+		cancel()
+		fields["hotswap"] = hs
+		if hsErr != nil {
+			fields["hotswapError"] = hsErr.Error()
+		}
+	}
 	if os.Getenv("GOIDEA_SMOKE_BUILD") == "1" && root != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		build, buildErr := m.SmokeBuild(ctx)

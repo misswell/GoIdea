@@ -3,7 +3,7 @@
 
 Usage: e2e-checks.py <phase> <smoke.json> [<smoke.json> ...]
        e2e-checks.py --list
-Phases: base | tools | lsp | debug | spring | negjdtls | runswitch | runkill | dbgcfg
+Phases: base | tools | lsp | debug | hotswap | spring | rerunfail | negjdtls | runswitch | runkill | dbgcfg
 Every check has an id. REGRESSION_INDEX.json names the same ids, and --list
 lets scripts/check-regression-index.py prove the two never drift apart, so a
 check cannot be deleted without the index noticing. Every failed assertion is
@@ -178,9 +178,22 @@ CHECKS = {
         ("recovered", "the backend restarted and restored the project", lambda d: (get(d, "runkill.recovered") is True, get(d, "runkill.recovered"))),
         ("rerun", "the same configuration runs to its exit after the recovery", lambda d: (get(d, "runkill.rerunExit") == 0, get(d, "runkill.rerunExit"))),
     ],
+    "rerunfail": [
+        ("rerunfailError", *absent("rerunfailError")),
+        ("failed", "the surefire output folded into a results tree with one failure", lambda d: ((get(d, "rerunfail.failed") or 0) == 1, get(d, "rerunfail.failed"))),
+        ("paths", "the failed test path is the class and method", lambda d: (get(d, "rerunfail.failedPaths") == "[[com.example.CalculatorTest failsOnPurpose]]", get(d, "rerunfail.failedPaths"))),
+        ("derived", "the derived configuration filters with Maven's -Dtest= on the failed method", lambda d: ("-Dtest=com.example.CalculatorTest#failsOnPurpose" in (get(d, "rerunfail.derivedArgs") or []), get(d, "rerunfail.derivedArgs"))),
+        ("one", "the rerun executed only the failed method (Tests run: 1)", lambda d: (get(d, "rerunfail.rerunRanOneTest") is True, get(d, "rerunfail.rerunRanOneTest"))),
+    ],
     "dbgcfg": [
         ("dbgcfgError", *absent("dbgcfgError")),
         ("session", "the detected application configuration was debugged directly and ran to its end", lambda d: (get(d, "dbgcfg.sessionEnded") is True and bool(get(d, "dbgcfg.config")), get(d, "dbgcfg"))),
+    ],
+    "hotswap": [
+        ("hotswapError", *absent("hotswapError")),
+        ("paused", "the debugger paused at the breakpoint before the println", lambda d: (get(d, "hotswap.paused") is True, get(d, "hotswap.paused"))),
+        ("reloaded", "the changed class was compiled and reloaded into the session", lambda d: (get(d, "hotswap.reloaded") is True and get(d, "hotswap.reloadStatus") == "已重新加载 1 个类", get(d, "hotswap.reloadStatus"))),
+        ("newText", "the reloaded code printed the new text after resume", lambda d: (get(d, "hotswap.hasNewText") is True, get(d, "hotswap.hasNewText"))),
     ],
     "spring": [
         ("springError", *absent("springError")),
