@@ -3,7 +3,7 @@
 The update window shows the section of the version it offers. Every release
 needs a `## <version>` section here, or its build fails.
 
-## Unreleased
+## 0.1.3
 
 - 新增 **选择运行/调试配置…**（`Ctrl+Alt+R`）弹出配置选择器：Enter 运行、`Shift+Enter` 调试、`Ctrl+Alt+D` 直接进入调试模式。
 - **调试**（`F9`）现在调试所选的运行配置，**调试当前文件**移至 `Ctrl+Shift+D`；两者共用同一套启动准备。
