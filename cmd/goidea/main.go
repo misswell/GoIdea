@@ -232,6 +232,42 @@ func smoke(m *app.Model) {
 			fields["runcfgError"] = runcfgErr.Error()
 		}
 	}
+	if os.Getenv("GOIDEA_SMOKE_NEGJDTLS") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		neg, negErr := m.SmokeNegJdtls(ctx)
+		cancel()
+		fields["negjdtls"] = neg
+		if negErr != nil {
+			fields["negjdtlsError"] = negErr.Error()
+		}
+	}
+	if os.Getenv("GOIDEA_SMOKE_RUNSWITCH") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
+		sw, swErr := m.SmokeRunSwitch(ctx, os.Getenv("GOIDEA_SMOKE_SWITCH_TO"))
+		cancel()
+		fields["runswitch"] = sw
+		if swErr != nil {
+			fields["runswitchError"] = swErr.Error()
+		}
+	}
+	if os.Getenv("GOIDEA_SMOKE_RUNKILL") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		kill, killErr := m.SmokeRunKill(ctx)
+		cancel()
+		fields["runkill"] = kill
+		if killErr != nil {
+			fields["runkillError"] = killErr.Error()
+		}
+	}
+	if os.Getenv("GOIDEA_SMOKE_DBGCFG") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+		dbgcfg, dbgcfgErr := m.SmokeDebugSelectedConfig(ctx)
+		cancel()
+		fields["dbgcfg"] = dbgcfg
+		if dbgcfgErr != nil {
+			fields["dbgcfgError"] = dbgcfgErr.Error()
+		}
+	}
 	if os.Getenv("GOIDEA_SMOKE_BUILD") == "1" && root != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		build, buildErr := m.SmokeBuild(ctx)

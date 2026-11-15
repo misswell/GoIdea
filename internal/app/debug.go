@@ -37,6 +37,12 @@ type DebugPane struct {
 	session  uint32 // backend DebugSessionId; 0 before the first start
 	config   string // main class being debugged
 
+	// lastID/lastRaw/lastKind remember the configuration this pane debugged,
+	// so the widget's rerun restarts it as saved now.
+	lastID   string
+	lastRaw  json.RawMessage
+	lastKind string
+
 	paused     bool
 	ended      bool
 	stopFile   string
@@ -541,8 +547,204 @@ func (m *Model) nextRequest() uint32 { return m.reqSeq.Add(1) }
 // ShowDebug toggles the Debug tool window.
 func (m *Model) ShowDebug() { m.dockActivate("debug") }
 
-// Debug starts a java-debug session for the active Java file.
+// Debug is run.debug: debug the selected run configuration (upstream
+// debugSelected). The active file's own configuration is run.debugContext.
 func (m *Model) Debug() {
+	m.DockShow("debug")
+	if m.busy {
+		m.invalidate()
+		return
+	}
+	cfg := m.run.current()
+	if cfg == nil && m.run.inline != nil {
+		cfg = m.run.inline
+	}
+	if cfg == nil {
+		m.debug.err = "先在运行配置选择器中选择一个配置"
+		m.invalidate()
+		return
+	}
+	m.DebugRunConfig(cfg)
+}
+
+// DebugRunConfig starts a java-debug session for an arbitrary run
+// configuration, the port of upstream javaLaunchConfig: JVM applications go
+// through the shared PrepareJavaLaunch, a kind GoIDEA cannot debug is
+// reported instead of silently starting.
+func (m *Model) DebugRunConfig(rc *openidea.RunConfig) {
+	root := m.Root()
+	m.DockShow("debug")
+	if root == "" || m.busy {
+		m.invalidate()
+		return
+	}
+	if !m.run.trusted {
+		m.debug.err = "项目未受信任：先授权构建和调试"
+		m.invalidate()
+		return
+	}
+	if m.debug.starting {
+		return
+	}
+	if m.debug.session != 0 && !m.debug.ended {
+		m.debug.err = "已有调试会话在运行：先停止"
+		m.invalidate()
+		return
+	}
+	if !adapter.IsJVMApplication(rc.Kind) {
+		m.debug.err = fmt.Sprintf("GoIDEA 还不能调试 %s 类型的运行配置", adapter.KindLabel(rc.Kind))
+		m.invalidate()
+		return
+	}
+	if rc.DebugAdapter != nil && *rc.DebugAdapter != "java-debug" && *rc.DebugAdapter != "" {
+		m.debug.err = fmt.Sprintf("调试器 %s 还不可用：GoIDEA 目前只搭载 java-debug", *rc.DebugAdapter)
+		m.invalidate()
+		return
+	}
+	if adapter.ParseJavaArgs(rc.Args).MainClass == "" {
+		m.debug.err = fmt.Sprintf("配置 '%s' 没有主类", rc.Name)
+		m.invalidate()
+		return
+	}
+	m.debug.lastID = rc.ID
+	m.debug.lastRaw = append(json.RawMessage(nil), rc.Raw()...)
+	m.debug.lastKind = rc.Kind
+	m.debug.config = adapter.ParseJavaArgs(rc.Args).MainClass
+	m.debug.starting = true
+	m.debug.session = 0
+	m.debug.ended = false
+	m.debug.paused = false
+	m.debug.stopLine = -1
+	m.debug.stopFile = ""
+	m.debug.frames = nil
+	m.debug.scopes = nil
+	m.debug.vars = nil
+	m.debug.threads = nil
+	m.debug.output = nil
+	m.debug.truncated = false
+	m.debug.err = ""
+	m.debug.status = "正在保存并构建…"
+	m.refreshDecorations()
+	m.invalidate()
+
+	p := m.prefs.SaveFiles
+	tabs := append([]*Tab(nil), m.tabs...)
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, 10*time.Minute)
+		defer cancel()
+		fail := func(msg string, err error) {
+			text := msg
+			if err != nil {
+				text += "：" + err.Error()
+			}
+			m.post(func() {
+				m.debug.starting = false
+				m.debug.err = text
+				m.debug.status = ""
+				m.invalidate()
+			})
+		}
+		// The build reads the files from disk.
+		if err := saveAll(ctx, tabs, p); err != nil {
+			fail("保存后再调试失败", err)
+			return
+		}
+		_ = m.pushBreakpoints(ctx, "")
+		// Run and Debug share one preparation, exactly like OpenIDEA's
+		// prepareJavaLaunch. A failure stops the launch here.
+		prepared, err := adapter.PrepareJavaLaunch(ctx, javaBackend{m}, rc, &adapter.Preparation{
+			Request: m.nextRequest(),
+			Report:  m.reportDebugConsole(root),
+		})
+		if err != nil {
+			fail(err.Error(), nil)
+			return
+		}
+		if prepared.Info.ErrorCount > 0 {
+			m.post(func() {
+				m.debug.status = "有编译错误，调试最后一次编译的类"
+				m.invalidate()
+			})
+		}
+		launch, err := m.javaDebugLaunch(ctx, rc, root, prepared, m.reportDebugConsole(root))
+		if err != nil {
+			fail(err.Error(), nil)
+			return
+		}
+		rawSession, err := m.mgr.Invoke(ctx, Window, "debug_start", map[string]any{"config": launch})
+		if err != nil {
+			fail("启动调试失败", err)
+			return
+		}
+		var session uint32
+		if err := json.Unmarshal(rawSession, &session); err != nil {
+			fail("读取调试会话失败", err)
+			return
+		}
+		m.post(func() {
+			if m.Root() != root {
+				// The project changed while the session started: stop the
+				// old project's debugger and leave the new state alone.
+				go func(id uint32) {
+					ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
+					defer cancel()
+					_, _ = m.mgr.Invoke(ctx, Window, "debug_stop", map[string]any{"session": id})
+				}(session)
+				return
+			}
+			m.debug.starting = false
+			if m.debug.session == 0 {
+				m.debug.session = session
+			}
+			m.debug.status = "调试已启动：" + m.debug.config
+			m.refreshDecorations()
+			m.invalidate()
+		})
+	}()
+}
+
+// DebugRerun restarts the configuration the debug pane ran, as upstream's
+// rerun of a debug session does: the configuration as saved now, its session
+// stopped first, and — when no session was started yet — the same call just
+// starts it.
+func (m *Model) DebugRerun() {
+	if m.debug.lastRaw == nil {
+		return
+	}
+	cfg, err := openidea.DecodeRunConfig(m.debug.lastRaw)
+	if err != nil {
+		m.debug.err = "上一次调试的配置无法读取：" + err.Error()
+		m.invalidate()
+		return
+	}
+	if m.debug.session == 0 || m.debug.ended {
+		m.DebugRunConfig(cfg)
+		return
+	}
+	m.StopDebug()
+	session := m.debug.session
+	go func() {
+		deadline := time.Now().Add(30 * time.Second)
+		for {
+			var ended bool
+			var next uint32
+			m.post(func() {
+				ended = m.debug.ended || m.debug.session != session && m.debug.session == 0
+				next = m.debug.session
+			})
+			_ = next
+			if ended || time.Now().After(deadline) {
+				break
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		m.post(func() { m.DebugRunConfig(cfg) })
+	}()
+}
+
+// DebugContext is run.debugContext: debug the active file's own
+// configuration (upstream runContext(true, arg)).
+func (m *Model) DebugContext() {
 	root := m.Root()
 	m.DockShow("debug")
 	if root == "" || m.busy {
@@ -576,6 +778,9 @@ func (m *Model) Debug() {
 	}
 	rel := relPathUnder(root, t.doc.Path())
 	rc := applicationConfig(target, adapter.JVMModuleDir(rel, m.run.configs, nil))
+	m.debug.lastID = rc.ID
+	m.debug.lastRaw = append(json.RawMessage(nil), rc.Raw()...)
+	m.debug.lastKind = rc.Kind
 	tabs := append([]*Tab(nil), m.tabs...)
 	m.debug.starting = true
 	m.debug.session = 0

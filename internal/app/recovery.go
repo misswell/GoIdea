@@ -147,43 +147,68 @@ func (m *Model) SmokeRollback(ctx context.Context) (map[string]any, error) {
 func (m *Model) SmokeSwitch(ctx context.Context, other string) (map[string]any, error) {
 	out := map[string]any{}
 	from := m.Root()
+	// openProject resolves symlinks (/tmp on macOS), so the wait must compare
+	// against the resolved path.
+	other = realPath(other)
 	if from == "" {
 		return out, fmt.Errorf("没有打开项目")
 	}
 	out["from"], out["to"] = from, other
-	current := func() string {
-		raw, err := m.mgr.Invoke(ctx, Window, "project_current", nil)
-		if err != nil {
-			return ""
-		}
-		var info struct {
-			Root string `json:"root"`
-		}
-		_ = json.Unmarshal(raw, &info)
-		return info.Root
-	}
+	var last string
 	wait := func(dir string) error {
 		deadline := time.Now().Add(90 * time.Second)
 		for time.Now().Before(deadline) {
 			var busy bool
-			var root string
-			m.post(func() { busy, root = m.busy, m.Root() })
-			if !busy && layoutKey(root) == layoutKey(dir) && layoutKey(current()) == layoutKey(dir) {
+			var root, status, phase string
+			var current string
+			m.post(func() {
+				busy, root, status, phase = m.busy, m.Root(), m.status, m.Phase()
+			})
+			raw, err := m.mgr.Invoke(ctx, Window, "project_current", nil)
+			if err == nil {
+				var info struct {
+					Root string `json:"root"`
+				}
+				_ = json.Unmarshal(raw, &info)
+				current = info.Root
+			}
+			if !busy && layoutKey(root) == layoutKey(dir) && layoutKey(current) == layoutKey(dir) {
 				return nil
 			}
+			last = fmt.Sprintf("busy=%v root=%q phase=%s current=%q status=%q", busy, root, phase, current, status)
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
 			case <-time.After(100 * time.Millisecond):
 			}
 		}
-		return fmt.Errorf("切换到 %s 超时", dir)
+		return fmt.Errorf("切换到 %s 超时：%s", dir, last)
 	}
 	started := time.Now()
 	m.post(func() { m.openProject(other, nil) })
 	if err := wait(other); err != nil {
 		out["switched"] = false
 		out["elapsedMs"] = time.Since(started).Milliseconds()
+		st := m.BackendState()
+		out["restarts"] = st.Restarts
+		out["backendPhase"] = st.Phase
+		if st.Err != nil {
+			out["backendErr"] = st.Err.Error()
+		}
+		m.post(func() {
+			out["banner"] = m.banner
+			var notes []string
+			for _, n := range m.notify.items {
+				notes = append(notes, n.title+": "+n.body)
+			}
+			out["notifications"] = notes
+		})
+		if m.cfg.Log != nil {
+			fmt.Fprintln(m.cfg.Log, "=== smoke switch timeout: all goroutines ===")
+			buf := make([]byte, 1<<20)
+			n := runtime.Stack(buf, true)
+			fmt.Fprint(m.cfg.Log, string(buf[:n]))
+		}
 		return out, err
 	}
 	out["switched"] = true

@@ -33,7 +33,7 @@ func (m *Model) runWidget(c *ui.Context, p *ui.Theme, oi oiColors) {
 			}
 			if debugging {
 				m.runWidgetButton(c, p, oi, "rerun", titled("Rerun", name), iconRun, oi.success, func() {
-					m.RunCommand("run.debug")
+					m.DebugRerun()
 				})
 			} else {
 				m.runWidgetButton(c, p, oi, "rerun", titled("Rerun", name), iconRun, oi.success, func() {
@@ -83,6 +83,10 @@ func (m *Model) runConfigChooser(c *ui.Context, p *ui.Theme, oi oiColors) {
 		ui.Icon(c, iconChevronDown).Size(12, 12).TextColor(oi.textSubtle)
 	})
 	w.Menu(func(menu *ui.Menu) {
+		if menu.Item("选择运行/调试配置…").Chosen() {
+			m.RunCommand("run.chooseConfig")
+		}
+		menu.Separator()
 		for i, cfg := range m.run.configs {
 			i, cfg := i, cfg
 			it := menu.Item(cfg.Name)

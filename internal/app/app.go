@@ -294,10 +294,12 @@ type Model struct {
 	// restartPending relaunches the app once the quit flow finishes.
 	invalidateDlg  *invalidatePane
 	restartPending bool
-	// runCfgDlg is Run › Edit Configurations… while it is open, and rerunAsk
-	// is the "Process is running" confirm of a rerun.
+	// runCfgDlg is Run › Edit Configurations… while it is open, rerunAsk is
+	// the "Process is running" confirm of a rerun, and chooser is the Select
+	// Run/Debug Configuration popup.
 	runCfgDlg *runConfigDlg
 	rerunAsk  *rerunAsk
+	chooser   *runChooser
 	// scratch is the New Scratch File chooser while it is open.
 	scratch *scratchChooser
 

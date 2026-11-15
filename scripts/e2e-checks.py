@@ -3,7 +3,7 @@
 
 Usage: e2e-checks.py <phase> <smoke.json> [<smoke.json> ...]
        e2e-checks.py --list
-Phases: base | tools | lsp | debug | spring
+Phases: base | tools | lsp | debug | spring | negjdtls | runswitch | runkill | dbgcfg
 Every check has an id. REGRESSION_INDEX.json names the same ids, and --list
 lets scripts/check-regression-index.py prove the two never drift apart, so a
 check cannot be deleted without the index noticing. Every failed assertion is
@@ -160,6 +160,27 @@ CHECKS = {
         ("runcfg.policy", "the build policy rewrote the Maven command line before launch", lambda d: (get(d, "runcfg.policyApplied") is True and (get(d, "runcfg.policyArgs") or [""])[0] == "clean", get(d, "runcfg.policyArgs"))),
         ("runcfg.run", "the edited configuration ran through the real run path", lambda d: (get(d, "runcfg.exitCode") == 0, get(d, "runcfg.exitCode"))),
         ("runcfg.removed", "the user copy was deleted and is gone from run_configs", lambda d: (get(d, "runcfg.removed") is True, get(d, "runcfg.removed"))),
+    ],
+    "negjdtls": [
+        ("negjdtlsError", *absent("negjdtlsError")),
+        ("refused", "without the Java toolchain the launch is refused with the real reason", lambda d: (get(d, "negjdtls.error") not in (None, ""), get(d, "negjdtls.error"))),
+        ("notStarted", "no process was started", lambda d: (get(d, "negjdtls.runStarted") is False, get(d, "negjdtls.runStarted"))),
+    ],
+    "runswitch": [
+        ("runswitchError", *absent("runswitchError")),
+        ("switched", "the project switched while the run was in flight", lambda d: (get(d, "runswitch.switched") is True, get(d, "runswitch.switched"))),
+        ("stopped", "the in-flight run was stopped by the switch", lambda d: ((get(d, "runswitch.runningAfterSwitch") or 0) == 0, get(d, "runswitch.runningAfterSwitch"))),
+        ("clean", "the new project's run pane is clean", lambda d: (get(d, "runswitch.newPaneClean") is True, get(d, "runswitch.newPaneClean"))),
+    ],
+    "runkill": [
+        ("runkillError", *absent("runkillError")),
+        ("refused", "a server killed mid-preparation refuses the launch with the real error", lambda d: (get(d, "runkill.error") not in (None, "") and get(d, "runkill.runStarted") is False, {"error": get(d, "runkill.error"), "started": get(d, "runkill.runStarted")})),
+        ("recovered", "the backend restarted and restored the project", lambda d: (get(d, "runkill.recovered") is True, get(d, "runkill.recovered"))),
+        ("rerun", "the same configuration runs to its exit after the recovery", lambda d: (get(d, "runkill.rerunExit") == 0, get(d, "runkill.rerunExit"))),
+    ],
+    "dbgcfg": [
+        ("dbgcfgError", *absent("dbgcfgError")),
+        ("session", "the detected application configuration was debugged directly and ran to its end", lambda d: (get(d, "dbgcfg.sessionEnded") is True and bool(get(d, "dbgcfg.config")), get(d, "dbgcfg"))),
     ],
     "spring": [
         ("springError", *absent("springError")),

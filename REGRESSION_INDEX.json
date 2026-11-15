@@ -957,6 +957,110 @@
    "doc": "BUILD_AND_DEBUG.md"
   },
   {
+   "id": "negjdtls.negjdtlsError",
+   "label": "negjdtlsError is absent",
+   "feature": "Missing-toolchain launch reports no unexpected error",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "negjdtls.refused",
+   "label": "without the Java toolchain the launch is refused with the real reason",
+   "feature": "9.3: launch refused when the toolchain is missing",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "negjdtls.notStarted",
+   "label": "no process was started",
+   "feature": "9.3: a failed preparation never calls run_start",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "runswitch.runswitchError",
+   "label": "runswitchError is absent",
+   "feature": "Switch-during-run path reports no unexpected error",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "runswitch.switched",
+   "label": "the project switched while the run was in flight",
+   "feature": "9.3: project switch during a run",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "runswitch.stopped",
+   "label": "the in-flight run was stopped by the switch",
+   "feature": "9.3: no orphan process after the switch",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "runswitch.clean",
+   "label": "the new project's run pane is clean",
+   "feature": "9.3: the switch leaves the new project untouched",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "runkill.runkillError",
+   "label": "runkillError is absent",
+   "feature": "Server-death path reports no unexpected error",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "runkill.refused",
+   "label": "a server killed mid-preparation refuses the launch with the real error",
+   "feature": "9.3: server exit during the preparation",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "runkill.recovered",
+   "label": "the backend restarted and restored the project",
+   "feature": "Recovery after the mid-preparation death",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "runkill.rerun",
+   "label": "the same configuration runs to its exit after the recovery",
+   "feature": "The retry works after recovery",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "dbgcfg.dbgcfgError",
+   "label": "dbgcfgError is absent",
+   "feature": "Debug selected configuration reports no unexpected error",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "dbgcfg.session",
+   "label": "the detected application configuration was debugged directly and ran to its end",
+   "feature": "run.debug: debug the selected run configuration",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
    "id": "base.run.config",
    "label": "a run configuration was detected",
    "feature": "Maven run configuration detection",

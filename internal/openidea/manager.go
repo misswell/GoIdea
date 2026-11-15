@@ -3,6 +3,7 @@ package openidea
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -211,12 +212,19 @@ func (m *Manager) adopt(s *Server) bool {
 		return false
 	}
 	m.srv = s
-	if m.started {
+	// The first launch has nothing to restore: the restore callback reopens
+	// what a *restart* interrupted, and running it on the first launch races
+	// the project the app is opening right now.
+	wasRestart := m.started
+	if wasRestart {
 		m.restarts++
 	}
 	m.started = true
 	m.state = State{Running: true, Info: s.Info(), Restarts: m.restarts, Phase: "running"}
-	restore := m.onRestart
+	var restore func(context.Context) error
+	if wasRestart {
+		restore = m.onRestart
+	}
 	m.mu.Unlock()
 	m.publish()
 	m.forward(s)
@@ -267,6 +275,10 @@ func (m *Manager) watch(s *Server) {
 		m.state = State{Err: err, Restarts: m.restarts, Phase: "restarting"}
 	}
 	m.mu.Unlock()
+	if m.cfg.Log != nil {
+		fmt.Fprintf(m.cfg.Log, "openidea: backend connection closed (wasCurrent=%v, closed=%v): %v\n",
+			wasCurrent, closed, err)
+	}
 	if wasCurrent {
 		m.publish()
 	}

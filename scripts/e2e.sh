@@ -71,7 +71,7 @@ printf '\n// TODO: e2e marker\n' >> "$JAVA"
 smoke() {
     local out="$1"
     shift
-    env GOIDEA_HEADLESS=1 GOIDEA_DATA_DIR="$DATA" GOIDEA_SERVER="$SERVER" \
+    env GOIDEA_HEADLESS=1 GOIDEA_DATA_DIR="${GOIDEA_SMOKE_DATA:-$DATA}" GOIDEA_SERVER="$SERVER" \
         GOIDEA_OPEN_PROJECT="$PROJ" GOIDEA_OPEN_FILES="$JAVA" \
         GOIDEA_SMOKE_OUT="$out" "$@" "$BIN" >"${out%.json}.log" 2>&1 ||
         { echo "goidea 退出异常，日志 ${out%.json}.log：" >&2; tail -30 "${out%.json}.log" >&2; return 1; }
@@ -96,6 +96,35 @@ SHOTS_JSON="$WORK/shots.json"
 grep -q "TODO: visual shot" "$JAVA" || printf '\n// TODO: visual shot\n' >> "$JAVA"
 smoke "$SHOTS_JSON" GOIDEA_SMOKE_SHOTS="$SHOTS"
 python3 "$CHECKS" shots "$SHOTS_JSON"
+
+say "阶段 1c：运行准备负向回归（任何准备失败都不得调用 run_start）"
+# A: a data directory without the Java toolchain — the application
+# configuration's preparation must fail with the real reason.
+NEGDATA="$WORK/neg-data"
+mkdir -p "$NEGDATA"
+NEGJDTLS="$WORK/negjdtls.json"
+export GOIDEA_SMOKE_DATA="$NEGDATA"
+smoke "$NEGJDTLS" GOIDEA_SMOKE_NEGJDTLS=1
+unset GOIDEA_SMOKE_DATA
+python3 "$CHECKS" negjdtls "$NEGJDTLS"
+# B: switch the project while a real Maven run is in flight.
+PROJB="$WORK/java-maven-b"
+cp -R "$ROOT/testdata/java-maven" "$PROJB"
+rm -rf "$PROJB/target"
+git -C "$PROJB" init -q
+git -C "$PROJB" add -A
+git -C "$PROJB" -c user.name=e2e -c user.email=e2e@goidea.invalid commit -qm baseline
+RUNSWITCH="$WORK/runswitch.json"
+smoke "$RUNSWITCH" GOIDEA_SMOKE_RUNSWITCH=1 GOIDEA_SMOKE_SWITCH_TO="$PROJB"
+python3 "$CHECKS" runswitch "$RUNSWITCH"
+# C: the server dies in the middle of the preparation.
+RUNKILL="$WORK/runkill.json"
+smoke "$RUNKILL" GOIDEA_SMOKE_RUNKILL=1
+python3 "$CHECKS" runkill "$RUNKILL"
+# D: run.debug debugs the detected application configuration itself.
+DBGCFG="$WORK/dbgcfg.json"
+smoke "$DBGCFG" GOIDEA_SMOKE_DBGCFG=1
+python3 "$CHECKS" dbgcfg "$DBGCFG"
 
 if [ "$OFFLINE" = "1" ]; then
     skip "Java 工具安装、JDT 语言服务与调试（GOIDEA_E2E_OFFLINE=1）"

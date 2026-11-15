@@ -27,7 +27,7 @@ new action, tool window, page or command appears automatically.
 | Kind | Items | Integrated | Partial | Engine | Blocked | Missing |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Feature folders | 44 | 0 | 12 | 0 | 0 | 32 |
-| Actions | 673 | 43 | 89 | 0 | 1 | 540 |
+| Actions | 673 | 42 | 93 | 0 | 1 | 537 |
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
 | Tool windows | 30 | 10 | 7 | 0 | 0 | 13 |
 | Overlays | 56 | 1 | 1 | 0 | 0 | 54 |
@@ -465,12 +465,12 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `go.generate.${scope}` |  | `src/features/run/goActions.ts` | missing |
 | `php.composerInstall` | Composer Install | `src/features/run/composerInstall.ts` | missing |
 | `run.agentStart` | Run Agent Command | `src/features/run/index.ts` | missing |
-| `run.chooseConfig` | Select Run/Debug Configuration… | `src/features/run/index.ts` | missing |
-| `run.chooseDebugConfig` | Debug… | `src/features/run/index.ts` | missing |
+| `run.chooseConfig` | Select Run/Debug Configuration… | `src/features/run/index.ts` | partial - internal/app/run_config_chooser.go runChooserDialog (Ctrl+Alt+R, run.chooseConfig in internal/app/commands.go): the ConfigChooser modes ported - run (Enter starts as saved now through askOrStart with the rerun confirm, Shift+Enter debugs), debug (run.chooseDebugConfig Ctrl+Alt+D), select (the widget's chooser); the current-file row debugs the context; limits: no temporary-configuration Save row, no mnemonics, no recent/pinned grouping |
+| `run.chooseDebugConfig` | Debug… | `src/features/run/index.ts` | partial - internal/app/run_config_chooser.go chooser in debug mode (Ctrl+Alt+D): Enter debugs the chosen configuration through DebugRunConfig over the shared adapter.PrepareJavaLaunch |
 | `run.createConfig` | Create Run Configuration | `src/features/run/index.ts` | missing |
-| `run.debug` | Debug | `src/features/run/index.ts` | integrated - debug.paused, debug.step.paused |
+| `run.debug` | Debug | `src/features/run/index.ts` | partial - internal/app/debug.go Debug/DebugRunConfig: debug the SELECTED run configuration over the shared PrepareJavaLaunch + javaDebugLaunch (F9, run.debug); non-JVM kinds and unshipped adapters (kotlin-debug-adapter) are refused with the real reason; negatives.dbgcfg.session debugs the detected application configuration to its end on the real server; limits: gradle/maven debugging delegates are not ported |
 | `run.debugConfig` | Debug Configuration | `src/features/run/index.ts` | missing |
-| `run.debugContext` | Debug Context Configuration | `src/features/run/index.ts` | missing |
+| `run.debugContext` | Debug Context Configuration | `src/features/run/index.ts` | partial - internal/app/debug.go DebugContext (Ctrl+Shift+D): the active file's applicationConfig over the shared PrepareJavaLaunch; the debug e2e phase proves the flow (debug.paused, debug.vars, debug.watch) |
 | `run.editConfigs` | Edit Configurations… | `src/features/run/index.ts` | partial - internal/app/run_config_dialog.go runConfigsDialog (Ctrl+Alt+Shift+R, run.editConfigs): the ConfigForm fields GoIDEA edits (name, command, program args via adapter.ParseArgs/FormatArgs, working directory, environment, module with save-time resolution, Build select with per-kind options), configs.ts validation and upsertConfig override semantics, saveUserConfigs through run_save_configs with removedDetectedIds; base.runcfg.* proves the round trip on the real server; limits: no per-template Add menu, no before-launch task editor, no compound editor |
 | `run.importJetbrains` | Import Run Configurations from JetBrains (.run, .idea) | `src/features/run/index.ts` | missing |
 | `run.importVscodeLaunch` | Import Run Configurations from .vscode/launch.json | `src/features/run/index.ts` | missing |

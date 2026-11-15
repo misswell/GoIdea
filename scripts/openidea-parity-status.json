@@ -354,8 +354,8 @@
       "evidence": "base.run.exit, base.run.build"
     },
     "action:run.debug": {
-      "status": "integrated",
-      "evidence": "debug.paused, debug.step.paused"
+      "status": "partial",
+      "evidence": "internal/app/debug.go Debug/DebugRunConfig: debug the SELECTED run configuration over the shared PrepareJavaLaunch + javaDebugLaunch (F9, run.debug); non-JVM kinds and unshipped adapters (kotlin-debug-adapter) are refused with the real reason; negatives.dbgcfg.session debugs the detected application configuration to its end on the real server; limits: gradle/maven debugging delegates are not ported"
     },
     "action:build.buildProject": {
       "status": "integrated",
@@ -708,6 +708,18 @@
     "overlay:run.editConfigs": {
       "status": "partial",
       "evidence": "internal/app/run_config_dialog.go runConfigsDialog drawn by the overlay registry (internal/app/overlay_registry.go runConfigs)"
+    },
+    "action:run.chooseConfig": {
+      "status": "partial",
+      "evidence": "internal/app/run_config_chooser.go runChooserDialog (Ctrl+Alt+R, run.chooseConfig in internal/app/commands.go): the ConfigChooser modes ported - run (Enter starts as saved now through askOrStart with the rerun confirm, Shift+Enter debugs), debug (run.chooseDebugConfig Ctrl+Alt+D), select (the widget's chooser); the current-file row debugs the context; limits: no temporary-configuration Save row, no mnemonics, no recent/pinned grouping"
+    },
+    "action:run.chooseDebugConfig": {
+      "status": "partial",
+      "evidence": "internal/app/run_config_chooser.go chooser in debug mode (Ctrl+Alt+D): Enter debugs the chosen configuration through DebugRunConfig over the shared adapter.PrepareJavaLaunch"
+    },
+    "action:run.debugContext": {
+      "status": "partial",
+      "evidence": "internal/app/debug.go DebugContext (Ctrl+Shift+D): the active file's applicationConfig over the shared PrepareJavaLaunch; the debug e2e phase proves the flow (debug.paused, debug.vars, debug.watch)"
     }
   }
 }

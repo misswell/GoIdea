@@ -377,6 +377,22 @@ func (m *Model) runConfigsDialog(c *ui.Context, p *ui.Theme) {
 	}
 }
 
+// askOrStart starts a configuration, applying the rerun confirm when it is
+// already running: upstream startRun's confirm-and-stop flow.
+func (m *Model) askOrStart(raw json.RawMessage, name string) {
+	live := m.run.running || m.run.awaiting
+	if !live {
+		m.startRunWith(raw, name)
+		return
+	}
+	if m.confirmRerunEnabled() {
+		m.rerunAsk = &rerunAsk{open: true, name: name, raw: append(json.RawMessage(nil), raw...)}
+		m.invalidate()
+		return
+	}
+	m.stopAndRerun(raw, name)
+}
+
 // rerunTarget is what a rerun launches: the configuration the pane started,
 // as saved now (upstream rerunConfig), or the one it ran with when it was
 // deleted or never saved (a Run Anything line).
@@ -405,17 +421,7 @@ func (m *Model) Rerun() {
 	if raw == nil {
 		return
 	}
-	live := m.run.running || m.run.awaiting
-	if !live {
-		m.startRunWith(raw, name)
-		return
-	}
-	if m.confirmRerunEnabled() {
-		m.rerunAsk = &rerunAsk{open: true, name: name, raw: append(json.RawMessage(nil), raw...)}
-		m.invalidate()
-		return
-	}
-	m.stopAndRerun(raw, name)
+	m.askOrStart(raw, name)
 }
 
 // stopAndRerun stops the running process, waits for its exit, and starts the

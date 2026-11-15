@@ -206,17 +206,6 @@ func (m *Model) loadRunConfigs() {
 	}()
 }
 
-// ChooseRunConfig shows the Run window, where the configurations the title
-// bar's chooser lists are chosen; the widget's own menu only fits the title.
-func (m *Model) ChooseRunConfig() {
-	m.run.visible = true
-	m.occupyBottom("run")
-	if m.run.trusted && !m.run.loaded {
-		m.loadRunConfigs()
-	}
-	m.invalidate()
-}
-
 // ReloadRunConfigs drops what detection found and asks the backend again.
 func (m *Model) ReloadRunConfigs() {
 	if m.Root() == "" || m.run.loading {
@@ -364,10 +353,10 @@ func (m *Model) startRunWith(raw json.RawMessage, name string) bool {
 			return
 		}
 		args["config"] = resolved
-		raw, err := m.mgr.Invoke(ctx, Window, "run_start", args)
+		rawInfo, err := m.invoke(ctx, "run_start", args)
 		var info openidea.RunInfo
 		if err == nil {
-			err = json.Unmarshal(raw, &info)
+			err = json.Unmarshal(rawInfo, &info)
 		}
 		m.post(func() {
 			if m.Root() != root || m.run.channel != ch {

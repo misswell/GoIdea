@@ -62,6 +62,54 @@ The e2e base phase runs the detected Maven configuration on
 `testdata/java-maven`, requires exit code 0 and requires `BUILD SUCCESS` in the
 output. This is a real `mvn` process, not a recorded transcript.
 
+## Run-preparation negative regressions (9.3)
+
+The e2e phase 1c proves, on the real server, that a failed preparation never
+reaches `run_start`:
+
+- `GOIDEA_SMOKE_NEGJDTLS=1` runs against a **fresh data directory with no
+  Java toolchain**: the backend detects no application configuration (its
+  model comes from the language server), the smoke persists a real user
+  configuration through `run_save_configs`, and launching it is refused with
+  the server's real verdict ("openidea: unavailable: jdtls is not installed"),
+  no process started, no orphan JVM.
+- `GOIDEA_SMOKE_RUNSWITCH=1` starts a real Maven run and **switches the
+  project while it is in flight**: the switch stops the process
+  (`runningAfterSwitch == 0`), and the new project's run pane is clean. This
+  exposed and fixed two real defects: the manager ran its restart-restore
+  callback on the first launch too, racing the project being opened
+  (a phantom "后端重启后恢复项目失败" that set the app to failed although
+  nothing had restarted), and the switch smoke compared an unresolved
+  `/tmp` symlink path.
+- `GOIDEA_SMOKE_RUNKILL=1` **kills the server with SIGKILL in the middle of
+  a launch preparation**: the launch is refused with the real error
+  ("启动失败：openidea: connection closed"), nothing starts, the backend
+  restarts and restores the project, and the same configuration then runs to
+  its exit.
+
+## Choosing and debugging configurations
+
+- **选择运行/调试配置…** (`Ctrl+Alt+R`, `run.chooseConfig`) opens the
+  configuration chooser (`internal/app/run_config_chooser.go`), the port of
+  upstream ConfigChooser: Enter runs the chosen configuration as saved now
+  (through the same stop-and-rerun confirm), **Shift+Enter** debugs it,
+  `Ctrl+Alt+D` (`run.chooseDebugConfig`) opens it in debug mode, and the
+  title bar widget opens it in select mode. The **当前文件** row debugs the
+  active file's own configuration.
+- **调试** (`F9`, `run.debug`) debugs the **selected** run configuration;
+  **调试当前文件** (`Ctrl+Shift+D`, `run.debugContext`) debugs the active
+  file's, as upstream's run.debug / run.debugContext split. Both go through
+  the shared `PrepareJavaLaunch` and `javaDebugLaunch`; a Maven or Gradle
+  configuration and an unshipped adapter (Kotlin) are refused with the real
+  reason instead of silently starting. The e2e negative phase's
+  `GOIDEA_SMOKE_DBGCFG=1` debugs the detected application configuration of
+  the real Maven project to its end.
+- **重新运行失败的测试** (`run.rerunFailed`) is not ported yet: it needs the
+  test-results pipeline upstream builds from the run console's test output
+  (the `testing` feature's parsers and results tree). It stays listed
+  missing in `PARITY_AUDIT.md` until that pipeline exists — no stub entry
+  is offered.
+
 ## Java launch preparation (shared by Run and Debug)
 
 `internal/adapter` ports OpenIDEA's `platform/javaLaunch.ts` function by
