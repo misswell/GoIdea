@@ -63,6 +63,7 @@ type RunPane struct {
 	tests      *adapter.TestResults
 	testParser *adapter.JvmParser
 	testGo     *adapter.GoParser
+	testCargo  *adapter.CargoParser
 	testStdout *adapter.TestStdoutBuffer
 	// selTest is the selected node of the results tree view.
 	selTest string
@@ -348,11 +349,16 @@ func (m *Model) startRunWith(raw json.RawMessage, name string) bool {
 			m.run.tests = adapter.NewTestResults()
 			m.run.testGo = adapter.NewGoParser()
 			m.run.testStdout = adapter.NewTestStdoutBuffer()
+		case "cargo":
+			m.run.tests = adapter.NewTestResults()
+			m.run.testCargo = adapter.NewCargoParser()
+			m.run.testStdout = adapter.NewTestStdoutBuffer()
 		}
 	}
 	if m.run.tests == nil {
 		m.run.testParser = nil
 		m.run.testGo = nil
+		m.run.testCargo = nil
 		m.run.testStdout = nil
 	}
 	tabs := append([]*Tab(nil), m.tabs...)
@@ -679,6 +685,8 @@ func (m *Model) feedRunTests(text string) string {
 		if m.run.testGo != nil {
 			events = m.run.testGo.Feed(line)
 			display = append(display, adapter.GoConsoleText(line))
+		} else if m.run.testCargo != nil {
+			events = m.run.testCargo.Feed(line)
 		} else if m.run.testParser != nil {
 			events = m.run.testParser.Feed(line)
 		}

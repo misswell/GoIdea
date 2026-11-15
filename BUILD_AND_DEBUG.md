@@ -297,6 +297,27 @@ when each state was first reached on the real backend and asserts the
 ordering (backend ≤ project ≤ buildModel ≤ run) and that all of them are
 reached (`readiness.*` checks).
 
+## Cargo test pipeline
+
+`internal/adapter/testing_cargo.go` ports `cargo.ts`: libtest output
+(`Running` suites, per-test lines, panic locations, `test result:` summaries)
+and `cargo nextest` fold into the results tree, and `cargoArgs` (rerun.ts)
+derives the failed-tests filter — the suite prefix stripped, the `::`-joined
+test path after `--` with `--exact`. The e2e phase 1b4
+(`GOIDEA_SMOKE_CARGORUN=1`, `testdata/cargo-app`) proves the tree counts (1
+failure, 2 passes), the failed path, the derivation, and that the rerun
+runs 1 test with 2 filtered out.
+
+## Out-of-the-box walkthrough (section 8)
+
+The e2e release phase 2c (`GOIDEA_SMOKE_FRESH=1`) runs the first-launch
+path on the real backend against a **brand-new data directory**: the Java
+toolchain installs from its release feeds (`before: missing` →
+`after: installed`), the six readiness states are reached in order (the
+Java import of a fresh jdtls took ~114 s on the acceptance machine), and
+the detected Maven configuration then runs to its exit 0. `fresh.*` checks
+gate the release.
+
 ## Go test pipeline
 
 `internal/adapter/testing_go.go` ports `go.ts`: plain `go test`/`go test -v`

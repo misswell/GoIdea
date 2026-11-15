@@ -259,6 +259,8 @@ func FrameworkFor(config *openidea.RunConfig) string {
 		return "jvm"
 	case "go":
 		return "go"
+	case "cargo":
+		return "cargo"
 	}
 	cmd := config.Command + " " + strings.Join(config.Args, " ")
 	if regexp.MustCompile(`\b(gradlew?|mvnw?)\b`).MatchString(cmd) {
@@ -266,6 +268,9 @@ func FrameworkFor(config *openidea.RunConfig) string {
 	}
 	if regexp.MustCompile(`\bgo\s+test\b`).MatchString(cmd) {
 		return "go"
+	}
+	if regexp.MustCompile(`\bcargo\b`).MatchString(cmd) {
+		return "cargo"
 	}
 	return ""
 }
@@ -291,6 +296,8 @@ func RerunFailedConfig(config *openidea.RunConfig, paths [][]string) *openidea.R
 			}
 			args = goArgs(config.Args, selected, "")
 		}
+	case "cargo":
+		args = CargoArgs(config.Args, paths)
 	}
 	if args == nil {
 		return nil

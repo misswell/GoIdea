@@ -109,6 +109,18 @@ PROJ="$REFAIL"
 JAVA=""
 smoke "$REFAIL_JSON" GOIDEA_SMOKE_RERUNFAIL=1
 python3 "$CHECKS" rerunfail "$REFAIL_JSON"
+
+say "阶段 1b4：cargo 测试管线与重新运行失败的测试"
+CARUN="$WORK/cargo-app"
+cp -R "$ROOT/testdata/cargo-app" "$CARUN"
+rm -rf "$CARUN/target"
+say "用真实 cargo 预构建夹具"
+(cd "$CARUN" && cargo test >/dev/null 2>&1 || true)
+CARGORUN_JSON="$WORK/cargorun.json"
+PROJ="$CARUN"
+JAVA=""
+smoke "$CARGORUN_JSON" GOIDEA_SMOKE_CARGORUN=1
+python3 "$CHECKS" cargorun "$CARGORUN_JSON"
 PROJ="$PROJ_BASE"; JAVA="$JAVA_BASE"
 
 say "阶段 1b3：六态启动状态机（第八节）"
@@ -165,6 +177,16 @@ else
     else
         say "SKIP：OpenIDEA Golden 截图未提供（设置 GOIDEA_GOLDEN_DIR）"
     fi
+
+    say "阶段 2c：干净环境开箱即用（第八节全链路）"
+    FRESH="$WORK/fresh-data"
+    mkdir -p "$FRESH"
+    FRESH_JSON="$WORK/fresh.json"
+    PROJ="$PROJ_BASE"
+    JAVA="$JAVA_BASE"
+    smoke "$FRESH_JSON" GOIDEA_SMOKE_DATA="$FRESH" GOIDEA_SMOKE_FRESH=1
+    unset GOIDEA_SMOKE_DATA
+    python3 "$CHECKS" fresh "$FRESH_JSON"
 
     say "阶段 3：JDT 补全、悬停、跳转、格式化、用法、重命名、诊断"
     LSP="$WORK/lsp.json"

@@ -918,3 +918,247 @@ func (m *Model) SmokeGoRerunFailed(ctx context.Context) (map[string]any, error) 
 	out["rerunOutputTail"] = tailOf(output, 600)
 	return out, nil
 }
+
+// SmokeCargoRerunFailed runs a real failing `cargo test` through the cargo
+// pipeline: the libtest output folds into the results tree, the
+// run.rerunFailed derivation produces the `-- exact` filter for the failed
+// test, and the rerun executes only it.
+func (m *Model) SmokeCargoRerunFailed(ctx context.Context) (map[string]any, error) {
+	out := map[string]any{"root": m.Root()}
+	configs, err := m.smokeRunConfigs(ctx)
+	if err != nil {
+		return out, err
+	}
+	var tests *openidea.RunConfig
+	for _, c := range configs {
+		if c.Kind == "cargo" || (len(c.Args) > 0 && c.Args[0] == "test") {
+			tests = c
+			break
+		}
+	}
+	if tests == nil {
+		return out, errors.New("没有检测到 cargo test 配置")
+	}
+	out["config"] = tests.Name
+	m.post(func() {
+		m.run.trusted = true
+		m.run.loaded = true
+		m.run.configs = toValueConfigs(configs)
+		m.invalidate()
+	})
+	m.askOrStart(tests.Raw(), tests.Name)
+	exitDeadline := time.Now().Add(5 * time.Minute)
+	var firstExit *int32
+	for time.Now().Before(exitDeadline) {
+		var exit *int32
+		var runErr string
+		m.post(func() { exit, runErr = m.run.exitCode, m.run.err })
+		if runErr != "" {
+			return out, fmt.Errorf("首跑失败：%s", runErr)
+		}
+		if exit != nil {
+			firstExit = exit
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
+	if firstExit == nil {
+		return out, errors.New("5 分钟内首跑没有退出")
+	}
+	out["firstExit"] = *firstExit
+	if m.run.tests == nil || m.run.tests.IsEmpty() {
+		return out, errors.New("cargo 结果树为空：输出没有被解析")
+	}
+	counts := m.run.tests.Counts()
+	out["failed"] = counts.Failed
+	out["passed"] = counts.Passed
+	if counts.Failed != 1 || counts.Passed != 2 {
+		return out, fmt.Errorf("结果树计数不符：failed=%d passed=%d，要 1 和 2", counts.Failed, counts.Passed)
+	}
+	paths := adapter.FailedTestPaths(m.run.tests)
+	out["failedPaths"] = fmt.Sprint(paths)
+	base, err := openidea.DecodeRunConfig(tests.Raw())
+	if err != nil {
+		return out, err
+	}
+	derived := adapter.RerunFailedConfig(base, paths)
+	if derived == nil {
+		return out, errors.New("派生 cargo 重跑配置失败")
+	}
+	out["derivedArgs"] = derived.Args
+	// The derivation filters the failed test with its full libtest path
+	// after `--`, with `--exact`.
+	hasFilter := false
+	for _, a := range derived.Args {
+		if a == "tests::it_fails_on_purpose" {
+			hasFilter = true
+		}
+	}
+	if !hasFilter {
+		return out, fmt.Errorf("派生的过滤器不是失败测试：%v", derived.Args)
+	}
+	m.post(func() {
+		m.run.busy = false
+		m.run.running = false
+		m.run.awaiting = false
+		m.run.exitCode = nil
+		m.run.err = ""
+		m.invalidate()
+	})
+	m.RerunFailedTests()
+	exitDeadline = time.Now().Add(5 * time.Minute)
+	for time.Now().Before(exitDeadline) {
+		var exit *int32
+		var runErr string
+		m.post(func() { exit, runErr = m.run.exitCode, m.run.err })
+		if runErr != "" {
+			return out, fmt.Errorf("重跑失败：%s", runErr)
+		}
+		if exit != nil {
+			out["rerunExit"] = *exit
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
+	if _, ok := out["rerunExit"]; !ok {
+		return out, errors.New("5 分钟内重跑没有退出")
+	}
+	output := m.run.text()
+	// Only the failed test ran again: the rerun runs 1 test, filters 2 out,
+	// and the two passing tests are absent from its results.
+	ranOne := strings.Contains(output, "running 1 test") &&
+		strings.Contains(output, "2 filtered out") &&
+		!strings.Contains(output, "it_adds_ok")
+	out["rerunRanOneTest"] = ranOne
+	if !ranOne {
+		return out, fmt.Errorf("重跑没有只运行失败测试；输出尾部：%s", tailOf(output, 800))
+	}
+	return out, nil
+}
+
+// SmokeFreshSetup is the section-8 clean-environment walkthrough on the real
+// backend: a brand-new data directory (no Java toolchain, no imports) gets
+// the toolchain installed, the six readiness states are reached in order,
+// and the detected Maven configuration then runs to its exit — the
+// out-of-the-box path a first launch takes, end to end.
+func (m *Model) SmokeFreshSetup(ctx context.Context) (map[string]any, error) {
+	out := map[string]any{"root": m.Root()}
+	// 1. Install the Java toolchain into the fresh data directory (the
+	// Tools action of the settings page, as a first launch offers).
+	tools, toolsErr := m.SmokeTools(ctx, true)
+	out["tools"] = tools
+	if toolsErr != nil {
+		return out, fmt.Errorf("工具安装失败：%w", toolsErr)
+	}
+	// 2. Trust the project (the first-run dialog a user grants) and load
+	// the run configurations, then watch the readiness states in order.
+	if _, err := m.mgr.Invoke(ctx, Window, "project_trust_set", map[string]any{
+		"path": m.Root(), "trusted": true, "folder": true,
+	}); err != nil {
+		return out, err
+	}
+	m.post(func() {
+		m.run.trusted = true
+		m.run.visible = true
+		m.occupyBottom("run")
+		m.loadRunConfigs()
+		m.invalidate()
+	})
+	started := time.Now()
+	first := map[string]time.Time{}
+	deadline := time.Now().Add(8 * time.Minute)
+	for time.Now().Before(deadline) {
+		r := m.readinessNow(ctx)
+		note := func(state string, ok bool) {
+			if ok {
+				if _, ok := first[state]; !ok {
+					first[state] = time.Now()
+				}
+			}
+		}
+		note("backend", r.Backend)
+		note("project", r.Project)
+		note("importing", r.Importing)
+		note("java", r.Java)
+		note("buildModel", r.BuildModel)
+		note("run", r.Run)
+		if r.Backend && r.Project && r.Java && r.BuildModel && r.Run {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
+	ms := func(state string) any {
+		t, ok := first[state]
+		if !ok {
+			return nil
+		}
+		return t.Sub(started).Milliseconds()
+	}
+	out["backendAt"] = ms("backend")
+	out["projectAt"] = ms("project")
+	out["javaAt"] = ms("java")
+	out["buildModelAt"] = ms("buildModel")
+	out["runAt"] = ms("run")
+	for _, state := range []string{"backend", "project", "java", "buildModel", "run"} {
+		if _, ok := first[state]; !ok {
+			return out, fmt.Errorf("8 分钟内就绪状态 %s 没有到达", state)
+		}
+	}
+	out["allReady"] = true
+	// 3. The detected Maven configuration runs to its exit.
+	configs, err := m.smokeRunConfigs(ctx)
+	if err != nil {
+		return out, err
+	}
+	var run *openidea.RunConfig
+	for _, c := range configs {
+		if c.Kind == "maven" || c.Kind == "gradle" {
+			run = c
+			break
+		}
+	}
+	if run == nil {
+		return out, errors.New("就绪后没有检测到构建配置")
+	}
+	m.post(func() {
+		m.run.trusted = true
+		m.run.loaded = true
+		m.run.configs = toValueConfigs(configs)
+		m.invalidate()
+	})
+	m.askOrStart(run.Raw(), run.Name)
+	exitDeadline := time.Now().Add(5 * time.Minute)
+	for time.Now().Before(exitDeadline) {
+		var exit *int32
+		var runErr string
+		m.post(func() { exit, runErr = m.run.exitCode, m.run.err })
+		if runErr != "" {
+			return out, fmt.Errorf("开箱运行失败：%s", runErr)
+		}
+		if exit != nil {
+			out["exitCode"] = *exit
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
+	if _, ok := out["exitCode"]; !ok {
+		return out, errors.New("5 分钟内运行没有退出")
+	}
+	return out, nil
+}

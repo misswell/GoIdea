@@ -1101,6 +1101,78 @@
    "doc": "BUILD_AND_DEBUG.md"
   },
   {
+   "id": "cargorun.cargorunError",
+   "label": "cargorunError is absent",
+   "feature": "Cargo test pipeline reports no unexpected error",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "cargorun.tree",
+   "label": "the libtest output folds into the tree with 1 failure and 2 passes",
+   "feature": "cargo test parsing into the results tree",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "cargorun.paths",
+   "label": "the failed path is the suite, module and test",
+   "feature": "Cargo failed test paths",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "cargorun.derived",
+   "label": "the derivation filters with -- tests::it_fails_on_purpose --exact",
+   "feature": "run.rerunFailed cargo derivation (cargoArgs)",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "cargorun.one",
+   "label": "the rerun executed only the failed test (running 1 test, 2 filtered out)",
+   "feature": "run.rerunFailed cargo rerun",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "fresh.freshError",
+   "label": "freshError is absent",
+   "feature": "Clean-environment walkthrough reports no unexpected error",
+   "area": "startup",
+   "gate": "release",
+   "doc": "README.md"
+  },
+  {
+   "id": "fresh.tools",
+   "label": "the Java toolchain installed into the fresh data directory",
+   "feature": "8: one-click toolchain install on first launch",
+   "area": "startup",
+   "gate": "release",
+   "doc": "README.md"
+  },
+  {
+   "id": "fresh.states",
+   "label": "every readiness state was reached after the install",
+   "feature": "8: readiness over a fresh environment",
+   "area": "startup",
+   "gate": "release",
+   "doc": "README.md"
+  },
+  {
+   "id": "fresh.run",
+   "label": "the detected Maven configuration ran to its exit",
+   "feature": "8: out-of-the-box run after readiness",
+   "area": "startup",
+   "gate": "release",
+   "doc": "README.md"
+  },
+  {
    "id": "negjdtls.negjdtlsError",
    "label": "negjdtlsError is absent",
    "feature": "Missing-toolchain launch reports no unexpected error",

@@ -286,6 +286,15 @@ func smoke(m *app.Model) {
 			fields["hotswapError"] = hsErr.Error()
 		}
 	}
+	if os.Getenv("GOIDEA_SMOKE_CARGORUN") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		cr, crErr := m.SmokeCargoRerunFailed(ctx)
+		cancel()
+		fields["cargorun"] = cr
+		if crErr != nil {
+			fields["cargorunError"] = crErr.Error()
+		}
+	}
 	if os.Getenv("GOIDEA_SMOKE_GORERUN") == "1" && root != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
 		gr, grErr := m.SmokeGoRerunFailed(ctx)
@@ -293,6 +302,15 @@ func smoke(m *app.Model) {
 		fields["gorerun"] = gr
 		if grErr != nil {
 			fields["gorerunError"] = grErr.Error()
+		}
+	}
+	if os.Getenv("GOIDEA_SMOKE_FRESH") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
+		fr, frErr := m.SmokeFreshSetup(ctx)
+		cancel()
+		fields["fresh"] = fr
+		if frErr != nil {
+			fields["freshError"] = frErr.Error()
 		}
 	}
 	if os.Getenv("GOIDEA_SMOKE_READINESS") == "1" && root != "" {

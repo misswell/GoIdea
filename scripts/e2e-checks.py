@@ -3,7 +3,7 @@
 
 Usage: e2e-checks.py <phase> <smoke.json> [<smoke.json> ...]
        e2e-checks.py --list
-Phases: base | tools | lsp | debug | hotswap | spring | rerunfail | readiness | negjdtls | runswitch | runkill | dbgcfg | attach
+Phases: base | tools | fresh | lsp | debug | hotswap | spring | rerunfail | gorerun | cargorun | readiness | negjdtls | runswitch | runkill | dbgcfg | attach
 Every check has an id. REGRESSION_INDEX.json names the same ids, and --list
 lets scripts/check-regression-index.py prove the two never drift apart, so a
 check cannot be deleted without the index noticing. Every failed assertion is
@@ -203,6 +203,19 @@ CHECKS = {
         ("found", "the attachable-process list found the suspended JDWP JVM", lambda d: ((get(d, "attach.processPort") or 0) == 5005, get(d, "attach.processPort"))),
         ("session", "the attach request built a real java-debug session", lambda d: (get(d, "attach.attached") is True, get(d, "attach.attached"))),
         ("output", "the resumed session printed the program's output", lambda d: (get(d, "attach.hasProgramOutput") is True, get(d, "attach.hasProgramOutput"))),
+    ],
+    "cargorun": [
+        ("cargorunError", *absent("cargorunError")),
+        ("tree", "the libtest output folds into the tree with 1 failure and 2 passes", lambda d: ((get(d, "cargorun.failed") or 0) == 1 and (get(d, "cargorun.passed") or 0) == 2, {"failed": get(d, "cargorun.failed"), "passed": get(d, "cargorun.passed")})),
+        ("paths", "the failed path is the suite, module and test", lambda d: (get(d, "cargorun.failedPaths") == "[[src/lib.rs tests it_fails_on_purpose]]", get(d, "cargorun.failedPaths"))),
+        ("derived", "the derivation filters with -- tests::it_fails_on_purpose --exact", lambda d: ("tests::it_fails_on_purpose" in (get(d, "cargorun.derivedArgs") or []) and "--exact" in (get(d, "cargorun.derivedArgs") or []), get(d, "cargorun.derivedArgs"))),
+        ("one", "the rerun executed only the failed test (running 1 test, 2 filtered out)", lambda d: (get(d, "cargorun.rerunRanOneTest") is True, get(d, "cargorun.rerunRanOneTest"))),
+    ],
+    "fresh": [
+        ("freshError", *absent("freshError")),
+        ("tools", "the Java toolchain installed into the fresh data directory", lambda d: ((get(d, "fresh.tools.after.jdtls") == "installed"), get(d, "fresh.tools.after"))),
+        ("states", "every readiness state was reached after the install", lambda d: (get(d, "fresh.allReady") is True, get(d, "fresh"))),
+        ("run", "the detected Maven configuration ran to its exit", lambda d: (get(d, "fresh.exitCode") == 0, get(d, "fresh.exitCode"))),
     ],
     "dbgcfg": [
         ("dbgcfgError", *absent("dbgcfgError")),
