@@ -339,7 +339,7 @@
     },
     "action:vcs.localHistory": {
       "status": "partial",
-      "evidence": "internal/app/history.go ShowHistory over history_list_dir, RestoreHistoryEntry over history_restore and ConfirmHistoryLabel over history_put_label, reachable from the project tree's Local History submenu, the tab menu's Local History submenu and the tab menu's Git › Show History; base.files.historyRestore, base.files.historyLabel; limits: the history list is a picker rather than OpenIDEA's history tool window"
+      "evidence": "internal/app/history.go ShowHistory over history_list_dir, RestoreHistoryEntry over history_restore and ConfirmHistoryLabel over history_put_label, with the timeline dialog (internal/app/history.go historyDialog); base.files.historyRestore proves a saved file's older snapshot restores and base.files.historyLabel proves a named point lists, both on the real server in the Main Gate's files phase; the editor's context menu carries Local History › Show History / Put Label… (internal/app/editor_menu.go); the label-time group restore (LocalHistory.tsx's snapshotsBefore) is RestoreHistoryLabelTime; limits: history_list and history_content are desktop-only in the pinned server, so the diff editor and revision preview are not available"
     },
     "action:vcs.rollback": {
       "status": "integrated",

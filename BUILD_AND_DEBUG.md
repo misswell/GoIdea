@@ -312,6 +312,22 @@ derived `-run ^TestFailsOnPurpose$`; the rerun executes. Open question
 recorded: the backend's quoting of the `$` anchor in the rerun filter needs
 an OpenIDEA-side check before the rerun's final one-test assertion can pass.
 
+## Local History
+
+The Local History timeline (`internal/app/history.go`, the port of upstream
+`vcs/LocalHistory.tsx` over the three stdio commands) shows a file's or a
+folder's revisions, labels and system events newest first, with the files
+whose history outlives them; **标记版本…** (`localHistory.putLabel`) names
+the current state of every file in the project, **恢复此版本** reverts the
+selected snapshot through `history_restore`, and **恢复到标签时刻** restores
+every file of the folder to its newest snapshot before the selected label
+(upstream `snapshotsBefore`). The editor's context menu carries Local
+History › Show History / Put Label…, and the base phase's `files.*` checks
+prove a saved file's older snapshot restores and a named point lists, on the
+real server. The pinned server does not serve `history_list` /
+`history_content` (desktop only), so the diff editor and the revision
+preview are not available here.
+
 ## HotSwap (Reload Changed Classes)
 
 **重新加载变更的类（HotSwap）** (`debug.reloadChangedClasses`,

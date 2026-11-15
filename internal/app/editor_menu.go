@@ -82,6 +82,15 @@ func (m *Model) editorMenu(menu *ui.Menu, t *Tab) {
 		}
 	})
 	menu.Separator()
+	menu.Submenu("Local History", func(menu *ui.Menu) {
+		if menu.Item("Show History").Chosen() {
+			m.ShowHistory(path)
+		}
+		if menu.Item("Put Label…").Chosen() {
+			m.OpenHistoryLabel()
+		}
+	})
+	menu.Separator()
 	if menu.Item("Reformat Code").Shortcut(ui.Cmd|ui.Alt, ui.KeyL).Chosen() {
 		m.FormatActive()
 	}

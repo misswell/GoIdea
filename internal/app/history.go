@@ -196,6 +196,74 @@ func historyTime(ms float64) string {
 	return time.UnixMilli(int64(ms)).Format("2006-01-02 15:04")
 }
 
+// snapshotBefore is LocalHistory.tsx's snapshotsBefore for one file: the
+// newest snapshot recorded before the label's timestamp.
+func snapshotBefore(entries []historyEntry, at float64, path string) *historyEntry {
+	var best *historyEntry
+	for i := range entries {
+		e := &entries[i]
+		if e.Kind == "label" || e.Ms >= at || e.Path != path {
+			continue
+		}
+		if best == nil || best.Ms < e.Ms {
+			best = e
+		}
+	}
+	return best
+}
+
+// RestoreHistoryLabelTime restores every file of the label's directory to
+// its state at the label, the way LocalHistory.tsx restores a label-time
+// selection (snapshotsBefore + history_restore per file).
+func (m *Model) RestoreHistoryLabelTime() {
+	h := m.history
+	if h == nil {
+		return
+	}
+	entries := h.entries
+	var label *historyEntry
+	if h.sel >= 0 && h.sel < len(entries) && entries[h.sel].Kind == "label" {
+		label = &entries[h.sel]
+	}
+	if label == nil {
+		return
+	}
+	at := label.Ms
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, 60*time.Second)
+		defer cancel()
+		var restored, failed int
+		for i := range entries {
+			e := entries[i]
+			if e.Kind == "label" || e.Ms >= at {
+				continue
+			}
+			snap := snapshotBefore(entries, at, e.Path)
+			if snap == nil || snap.ID != e.ID {
+				continue
+			}
+			if _, err := m.mgr.Invoke(ctx, Window, "history_restore", map[string]any{"path": e.Path, "id": e.ID}); err != nil {
+				failed++
+			} else {
+				restored++
+			}
+		}
+		m.post(func() {
+			if failed > 0 {
+				m.notifyWarning("local-history.restore", "Local History", fmt.Sprintf("恢复了 %d 个文件，%d 个失败", restored, failed))
+			} else if restored > 0 {
+				m.notifyInfo("local-history.restore", "Local History", fmt.Sprintf("已恢复 %d 个文件到标签时刻", restored))
+			} else {
+				m.notifyInfo("local-history.restore", "Local History", "该标签时刻没有可恢复的文件快照")
+			}
+			if m.history != nil {
+				m.loadHistory(m.history)
+			}
+			m.invalidate()
+		})
+	}()
+}
+
 // historySize is a snapshot's stored size.
 func historySize(n uint64) string {
 	if n >= 1024 {
@@ -290,6 +358,12 @@ func (m *Model) historyDialog(c *ui.Context, p *ui.Theme) {
 					m.invalidate()
 				})
 				ui.Spacer(c)
+				if len(h.entries) > 0 && h.entries[h.sel].Kind == "label" {
+					// The label-time restore of upstream LocalHistory.tsx:
+					// every file of this folder goes back to its newest
+					// snapshot before the label.
+					ui.Button(c, "恢复到标签时刻").Disabled(h.busy).OnClick(func() { m.RestoreHistoryLabelTime() })
+				}
 				if len(h.entries) > 0 && h.entries[h.sel].Kind != "label" {
 					label := "恢复此版本"
 					if h.confirmRestore {
