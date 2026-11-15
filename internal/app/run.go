@@ -64,6 +64,7 @@ type RunPane struct {
 	testParser *adapter.JvmParser
 	testGo     *adapter.GoParser
 	testCargo  *adapter.CargoParser
+	testPytest *adapter.PytestParser
 	testStdout *adapter.TestStdoutBuffer
 	// selTest is the selected node of the results tree view.
 	selTest string
@@ -317,18 +318,37 @@ func (m *Model) startRunWith(raw json.RawMessage, name string) bool {
 	// withTestReporting (testing/index.ts): a `go test` run reports per test
 	// only with -json, which the parser consumes; the console shows the
 	// records' output text.
-	if probeCfg, rerr := openidea.DecodeRunConfig(raw); rerr == nil && adapter.FrameworkFor(probeCfg) == "go" &&
-		len(probeCfg.Args) > 0 && probeCfg.Args[0] == "test" {
-		hasJSON := false
-		for _, a := range probeCfg.Args {
-			if a == "-json" || strings.HasPrefix(a, "-json=") {
-				hasJSON = true
-				break
+	if probeCfg, rerr := openidea.DecodeRunConfig(raw); rerr == nil {
+		switch adapter.FrameworkFor(probeCfg) {
+		case "go":
+			if len(probeCfg.Args) > 0 && probeCfg.Args[0] == "test" {
+				hasJSON := false
+				for _, a := range probeCfg.Args {
+					if a == "-json" || strings.HasPrefix(a, "-json=") {
+						hasJSON = true
+						break
+					}
+				}
+				if !hasJSON {
+					if patched, ok := patchRunConfigArgs(raw, append([]string{"test", "-json"}, probeCfg.Args[1:]...)); ok {
+						raw = patched
+					}
+				}
 			}
-		}
-		if !hasJSON {
-			if patched, ok := patchRunConfigArgs(raw, append([]string{"test", "-json"}, probeCfg.Args[1:]...)); ok {
-				raw = patched
+		case "pytest":
+			// withTestReporting: pytest prints progress dots without -v, so
+			// passed tests would never reach the tree.
+			chosen := false
+			for _, a := range probeCfg.Args {
+				if a == "-v" || a == "-q" || a == "--verbose" || a == "--quiet" || strings.HasPrefix(a, "--verbosity") {
+					chosen = true
+					break
+				}
+			}
+			if !chosen {
+				if patched, ok := patchRunConfigArgs(raw, append(append([]string(nil), probeCfg.Args...), "-v")); ok {
+					raw = patched
+				}
 			}
 		}
 	}
@@ -353,12 +373,17 @@ func (m *Model) startRunWith(raw json.RawMessage, name string) bool {
 			m.run.tests = adapter.NewTestResults()
 			m.run.testCargo = adapter.NewCargoParser()
 			m.run.testStdout = adapter.NewTestStdoutBuffer()
+		case "pytest":
+			m.run.tests = adapter.NewTestResults()
+			m.run.testPytest = adapter.NewPytestParser()
+			m.run.testStdout = adapter.NewTestStdoutBuffer()
 		}
 	}
 	if m.run.tests == nil {
 		m.run.testParser = nil
 		m.run.testGo = nil
 		m.run.testCargo = nil
+		m.run.testPytest = nil
 		m.run.testStdout = nil
 	}
 	tabs := append([]*Tab(nil), m.tabs...)
@@ -687,6 +712,8 @@ func (m *Model) feedRunTests(text string) string {
 			display = append(display, adapter.GoConsoleText(line))
 		} else if m.run.testCargo != nil {
 			events = m.run.testCargo.Feed(line)
+		} else if m.run.testPytest != nil {
+			events = m.run.testPytest.Feed(line)
 		} else if m.run.testParser != nil {
 			events = m.run.testParser.Feed(line)
 		}

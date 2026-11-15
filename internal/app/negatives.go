@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"runtime"
 	"strconv"
@@ -1159,6 +1160,170 @@ func (m *Model) SmokeFreshSetup(ctx context.Context) (map[string]any, error) {
 	}
 	if _, ok := out["exitCode"]; !ok {
 		return out, errors.New("5 分钟内运行没有退出")
+	}
+	return out, nil
+}
+
+// SmokePytestRerunFailed runs a real failing pytest suite through the pytest
+// pipeline: the -v verbose lines fold into the results tree, the
+// run.rerunFailed derivation appends the failed node id, and the rerun
+// executes only it.
+func (m *Model) SmokePytestRerunFailed(ctx context.Context) (map[string]any, error) {
+	out := map[string]any{"root": m.Root()}
+	var configs []*openidea.RunConfig
+	var tests *openidea.RunConfig
+	var err error
+	deadline := time.Now().Add(3 * time.Minute)
+	for time.Now().Before(deadline) {
+		configs, err = m.smokeRunConfigs(ctx)
+		if err == nil {
+			for _, c := range configs {
+				if adapter.FrameworkFor(c) == "pytest" {
+					tests = c
+					break
+				}
+			}
+		}
+		if tests != nil {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
+	if err != nil {
+		return out, err
+	}
+	if tests == nil {
+		return out, errors.New("3 分钟内没有检测到 pytest 配置")
+	}
+	// The backend's run executor resolves commands on the login shell's PATH;
+	// a venv's pytest lives elsewhere, so the configuration's command is
+	// edited to the absolute interpreter — what Edit Configurations does.
+	if abs := strings.TrimSpace(os.Getenv("GOIDEA_PYTEST")); abs != "" {
+		obj := map[string]any{}
+		if json.Unmarshal(tests.Raw(), &obj) == nil {
+			obj["command"] = abs
+			if np, nperr := json.Marshal(obj); nperr == nil {
+				if fixed, ferr := openidea.DecodeRunConfig(np); ferr == nil {
+					_, _ = m.invoke(ctx, "run_save_configs", map[string]any{
+						"configs": []map[string]any{{"id": fixed.ID, "name": fixed.Name, "kind": fixed.Kind,
+							"command": fixed.Command, "args": fixed.Args, "cwd": nil,
+							"env": map[string]string{}, "detected": false, "isTest": fixed.IsTest, "module": ""}},
+						"removedDetectedIds": nil,
+					})
+					configs, err = m.smokeRunConfigs(ctx)
+					if err == nil {
+						for _, c := range configs {
+							if c.ID == fixed.ID {
+								tests = c
+								break
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	out["config"] = tests.Name
+	m.post(func() {
+		m.run.trusted = true
+		m.run.loaded = true
+		m.run.configs = toValueConfigs(configs)
+		m.invalidate()
+	})
+	m.askOrStart(tests.Raw(), tests.Name)
+	exitDeadline := time.Now().Add(3 * time.Minute)
+	var firstExit *int32
+	for time.Now().Before(exitDeadline) {
+		var exit *int32
+		var runErr string
+		m.post(func() { exit, runErr = m.run.exitCode, m.run.err })
+		if runErr != "" {
+			return out, fmt.Errorf("首跑失败：%s", runErr)
+		}
+		if exit != nil {
+			firstExit = exit
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
+	if firstExit == nil {
+		return out, errors.New("3 分钟内首跑没有退出")
+	}
+	out["firstExit"] = *firstExit
+	if m.run.tests == nil || m.run.tests.IsEmpty() {
+		return out, errors.New("pytest 结果树为空：输出没有被解析")
+	}
+	counts := m.run.tests.Counts()
+	out["failed"] = counts.Failed
+	out["passed"] = counts.Passed
+	if counts.Failed != 1 || counts.Passed != 2 {
+		return out, fmt.Errorf("结果树计数不符：failed=%d passed=%d，要 1 和 2", counts.Failed, counts.Passed)
+	}
+	paths := adapter.FailedTestPaths(m.run.tests)
+	out["failedPaths"] = fmt.Sprint(paths)
+	base, err := openidea.DecodeRunConfig(tests.Raw())
+	if err != nil {
+		return out, err
+	}
+	derived := adapter.RerunFailedConfig(base, paths)
+	if derived == nil {
+		return out, errors.New("派生 pytest 重跑配置失败")
+	}
+	out["derivedArgs"] = derived.Args
+	hasID := false
+	for _, a := range derived.Args {
+		if strings.Contains(a, "test_fails_on_purpose") {
+			hasID = true
+		}
+	}
+	if !hasID {
+		return out, fmt.Errorf("派生的过滤器不是失败测试：%v", derived.Args)
+	}
+	m.post(func() {
+		m.run.busy = false
+		m.run.running = false
+		m.run.awaiting = false
+		m.run.exitCode = nil
+		m.run.err = ""
+		m.invalidate()
+	})
+	m.RerunFailedTests()
+	exitDeadline = time.Now().Add(3 * time.Minute)
+	for time.Now().Before(exitDeadline) {
+		var exit *int32
+		var runErr string
+		m.post(func() { exit, runErr = m.run.exitCode, m.run.err })
+		if runErr != "" {
+			return out, fmt.Errorf("重跑失败：%s", runErr)
+		}
+		if exit != nil {
+			out["rerunExit"] = *exit
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
+	if _, ok := out["rerunExit"]; !ok {
+		return out, errors.New("3 分钟内重跑没有退出")
+	}
+	output := m.run.text()
+	// Only the failed test ran again: pytest reports a single collected test.
+	ranOne := strings.Contains(output, "1 passed") || strings.Contains(output, "1 failed")
+	collected := strings.Contains(output, "collected 1 item") || strings.Contains(output, "1 item")
+	out["rerunRanOneTest"] = ranOne && collected
+	if !(ranOne && collected) {
+		return out, fmt.Errorf("重跑没有只运行失败测试；输出尾部：%s", tailOf(output, 800))
 	}
 	return out, nil
 }

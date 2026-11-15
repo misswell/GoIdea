@@ -164,6 +164,35 @@ func jvmArgs(config *openidea.RunConfig, paths [][]string) []string {
 	return args
 }
 
+// PytestArgs derives the arguments that run only the selected pytest tests
+// (rerun.ts pytestArgs): the node ids appended after the options, with the
+// original run's test paths and -k expressions dropped.
+func PytestArgs(base []string, paths [][]string) []string {
+	seen := map[string]bool{}
+	var ids []string
+	for _, p := range paths {
+		joined := strings.Join(p, "::")
+		if joined != "" && !seen[joined] {
+			seen[joined] = true
+			ids = append(ids, joined)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	kept := dropFlag(base, []string{"-k"})
+	dropExt := regexp.MustCompile(`\.py(::|$)`)
+	dropDir := regexp.MustCompile(`^tests?/?$`)
+	var out []string
+	for _, a := range kept {
+		if dropExt.MatchString(a) || dropDir.MatchString(a) {
+			continue
+		}
+		out = append(out, a)
+	}
+	return append(out, ids...)
+}
+
 // goSinglePackage returns the one package all paths belong to, "" when they
 // span several (rerun.ts's grouping key).
 func goSinglePackage(paths [][]string) string {
@@ -261,6 +290,12 @@ func FrameworkFor(config *openidea.RunConfig) string {
 		return "go"
 	case "cargo":
 		return "cargo"
+	case "pytest":
+		return "pytest"
+	case "phpunit":
+		return "phpunit"
+	case "ruby", "rake", "rspec":
+		return "ruby"
 	}
 	cmd := config.Command + " " + strings.Join(config.Args, " ")
 	if regexp.MustCompile(`\b(gradlew?|mvnw?)\b`).MatchString(cmd) {
@@ -271,6 +306,9 @@ func FrameworkFor(config *openidea.RunConfig) string {
 	}
 	if regexp.MustCompile(`\bcargo\b`).MatchString(cmd) {
 		return "cargo"
+	}
+	if regexp.MustCompile(`\bpytest\b`).MatchString(cmd) {
+		return "pytest"
 	}
 	return ""
 }
@@ -298,6 +336,8 @@ func RerunFailedConfig(config *openidea.RunConfig, paths [][]string) *openidea.R
 		}
 	case "cargo":
 		args = CargoArgs(config.Args, paths)
+	case "pytest":
+		args = PytestArgs(config.Args, paths)
 	}
 	if args == nil {
 		return nil

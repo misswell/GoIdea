@@ -3,7 +3,7 @@
 
 Usage: e2e-checks.py <phase> <smoke.json> [<smoke.json> ...]
        e2e-checks.py --list
-Phases: base | tools | fresh | lsp | debug | hotswap | spring | rerunfail | gorerun | cargorun | readiness | negjdtls | runswitch | runkill | dbgcfg | attach
+Phases: base | tools | fresh | lsp | debug | hotswap | spring | rerunfail | gorerun | cargorun | pyrerun | readiness | negjdtls | runswitch | runkill | dbgcfg | attach
 Every check has an id. REGRESSION_INDEX.json names the same ids, and --list
 lets scripts/check-regression-index.py prove the two never drift apart, so a
 check cannot be deleted without the index noticing. Every failed assertion is
@@ -216,6 +216,13 @@ CHECKS = {
         ("tools", "the Java toolchain installed into the fresh data directory", lambda d: ((get(d, "fresh.tools.after.jdtls") == "installed"), get(d, "fresh.tools.after"))),
         ("states", "every readiness state was reached after the install", lambda d: (get(d, "fresh.allReady") is True, get(d, "fresh"))),
         ("run", "the detected Maven configuration ran to its exit", lambda d: (get(d, "fresh.exitCode") == 0, get(d, "fresh.exitCode"))),
+    ],
+    "pyrerun": [
+        ("pyrerunError", *absent("pyrerunError")),
+        ("tree", "the -v verbose lines fold into the tree with 1 failure and 2 passes", lambda d: ((get(d, "pyrerun.failed") or 0) == 1 and (get(d, "pyrerun.passed") or 0) == 2, {"failed": get(d, "pyrerun.failed"), "passed": get(d, "pyrerun.passed")})),
+        ("paths", "the failed path is the file and test", lambda d: (get(d, "pyrerun.failedPaths") == "[[test_calc.py test_fails_on_purpose]]", get(d, "pyrerun.failedPaths"))),
+        ("derived", "the derivation appends the failed node id", lambda d: (any("test_fails_on_purpose" in a for a in (get(d, "pyrerun.derivedArgs") or [])), get(d, "pyrerun.derivedArgs"))),
+        ("one", "the rerun executed only the failed test (one item collected)", lambda d: (get(d, "pyrerun.rerunRanOneTest") is True, get(d, "pyrerun.rerunRanOneTest"))),
     ],
     "dbgcfg": [
         ("dbgcfgError", *absent("dbgcfgError")),

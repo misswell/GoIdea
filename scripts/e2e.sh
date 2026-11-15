@@ -121,6 +121,25 @@ PROJ="$CARUN"
 JAVA=""
 smoke "$CARGORUN_JSON" GOIDEA_SMOKE_CARGORUN=1
 python3 "$CHECKS" cargorun "$CARGORUN_JSON"
+
+say "阶段 1b5：pytest 测试管线与重新运行失败的测试"
+if ! command -v pytest >/dev/null 2>&1; then
+    say "准备 pytest：优先 venv（本机 python 可能 externally-managed）"
+    if [ ! -x "$HOME/.goidea-pytest/bin/pytest" ]; then
+        python3 -m venv "$HOME/.goidea-pytest" && "$HOME/.goidea-pytest/bin/pip" install --quiet pytest
+    fi
+    export PATH="$HOME/.goidea-pytest/bin:$PATH"
+    export GOIDEA_PYTEST="$HOME/.goidea-pytest/bin/pytest"
+fi
+PYRUN="$WORK/pytest-app"
+cp -R "$ROOT/testdata/pytest-app" "$PYRUN"
+rm -rf "$PYRUN/__pycache__" "$PYRUN/.pytest_cache"
+PYRUN_JSON="$WORK/pyrerun.json"
+PROJ="$PYRUN"
+JAVA=""
+smoke "$PYRUN_JSON" GOIDEA_SMOKE_PYRERUN=1
+python3 "$CHECKS" pyrerun "$PYRUN_JSON"
+unset GOIDEA_PYTEST
 PROJ="$PROJ_BASE"; JAVA="$JAVA_BASE"
 
 say "阶段 1b3：六态启动状态机（第八节）"

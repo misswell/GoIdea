@@ -297,6 +297,20 @@ when each state was first reached on the real backend and asserts the
 ordering (backend ≤ project ≤ buildModel ≤ run) and that all of them are
 reached (`readiness.*` checks).
 
+## Pytest pipeline
+
+`internal/adapter/testing_pytest.go` ports `pytest.ts`: `-v` verbose lines,
+`-rA`/short summary lines, progress dots, failure sections whose names are
+buffered until a node id resolves them, and the final summary. Upstream's
+`withTestReporting` adds `-v` to a pytest launch unless a verbosity was
+chosen, and `pytestArgs` (rerun.ts) derives the failed-tests filter by
+appending the node ids after the options. The configuration's command may
+point at a venv interpreter (edited through Edit Configurations, since the
+backend resolves commands on the login shell's PATH). The e2e phase 1b5
+(`GOIDEA_SMOKE_PYRERUN=1`, `testdata/pytest-app`) proves the tree counts (1
+failure, 2 passes), the failed node id (`test_calc.py::test_fails_on_purpose`)
+and that the rerun collects and runs only it.
+
 ## Cargo test pipeline
 
 `internal/adapter/testing_cargo.go` ports `cargo.ts`: libtest output
