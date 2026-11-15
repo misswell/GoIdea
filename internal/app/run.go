@@ -63,6 +63,8 @@ type RunPane struct {
 	tests      *adapter.TestResults
 	testParser *adapter.JvmParser
 	testStdout *adapter.TestStdoutBuffer
+	// selTest is the selected node of the results tree view.
+	selTest string
 }
 
 type outputLine struct {
@@ -203,6 +205,7 @@ func (m *Model) loadRunConfigs() {
 			m.run.configs = configs
 			m.run.inline = nil
 			m.run.loaded = true
+			m.refreshReadiness()
 			m.run.sel = pickRunConfig(configs)
 			m.invalidate()
 			if m.run.pendingStart {
@@ -569,6 +572,51 @@ func (p *RunPane) append(c openidea.OutputChunk) {
 		p.output = append(p.output[:0], p.output[over:]...)
 		p.truncated = true
 	}
+}
+
+// testTreeLine is one row of the results tree view: its node id, the status
+// mark and the display text.
+type testTreeLine struct {
+	id   string
+	mark string
+	text string
+}
+
+// treeLines flattens the results tree for the view: one row per node, roots
+// first, children indented, with the aggregated status mark and the duration.
+func (p *RunPane) treeLines() []testTreeLine {
+	if p.tests == nil || p.tests.IsEmpty() {
+		return nil
+	}
+	mark := func(n *adapter.TestNode) string {
+		switch adapter.TestNodeStatusOf(n) {
+		case adapter.TestPassed:
+			return "✓"
+		case adapter.TestFailed:
+			return "✗"
+		case adapter.TestSkipped:
+			return "⊘"
+		case adapter.TestRunning:
+			return "⟳"
+		}
+		return "·"
+	}
+	var out []testTreeLine
+	var walk func(n *adapter.TestNode, depth int)
+	walk = func(n *adapter.TestNode, depth int) {
+		text := strings.Repeat("    ", depth) + n.Name
+		if n.DurationMs != nil {
+			text += fmt.Sprintf(" (%.1f ms)", *n.DurationMs)
+		}
+		out = append(out, testTreeLine{id: n.ID, mark: mark(n), text: text})
+		for _, ch := range n.Children {
+			walk(ch, depth+1)
+		}
+	}
+	for _, root := range p.tests.Roots {
+		walk(root, 0)
+	}
+	return out
 }
 
 // feedRunTests feeds the run's output lines to the test parser (types.ts

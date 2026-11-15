@@ -997,6 +997,70 @@
    "doc": "BUILD_AND_DEBUG.md"
   },
   {
+   "id": "readiness.readinessError",
+   "label": "readinessError is absent",
+   "feature": "Readiness state machine reports no unexpected error",
+   "area": "startup",
+   "gate": "main",
+   "doc": "README.md"
+  },
+  {
+   "id": "readiness.ordered",
+   "label": "the six states arrive in order (backend ≤ project ≤ buildModel ≤ run)",
+   "feature": "8: readiness state machine ordering",
+   "area": "startup",
+   "gate": "main",
+   "doc": "README.md"
+  },
+  {
+   "id": "readiness.final",
+   "label": "every readiness state is reached",
+   "feature": "8: Backend/Project/Java/BuildModel/Run all ready",
+   "area": "startup",
+   "gate": "main",
+   "doc": "README.md"
+  },
+  {
+   "id": "attach.attachError",
+   "label": "attachError is absent",
+   "feature": "Attach to Process reports no unexpected error",
+   "area": "debugger",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "attach.found",
+   "label": "the attachable-process list found the suspended JDWP JVM",
+   "feature": "Attach to Process: backend process enumeration",
+   "area": "debugger",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "attach.session",
+   "label": "the attach request built a real java-debug session",
+   "feature": "javaAttachConfig port",
+   "area": "debugger",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "attach.output",
+   "label": "the resumed session printed the program's output",
+   "feature": "Attach session runs the program",
+   "area": "debugger",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "rerunfail.tree",
+   "label": "the results tree view lists the class and the failed method with failure marks",
+   "feature": "Test results tree view",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
    "id": "negjdtls.negjdtlsError",
    "label": "negjdtlsError is absent",
    "feature": "Missing-toolchain launch reports no unexpected error",

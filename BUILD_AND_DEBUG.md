@@ -258,6 +258,45 @@ surefire reports `Tests run: 1`. Not ported yet: the results **tree view**
 (the console shows the failure details), the other frameworks' parsers, and
 Gradle's init-script wiring (`run_gradle_jvm_args_script`).
 
+## Test results tree view
+
+The Run pane renders the parsed results tree above the console (upstream
+RunView's test tree): one row per node with the status mark (✓ ✗ ⊘ ⟳), the
+name and the duration; clicking a row selects it and shows its captured
+output. The `rerunfail.*` e2e checks assert the tree lists
+`✗ com.example.CalculatorTest` and `✗ failsOnPurpose` with durations.
+
+## Attach to Process
+
+**附加到进程…** (`Alt+Shift+F5`, `debug.attach`, `internal/app/attach.go`)
+ports `attach.ts` and `java.ts`'s `javaAttachConfig`: the backend enumerates
+the attachable processes (`debug_attachable_processes`), the popup lists the
+Java (JDWP) group with the filter (every word matches pid, name or command
+line), and attaching builds java-debug's attach request — the session's
+cwd, the imported project's name (`javaProjectName`), `hostName`, `port` and
+a 30 s timeout. A VM started with `suspend=y` is resumed once attached, as
+IDEA does; its stdout stays with the process that launched it. The e2e
+release phase runs the real flow: a run starts the App suspended on port
+5005, the process list finds it, the attach builds a real java-debug
+session, and the resumed JVM's output lands in the Run pane (`attach.*`
+checks). GoIDEA ships the java-debug adapter only, so the popup lists the
+Java group — kinds without an adapter are not offered.
+
+## Readiness (section 8's six states)
+
+`internal/app/readiness.go` derives the startup states from the live
+signals: **Backend Connected** (the manager's running phase), **Project
+Opened** (`project_current` matches), **Project Importing** (open while
+jdtls is starting), **Java Ready** (the jdtls status is ready), **Build
+Model Ready** (the Maven window's model loaded without error) and **Run
+Ready** (the project trusted and its configurations loaded). The snapshot
+refreshes when the project opens, after the run configs and the build model
+land; the Run pane's header names the first missing state, and Debug
+requires Java Ready. The e2e phase 1b3 (`GOIDEA_SMOKE_READINESS=1`) records
+when each state was first reached on the real backend and asserts the
+ordering (backend ≤ project ≤ buildModel ≤ run) and that all of them are
+reached (`readiness.*` checks).
+
 ## HotSwap (Reload Changed Classes)
 
 **重新加载变更的类（HotSwap）** (`debug.reloadChangedClasses`,

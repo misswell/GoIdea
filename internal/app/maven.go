@@ -107,6 +107,7 @@ func (m *Model) loadBuildModel() {
 				m.maven.err = "读取构建模型失败：" + err.Error()
 			} else {
 				m.maven.model = model
+				m.refreshReadiness()
 			}
 			m.invalidate()
 		})

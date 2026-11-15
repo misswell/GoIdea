@@ -151,6 +151,15 @@ func (m *Model) SmokeRerunFailed(ctx context.Context) (map[string]any, error) {
 	// Only the failed method ran again: surefire reports a single test.
 	ranOnce := strings.Contains(output, "Tests run: 1")
 	out["rerunRanOneTest"] = ranOnce
+	// The results tree view: rows carry the status marks and both the class
+	// and the failed method.
+	var tree []string
+	m.post(func() {
+		for _, line := range m.run.treeLines() {
+			tree = append(tree, line.mark+" "+strings.TrimSpace(line.text))
+		}
+	})
+	out["tree"] = tree
 	if !ranOnce {
 		return out, fmt.Errorf("重跑没有只运行失败的方法；输出尾部：%s", tailOf(output, 800))
 	}
@@ -576,4 +585,201 @@ func (m *Model) SmokeRunKill(ctx context.Context) (map[string]any, error) {
 		}
 	}
 	return out, errors.New("5 分钟内重跑没有退出")
+}
+
+// SmokeReadiness records the six-state startup timeline (section 8) on the
+// real backend: when each state — Backend Connected, Project Opened, Project
+// Importing, Java Ready, Build Model Ready, Run Ready — was first reached,
+// and that they arrive in order.
+func (m *Model) SmokeReadiness(ctx context.Context) (map[string]any, error) {
+	out := map[string]any{"root": m.Root()}
+	first := map[string]time.Time{}
+	started := time.Now()
+	deadline := time.Now().Add(6 * time.Minute)
+	for time.Now().Before(deadline) {
+		r := m.readinessNow(ctx)
+		note := func(state string, ok bool) {
+			if ok {
+				if _, ok := first[state]; !ok {
+					first[state] = time.Now()
+				}
+			}
+		}
+		note("backend", r.Backend)
+		note("project", r.Project)
+		note("importing", r.Importing)
+		note("java", r.Java)
+		note("buildModel", r.BuildModel)
+		note("run", r.Run)
+		if r.Backend && r.Project && r.Java && r.BuildModel && r.Run {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(250 * time.Millisecond):
+		}
+	}
+	ms := func(state string) any {
+		t, ok := first[state]
+		if !ok {
+			return nil
+		}
+		return t.Sub(started).Milliseconds()
+	}
+	out["backendAt"] = ms("backend")
+	out["projectAt"] = ms("project")
+	out["importingAt"] = ms("importing")
+	out["javaAt"] = ms("java")
+	out["buildModelAt"] = ms("buildModel")
+	out["runAt"] = ms("run")
+	final := m.readinessNow(ctx)
+	out["final"] = map[string]bool{
+		"backend": final.Backend, "project": final.Project,
+		"java": final.Java, "buildModel": final.BuildModel, "run": final.Run,
+	}
+	// The states arrive in order: the backend and the project precede the
+	// rest; the run pane is ready only after the build model.
+	for _, pair := range [][2]string{{"backend", "project"}, {"project", "buildModel"}, {"buildModel", "run"}} {
+		a, aok := first[pair[0]]
+		b, bok := first[pair[1]]
+		if !aok || !bok {
+			return out, fmt.Errorf("状态 %s 或 %s 没有到达", pair[0], pair[1])
+		}
+		if b.Before(a) {
+			return out, fmt.Errorf("状态 %s 早于 %s 到达", pair[1], pair[0])
+		}
+	}
+	out["ordered"] = true
+	return out, nil
+}
+
+// SmokeAttach attaches to a real suspended JDWP JVM through Attach to
+// Process: a run starts the App suspended with a fixed debug port, the
+// attachable-process list finds it, AttachToProcess builds java-debug's
+// attach request (javaAttachConfig), and the resumed session prints the
+// program's output.
+func (m *Model) SmokeAttach(ctx context.Context) (map[string]any, error) {
+	out := map[string]any{"root": m.Root()}
+	// The suspended JVM runs the project's main class through a shell
+	// configuration: server=y keeps it waiting for the debugger, and the
+	// fixed port makes it findable in the process list. The attach itself
+	// needs no run configuration — only the project's sources.
+	if _, err := m.smokeRunConfigs(ctx); err != nil {
+		return out, err
+	}
+	suspend := map[string]any{
+		"id": "user:attach-smoke", "name": "attach-smoke", "kind": "shell", "command": "sh",
+		"args": []string{"-c", `java -agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=5005 -cp "$PWD/target/classes" com.example.App`},
+		"cwd":  nil, "env": map[string]string{}, "detected": false, "isTest": false, "module": "",
+	}
+	if _, err := m.invoke(ctx, "run_save_configs", map[string]any{
+		"configs": []map[string]any{suspend}, "removedDetectedIds": nil,
+	}); err != nil {
+		return out, err
+	}
+	raw, err := m.invoke(ctx, "run_configs", nil)
+	if err != nil {
+		return out, err
+	}
+	merged, err := openidea.DecodeRunConfigs(raw)
+	if err != nil {
+		return out, err
+	}
+	var line *openidea.RunConfig
+	for i := range merged {
+		if merged[i].ID == "user:attach-smoke" {
+			line = &merged[i]
+		}
+	}
+	if line == nil {
+		return out, errors.New("附加冒烟的 JVM 启动配置没有保存")
+	}
+	m.post(func() {
+		m.run.trusted = true
+		m.run.loaded = true
+		m.run.configs = merged
+		m.invalidate()
+	})
+	m.askOrStart(line.Raw(), line.Name)
+
+	// The process list finds the suspended JVM (its JDWP port listens).
+	var found *openidea.AttachableProcess
+	processDeadline := time.Now().Add(90 * time.Second)
+	for time.Now().Before(processDeadline) {
+		rawList, perr := m.invoke(ctx, "debug_attachable_processes", nil)
+		if perr == nil {
+			var list []openidea.AttachableProcess
+			if json.Unmarshal(rawList, &list) == nil {
+				for _, p := range list {
+					if p.Kind == "java" && p.Port != nil && *p.Port == 5005 {
+						cp := p
+						found = &cp
+					}
+				}
+			}
+		}
+		if found != nil {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
+	if found == nil {
+		return out, errors.New("90 秒内进程列表没有发现挂起的 JDWP JVM")
+	}
+	out["processPid"] = found.PID
+	out["processPort"] = *found.Port
+	m.AttachToProcess(*found)
+	attachDeadline := time.Now().Add(90 * time.Second)
+	attached := false
+	for time.Now().Before(attachDeadline) {
+		var session uint32
+		var starting bool
+		var dbgErr string
+		m.post(func() { session, starting = m.debug.session, m.debug.starting; dbgErr = m.debug.err })
+		if dbgErr != "" {
+			return out, fmt.Errorf("附加失败：%s", dbgErr)
+		}
+		if session != 0 && !starting {
+			attached = true
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(200 * time.Millisecond):
+		}
+	}
+	out["attached"] = attached
+	if !attached {
+		return out, errors.New("90 秒内没有完成附加")
+	}
+	// An attached JVM's stdout stays with the process that launched it (the
+	// run pane's channel), not with the DAP console.
+	endDeadline := time.Now().Add(90 * time.Second)
+	var output string
+	for time.Now().Before(endDeadline) {
+		m.post(func() { output = m.run.text() })
+		if strings.Contains(output, "Hello, GoIDEA!") {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(300 * time.Millisecond):
+		}
+	}
+	out["hasProgramOutput"] = strings.Contains(output, "Hello, GoIDEA!")
+	if !strings.Contains(output, "Hello, GoIDEA!") {
+		return out, fmt.Errorf("被附加的 JVM 没有输出程序文本；运行面板尾部：%s", tailOf(output, 400))
+	}
+	// Clean the smoke's configuration away.
+	_, _ = m.invoke(ctx, "run_save_configs", map[string]any{
+		"configs": []map[string]any{}, "removedDetectedIds": nil,
+	})
+	return out, nil
 }

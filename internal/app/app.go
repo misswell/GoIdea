@@ -295,11 +295,16 @@ type Model struct {
 	invalidateDlg  *invalidatePane
 	restartPending bool
 	// runCfgDlg is Run › Edit Configurations… while it is open, rerunAsk is
-	// the "Process is running" confirm of a rerun, and chooser is the Select
-	// Run/Debug Configuration popup.
+	// the "Process is running" confirm of a rerun, chooser is the Select
+	// Run/Debug Configuration popup, and attach is Attach to Process.
 	runCfgDlg *runConfigDlg
 	rerunAsk  *rerunAsk
 	chooser   *runChooser
+	attach    *attachDlg
+	// ready is the cached six-state readiness snapshot (section 8), refreshed
+	// when the project opens, after the run configs and the build model land,
+	// and by the readiness smoke.
+	ready *Readiness
 	// scratch is the New Scratch File chooser while it is open.
 	scratch *scratchChooser
 
@@ -1126,6 +1131,7 @@ func (m *Model) openProject(dir string, files []string) {
 			m.rememberProject(dir)
 			m.saveSession()
 			m.checkTrust(dir)
+			m.refreshReadiness()
 			m.RefreshVCS()
 			m.RefreshBranch()
 			m.setStartPhase("ready")

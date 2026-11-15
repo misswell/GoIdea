@@ -27,7 +27,7 @@ new action, tool window, page or command appears automatically.
 | Kind | Items | Integrated | Partial | Engine | Blocked | Missing |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Feature folders | 44 | 0 | 12 | 0 | 0 | 32 |
-| Actions | 673 | 42 | 96 | 0 | 1 | 534 |
+| Actions | 673 | 42 | 97 | 0 | 1 | 533 |
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
 | Tool windows | 30 | 10 | 7 | 0 | 0 | 13 |
 | Overlays | 56 | 1 | 1 | 0 | 0 | 54 |
@@ -251,7 +251,7 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 
 | Action | Title | Source | Status |
 | --- | --- | --- | --- |
-| `debug.attach` | Attach Debugger | `src/features/debugger/actions.ts` | missing |
+| `debug.attach` | Attach Debugger | `src/features/debugger/actions.ts` | partial - internal/app/attach.go ports attach.ts and java.ts's javaAttachConfig: debug_attachable_processes enumeration, the Java (JDWP) group with the word filter, and the attach request (cwd, javaProjectName, hostName, port, 30 s timeout) with the suspend=y auto-resume; attach.* release-gate checks attach to a real suspended JDWP JVM and require the program's output in the run pane; limits: GoIDEA ships java-debug only, so the popup lists the Java group, and there is no listen-mode remote debug |
 | `debug.attachToProcess` | Attach to Process… | `src/features/debugger/actions.ts` | missing |
 | `debug.browseConsoleHistory` | Browse Console History | `src/features/debugger/actions.ts` | missing |
 | `debug.cancelHotSwap` | Cancel Hot Swap Build | `src/features/debugger/actions.ts` | missing |
@@ -478,7 +478,7 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `run.pluginStart` | Run Plugin Configuration | `src/features/run/index.ts` | missing |
 | `run.reloadConfigs` | Reload Run Configurations | `src/features/run/index.ts` | missing |
 | `run.rerun` | Rerun | `src/features/run/index.ts` | partial - internal/app/run_config_dialog.go Rerun over the run widget's rerun button (⌘R, run.rerun in internal/app/commands.go): rerunConfig semantics (the configuration as saved now), the Process 'x' Is Running confirm (dialogs.tsx confirmRerun) with 不再询问 persisted under run.confirmRerun in internal/app/settings.go RunPrefs, stop + wait for exit + restart; limits: allowParallel restarts instead of a second instance (single run session) |
-| `run.rerunFailed` | Rerun Failed Tests | `src/features/run/index.ts` | partial - internal/adapter/testing_results.go, testing_jvm.go and testing_rerun.go port the testing pipeline's results.ts, jvm.ts (surefire 2/3 failure lines, class/total summaries, Gradle logging, TeamCity init-script messages) and rerun.ts's jvmArgs (Maven -Dtest=Class#m1+m2, Gradle --tests); internal/app/run.go folds the run output into the tree and internal/app/run_config_dialog.go RerunFailedTests is the action (run.rerunFailed, the run pane's 重跑失败测试 button); rerunfail.* checks run a real failing JUnit method and prove the derived -Dtest=com.example.CalculatorTest#failsOnPurpose reruns Tests run: 1; limits: the results TREE view is not drawn yet, and the other frameworks' parsers (go/pytest/phpunit/ruby/dotnet/cargo/js) are not ported |
+| `run.rerunFailed` | Rerun Failed Tests | `src/features/run/index.ts` | partial - internal/adapter/testing_results.go, testing_jvm.go and testing_rerun.go port the testing pipeline's results.ts, jvm.ts (surefire 2/3, Gradle logging, TeamCity init-script messages) and rerun.ts's jvmArgs; internal/app/run.go folds the run output into the tree, and the Run pane renders the results TREE (internal/app/view.go: status marks, durations, per-node output); run.rerunFailed derives the -Dtest=/--tests filter; rerunfail.* checks prove the derivation and the Tests run: 1 rerun; limits: other frameworks' parsers and Gradle's init-script wiring are not ported |
 | `run.run` | Run | `src/features/run/index.ts` | integrated - base.run.exit, base.run.build |
 | `run.runConfig` | Run Configuration | `src/features/run/index.ts` | partial - internal/app/run_anything.go runAnythingLine executes a run configuration by its exact name (upstream runConfigsRunAnything.execute) with the same multi-word filter and prefix-first ordering as upstream matchingConfigs (runAnythingConfigs); limits: the chooser's debug executor and RunWidget per-kind icons differ |
 | `run.runContext` | Run Context Configuration | `src/features/run/index.ts` | missing |
@@ -1929,7 +1929,7 @@ Local-only commands and the per-command argument lists are in
 | `db_tables` | db | yes | yes | missing |
 | `db_test` | db | yes |  | missing |
 | `db_trust_ssh_host` | db | yes |  | missing |
-| `debug_attachable_processes` | debug | yes |  | missing |
+| `debug_attachable_processes` | debug | yes | yes | missing |
 | `debug_breakpoint_states` | debug | yes |  | missing |
 | `debug_capabilities` | debug | yes |  | missing |
 | `debug_completions` | debug | yes |  | missing |
@@ -2488,7 +2488,7 @@ Local-only commands and the per-command argument lists are in
 | `wsl_distros` | wsl | no |  | missing |
 | `wsl_resolve` | wsl | no |  | missing |
 
-476 commands are served over stdio and 110 are called by GoIDEA today. A command
+476 commands are served over stdio and 111 are called by GoIDEA today. A command
 that is registered only in the desktop shell needs an `ops` module before stdio
 can serve it; a GoIDEA check counts only when the UI path works end to end.
 

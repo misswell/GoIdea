@@ -723,7 +723,7 @@
     },
     "action:run.rerunFailed": {
       "status": "partial",
-      "evidence": "internal/adapter/testing_results.go, testing_jvm.go and testing_rerun.go port the testing pipeline's results.ts, jvm.ts (surefire 2/3 failure lines, class/total summaries, Gradle logging, TeamCity init-script messages) and rerun.ts's jvmArgs (Maven -Dtest=Class#m1+m2, Gradle --tests); internal/app/run.go folds the run output into the tree and internal/app/run_config_dialog.go RerunFailedTests is the action (run.rerunFailed, the run pane's 重跑失败测试 button); rerunfail.* checks run a real failing JUnit method and prove the derived -Dtest=com.example.CalculatorTest#failsOnPurpose reruns Tests run: 1; limits: the results TREE view is not drawn yet, and the other frameworks' parsers (go/pytest/phpunit/ruby/dotnet/cargo/js) are not ported"
+      "evidence": "internal/adapter/testing_results.go, testing_jvm.go and testing_rerun.go port the testing pipeline's results.ts, jvm.ts (surefire 2/3, Gradle logging, TeamCity init-script messages) and rerun.ts's jvmArgs; internal/app/run.go folds the run output into the tree, and the Run pane renders the results TREE (internal/app/view.go: status marks, durations, per-node output); run.rerunFailed derives the -Dtest=/--tests filter; rerunfail.* checks prove the derivation and the Tests run: 1 rerun; limits: other frameworks' parsers and Gradle's init-script wiring are not ported"
     },
     "action:debug.reloadChangedClasses": {
       "status": "partial",
@@ -732,6 +732,10 @@
     "action:run.runConfig": {
       "status": "partial",
       "evidence": "internal/app/run_anything.go runAnythingLine executes a run configuration by its exact name (upstream runConfigsRunAnything.execute) with the same multi-word filter and prefix-first ordering as upstream matchingConfigs (runAnythingConfigs); limits: the chooser's debug executor and RunWidget per-kind icons differ"
+    },
+    "action:debug.attach": {
+      "status": "partial",
+      "evidence": "internal/app/attach.go ports attach.ts and java.ts's javaAttachConfig: debug_attachable_processes enumeration, the Java (JDWP) group with the word filter, and the attach request (cwd, javaProjectName, hostName, port, 30 s timeout) with the suspend=y auto-resume; attach.* release-gate checks attach to a real suspended JDWP JVM and require the program's output in the run pane; limits: GoIDEA ships java-debug only, so the popup lists the Java group, and there is no listen-mode remote debug"
     }
   }
 }

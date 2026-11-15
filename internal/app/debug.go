@@ -592,6 +592,11 @@ func (m *Model) DebugRunConfig(rc *openidea.RunConfig) {
 		m.invalidate()
 		return
 	}
+	if reason := m.readyFor(true); reason != "" && m.run.loaded {
+		m.debug.err = reason
+		m.invalidate()
+		return
+	}
 	if m.debug.starting {
 		return
 	}
@@ -762,6 +767,11 @@ func (m *Model) DebugContext() {
 	}
 	if !m.run.trusted {
 		m.debug.err = "项目未受信任：先授权构建和调试"
+		m.invalidate()
+		return
+	}
+	if reason := m.readyFor(true); reason != "" && m.run.loaded {
+		m.debug.err = reason
 		m.invalidate()
 		return
 	}

@@ -392,6 +392,34 @@ func (m *Model) runPanel(c *ui.Context, p *ui.Theme) {
 				ui.Text(c, m.run.err).FontSize(11.5).TextColor(p.Warning).SingleLine().Ellipsis("…")
 			})
 		}
+		// The test results tree, above the console like upstream RunView's
+		// test tree: status mark, name and duration per node, and a failed
+		// node's details render under the tree when selected.
+		if tree := m.run.treeLines(); len(tree) > 0 {
+			ui.Scroll(c).Height(150).Children(func() {
+				ui.Column(c).Padding(4, 10).Children(func() {
+					for i, line := range tree {
+						i, line := i, line
+						row := ui.Row(c.Key(fmt.Sprintf("testtree:%d", i))).Height(20).Padding(0, 4).Gap(6).AlignItems(ui.Center)
+						if line.id == m.run.selTest {
+							row.Background(p.SurfaceHover)
+						}
+						row.OnClick(func() {
+							m.run.selTest = line.id
+							m.invalidate()
+						})
+						row.Children(func() {
+							ui.Text(c, line.mark+" "+line.text).FontSize(11.5).TextColor(p.Text).SingleLine().Ellipsis("…")
+						})
+					}
+				})
+			})
+			if node := m.run.tests.Get(m.run.selTest); node != nil && len(node.Output) > 0 {
+				ui.Row(c).Padding(4, 10).Children(func() {
+					ui.Text(c, adapter.NodeOutputText(node)).FontSize(11).TextColor(p.TextMuted)
+				})
+			}
+		}
 		ui.Scroll(c).Grow(1).Children(func() {
 			ui.Column(c).Padding(8, 10).Children(func() {
 				if !m.run.trusted {
@@ -510,7 +538,11 @@ func (m *Model) runHeader(c *ui.Context, p *ui.Theme) {
 	ui.Row(c).Height(30).Padding(0, 8).Gap(8).AlignItems(ui.Center).
 		BorderWidth(0, 0, 1, 0).BorderColor(p.Border).Children(func() {
 		ui.Text(c, "运行").FontSize(12).Bold().TextColor(p.Text)
-		if m.run.trusted {
+		// The section-8 readiness: when a state is missing, the header names
+		// it instead of failing silently.
+		if reason := m.readyFor(false); reason != "" && m.run.trusted {
+			ui.Text(c, reason).FontSize(10.5).TextColor(p.TextMuted).SingleLine().Grow(1)
+		} else if m.run.trusted {
 			ui.Button(c, "‹").OnClick(func() { m.CycleRunConfig(-1) })
 			name := "正在读取配置…"
 			if cfg := m.run.current(); cfg != nil {

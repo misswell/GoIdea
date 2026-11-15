@@ -3,7 +3,7 @@
 
 Usage: e2e-checks.py <phase> <smoke.json> [<smoke.json> ...]
        e2e-checks.py --list
-Phases: base | tools | lsp | debug | hotswap | spring | rerunfail | negjdtls | runswitch | runkill | dbgcfg
+Phases: base | tools | lsp | debug | hotswap | spring | rerunfail | readiness | negjdtls | runswitch | runkill | dbgcfg | attach
 Every check has an id. REGRESSION_INDEX.json names the same ids, and --list
 lets scripts/check-regression-index.py prove the two never drift apart, so a
 check cannot be deleted without the index noticing. Every failed assertion is
@@ -184,6 +184,18 @@ CHECKS = {
         ("paths", "the failed test path is the class and method", lambda d: (get(d, "rerunfail.failedPaths") == "[[com.example.CalculatorTest failsOnPurpose]]", get(d, "rerunfail.failedPaths"))),
         ("derived", "the derived configuration filters with Maven's -Dtest= on the failed method", lambda d: ("-Dtest=com.example.CalculatorTest#failsOnPurpose" in (get(d, "rerunfail.derivedArgs") or []), get(d, "rerunfail.derivedArgs"))),
         ("one", "the rerun executed only the failed method (Tests run: 1)", lambda d: (get(d, "rerunfail.rerunRanOneTest") is True, get(d, "rerunfail.rerunRanOneTest"))),
+        ("tree", "the results tree view lists the class and the failed method with failure marks", lambda d: (any("✗" in r and "CalculatorTest" in r for r in (get(d, "rerunfail.tree") or [])) and any("✗" in r and "failsOnPurpose" in r for r in (get(d, "rerunfail.tree") or [])), get(d, "rerunfail.tree"))),
+    ],
+    "readiness": [
+        ("readinessError", *absent("readinessError")),
+        ("ordered", "the six states arrive in order (backend ≤ project ≤ buildModel ≤ run)", lambda d: (get(d, "readiness.ordered") is True, get(d, "readiness"))),
+        ("final", "every readiness state is reached", lambda d: (all(v is True for v in (get(d, "readiness.final") or {}).values()), get(d, "readiness.final"))),
+    ],
+    "attach": [
+        ("attachError", *absent("attachError")),
+        ("found", "the attachable-process list found the suspended JDWP JVM", lambda d: ((get(d, "attach.processPort") or 0) == 5005, get(d, "attach.processPort"))),
+        ("session", "the attach request built a real java-debug session", lambda d: (get(d, "attach.attached") is True, get(d, "attach.attached"))),
+        ("output", "the resumed session printed the program's output", lambda d: (get(d, "attach.hasProgramOutput") is True, get(d, "attach.hasProgramOutput"))),
     ],
     "dbgcfg": [
         ("dbgcfgError", *absent("dbgcfgError")),

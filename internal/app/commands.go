@@ -155,6 +155,7 @@ func builtinCommands() []appCommand {
 		{"run.debug", "调试所选配置", "运行", "F9", "debug selected configuration", func(m *Model) { m.Debug() }},
 		{"run.debugContext", "调试当前文件", "运行", "Ctrl+Shift+D", "debug context active file", func(m *Model) { m.DebugContext() }},
 		{"run.stop", "停止", "运行", "Shift+F5", "stop terminate", func(m *Model) { m.StopRun(); m.StopDebug() }},
+		{"debug.attach", "附加到进程…", "运行", "Alt+Shift+F5", "attach to process jdwp java", func(m *Model) { m.OpenAttach() }},
 		{"run.breakpoint", "切换断点", "运行", "Cmd+F8", "toggle breakpoint", func(m *Model) { m.ToggleBreakpoint() }},
 		{"run.stepOver", "步过", "运行", "F8", "step over", func(m *Model) { m.StepOver() }},
 		{"run.stepInto", "步入", "运行", "F7", "step into", func(m *Model) { m.StepInto() }},

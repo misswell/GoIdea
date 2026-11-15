@@ -355,6 +355,18 @@ type HotSwapResult struct {
 	ErrorMessage   *string  `json:"errorMessage"`
 }
 
+// AttachableProcess is one entry of debug_attachable_processes: a process a
+// debugger can attach to.
+type AttachableProcess struct {
+	PID         int     `json:"pid"`
+	Name        string  `json:"name"`
+	CommandLine string  `json:"commandLine"`
+	Kind        string  `json:"kind"` // java | node | python | go | native
+	Adapter     string  `json:"adapter"`
+	Host        *string `json:"host"`
+	Port        *int    `json:"port"`
+}
+
 // LineMatch is one line a search matched: 0-based line, its text, and the
 // UTF-16 column ranges within that text.
 type LineMatch struct {

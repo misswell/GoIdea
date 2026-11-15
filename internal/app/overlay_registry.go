@@ -112,6 +112,9 @@ func init() {
 	reg("runConfigs", overlayLayerDialog, 252, true,
 		func(m *Model) bool { return m.runCfgDlg != nil },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.runConfigsDialog(c, p) })
+	reg("attach", overlayLayerDialog, 254, true,
+		func(m *Model) bool { return m.attach != nil },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.attachDialog(c, p) })
 	reg("runChooser", overlayLayerPopup, 253, false,
 		func(m *Model) bool { return m.chooser != nil },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.runChooserDialog(c, p) })

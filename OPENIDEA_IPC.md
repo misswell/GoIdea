@@ -44,7 +44,7 @@ release can be called today.
 | Clipboard | `clipboard` | 0 | 6 | 0 |
 | Coverage | `coverage` | 3 | 0 | 0 |
 | Database | `db` | 31 | 1 | 13 |
-| Debugger | `debug` | 36 | 2 | 13 |
+| Debugger | `debug` | 36 | 2 | 14 |
 | Dependencies | `dependencies` | 1 | 0 | 0 |
 | Deployment | `deploy` | 16 | 0 | 0 |
 | Documents | `doc` | 18 | 0 | 6 |
@@ -88,7 +88,7 @@ release can be called today.
 ## Served by `openidea-server --stdio`
 
 476 commands. `GoIDEA` marks the ones a non-test Go source invokes today
-(110 of 476).
+(111 of 476).
 
 | Command | Domain | Arguments | GoIDEA |
 | --- | --- | --- | --- |
@@ -171,7 +171,7 @@ release can be called today.
 | `db_tables` | Database | — | yes |
 | `db_test` | Database | — | — |
 | `db_trust_ssh_host` | Database | — | — |
-| `debug_attachable_processes` | Debugger | — | — |
+| `debug_attachable_processes` | Debugger | — | yes |
 | `debug_breakpoint_states` | Debugger | `path` | — |
 | `debug_capabilities` | Debugger | `session` | — |
 | `debug_completions` | Debugger | `column`, `frameId`, `line`, `session`, `text` | — |
@@ -782,7 +782,7 @@ GoIDEA needs to do for each:
 
 ## What this means for GoIDEA
 
-476 remote commands are available today; GoIDEA uses 110. The parity work is
+476 remote commands are available today; GoIDEA uses 111. The parity work is
 first to cover the remote surface OpenIDEA's own frontend uses, then to move
 `shared-op`/`host`/`crate` commands onto stdio through the OpenIDEA fork
 (a submodule bump and a server release), and to implement `desktop` commands

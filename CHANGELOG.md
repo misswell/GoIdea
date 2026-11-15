@@ -3,6 +3,12 @@
 The update window shows the section of the version it offers. Every release
 needs a `## <version>` section here, or its build fails.
 
+## Unreleased
+
+- 运行窗口新增**测试结果树**：状态标记、耗时与失败详情，点击查看单个测试的输出。
+- 新增 **附加到进程…**（`Alt+Shift+F5`）：枚举可附加的 Java（JDWP）进程并附加到运行中的 JVM，挂起启动的 VM 附加后自动恢复。
+- 新增启动就绪状态机：后端连接 → 项目打开 → 导入中 → Java 就绪 → 构建模型就绪 → 运行就绪，未就绪时显示原因。
+
 ## 0.1.4
 
 - 运行窗口新增**重跑失败测试**：按原版解析 surefire 输出生成结果树，重跑只带失败的方法（`-Dtest=类#方法`）。

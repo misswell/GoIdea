@@ -61,6 +61,9 @@ const maxTestOutputLines = 400
 
 // testNodeStatus aggregates a node's status over its subtree (results.ts
 // nodeStatus).
+// TestNodeStatusOf exposes a node's aggregated status to the view.
+func TestNodeStatusOf(node *TestNode) TestStatus { return testNodeStatus(node) }
+
 func testNodeStatus(node *TestNode) TestStatus {
 	if len(node.Children) == 0 {
 		return node.Own
@@ -144,6 +147,11 @@ func (r *TestResults) Node(path []string) *TestNode {
 		parent.Children = append(parent.Children, node)
 	}
 	return node
+}
+
+// Get returns the node with the id, or nil.
+func (r *TestResults) Get(id string) *TestNode {
+	return r.byID[id]
 }
 
 // HasResult reports whether the test at path finished with a result.

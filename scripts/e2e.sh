@@ -111,6 +111,11 @@ smoke "$REFAIL_JSON" GOIDEA_SMOKE_RERUNFAIL=1
 python3 "$CHECKS" rerunfail "$REFAIL_JSON"
 PROJ="$PROJ_BASE"; JAVA="$JAVA_BASE"
 
+say "阶段 1b3：六态启动状态机（第八节）"
+READINESS_JSON="$WORK/readiness.json"
+smoke "$READINESS_JSON" GOIDEA_SMOKE_READINESS=1
+python3 "$CHECKS" readiness "$READINESS_JSON"
+
 say "阶段 1c：运行准备负向回归（任何准备失败都不得调用 run_start）"
 # A: a data directory without the Java toolchain — the application
 # configuration's preparation must fail with the real reason.
@@ -135,10 +140,13 @@ python3 "$CHECKS" runswitch "$RUNSWITCH"
 RUNKILL="$WORK/runkill.json"
 smoke "$RUNKILL" GOIDEA_SMOKE_RUNKILL=1
 python3 "$CHECKS" runkill "$RUNKILL"
-# D: run.debug debugs the detected application configuration itself.
+# D: run.debug debugs the detected application configuration itself; the
+# same instance then attaches to a real suspended JDWP JVM through Attach to
+# Process.
 DBGCFG="$WORK/dbgcfg.json"
-smoke "$DBGCFG" GOIDEA_SMOKE_DBGCFG=1
+smoke "$DBGCFG" GOIDEA_SMOKE_DBGCFG=1 GOIDEA_SMOKE_ATTACH=1
 python3 "$CHECKS" dbgcfg "$DBGCFG"
+python3 "$CHECKS" attach "$DBGCFG"
 
 if [ "$OFFLINE" = "1" ]; then
     skip "Java 工具安装、JDT 语言服务与调试（GOIDEA_E2E_OFFLINE=1）"
