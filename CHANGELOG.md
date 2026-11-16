@@ -3,7 +3,7 @@
 The update window shows the section of the version it offers. Every release
 needs a `## <version>` section here, or its build fails.
 
-## Unreleased
+## 0.1.14
 
 - **File › New Project…** 现在会打开向导：此前命令和欢迎页按钮都不显示任何界面。
 - 无干扰模式（**View | Appearance**）恢复显示编辑器内容与退出提示条，不再是一片空白。
