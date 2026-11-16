@@ -154,6 +154,27 @@ func (m *Model) SmokeShots(ctx context.Context, dir string) (map[string]any, err
 	shot("settings")
 	m.post(func() { m.closeSettings() })
 
+	// Every other settings page this build carries, one state each.
+	for _, page := range []struct{ id, name string }{
+		{settingsPageKeymap, "settings-keymap"},
+		{settingsPageGeneral, "settings-editor"},
+		{settingsPageEditorAppearance, "settings-editor-appearance"},
+		{settingsPageBreadcrumbs, "settings-breadcrumbs"},
+		{settingsPageEditorTabs, "settings-tabs"},
+		{settingsPageCodeFolding, "settings-folding"},
+		{settingsPageEditorFont, "settings-font"},
+		{settingsPageTodo, "settings-todo"},
+		{settingsPageNotifications, "settings-notifications"},
+		{settingsPageJava, "settings-java"},
+	} {
+		page := page
+		m.post(func() { m.OpenSettingsPage(page.id) })
+		wait(func() bool { return m.settingsOpen }, 30*time.Second)
+		shot(page.name)
+		m.post(func() { m.closeSettings() })
+		wait(func() bool { return !m.settingsOpen }, 30*time.Second)
+	}
+
 	// Command palette and the quick-file popup.
 	m.post(func() { m.OpenCommands() })
 	wait(func() bool { return m.palette != nil }, 30*time.Second)
@@ -163,6 +184,12 @@ func (m *Model) SmokeShots(ctx context.Context, dir string) (map[string]any, err
 	wait(func() bool { return m.files != nil && m.files.done }, 60*time.Second)
 	shot("popup-quick-files")
 	m.post(func() { m.closeQuickFiles() })
+
+	// Run Anything over the same configurations.
+	m.post(func() { m.OpenRunAnything() })
+	wait(func() bool { return m.runAnything != nil }, 30*time.Second)
+	shot("run-anything")
+	m.post(func() { m.closeRunAnything() })
 
 	// Search Everywhere over the real index.
 	m.post(func() {
@@ -181,6 +208,23 @@ func (m *Model) SmokeShots(ctx context.Context, dir string) (map[string]any, err
 	m.post(func() { m.ShowServices() })
 	shot("services")
 	m.post(func() { m.CloseServices() })
+
+	// The Debug window with no session, and the terminal with a live shell.
+	m.post(func() { m.ShowDebug() })
+	wait(func() bool { return m.debug.visible }, 30*time.Second)
+	shot("debug")
+	// DockHide, not the mirror flag: the dock is what draws the bottom area,
+	// so every later state would keep showing the window.
+	m.post(func() { m.DockHide("debug") })
+	wait(func() bool { return !m.debug.visible }, 30*time.Second)
+	m.post(func() { m.ShowTerm() })
+	wait(func() bool {
+		s := m.term.current()
+		return s != nil && s.id != 0 && len(s.lines) > 0
+	}, 60*time.Second)
+	shot("terminal")
+	m.post(func() { m.DockHide("term") })
+	wait(func() bool { return !m.term.visible }, 30*time.Second)
 
 	// The left tool window: Structure in the split area below Project.
 	m.post(func() { m.ShowStructure() })
@@ -238,6 +282,18 @@ func (m *Model) SmokeShots(ctx context.Context, dir string) (map[string]any, err
 	wait(func() bool { return m.diff != nil && !m.diff.loading }, 60*time.Second)
 	shot("diff")
 	m.post(func() { m.closeDiff() })
+
+	// Local History from the editor menu, over the file's own snapshots.
+	m.post(func() {
+		if t := m.tab(); t != nil {
+			m.ShowHistory(t.doc.Path())
+		}
+	})
+	wait(func() bool {
+		return m.history != nil && !m.history.loading && !m.history.busy
+	}, 60*time.Second)
+	shot("local-history")
+	m.post(func() { m.closeHistory() })
 
 	// View › Tool Windows › Database with the project's data sources.
 	m.post(func() { m.OpenDatabase() })
