@@ -6,6 +6,7 @@ needs a `## <version>` section here, or its build fails.
 ## 0.1.10
 
 - 测试结果管线支持 **jest**：verbose 输出解析进结果树，重新运行失败的测试按 `-t` 正则锚定派生（项目需安装 jest）。
+- 结果树中双击失败的测试会打开其源文件并定位到失败行。
 
 ## 0.1.9
 
