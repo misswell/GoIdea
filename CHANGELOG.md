@@ -3,7 +3,7 @@
 The update window shows the section of the version it offers. Every release
 needs a `## <version>` section here, or its build fails.
 
-## Unreleased
+## 0.1.19
 
 - 左侧项目树按 OpenIDEA 呈现：包链合并为 `com.example` 一行，模块/源根/包与按类型区分的文件图标，`target`、`.openidea` 等排除目录以琥珀色底显示。
 
