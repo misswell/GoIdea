@@ -31,6 +31,7 @@ pr_gate() {
     CGO_ENABLED=0 go test ./cmd/mayoi -skip '^TestTerminalMovesToLockedRightColumn$|^TestTerminalExitedEarlyStays$' 
     CGO_ENABLED=0 go build -o build/goidea ./cmd/goidea
     scripts/check-licenses.sh
+    scripts/check-ui-brand.sh
     python3 scripts/check-regression-index.py
     python3 scripts/openidea-ipc.py --check
     python3 scripts/openidea-parity.py --check
