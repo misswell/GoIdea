@@ -7,6 +7,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"image/png"
 	"os"
 	"path/filepath"
@@ -300,6 +301,93 @@ func (m *Model) SmokeShots(ctx context.Context, dir string) (map[string]any, err
 	wait(func() bool { return m.db != nil && m.db.open && !m.db.loading }, 60*time.Second)
 	shot("database")
 	m.post(func() { m.closeDatabase() })
+
+	// The database window's own sheets over a temporary SQLite source: the
+	// table page, the statement history and an execution plan. The source is
+	// written into the project's settings, so it is removed again below.
+	dbFile, dbErr := os.CreateTemp("", "goidea-shots-*.sqlite")
+	if dbErr != nil {
+		errs = append(errs, "database source: "+dbErr.Error())
+	} else {
+		dbPath := dbFile.Name()
+		dbFile.Close()
+		defer os.Remove(dbPath)
+		dbID := sqliteSourceID(dbPath)
+		setupDB := func() error {
+			if m.mgr == nil {
+				return errors.New("no backend")
+			}
+			dbCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+			defer cancel()
+			// The shot run may reuse a project, so drop the sources an earlier
+			// run left before adding this one.
+			if err := m.mgr.DBSaveSourcesRaw(dbCtx, Window, []map[string]any{}); err != nil {
+				return err
+			}
+			if err := m.mgr.DBSaveSQLiteSource(dbCtx, Window, dbID, filepath.Base(dbPath), dbPath); err != nil {
+				return err
+			}
+			if err := m.mgr.DBConnect(dbCtx, Window, dbID); err != nil {
+				return err
+			}
+			sql := "CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT); " +
+				"INSERT INTO items (name) VALUES ('one'), ('two');"
+			stmts, err := m.mgr.DBStatements(dbCtx, Window, dbID, sql, 0, utf16Len(sql))
+			if err != nil {
+				return err
+			}
+			_, err = m.mgr.DBExecute(dbCtx, Window, 1, dbID, stmts, 50, "")
+			return err
+		}
+		if err := setupDB(); err != nil {
+			errs = append(errs, "database source: "+err.Error())
+		} else {
+			m.post(func() { m.OpenDatabase() })
+			wait(func() bool {
+				return m.db != nil && m.db.open && !m.db.loading && len(m.db.tables) > 0
+			}, 60*time.Second)
+			m.post(func() {
+				schema := m.db.schema
+				if schema == "" {
+					schema = "main"
+				}
+				m.OpenDBTable(schema, "items")
+			})
+			wait(func() bool {
+				return m.dbTable != nil && !m.dbTable.loading && len(m.dbTable.page.Result.Rows) > 0
+			}, 60*time.Second)
+			shot("db-table")
+			m.post(func() { m.closeDBTable() })
+
+			m.post(func() {
+				m.db.sql = "SELECT * FROM items"
+				m.RunDB()
+			})
+			wait(func() bool { return !m.db.running && len(m.db.outcomes) > 0 }, 60*time.Second)
+			m.post(func() { m.OpenDBHistory() })
+			wait(func() bool {
+				return m.dbHist != nil && !m.dbHist.loading && len(m.dbHist.items) > 0
+			}, 60*time.Second)
+			shot("db-history")
+			m.post(func() { m.closeDBHistory() })
+
+			m.post(func() {
+				m.db.sql = "SELECT * FROM items WHERE id = 1"
+				m.ExplainDB()
+			})
+			wait(func() bool {
+				return m.dbPlan != nil && !m.dbPlan.loading && len(m.dbPlan.rows) > 0
+			}, 60*time.Second)
+			shot("db-plan")
+			m.post(func() { m.closeDBPlan() })
+			m.post(func() { m.closeDatabase() })
+
+			dbCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			_ = m.mgr.DBDisconnect(dbCtx, Window, dbID)
+			_ = m.mgr.DBSaveSourcesRaw(dbCtx, Window, []map[string]any{})
+			cancel()
+		}
+	}
 
 	// The Trust Project prompt a project asks before it may build.
 	m.post(func() { m.trustAsk = true })

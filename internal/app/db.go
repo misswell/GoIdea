@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -261,6 +263,13 @@ func (m *Model) DisconnectDBSource(id string) {
 	}()
 }
 
+// sqliteSourceID names a SQLite data source after its file. A connection
+// target is <id>[:<database>], so the id itself must not contain a colon.
+func sqliteSourceID(path string) string {
+	sum := sha256.Sum256([]byte(path))
+	return "sqlite-" + hex.EncodeToString(sum[:6])
+}
+
 // AddSQLiteSource asks for a SQLite file and saves it as a data source.
 func (m *Model) AddSQLiteSource() {
 	v := m.db
@@ -280,7 +289,7 @@ func (m *Model) AddSQLiteSource() {
 		path := paths[0]
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
-		id := "sqlite:" + path
+		id := sqliteSourceID(path)
 		err = m.mgr.DBSaveSQLiteSource(ctx, Window, id, filepath.Base(path), path)
 		m.post(func() {
 			if m.db != v {
@@ -1401,7 +1410,13 @@ func (m *Model) dbHistoryDialog(c *ui.Context, p *ui.Theme) {
 			} else {
 				ui.Text(c, fmt.Sprintf("%s · Enter puts it in the console · Esc closes", count(len(h.items), "statement", "statements"))).
 					FontSize(10.5).TextColor(p.TextMuted).SingleLine()
-				ui.Scroll(c).Height(320).Children(func() {
+				// The list hugs its rows up to the cap; a fixed box left a
+				// mostly empty sheet for a handful of statements.
+				historyHeight := float32(len(h.items) * 24)
+				if historyHeight > 320 {
+					historyHeight = 320
+				}
+				ui.Scroll(c).Height(historyHeight).Children(func() {
 					ui.Column(c).Children(func() {
 						for i, e := range h.items {
 							i, e := i, e
@@ -1449,7 +1464,11 @@ func (m *Model) dbPlanDialog(c *ui.Context, p *ui.Theme) {
 			} else if pl.err != "" {
 				ui.Text(c, pl.err).FontSize(11).TextColor(p.Danger).SingleLine().Ellipsis("…")
 			} else {
-				ui.Scroll(c).Height(340).Children(func() {
+				planHeight := float32(len(pl.rows) * 22)
+				if planHeight > 340 {
+					planHeight = 340
+				}
+				ui.Scroll(c).Height(planHeight).Children(func() {
 					ui.Column(c).Children(func() {
 						for _, r := range pl.rows {
 							n := pl.nodes[r.index]

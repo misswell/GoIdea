@@ -25,13 +25,15 @@ func init() {
 	reg("implementation", overlayLayerPopup, 25, true,
 		func(m *Model) bool { return m.impl.open },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.implementationDialog(c, p) })
-	reg("dbTable", overlayLayerDialog, 55, true,
+	// The database window's own sheets open on top of it: its sheet draws at
+	// 210, so these sit above that rather than under it.
+	reg("dbTable", overlayLayerDialog, 215, true,
 		func(m *Model) bool { return m.dbTable != nil },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.dbTableDialog(c, p) })
-	reg("dbHistory", overlayLayerPopup, 56, true,
+	reg("dbHistory", overlayLayerDialog, 216, true,
 		func(m *Model) bool { return m.dbHist != nil && m.dbHist.open },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.dbHistoryDialog(c, p) })
-	reg("dbPlan", overlayLayerDialog, 57, true,
+	reg("dbPlan", overlayLayerDialog, 217, true,
 		func(m *Model) bool { return m.dbPlan != nil && m.dbPlan.open },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.dbPlanDialog(c, p) })
 	reg("termShell", overlayLayerPopup, 58, true,

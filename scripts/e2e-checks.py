@@ -30,6 +30,7 @@ SHOT_STATES = {
     "left-structure", "services", "new-project", "dialog", "welcome-empty", "welcome",
     "welcome-customize", "welcome-plugins", "run-configs", "attach", "commit", "diff",
     "database", "trust", "run-anything", "local-history", "debug", "terminal",
+    "db-table", "db-history", "db-plan",
     "settings-keymap", "settings-editor", "settings-editor-appearance",
     "settings-breadcrumbs", "settings-tabs", "settings-folding", "settings-font",
     "settings-todo", "settings-notifications", "settings-java",
