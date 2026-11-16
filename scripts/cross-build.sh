@@ -88,6 +88,8 @@ build_target() {
         rm -f "$HOST_SERVER"
         if [ "$goos" = "darwin" ]; then
             app="$(find "$OUT" -maxdepth 3 -name GoIDEA.app -type d | head -1)"
+            # The app refuses a sidecar that disagrees with the signed server.
+            scripts/seal-shipped-server.sh "$app" - >/dev/null
             server="$app/Contents/Resources/openidea-server"
         else
             server="$(find "$OUT" -maxdepth 3 -path "*/$goos-$goarch/openidea-server" -type f | head -1)"

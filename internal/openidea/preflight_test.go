@@ -47,7 +47,11 @@ func TestPreflightAcceptsThePinnedServer(t *testing.T) {
 		t.Fatalf("home not created: %v", err)
 	}
 	if _, err := Preflight(LaunchConfig{ServerPath: self, ExpectedSHA256: strings.Repeat("0", 64)}); err == nil ||
-		!strings.Contains(err.Error(), "server sha256") {
+		!strings.Contains(err.Error(), "server sha256") ||
+		// The message must say what the mismatch means: the sidecar beside
+		// the server does not describe it (a replaced file, or an app
+		// packaged against another build).
+		!strings.Contains(err.Error(), "does not describe it") {
 		t.Fatalf("bad checksum: %v", err)
 	}
 	if _, err := Preflight(LaunchConfig{ServerPath: self, MinVersion: "0.1.45"}); err == nil ||

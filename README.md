@@ -108,6 +108,15 @@ image with `codesign`, `spctl` and `stapler`. Pushing a `v*` tag whose version
 matches `mygo.json` runs the same script on GitHub Actions and publishes the
 DMG (see `.github/workflows/release.yml`).
 
+Signing the bundle (`codesign --deep`) also signs the `openidea-server` among
+its resources, and a signature is appended to the file: the checksum
+`fetch-server.sh` wrote beside it then describes the upstream download, not
+the file the app runs. The app's preflight compares the two, so
+`scripts/seal-shipped-server.sh` rewrites the sidecar to the shipped bytes
+and re-seals the bundle before the image is built and notarized — a mismatch
+would make a released app refuse its own server (`openidea: server sha256`).
+The same script runs after every darwin cross build.
+
 ## Upstreams
 
 GoIDEA follows three upstreams and inherits their work instead of forking away

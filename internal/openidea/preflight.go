@@ -71,8 +71,13 @@ func Preflight(cfg LaunchConfig) (Report, error) {
 	}
 	r.SHA256 = sum
 	if cfg.ExpectedSHA256 != "" && !strings.EqualFold(cfg.ExpectedSHA256, sum) {
+		// The sidecar beside the binary records the release's digest: a
+		// mismatch means the file was replaced after it was written, or the
+		// app shipped a server that was re-signed (signing rewrites the
+		// bytes) without updating it.
 		return r, &PreflightError{Kind: "sha256", Path: cfg.ServerPath,
-			Detail: fmt.Sprintf("%s, want %s", sum, cfg.ExpectedSHA256)}
+			Detail: fmt.Sprintf("%s, want %s (the checksum beside the server does not describe it: the file was replaced, or the app was packaged against another build)",
+				sum, cfg.ExpectedSHA256)}
 	}
 	protocol := cfg.Protocol
 	if protocol == 0 {

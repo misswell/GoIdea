@@ -3,6 +3,10 @@
 The update window shows the section of the version it offers. Every release
 needs a `## <version>` section here, or its build fails.
 
+## Unreleased
+
+- 修复安装版启动失败：签名后的内置 Server 与校验和文件不一致，导致预检拒绝启动；发布流程改为按出厂字节重写校验和并重新封装。
+
 ## 0.1.10
 
 - 测试结果管线支持 **jest**：verbose 输出解析进结果树，重新运行失败的测试按 `-t` 正则锚定派生（项目需安装 jest）。
