@@ -3,7 +3,7 @@
 The update window shows the section of the version it offers. Every release
 needs a `## <version>` section here, or its build fails.
 
-## Unreleased
+## 0.1.16
 
 - 界面语言统一为英文：菜单、命令面板、设置、对话框、提示条与状态栏不再中英混排。
 - 计数文案按单复数显示（`1 item` / `2 items`），运行配置表单的英文标签不再被截断。
