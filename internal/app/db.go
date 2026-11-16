@@ -501,7 +501,7 @@ func (m *Model) dbDialog(c *ui.Context, p *ui.Theme) {
 				ui.Spacer(c)
 				ui.Text(c, dbStatusText(v)).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
 			})
-			ui.Row(c).Grow(1).MinHeight(0).Gap(14).Children(func() {
+			ui.Row(c).Grow(1).MinHeight(0).Gap(14).AlignItems(ui.Stretch).Children(func() {
 				ui.Column(c).Width(250).Gap(6).Children(func() {
 					ui.Text(c, "数据源").FontSize(11).TextColor(p.TextMuted).SingleLine()
 					if len(v.sources) == 0 {

@@ -805,7 +805,7 @@ func (m *Model) debugPanel(c *ui.Context, p *ui.Theme) {
 				})
 			})
 		}
-		ui.Row(c).Grow(1).MinHeight(0).Children(func() {
+		ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
 			m.debugFrames(c, p)
 			m.debugVars(c, p)
 			m.debugConsole(c, p)

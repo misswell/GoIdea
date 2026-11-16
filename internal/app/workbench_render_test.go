@@ -46,7 +46,7 @@ func TestWorkbenchShellRenders(t *testing.T) {
 	tt := workbenchTester(t, m)
 	for _, text := range []string{
 		filepath.Base(root), "Search Everywhere", "Go to File",
-		"Drop files here to open them", "openidea-server offline",
+		"Drop files here to open them", "GoIDEA 后端未连接",
 	} {
 		if !tt.HasText(text) {
 			t.Fatalf("%q is not in the workbench: %q", text, tt.Texts())
@@ -59,7 +59,7 @@ func TestWorkbenchShellRenders(t *testing.T) {
 		t.Fatalf("Project is not at the top of the left island: %+v, %v", r, ok)
 	}
 	// The status bar occupies the last 34px of the window.
-	if r, ok := tt.Find("openidea-server offline"); !ok || r.Y < 900-oiStatusBarHeight {
+	if r, ok := tt.Find("GoIDEA 后端未连接"); !ok || r.Y < 900-oiStatusBarHeight {
 		t.Fatalf("the backend state is not in the status bar: %+v, %v", r, ok)
 	}
 }

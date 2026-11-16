@@ -36,9 +36,9 @@ func TestWelcomeLandingRenders(t *testing.T) {
 	m := &Model{}
 	tt := welcomeTester(t, m, true)
 	for _, text := range []string{
-		"OpenIDEA", "An open-source IDE inspired by IntelliJ IDEA",
+		"GoIDEA", "An open-source IDE inspired by IntelliJ IDEA",
 		"Projects", "Customize", "Plugins",
-		"Welcome to OpenIDEA",
+		"Welcome to GoIDEA",
 		"Open a folder from disk or clone a repository from version control.",
 		"New Project", "Clone Repository", "Remote Development",
 		"Open a folder", openAccelerator(),

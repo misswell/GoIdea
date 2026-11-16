@@ -855,7 +855,7 @@ func (m *Model) pluginPageUI(c *ui.Context, oi oiColors) {
 				m.pluginInstallRow(c, oi, pg)
 			}
 			ui.Row(c).Grow(1).MinHeight(0).MinWidth(0).BorderWidth(1).
-				BorderColor(oi.borderStrong).Radius(6).Children(func() {
+				BorderColor(oi.borderStrong).Radius(6).AlignItems(ui.Stretch).Children(func() {
 				m.pluginSide(c, oi, pg)
 				if pg.tab == 1 {
 					m.pluginAvailableDetails(c, oi, pg)

@@ -1362,7 +1362,9 @@ func (m *Model) settingsSheet(c *ui.Context, p *ui.Theme) {
 	ui.Column(c).Width(settingsDialogWidth).Height(m.settingsDialogHeight()).
 		Background(oi.elev).Radius(6).Children(func() {
 		m.settingsTitle(c, oi)
-		ui.Row(c).Grow(1).MinHeight(0).MinWidth(0).Children(func() {
+		// Stretch, not the Row default of centering: a short page would
+		// otherwise float in the middle instead of filling its side.
+		ui.Row(c).Grow(1).MinHeight(0).MinWidth(0).AlignItems(ui.Stretch).Children(func() {
 			m.settingsSidebar(c, p, oi)
 			m.settingsSplitHandle(c, oi)
 			m.settingsPageHost(c, p, oi)
@@ -1406,7 +1408,7 @@ func (m *Model) settingsTitle(c *ui.Context, oi oiColors) {
 func (m *Model) settingsSidebar(c *ui.Context, p *ui.Theme, oi oiColors) {
 	ui.Column(c).Width(m.settingsSideWidth()).Shrink(0).MinHeight(0).Children(func() {
 		ui.Row(c).Padding(7, 5, 6, 5).Shrink(0).Children(func() {
-			in := ui.TextInput(c, &m.settingsQuery).AutoFocus()
+			in := ui.TextInput(c, &m.settingsQuery).Grow(1).Placeholder("Search settings").AutoFocus()
 			in.OnChange(func() { m.settingsQueryChanged() })
 			in.OnShortcut(0, ui.KeyDown, func() { m.settingsStepSelection(1) })
 			in.OnShortcut(0, ui.KeyUp, func() { m.settingsStepSelection(-1) })

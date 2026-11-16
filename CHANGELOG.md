@@ -3,6 +3,11 @@
 The update window shows the section of the version it offers. Every release
 needs a `## <version>` section here, or its build fails.
 
+## Unreleased
+
+- 修复设置、数据库与插件页面的两栏错位：内容从顶部对齐，设置页的搜索框带 `Search settings` 占位符。
+- 界面中的产品名统一为 **GoIDEA**，状态栏显示「GoIDEA 后端已连接 / 未连接」。
+
 ## 0.1.11
 
 - 修复安装版启动失败：签名后的内置 Server 与校验和文件不一致，导致预检拒绝启动；发布流程改为按出厂字节重写校验和并重新封装。

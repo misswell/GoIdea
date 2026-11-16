@@ -672,7 +672,7 @@ func (m *Model) Phase() string {
 
 // Start restores the last session in the background.
 func (m *Model) Start() {
-	m.post(func() { m.busy = true; m.status = "正在连接 openidea-server…" })
+	m.post(func() { m.busy = true; m.status = "正在连接 GoIDEA 后端…" })
 	go m.start()
 	go m.syncLoop()
 }
@@ -706,9 +706,9 @@ func (m *Model) start() {
 		m.setStartPhase("failed")
 		m.post(func() {
 			m.busy = false
-			m.status = "openidea-server 启动失败"
-			m.banner = "openidea-server 启动失败：" + startErr.Error()
-			m.notifyError("backend", "openidea-server failed to start", startErr.Error())
+			m.status = "GoIDEA 后端启动失败"
+			m.banner = "GoIDEA 后端启动失败：" + startErr.Error()
+			m.notifyError("backend", "GoIDEA backend failed to start", startErr.Error())
 			m.invalidate()
 		})
 		return
@@ -815,7 +815,7 @@ func (m *Model) watchState() {
 					m.debug.paused = false
 					m.debug.session = 0
 				case state.Running:
-					m.status = "已连接 openidea-server"
+					m.status = "已连接 GoIDEA 后端"
 				}
 				m.invalidate()
 			})
@@ -1166,7 +1166,7 @@ func (m *Model) openBackendProjectAt(ctx context.Context, dir, restoreTo string)
 		}
 		if time.Now().After(deadline) {
 			m.restoreBackendProject(ctx, restoreTo, dir)
-			return fmt.Errorf("openidea-server 未在 60 秒内把 %s 设为当前项目", filepath.Base(dir))
+			return fmt.Errorf("GoIDEA 后端未在 60 秒内把 %s 设为当前项目", filepath.Base(dir))
 		}
 		select {
 		case <-ctx.Done():

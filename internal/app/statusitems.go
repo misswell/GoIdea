@@ -19,8 +19,8 @@ func init() {
 		},
 		Render: func(m *Model, c *ui.Context, p *ui.Theme, oi oiColors) {
 			text := map[string]string{
-				"preflight": "检查 openidea-server…",
-				"server":    "启动 openidea-server…",
+				"preflight": "检查 GoIDEA 后端…",
+				"server":    "启动 GoIDEA 后端…",
 				"opening":   "正在打开项目…",
 				"restoring": "正在恢复文件…",
 				"failed":    "启动失败",
@@ -106,9 +106,9 @@ func init() {
 		}})
 	registerStatusItem(&StatusItem{ID: "status.backend", Side: "right", Order: 40,
 		Render: func(m *Model, c *ui.Context, p *ui.Theme, oi oiColors) {
-			state := "openidea-server connected"
+			state := "GoIDEA 后端已连接"
 			if !m.BackendState().Running {
-				state = "openidea-server offline"
+				state = "GoIDEA 后端未连接"
 			}
 			ui.Text(c, state).FontSize(13).TextColor(oi.textMuted).SingleLine()
 		}})

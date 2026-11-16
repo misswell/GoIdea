@@ -99,7 +99,7 @@ func (m *Model) actionTitleTool(c *ui.Context, p *ui.Theme, oi oiColors, id stri
 // projectWidget is the avatar, the project name and the chevron, with
 // OpenIDEA's project menu.
 func (m *Model) projectWidget(c *ui.Context, p *ui.Theme, oi oiColors) {
-	name := "OpenIDEA"
+	name := "GoIDEA"
 	if root := m.Root(); root != "" {
 		name = filepath.Base(root)
 	}
@@ -987,7 +987,7 @@ func (m *Model) editorIsland(c *ui.Context, p *ui.Theme) {
 			})
 			return
 		}
-		ui.Row(c).Grow(1).MinWidth(0).MinHeight(0).Children(func() {
+		ui.Row(c).Grow(1).MinWidth(0).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
 			m.editorGroup(c, p, oi, first)
 			ui.Column(c).Width(1).Shrink(0).Background(oi.border)
 			m.editorGroup(c, p, oi, second)
@@ -1001,7 +1001,7 @@ func (m *Model) editorGroup(c *ui.Context, p *ui.Theme, oi oiColors, g groupView
 	pane := ui.Column(c).Grow(1).MinWidth(0).MinHeight(0)
 	pane.Children(func() {
 		if m.tabPrefs.Vertical() {
-			ui.Row(c).Grow(1).MinWidth(0).MinHeight(0).Children(func() {
+			ui.Row(c).Grow(1).MinWidth(0).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
 				if m.tabPrefs.Placement != "right" {
 					m.verticalTabs(c, p, oi, g)
 				}

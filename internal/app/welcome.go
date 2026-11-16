@@ -72,7 +72,7 @@ func (m *Model) welcomeSidebar(c *ui.Context, oi oiColors) {
 					ui.Image(c, logo).Size(32, 32)
 				}
 				ui.Column(c).Justify(ui.Center).Children(func() {
-					ui.Text(c, "OpenIDEA").FontSize(13).TextColor(oi.textStrong).SingleLine()
+					ui.Text(c, "GoIDEA").FontSize(13).TextColor(oi.textStrong).SingleLine()
 					if version := mygo.App.Version(); version != "" {
 						ui.Text(c, version).FontSize(13).TextColor(oi.textMuted).SingleLine()
 					}
@@ -331,7 +331,7 @@ func (m *Model) welcomeButton(c *ui.Context, oi oiColors, label string, enabled 
 func (m *Model) welcomeLanding(c *ui.Context, oi oiColors) {
 	ui.Column(c).Grow(1).Justify(ui.Center).AlignItems(ui.Center).Gap(12).
 		Padding(0, 0, 40, 0).Children(func() {
-		ui.Text(c, "Welcome to OpenIDEA").FontSize(18).Bold().TextColor(oi.textStrong)
+		ui.Text(c, "Welcome to GoIDEA").FontSize(18).Bold().TextColor(oi.textStrong)
 		ui.Text(c, "Open a folder from disk or clone a repository from version control.").
 			FontSize(13).TextColor(oi.textMuted)
 		ui.Row(c).Gap(24).Margin(16, 0, 0, 0).Children(func() {
