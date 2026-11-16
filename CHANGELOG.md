@@ -3,7 +3,7 @@
 The update window shows the section of the version it offers. Every release
 needs a `## <version>` section here, or its build fails.
 
-## Unreleased
+## 0.1.18
 
 - **Maven** 工具窗口按 OpenIDEA 重做：工具栏、Build files changed / **Load Maven Changes** 横幅、Profiles、Lifecycle/Plugins/Dependencies/Run Configurations 与模块层级。
 - 双击生命周期阶段、插件目标或 Maven 运行配置即可运行；**Work Offline** 与 **Skip Tests** 开关会写进命令行。
