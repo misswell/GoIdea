@@ -3,6 +3,10 @@
 The update window shows the section of the version it offers. Every release
 needs a `## <version>` section here, or its build fails.
 
+## Unreleased
+
+- 修复从 **Maven** 窗口运行生命周期阶段失败：现在发送完整的运行配置（含 `isTest`、`debugAdapter`），不再被后端以 `missing field isTest` 拒绝。
+
 ## 0.1.21
 
 - 编辑器标签页按文件类型显示图标（Java/XML/YAML/JSON/脚本等），与项目树使用同一套图标。

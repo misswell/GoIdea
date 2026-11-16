@@ -370,6 +370,32 @@ func (m *Model) runMavenGoal(p *mavenProject, goals []string) {
 	if p == nil || len(goals) == 0 {
 		return
 	}
+	cfg, name := m.mavenGoalRunConfig(p, goals)
+	raw, err := json.Marshal(cfg)
+	if err != nil {
+		m.status = "Could not start the Maven goal: " + err.Error()
+		m.invalidate()
+		return
+	}
+	if !m.run.trusted {
+		m.run.pendingTrust = true
+		m.trustAsk = true
+		m.invalidate()
+		return
+	}
+	if m.run.busy || m.run.running {
+		m.status = "A run is already in progress"
+		m.invalidate()
+		return
+	}
+	m.status = "Running " + strings.Join(goals, " ")
+	m.startRunWith(raw, name)
+}
+
+// mavenGoalRunConfig is mavenGoalConfig: the launcher (the project's wrapper
+// or mvn), the goals with the settings' flags, the project's directory and the
+// name IDEA gives the configuration.
+func (m *Model) mavenGoalRunConfig(p *mavenProject, goals []string) (openidea.RunConfig, string) {
 	command := "mvn"
 	if mvnw.MatchString(p.Command) {
 		command = p.Command
@@ -402,35 +428,22 @@ func (m *Model) runMavenGoal(p *mavenProject, goals []string) {
 		dir := p.Dir
 		cwd = &dir
 	}
-	cfg := map[string]any{
-		"id":       "maven:goal:" + p.Pom + ":" + strings.Join(goals, " "),
-		"name":     name,
-		"kind":     "maven",
-		"command":  command,
-		"args":     args,
-		"cwd":      cwd,
-		"env":      map[string]string{},
-		"detected": false,
-	}
-	raw, err := json.Marshal(cfg)
-	if err != nil {
-		m.status = "Could not start the Maven goal: " + err.Error()
-		m.invalidate()
-		return
-	}
-	if !m.run.trusted {
-		m.run.pendingTrust = true
-		m.trustAsk = true
-		m.invalidate()
-		return
-	}
-	if m.run.busy || m.run.running {
-		m.status = "A run is already in progress"
-		m.invalidate()
-		return
-	}
-	m.status = "Running " + strings.Join(goals, " ")
-	m.startRunWith(raw, name)
+	// A whole RunConfig, not a sparse map: the backend's deserializer has no
+	// defaults for isTest and debugAdapter, so a partial object is refused
+	// with "missing field `isTest`".
+	return openidea.RunConfig{
+		ID:           "maven:goal:" + p.Pom + ":" + strings.Join(goals, " "),
+		Name:         name,
+		Kind:         "maven",
+		Command:      command,
+		Args:         args,
+		Cwd:          cwd,
+		Env:          map[string]string{},
+		Detected:     false,
+		IsTest:       mavenTestGoals(goals, args),
+		DebugAdapter: nil,
+		EnvFiles:     []string{},
+	}, name
 }
 
 // --- tree -----------------------------------------------------------------
@@ -858,6 +871,24 @@ func (m *mavenModel) MavenProjects() []mavenProject {
 }
 
 func mavenProjectKey(p mavenProject) string { return "mvn:" + p.Pom }
+
+// mavenTestGoals reports whether the goals run tests, as MAVEN_TEST_GOALS does
+// upstream: test, verify, integration-test, install, deploy or a surefire goal.
+func mavenTestGoals(goals, args []string) bool {
+	for _, a := range args {
+		if a == "-DskipTests" {
+			return false
+		}
+	}
+	for _, g := range goals {
+		switch g {
+		case "test", "verify", "integration-test", "install", "deploy",
+			"surefire:test", "failsafe:integration-test":
+			return true
+		}
+	}
+	return false
+}
 
 func mavenProfileKey(p mavenProfile) string {
 	root := ""

@@ -1,6 +1,10 @@
 package app
 
-import "testing"
+import (
+	"encoding/json"
+	"strings"
+	"testing"
+)
 
 func TestMavenPanelDrawsModulesAndDependencies(t *testing.T) {
 	m := &Model{}
@@ -75,5 +79,33 @@ func TestMavenTreeFollowsTheReactor(t *testing.T) {
 	}
 	if kinds[len(kinds)-1] != "project" {
 		t.Fatalf("the module is not under its aggregator: %v", kinds)
+	}
+}
+
+// TestMavenGoalConfigCarriesEveryRunConfigField guards the backend's
+// deserializer: a partial object is refused with "missing field `isTest`",
+// which is what a phase run showed before the config was whole.
+func TestMavenGoalConfigCarriesEveryRunConfigField(t *testing.T) {
+	m := &Model{}
+	p := &mavenProject{DisplayName: "tg-tenant", ArtifactID: "tg-tenant", Pom: "pom.xml", Command: "mvn"}
+	cfg, name := m.mavenGoalRunConfig(p, []string{"test"})
+	if name != "tg-tenant [test]" {
+		t.Fatalf("name = %q", name)
+	}
+	raw, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{`"id"`, `"name"`, `"kind"`, `"command"`, `"args"`, `"cwd"`,
+		`"env"`, `"detected"`, `"isTest"`, `"debugAdapter"`} {
+		if !strings.Contains(string(raw), field) {
+			t.Fatalf("%s is missing from the configuration: %s", field, raw)
+		}
+	}
+	if !cfg.IsTest {
+		t.Fatal("a test goal is not marked as a test")
+	}
+	if cfg, _ := m.mavenGoalRunConfig(p, []string{"validate"}); cfg.IsTest {
+		t.Fatal("validate is marked as a test")
 	}
 }
