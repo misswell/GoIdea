@@ -3,7 +3,7 @@
 The update window shows the section of the version it offers. Every release
 needs a `## <version>` section here, or its build fails.
 
-## Unreleased
+## 0.1.20
 
 - 状态栏补齐 OpenIDEA 的项：语言、`Ln 1, Col 1 (4 chars)`、`4 spaces`、`LF`/`CRLF` 与 `UTF-8`。
 
