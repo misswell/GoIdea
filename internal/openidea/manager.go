@@ -276,7 +276,7 @@ func (m *Manager) watch(s *Server) {
 	}
 	m.mu.Unlock()
 	if m.cfg.Log != nil {
-		fmt.Fprintf(m.cfg.Log, "openidea: backend connection closed (wasCurrent=%v, closed=%v): %v\n",
+		fmt.Fprintf(m.cfg.Log, "goidea: backend connection closed (wasCurrent=%v, closed=%v): %v\n",
 			wasCurrent, closed, err)
 	}
 	if wasCurrent {

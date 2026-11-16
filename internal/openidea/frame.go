@@ -39,7 +39,7 @@ func readFrame(r *bufio.Reader, onNoise func(string)) ([]byte, error) {
 			return nil, io.ErrUnexpectedEOF
 		}
 		if len(line) > maxHeaderLineLen {
-			return nil, fmt.Errorf("openidea: header line too long")
+			return nil, fmt.Errorf("goidea: header line too long")
 		}
 		text := strings.TrimRight(line, "\r\n")
 		if text == "" {
@@ -57,23 +57,23 @@ func readFrame(r *bufio.Reader, onNoise func(string)) ([]byte, error) {
 				}
 				continue
 			}
-			return nil, fmt.Errorf("openidea: malformed header %q", text)
+			return nil, fmt.Errorf("goidea: malformed header %q", text)
 		}
 		sawHeader = true
 		if strings.EqualFold(name, "content-length") {
 			n, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
 			if err != nil || n < 0 {
-				return nil, fmt.Errorf("openidea: invalid Content-Length %q", value)
+				return nil, fmt.Errorf("goidea: invalid Content-Length %q", value)
 			}
 			if n > maxMessageLen {
-				return nil, fmt.Errorf("openidea: message too large: %d bytes", n)
+				return nil, fmt.Errorf("goidea: message too large: %d bytes", n)
 			}
 			length = n
 		}
 	}
 	body := make([]byte, length)
 	if _, err := io.ReadFull(r, body); err != nil {
-		return nil, fmt.Errorf("openidea: truncated message: %w", err)
+		return nil, fmt.Errorf("goidea: truncated message: %w", err)
 	}
 	return body, nil
 }

@@ -107,7 +107,7 @@ func (c *Conn) readLoop(r *bufio.Reader, onNoise func(string)) {
 		}
 		var m message
 		if err := json.Unmarshal(body, &m); err != nil {
-			c.shutdown(fmt.Errorf("openidea: invalid message: %w", err))
+			c.shutdown(fmt.Errorf("goidea: invalid message: %w", err))
 			return
 		}
 		switch {
@@ -117,12 +117,12 @@ func (c *Conn) readLoop(r *bufio.Reader, onNoise func(string)) {
 			c.deliver(Notification{Method: m.Method, Params: m.Params})
 		default:
 			if os.Getenv("GOIDEA_RPC_TRACE") == "1" {
-				log.Printf("openidea: response %s: %s", m.ID, body)
+				log.Printf("goidea: response %s: %s", m.ID, body)
 			}
 			if len(m.Result) == 0 && m.Error == nil {
 				// A reply with neither result nor error hides backend bugs: keep
 				// the raw body so the caller's "empty result" has a cause in the log.
-				log.Printf("openidea: response %s has neither result nor error: %s", m.ID, body)
+				log.Printf("goidea: response %s has neither result nor error: %s", m.ID, body)
 			}
 			c.complete(&m)
 		}

@@ -33,9 +33,9 @@ type Error struct {
 
 func (e *Error) Error() string {
 	if e.Kind != "" {
-		return fmt.Sprintf("openidea: %s: %s", e.Kind, e.Message)
+		return fmt.Sprintf("goidea: %s: %s", e.Kind, e.Message)
 	}
-	return fmt.Sprintf("openidea: %s", e.Message)
+	return fmt.Sprintf("goidea: %s", e.Message)
 }
 
 // IsOutOfSync reports whether err is the document version mismatch the bridge
@@ -68,8 +68,8 @@ func parseServerError(code int64, message string) *Error {
 }
 
 // ErrClosed is returned to calls when the connection or process is gone.
-var ErrClosed = errors.New("openidea: connection closed")
+var ErrClosed = errors.New("goidea: connection closed")
 
 // ErrOverflow is returned when the notification consumer falls too far behind:
 // the connection is closed rather than letting an unbounded queue grow.
-var ErrOverflow = errors.New("openidea: notification queue overflow")
+var ErrOverflow = errors.New("goidea: notification queue overflow")

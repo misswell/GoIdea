@@ -28,7 +28,7 @@ type PreflightError struct {
 }
 
 func (e *PreflightError) Error() string {
-	return fmt.Sprintf("openidea: server %s: %s", e.Kind, e.Detail)
+	return fmt.Sprintf("goidea: server %s: %s", e.Kind, e.Detail)
 }
 
 // Report is what the preflight learned about the binary before it ran.

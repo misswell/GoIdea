@@ -9,7 +9,7 @@
 # starts the server, so a signed app with the upstream digest refuses its own
 # server:
 #
-#   openidea: server sha256: <shipped>, want <upstream>
+#   goidea: server sha256: <shipped>, want <upstream>
 #
 # Provenance stays at download time (fetch-server.sh verifies the pinned
 # digest); the bundle carries the digest of the bytes it runs, which is what

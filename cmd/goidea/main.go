@@ -695,7 +695,7 @@ func resolveServer() (string, error) {
 	if p, err := exec.LookPath("openidea-server"); err == nil {
 		return p, nil
 	}
-	return "", fmt.Errorf("未找到 openidea-server：请设置 GOIDEA_SERVER 或把它放到可执行文件旁")
+	return "", fmt.Errorf("未找到 GoIDEA 后端程序：请设置 GOIDEA_SERVER 或把它放到可执行文件旁")
 }
 
 // serverMinVersion is the OpenIDEA release this client speaks to; it moves

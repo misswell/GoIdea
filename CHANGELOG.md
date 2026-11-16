@@ -3,6 +3,10 @@
 The update window shows the section of the version it offers. Every release
 needs a `## <version>` section here, or its build fails.
 
+## Unreleased
+
+- 界面与错误提示统一为 **GoIDEA** 命名：客户端错误前缀改为 `goidea:`，缺失后端时提示「未找到 GoIDEA 后端程序」。
+
 ## 0.1.12
 
 - 修复设置、数据库与插件页面的两栏错位：内容从顶部对齐，设置页的搜索框带 `Search settings` 占位符。

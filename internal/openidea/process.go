@@ -60,7 +60,7 @@ type Server struct {
 // commands it actually supports.
 func Launch(ctx context.Context, cfg LaunchConfig) (*Server, error) {
 	if cfg.ServerPath == "" {
-		return nil, errors.New("openidea: no server path")
+		return nil, errors.New("goidea: no server path")
 	}
 	if cfg.Protocol == 0 {
 		cfg.Protocol = 2
@@ -99,7 +99,7 @@ func Launch(ctx context.Context, cfg LaunchConfig) (*Server, error) {
 		return nil, err
 	}
 	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("openidea: start %s: %w", cfg.ServerPath, err)
+		return nil, fmt.Errorf("goidea: start %s: %w", cfg.ServerPath, err)
 	}
 
 	s := &Server{
@@ -125,26 +125,26 @@ func Launch(ctx context.Context, cfg LaunchConfig) (*Server, error) {
 	raw, err := s.conn.Call(startCtx, "initialize", map[string]any{"version": cfg.Protocol})
 	if err != nil {
 		s.kill()
-		return nil, fmt.Errorf("openidea: initialize: %w", err)
+		return nil, fmt.Errorf("goidea: initialize: %w", err)
 	}
 	var info ServerInfo
 	if err := json.Unmarshal(raw, &info); err != nil {
 		s.kill()
-		return nil, fmt.Errorf("openidea: initialize reply: %w", err)
+		return nil, fmt.Errorf("goidea: initialize reply: %w", err)
 	}
 	if info.Protocol != cfg.Protocol {
 		s.kill()
-		return nil, fmt.Errorf("openidea: server speaks protocol %d, need %d", info.Protocol, cfg.Protocol)
+		return nil, fmt.Errorf("goidea: server speaks protocol %d, need %d", info.Protocol, cfg.Protocol)
 	}
 	cmdsRaw, err := s.conn.Call(startCtx, "commands", nil)
 	if err != nil {
 		s.kill()
-		return nil, fmt.Errorf("openidea: commands: %w", err)
+		return nil, fmt.Errorf("goidea: commands: %w", err)
 	}
 	var commands []string
 	if err := json.Unmarshal(cmdsRaw, &commands); err != nil {
 		s.kill()
-		return nil, fmt.Errorf("openidea: commands reply: %w", err)
+		return nil, fmt.Errorf("goidea: commands reply: %w", err)
 	}
 	s.info = info
 	s.report = report
