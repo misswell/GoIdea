@@ -3,6 +3,11 @@
 The update window shows the section of the version it offers. Every release
 needs a `## <version>` section here, or its build fails.
 
+## Unreleased
+
+- **Maven** 工具窗口按 OpenIDEA 重做：工具栏、Build files changed / **Load Maven Changes** 横幅、Profiles、Lifecycle/Plugins/Dependencies/Run Configurations 与模块层级。
+- 双击生命周期阶段、插件目标或 Maven 运行配置即可运行；**Work Offline** 与 **Skip Tests** 开关会写进命令行。
+
 ## 0.1.17
 
 - **Add SQLite…** 添加的数据源现在能真正连接：数据源 id 不再含冒号，与后端 `<id>[:<database>]` 的目标格式一致。

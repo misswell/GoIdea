@@ -210,6 +210,14 @@ func (m *Model) SmokeShots(ctx context.Context, dir string) (map[string]any, err
 	shot("services")
 	m.post(func() { m.CloseServices() })
 
+	// The Maven tool window: toolbar, banner and the reactor tree.
+	m.post(func() { m.ShowMaven() })
+	wait(func() bool {
+		return m.maven.visible && !m.maven.loading && len(m.maven.model.MavenProjects()) > 0
+	}, 60*time.Second)
+	shot("maven")
+	m.post(func() { m.CloseMaven() })
+
 	// The Debug window with no session, and the terminal with a live shell.
 	m.post(func() { m.ShowDebug() })
 	wait(func() bool { return m.debug.visible }, 30*time.Second)

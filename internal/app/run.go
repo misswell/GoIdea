@@ -607,6 +607,8 @@ func (m *Model) acceptChunk(id uint32, data json.RawMessage) {
 		m.invalidate()
 	case id != 0 && id == m.build.channel:
 		m.acceptBuildEvent(data)
+	case id != 0 && id == m.maven.channel && m.maven.syncing:
+		m.acceptMavenEvent(data)
 	case id != 0 && m.term.byChannel(id) != nil:
 		m.acceptTermChunk(id, data)
 	case id != 0 && m.se != nil && id == m.se.textCh:
