@@ -47,6 +47,11 @@ func (m *Model) SmokeShots(ctx context.Context, dir string) (map[string]any, err
 				tt := ui.NewTester(func(c *ui.Context) { m.View(c) }, smokeShotWidth, smokeShotHeight)
 				tt.SetDark(theme.dark)
 				tt.SetScale(1)
+				// MyGo resolves Grow() and Bounds() one frame after the tree
+				// changes, so a state switch is laid out by the first frame
+				// and complete on the second: the image is what the screen
+				// shows one frame later, not a half-built tree.
+				tt.Frame()
 				tt.Frame()
 				img := tt.Image()
 				m.theme = previous
@@ -112,10 +117,12 @@ func (m *Model) SmokeShots(ctx context.Context, dir string) (map[string]any, err
 	wait(func() bool { return m.tab() != nil }, 60*time.Second)
 	shot("workbench")
 
-	// The editor alone, as Distraction Free Mode shows it.
-	m.post(func() { m.zen = true })
+	// The editor alone, as Distraction Free Mode shows it: the action, not the
+	// flag, so the gutter and the hint come out as they do for the user.
+	m.post(func() { m.ToggleZen() })
+	wait(func() bool { return m.zen && m.tab() != nil }, 30*time.Second)
 	shot("editor")
-	m.post(func() { m.zen = false })
+	m.post(func() { m.ToggleZen() })
 
 	// Bottom tool window: the TODO window over its scanned project.
 	m.post(func() { m.ShowTodo() })
@@ -153,7 +160,7 @@ func (m *Model) SmokeShots(ctx context.Context, dir string) (map[string]any, err
 	shot("palette")
 	m.post(func() { m.closeCommands() })
 	m.post(func() { m.OpenQuickFiles() })
-	wait(func() bool { return m.files != nil }, 30*time.Second)
+	wait(func() bool { return m.files != nil && m.files.done }, 60*time.Second)
 	shot("popup-quick-files")
 	m.post(func() { m.closeQuickFiles() })
 
@@ -178,13 +185,22 @@ func (m *Model) SmokeShots(ctx context.Context, dir string) (map[string]any, err
 	// The left tool window: Structure in the split area below Project.
 	m.post(func() { m.ShowStructure() })
 	wait(func() bool { return m.leftSplit == "structure" && m.structure.visible }, 30*time.Second)
+	// The symbols come from the backend: a shot taken while they load shows
+	// the window's "reading" placeholder instead of its rows.
+	wait(func() bool {
+		t := m.tab()
+		return t != nil && !t.outlineLoading
+	}, 60*time.Second)
 	shot("left-structure")
 	m.post(func() { m.CloseStructure() })
 
-	// File › New Project… as a real dialog.
+	// File › New Project… as a real dialog, with the backend's generator
+	// catalog loaded so the sheet shows the template list OpenIDEA shows.
 	m.post(func() { m.NewProject() })
+	wait(func() bool { return m.newProject.open && len(m.newProject.catalog) > 0 }, 60*time.Second)
 	shot("new-project")
 	m.post(func() { m.CloseNewProject() })
+	wait(func() bool { return !m.newProject.open }, 30*time.Second)
 
 	// A dialog: File › Invalidate Caches….
 	m.post(func() { m.OpenInvalidateCaches() })

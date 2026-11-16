@@ -100,6 +100,11 @@ func init() {
 	reg("settings", overlayLayerDialog, 230, true,
 		func(m *Model) bool { return m.settingsOpen },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.settingsDialog(c, p) })
+	// File › New Project… and the Welcome screen's button: a full sheet over
+	// the workbench, above Settings so it cannot be hidden underneath it.
+	reg("newProject", overlayLayerDialog, 235, true,
+		func(m *Model) bool { return m.newProject.open },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.newProjectDialog(c, p) })
 	reg("toolbarCustomize", overlayLayerDialog, 240, true,
 		func(m *Model) bool { return m.toolbarCustomize },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.toolbarCustomizeDialog(c, p) })

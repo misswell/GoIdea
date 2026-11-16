@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
@@ -9,7 +10,7 @@ import (
 func TestOverlaysAreRegisteredOnce(t *testing.T) {
 	want := []string{"rename", "symbols", "intentions", "quickFiles", "branches",
 		"bookmarksPopup", "commandPalette", "searchEverywhere", "runAnything", "diff",
-		"settings", "invalidateCaches", "scratchChooser", "commit", "database"}
+		"settings", "newProject", "invalidateCaches", "scratchChooser", "commit", "database"}
 	for _, id := range want {
 		if _, ok := overlays.byID[id]; !ok {
 			t.Fatalf("%s is not registered", id)
@@ -47,6 +48,32 @@ func TestOverlayOpenFollowsBusinessState(t *testing.T) {
 		t.Fatal("Invalidate Caches is not a modal overlay")
 	}
 	m.invalidateDlg = nil
+}
+
+func TestNewProjectDrawsItsSheet(t *testing.T) {
+	m := &Model{ctx: context.Background()}
+	m.postHook = func(fn func()) { fn() }
+	m.NewProject()
+	if !m.newProject.open {
+		t.Fatal("New Project did not open")
+	}
+	if !m.modalOverlayOpen() {
+		t.Fatal("the New Project sheet is not a modal overlay")
+	}
+	tt := ui.NewTester(func(c *ui.Context) { m.View(c) }, 1440, 900)
+	tt.Frame()
+	// "Location:" belongs to the sheet alone; the wizard used to set its state
+	// without a registered overlay, so the workbench was all that was drawn.
+	if _, ok := tt.Find("Location:"); !ok {
+		t.Fatalf("the New Project sheet was not drawn: %v", tt.Texts())
+	}
+	if _, ok := tt.Find("Create Git repository"); !ok {
+		t.Fatal("the sheet's Git option was not drawn")
+	}
+	m.CloseNewProject()
+	if m.overlayOpen() {
+		t.Fatal("closing New Project left an overlay up")
+	}
 }
 
 func TestOverlayOrderIsStable(t *testing.T) {

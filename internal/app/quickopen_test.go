@@ -32,3 +32,15 @@ func TestCloseQuickFilesDropsPicker(t *testing.T) {
 		t.Fatalf("picker stayed open")
 	}
 }
+
+func TestFileListHeightHugsRowsAndCaps(t *testing.T) {
+	if got := fileListHeight(1); got != 24 {
+		t.Fatalf("one match takes %v DIP, want 24", got)
+	}
+	if got := fileListHeight(5); got != 120 {
+		t.Fatalf("five matches take %v DIP, want 120", got)
+	}
+	if got := fileListHeight(200); got != 330 {
+		t.Fatalf("a long list takes %v DIP, want the 330 cap", got)
+	}
+}

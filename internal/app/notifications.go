@@ -288,7 +288,7 @@ func (m *Model) balloons(c *ui.Context, p *ui.Theme) {
 	w, h := c.Size()
 	total := float32(0)
 	for _, it := range items {
-		total += notifyHeight(it) + 8
+		total += notifyHeight(it, len(m.balloonActions(it))) + 8
 	}
 	x := w - notifyBalloonWidth - 16
 	y := h - oiStatusBarHeight - 12 - total
@@ -302,29 +302,44 @@ func (m *Model) balloons(c *ui.Context, p *ui.Theme) {
 	})
 }
 
-// notifyHeight is a balloon's height from its content.
-func notifyHeight(n ideNotification) float32 {
+// notifyHeight is a balloon's height from its content, including the actions
+// the balloon actually shows: the suppression balloonView appends counts, and
+// leaving it out clipped the last action row of the bottom balloon.
+func notifyHeight(n ideNotification, actions int) float32 {
 	h := float32(50)
 	if n.body != "" {
 		h += 16
 	}
-	if len(n.actions) > 0 {
+	if actions > 0 {
 		h += 24
 	}
 	return h
 }
 
+// balloonActions is what a balloon offers: its own actions, then the
+// suppression the notification's group allows.
+func (m *Model) balloonActions(n ideNotification) []notifyAction {
+	actions := n.actions
+	if m.canSuppress(n) {
+		actions = append(append([]notifyAction(nil), actions...),
+			notifyAction{label: "Don't Show Again", run: func(m *Model) { m.SuppressGroup(n.group) }})
+	}
+	return actions
+}
+
 // balloonView draws one balloon, as OpenIDEA's Toast: accent bar, title, body,
 // actions, and a close button on the corner.
 func (m *Model) balloonView(c *ui.Context, p *ui.Theme, n ideNotification) {
-	r := ui.Row(c.Key(fmt.Sprintf("balloon:%d", n.id))).Height(notifyHeight(n)).
+	actions := m.balloonActions(n)
+	height := notifyHeight(n, len(actions))
+	r := ui.Row(c.Key(fmt.Sprintf("balloon:%d", n.id))).Height(height).
 		Radius(10).Background(p.Surface).BorderWidth(1).BorderColor(p.Border).
 		Shadow(0, 8, 24, 0, ui.RGBA(0, 0, 0, 0.35))
 	if r.Hovered() != n.hover {
 		m.SetBalloonHover(n.id, r.Hovered())
 	}
 	r.Children(func() {
-		ui.Row(c).Width(3).Height(notifyHeight(n)).Radius(10).
+		ui.Row(c).Width(3).Height(height).Radius(10).
 			Background(notifyLevelColor(p, n.level))
 		ui.Column(c).Grow(1).Padding(10, 12).Gap(3).Children(func() {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
@@ -345,11 +360,7 @@ func (m *Model) balloonView(c *ui.Context, p *ui.Theme, n ideNotification) {
 				ui.Text(c, n.body).FontSize(11.5).TextColor(p.TextMuted).
 					SingleLine().Ellipsis("…")
 			}
-			actions := n.actions
-			if m.canSuppress(n) {
-				actions = append(append([]notifyAction(nil), actions...),
-					notifyAction{label: "Don't Show Again", run: func(m *Model) { m.SuppressGroup(n.group) }})
-			}
+			actions := m.balloonActions(n)
 			if len(actions) > 0 {
 				ui.Row(c).Gap(6).Children(func() {
 					for i, a := range actions {

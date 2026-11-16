@@ -27,6 +27,24 @@ func TestNotificationKeyReplacesAndErrorsStick(t *testing.T) {
 	}
 }
 
+func TestBalloonHeightCountsTheSuppressionAction(t *testing.T) {
+	m := &Model{}
+	n := ideNotification{group: "shot.info", level: "info", title: "Build finished", body: "one"}
+	// A balloon the user can suppress shows "Don't Show Again", and the
+	// height must leave room for it: a height that counts only n.actions
+	// clipped that row off the bottom of the balloon.
+	if actions := m.balloonActions(n); len(actions) != 1 || actions[0].label != "Don't Show Again" {
+		t.Fatalf("actions = %+v, want the suppression", actions)
+	}
+	if plain, with := notifyHeight(n, 0), notifyHeight(n, len(m.balloonActions(n))); with-plain != 24 {
+		t.Fatalf("suppression adds %v to the balloon height, want 24", with-plain)
+	}
+	err := ideNotification{group: "shot.error", level: "error", title: "Build failed", body: "two"}
+	if got := len(m.balloonActions(err)); got != 0 {
+		t.Fatalf("an error offers %d actions, want none", got)
+	}
+}
+
 func TestBalloonsKeepThreeNewestAtTheBottom(t *testing.T) {
 	m := &Model{}
 	m.notifyInfo("a", "A", "")

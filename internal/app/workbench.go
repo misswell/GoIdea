@@ -698,7 +698,9 @@ func (m *Model) stripeBell(c *ui.Context, p *ui.Theme, oi oiColors) {
 	b.Children(func() {
 		ui.Icon(c, notifyIcon).Size(20, 20).TextColor(tone)
 		if n := m.unreadNotifications(); n > 0 {
-			ui.Row(c).Absolute().Left(20).Top(4).MinWidth(13).Height(13).
+			// The badge sits inside the 30px button's right edge: at Left(20)
+			// it overhangs the right rail and is cut by the window.
+			ui.Row(c).Absolute().Left(16).Top(3).MinWidth(13).Height(13).
 				Padding(0, 3).Radius(7).Background(p.Danger).Justify(ui.Center).
 				AlignItems(ui.Center).Children(func() {
 				ui.Text(c, fmt.Sprintf("%d", n)).FontSize(9).Bold().

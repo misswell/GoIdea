@@ -47,6 +47,16 @@ func (m *Model) OpenQuickFiles() {
 	m.queryFiles()
 }
 
+// fileListHeight is the Quick Open list's height: its 24px rows, capped so a
+// long index scrolls instead of growing the card.
+func fileListHeight(rows int) float32 {
+	h := float32(rows) * 24
+	if h > 330 {
+		h = 330
+	}
+	return h
+}
+
 // closeQuickFiles drops the picker and cancels a lookup still in flight.
 func (m *Model) closeQuickFiles() {
 	if m.files == nil {
@@ -221,7 +231,9 @@ func (m *Model) filesDialog(c *ui.Context, p *ui.Theme) {
 			if len(f.items) == 0 {
 				return
 			}
-			ui.Scroll(c).Height(330).Children(func() {
+			// The list hugs its rows up to the cap: a fixed 330px box left a
+			// mostly empty card when Quick Open had one or two matches.
+			ui.Scroll(c).Height(fileListHeight(len(f.items))).Children(func() {
 				ui.Column(c).Children(func() {
 					for i, fm := range f.items {
 						i, fm := i, fm

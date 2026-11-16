@@ -3,6 +3,13 @@
 The update window shows the section of the version it offers. Every release
 needs a `## <version>` section here, or its build fails.
 
+## Unreleased
+
+- **File › New Project…** 现在会打开向导：此前命令和欢迎页按钮都不显示任何界面。
+- 无干扰模式（**View | Appearance**）恢复显示编辑器内容与退出提示条，不再是一片空白。
+- 通知气泡的高度计入「Don't Show Again」，底部操作不再被裁掉；未读数徽标收进按钮内。
+- **Quick Open** 的结果列表按行数收缩，只有一条结果时不再留下大块空白。
+
 ## 0.1.13
 
 - 界面与错误提示统一为 **GoIDEA** 命名：客户端错误前缀改为 `goidea:`，缺失后端时提示「未找到 GoIDEA 后端程序」。

@@ -137,7 +137,10 @@ func (m *Model) zenEditor(c *ui.Context, p *ui.Theme, oi oiColors) {
 			m.emptyEditor(c, p)
 			return
 		}
-		ui.Row(c).Grow(1).MinHeight(0).MinWidth(0).Justify(ui.Center).Children(func() {
+		// Stretch: a Row centres its cross axis by default, and the editor
+		// surface takes its height from the row, not from its text.
+		ui.Row(c).Grow(1).MinHeight(0).MinWidth(0).Justify(ui.Center).
+			AlignItems(ui.Stretch).Children(func() {
 			editor.View(c, t.state).Width(m.zenColumnWidth()).MinWidth(0).MinHeight(0)
 		})
 	})
