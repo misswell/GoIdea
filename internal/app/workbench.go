@@ -1155,7 +1155,8 @@ func (m *Model) tabOverflow(c *ui.Context, p *ui.Theme, oi oiColors, g groupView
 				}
 				name, dir := m.tabLabelIn(g.tabs, row.Tab)
 				r.Children(func() {
-					ui.Icon(c, iconFile).Size(14, 14).TextColor(oi.textMuted)
+					icon, tone := treeFileIcon(name, p)
+					ui.Icon(c, icon).Size(14, 14).TextColor(tone)
 					ui.Text(c, name).FontSize(13).TextColor(oi.text).SingleLine().
 						Ellipsis("…")
 					if dir != "" {
@@ -1291,7 +1292,8 @@ func (m *Model) tabButtons(c *ui.Context, p *ui.Theme, oi oiColors, g groupView,
 					closeButton()
 				}
 				if !m.tabPrefs.HideFileIcon {
-					ui.Icon(c, iconFile).Size(14, 14).TextColor(oi.textMuted)
+					icon, tone := treeFileIcon(name, p)
+					ui.Icon(c, icon).Size(14, 14).TextColor(tone)
 				}
 				if t.dirty() {
 					ui.Text(c, "●").FontSize(9).TextColor(oi.accent)
