@@ -7,8 +7,10 @@ package app
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/editor"
 )
 
 func init() {
@@ -90,16 +92,55 @@ func init() {
 		Render: func(m *Model, c *ui.Context, p *ui.Theme, oi oiColors) {
 			if t := m.tab(); t != nil {
 				pos := t.state.CursorPos()
-				ui.Text(c, fmt.Sprintf("Ln %d, Col %d", pos.Line+1, pos.Col+1)).
-					FontSize(13).TextColor(oi.textMuted).SingleLine()
+				text := fmt.Sprintf("Ln %d, Col %d", pos.Line+1, pos.Col+1)
+				if sel := t.state.Selection(); sel.Start() != sel.End() {
+					text += fmt.Sprintf(" (%d chars)", utf16Len(t.state.SelectedText()))
+				}
+				ui.Text(c, text).FontSize(13).TextColor(oi.textMuted).SingleLine()
 			}
+		}})
+	registerStatusItem(&StatusItem{ID: "status.language", Side: "right", Order: 18,
+		Render: func(m *Model, c *ui.Context, p *ui.Theme, oi oiColors) {
+			if t := m.tab(); t != nil {
+				if lang := t.doc.Info().Language; lang != "" && lang != "plaintext" {
+					ui.Text(c, strings.ToUpper(lang[:1])+lang[1:]).FontSize(13).
+						TextColor(oi.textMuted).SingleLine()
+				}
+			}
+		}})
+	registerStatusItem(&StatusItem{ID: "status.indent", Side: "right", Order: 24,
+		Render: func(m *Model, c *ui.Context, p *ui.Theme, oi oiColors) {
+			if t := m.tab(); t != nil {
+				size := t.state.TabSize
+				if size <= 0 {
+					size = 4
+				}
+				label := fmt.Sprintf("%d spaces", size)
+				if t.state.Indent == editor.IndentTabs {
+					label = "Tab"
+				}
+				ui.Text(c, label).FontSize(13).TextColor(oi.textMuted).SingleLine()
+			}
+		}})
+	registerStatusItem(&StatusItem{ID: "status.eol", Side: "right", Order: 28,
+		Render: func(m *Model, c *ui.Context, p *ui.Theme, oi oiColors) {
+			label := "LF"
+			if t := m.tab(); t != nil {
+				switch strings.ToLower(t.doc.Info().LineEnding) {
+				case "crlf":
+					label = "CRLF"
+				case "cr":
+					label = "CR"
+				}
+			}
+			ui.Text(c, label).FontSize(13).TextColor(oi.textMuted).SingleLine()
 		}})
 	registerStatusItem(&StatusItem{ID: "status.encoding", Side: "right", Order: 30,
 		Render: func(m *Model, c *ui.Context, p *ui.Theme, oi oiColors) {
 			info := "UTF-8"
 			if t := m.tab(); t != nil {
 				if enc := t.doc.Info().Encoding; enc != "" {
-					info = enc
+					info = strings.ToUpper(enc)
 				}
 			}
 			ui.Text(c, info).FontSize(13).TextColor(oi.textMuted).SingleLine()

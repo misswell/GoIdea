@@ -3,6 +3,10 @@
 The update window shows the section of the version it offers. Every release
 needs a `## <version>` section here, or its build fails.
 
+## Unreleased
+
+- 状态栏补齐 OpenIDEA 的项：语言、`Ln 1, Col 1 (4 chars)`、`4 spaces`、`LF`/`CRLF` 与 `UTF-8`。
+
 ## 0.1.19
 
 - 左侧项目树按 OpenIDEA 呈现：包链合并为 `com.example` 一行，模块/源根/包与按类型区分的文件图标，`target`、`.openidea` 等排除目录以琥珀色底显示。
