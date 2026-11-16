@@ -3,7 +3,7 @@
 The update window shows the section of the version it offers. Every release
 needs a `## <version>` section here, or its build fails.
 
-## Unreleased
+## 0.1.11
 
 - 修复安装版启动失败：签名后的内置 Server 与校验和文件不一致，导致预检拒绝启动；发布流程改为按出厂字节重写校验和并重新封装。
 
