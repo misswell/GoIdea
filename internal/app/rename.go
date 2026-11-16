@@ -42,7 +42,7 @@ func (m *Model) RenameActive() {
 	}
 	docID := t.doc.ID()
 	pos := t.doc.UTF16Pos(t.state.Cursor())
-	m.status = "正在查找可重命名的符号…"
+	m.status = "Finding the symbol to rename…"
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, renameTimeout)
@@ -62,9 +62,9 @@ func (m *Model) RenameActive() {
 		m.post(func() {
 			switch {
 			case err != nil:
-				m.fail(t.doc.Path(), fmt.Errorf("重命名失败：%w", err))
+				m.fail(t.doc.Path(), fmt.Errorf("Renaming failed: %w", err))
 			case old == "":
-				m.status = "光标处没有可重命名的符号"
+				m.status = "There is no renamable symbol under the caret"
 			default:
 				m.rename = &renameState{tab: t, pos: pos, old: old, name: old}
 			}
@@ -91,7 +91,7 @@ func (m *Model) submitRename() {
 	t := r.tab
 	docID := t.doc.ID()
 	pos := r.pos
-	m.status = "正在计算重命名…"
+	m.status = "Computing the rename…"
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, renameTimeout)
@@ -120,14 +120,14 @@ func (m *Model) finishRename(r *renameState, err error, renamed *openidea.Rename
 		switch {
 		case err != nil:
 			r.err = renameErrorText(err)
-			m.status = "重命名失败"
+			m.status = "Renaming failed"
 		case renamed == nil:
-			r.err = "重命名没有返回结果"
+			r.err = "The rename returned nothing"
 		default:
 			info := renameEditInfo(renamed.Edit)
 			if info.Files == 0 {
 				m.rename = nil
-				m.status = "没有需要修改的地方"
+				m.status = "Nothing needs to change"
 				break
 			}
 			r.files = info.Files
@@ -138,7 +138,7 @@ func (m *Model) finishRename(r *renameState, err error, renamed *openidea.Rename
 				break
 			}
 			m.rename = nil
-			m.status = fmt.Sprintf("正在重命名 %s → %s…", r.old, strings.TrimSpace(r.name))
+			m.status = fmt.Sprintf("Renaming %s → %s…", r.old, strings.TrimSpace(r.name))
 			m.applyRenameEdit(r, renamed.Edit, info)
 		}
 		m.invalidate()
@@ -173,14 +173,14 @@ func (m *Model) applyRenameEdit(r *renameState, edit json.RawMessage, info renam
 					r.err = renameErrorText(err)
 					m.invalidate()
 				} else {
-					m.fail("", fmt.Errorf("重命名 %s → %s：%w", old, name, err))
+					m.fail("", fmt.Errorf("Renaming %s → %s: %w", old, name, err))
 				}
 				return
 			}
 			if r == m.rename {
 				m.rename = nil
 			}
-			m.status = fmt.Sprintf("已重命名 %s → %s：%d 个文件", old, name, info.Files)
+			m.status = fmt.Sprintf("Renamed %s → %s: %d files", old, name, info.Files)
 			m.invalidate()
 		})
 	}()
@@ -210,9 +210,9 @@ func renameEditInfo(edit json.RawMessage) renameInfo {
 func renameErrorText(err error) string {
 	switch {
 	case openidea.IsOutOfSync(err):
-		return "文档已改动，请重新发起重命名"
+		return "The document changed; start the rename again"
 	case openidea.ErrorKind(err) == "notFound":
-		return "找不到该符号所属的语言服务器"
+		return "The language server for this symbol was not found"
 	}
 	return err.Error()
 }
@@ -224,15 +224,15 @@ func renameIncompleteText(incomplete *string) string {
 	}
 	switch *incomplete {
 	case "indexing":
-		return "语言服务器仍在索引，重命名可能遗漏引用"
+		return "The language server is still indexing; the rename may miss references"
 	case "tooManyFiles":
-		return "提及该名称的文件过多，只检查了一部分"
+		return "Too many files mention the name; only some were checked"
 	case "filesSkipped":
-		return "部分文件过大或无法读取，未检查"
+		return "Some files were too large or unreadable and were not checked"
 	case "serverFailed":
-		return "服务端查询失败，重命名可能遗漏引用"
+		return "The server query failed; the rename may miss references"
 	}
-	return "重命名可能遗漏引用（" + *incomplete + "）"
+	return "The rename may miss references (" + *incomplete + ")"
 }
 
 // renameDialog shows the prompt over the window while a rename is open.
@@ -244,7 +244,7 @@ func (m *Model) renameDialog(c *ui.Context, p *ui.Theme) {
 	open := true
 	d := ui.Modal(c, &open, func() {
 		ui.Column(c).Width(420).Gap(8).Children(func() {
-			title := "重命名符号"
+			title := "Rename Symbol"
 			if r.old != "" {
 				title += "：" + r.old
 			}
@@ -261,18 +261,18 @@ func (m *Model) renameDialog(c *ui.Context, p *ui.Theme) {
 			}
 			ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
 				if r.busy {
-					ui.Text(c, "处理中…").FontSize(11.5).TextColor(p.TextMuted)
+					ui.Text(c, "Working…").FontSize(11.5).TextColor(p.TextMuted)
 				}
 				if len(r.pending) > 0 {
-					label := fmt.Sprintf("应用到 %d 个文件", r.files)
+					label := fmt.Sprintf("Apply to %d files", r.files)
 					if r.moves > 0 {
-						label = fmt.Sprintf("应用到 %d 个文件（含 %d 项重命名）", r.files, r.moves)
+						label = fmt.Sprintf("Apply to %d files (%d renames)", r.files, r.moves)
 					}
 					ui.Button(c, label).Disabled(r.busy).OnClick(func() { m.applyRename() })
 				} else {
-					ui.Button(c, "重命名").Disabled(r.busy).OnClick(func() { m.submitRename() })
+					ui.Button(c, "Rename").Disabled(r.busy).OnClick(func() { m.submitRename() })
 				}
-				ui.Button(c, "取消").OnClick(func() {
+				ui.Button(c, "Cancel").OnClick(func() {
 					m.rename = nil
 					m.invalidate()
 				})

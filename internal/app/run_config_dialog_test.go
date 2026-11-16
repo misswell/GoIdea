@@ -55,7 +55,7 @@ func TestRunConfigDialogDrawsAsASheet(t *testing.T) {
 	tt.Frame()
 	// The sheet used to be created with open=false, so the modal closed it in
 	// the same frame and Run › Edit Configurations… showed nothing.
-	if _, ok := tt.Find("运行/调试配置"); !ok {
+	if _, ok := tt.Find("Run/Debug Configurations"); !ok {
 		t.Fatalf("the Edit Configurations sheet was not drawn: %v", tt.Texts())
 	}
 }

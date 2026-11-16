@@ -286,13 +286,13 @@ func (m *Model) problemsStatus(c *ui.Context, p *ui.Theme) {
 	}
 	r.Children(func() {
 		if errors > 0 {
-			ui.Text(c, fmt.Sprintf("%d 个错误", errors)).FontSize(11.5).TextColor(p.Danger)
+			ui.Text(c, count(errors, "error", "errors")).FontSize(11.5).TextColor(p.Danger)
 		}
 		if warnings > 0 {
-			ui.Text(c, fmt.Sprintf("%d 个警告", warnings)).FontSize(11.5).TextColor(p.Warning)
+			ui.Text(c, count(warnings, "warning", "warnings")).FontSize(11.5).TextColor(p.Warning)
 		}
 		if infos > 0 {
-			ui.Text(c, fmt.Sprintf("%d 个信息", infos)).FontSize(11.5).TextColor(p.Accent)
+			ui.Text(c, fmt.Sprintf("%d info", infos)).FontSize(11.5).TextColor(p.Accent)
 		}
 	})
 	if r.Clicked() {
@@ -310,21 +310,21 @@ func (m *Model) problemsPanel(c *ui.Context, p *ui.Theme) {
 	col.Children(func() {
 		ui.Row(c).Height(30).Padding(0, 8).Gap(10).AlignItems(ui.Center).
 			BorderWidth(0, 0, 1, 0).BorderColor(p.Border).Children(func() {
-			ui.Text(c, "问题").FontSize(12).Bold().TextColor(p.Text)
-			m.problemFilter(c, p, "错误", errors, p.Danger, &m.problems.showErr)
-			m.problemFilter(c, p, "警告", warnings, p.Warning, &m.problems.showWarn)
-			m.problemFilter(c, p, "信息", infos, p.TextMuted, &m.problems.showInfo)
+			ui.Text(c, "Problems").FontSize(12).Bold().TextColor(p.Text)
+			m.problemFilter(c, p, "Errors", errors, p.Danger, &m.problems.showErr)
+			m.problemFilter(c, p, "Warnings", warnings, p.Warning, &m.problems.showWarn)
+			m.problemFilter(c, p, "Info", infos, p.TextMuted, &m.problems.showInfo)
 			ui.Spacer(c)
-			m.problemScope(c, p, "当前文件", false)
-			m.problemScope(c, p, "项目", true)
-			ui.Button(c, "关闭").OnClick(func() { m.CloseProblems() })
+			m.problemScope(c, p, "Current File", false)
+			m.problemScope(c, p, "Project", true)
+			ui.Button(c, "Close").OnClick(func() { m.CloseProblems() })
 		})
 		ui.Scroll(c).Grow(1).Children(func() {
 			ui.Column(c).Padding(4, 0).Children(func() {
 				if len(groups) == 0 {
-					hint := "当前文件没有问题"
+					hint := "No problems in the current file"
 					if m.problems.project {
-						hint = "项目中没有问题"
+						hint = "No problems in the project"
 					}
 					ui.Text(c, hint).FontSize(11.5).TextColor(p.TextMuted)
 					return
@@ -424,7 +424,7 @@ func (m *Model) problemFileRow(c *ui.Context, p *ui.Theme, gi int, items []Probl
 				ui.Text(c, "("+item.Code+")").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
 			}
 			ui.Spacer(c)
-			ui.Text(c, fmt.Sprintf("行 %d", item.Line+1)).FontSize(10.5).
+			ui.Text(c, fmt.Sprintf("Line %d", item.Line+1)).FontSize(10.5).
 				TextColor(p.TextMuted).SingleLine()
 		})
 		if r.Clicked() {

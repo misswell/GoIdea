@@ -64,7 +64,7 @@ func (m *Model) watchFiles(now time.Time) {
 		}
 		if t.unsaved() || t.syncing {
 			t.noteDisk()
-			m.banner = "文件已在外部修改：" + filepath.Base(t.doc.Path()) + "（保留了编辑器中的内容）"
+			m.banner = "The file changed outside the IDE: " + filepath.Base(t.doc.Path()) + " (the editor's content was kept)"
 			m.invalidate()
 			continue
 		}
@@ -82,16 +82,16 @@ func (m *Model) ReloadAllFromDisk() {
 			continue
 		}
 		if t.unsaved() {
-			m.banner = "文件有未保存的修改，未从磁盘重新加载：" + filepath.Base(t.doc.Path())
+			m.banner = "Unsaved changes; not reloaded from disk: " + filepath.Base(t.doc.Path())
 			continue
 		}
 		m.reloadTab(t)
 		n++
 	}
 	if n == 0 {
-		m.status = "没有可从磁盘重新加载的文件"
+		m.status = "No files to reload from disk"
 	} else {
-		m.status = fmt.Sprintf("正在从磁盘重新加载 %d 个文件…", n)
+		m.status = fmt.Sprintf("Reloading %d files from disk…", n)
 	}
 	m.invalidate()
 }
@@ -124,7 +124,7 @@ func (m *Model) reloadTab(t *Tab) {
 			if m.banner != "" && strings.Contains(m.banner, filepath.Base(path)) {
 				m.banner = ""
 			}
-			m.status = "已重新加载 " + filepath.Base(path)
+			m.status = "Reloaded " + filepath.Base(path)
 			m.invalidate()
 		})
 	}()
@@ -137,18 +137,18 @@ func (m *Model) SmokeWatch(ctx context.Context) (map[string]any, error) {
 	out := map[string]any{}
 	root := m.Root()
 	if root == "" {
-		return out, errors.New("没有打开项目")
+		return out, errors.New("No project is open")
 	}
 	need := false
 	mygo.RunOnMain(func() { need = m.tab() == nil })
 	if need {
 		candidate := findSmokeFile(root)
 		if candidate == "" {
-			return out, errors.New("项目里没有可打开的文件")
+			return out, errors.New("The project has no file to open")
 		}
 		mygo.RunOnMain(func() { m.openFile(candidate) })
 		if !m.waitDebug(ctx, func(*DebugPane) bool { return m.tab() != nil }, 60*time.Second) {
-			return out, errors.New("打开文件超时")
+			return out, errors.New("Opening the file timed out")
 		}
 	}
 	var t *Tab
@@ -160,7 +160,7 @@ func (m *Model) SmokeWatch(ctx context.Context) (map[string]any, error) {
 		}
 	})
 	if t == nil {
-		return out, errors.New("没有可检查的文件")
+		return out, errors.New("No file to check")
 	}
 	path := t.doc.Path()
 	out["path"] = path
@@ -172,7 +172,7 @@ func (m *Model) SmokeWatch(ctx context.Context) (map[string]any, error) {
 			break
 		}
 		if time.Now().After(deadline) {
-			return out, errors.New("缓冲区一直没有同步完成")
+			return out, errors.New("The buffer never finished syncing")
 		}
 		time.Sleep(150 * time.Millisecond)
 	}
@@ -217,7 +217,7 @@ func (m *Model) SmokeWatch(ctx context.Context) (map[string]any, error) {
 			break
 		}
 		if time.Now().After(deadline) {
-			out["restoreError"] = "保存恢复内容超时"
+			out["restoreError"] = "Saving the restored content timed out"
 			break
 		}
 		time.Sleep(150 * time.Millisecond)
@@ -263,7 +263,7 @@ func (m *Model) SmokeWatch(ctx context.Context) (map[string]any, error) {
 			break
 		}
 		if time.Now().After(deadline) {
-			out["reloadAllError"] = "恢复重新加载前的文件超时"
+			out["reloadAllError"] = "Restoring the files from before the reload timed out"
 			break
 		}
 		time.Sleep(150 * time.Millisecond)

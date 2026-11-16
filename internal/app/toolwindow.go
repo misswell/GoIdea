@@ -522,7 +522,7 @@ func (m *Model) MoveToolToRight() {
 		if m.rightTool == "problems" || m.rightTool == "todo" {
 			name = m.rightTool
 		} else {
-			m.status = "该工具窗口不能移到右侧"
+			m.status = "This tool window cannot move to the right side"
 			m.invalidate()
 			return
 		}
@@ -556,7 +556,7 @@ func (m *Model) moveToolToSlot(target dockSlot) {
 		return
 	}
 	if dockSpec(m.tool) == nil {
-		m.status = "该工具窗口不能移动"
+		m.status = "This tool window cannot move"
 		m.invalidate()
 		return
 	}
@@ -583,7 +583,7 @@ func (m *Model) MoveToolToBottom() {
 		m.rememberLayout()
 		m.ShowTodo()
 	default:
-		m.status = "该工具窗口不能移到底部"
+		m.status = "This tool window cannot move to the bottom"
 		m.invalidate()
 	}
 }

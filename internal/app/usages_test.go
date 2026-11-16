@@ -75,7 +75,7 @@ func TestSetUsagesKeepsListBounded(t *testing.T) {
 	if !m.usages.truncated {
 		t.Error("truncated = false")
 	}
-	if !strings.Contains(m.usages.incomplete, "索引") {
+	if !strings.Contains(m.usages.incomplete, "indexing") {
 		t.Errorf("incomplete = %q", m.usages.incomplete)
 	}
 	if !m.usages.librariesSkipped {
@@ -90,10 +90,10 @@ func TestSetUsagesKeepsListBounded(t *testing.T) {
 
 func TestIncompleteText(t *testing.T) {
 	cases := map[string]string{
-		"indexing":     "索引",
-		"tooManyFiles": "过多",
-		"filesSkipped": "未检查",
-		"serverFailed": "失败",
+		"indexing":     "indexing",
+		"tooManyFiles": "Too many",
+		"filesSkipped": "not checked",
+		"serverFailed": "failed",
 		"somethingNew": "somethingNew",
 		"":             "",
 	}

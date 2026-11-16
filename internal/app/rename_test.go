@@ -32,10 +32,10 @@ func TestRenameEditInfo(t *testing.T) {
 
 func TestRenameIncompleteText(t *testing.T) {
 	cases := map[string]string{
-		"indexing":     "索引",
-		"tooManyFiles": "过多",
-		"filesSkipped": "未检查",
-		"serverFailed": "失败",
+		"indexing":     "indexing",
+		"tooManyFiles": "Too many",
+		"filesSkipped": "not checked",
+		"serverFailed": "failed",
 	}
 	for kind, want := range cases {
 		kind := kind
@@ -54,11 +54,11 @@ func TestRenameIncompleteText(t *testing.T) {
 
 func TestRenameErrorText(t *testing.T) {
 	stale := &openidea.Error{Kind: "outOfSync", Message: "document changed"}
-	if got := renameErrorText(stale); !strings.Contains(got, "重新发起") {
+	if got := renameErrorText(stale); !strings.Contains(got, "start the rename again") {
 		t.Fatalf("out of sync says %q", got)
 	}
 	missing := &openidea.Error{Kind: "notFound", Message: "no server"}
-	if got := renameErrorText(missing); !strings.Contains(got, "语言服务器") {
+	if got := renameErrorText(missing); !strings.Contains(got, "language server") {
 		t.Fatalf("not found says %q", got)
 	}
 	plain := errors.New("boom")

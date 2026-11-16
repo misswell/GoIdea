@@ -111,7 +111,7 @@ func (p *DebugPane) breakpointLines(path string) []int {
 // gives the file's whole list to the backend (which keeps it for sessions).
 func (m *Model) toggleBreakpointAt(path string, line int) {
 	if line < 0 || !isJavaSource(path) {
-		m.status = "断点只支持 Java 源文件"
+		m.status = "Breakpoints only work in Java source files"
 		m.invalidate()
 		return
 	}
@@ -126,9 +126,9 @@ func (m *Model) toggleBreakpointAt(path string, line int) {
 		m.debug.bps[path] = next
 	}
 	if found {
-		m.status = fmt.Sprintf("已移除断点：第 %d 行", line+1)
+		m.status = fmt.Sprintf("Breakpoint removed at line %d", line+1)
 	} else {
-		m.status = fmt.Sprintf("已设置断点：第 %d 行", line+1)
+		m.status = fmt.Sprintf("Breakpoint set at line %d", line+1)
 	}
 	m.refreshDecorations()
 	m.invalidate()
@@ -396,7 +396,7 @@ func (m *Model) javaDebugLaunch(ctx context.Context, rc *openidea.RunConfig, roo
 	if info.ErrorCount > 0 && report == nil {
 		m.post(func() {
 			m.notifyWarning("debug.java-compile-errors",
-				"'"+rc.Name+"' 有编译错误；调试最后一次编译的类",
+				"'"+rc.Name+"' has compilation errors; debugging the last compiled classes",
 				strings.TrimRight(adapter.FormatCompileErrors(info), "\n"))
 		})
 	}
@@ -409,16 +409,16 @@ func (m *Model) javaDebugLaunch(ctx context.Context, rc *openidea.RunConfig, roo
 		// restarts with the bundle.
 		if openidea.ErrorKind(err) == "unavailable" && javaDebugMissing.MatchString(err.Error()) {
 			m.post(func() {
-				m.notifyWarning("debug.java-debug-missing", "Java 调试器未安装",
-					"调试 Java 需要 jdtls 内的 Microsoft java-debug。安装并等 jdtls 重启后再调试。",
-					notifyAction{label: "安装", run: func(m *Model) { m.InstallJavaToolchain() }})
+				m.notifyWarning("debug.java-debug-missing", "Java Debugger Not Installed",
+					"Debugging Java needs Microsoft java-debug inside jdtls. Install it and debug once jdtls restarts.",
+					notifyAction{label: "Install", run: func(m *Model) { m.InstallJavaToolchain() }})
 			})
 		}
 		return openidea.DebugLaunchConfig{}, err
 	}
 	var port uint16
 	if err := json.Unmarshal(rawPort, &port); err != nil {
-		return openidea.DebugLaunchConfig{}, fmt.Errorf("读取 java-debug 端口失败：%w", err)
+		return openidea.DebugLaunchConfig{}, fmt.Errorf("Could not read the java-debug port: %w", err)
 	}
 	// java-debug resolves the Java project for Evaluate on its own from
 	// `mainClass` only when the class belongs to a project it knows; name the
@@ -569,7 +569,7 @@ func (m *Model) Debug() {
 		cfg = m.run.inline
 	}
 	if cfg == nil {
-		m.debug.err = "先在运行配置选择器中选择一个配置"
+		m.debug.err = "Choose a configuration in the run configuration chooser first"
 		m.invalidate()
 		return
 	}
@@ -588,7 +588,7 @@ func (m *Model) DebugRunConfig(rc *openidea.RunConfig) {
 		return
 	}
 	if !m.run.trusted {
-		m.debug.err = "项目未受信任：先授权构建和调试"
+		m.debug.err = "The project is not trusted: allow building and debugging first"
 		m.invalidate()
 		return
 	}
@@ -601,22 +601,22 @@ func (m *Model) DebugRunConfig(rc *openidea.RunConfig) {
 		return
 	}
 	if m.debug.session != 0 && !m.debug.ended {
-		m.debug.err = "已有调试会话在运行：先停止"
+		m.debug.err = "A debug session is already running: stop it first"
 		m.invalidate()
 		return
 	}
 	if !adapter.IsJVMApplication(rc.Kind) {
-		m.debug.err = fmt.Sprintf("GoIDEA 还不能调试 %s 类型的运行配置", adapter.KindLabel(rc.Kind))
+		m.debug.err = fmt.Sprintf("GoIDEA cannot debug %s run configurations yet", adapter.KindLabel(rc.Kind))
 		m.invalidate()
 		return
 	}
 	if rc.DebugAdapter != nil && *rc.DebugAdapter != "java-debug" && *rc.DebugAdapter != "" {
-		m.debug.err = fmt.Sprintf("调试器 %s 还不可用：GoIDEA 目前只搭载 java-debug", *rc.DebugAdapter)
+		m.debug.err = fmt.Sprintf("The %s debugger is not available: GoIDEA ships java-debug only", *rc.DebugAdapter)
 		m.invalidate()
 		return
 	}
 	if adapter.ParseJavaArgs(rc.Args).MainClass == "" {
-		m.debug.err = fmt.Sprintf("配置 '%s' 没有主类", rc.Name)
+		m.debug.err = fmt.Sprintf("Configuration '%s' has no main class", rc.Name)
 		m.invalidate()
 		return
 	}
@@ -637,7 +637,7 @@ func (m *Model) DebugRunConfig(rc *openidea.RunConfig) {
 	m.debug.output = nil
 	m.debug.truncated = false
 	m.debug.err = ""
-	m.debug.status = "正在保存并构建…"
+	m.debug.status = "Saving and building…"
 	m.refreshDecorations()
 	m.invalidate()
 
@@ -660,7 +660,7 @@ func (m *Model) DebugRunConfig(rc *openidea.RunConfig) {
 		}
 		// The build reads the files from disk.
 		if err := saveAll(ctx, tabs, p); err != nil {
-			fail("保存后再调试失败", err)
+			fail("Saving before debugging failed", err)
 			return
 		}
 		_ = m.pushBreakpoints(ctx, "")
@@ -676,7 +676,7 @@ func (m *Model) DebugRunConfig(rc *openidea.RunConfig) {
 		}
 		if prepared.Info.ErrorCount > 0 {
 			m.post(func() {
-				m.debug.status = "有编译错误，调试最后一次编译的类"
+				m.debug.status = "There are compilation errors; debugging the last compiled classes"
 				m.invalidate()
 			})
 		}
@@ -687,12 +687,12 @@ func (m *Model) DebugRunConfig(rc *openidea.RunConfig) {
 		}
 		rawSession, err := m.mgr.Invoke(ctx, Window, "debug_start", map[string]any{"config": launch})
 		if err != nil {
-			fail("启动调试失败", err)
+			fail("Starting the debug session failed", err)
 			return
 		}
 		var session uint32
 		if err := json.Unmarshal(rawSession, &session); err != nil {
-			fail("读取调试会话失败", err)
+			fail("Reading the debug session failed", err)
 			return
 		}
 		m.post(func() {
@@ -710,7 +710,7 @@ func (m *Model) DebugRunConfig(rc *openidea.RunConfig) {
 			if m.debug.session == 0 {
 				m.debug.session = session
 			}
-			m.debug.status = "调试已启动：" + m.debug.config
+			m.debug.status = "Debugging started: " + m.debug.config
 			m.refreshDecorations()
 			m.invalidate()
 		})
@@ -727,7 +727,7 @@ func (m *Model) DebugRerun() {
 	}
 	cfg, err := openidea.DecodeRunConfig(m.debug.lastRaw)
 	if err != nil {
-		m.debug.err = "上一次调试的配置无法读取：" + err.Error()
+		m.debug.err = "Could not read the last debug configuration: " + err.Error()
 		m.invalidate()
 		return
 	}
@@ -766,7 +766,7 @@ func (m *Model) DebugContext() {
 		return
 	}
 	if !m.run.trusted {
-		m.debug.err = "项目未受信任：先授权构建和调试"
+		m.debug.err = "The project is not trusted: allow building and debugging first"
 		m.invalidate()
 		return
 	}
@@ -779,19 +779,19 @@ func (m *Model) DebugContext() {
 		return
 	}
 	if m.debug.session != 0 && !m.debug.ended {
-		m.debug.err = "已有调试会话在运行：先停止"
+		m.debug.err = "A debug session is already running: stop it first"
 		m.invalidate()
 		return
 	}
 	t := m.tab()
 	if t == nil {
-		m.debug.err = "先打开一个 Java 源文件"
+		m.debug.err = "Open a Java source file first"
 		m.invalidate()
 		return
 	}
 	target, ok := javaTargetFor(root, t.doc.Path(), t.doc.Text())
 	if !ok {
-		m.debug.err = "当前文件不是 Java 主类"
+		m.debug.err = "The current file is not a Java main class"
 		m.invalidate()
 		return
 	}
@@ -815,7 +815,7 @@ func (m *Model) DebugContext() {
 	m.debug.output = nil
 	m.debug.truncated = false
 	m.debug.err = ""
-	m.debug.status = "正在保存并构建…"
+	m.debug.status = "Saving and building…"
 	m.refreshDecorations()
 	m.invalidate()
 
@@ -837,7 +837,7 @@ func (m *Model) DebugContext() {
 		}
 		// The build reads the files from disk.
 		if err := saveAll(ctx, tabs, p); err != nil {
-			fail("保存后再调试失败", err)
+			fail("Saving before debugging failed", err)
 			return
 		}
 		_ = m.pushBreakpoints(ctx, "")
@@ -854,7 +854,7 @@ func (m *Model) DebugContext() {
 		}
 		if prepared.Info.ErrorCount > 0 {
 			m.post(func() {
-				m.debug.status = "有编译错误，调试最后一次编译的类"
+				m.debug.status = "There are compilation errors; debugging the last compiled classes"
 				m.invalidate()
 			})
 		}
@@ -865,12 +865,12 @@ func (m *Model) DebugContext() {
 		}
 		rawSession, err := m.mgr.Invoke(ctx, Window, "debug_start", map[string]any{"config": launch})
 		if err != nil {
-			fail("启动调试失败", err)
+			fail("Starting the debug session failed", err)
 			return
 		}
 		var session uint32
 		if err := json.Unmarshal(rawSession, &session); err != nil {
-			fail("读取调试会话失败", err)
+			fail("Reading the debug session failed", err)
 			return
 		}
 		m.post(func() {
@@ -888,7 +888,7 @@ func (m *Model) DebugContext() {
 			if m.debug.session == 0 {
 				m.debug.session = session
 			}
-			m.debug.status = "调试已启动：" + target.mainClass
+			m.debug.status = "Debugging started: " + target.mainClass
 			m.refreshDecorations()
 			m.invalidate()
 		})
@@ -901,13 +901,13 @@ func (m *Model) DebugContinue() {
 		return
 	}
 	session, thread := m.debug.session, m.debug.stopThread
-	m.debug.status = "继续运行…"
+	m.debug.status = "Resuming…"
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 		defer cancel()
 		if _, err := m.mgr.Invoke(ctx, Window, "debug_resume", map[string]any{"session": session, "threadId": thread}); err != nil {
-			m.post(func() { m.debug.err = "继续失败：" + err.Error(); m.invalidate() })
+			m.post(func() { m.debug.err = "Resume failed: " + err.Error(); m.invalidate() })
 		}
 	}()
 }
@@ -923,7 +923,7 @@ func (m *Model) DebugPause() {
 		thread = m.debug.threads[0].ID
 	}
 	if thread == 0 {
-		m.debug.err = "没有可暂停的线程"
+		m.debug.err = "There is no thread to pause"
 		m.invalidate()
 		return
 	}
@@ -931,7 +931,7 @@ func (m *Model) DebugPause() {
 		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 		defer cancel()
 		if _, err := m.mgr.Invoke(ctx, Window, "debug_pause", map[string]any{"session": session, "threadId": thread}); err != nil {
-			m.post(func() { m.debug.err = "暂停失败：" + err.Error(); m.invalidate() })
+			m.post(func() { m.debug.err = "Pause failed: " + err.Error(); m.invalidate() })
 		}
 	}()
 }
@@ -943,7 +943,7 @@ func (m *Model) DebugStep(kind string) {
 		return
 	}
 	session, thread := m.debug.session, m.debug.stopThread
-	m.debug.status = "单步执行…"
+	m.debug.status = "Stepping…"
 	m.debug.paused = false
 	m.refreshDecorations()
 	m.invalidate()
@@ -953,7 +953,7 @@ func (m *Model) DebugStep(kind string) {
 		if _, err := m.mgr.Invoke(ctx, Window, "debug_step", map[string]any{
 			"session": session, "threadId": thread, "kind": kind,
 		}); err != nil {
-			m.post(func() { m.debug.err = "单步失败：" + err.Error(); m.invalidate() })
+			m.post(func() { m.debug.err = "Step failed: " + err.Error(); m.invalidate() })
 		}
 	}()
 }
@@ -971,14 +971,14 @@ func (m *Model) RunToCursor(force bool) {
 	}
 	t := m.tab()
 	if t == nil {
-		m.debug.err = "没有打开的文件，无法运行到光标"
+		m.debug.err = "No file is open, so Run to Cursor has no place to go"
 		m.invalidate()
 		return
 	}
 	path := t.doc.Path()
 	line := t.state.CursorPos().Line
 	session, thread := m.debug.session, m.debug.stopThread
-	m.debug.status = "运行到光标…"
+	m.debug.status = "Running to the cursor…"
 	m.debug.paused = false
 	m.refreshDecorations()
 	m.invalidate()
@@ -988,7 +988,7 @@ func (m *Model) RunToCursor(force bool) {
 		if _, err := m.mgr.Invoke(ctx, Window, "debug_run_to", map[string]any{
 			"session": session, "threadId": thread, "path": path, "line": line, "force": force,
 		}); err != nil {
-			m.post(func() { m.debug.err = "运行到光标失败：" + err.Error(); m.invalidate() })
+			m.post(func() { m.debug.err = "Run to Cursor failed: " + err.Error(); m.invalidate() })
 		}
 	}()
 }
@@ -1002,13 +1002,13 @@ func (m *Model) StopDebug() {
 		return
 	}
 	session := m.debug.session
-	m.debug.status = "正在停止调试…"
+	m.debug.status = "Stopping the debug session…"
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 		defer cancel()
 		if _, err := m.mgr.Invoke(ctx, Window, "debug_stop", map[string]any{"session": session}); err != nil {
-			m.post(func() { m.debug.err = "停止调试失败：" + err.Error(); m.invalidate() })
+			m.post(func() { m.debug.err = "Stopping the debug session failed: " + err.Error(); m.invalidate() })
 		}
 	}()
 }
@@ -1034,15 +1034,15 @@ func (m *Model) acceptDebugEvent(session uint32, raw json.RawMessage) {
 		if e.Name != "" {
 			d.config = e.Name
 		}
-		d.status = "调试已启动"
+		d.status = "Debugging started"
 	case "stopped":
 		d.paused = true
 		d.ended = false
 		d.stopThread = e.ThreadID
 		d.reason = e.Reason
-		d.status = "已暂停"
+		d.status = "Paused"
 		if e.Description != "" {
-			d.status = "已暂停：" + e.Description
+			d.status = "Paused: " + e.Description
 		}
 		m.fetchStop(e.ThreadID)
 	case "continued":
@@ -1053,7 +1053,7 @@ func (m *Model) acceptDebugEvent(session uint32, raw json.RawMessage) {
 		d.stopLine = -1
 		d.stopFile = ""
 		m.clearWatchValues()
-		d.status = "运行中…"
+		d.status = "Running…"
 	case "output":
 		text := strings.TrimSuffix(stripANSI(e.Output), "\n")
 		if text != "" {
@@ -1077,14 +1077,14 @@ func (m *Model) acceptDebugEvent(session uint32, raw json.RawMessage) {
 		d.vars = nil
 		d.stopLine = -1
 		m.clearWatchValues()
-		d.status = "调试已结束"
+		d.status = "Debugging ended"
 	case "exited":
 		d.ended = true
 		d.paused = false
 		m.clearWatchValues()
-		d.status = "程序已退出"
+		d.status = "The program exited"
 		if e.Code != nil {
-			d.status = fmt.Sprintf("程序已退出（退出码 %d）", *e.Code)
+			d.status = fmt.Sprintf("The program exited (code %d)", *e.Code)
 		}
 	case "breakpointsChanged":
 		// Verification is refetched by the file's next push; nothing to do
@@ -1096,7 +1096,7 @@ func (m *Model) acceptDebugEvent(session uint32, raw json.RawMessage) {
 		if e.ChangeType == "BUILD_COMPLETE" {
 			m.offerHotSwapAfterBuild()
 		} else if e.Message != "" {
-			d.status = "热替换：" + e.Message
+			d.status = "Hot swap: " + e.Message
 		}
 	}
 	m.refreshDecorations()
@@ -1183,7 +1183,7 @@ func (m *Model) loadScopes(ctx context.Context, session uint32, frameID int64) (
 // SubmitWatch evaluates the typed expression and pins it to the panel.
 func (m *Model) SubmitWatch() {
 	if !m.debug.paused {
-		m.debug.err = "暂停后才能求值"
+		m.debug.err = "Pause before evaluating"
 		m.invalidate()
 		return
 	}
@@ -1208,7 +1208,7 @@ func (m *Model) addWatch(expr string) bool {
 		}
 	}
 	if len(m.debug.watches) >= maxWatches {
-		m.debug.err = fmt.Sprintf("最多监视 %d 个表达式", maxWatches)
+		m.debug.err = fmt.Sprintf("At most %d expressions can be watched", maxWatches)
 		m.invalidate()
 		return false
 	}
@@ -1340,7 +1340,7 @@ func (m *Model) SmokeDebug(ctx context.Context) (map[string]any, error) {
 	root := m.Root()
 	out := map[string]any{"root": root}
 	if root == "" {
-		return out, errors.New("没有打开项目")
+		return out, errors.New("No project is open")
 	}
 	if _, err := m.mgr.Invoke(ctx, Window, "project_trust_set", map[string]any{
 		"path": root, "trusted": true, "folder": true,
@@ -1359,11 +1359,11 @@ func (m *Model) SmokeDebug(ctx context.Context) (map[string]any, error) {
 		// path the tree uses, so the smoke exercises the real document bridge.
 		candidate := findJavaMain(root)
 		if candidate == "" {
-			return out, errors.New("项目里没有带 main 方法的 Java 文件")
+			return out, errors.New("The project has no Java file with a main method")
 		}
 		m.post(func() { m.openFile(candidate) })
 		if !m.waitDebug(ctx, func(*DebugPane) bool { return m.tab() != nil }, 90*time.Second) {
-			return out, errors.New("打开 " + candidate + " 超时")
+			return out, errors.New("Opening " + candidate + " timed out")
 		}
 		m.post(func() {
 			if t := m.tab(); t != nil {
@@ -1374,7 +1374,7 @@ func (m *Model) SmokeDebug(ctx context.Context) (map[string]any, error) {
 	}
 	target, ok := javaTargetFor(root, path, text)
 	if !ok {
-		return out, errors.New("当前文件不是 Java 主类：" + path)
+		return out, errors.New("The current file is not a Java main class: " + path)
 	}
 	out["mainClass"] = target.mainClass
 	rc := applicationConfig(target, adapter.JVMModuleDir(relPathUnder(root, path), nil, nil))
@@ -1395,7 +1395,7 @@ func (m *Model) SmokeDebug(ctx context.Context) (map[string]any, error) {
 		m.debug.visible = true
 		m.occupyBottom("debug")
 		m.debug.starting = true
-		m.debug.status = "smoke：正在构建…"
+		m.debug.status = "smoke: building…"
 		if m.debug.bps == nil {
 			m.debug.bps = map[string][]int{}
 		}
@@ -1448,7 +1448,7 @@ func (m *Model) SmokeDebug(ctx context.Context) (map[string]any, error) {
 		m.post(func() { state = m.debug.status + " " + m.debug.err })
 		out["paused"] = false
 		out["state"] = state
-		return out, errors.New("断点未在 4 分钟内命中：" + state)
+		return out, errors.New("The breakpoint was not hit within 4 minutes: " + state)
 	}
 	out["paused"] = true
 	frameID := int64(0)

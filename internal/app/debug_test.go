@@ -241,7 +241,7 @@ func TestRemoveWatch(t *testing.T) {
 func TestSubmitWatchNeedsPause(t *testing.T) {
 	m := &Model{debug: DebugPane{evalText: "count"}}
 	m.SubmitWatch()
-	if len(m.debug.watches) != 0 || !strings.Contains(m.debug.err, "暂停") {
+	if len(m.debug.watches) != 0 || !strings.Contains(m.debug.err, "Pause") {
 		t.Fatalf("watches = %+v, err = %q", m.debug.watches, m.debug.err)
 	}
 }

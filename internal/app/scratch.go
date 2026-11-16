@@ -215,11 +215,11 @@ func (m *Model) CreateScratchLanguage(id string) {
 	m.rememberScratchLanguage(id)
 	path, line, col, err := m.createScratchFile(lang)
 	if err != nil {
-		m.status = "无法创建临时文件：" + err.Error()
+		m.status = "Could not create the scratch file: " + err.Error()
 		m.invalidate()
 		return
 	}
-	m.status = "已创建 " + filepath.Base(path)
+	m.status = "Created " + filepath.Base(path)
 	m.revealAt(path, line, col)
 	m.invalidate()
 }
@@ -227,7 +227,7 @@ func (m *Model) CreateScratchLanguage(id string) {
 // scratchDir is <data>/scratches, beside the settings file.
 func (m *Model) scratchDir() (string, error) {
 	if m.cfg.SettingsPath == "" {
-		return "", fmt.Errorf("没有可用的数据目录")
+		return "", fmt.Errorf("No data directory is available")
 	}
 	return filepath.Join(filepath.Dir(m.cfg.SettingsPath), "scratches"), nil
 }
@@ -318,7 +318,7 @@ func (m *Model) scratchChooserDialog(c *ui.Context, p *ui.Theme) {
 	open := v.open
 	d := ui.Modal(c, &open, func() {
 		ui.Column(c).Width(420).Gap(8).Children(func() {
-			ui.Text(c, "新建临时文件").FontSize(13).Bold().TextColor(p.Text).SingleLine()
+			ui.Text(c, "New Scratch File").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			in := ui.TextInput(c, &v.filter).AutoFocus()
 			if in.Changed() {
 				m.SetScratchFilter(v.filter)
@@ -328,13 +328,13 @@ func (m *Model) scratchChooserDialog(c *ui.Context, p *ui.Theme) {
 			}
 			switch {
 			case v.loading:
-				ui.Text(c, "正在读取语言…").FontSize(11).TextColor(p.TextMuted).SingleLine()
+				ui.Text(c, "Reading the languages…").FontSize(11).TextColor(p.TextMuted).SingleLine()
 			case v.err != "":
 				ui.Text(c, v.err).FontSize(10.5).TextColor(p.Danger).SingleLine().Ellipsis("…")
 			default:
 				rows := m.scratchRows()
 				if len(rows) == 0 {
-					ui.Text(c, "没有匹配的语言").FontSize(11).TextColor(p.TextMuted).SingleLine()
+					ui.Text(c, "No matching languages").FontSize(11).TextColor(p.TextMuted).SingleLine()
 				}
 				first := v.active - 5
 				if first < 0 {
@@ -401,7 +401,7 @@ func (m *Model) SmokeScratch(ctx context.Context) (map[string]any, error) {
 			break
 		}
 		if time.Now().After(deadline) {
-			return out, errors.New("读取语言列表超时")
+			return out, errors.New("Reading the language list timed out")
 		}
 		select {
 		case <-ctx.Done():
@@ -416,7 +416,7 @@ func (m *Model) SmokeScratch(ctx context.Context) (map[string]any, error) {
 		}
 	})
 	if id == "" {
-		out["error"] = "没有可用的语言"
+		out["error"] = "No language is available"
 		return out, nil
 	}
 	m.post(func() { m.CreateScratchLanguage(id) })

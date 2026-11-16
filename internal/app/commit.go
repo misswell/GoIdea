@@ -194,28 +194,28 @@ func (m *Model) submitCommit() {
 	message := strings.TrimSpace(c.message)
 	switch {
 	case message == "" && !c.amend:
-		c.err = "请输入提交信息"
+		c.err = "Enter a commit message"
 		m.invalidate()
 		return
 	case len(m.commitFiles(c)) == 0:
-		c.err = "没有可提交的更改"
+		c.err = "There are no changes to commit"
 		m.invalidate()
 		return
 	}
 	plan := m.planCommit(c)
 	if len(plan.conflict) > 0 {
-		c.err = "请先解决冲突：" + strings.Join(plan.conflict, "、")
+		c.err = "Resolve the conflicts first: " + strings.Join(plan.conflict, "、")
 		m.invalidate()
 		return
 	}
 	if len(plan.included) == 0 && !c.amend {
-		c.err = "没有选择要提交的更改"
+		c.err = "No changes are selected for the commit"
 		m.invalidate()
 		return
 	}
 	c.busy = true
 	c.err = ""
-	m.status = "正在提交…"
+	m.status = "Committing…"
 	m.invalidate()
 	tabs := append([]*Tab(nil), m.tabs...)
 	options := openidea.CommitOptions{
@@ -249,16 +249,16 @@ func (m *Model) finishCommit(c *commitState, id string, err error) {
 		c.busy = false
 		if err != nil {
 			c.err = commitErrorText(err)
-			m.status = "提交失败"
+			m.status = "Commit failed"
 			m.invalidate()
 			return
 		}
 		m.commit = nil
 		summary := firstLine(c.message)
 		if summary == "" {
-			summary = "修正上次提交"
+			summary = "Amend the last commit"
 		}
-		m.status = fmt.Sprintf("已提交 %s：%s", shortID(id), summary)
+		m.status = fmt.Sprintf("Committed %s: %s", shortID(id), summary)
 		m.RefreshVCS()
 		m.invalidate()
 	})
@@ -387,9 +387,9 @@ func firstLine(text string) string {
 // commitErrorText turns the refusals a commit can hit into the dialog's words.
 func commitErrorText(err error) string {
 	if openidea.IsOutOfSync(err) {
-		return "文件已在磁盘上改动，请刷新后重试"
+		return "The file changed on disk; refresh and try again"
 	}
-	return "提交失败：" + err.Error()
+	return "Commit failed: " + err.Error()
 }
 
 // commitDialog draws the Commit dialog over the window.
@@ -402,13 +402,13 @@ func (m *Model) commitDialog(c *ui.Context, p *ui.Theme) {
 	d := ui.Modal(c, &open, func() {
 		files := m.commitFiles(s)
 		ui.Column(c).Width(560).Gap(8).Children(func() {
-			ui.Text(c, "提交更改").FontSize(13).Bold().TextColor(p.Text)
+			ui.Text(c, "Commit Changes").FontSize(13).Bold().TextColor(p.Text)
 			ui.TextArea(c, &s.message).Height(84)
-			ui.Text(c, "提交信息，例如：修复登录超时").FontSize(11).TextColor(p.TextMuted)
-			ui.Text(c, fmt.Sprintf("已选择 %d 个文件", len(m.planCommit(s).included))).
+			ui.Text(c, "Commit message, for example: Fix the login timeout").FontSize(11).TextColor(p.TextMuted)
+			ui.Text(c, fmt.Sprintf("%s selected", count(len(m.planCommit(s).included), "file", "files"))).
 				FontSize(11).TextColor(p.TextMuted)
 			if len(files) == 0 {
-				ui.Text(c, "没有可提交的更改").FontSize(11.5).TextColor(p.TextMuted)
+				ui.Text(c, "There are no changes to commit").FontSize(11.5).TextColor(p.TextMuted)
 			} else {
 				ui.Scroll(c).Height(220).Children(func() {
 					for i, f := range files {
@@ -431,23 +431,23 @@ func (m *Model) commitDialog(c *ui.Context, p *ui.Theme) {
 				})
 			}
 			ui.Row(c).Gap(12).Children(func() {
-				ui.Checkbox(c, &s.amend, "修正上次提交")
-				ui.Checkbox(c, &s.signOff, "签名")
-				ui.Checkbox(c, &s.runHooks, "运行 Git 钩子")
+				ui.Checkbox(c, &s.amend, "Amend the last commit")
+				ui.Checkbox(c, &s.signOff, "Sign-off")
+				ui.Checkbox(c, &s.runHooks, "Run Git hooks")
 			})
 			if s.err != "" {
 				ui.Text(c, s.err).FontSize(11).TextColor(p.Danger)
 			}
 			ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
 				if s.busy {
-					ui.Text(c, "提交中…").FontSize(11.5).TextColor(p.TextMuted)
+					ui.Text(c, "Committing…").FontSize(11.5).TextColor(p.TextMuted)
 				}
 				if s.amend {
-					ui.Button(c, "修正提交").Disabled(s.busy).OnClick(m.submitCommit)
+					ui.Button(c, "Amend Commit").Disabled(s.busy).OnClick(m.submitCommit)
 				} else {
-					ui.Button(c, "提交").Disabled(s.busy || len(files) == 0).OnClick(m.submitCommit)
+					ui.Button(c, "Commit").Disabled(s.busy || len(files) == 0).OnClick(m.submitCommit)
 				}
-				ui.Button(c, "取消").OnClick(func() {
+				ui.Button(c, "Cancel").OnClick(func() {
 					m.commit = nil
 					m.invalidate()
 				})

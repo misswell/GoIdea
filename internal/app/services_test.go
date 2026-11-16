@@ -98,7 +98,7 @@ func TestServicesShowsTheRunningProcessAndItsStop(t *testing.T) {
 		t.Fatalf("the running process is not listed with its stop: %+v", rows)
 	}
 	stop.run(m)
-	if m.run.err != "进程尚未启动" {
+	if m.run.err != "The process has not started" {
 		t.Fatalf("the stop row did not reach StopRun: %q", m.run.err)
 	}
 

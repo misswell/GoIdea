@@ -123,12 +123,12 @@ func (m *Model) AttachToProcess(p openidea.AttachableProcess) {
 	root := m.Root()
 	m.DockShow("debug")
 	if root == "" {
-		m.debug.err = "先打开一个项目：源码与被调试进程同属一个工作区"
+		m.debug.err = "Open a project first: the sources and the debuggee share a workspace"
 		m.invalidate()
 		return
 	}
 	if p.Port == nil {
-		m.debug.err = fmt.Sprintf("进程 %d 没有 JDWP 调试端口", p.PID)
+		m.debug.err = fmt.Sprintf("Process %d has no JDWP debug port", p.PID)
 		m.invalidate()
 		return
 	}
@@ -136,7 +136,7 @@ func (m *Model) AttachToProcess(p openidea.AttachableProcess) {
 		return
 	}
 	if m.debug.session != 0 && !m.debug.ended {
-		m.debug.err = "已有调试会话在运行：先停止"
+		m.debug.err = "A debug session is already running: stop it first"
 		m.invalidate()
 		return
 	}
@@ -154,7 +154,7 @@ func (m *Model) AttachToProcess(p openidea.AttachableProcess) {
 	m.debug.output = nil
 	m.debug.truncated = false
 	m.debug.err = ""
-	m.debug.status = "正在连接 " + fmt.Sprintf("%s (%d)…", p.Name, p.PID)
+	m.debug.status = "Connecting to " + fmt.Sprintf("%s (%d)…", p.Name, p.PID)
 	m.invalidate()
 
 	go func() {
@@ -180,17 +180,17 @@ func (m *Model) AttachToProcess(p openidea.AttachableProcess) {
 			// java-debug missing from jdtls: offer the one-click install.
 			if openidea.ErrorKind(err) == "unavailable" && javaDebugMissing.MatchString(err.Error()) {
 				m.post(func() {
-					m.notifyWarning("debug.java-debug-missing", "Java 调试器未安装",
-						"调试 Java 需要 jdtls 内的 Microsoft java-debug。安装并等 jdtls 重启后再调试。",
-						notifyAction{label: "安装", run: func(m *Model) { m.InstallJavaToolchain() }})
+					m.notifyWarning("debug.java-debug-missing", "Java Debugger Not Installed",
+						"Debugging Java needs Microsoft java-debug inside jdtls. Install it and debug once jdtls restarts.",
+						notifyAction{label: "Install", run: func(m *Model) { m.InstallJavaToolchain() }})
 				})
 			}
-			fail("启动 java-debug 失败", err)
+			fail("Starting java-debug failed", err)
 			return
 		}
 		var port uint16
 		if err := json.Unmarshal(rawPort, &port); err != nil {
-			fail("读取 java-debug 端口失败", err)
+			fail("Could not read the java-debug port", err)
 			return
 		}
 		project := javaProjectName(root)
@@ -207,7 +207,7 @@ func (m *Model) AttachToProcess(p openidea.AttachableProcess) {
 		}
 		rawExtra, err := json.Marshal(extra)
 		if err != nil {
-			fail("构造附加配置失败", err)
+			fail("Building the attach configuration failed", err)
 			return
 		}
 		s := string(rawExtra)
@@ -223,12 +223,12 @@ func (m *Model) AttachToProcess(p openidea.AttachableProcess) {
 		}
 		rawSession, err := m.mgr.Invoke(ctx, Window, "debug_start", map[string]any{"config": launch})
 		if err != nil {
-			fail("附加失败", err)
+			fail("Attach failed", err)
 			return
 		}
 		var session uint32
 		if err := json.Unmarshal(rawSession, &session); err != nil {
-			fail("读取调试会话失败", err)
+			fail("Reading the debug session failed", err)
 			return
 		}
 		_ = filepath.Clean(cwd)
@@ -245,7 +245,7 @@ func (m *Model) AttachToProcess(p openidea.AttachableProcess) {
 			if m.debug.session == 0 {
 				m.debug.session = session
 			}
-			m.debug.status = "已附加：" + fmt.Sprintf("%s (%d)", p.Name, p.PID)
+			m.debug.status = "Attached: " + fmt.Sprintf("%s (%d)", p.Name, p.PID)
 			m.invalidate()
 			// A VM launched with suspend=y waits for the debugger: IDEA's
 			// attach resumes it once attached. The main thread may be
@@ -277,7 +277,7 @@ func (m *Model) attachDialog(c *ui.Context, p *ui.Theme) {
 	open := d.open
 	ui.Modal(c, &open, func() {
 		ui.Column(c).Width(560).Gap(8).Children(func() {
-			ui.Text(c, "附加到进程").FontSize(13).Bold().TextColor(p.Text).SingleLine()
+			ui.Text(c, "Attach to Process").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			in := ui.TextInput(c, &d.query).AutoFocus()
 			in.OnShortcut(0, ui.KeyDown, func() { m.stepAttach(1) })
 			in.OnShortcut(0, ui.KeyUp, func() { m.stepAttach(-1) })
@@ -285,14 +285,14 @@ func (m *Model) attachDialog(c *ui.Context, p *ui.Theme) {
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 				switch {
 				case d.busy:
-					ui.Text(c, "正在读取进程…").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+					ui.Text(c, "Reading the processes…").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
 				case d.err != "":
 					ui.Text(c, d.err).FontSize(10.5).TextColor(p.Danger).SingleLine().Ellipsis("…")
 				case len(rows) == 0:
-					ui.Text(c, "没有可附加的 Java（JDWP）进程：以 -agentlib:jdwp=transport=dt_socket,server=y 启动的进程会出现在这里").
+					ui.Text(c, "No attachable Java (JDWP) processes: processes started with -agentlib:jdwp=transport=dt_socket,server=y appear here").
 						FontSize(10.5).TextColor(p.TextMuted)
 				default:
-					ui.Text(c, fmt.Sprintf("Java (JDWP) · %d 个进程，Enter 附加", len(rows))).
+					ui.Text(c, fmt.Sprintf("Java (JDWP) · %d processes, Enter attaches", len(rows))).
 						FontSize(10.5).TextColor(p.TextMuted).SingleLine()
 				}
 			})
@@ -328,10 +328,10 @@ func (m *Model) attachDialog(c *ui.Context, p *ui.Theme) {
 				})
 			}
 			ui.Row(c).Gap(8).Children(func() {
-				attach := ui.Button(c, "附加")
+				attach := ui.Button(c, "Attach")
 				attach.OnClick(func() { m.attachSelected(rows) })
-				ui.Button(c, "刷新").OnClick(m.refreshAttachList)
-				ui.Button(c, "取消").OnClick(m.closeAttach)
+				ui.Button(c, "Refresh").OnClick(m.refreshAttachList)
+				ui.Button(c, "Cancel").OnClick(m.closeAttach)
 			})
 		})
 	})

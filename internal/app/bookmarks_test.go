@@ -241,10 +241,10 @@ func TestRenameBookmarkList(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, name, err := renameBookmarkList(lists, "list2", " Home ")
-	if err != "" || name != "Home" || got[1].Name != "Home" || got[0].Name != "书签" {
+	if err != "" || name != "Home" || got[1].Name != "Home" || got[0].Name != "Bookmarks" {
 		t.Fatalf("rename = %v, %q, %q; want list2 as Home", got, name, err)
 	}
-	if _, _, err := renameBookmarkList(lists, "list2", "书签"); err == "" {
+	if _, _, err := renameBookmarkList(lists, "list2", "Bookmarks"); err == "" {
 		t.Fatal("a duplicate name was accepted")
 	}
 	if _, _, err := renameBookmarkList(lists, "list2", " "); err == "" {
@@ -268,7 +268,7 @@ func TestRemoveBookmarkList(t *testing.T) {
 		{Path: "/p/A.java", List: "list2"},
 		{Path: "/p/B.java"},
 	}
-	got, keptMarks, keptPaths, def := removeBookmarkList(lists, marks, paths, "list2", "list2", "书签")
+	got, keptMarks, keptPaths, def := removeBookmarkList(lists, marks, paths, "list2", "list2", "Bookmarks")
 	if len(got) != 1 || got[0].ID != bookmarkDefaultList || def != bookmarkDefaultList {
 		t.Fatalf("remove list2 = %v default %q, want the default list", got, def)
 	}
@@ -276,15 +276,15 @@ func TestRemoveBookmarkList(t *testing.T) {
 		t.Fatalf("marks %v paths %v, want the default list's bookmarks", keptMarks, keptPaths)
 	}
 	// The last list cannot vanish: a fresh default replaces it.
-	got, _, _, def = removeBookmarkList([]BookmarkList{{ID: bookmarkDefaultList, Name: "书签"}},
-		marks[1:], nil, bookmarkDefaultList, bookmarkDefaultList, "书签")
+	got, _, _, def = removeBookmarkList([]BookmarkList{{ID: bookmarkDefaultList, Name: "Bookmarks"}},
+		marks[1:], nil, bookmarkDefaultList, bookmarkDefaultList, "Bookmarks")
 	if len(got) != 1 || got[0].ID != bookmarkDefaultList || def != bookmarkDefaultList {
 		t.Fatalf("remove the only list = %v default %q, want a fresh default", got, def)
 	}
 }
 
 func TestBookmarkPopupRows(t *testing.T) {
-	lists := []BookmarkList{{ID: bookmarkDefaultList, Name: "书签"}, {ID: "list2", Name: "Work"}}
+	lists := []BookmarkList{{ID: bookmarkDefaultList, Name: "Bookmarks"}, {ID: "list2", Name: "Work"}}
 	marks := []Bookmark{
 		{Path: "/p/a.java", Line: 2, List: "list2"},
 		{Path: "/p/a.java", Line: 1},
@@ -308,7 +308,7 @@ func TestBookmarkPopupRows(t *testing.T) {
 		t.Fatalf("items = %v, want the file first inside Work", items)
 	}
 	// Empty lists are left out, and nothing is listed without bookmarks.
-	if rows := bookmarkPopupRows([]BookmarkList{{ID: bookmarkDefaultList, Name: "书签"}}, nil, nil); len(rows) != 0 {
+	if rows := bookmarkPopupRows([]BookmarkList{{ID: bookmarkDefaultList, Name: "Bookmarks"}}, nil, nil); len(rows) != 0 {
 		t.Fatalf("empty rows = %v, want none", rows)
 	}
 }

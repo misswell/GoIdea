@@ -45,7 +45,7 @@ func (m *Model) LoadJavaTools() {
 		m.post(func() {
 			m.toolsLoading = false
 			if err != nil {
-				m.toolsErr = "读取 Java 工具状态失败：" + err.Error()
+				m.toolsErr = "Could not read the Java tool status: " + err.Error()
 				m.invalidate()
 				return
 			}
@@ -94,13 +94,13 @@ func javaToolRows(list []openidea.ToolInfo) []javaTool {
 func javaToolStatus(status string) string {
 	switch status {
 	case "installed":
-		return "已由 GoIDEA 安装"
+		return "Installed by GoIDEA"
 	case "onPath":
-		return "已在 PATH 中"
+		return "On PATH"
 	case "custom":
-		return "已在设置中指定"
+		return "Set in Settings"
 	case "missing":
-		return "未安装"
+		return "Not installed"
 	}
 	return status
 }
@@ -125,7 +125,7 @@ func (m *Model) InstallJavaToolchain() {
 		return
 	}
 	if m.Root() == "" {
-		m.status = "先打开一个项目，再安装 Java 工具"
+		m.status = "Open a project before installing the Java tools"
 		m.invalidate()
 		return
 	}
@@ -133,14 +133,14 @@ func (m *Model) InstallJavaToolchain() {
 	m.toolsLog = nil
 	m.toolsProgress = ""
 	m.toolsAbort.Store(false)
-	m.toolsBusy = "正在检查 Java 工具…"
+	m.toolsBusy = "Checking the Java tools…"
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Minute)
 		defer cancel()
 		list, err := m.mgr.ToolsList(ctx, Window)
 		if err != nil {
-			m.finishToolInstall("读取工具列表失败：" + err.Error())
+			m.finishToolInstall("Could not read the tool list: " + err.Error())
 			return
 		}
 		pending := javaToolsMissing(javaToolRows(list))
@@ -162,10 +162,10 @@ func (m *Model) InstallJavaToolchain() {
 					m.toolsRequest = req
 					m.toolsProgress = ""
 					if first {
-						m.toolsBusy = "正在安装 " + tool.Display
+						m.toolsBusy = "Installing " + tool.Display
 					} else {
-						m.toolsBusy = "正在重试 " + tool.Display
-						m.toolsLog = append(m.toolsLog, "下载中断，重试…")
+						m.toolsBusy = "Retrying " + tool.Display
+						m.toolsLog = append(m.toolsLog, "Download interrupted; retrying…")
 					}
 					m.invalidate()
 				})
@@ -180,20 +180,20 @@ func (m *Model) InstallJavaToolchain() {
 			}
 			if installErr != nil {
 				if m.toolsAbort.Load() {
-					m.finishToolInstall("Java 工具安装已取消")
+					m.finishToolInstall("The Java tool installation was cancelled")
 				} else {
-					m.finishToolInstall(fmt.Sprintf("%s 安装失败：%v", tool.Display, installErr))
+					m.finishToolInstall(fmt.Sprintf("%s installation failed: %v", tool.Display, installErr))
 				}
 				return
 			}
 			m.post(func() {
-				m.toolsLog = append(m.toolsLog, "已安装 "+tool.Display)
+				m.toolsLog = append(m.toolsLog, "Installed "+tool.Display)
 				m.trimToolsLog()
 			})
 		}
 		reloaded, err := m.mgr.ToolsList(ctx, Window)
 		if err != nil {
-			m.finishToolInstall("安装完成，但重新读取状态失败：" + err.Error())
+			m.finishToolInstall("Installed, but reading the status again failed: " + err.Error())
 			return
 		}
 		m.post(func() {
@@ -203,7 +203,7 @@ func (m *Model) InstallJavaToolchain() {
 		// jdtls starts with the new server binary and the java-debug bundle;
 		// re-attaching documents makes the language services pick it up.
 		if err := m.reg.ReopenAll(ctx); err != nil {
-			m.finishToolInstall("安装完成，但重新打开文件失败：" + err.Error())
+			m.finishToolInstall("Installed, but reopening the file failed: " + err.Error())
 			return
 		}
 		m.finishToolInstall("")
@@ -226,9 +226,9 @@ func (m *Model) finishToolInstall(errText string) {
 		}
 		missing := javaToolsMissing(m.javaTools)
 		if len(missing) == 0 {
-			m.status = "Java 语言服务与调试器已就绪"
+			m.status = "Java language services and debugger are ready"
 		} else {
-			m.status = "Java 工具仍缺少：" + javaToolNamesOf(missing)
+			m.status = "Java tools still missing: " + javaToolNamesOf(missing)
 		}
 		m.invalidate()
 	})
@@ -250,14 +250,14 @@ func (m *Model) CancelToolInstall() {
 		return
 	}
 	m.toolsAbort.Store(true)
-	m.toolsBusy = "正在取消安装…"
+	m.toolsBusy = "Cancelling the installation…"
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
 		defer cancel()
 		if _, err := m.mgr.Invoke(ctx, Window, "cancel_request", map[string]any{"id": req}); err != nil {
 			m.post(func() {
-				m.toolsErr = "取消安装失败：" + err.Error()
+				m.toolsErr = "Cancelling the installation failed: " + err.Error()
 				m.invalidate()
 			})
 		}
@@ -303,7 +303,7 @@ func (m *Model) SmokeTools(ctx context.Context, install bool) (map[string]any, e
 	out := map[string]any{}
 	root := m.Root()
 	if root == "" {
-		return out, errors.New("没有打开项目")
+		return out, errors.New("No project is open")
 	}
 	if _, err := m.mgr.Invoke(ctx, Window, "project_trust_set", map[string]any{
 		"path": root, "trusted": true, "folder": true,
@@ -327,7 +327,7 @@ func (m *Model) SmokeTools(ctx context.Context, install bool) (map[string]any, e
 	installed := []string{}
 	for _, row := range javaToolsMissing(javaToolRows(list)) {
 		if !row.CanInstall {
-			out[row.Name+"Error"] = "不可安装：" + row.Reason
+			out[row.Name+"Error"] = "Not installable: " + row.Reason
 			continue
 		}
 		ch := m.nextChannel()
@@ -363,7 +363,7 @@ func (m *Model) SmokeTools(ctx context.Context, install bool) (map[string]any, e
 	out["after"] = state
 	for _, name := range javaToolNames {
 		if state[name] == "missing" {
-			return out, fmt.Errorf("%s 仍未安装", name)
+			return out, fmt.Errorf("%s is still not installed", name)
 		}
 	}
 	if err := m.reg.ReopenAll(ctx); err != nil {

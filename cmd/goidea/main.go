@@ -677,7 +677,7 @@ func resolveServer() (string, error) {
 		if st, err := os.Stat(p); err == nil && !st.IsDir() {
 			return p, nil
 		}
-		return "", fmt.Errorf("GOIDEA_SERVER 指向的文件不存在：%s", p)
+		return "", fmt.Errorf("The file GOIDEA_SERVER points to does not exist: %s", p)
 	}
 	if exe, err := os.Executable(); err == nil {
 		p := filepath.Join(filepath.Dir(exe), "openidea-server")
@@ -695,7 +695,7 @@ func resolveServer() (string, error) {
 	if p, err := exec.LookPath("openidea-server"); err == nil {
 		return p, nil
 	}
-	return "", fmt.Errorf("未找到 GoIDEA 后端程序：请设置 GOIDEA_SERVER 或把它放到可执行文件旁")
+	return "", fmt.Errorf("The GoIDEA backend was not found: set GOIDEA_SERVER or put it next to the executable")
 }
 
 // serverMinVersion is the OpenIDEA release this client speaks to; it moves

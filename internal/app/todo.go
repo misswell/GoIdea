@@ -132,10 +132,10 @@ const (
 
 // todoScopes are the Scope Based tab's built-in scopes, in OpenIDEA's order.
 var todoScopes = []struct{ id, label string }{
-	{"projectFiles", "项目文件"},
-	{"productionFiles", "生产文件"},
-	{"testFiles", "测试文件"},
-	{"openFiles", "打开的文件"},
+	{"projectFiles", "Project Files"},
+	{"productionFiles", "Production Files"},
+	{"testFiles", "Test Files"},
+	{"openFiles", "Open Files"},
 }
 
 func (m *Model) resetTodo() {
@@ -448,7 +448,7 @@ func (m *Model) RunTodo() {
 			m.todo.running = false
 			m.todo.scannedOnce = true
 			if err != nil && m.todo.err == "" {
-				m.todo.err = "TODO 扫描失败：" + err.Error()
+				m.todo.err = "The TODO scan failed: " + err.Error()
 			}
 			if m.Root() != root {
 				m.todo.items = map[string][]TodoItem{}
@@ -595,7 +595,7 @@ func (m *Model) RunTodoScope() {
 			}
 			m.todo.scopeRunning = false
 			if err != nil && m.todo.scopeErr == "" {
-				m.todo.scopeErr = "范围扫描失败：" + err.Error()
+				m.todo.scopeErr = "The scope scan failed: " + err.Error()
 			}
 			if m.Root() != root {
 				m.todo.scopeItems = map[string][]TodoItem{}
@@ -841,10 +841,10 @@ func (m *Model) todoPanel(c *ui.Context, p *ui.Theme) {
 		ui.Row(c).Height(30).Padding(0, 8).Gap(10).AlignItems(ui.Center).
 			BorderWidth(0, 0, 1, 0).BorderColor(p.Border).Children(func() {
 			ui.Text(c, "TODO").FontSize(12).Bold().TextColor(p.Text)
-			m.todoTab(c, p, "project", "项目", m.todoTabCount("project"))
-			m.todoTab(c, p, "file", "当前文件", m.todoTabCount("file"))
-			m.todoTab(c, p, "scope", "按范围", 0)
-			m.todoTab(c, p, "changes", "更改", m.todoTabCount("changes"))
+			m.todoTab(c, p, "project", "Project", m.todoTabCount("project"))
+			m.todoTab(c, p, "file", "Current File", m.todoTabCount("file"))
+			m.todoTab(c, p, "scope", "Scope", 0)
+			m.todoTab(c, p, "changes", "Changes", m.todoTabCount("changes"))
 			ui.Spacer(c)
 			for _, pat := range m.todo.patterns {
 				if !pat.Enabled || strings.TrimSpace(pat.Keyword) == "" {
@@ -855,14 +855,14 @@ func (m *Model) todoPanel(c *ui.Context, p *ui.Theme) {
 			m.todoAction(c, p, "↑", false, func() { m.StepTodo(-1) })
 			m.todoAction(c, p, "↓", false, func() { m.StepTodo(1) })
 			m.todoAction(c, p, "Aa", m.todo.caseSensitive, func() { m.toggleTodoCase() })
-			m.todoAction(c, p, "刷新", false, func() {
+			m.todoAction(c, p, "Refresh", false, func() {
 				if m.todo.tab == "scope" {
 					m.RunTodoScope()
 					return
 				}
 				m.RunTodo()
 			})
-			m.todoAction(c, p, "关闭", false, func() { m.CloseTodo() })
+			m.todoAction(c, p, "Close", false, func() { m.CloseTodo() })
 		})
 		if m.todo.tab == "scope" {
 			m.todoScopeBar(c, p)
@@ -870,7 +870,7 @@ func (m *Model) todoPanel(c *ui.Context, p *ui.Theme) {
 		if m.todo.limit {
 			ui.Row(c).Padding(2, 10).BorderWidth(0, 0, 1, 0).BorderColor(p.Border).
 				Children(func() {
-					ui.Text(c, "匹配过多，只显示前面的部分").FontSize(10.5).
+					ui.Text(c, "Too many matches; only the first ones are shown").FontSize(10.5).
 						TextColor(p.Warning).SingleLine()
 				})
 		}
@@ -897,27 +897,27 @@ func (m *Model) todoEmptyHint() string {
 	switch m.todo.tab {
 	case "file":
 		if m.tab() == nil {
-			return "没有打开的文件"
+			return "No file is open"
 		}
-		return "此文件中没有 TODO"
+		return "No TODOs in this file"
 	case "scope":
 		if m.todo.scopeRunning || (!m.todo.scopeDone && m.todo.scopeScanned != "") {
-			return "正在扫描 TODO…"
+			return "Scanning for TODOs…"
 		}
 		if m.todo.scopeErr != "" {
 			return m.todo.scopeErr
 		}
-		return "此范围中没有 TODO"
+		return "No TODOs in this scope"
 	case "changes":
-		return "更改的文件中没有 TODO"
+		return "No TODOs in the changed files"
 	}
 	if m.todo.err != "" {
 		return m.todo.err
 	}
 	if m.todo.running || !m.todo.scannedOnce {
-		return "正在扫描 TODO…"
+		return "Scanning for TODOs…"
 	}
-	return "没有找到 TODO"
+	return "No TODOs found"
 }
 
 // todoTab is one scope tab in the header; the active tab is filled.
@@ -1000,10 +1000,10 @@ func (m *Model) todoScopeBar(c *ui.Context, p *ui.Theme) {
 	chosen := current
 	ui.Row(c).Height(32).Padding(0, 8).Gap(6).AlignItems(ui.Center).
 		BorderWidth(0, 0, 1, 0).BorderColor(p.Border).Children(func() {
-		ui.Text(c, "范围：").FontSize(10.5).TextColor(p.TextMuted)
+		ui.Text(c, "Scope: ").FontSize(10.5).TextColor(p.TextMuted)
 		ui.Select(c, &chosen, labels).Width(240)
 		if m.todo.scopeRunning {
-			ui.Text(c, "扫描中…").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+			ui.Text(c, "Scanning…").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
 		}
 	})
 	if chosen != current && chosen != "" {
@@ -1039,7 +1039,7 @@ func (m *Model) todoFileRows(c *ui.Context, p *ui.Theme, gi int, g todoGroup) {
 			ui.Text(c, dir).FontSize(10.5).TextColor(p.TextMuted).SingleLine().Ellipsis("…")
 		}
 		ui.Spacer(c)
-		ui.Text(c, fmt.Sprintf("%d 项", len(g.items))).FontSize(10.5).
+		ui.Text(c, count(len(g.items), "item", "items")).FontSize(10.5).
 			TextColor(p.TextMuted).SingleLine()
 	})
 	if head.Clicked() {
@@ -1085,7 +1085,7 @@ func (m *Model) todoFileRows(c *ui.Context, p *ui.Theme, gi int, g todoGroup) {
 // reports what streamed back: the counts, the first item and the tab rows.
 func (m *Model) SmokeTodo(ctx context.Context) (map[string]any, error) {
 	if m.Root() == "" {
-		return nil, errors.New("没有打开项目")
+		return nil, errors.New("No project is open")
 	}
 	out := map[string]any{}
 	m.post(func() {

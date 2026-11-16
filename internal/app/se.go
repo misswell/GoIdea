@@ -313,7 +313,7 @@ func (m *Model) seQueryFiles(seq int, query string) {
 			s.fileDone = true
 			if err != nil {
 				if openidea.ErrorKind(err) != "cancelled" {
-					s.err = "查找文件失败：" + err.Error()
+					s.err = "Finding files failed: " + err.Error()
 				}
 			} else {
 				s.files = files
@@ -351,7 +351,7 @@ func (m *Model) seQuerySymbols(seq int, query string) {
 			s.symbolDone = true
 			if err != nil {
 				if openidea.ErrorKind(err) != "cancelled" && s.err == "" {
-					s.err = "查找符号失败：" + err.Error()
+					s.err = "Finding symbols failed: " + err.Error()
 				}
 			} else if len(syms) > seSymbolQueryLimit {
 				syms = syms[:seSymbolQueryLimit]
@@ -387,7 +387,7 @@ func (m *Model) seQueryText(seq int, query string) {
 			}
 			s.textCh = 0
 			if err != nil && openidea.ErrorKind(err) != "cancelled" && s.err == "" {
-				s.err = "搜索失败：" + err.Error()
+				s.err = "Searching failed: " + err.Error()
 			}
 			m.invalidate()
 		})
@@ -770,15 +770,15 @@ func (m *Model) searchEverywhereDialog(c *ui.Context, p *ui.Theme) {
 				case s.err != "":
 					errorState(c, p, s.err)
 				case s.tab == seTabText && s.textBusy:
-					loadingState(c, p, "正在搜索")
+					loadingState(c, p, "Searching")
 				case s.seEmpty() && s.tab == seTabAll:
-					emptyState(c, p, "输入以搜索类、文件、符号、操作和文本")
+					emptyState(c, p, "Type to search classes, files, symbols, actions and text")
 				default:
-					emptyState(c, p, "没有匹配的结果")
+					emptyState(c, p, "No matching results")
 				}
 				return
 			}
-			ui.Text(c, fmt.Sprintf("%d 个结果", m.seItemCount(rows))).
+			ui.Text(c, count(m.seItemCount(rows), "result", "results")).
 				FontSize(10.5).TextColor(p.TextMuted).SingleLine()
 			ui.Scroll(c).Height(380).Children(func() {
 				ui.Column(c).Children(func() {

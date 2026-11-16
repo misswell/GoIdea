@@ -64,7 +64,7 @@ func (m *Model) ConfirmDirCompare() {
 	}
 	other := strings.TrimSpace(d.other)
 	if other == "" {
-		d.err = "先输入要比较的目录"
+		d.err = "Enter the directory to compare first"
 		m.invalidate()
 		return
 	}
@@ -73,7 +73,7 @@ func (m *Model) ConfirmDirCompare() {
 	}
 	other = filepath.Clean(other)
 	if other == d.left {
-		d.err = "选中和输入的目录相同"
+		d.err = "The selected and entered directories are the same"
 		m.invalidate()
 		return
 	}
@@ -98,7 +98,7 @@ func (m *Model) ConfirmDirCompare() {
 			}
 			d.loading = false
 			if err != nil {
-				d.err = "比较目录失败：" + err.Error()
+				d.err = "Comparing the directories failed: " + err.Error()
 				m.invalidate()
 				return
 			}
@@ -121,13 +121,13 @@ func (m *Model) closeDirCompare() {
 func dirCompareStatus(status string) string {
 	switch status {
 	case "leftOnly":
-		return "仅左侧"
+		return "Left only"
 	case "rightOnly":
-		return "仅右侧"
+		return "Right only"
 	case "different":
-		return "内容不同"
+		return "Different"
 	}
-	return "相同"
+	return "Same"
 }
 
 // dirCompareCounts counts the files each status found, folders excluded.
@@ -151,9 +151,9 @@ func (m *Model) dirCompareDialog(c *ui.Context, p *ui.Theme) {
 	open := d.open
 	dlg := ui.Modal(c, &open, func() {
 		ui.Column(c).Width(720).Gap(8).Children(func() {
-			title := "比较目录 · " + filepath.Base(d.left)
+			title := "Compare Directories · " + filepath.Base(d.left)
 			if d.loading {
-				title = "比较目录 · 正在比较…"
+				title = "Compare Directories · Comparing…"
 			}
 			ui.Text(c, title).FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			ui.Text(c, filepath.ToSlash(d.left)).FontSize(10.5).TextColor(p.TextMuted).
@@ -171,21 +171,21 @@ func (m *Model) dirCompareDialog(c *ui.Context, p *ui.Theme) {
 				if in.Submitted() {
 					m.ConfirmDirCompare()
 				}
-				ui.Text(c, "输入另一个目录的路径，相对路径从项目根开始。").
+				ui.Text(c, "Enter the other directory's path; relative paths start at the project root.").
 					FontSize(10.5).TextColor(p.TextMuted)
 				ui.Row(c).Gap(8).Children(func() {
-					ui.Button(c, "取消").OnClick(func() { m.closeDirCompare() })
-					ui.Button(c, "比较").OnClick(func() { m.ConfirmDirCompare() })
+					ui.Button(c, "Cancel").OnClick(func() { m.closeDirCompare() })
+					ui.Button(c, "Compare").OnClick(func() { m.ConfirmDirCompare() })
 				})
 				return
 			}
 			if d.loading {
-				ui.Text(c, "正在读取两个目录…").FontSize(11.5).TextColor(p.TextMuted)
-				ui.Button(c, "取消").OnClick(func() { m.closeDirCompare() })
+				ui.Text(c, "Reading both directories…").FontSize(11.5).TextColor(p.TextMuted)
+				ui.Button(c, "Cancel").OnClick(func() { m.closeDirCompare() })
 				return
 			}
 			counts := dirCompareCounts(d.entries)
-			ui.Text(c, fmt.Sprintf("%d 个文件不同，%d 个只在左侧，%d 个只在右侧，%d 个相同",
+			ui.Text(c, fmt.Sprintf("%d differ, %d only on the left, %d only on the right, %d identical",
 				counts["different"], counts["leftOnly"], counts["rightOnly"], counts["equal"])).
 				FontSize(11).TextColor(p.TextMuted).SingleLine()
 			shown := 0
@@ -218,28 +218,28 @@ func (m *Model) dirCompareDialog(c *ui.Context, p *ui.Theme) {
 					}
 					if shown == 0 {
 						ui.Row(c).Padding(6, 8).Children(func() {
-							ui.Text(c, "两个目录没有差异").FontSize(11.5).TextColor(p.TextMuted)
+							ui.Text(c, "The two directories have no differences").FontSize(11.5).TextColor(p.TextMuted)
 						})
 					}
 				})
 			})
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-				label := "显示相同的文件"
+				label := "Show identical files"
 				if d.showEqual {
-					label = "隐藏相同的文件"
+					label = "Hide identical files"
 				}
 				ui.Button(c, label).OnClick(func() {
 					d.showEqual = !d.showEqual
 					m.invalidate()
 				})
 				ui.Spacer(c)
-				ui.Button(c, "另一个目录…").OnClick(func() {
+				ui.Button(c, "Another Directory…").OnClick(func() {
 					d.asking = true
 					d.other = ""
 					d.err = ""
 					m.invalidate()
 				})
-				ui.Button(c, "关闭").OnClick(func() { m.closeDirCompare() })
+				ui.Button(c, "Close").OnClick(func() { m.closeDirCompare() })
 			})
 		})
 	})

@@ -113,7 +113,7 @@ func (m *Model) queryFiles() {
 			f.done = true
 			if err != nil {
 				if openidea.ErrorKind(err) != "cancelled" {
-					f.err = "查找文件失败：" + err.Error()
+					f.err = "Finding files failed: " + err.Error()
 				}
 				f.items = nil
 				f.sel = 0
@@ -192,7 +192,7 @@ func (m *Model) filesDialog(c *ui.Context, p *ui.Theme) {
 	open := f.open
 	d := ui.Modal(c, &open, func() {
 		ui.Column(c).Width(600).Gap(8).Children(func() {
-			ui.Text(c, "快速打开").FontSize(13).Bold().TextColor(p.Text).SingleLine()
+			ui.Text(c, "Quick Open").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			in := ui.TextInput(c, &f.query).AutoFocus()
 			in.OnChange(func() { m.queryFiles() })
 			in.OnShortcut(0, ui.KeyDown, func() { m.stepFile(1) })
@@ -201,24 +201,24 @@ func (m *Model) filesDialog(c *ui.Context, p *ui.Theme) {
 				m.openSelectedFile()
 			}
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-				text := "输入文件名，Enter 打开"
+				text := "Type a file name; Enter opens it"
 				switch {
 				case f.busy:
-					text = "正在查找…"
+					text = "Searching…"
 				case f.err != "":
 					text = ""
 				case strings.TrimSpace(f.query) == "":
 					if f.done && len(f.items) == 0 {
-						text = "还没有最近打开的文件"
+						text = "No recently opened files yet"
 					} else if len(f.items) > 0 {
-						text = "最近打开"
+						text = "Recently opened"
 					}
 				case f.done && len(f.items) == 0:
-					text = "没有匹配的文件"
+					text = "No matching files"
 				case len(f.items) > 0:
-					text = fmt.Sprintf("%d 个结果", len(f.items))
+					text = count(len(f.items), "result", "results")
 					if f.truncated {
-						text = fmt.Sprintf("结果过多，仅显示前 %d 个", maxFileResults)
+						text = fmt.Sprintf("Too many results; showing the first %d", maxFileResults)
 					}
 				}
 				if text != "" {

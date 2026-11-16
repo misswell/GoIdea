@@ -197,8 +197,8 @@ func TestTodoFileTabNeedsAnEditor(t *testing.T) {
 	if groups := m.todoGroups(); len(groups) != 0 {
 		t.Fatalf("groups = %+v, want none without an editor", groups)
 	}
-	if hint := m.todoEmptyHint(); hint != "没有打开的文件" {
-		t.Fatalf("hint = %q, want 没有打开的文件", hint)
+	if hint := m.todoEmptyHint(); hint != "No file is open" {
+		t.Fatalf("hint = %q, want No file is open", hint)
 	}
 }
 

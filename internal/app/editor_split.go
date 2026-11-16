@@ -250,7 +250,7 @@ func (m *Model) splitEditor(down bool) {
 	m.splitDown = down
 	m.focusGroup(groupSplit)
 	m.revealEditor()
-	m.status = "已拆分编辑器"
+	m.status = "Editor split"
 	m.invalidate()
 }
 
@@ -328,7 +328,7 @@ func (m *Model) OpenInOppositeGroup() {
 	m.split.active = len(m.split.tabs) - 1
 	m.focusGroup(groupSplit)
 	m.revealEditor()
-	m.status = "已在另一组中打开 " + tabPath(t)
+	m.status = "Opened in the other group: " + tabPath(t)
 	m.invalidate()
 }
 

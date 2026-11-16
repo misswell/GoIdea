@@ -124,9 +124,9 @@ func (m *Model) pomGotoDeclaration(t *Tab, off int) bool {
 			}
 			switch {
 			case err != nil:
-				m.status = "跳转失败：" + err.Error()
+				m.status = "Navigation failed: " + err.Error()
 			case target == nil:
-				m.status = "未找到声明"
+				m.status = "No declaration found"
 			default:
 				m.revealRange(target.Path,
 					int(target.Range.Start.Line), int(target.Range.Start.Col),

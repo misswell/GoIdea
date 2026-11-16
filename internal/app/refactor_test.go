@@ -28,13 +28,13 @@ func TestAcceptWorkspaceEditReplacesRedo(t *testing.T) {
 }
 
 func TestRefactorErrorText(t *testing.T) {
-	if got := refactorErrorText(&openidea.Error{Kind: "notFound", Message: "gone"}, "撤销"); !strings.Contains(got, "历史记录") {
+	if got := refactorErrorText(&openidea.Error{Kind: "notFound", Message: "gone"}, "undo"); !strings.Contains(got, "history") {
 		t.Fatalf("not found says %q", got)
 	}
-	if got := refactorErrorText(&openidea.Error{Kind: "outOfSync", Message: "changed"}, "重做"); !strings.Contains(got, "手动处理") {
+	if got := refactorErrorText(&openidea.Error{Kind: "outOfSync", Message: "changed"}, "redo"); !strings.Contains(got, "by hand") {
 		t.Fatalf("out of sync says %q", got)
 	}
-	if got := refactorErrorText(errors.New("boom"), "撤销"); got != "撤销重构失败：boom" {
+	if got := refactorErrorText(errors.New("boom"), "undo"); got != "Undo refactoring failed: boom" {
 		t.Fatalf("plain error says %q", got)
 	}
 }

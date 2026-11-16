@@ -81,7 +81,7 @@ func (m *Model) startBuild(kind string, file *string) {
 		return
 	}
 	if !m.run.trusted {
-		m.build.err = "未信任的项目不会构建"
+		m.build.err = "An untrusted project does not build"
 		m.trustAsk = true
 		m.invalidate()
 		return
@@ -105,7 +105,7 @@ func (m *Model) startBuild(kind string, file *string) {
 	m.build.err = ""
 	m.build.output = nil
 	m.build.truncated = false
-	m.status = "正在构建…"
+	m.status = "Building…"
 	m.invalidate()
 
 	args := map[string]any{
@@ -126,7 +126,7 @@ func (m *Model) startBuild(kind string, file *string) {
 					return
 				}
 				m.build.busy = false
-				m.build.err = "保存后再构建失败：" + err.Error()
+				m.build.err = "Saving before building failed: " + err.Error()
 				m.invalidate()
 			})
 			return
@@ -142,8 +142,8 @@ func (m *Model) startBuild(kind string, file *string) {
 			}
 			m.build.busy = false
 			if err != nil {
-				m.build.err = "构建失败：" + err.Error()
-				m.status = "构建请求失败"
+				m.build.err = "Build failed: " + err.Error()
+				m.status = "The build request failed"
 				m.notifyError("build", "Build failed", notifySuffix(err.Error()))
 				m.invalidate()
 				return
@@ -181,14 +181,14 @@ func (m *Model) StopBuild() {
 		return
 	}
 	id := m.build.request
-	m.status = "正在停止构建…"
+	m.status = "Stopping the build…"
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
 		defer cancel()
 		if _, err := m.mgr.Invoke(ctx, Window, "cancel_request", map[string]any{"id": id}); err != nil {
 			m.post(func() {
-				m.build.err = "停止构建失败：" + err.Error()
+				m.build.err = "Stopping the build failed: " + err.Error()
 				m.invalidate()
 			})
 		}
@@ -278,11 +278,11 @@ func (p *BuildPane) renderText() string {
 func kindLabel(kind string) string {
 	switch kind {
 	case "build":
-		return "构建"
+		return "Build"
 	case "rebuild":
-		return "重新构建"
+		return "Rebuild"
 	case "artifacts":
-		return "构建产物"
+		return "Build Artifacts"
 	}
 	return kind
 }
@@ -307,17 +307,17 @@ func buildSummary(result openidea.BuildResult) string {
 	duration := formatBuildDuration(result.DurationMS)
 	if result.Success {
 		if result.Warnings > 0 {
-			return fmt.Sprintf("构建成功，%d 个警告，用时 %s", result.Warnings, duration)
+			return fmt.Sprintf("Build succeeded with %d warnings in %s", result.Warnings, duration)
 		}
-		return "构建成功，用时 " + duration
+		return "Build succeeded in " + duration
 	}
 	if result.Errors == 0 {
-		return "构建失败"
+		return "Build Failed"
 	}
 	if result.Warnings > 0 {
-		return fmt.Sprintf("构建失败：%d 个错误，%d 个警告", result.Errors, result.Warnings)
+		return fmt.Sprintf("Build failed: %d errors, %d warnings", result.Errors, result.Warnings)
 	}
-	return fmt.Sprintf("构建失败：%d 个错误", result.Errors)
+	return fmt.Sprintf("Build failed: %d errors", result.Errors)
 }
 
 // formatBuildDuration renders `450 ms`, `3 s 120 ms` or `1 m 5 s`.
@@ -346,7 +346,7 @@ func formatBuildDuration(ms float64) string {
 func (m *Model) SmokeBuild(ctx context.Context) (map[string]any, error) {
 	root := m.Root()
 	if root == "" {
-		return nil, errors.New("没有打开项目")
+		return nil, errors.New("No project is open")
 	}
 	if _, err := m.mgr.Invoke(ctx, Window, "project_trust_set", map[string]any{
 		"path": root, "trusted": true, "folder": true,

@@ -83,7 +83,7 @@ func (m *Model) OpenTypeHierarchy() { m.openHierarchy("type") }
 func (m *Model) openHierarchy(mode string) {
 	t := m.tab()
 	if t == nil {
-		m.status = "Hierarchy 需要打开的文件"
+		m.status = "Hierarchy needs an open file"
 		m.invalidate()
 		return
 	}

@@ -74,7 +74,7 @@ func (m *Model) loadScaffoldCatalog() {
 				return
 			}
 			if err != nil {
-				m.newProject.catalogErr = "读取项目模板失败：" + err.Error()
+				m.newProject.catalogErr = "Could not read the project templates: " + err.Error()
 				m.invalidate()
 				return
 			}
@@ -274,7 +274,7 @@ func (m *Model) createScaffoldProject() {
 			m.newProject.busy = false
 			m.newProject.channel, m.newProject.request = 0, 0
 			if err != nil {
-				m.newProject.err = "创建失败：" + err.Error()
+				m.newProject.err = "Creating failed: " + err.Error()
 				m.invalidate()
 				return
 			}
@@ -524,7 +524,7 @@ func (m *Model) SmokeScaffoldProject(ctx context.Context, dir string) (map[strin
 	m.post(func() { n = len(m.newProject.catalog) })
 	out["generators"] = n
 	if n == 0 {
-		return out, fmt.Errorf("项目模板清单为空")
+		return out, fmt.Errorf("The project template catalog is empty")
 	}
 	m.post(func() { m.CreateNewProject() })
 	deadline = time.Now().Add(15 * time.Minute)
@@ -544,7 +544,7 @@ func (m *Model) SmokeScaffoldProject(ctx context.Context, dir string) (map[strin
 			break
 		}
 		if time.Now().After(deadline) {
-			return out, fmt.Errorf("创建项目超时")
+			return out, fmt.Errorf("Creating the project timed out")
 		}
 		select {
 		case <-ctx.Done():

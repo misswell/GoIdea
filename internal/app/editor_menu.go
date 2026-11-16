@@ -103,6 +103,6 @@ func (m *Model) editorMenu(menu *ui.Menu, t *Tab) {
 // as OpenIDEA shows its "Copied …" hint.
 func (m *Model) copyEditorText(text string) {
 	mygo.Clipboard.WriteText(text)
-	m.status = "已复制 " + text
+	m.status = "Copied " + text
 	m.invalidate()
 }

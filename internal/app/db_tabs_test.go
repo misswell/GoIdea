@@ -63,15 +63,15 @@ func TestDBResultTabsCycleCloseAndCloseOthers(t *testing.T) {
 }
 
 func TestDBTableRange(t *testing.T) {
-	if got := dbTableRange(nil); got != "没有行" {
+	if got := dbTableRange(nil); got != "No rows" {
 		t.Fatalf("nil sheet = %q", got)
 	}
 	s := &dbTableSheet{offset: 100}
-	if got := dbTableRange(s); got != "没有行" {
+	if got := dbTableRange(s); got != "No rows" {
 		t.Fatalf("empty page = %q", got)
 	}
 	s.page.Result.Rows = [][]*string{nil, nil, nil}
-	if got := dbTableRange(s); got != "101–103 行" {
+	if got := dbTableRange(s); got != "Rows 101–103" {
 		t.Fatalf("range = %q", got)
 	}
 }
@@ -119,10 +119,10 @@ func TestDBTableDetailLines(t *testing.T) {
 		Columns []string `json:"columns"`
 	}{{Name: "ix_name", Columns: []string{"name"}}}
 	lines := dbTableDetailLines(d)
-	if lines[0] != "列（2）" {
+	if lines[0] != "Columns (2)" {
 		t.Fatalf("header = %q", lines[0])
 	}
-	if !strings.Contains(lines[1], "id  INTEGER · 主键 · 非空") {
+	if !strings.Contains(lines[1], "id  INTEGER · primary key · not null") {
 		t.Fatalf("column line = %q", lines[1])
 	}
 	found := false

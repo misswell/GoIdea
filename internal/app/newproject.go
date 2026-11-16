@@ -309,7 +309,7 @@ func (m *Model) newProjectDialog(c *ui.Context, p *ui.Theme) {
 					m.CreateNewProject()
 				}
 				if st.busy {
-					ui.Text(c, "正在创建…").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+					ui.Text(c, "Creating…").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
 				}
 			})
 		})

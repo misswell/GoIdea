@@ -57,7 +57,7 @@ func (m *Model) SmokeDock() map[string]any {
 		tt.SetDark(true)
 		tt.SetScale(1)
 		tt.Frame()
-		out["problemsRendered"] = tt.HasText("问题")
+		out["problemsRendered"] = tt.HasText("Problems")
 		out["todoRendered"] = tt.HasText("TODO")
 
 		m.SetToolWindowPinned("problems", false)

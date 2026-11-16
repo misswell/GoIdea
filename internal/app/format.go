@@ -22,7 +22,7 @@ func (m *Model) formatTab(t *Tab) {
 		return
 	}
 	t.formatting = true
-	m.status = "正在格式化 " + filepath.Base(t.doc.Path()) + "…"
+	m.status = "Formatting " + filepath.Base(t.doc.Path()) + "…"
 	m.invalidate()
 	docID := t.doc.ID()
 	version := t.doc.Buffer().Version()
@@ -71,13 +71,13 @@ func (m *Model) finishFormat(t *Tab, err error, stale bool, applied int) {
 		t.formatting = false
 		switch {
 		case err != nil:
-			m.fail(t.doc.Path(), fmt.Errorf("格式化失败：%w", err))
+			m.fail(t.doc.Path(), fmt.Errorf("Formatting failed: %w", err))
 		case stale:
-			m.status = "文本已改动，未格式化；请重试"
+			m.status = "The text changed and was not formatted; try again"
 		case applied == 0:
-			m.status = "格式化完成，无需改动"
+			m.status = "Formatting done; nothing changed"
 		default:
-			m.status = fmt.Sprintf("已格式化：%d 处修改", applied)
+			m.status = fmt.Sprintf("Formatted: %d changes", applied)
 		}
 		m.invalidate()
 	})

@@ -26,10 +26,10 @@ func TestCloseDiffDropsView(t *testing.T) {
 
 func TestDiffErrorTextNamesMissingGit(t *testing.T) {
 	err := &openidea.Error{Kind: "unavailable", Message: "not a git repository"}
-	if got := diffErrorText(err); got != "当前项目不是 Git 仓库" {
+	if got := diffErrorText(err); got != "The current project is not a Git repository" {
 		t.Fatalf("diffErrorText = %q", got)
 	}
-	if got := diffErrorText(textdiffError{}); !strings.HasPrefix(got, "读取差异失败：") {
+	if got := diffErrorText(textdiffError{}); !strings.HasPrefix(got, "Could not read the diff: ") {
 		t.Fatalf("diffErrorText = %q", got)
 	}
 }
@@ -61,10 +61,10 @@ func TestDiffTitleNamesEachCompare(t *testing.T) {
 		d    diffView
 		want string
 	}{
-		{diffView{path: "/p/Main.java"}, "Main.java · 与 HEAD 比较"},
+		{diffView{path: "/p/Main.java"}, "Main.java · Compared with HEAD"},
 		{diffView{path: "/p/Main.java", other: "/p/Util.java"}, "Main.java ↔ Util.java"},
-		{diffView{path: "/p/Main.java", inline: true, label: "剪贴板"}, "Main.java ↔ 剪贴板"},
-		{diffView{path: "/p/Main.java", loading: true}, "Main.java · 正在比较…"},
+		{diffView{path: "/p/Main.java", inline: true, label: "Clipboard"}, "Main.java ↔ Clipboard"},
+		{diffView{path: "/p/Main.java", loading: true}, "Main.java · Comparing…"},
 	}
 	for _, c := range cases {
 		if got := diffTitle(&c.d); got != c.want {
@@ -77,7 +77,7 @@ func TestCompareWithoutATabOpensNothing(t *testing.T) {
 	m := &Model{}
 	m.CompareTabWithClipboard(nil)
 	m.PickCompareFile(nil)
-	m.ShowTextCompare("", "a", "剪贴板", "b")
+	m.ShowTextCompare("", "a", "Clipboard", "b")
 	if m.diff != nil {
 		t.Fatalf("compare view opened without a tab")
 	}

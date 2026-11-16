@@ -113,7 +113,7 @@ func (m *Model) ShowDiff(path string) {
 			d.err = ""
 			d.added, d.gone = added, gone
 			if added == 0 && gone == 0 {
-				d.message = "与 HEAD 相同"
+				d.message = "Identical to HEAD"
 				m.invalidate()
 				return
 			}
@@ -155,13 +155,13 @@ func (m *Model) ShowFileDiff(left, right string) {
 					return
 				}
 				d.loading = false
-				d.err = "读取文件失败：" + err.Error()
+				d.err = "Reading the file failed: " + err.Error()
 				m.invalidate()
 			})
 			return
 		}
 		rows, added, gone := diffRows(old, cur)
-		m.finishCompare(d, rows, added, gone, "两个文件相同")
+		m.finishCompare(d, rows, added, gone, "The two files are identical")
 	}()
 }
 
@@ -189,13 +189,13 @@ func (m *Model) CompareTabWithFile(t *Tab, picked string) {
 					return
 				}
 				d.loading = false
-				d.err = "读取文件失败：" + err.Error()
+				d.err = "Reading the file failed: " + err.Error()
 				m.invalidate()
 			})
 			return
 		}
 		rows, added, gone := diffRows(string(data), cur)
-		m.finishCompare(d, rows, added, gone, "两个文件相同")
+		m.finishCompare(d, rows, added, gone, "The two files are identical")
 	}()
 }
 
@@ -231,11 +231,11 @@ func (m *Model) CompareTabWithClipboard(t *Tab) {
 		raw, err = data.Read(transfer.Text)
 	}
 	if err != nil {
-		m.status = "剪贴板中没有文本"
+		m.status = "The clipboard has no text"
 		m.invalidate()
 		return
 	}
-	m.ShowTextCompare(t.doc.Path(), t.doc.Text(), "剪贴板", string(raw))
+	m.ShowTextCompare(t.doc.Path(), t.doc.Text(), "Clipboard", string(raw))
 }
 
 // ShowTextCompare opens the compare view on a tab's text and a text that is
@@ -249,7 +249,7 @@ func (m *Model) ShowTextCompare(path, cur, label, text string) {
 	m.invalidate()
 	go func() {
 		rows, added, gone := diffRows(cur, text)
-		m.finishCompare(d, rows, added, gone, label+"与当前文件相同")
+		m.finishCompare(d, rows, added, gone, label+" is identical to the current file")
 	}()
 }
 
@@ -303,9 +303,9 @@ func (m *Model) closeDiff() {
 func diffErrorText(err error) string {
 	var oe *openidea.Error
 	if errors.As(err, &oe) && oe.Kind == "unavailable" && strings.Contains(oe.Message, "not a git repository") {
-		return "当前项目不是 Git 仓库"
+		return "The current project is not a Git repository"
 	}
-	return "读取差异失败：" + err.Error()
+	return "Could not read the diff: " + err.Error()
 }
 
 // diffDialog draws the compare view: the file's diff against HEAD.
@@ -398,13 +398,13 @@ func diffTitle(d *diffView) string {
 	name := filepath.Base(d.path)
 	switch {
 	case d.loading:
-		return name + " · 正在比较…"
+		return name + " · Comparing…"
 	case d.inline:
 		return name + " ↔ " + d.label
 	case d.other != "":
 		return name + " ↔ " + filepath.Base(d.other)
 	}
-	return name + " · 与 HEAD 比较"
+	return name + " · Compared with HEAD"
 }
 
 func diffSign(k textdiff.Kind) string {
@@ -444,7 +444,7 @@ func diffRowText(r textdiff.Row) string {
 func (m *Model) SmokeDiff(ctx context.Context) (map[string]any, error) {
 	out := map[string]any{}
 	if m.Root() == "" {
-		return out, errors.New("没有打开项目")
+		return out, errors.New("No project is open")
 	}
 	raw, err := m.mgr.Invoke(ctx, Window, "vcs_status", nil)
 	if err != nil {
@@ -475,7 +475,7 @@ func (m *Model) SmokeDiff(ctx context.Context) (map[string]any, error) {
 		target = &files[0]
 	}
 	if target == nil {
-		return out, errors.New("没有未提交的更改可比较")
+		return out, errors.New("There are no uncommitted changes to compare")
 	}
 	path := target.Path
 	out["path"] = path
@@ -518,7 +518,7 @@ func (m *Model) SmokeDiff(ctx context.Context) (map[string]any, error) {
 			break
 		}
 		if time.Now().After(deadline) {
-			out["error"] = "比较超时"
+			out["error"] = "Comparing timed out"
 			break
 		}
 		time.Sleep(150 * time.Millisecond)

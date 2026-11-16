@@ -25,19 +25,19 @@ func TestClampSymbolSel(t *testing.T) {
 
 func TestSymbolKindLabel(t *testing.T) {
 	cases := map[string]string{
-		"class":     "类",
-		"interface": "接口",
-		"method":    "方法",
-		"field":     "字段",
-		"constant":  "常量",
-		"enum":      "枚举",
+		"class":     "Class",
+		"interface": "Interface",
+		"method":    "Method",
+		"field":     "Field",
+		"constant":  "Constant",
+		"enum":      "Enum",
 	}
 	for kind, want := range cases {
 		if got := symbolKindLabel(kind); !strings.Contains(got, want) {
 			t.Fatalf("%s is %q", kind, got)
 		}
 	}
-	if got := symbolKindLabel("somethingNew"); got != "符号" {
+	if got := symbolKindLabel("somethingNew"); got != "Symbol" {
 		t.Fatalf("unknown kind is %q", got)
 	}
 }
@@ -67,7 +67,7 @@ func TestApplySymbolClosesPicker(t *testing.T) {
 	if m.symbols != nil {
 		t.Fatalf("picker stayed open")
 	}
-	if !strings.Contains(m.status, "外部依赖") {
+	if !strings.Contains(m.status, "external dependency") {
 		t.Fatalf("status is %q", m.status)
 	}
 }

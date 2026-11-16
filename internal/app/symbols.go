@@ -117,7 +117,7 @@ func (m *Model) querySymbols() {
 				// A cancelled lookup was replaced by a newer query, whose
 				// answer is the one that lands.
 				if openidea.ErrorKind(err) != "cancelled" {
-					s.err = "查找符号失败：" + err.Error()
+					s.err = "Could not find symbols: " + err.Error()
 				}
 				s.items = nil
 				s.sel = 0
@@ -181,7 +181,7 @@ func (m *Model) openSelectedSymbol() {
 	}
 	if len(s.items) == 0 {
 		if strings.TrimSpace(s.query) == "" {
-			s.err = "输入名称搜索项目里的符号"
+			s.err = "Type a name to search the project's symbols"
 		}
 		m.invalidate()
 		return
@@ -194,7 +194,7 @@ func (m *Model) applySymbol(sym openidea.WorkspaceSymbol) {
 	m.closeSymbols()
 	loc := sym.Location
 	if strings.Contains(loc.Path, "://") {
-		m.status = "符号位于外部依赖，无法作为文件打开"
+		m.status = "The symbol is in an external dependency and cannot open as a file"
 		m.invalidate()
 		return
 	}
@@ -207,51 +207,51 @@ func (m *Model) applySymbol(sym openidea.WorkspaceSymbol) {
 func symbolKindLabel(kind string) string {
 	switch kind {
 	case "class":
-		return "类"
+		return "Class"
 	case "interface":
-		return "接口"
+		return "Interface"
 	case "struct":
-		return "结构"
+		return "Struct"
 	case "enum":
-		return "枚举"
+		return "Enum"
 	case "enumMember":
-		return "枚举项"
+		return "Enum constant"
 	case "method":
-		return "方法"
+		return "Method"
 	case "function":
-		return "函数"
+		return "Function"
 	case "constructor":
-		return "构造器"
+		return "Constructor"
 	case "field":
-		return "字段"
+		return "Field"
 	case "property":
-		return "属性"
+		return "Property"
 	case "variable":
-		return "变量"
+		return "Variable"
 	case "constant":
-		return "常量"
+		return "Constant"
 	case "package":
-		return "包"
+		return "Package"
 	case "module":
-		return "模块"
+		return "Module"
 	case "namespace":
-		return "命名空间"
+		return "Namespace"
 	case "trait":
-		return "特征"
+		return "Trait"
 	case "typeParameter":
-		return "类型参数"
+		return "Type parameter"
 	case "typeAlias":
-		return "类型别名"
+		return "Type alias"
 	case "file":
-		return "文件"
+		return "File"
 	case "event":
-		return "事件"
+		return "Event"
 	case "operator":
-		return "运算符"
+		return "Operator"
 	case "key":
-		return "键"
+		return "Key"
 	}
-	return "符号"
+	return "Symbol"
 }
 
 // symbolWhere is a result's relative file and zero-based line, as the picker
@@ -275,7 +275,7 @@ func (m *Model) symbolsDialog(c *ui.Context, p *ui.Theme) {
 	open := s.open
 	d := ui.Modal(c, &open, func() {
 		ui.Column(c).Width(600).Gap(8).Children(func() {
-			ui.Text(c, "转到符号").FontSize(13).Bold().TextColor(p.Text).SingleLine()
+			ui.Text(c, "Go to Symbol").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			in := ui.TextInput(c, &s.query).AutoFocus()
 			in.OnChange(func() { m.querySymbols() })
 			in.OnShortcut(0, ui.KeyDown, func() { m.stepSymbol(1) })
@@ -284,18 +284,18 @@ func (m *Model) symbolsDialog(c *ui.Context, p *ui.Theme) {
 				m.openSelectedSymbol()
 			}
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-				text := "输入类型或成员名称，Enter 打开"
+				text := "Type a type or member name; Enter opens it"
 				switch {
 				case s.busy:
-					text = "正在查找…"
+					text = "Searching…"
 				case s.err != "":
 					text = ""
 				case s.done && len(s.items) == 0:
-					text = "没有匹配的符号"
+					text = "No matching symbols"
 				case len(s.items) > 0:
-					text = fmt.Sprintf("%d 个结果", len(s.items))
+					text = count(len(s.items), "result", "results")
 					if s.truncated {
-						text = fmt.Sprintf("结果过多，仅显示前 %d 个", maxSymbolResults)
+						text = fmt.Sprintf("Too many results; showing the first %d", maxSymbolResults)
 					}
 				}
 				if text != "" {

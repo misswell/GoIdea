@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"mayoi/internal/openidea"
 )
@@ -28,7 +29,7 @@ func (m *Model) acceptWorkspaceEdit(e openidea.WorkspaceEditAppliedEvent) {
 func (m *Model) UndoRefactor() {
 	r := m.refactor
 	if r == nil {
-		m.status = "没有可撤销的重构"
+		m.status = "There is no refactoring to undo"
 		m.invalidate()
 		return
 	}
@@ -39,7 +40,7 @@ func (m *Model) UndoRefactor() {
 func (m *Model) RedoRefactor() {
 	r := m.redoRefactor
 	if r == nil {
-		m.status = "没有可重做的重构"
+		m.status = "There is no refactoring to redo"
 		m.invalidate()
 		return
 	}
@@ -47,11 +48,11 @@ func (m *Model) RedoRefactor() {
 }
 
 func (m *Model) refactorHistory(cmd string, r *refactorEdit, undo bool) {
-	verb := "撤销"
+	done, action := "Undid", "undo"
 	if undo {
-		m.status = "正在撤销重构…"
+		m.status = "Undoing the refactoring…"
 	} else {
-		verb, m.status = "重做", "正在重做重构…"
+		done, action, m.status = "Redid", "redo", "Redoing the refactoring…"
 	}
 	m.invalidate()
 	go func() {
@@ -60,7 +61,7 @@ func (m *Model) refactorHistory(cmd string, r *refactorEdit, undo bool) {
 		_, err := m.mgr.Invoke(ctx, Window, cmd, map[string]any{"id": r.id})
 		m.post(func() {
 			if err != nil {
-				m.status = refactorErrorText(err, verb)
+				m.status = refactorErrorText(err, action)
 				m.invalidate()
 				return
 			}
@@ -69,7 +70,7 @@ func (m *Model) refactorHistory(cmd string, r *refactorEdit, undo bool) {
 			} else {
 				m.refactor, m.redoRefactor = r, nil
 			}
-			m.status = fmt.Sprintf("已%s重构：%d 个文件", verb, len(r.paths))
+			m.status = fmt.Sprintf("%s the refactoring: %d files", done, len(r.paths))
 			m.invalidate()
 		})
 	}()
@@ -80,9 +81,10 @@ func (m *Model) refactorHistory(cmd string, r *refactorEdit, undo bool) {
 func refactorErrorText(err error, verb string) string {
 	switch {
 	case openidea.ErrorKind(err) == "notFound":
-		return "该重构已不在历史记录中，无法" + verb
+		return "The refactoring is no longer in the history; cannot " + verb
 	case openidea.IsOutOfSync(err):
-		return "文件在重构后被修改，无法" + verb + "；请手动处理"
+		return "The file changed after the refactoring; cannot " + verb + "; resolve it by hand"
 	}
-	return verb + "重构失败：" + err.Error()
+	title := strings.ToUpper(verb[:1]) + verb[1:]
+	return title + " refactoring failed: " + err.Error()
 }

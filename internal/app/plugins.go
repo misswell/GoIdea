@@ -467,12 +467,12 @@ func (h *goideaPluginHost) renderView(c *ui.Context, p *ui.Theme, oi oiColors, i
 	ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Background(p.Surface).Padding(6, 8).
 		Children(func() {
 			if len(raw) == 0 {
-				emptyState(c, p, "插件视图尚未渲染")
+				emptyState(c, p, "The plugins view has not rendered")
 				return
 			}
 			var node pluginViewNode
 			if err := json.Unmarshal(raw, &node); err != nil {
-				errorState(c, p, "插件视图无法解析："+err.Error())
+				errorState(c, p, "The plugins view could not be parsed: "+err.Error())
 				return
 			}
 			h.drawViewNode(c, p, oi, node, 0, view.plugin)
@@ -582,7 +582,7 @@ func (h *goideaPluginHost) dispatchHandler(p *plugin.Plugin, handler, value stri
 		defer cancel()
 		if _, err := p.Request(ctx, "handler", map[string]any{"id": handler, "value": value}); err != nil {
 			h.m.post(func() {
-				h.m.status = "插件视图回调失败：" + err.Error()
+				h.m.status = "The plugins view callback failed: " + err.Error()
 				h.m.invalidate()
 			})
 		}
@@ -626,7 +626,7 @@ func (m *Model) runPluginCommand(pg *pluginPage, c plugin.Command) {
 		}
 		if _, err := pg.reg.Run(c.ID, arg); err != nil {
 			m.post(func() {
-				m.status = "插件命令失败：" + err.Error()
+				m.status = "The plugin command failed: " + err.Error()
 				m.invalidate()
 			})
 		}

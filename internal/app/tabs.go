@@ -385,9 +385,9 @@ func (m *Model) closeTabThen(t *Tab, then func()) {
 	name := filepath.Base(t.doc.Path())
 	go func() {
 		res, err := mygo.Dialog.Message(mygo.MessageOptions{
-			Parent: m.win, Type: mygo.MessageWarning, Title: "关闭文件",
-			Message: "是否保存对 " + name + " 的更改？",
-			Buttons: []string{"保存", "不保存", "取消"}, DefaultButton: 0, CancelButton: 2,
+			Parent: m.win, Type: mygo.MessageWarning, Title: "Close File",
+			Message: "Do you want to save changes to " + name + "'s changes?",
+			Buttons: []string{"Save", "Don't Save", "Cancel"}, DefaultButton: 0, CancelButton: 2,
 		})
 		if err != nil {
 			return

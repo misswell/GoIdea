@@ -82,7 +82,7 @@ func (m *Model) invoke(ctx context.Context, cmd string, args any) (json.RawMessa
 func (m *Model) resolveJVMConfig(ctx context.Context, raw json.RawMessage, root string, report func(text, kind string)) (json.RawMessage, error) {
 	cfg, err := openidea.DecodeRunConfig(raw)
 	if err != nil {
-		return nil, fmt.Errorf("运行配置无法解析：%w", err)
+		return nil, fmt.Errorf("The run configuration could not be resolved: %w", err)
 	}
 	if !adapter.IsJVMApplication(cfg.Kind) {
 		// Maven and Gradle rewrite their own command from the build policy
@@ -90,7 +90,7 @@ func (m *Model) resolveJVMConfig(ctx context.Context, raw json.RawMessage, root 
 		if rewritten := adapter.ApplyBuildPolicyToCommand(cfg); rewritten != cfg {
 			var obj map[string]any
 			if err := json.Unmarshal(raw, &obj); err != nil {
-				return nil, fmt.Errorf("运行配置无法解析：%w", err)
+				return nil, fmt.Errorf("The run configuration could not be resolved: %w", err)
 			}
 			obj["args"] = rewritten.Args
 			return json.Marshal(obj)
@@ -113,7 +113,7 @@ func (m *Model) resolveJVMConfig(ctx context.Context, raw json.RawMessage, root 
 func resolvedRunConfig(raw json.RawMessage, command string, args []string) (json.RawMessage, error) {
 	var obj map[string]any
 	if err := json.Unmarshal(raw, &obj); err != nil {
-		return nil, fmt.Errorf("运行配置无法解析：%w", err)
+		return nil, fmt.Errorf("The run configuration could not be resolved: %w", err)
 	}
 	obj["command"], obj["args"] = command, args
 	return json.Marshal(obj)

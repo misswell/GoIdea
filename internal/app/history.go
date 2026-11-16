@@ -101,7 +101,7 @@ func (m *Model) loadHistory(h *historyState) {
 			}
 			h.loading = false
 			if err != nil {
-				h.err = "读取本地历史失败：" + err.Error()
+				h.err = "Could not read the local history: " + err.Error()
 				m.invalidate()
 				return
 			}
@@ -144,13 +144,13 @@ func (m *Model) RestoreHistoryEntry() {
 			}
 			h.busy = false
 			if err != nil {
-				h.err = "恢复失败：" + err.Error()
+				h.err = "Restoring failed: " + err.Error()
 				m.invalidate()
 				return
 			}
 			h.err = ""
 			m.refreshTree(filepath.Dir(e.Path))
-			m.status = "已恢复 " + filepath.Base(e.Path) + " 的 " + historyTime(e.Ms) + " 版本"
+			m.status = "Restored " + filepath.Base(e.Path) + " to the " + historyTime(e.Ms) + " version"
 			m.invalidate()
 			m.loadHistory(h)
 		})
@@ -165,7 +165,7 @@ func (m *Model) ConfirmHistoryLabel() {
 	}
 	label := strings.TrimSpace(h.label)
 	if label == "" {
-		h.err = "标签不能为空"
+		h.err = "The label cannot be empty"
 		m.invalidate()
 		return
 	}
@@ -181,11 +181,11 @@ func (m *Model) ConfirmHistoryLabel() {
 			}
 			h.busy = false
 			if err != nil {
-				h.err = "标记失败：" + err.Error()
+				h.err = "Putting the label failed: " + err.Error()
 				m.invalidate()
 				return
 			}
-			m.status = "已标记版本 " + label
+			m.status = "Put label " + label
 			m.closeHistory()
 		})
 	}()
@@ -250,11 +250,11 @@ func (m *Model) RestoreHistoryLabelTime() {
 		}
 		m.post(func() {
 			if failed > 0 {
-				m.notifyWarning("local-history.restore", "Local History", fmt.Sprintf("恢复了 %d 个文件，%d 个失败", restored, failed))
+				m.notifyWarning("local-history.restore", "Local History", fmt.Sprintf("Restored %d files; %d failed", restored, failed))
 			} else if restored > 0 {
-				m.notifyInfo("local-history.restore", "Local History", fmt.Sprintf("已恢复 %d 个文件到标签时刻", restored))
+				m.notifyInfo("local-history.restore", "Local History", fmt.Sprintf("Restored %d files to the label's moment", restored))
 			} else {
-				m.notifyInfo("local-history.restore", "Local History", "该标签时刻没有可恢复的文件快照")
+				m.notifyInfo("local-history.restore", "Local History", "The label's moment has no file snapshots to restore")
 			}
 			if m.history != nil {
 				m.loadHistory(m.history)
@@ -281,9 +281,9 @@ func (m *Model) historyDialog(c *ui.Context, p *ui.Theme) {
 	open := h.open
 	d := ui.Modal(c, &open, func() {
 		ui.Column(c).Width(680).Gap(8).Children(func() {
-			title := "本地历史 · " + filepath.Base(h.path)
+			title := "Local History · " + filepath.Base(h.path)
 			if h.loading {
-				title = "本地历史 · 正在读取…"
+				title = "Local History · Reading…"
 			}
 			ui.Text(c, title).FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			if rel, err := filepath.Rel(m.Root(), h.path); err == nil && !strings.HasPrefix(rel, "..") {
@@ -299,18 +299,18 @@ func (m *Model) historyDialog(c *ui.Context, p *ui.Theme) {
 				if in.Submitted() {
 					m.ConfirmHistoryLabel()
 				}
-				ui.Text(c, "标签记下当前项目所有文件的状态。").FontSize(10.5).TextColor(p.TextMuted)
+				ui.Text(c, "The label records the state of every file in the project.").FontSize(10.5).TextColor(p.TextMuted)
 				ui.Row(c).Gap(8).Children(func() {
-					ui.Button(c, "取消").OnClick(func() { m.closeHistory() })
-					ui.Button(c, "保存").Disabled(h.busy).OnClick(func() { m.ConfirmHistoryLabel() })
+					ui.Button(c, "Cancel").OnClick(func() { m.closeHistory() })
+					ui.Button(c, "Save").Disabled(h.busy).OnClick(func() { m.ConfirmHistoryLabel() })
 				})
 				return
 			}
 			switch {
 			case h.loading:
-				ui.Text(c, "正在读取历史…").FontSize(11.5).TextColor(p.TextMuted)
+				ui.Text(c, "Reading the history…").FontSize(11.5).TextColor(p.TextMuted)
 			case len(h.entries) == 0:
-				ui.Text(c, "还没有历史记录").FontSize(11.5).TextColor(p.TextMuted)
+				ui.Text(c, "No history yet").FontSize(11.5).TextColor(p.TextMuted)
 			default:
 				ui.Scroll(c).Height(380).Children(func() {
 					ui.Column(c).Children(func() {
@@ -350,7 +350,7 @@ func (m *Model) historyDialog(c *ui.Context, p *ui.Theme) {
 				})
 			}
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-				ui.Button(c, "标记版本…").OnClick(func() {
+				ui.Button(c, "Put Label…").OnClick(func() {
 					h.labeling = true
 					h.label = ""
 					h.err = ""
@@ -362,16 +362,16 @@ func (m *Model) historyDialog(c *ui.Context, p *ui.Theme) {
 					// The label-time restore of upstream LocalHistory.tsx:
 					// every file of this folder goes back to its newest
 					// snapshot before the label.
-					ui.Button(c, "恢复到标签时刻").Disabled(h.busy).OnClick(func() { m.RestoreHistoryLabelTime() })
+					ui.Button(c, "Restore to the Label's Moment").Disabled(h.busy).OnClick(func() { m.RestoreHistoryLabelTime() })
 				}
 				if len(h.entries) > 0 && h.entries[h.sel].Kind != "label" {
-					label := "恢复此版本"
+					label := "Restore This Version"
 					if h.confirmRestore {
-						label = "确认恢复"
+						label = "Confirm Restore"
 					}
 					ui.Button(c, label).Disabled(h.busy).OnClick(func() { m.RestoreHistoryEntry() })
 				}
-				ui.Button(c, "关闭").OnClick(func() { m.closeHistory() })
+				ui.Button(c, "Close").OnClick(func() { m.closeHistory() })
 			})
 		})
 	})

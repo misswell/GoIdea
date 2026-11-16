@@ -188,7 +188,7 @@ func (m *Model) ShowTerm() { m.dockActivate("term") }
 func (m *Model) SpawnTerm() {
 	root := m.Root()
 	if root == "" {
-		m.term.err = "先打开一个项目，再启动终端"
+		m.term.err = "Open a project before starting the terminal"
 		m.invalidate()
 		return
 	}
@@ -208,7 +208,7 @@ func (m *Model) OpenTermTab() {
 func (m *Model) OpenTermTabIn(g int) {
 	root := m.Root()
 	if root == "" {
-		m.term.err = "先打开一个项目，再启动终端"
+		m.term.err = "Open a project before starting the terminal"
 		m.invalidate()
 		return
 	}
@@ -224,7 +224,7 @@ func (m *Model) OpenTermTabIn(g int) {
 func (m *Model) OpenTerminalAt(dir string) {
 	root := m.Root()
 	if root == "" || dir == "" {
-		m.term.err = "先打开一个项目，再启动终端"
+		m.term.err = "Open a project before starting the terminal"
 		m.invalidate()
 		return
 	}
@@ -246,7 +246,7 @@ func (m *Model) SplitTermDown() { m.SplitTerm("down") }
 func (m *Model) SplitTerm(axis string) {
 	root := m.Root()
 	if root == "" {
-		m.term.err = "先打开一个项目，再启动终端"
+		m.term.err = "Open a project before starting the terminal"
 		m.invalidate()
 		return
 	}
@@ -334,7 +334,7 @@ func (m *Model) spawnTermSessionShell(root, cwd string, g int, shell string) {
 				return
 			}
 			if err != nil {
-				m.term.err = "启动终端失败：" + err.Error()
+				m.term.err = "Starting the terminal failed: " + err.Error()
 				m.invalidate()
 				return
 			}
@@ -365,7 +365,7 @@ func (m *Model) SubmitTermInput() {
 			"id": id, "data": line + "\r",
 		}); err != nil {
 			m.post(func() {
-				m.term.err = "写入终端失败：" + err.Error()
+				m.term.err = "Writing to the terminal failed: " + err.Error()
 				m.invalidate()
 			})
 		}
@@ -388,7 +388,7 @@ func (m *Model) KillTerm() {
 		defer cancel()
 		if _, err := m.mgr.Invoke(ctx, Window, "term_kill", map[string]any{"id": id}); err != nil {
 			m.post(func() {
-				m.term.err = "结束终端失败：" + err.Error()
+				m.term.err = "Killing the terminal failed: " + err.Error()
 				m.invalidate()
 			})
 		}
@@ -504,7 +504,7 @@ func (m *Model) termFindLabel() string {
 	}
 	hits := termHits(s.lines, m.term.find)
 	if len(hits) == 0 {
-		return "无匹配"
+		return "No matches"
 	}
 	at := 0
 	for i, line := range hits {
@@ -513,7 +513,7 @@ func (m *Model) termFindLabel() string {
 		}
 	}
 	if at == 0 {
-		return fmt.Sprintf("%d 个", len(hits))
+		return fmt.Sprintf("%d", len(hits))
 	}
 	return fmt.Sprintf("%d/%d", at, len(hits))
 }
@@ -597,7 +597,7 @@ func (m *Model) SmokeTerm(ctx context.Context) (map[string]any, error) {
 	out := map[string]any{"shell": ""}
 	root := m.Root()
 	if root == "" {
-		return out, errors.New("没有打开项目")
+		return out, errors.New("No project is open")
 	}
 	if rawShell, err := m.mgr.Invoke(ctx, Window, "term_default_shell", nil); err != nil {
 		out["defaultShellError"] = err.Error()
@@ -615,7 +615,7 @@ func (m *Model) SmokeTerm(ctx context.Context) (map[string]any, error) {
 	if rawShells, err := m.mgr.Invoke(ctx, Window, "term_available_shells", nil); err != nil {
 		out["shellsError"] = err.Error()
 	} else if json.Unmarshal(rawShells, &shells) != nil {
-		out["shellsError"] = "shell 列表格式不符"
+		out["shellsError"] = "The shell list has an unexpected format"
 	}
 	out["shells"] = len(shells)
 	if len(shells) > 0 {
@@ -888,7 +888,7 @@ func (m *Model) loadTermShells() {
 			}
 			p.loading = false
 			if err != nil {
-				p.err = "读取 shell 列表失败：" + err.Error()
+				p.err = "Could not read the shell list: " + err.Error()
 			} else {
 				p.shells = shells
 			}
@@ -948,14 +948,14 @@ func (m *Model) termShellDialog(c *ui.Context, p *ui.Theme) {
 	jump := -1
 	ui.Modal(c, &open, func() {
 		ui.Column(c).Width(480).Gap(8).Children(func() {
-			ui.Text(c, "新建终端标签页").FontSize(13).Bold().TextColor(p.Text).SingleLine()
+			ui.Text(c, "New Terminal Tab").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			switch {
 			case pk.loading:
-				ui.Text(c, "读取 shell…").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+				ui.Text(c, "Reading the shells…").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
 			case pk.err != "":
 				ui.Text(c, pk.err).FontSize(11).TextColor(p.Danger).SingleLine().Ellipsis("…")
 			case len(pk.shells) == 0:
-				ui.Text(c, "没有找到可用的 shell。").FontSize(11).TextColor(p.TextMuted).SingleLine()
+				ui.Text(c, "No usable shell was found.").FontSize(11).TextColor(p.TextMuted).SingleLine()
 			}
 			for i := range pk.shells {
 				i := i

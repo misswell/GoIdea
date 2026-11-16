@@ -121,7 +121,7 @@ func (m *Model) RunSearch() {
 			}
 			m.search.running = false
 			if err != nil && m.search.err == "" {
-				m.search.err = "搜索失败：" + err.Error()
+				m.search.err = "Searching failed: " + err.Error()
 			}
 			if m.Root() != root {
 				m.search.files = nil
@@ -166,8 +166,9 @@ func (m *Model) acceptSearchEvent(data json.RawMessage) {
 		m.search.done = true
 		if ev.Summary != nil {
 			m.search.cancelled = ev.Summary.Cancelled
-			m.search.summary = fmt.Sprintf("%d 个文件，%d 处匹配，%d ms",
-				ev.Summary.Files, ev.Summary.Matches, int(ev.Summary.ElapsedMs))
+			m.search.summary = fmt.Sprintf("%s, %s, %d ms",
+				count(int(ev.Summary.Files), "file", "files"),
+				count(int(ev.Summary.Matches), "match", "matches"), int(ev.Summary.ElapsedMs))
 		}
 	}
 	m.invalidate()
@@ -246,7 +247,7 @@ func (m *Model) applyReveal(t *Tab) {
 func (m *Model) SmokeSearch(ctx context.Context) (map[string]any, error) {
 	out := map[string]any{}
 	if m.Root() == "" {
-		return out, errors.New("没有打开项目")
+		return out, errors.New("No project is open")
 	}
 	m.post(func() {
 		m.search.query = "class "

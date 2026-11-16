@@ -348,7 +348,7 @@ func (m *Model) dockDragGhost(id string, x, y, w, h float32, held bool) {
 			return
 		}
 		m.dockDragID, m.dockDragSlot, m.dockDragArmed = id, slot, true
-		m.status = "松开以停靠到 " + dockSlotLabel(slot)
+		m.status = "Release to dock into " + dockSlotLabel(slot)
 		m.invalidate()
 		return
 	}
@@ -386,7 +386,7 @@ func (m *Model) SetToolViewMode(id, mode string) {
 		}
 		m.dock.viewModes[id] = mode
 	case "undock":
-		m.status = "分离窗口（Undock）尚未移植：MyGo 目前只有单窗口"
+		m.status = "Undocking is not ported yet: MyGo has a single window"
 		m.invalidate()
 		return
 	}
@@ -423,7 +423,7 @@ func (m *Model) DockShow(id string) {
 	}
 	target, ok := m.dockPlacement(id, spec.anchor)
 	if !ok {
-		m.status = spec.title + " 所在区域已固定，先取消 Pin"
+		m.status = spec.title + "'s area is pinned; unpin it first"
 		m.invalidate()
 		return
 	}
@@ -490,7 +490,7 @@ func (m *Model) DockMove(id string, target dockSlot) {
 	from, shown := m.dockSlotOf(id)
 	target, ok := m.dockPlacement(id, target)
 	if !ok {
-		m.status = dockSpec(id).title + " 的目标区域已固定，先取消 Pin"
+		m.status = dockSpec(id).title + "'s target area is pinned; unpin it first"
 		m.invalidate()
 		return
 	}

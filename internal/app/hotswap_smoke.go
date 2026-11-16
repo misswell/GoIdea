@@ -159,8 +159,8 @@ func (m *Model) SmokeHotSwap(ctx context.Context) (map[string]any, error) {
 			status, dbgErr, build, stage = m.debug.status, m.debug.err, m.debug.hotSwapBuild, m.debug.hotSwapStage
 		})
 		out["hotSwapStage"] = stage
-		if strings.Contains(status, "已重新加载") || strings.Contains(dbgErr, "Hot Swap failed") || (build != "" && status != "正在编译变更的类…") {
-			reloaded = strings.Contains(status, "已重新加载")
+		if strings.Contains(status, "Reloaded ") || strings.Contains(dbgErr, "Hot Swap failed") || (build != "" && status != "Compiling the changed classes…") {
+			reloaded = strings.Contains(status, "Reloaded ")
 			out["reloadStatus"] = status
 			out["reloadError"] = dbgErr
 			break

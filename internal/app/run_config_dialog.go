@@ -113,7 +113,7 @@ func (d *runConfigDlg) loadForm() {
 	d.policyLabel = policyLabelOf(d.policy, cfg.Kind)
 	d.selLabel = adapter.KindLabel(cfg.Kind) + " · " + cfg.Name
 	if cfg.Detected {
-		d.selLabel += "（检测）"
+		d.selLabel += " (detected)"
 	}
 	d.errs = nil
 	d.saveErr = ""
@@ -271,16 +271,16 @@ func (m *Model) runConfigsDialog(c *ui.Context, p *ui.Theme) {
 	open := d.open
 	modal := ui.Modal(c, &open, func() {
 		ui.Column(c).Width(640).Gap(8).Children(func() {
-			ui.Text(c, "运行/调试配置").FontSize(13).Bold().TextColor(p.Text).SingleLine()
+			ui.Text(c, "Run/Debug Configurations").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			if len(d.items) == 0 {
-				ui.Text(c, "项目还没有运行配置。").FontSize(11).TextColor(p.TextMuted).SingleLine()
+				ui.Text(c, "The project has no run configurations yet.").FontSize(11).TextColor(p.TextMuted).SingleLine()
 			}
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				list := make([]string, 0, len(d.items))
 				for _, cfg := range d.items {
 					label := adapter.KindLabel(cfg.Kind) + " · " + cfg.Name
 					if cfg.Detected {
-						label += "（检测）"
+						label += " (detected)"
 					}
 					list = append(list, label)
 				}
@@ -289,7 +289,7 @@ func (m *Model) runConfigsDialog(c *ui.Context, p *ui.Theme) {
 					for i, cfg := range d.items {
 						label := adapter.KindLabel(cfg.Kind) + " · " + cfg.Name
 						if cfg.Detected {
-							label += "（检测）"
+							label += " (detected)"
 						}
 						if label == d.selLabel {
 							d.sel = i
@@ -298,14 +298,14 @@ func (m *Model) runConfigsDialog(c *ui.Context, p *ui.Theme) {
 					}
 					d.loadForm()
 				}
-				ui.Button(c, "新建").OnClick(m.AddRunConfig)
-				ui.Button(c, "复制").OnClick(m.DuplicateRunConfig)
-				ui.Button(c, "删除").OnClick(m.RemoveRunConfig)
+				ui.Button(c, "New").OnClick(m.AddRunConfig)
+				ui.Button(c, "Duplicate").OnClick(m.DuplicateRunConfig)
+				ui.Button(c, "Delete").OnClick(m.RemoveRunConfig)
 			})
 			if cfg := d.selected(); cfg != nil {
 				ui.Column(c).Gap(6).Children(func() {
 					ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-						ui.Text(c, "名称").FontSize(11).TextColor(p.TextMuted).Width(96).SingleLine()
+						ui.Text(c, "Name").FontSize(11).TextColor(p.TextMuted).Width(140).SingleLine()
 						ui.TextInput(c, &d.name).Width(300)
 						ui.Text(c, adapter.KindLabel(cfg.Kind)).FontSize(11).TextColor(p.TextMuted).SingleLine()
 					})
@@ -313,18 +313,18 @@ func (m *Model) runConfigsDialog(c *ui.Context, p *ui.Theme) {
 						ui.Text(c, e).FontSize(10.5).TextColor(p.Danger).SingleLine()
 					}
 					ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-						ui.Text(c, "命令").FontSize(11).TextColor(p.TextMuted).Width(96).SingleLine()
+						ui.Text(c, "Command").FontSize(11).TextColor(p.TextMuted).Width(140).SingleLine()
 						ui.TextInput(c, &cfg.Command).Width(430)
 					})
 					if e := d.errs["command"]; e != "" {
 						ui.Text(c, e).FontSize(10.5).TextColor(p.Danger).SingleLine()
 					}
 					ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-						ui.Text(c, "程序实参").FontSize(11).TextColor(p.TextMuted).Width(96).SingleLine()
+						ui.Text(c, "Program arguments").FontSize(11).TextColor(p.TextMuted).Width(140).SingleLine()
 						ui.TextInput(c, &d.args).Width(430)
 					})
 					ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-						ui.Text(c, "工作目录").FontSize(11).TextColor(p.TextMuted).Width(96).SingleLine()
+						ui.Text(c, "Working directory").FontSize(11).TextColor(p.TextMuted).Width(140).SingleLine()
 						ui.Text(c, m.Root()+"/").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
 						ui.TextInput(c, &d.cwd).Width(240)
 					})
@@ -332,7 +332,7 @@ func (m *Model) runConfigsDialog(c *ui.Context, p *ui.Theme) {
 						ui.Text(c, e).FontSize(10.5).TextColor(p.Danger).SingleLine()
 					}
 					ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-						ui.Text(c, "环境变量").FontSize(11).TextColor(p.TextMuted).Width(96).SingleLine()
+						ui.Text(c, "Environment variables").FontSize(11).TextColor(p.TextMuted).Width(140).SingleLine()
 						ui.TextInput(c, &d.env).Width(430)
 					})
 					if e := d.errs["env"]; e != "" {
@@ -340,9 +340,9 @@ func (m *Model) runConfigsDialog(c *ui.Context, p *ui.Theme) {
 					}
 					if adapter.IsJVMApplication(cfg.Kind) {
 						ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-							ui.Text(c, "模块").FontSize(11).TextColor(p.TextMuted).Width(96).SingleLine()
+							ui.Text(c, "Module").FontSize(11).TextColor(p.TextMuted).Width(140).SingleLine()
 							ui.TextInput(c, &d.module).Width(300)
-							ui.Text(c, "留空则在保存时自动识别").FontSize(10).TextColor(p.TextMuted).SingleLine()
+							ui.Text(c, "Empty: detected when saving").FontSize(10).TextColor(p.TextMuted).SingleLine()
 						})
 					}
 					if adapter.BuildPolicyApplies(cfg.Kind) {
@@ -352,7 +352,7 @@ func (m *Model) runConfigsDialog(c *ui.Context, p *ui.Theme) {
 							labels = append(labels, o.Label)
 						}
 						ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-							ui.Text(c, "启动前构建").FontSize(11).TextColor(p.TextMuted).Width(96).SingleLine()
+							ui.Text(c, "Build before launch").FontSize(11).TextColor(p.TextMuted).Width(140).SingleLine()
 							if sel := ui.Select(c, &d.policyLabel, labels); sel.Changed() {
 								for _, o := range opts {
 									if o.Label == d.policyLabel {
@@ -368,8 +368,8 @@ func (m *Model) runConfigsDialog(c *ui.Context, p *ui.Theme) {
 				ui.Text(c, d.saveErr).FontSize(10.5).TextColor(p.Danger).SingleLine()
 			}
 			ui.Row(c).Gap(8).Children(func() {
-				ui.Button(c, "保存").OnClick(m.SaveRunConfigs)
-				ui.Button(c, "取消").OnClick(m.closeRunConfigs)
+				ui.Button(c, "Save").OnClick(m.SaveRunConfigs)
+				ui.Button(c, "Cancel").OnClick(m.closeRunConfigs)
 			})
 		})
 	})
@@ -387,25 +387,25 @@ func (m *Model) RerunFailedTests() {
 	}
 	raw, _ := m.rerunTarget()
 	if raw == nil {
-		m.notifyInfo("run-rerun-failed", "没有可重跑的失败测试", "本次会话还没有运行过配置")
+		m.notifyInfo("run-rerun-failed", "No failed tests to rerun", "No configuration has run in this session")
 		m.invalidate()
 		return
 	}
 	base, err := openidea.DecodeRunConfig(raw)
 	if err != nil {
-		m.notifyInfo("run-rerun-failed", "没有可重跑的失败测试", err.Error())
+		m.notifyInfo("run-rerun-failed", "No failed tests to rerun", err.Error())
 		m.invalidate()
 		return
 	}
 	if m.run.tests == nil {
-		m.notifyInfo("run-rerun-failed", "没有可重跑的失败测试", "该配置的输出没有按测试报告")
+		m.notifyInfo("run-rerun-failed", "No failed tests to rerun", "This configuration's output is not a test report")
 		m.invalidate()
 		return
 	}
 	paths := adapter.FailedTestPaths(m.run.tests)
 	derived := adapter.RerunFailedConfig(base, paths)
 	if derived == nil {
-		m.notifyInfo("run-rerun-failed", "没有可重跑的失败测试", "没有失败测试，或该配置的框架不支持按测试过滤")
+		m.notifyInfo("run-rerun-failed", "No failed tests to rerun", "There are no failed tests, or the configuration's framework does not support test filters")
 		m.invalidate()
 		return
 	}
@@ -521,16 +521,16 @@ func (m *Model) rerunConfirmDialog(c *ui.Context, p *ui.Theme) {
 	open := ask.open
 	modal := ui.Modal(c, &open, func() {
 		ui.Column(c).Width(440).Gap(10).Children(func() {
-			ui.Text(c, "进程 '"+ask.name+"' 正在运行").FontSize(13).Bold().TextColor(p.Text).SingleLine()
-			ui.Text(c, "'"+ask.name+"' 不允许并行运行。\n要停止正在运行的进程并重新运行吗？").
+			ui.Text(c, "Process '"+ask.name+"' Is Running").FontSize(13).Bold().TextColor(p.Text).SingleLine()
+			ui.Text(c, "'"+ask.name+"' does not allow parallel runs.\nStop the running process and run it again?").
 				FontSize(11).TextColor(p.Text)
 			dontAsk := ask.dontAsk
-			if ui.Checkbox(c, &dontAsk, "不再询问").Changed() {
+			if ui.Checkbox(c, &dontAsk, "Don't ask again").Changed() {
 				ask.dontAsk = dontAsk
 			}
 			ui.Row(c).Gap(8).Children(func() {
-				ui.Button(c, "停止并重新运行").OnClick(m.ConfirmRerun)
-				ui.Button(c, "取消").OnClick(m.CancelRerun)
+				ui.Button(c, "Stop and Rerun").OnClick(m.ConfirmRerun)
+				ui.Button(c, "Cancel").OnClick(m.CancelRerun)
 			})
 		})
 	})

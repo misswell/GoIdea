@@ -116,15 +116,15 @@ func branchOperationTitle(op *string, head string) string {
 	verb := ""
 	switch *op {
 	case "rebase":
-		verb = "正在变基"
+		verb = "Rebasing"
 	case "merge":
-		verb = "正在合并"
+		verb = "Merging"
 	case "cherry-pick":
-		verb = "正在拣选"
+		verb = "Cherry-picking"
 	case "revert":
-		verb = "正在还原"
+		verb = "Reverting"
 	case "am":
-		verb = "正在应用补丁"
+		verb = "Applying the patch"
 	default:
 		return ""
 	}
@@ -280,7 +280,7 @@ func (m *Model) checkoutBranch(name string) {
 	}
 	m.branch.busy = true
 	m.branch.err = ""
-	m.status = "正在切换到 " + name + "…"
+	m.status = "Switching to " + name + "…"
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 2*time.Minute)
@@ -294,12 +294,12 @@ func (m *Model) checkoutBranch(name string) {
 				return
 			}
 			if err != nil {
-				m.branch.err = "切换分支失败：" + err.Error()
+				m.branch.err = "Switching branches failed: " + err.Error()
 				m.invalidate()
 				return
 			}
 			m.closeBranches()
-			m.status = "已切换到 " + name
+			m.status = "Switched to " + name
 			m.RefreshBranch()
 			if m.vcs.loaded || m.vcs.loading {
 				m.RefreshVCS()
@@ -391,7 +391,7 @@ func branchErrorText(err error) string {
 	if errors.As(err, &oe) && oe.Kind == "unavailable" && strings.Contains(oe.Message, "not a git repository") {
 		return ""
 	}
-	return "读取分支失败：" + err.Error()
+	return "Could not read the branches: " + err.Error()
 }
 
 // branchesDialog draws the Branches popup: a filter over the branches, the
@@ -403,7 +403,7 @@ func (m *Model) branchesDialog(c *ui.Context, p *ui.Theme) {
 	open := m.branch.open
 	d := ui.Modal(c, &open, func() {
 		ui.Column(c).Width(520).Gap(8).Children(func() {
-			ui.Text(c, "分支").FontSize(13).Bold().TextColor(p.Text).SingleLine()
+			ui.Text(c, "Branches").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			in := ui.TextInput(c, &m.branch.query).AutoFocus()
 			in.OnChange(func() {
 				m.branch.sel = 0
@@ -416,18 +416,18 @@ func (m *Model) branchesDialog(c *ui.Context, p *ui.Theme) {
 			}
 			rows := m.branchRows()
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-				text := "输入名称筛选，Enter 切换分支"
+				text := "Type a name to filter; Enter checks the branch out"
 				switch {
 				case m.branch.busy:
-					text = "正在切换…"
+					text = "Switching…"
 				case m.branch.err != "":
 					text = ""
 				case m.branch.listing:
-					text = "正在读取分支…"
+					text = "Reading the branches…"
 				case len(rows) == 0:
-					text = "没有匹配的分支"
+					text = "No matching branches"
 				default:
-					text = fmt.Sprintf("%d 个分支", len(rows))
+					text = count(len(rows), "branch", "branches")
 				}
 				if text != "" {
 					ui.Text(c, text).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
@@ -457,10 +457,10 @@ func (m *Model) branchesDialog(c *ui.Context, p *ui.Theme) {
 							}
 							ui.Text(c, b.Name).FontSize(12).TextColor(color).SingleLine().Ellipsis("…")
 							if b.Current {
-								ui.Text(c, "当前").FontSize(10.5).TextColor(p.Accent).SingleLine()
+								ui.Text(c, "Current").FontSize(10.5).TextColor(p.Accent).SingleLine()
 							}
 							if b.Upstream != nil && !b.Remote {
-								ui.Text(c, "跟踪 "+*b.Upstream).FontSize(10.5).TextColor(p.TextMuted).
+								ui.Text(c, "Tracking "+*b.Upstream).FontSize(10.5).TextColor(p.TextMuted).
 									SingleLine().Ellipsis("…")
 							}
 							if b.Behind > 0 {

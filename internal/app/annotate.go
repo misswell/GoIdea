@@ -131,9 +131,9 @@ func (m *Model) annotateDialog(c *ui.Context, p *ui.Theme) {
 	open := a.open
 	dlg := ui.Modal(c, &open, func() {
 		ui.Column(c).Width(820).Gap(8).Children(func() {
-			title := "注释 · " + filepath.Base(a.path)
+			title := "Annotate · " + filepath.Base(a.path)
 			if a.loading {
-				title = "注释 · 正在读取…"
+				title = "Annotate · Reading…"
 			}
 			ui.Text(c, title).FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			if rel, err := filepath.Rel(m.Root(), a.path); err == nil && !strings.HasPrefix(rel, "..") {
@@ -144,9 +144,9 @@ func (m *Model) annotateDialog(c *ui.Context, p *ui.Theme) {
 			case a.err != "":
 				ui.Text(c, a.err).FontSize(11.5).TextColor(p.Danger).SingleLine().Ellipsis("…")
 			case a.loading:
-				ui.Text(c, "正在读取逐行提交…").FontSize(11.5).TextColor(p.TextMuted)
+				ui.Text(c, "Reading the commit of each line…").FontSize(11.5).TextColor(p.TextMuted)
 			case len(a.rows) == 0:
-				ui.Text(c, "没有可注释的行").FontSize(11.5).TextColor(p.TextMuted)
+				ui.Text(c, "No lines to annotate").FontSize(11.5).TextColor(p.TextMuted)
 			}
 			if len(a.rows) > 0 {
 				ui.Scroll(c).Height(460).Children(func() {
@@ -187,7 +187,7 @@ func (m *Model) annotateDialog(c *ui.Context, p *ui.Theme) {
 			}
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Spacer(c)
-				ui.Button(c, "关闭").OnClick(func() { m.closeAnnotate() })
+				ui.Button(c, "Close").OnClick(func() { m.closeAnnotate() })
 			})
 		})
 	})

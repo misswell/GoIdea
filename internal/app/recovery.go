@@ -22,7 +22,7 @@ func (m *Model) SmokeRecovery(ctx context.Context) (map[string]any, error) {
 	out := map[string]any{}
 	s := m.mgr.Server()
 	if s == nil {
-		return out, fmt.Errorf("后端未运行")
+		return out, fmt.Errorf("The backend is not running")
 	}
 	root := m.Root()
 	var tabs int
@@ -80,7 +80,7 @@ func (m *Model) SmokeRecovery(ctx context.Context) (map[string]any, error) {
 	out["docsKept"] = after == tabs
 	out["elapsedMs"] = time.Since(started).Milliseconds()
 	if !restored {
-		return out, fmt.Errorf("后端 90 秒内没有恢复项目")
+		return out, fmt.Errorf("The backend did not restore the project within 90 seconds")
 	}
 	return out, nil
 }
@@ -92,7 +92,7 @@ func (m *Model) SmokeRollback(ctx context.Context) (map[string]any, error) {
 	out := map[string]any{}
 	root := m.Root()
 	if root == "" {
-		return out, fmt.Errorf("没有打开项目")
+		return out, fmt.Errorf("No project is open")
 	}
 	var tabs int
 	var firstDoc string
@@ -120,18 +120,18 @@ func (m *Model) SmokeRollback(ctx context.Context) (map[string]any, error) {
 			out["rootAfter"], out["tabsAfter"], out["docAlive"], out["banner"] = rootAfter, after, docAlive, banner
 			switch {
 			case layoutKey(rootAfter) != layoutKey(root):
-				return out, fmt.Errorf("失败切换后不在原项目")
+				return out, fmt.Errorf("The failed switch left the original project")
 			case banner == "":
-				return out, fmt.Errorf("失败切换没有报错")
+				return out, fmt.Errorf("The failed switch reported no error")
 			case after != tabs:
-				return out, fmt.Errorf("标签页没有恢复：%d → %d", tabs, after)
+				return out, fmt.Errorf("The tabs were not restored: %d → %d", tabs, after)
 			case firstDoc != "" && !docAlive:
-				return out, fmt.Errorf("原项目的文档已关闭")
+				return out, fmt.Errorf("The original project's documents were closed")
 			}
 			return out, nil
 		}
 		if time.Now().After(deadline) {
-			return out, fmt.Errorf("失败切换没有结束")
+			return out, fmt.Errorf("The failed switch did not finish")
 		}
 		select {
 		case <-ctx.Done():
@@ -151,7 +151,7 @@ func (m *Model) SmokeSwitch(ctx context.Context, other string) (map[string]any, 
 	// against the resolved path.
 	other = realPath(other)
 	if from == "" {
-		return out, fmt.Errorf("没有打开项目")
+		return out, fmt.Errorf("No project is open")
 	}
 	out["from"], out["to"] = from, other
 	var last string
@@ -182,7 +182,7 @@ func (m *Model) SmokeSwitch(ctx context.Context, other string) (map[string]any, 
 			case <-time.After(100 * time.Millisecond):
 			}
 		}
-		return fmt.Errorf("切换到 %s 超时：%s", dir, last)
+		return fmt.Errorf("Switching to %s timed out: %s", dir, last)
 	}
 	started := time.Now()
 	m.post(func() { m.openProject(other, nil) })

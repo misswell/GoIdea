@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 	"time"
 
@@ -53,7 +52,7 @@ func (m *Model) ShowIntentions() {
 	p := &intentPane{open: true, tab: t, busy: true}
 	p.list.Selected = &p.sel
 	m.intents = p
-	m.status = "正在查找意图操作…"
+	m.status = "Finding context actions…"
 	m.invalidate()
 	m.queryIntentions(p, start, end)
 }
@@ -99,7 +98,7 @@ func (m *Model) finishIntentions(p *intentPane, req uint32, q *openidea.CodeActi
 	if err != nil {
 		// A cancelled query was closed or replaced, and nothing shows it.
 		if openidea.ErrorKind(err) != "cancelled" {
-			p.err = "查找意图操作失败：" + err.Error()
+			p.err = "Finding context actions failed: " + err.Error()
 		}
 		m.invalidate()
 		return
@@ -162,12 +161,12 @@ func (m *Model) applyIntent(it intentAction) {
 			}
 			p.busy = false
 			if err != nil {
-				p.err = "应用意图操作失败：" + err.Error()
+				p.err = "Applying the context action failed: " + err.Error()
 				m.invalidate()
 				return
 			}
 			m.intents = nil
-			m.status = "已应用：" + it.title
+			m.status = "Applied: " + it.title
 			m.invalidate()
 		})
 	}()
@@ -210,31 +209,31 @@ func (m *Model) cancelIntentQuery() {
 func intentKindLabel(kind string) string {
 	switch {
 	case kind == "":
-		return "操作"
+		return "Action"
 	case kind == "quickfix" || strings.HasPrefix(kind, "quickfix."):
-		return "快速修复"
+		return "Quick Fix"
 	case kind == "refactor" || strings.HasPrefix(kind, "refactor."):
 		switch {
 		case strings.HasPrefix(kind, "refactor.extract"):
-			return "提取"
+			return "Extract"
 		case strings.HasPrefix(kind, "refactor.inline"):
-			return "内联"
+			return "Inline"
 		case strings.HasPrefix(kind, "refactor.move"):
-			return "移动"
+			return "Move"
 		case strings.HasPrefix(kind, "refactor.rewrite"):
-			return "改写"
+			return "Rewrite"
 		}
-		return "重构"
+		return "Refactor"
 	case kind == "source" || strings.HasPrefix(kind, "source."):
 		switch {
 		case strings.HasPrefix(kind, "source.organizeImports"):
-			return "整理导入"
+			return "Optimize Imports"
 		case strings.HasPrefix(kind, "source.fixAll"):
-			return "修复全部"
+			return "Fix All"
 		}
-		return "源码"
+		return "Source"
 	}
-	return "操作"
+	return "Action"
 }
 
 // intentionsDialog draws the actions offered at the caret.
@@ -246,15 +245,15 @@ func (m *Model) intentionsDialog(c *ui.Context, p *ui.Theme) {
 	open := pn.open
 	d := ui.Modal(c, &open, func() {
 		ui.Column(c).Width(460).Gap(8).Children(func() {
-			ui.Text(c, "意图操作").FontSize(13).Bold().TextColor(p.Text).SingleLine()
-			hint := fmt.Sprintf("%d 个操作", len(pn.items))
+			ui.Text(c, "Context Actions").FontSize(13).Bold().TextColor(p.Text).SingleLine()
+			hint := count(len(pn.items), "action", "actions")
 			switch {
 			case pn.busy:
-				hint = "正在查找…"
+				hint = "Searching…"
 			case pn.err != "":
 				hint = ""
 			case len(pn.items) == 0:
-				hint = "此处没有可用的意图操作"
+				hint = "No context actions are available here"
 			}
 			if hint != "" {
 				ui.Text(c, hint).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
@@ -276,7 +275,7 @@ func (m *Model) intentionsDialog(c *ui.Context, p *ui.Theme) {
 					ui.Text(c, it.title).FontSize(12).Bold().TextColor(color).
 						SingleLine().Ellipsis("…")
 					if it.preferred && it.disabled == "" {
-						ui.Text(c, "建议").FontSize(10).TextColor(p.Accent).SingleLine()
+						ui.Text(c, "Suggested").FontSize(10).TextColor(p.Accent).SingleLine()
 					}
 					ui.Spacer(c)
 					right := intentKindLabel(it.kind)

@@ -113,7 +113,7 @@ func (m *Model) checkTrust(dir string) {
 			if m.run.trusted {
 				m.loadRunConfigs()
 			} else {
-				m.status += " · 未信任（运行前需授权）"
+				m.status += " · untrusted (allow it before running)"
 				m.trustAsk = true
 			}
 			m.invalidate()
@@ -165,7 +165,7 @@ func (m *Model) TrustProject() {
 			}
 			m.run.trusted = status.Trusted
 			if m.run.trusted {
-				m.status = "已信任此项目，可以构建和运行"
+				m.status = "This project is trusted; it may build and run"
 				if m.run.pendingTrust {
 					m.run.pendingTrust = false
 					m.run.pendingStart = true
@@ -173,7 +173,7 @@ func (m *Model) TrustProject() {
 				m.loadRunConfigs()
 			}
 			if reopenErr != nil {
-				m.run.trustErr = "语言服务重连失败：" + reopenErr.Error()
+				m.run.trustErr = "Reconnecting the language service failed: " + reopenErr.Error()
 			}
 			m.invalidate()
 		})
@@ -202,7 +202,7 @@ func (m *Model) loadRunConfigs() {
 				return
 			}
 			if err != nil {
-				m.run.err = "读取运行配置失败：" + err.Error()
+				m.run.err = "Could not read the run configurations: " + err.Error()
 				m.run.visible = true
 				m.occupyBottom("run")
 				m.invalidate()
@@ -280,7 +280,7 @@ func (m *Model) Run() {
 	if !m.run.trusted {
 		m.run.pendingTrust = true
 		m.trustAsk = true
-		m.status = "项目未信任：请在弹窗中信任后再运行"
+		m.status = "The project is not trusted: accept the prompt before running"
 		m.invalidate()
 		return
 	}
@@ -409,7 +409,7 @@ func (m *Model) startRunWith(raw json.RawMessage, name string) bool {
 	m.run.err = ""
 	m.run.output = nil
 	m.run.truncated = false
-	m.status = "正在启动 " + name + "…"
+	m.status = "Starting " + name + "…"
 	m.invalidate()
 
 	args := map[string]any{
@@ -426,7 +426,7 @@ func (m *Model) startRunWith(raw json.RawMessage, name string) bool {
 			m.post(func() {
 				m.run.busy = false
 				m.run.awaiting = false
-				m.run.err = "保存后再运行失败：" + err.Error()
+				m.run.err = "Saving before running failed: " + err.Error()
 				m.invalidate()
 			})
 			return
@@ -436,7 +436,7 @@ func (m *Model) startRunWith(raw json.RawMessage, name string) bool {
 			m.post(func() {
 				m.run.busy = false
 				m.run.awaiting = false
-				m.run.err = "启动失败：" + err.Error()
+				m.run.err = "Starting failed: " + err.Error()
 				m.invalidate()
 			})
 			return
@@ -465,7 +465,7 @@ func (m *Model) startRunWith(raw json.RawMessage, name string) bool {
 			if err != nil {
 				m.run.awaiting = false
 				m.run.running = false
-				m.run.err = "启动失败：" + err.Error()
+				m.run.err = "Starting failed: " + err.Error()
 				m.invalidate()
 				return
 			}
@@ -475,7 +475,7 @@ func (m *Model) startRunWith(raw json.RawMessage, name string) bool {
 			if !info.Running {
 				m.run.awaiting = false
 			}
-			m.status = "运行中：" + info.Name
+			m.status = "Running: " + info.Name
 			m.invalidate()
 		})
 	}()
@@ -489,18 +489,18 @@ func (m *Model) StopRun() {
 	}
 	id := m.run.runID
 	if id == 0 {
-		m.run.err = "进程尚未启动"
+		m.run.err = "The process has not started"
 		m.invalidate()
 		return
 	}
-	m.status = "正在停止…"
+	m.status = "Stopping…"
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
 		defer cancel()
 		if _, err := m.invoke(ctx, "run_stop", map[string]any{"id": id}); err != nil {
 			m.post(func() {
-				m.run.err = "停止失败：" + err.Error()
+				m.run.err = "Stopping failed: " + err.Error()
 				m.invalidate()
 			})
 		}
@@ -804,11 +804,11 @@ func (m *Model) acceptExit(e openidea.RunExitedEvent) {
 	}
 	switch {
 	case e.Code == nil:
-		m.status = "运行已结束"
+		m.status = "The run ended"
 	case *e.Code == 0:
-		m.status = "运行成功（退出码 0）"
+		m.status = "Run succeeded (exit code 0)"
 	default:
-		m.status = fmt.Sprintf("运行失败（退出码 %d）", *e.Code)
+		m.status = fmt.Sprintf("Run failed (exit code %d)", *e.Code)
 	}
 	m.invalidate()
 }
@@ -853,7 +853,7 @@ func (p *RunPane) text() string {
 func (m *Model) SmokeRun(ctx context.Context) (config string, code *int32, output string, err error) {
 	root := m.Root()
 	if root == "" {
-		return "", nil, "", errors.New("没有打开项目")
+		return "", nil, "", errors.New("No project is open")
 	}
 	if _, err = m.mgr.Invoke(ctx, Window, "project_trust_set", map[string]any{
 		"path": root, "trusted": true, "folder": true,
@@ -869,7 +869,7 @@ func (m *Model) SmokeRun(ctx context.Context) (config string, code *int32, outpu
 		return "", nil, "", err
 	}
 	if len(configs) == 0 {
-		return "", nil, "", errors.New("项目没有可运行的配置")
+		return "", nil, "", errors.New("The project has no runnable configuration")
 	}
 	sel := pickRunConfig(configs)
 	if want := strings.TrimSpace(os.Getenv("GOIDEA_SMOKE_RUN_CONFIG")); want != "" {
@@ -881,7 +881,7 @@ func (m *Model) SmokeRun(ctx context.Context) (config string, code *int32, outpu
 			}
 		}
 		if sel < 0 {
-			return "", nil, "", fmt.Errorf("没有名为 %s 的运行配置", want)
+			return "", nil, "", fmt.Errorf("There is no run configuration named %s", want)
 		}
 	}
 	cfg := configs[sel]
@@ -975,7 +975,7 @@ func (m *Model) SmokeSpringRun(ctx context.Context) (map[string]any, error) {
 	out := map[string]any{"root": m.Root()}
 	root := m.Root()
 	if root == "" {
-		return out, errors.New("没有打开项目")
+		return out, errors.New("No project is open")
 	}
 	if _, err := m.mgr.Invoke(ctx, Window, "project_trust_set", map[string]any{
 		"path": root, "trusted": true, "folder": true,
@@ -1009,7 +1009,7 @@ func (m *Model) SmokeSpringRun(ctx context.Context) (map[string]any, error) {
 			for _, c := range configs {
 				names = append(names, c.Kind+":"+c.Name)
 			}
-			return out, fmt.Errorf("6 分钟内没有发现 spring-boot 运行配置；检测到：%s",
+			return out, fmt.Errorf("No spring-boot run configuration appeared within 6 minutes; detected: %s",
 				strings.Join(names, ", "))
 		}
 		select {
@@ -1030,7 +1030,7 @@ func (m *Model) SmokeSpringRun(ctx context.Context) (map[string]any, error) {
 	}
 	out["configModule"] = module
 	if module == "" {
-		return out, errors.New("多模块项目必须解析出子模块，而不是项目根目录")
+		return out, errors.New("A multi-module project must resolve to a submodule, not the project root")
 	}
 	out["configArgs"] = rawCfg["args"]
 	mainClass := adapter.ParseJavaArgs(cfg.Args).MainClass
@@ -1067,7 +1067,7 @@ func (m *Model) SmokeSpringRun(ctx context.Context) (map[string]any, error) {
 	resolvedText := string(resolved)
 	if strings.Contains(resolvedText, "${classpath}") || strings.Contains(resolvedText, "${testClasspath}") {
 		m.post(func() { m.run.busy = false; m.run.awaiting = false })
-		return out, errors.New("解析后的配置仍带有 classpath 占位符：" + resolvedText)
+		return out, errors.New("The resolved configuration still has classpath placeholders: " + resolvedText)
 	}
 	var resolvedCfg map[string]any
 	if err := json.Unmarshal(resolved, &resolvedCfg); err != nil {
@@ -1086,7 +1086,7 @@ func (m *Model) SmokeSpringRun(ctx context.Context) (map[string]any, error) {
 	}
 	out["classPathEntries"] = entries
 	if entries == 0 {
-		return out, errors.New("解析后的 classpath 为空")
+		return out, errors.New("The resolved classpath is empty")
 	}
 
 	args := map[string]any{
@@ -1140,7 +1140,7 @@ func (m *Model) SmokeSpringRun(ctx context.Context) (map[string]any, error) {
 	}
 	out["started"] = started
 	if !started {
-		return out, fmt.Errorf("4 分钟内没有等到 Spring Boot 启动标志 %q；输出尾部：%s", marker, tailOf(text, 1200))
+		return out, fmt.Errorf("The Spring Boot startup marker %q did not appear within 4 minutes; output tail: %s", marker, tailOf(text, 1200))
 	}
 
 	// The process must really be running, not just reported.
@@ -1160,7 +1160,7 @@ func (m *Model) SmokeSpringRun(ctx context.Context) (map[string]any, error) {
 	}
 	out["processRunning"] = running
 	if !running {
-		return out, errors.New("Spring Boot 启动标志出现，但进程已不在运行")
+		return out, errors.New("The Spring Boot startup marker appeared, but the process is no longer running")
 	}
 
 	m.StopRun()
@@ -1172,7 +1172,7 @@ func (m *Model) SmokeSpringRun(ctx context.Context) (map[string]any, error) {
 			break
 		}
 		if time.Now().After(waitDeadline) {
-			return out, errors.New("run_stop 后进程没有退出")
+			return out, errors.New("The process did not exit after run_stop")
 		}
 		select {
 		case <-ctx.Done():
@@ -1190,7 +1190,7 @@ func (m *Model) SmokeSpringRun(ctx context.Context) (map[string]any, error) {
 		}
 		if time.Now().After(stopDeadline) {
 			out["orphans"] = len(orphans)
-			return out, fmt.Errorf("run_stop 后仍有 %d 个孤立的 JVM 进程：%s", len(orphans), strings.Join(orphans, ", "))
+			return out, fmt.Errorf("%d orphaned JVM processes remained after run_stop: %s", len(orphans), strings.Join(orphans, ", "))
 		}
 		select {
 		case <-ctx.Done():
@@ -1245,7 +1245,7 @@ func (m *Model) SmokeRunConfigEdit(ctx context.Context) (map[string]any, error) 
 	root := m.Root()
 	out := map[string]any{"root": root}
 	if root == "" {
-		return out, errors.New("没有打开项目")
+		return out, errors.New("No project is open")
 	}
 	if _, err := m.mgr.Invoke(ctx, Window, "project_trust_set", map[string]any{
 		"path": root, "trusted": true, "folder": true,
@@ -1272,7 +1272,7 @@ func (m *Model) SmokeRunConfigEdit(ctx context.Context) (map[string]any, error) 
 		return out, err
 	}
 	if len(configs) == 0 {
-		return out, errors.New("项目没有可运行的配置")
+		return out, errors.New("The project has no runnable configuration")
 	}
 	// Editing the first detected configuration produces a user copy with its
 	// id, a new name, and a Build Before Launch policy (upstream upsertConfig).
@@ -1301,10 +1301,10 @@ func (m *Model) SmokeRunConfigEdit(ctx context.Context) (map[string]any, error) 
 		}
 	}
 	if saved == nil {
-		return out, fmt.Errorf("保存后 run_configs 没有返回用户配置 %s", duplicate.ID)
+		return out, fmt.Errorf("After saving, run_configs did not return the user configuration %s", duplicate.ID)
 	}
 	if saved.Detected || saved.Name != editedName {
-		return out, fmt.Errorf("保存的配置未按编辑内容返回：name=%s detected=%v", saved.Name, saved.Detected)
+		return out, fmt.Errorf("The saved configuration did not come back as edited: name=%s detected=%v", saved.Name, saved.Detected)
 	}
 	out["saved"] = true
 	out["savedName"] = saved.Name
@@ -1313,7 +1313,7 @@ func (m *Model) SmokeRunConfigEdit(ctx context.Context) (map[string]any, error) 
 	// prepends clean (upstream applyBuildPolicyToCommand).
 	resolved, err := m.resolveJVMConfig(ctx, saved.Raw(), root, nil)
 	if err != nil {
-		return out, fmt.Errorf("解析构建策略失败：%w", err)
+		return out, fmt.Errorf("Could not resolve the build policy: %w", err)
 	}
 	var obj map[string]any
 	if err := json.Unmarshal(resolved, &obj); err != nil {
@@ -1322,7 +1322,7 @@ func (m *Model) SmokeRunConfigEdit(ctx context.Context) (map[string]any, error) 
 	args := toStrings(obj["args"])
 	out["policyArgs"] = args
 	if len(args) == 0 || args[0] != "clean" {
-		return out, fmt.Errorf("rebuild 策略没有在启动前重写 Maven 命令行：%v", args)
+		return out, fmt.Errorf("The rebuild policy did not rewrite the Maven command line before launch: %v", args)
 	}
 	out["policyApplied"] = true
 
@@ -1342,7 +1342,7 @@ func (m *Model) SmokeRunConfigEdit(ctx context.Context) (map[string]any, error) 
 	}
 	for _, c := range merged {
 		if c.ID == duplicate.ID {
-			return out, errors.New("删除后 run_configs 仍返回该配置")
+			return out, errors.New("run_configs still returns the configuration after deleting it")
 		}
 	}
 	out["removed"] = true
@@ -1425,7 +1425,7 @@ func (m *Model) trustDialog(c *ui.Context, p *ui.Theme) {
 	ui.Modal(c, &open, func() {
 		ui.Column(c).Width(460).Gap(10).Children(func() {
 			ui.Text(c, "Trust Project").FontSize(14).Bold().TextColor(oi.text).SingleLine()
-			ui.Text(c, "此项目来自外部来源。构建、运行、调试和语言服务会执行项目中的代码。").
+			ui.Text(c, "This project comes from an external source. Building, running, debugging and language services execute its code.").
 				FontSize(12).TextColor(oi.textMuted)
 			if m.run.trustErr != "" {
 				ui.Text(c, m.run.trustErr).FontSize(11).TextColor(oi.danger)

@@ -118,9 +118,9 @@ func (m *Model) SmokeVCS(ctx context.Context) (int, string, error) {
 func vcsErrorText(err error) string {
 	var oe *openidea.Error
 	if errors.As(err, &oe) && oe.Kind == "unavailable" && strings.Contains(oe.Message, "not a git repository") {
-		return "当前项目不是 Git 仓库"
+		return "The current project is not a Git repository"
 	}
-	return "读取 Git 状态失败：" + err.Error()
+	return "Could not read the Git status: " + err.Error()
 }
 
 // vcsBadge is the label of a status row: a letter as IDEA shows it, the
@@ -135,21 +135,21 @@ func vcsBadge(f openidea.FileStatus) (letter, word, tone string) {
 	}
 	switch kind {
 	case "added":
-		return "A", "新增", "add"
+		return "A", "Added", "add"
 	case "modified":
-		return "M", "已修改", "mod"
+		return "M", "Modified", "mod"
 	case "deleted":
-		return "D", "已删除", "del"
+		return "D", "Deleted", "del"
 	case "renamed":
-		return "R", "已重命名", "add"
+		return "R", "Renamed", "add"
 	case "conflicted":
-		return "!", "冲突", "del"
+		return "!", "Conflict", "del"
 	case "untracked":
-		return "U", "未跟踪", "mod"
+		return "U", "Untracked", "mod"
 	case "ignored":
-		return "I", "已忽略", "muted"
+		return "I", "Ignored", "muted"
 	}
-	return "?", "已更改", "mod"
+	return "?", "Changed", "mod"
 }
 
 // vcsStaged and vcsUnstaged split the changes the way OpenIDEA's changes view
@@ -175,7 +175,7 @@ func vcsUnstaged(files []openidea.FileStatus) []openidea.FileStatus {
 }
 
 // StageChange stages one file from the changes view.
-func (m *Model) StageChange(f openidea.FileStatus) { m.changeOp("vcs_stage", f, "已暂存 ") }
+func (m *Model) StageChange(f openidea.FileStatus) { m.changeOp("vcs_stage", f, "Staged ") }
 
 // AddToIgnore adds path to the shared .gitignore or, with destination
 // "localExclude", to .git/info/exclude, as the project view's Git › Add to
@@ -191,7 +191,7 @@ func (m *Model) AddToIgnore(path, destination string) {
 	}
 	m.vcs.busy = true
 	m.vcs.opErr = ""
-	m.status = "正在把 " + name + " 加入 " + where + "…"
+	m.status = "Adding " + name + " to " + where + "…"
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, time.Minute)
@@ -205,11 +205,11 @@ func (m *Model) AddToIgnore(path, destination string) {
 				return
 			}
 			if err != nil {
-				m.vcs.opErr = "加入忽略失败：" + err.Error()
+				m.vcs.opErr = "Could not add it to the ignore list: " + err.Error()
 				m.invalidate()
 				return
 			}
-			m.status = "已把 " + name + " 加入 " + where
+			m.status = "Added " + name + " to " + where
 			m.RefreshVCS()
 			m.invalidate()
 		})
@@ -229,7 +229,7 @@ func (m *Model) statusFor(path string) (openidea.FileStatus, bool) {
 
 // UnstageChange takes one file back out of the index.
 func (m *Model) UnstageChange(f openidea.FileStatus) {
-	m.changeOp("vcs_unstage", f, "已取消暂存 ")
+	m.changeOp("vcs_unstage", f, "Unstaged ")
 }
 
 func (m *Model) changeOp(command string, f openidea.FileStatus, done string) {
@@ -238,7 +238,7 @@ func (m *Model) changeOp(command string, f openidea.FileStatus, done string) {
 	}
 	m.vcs.busy = true
 	m.vcs.opErr = ""
-	m.status = "正在更新 " + filepath.Base(f.RelPath) + "…"
+	m.status = "Updating " + filepath.Base(f.RelPath) + "…"
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, time.Minute)
@@ -250,7 +250,7 @@ func (m *Model) changeOp(command string, f openidea.FileStatus, done string) {
 				return
 			}
 			if err != nil {
-				m.vcs.opErr = "Git 操作失败：" + err.Error()
+				m.vcs.opErr = "The Git operation failed: " + err.Error()
 				m.invalidate()
 				return
 			}
@@ -291,14 +291,14 @@ func (m *Model) ConfirmRollback() {
 				return
 			}
 			if err != nil {
-				r.err = "回滚失败：" + err.Error()
+				r.err = "Rollback failed: " + err.Error()
 				m.invalidate()
 				return
 			}
 			if m.rollback == r {
 				m.rollback = nil
 			}
-			m.status = "已回滚 " + r.name
+			m.status = "Rolled back " + r.name
 			m.RefreshVCS()
 			m.invalidate()
 		})
@@ -314,19 +314,19 @@ func (m *Model) rollbackDialog(c *ui.Context, p *ui.Theme) {
 	open := r.open
 	d := ui.Modal(c, &open, func() {
 		ui.Column(c).Width(420).Gap(10).Children(func() {
-			ui.Text(c, "回滚更改").FontSize(13).Bold().TextColor(p.Text).SingleLine()
-			ui.Text(c, "回滚 "+r.name+"？未暂存的更改会丢失。").FontSize(11.5).
+			ui.Text(c, "Roll Back Changes").FontSize(13).Bold().TextColor(p.Text).SingleLine()
+			ui.Text(c, "Roll back "+r.name+"? Unstaged changes are lost.").FontSize(11.5).
 				TextColor(p.TextMuted)
 			if r.err != "" {
 				ui.Text(c, r.err).FontSize(11).TextColor(p.Danger).SingleLine().Ellipsis("…")
 			}
 			ui.Row(c).Gap(8).Children(func() {
-				label := "回滚"
+				label := "Roll Back"
 				if r.busy {
-					label = "回滚中…"
+					label = "Rolling back…"
 				}
 				ui.Button(c, label).Disabled(r.busy).OnClick(m.ConfirmRollback)
-				ui.Button(c, "取消").OnClick(m.closeRollback)
+				ui.Button(c, "Cancel").OnClick(m.closeRollback)
 			})
 		})
 	})
@@ -340,7 +340,7 @@ func (m *Model) rollbackDialog(c *ui.Context, p *ui.Theme) {
 func (m *Model) SmokeStage(ctx context.Context) (map[string]any, error) {
 	root := m.Root()
 	if root == "" {
-		return nil, errors.New("没有打开项目")
+		return nil, errors.New("No project is open")
 	}
 	tmp := filepath.Join(root, "goidea-stage-smoke.txt")
 	if err := os.WriteFile(tmp, []byte("stage smoke\n"), 0o644); err != nil {

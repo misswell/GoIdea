@@ -116,7 +116,7 @@ func TestRunChooserDebugsTheCurrentFileRow(t *testing.T) {
 	if m.chooser != nil {
 		t.Fatalf("the chooser closed")
 	}
-	if m.debug.err != "先打开一个 Java 源文件" {
+	if m.debug.err != "Open a Java source file first" {
 		t.Fatalf("the current-file row debugs the context, got %q", m.debug.err)
 	}
 }

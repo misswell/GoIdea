@@ -78,11 +78,11 @@ func TestImplementationTitle(t *testing.T) {
 	m := &Model{}
 	m.impl.items = []implTarget{{path: "/p/A.java"}}
 	m.impl.name = "greet"
-	if got := m.implementationTitle(); got != "选择实现：greet（1）" {
+	if got := m.implementationTitle(); got != "Choose Implementation: greet (1)" {
 		t.Fatalf("title = %q", got)
 	}
 	m.impl.name = ""
-	if got := m.implementationTitle(); got != "选择实现（1）" {
+	if got := m.implementationTitle(); got != "Choose Implementation (1)" {
 		t.Fatalf("plain title = %q", got)
 	}
 }

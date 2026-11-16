@@ -21,9 +21,9 @@ func (m *Model) vcsRows(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	if len(m.vcs.files) == 0 {
-		hint := "没有未提交的更改"
+		hint := "No uncommitted changes"
 		if !m.vcs.loaded && !m.vcs.loading {
-			hint = "点“刷新”读取 Git 状态"
+			hint = "Press Refresh to read the Git status"
 		}
 		if m.vcs.loading {
 			hint = "Reading Git status…"
@@ -85,14 +85,14 @@ func (m *Model) vcsRow(c *ui.Context, p *ui.Theme, side string, i int, f openide
 			SingleLine().Ellipsis("…")
 		ui.Spacer(c)
 		if side == "staged" {
-			if m.rowChip(c, p, "vcs:unstage:"+f.Path, "取消暂存") {
+			if m.rowChip(c, p, "vcs:unstage:"+f.Path, "Unstage") {
 				m.UnstageChange(f)
 			}
 		} else {
-			if m.rowChip(c, p, "vcs:stage:"+f.Path, "暂存") {
+			if m.rowChip(c, p, "vcs:stage:"+f.Path, "Stage") {
 				m.StageChange(f)
 			}
-			if m.rowChip(c, p, "vcs:rollback:"+f.Path, "回滚") {
+			if m.rowChip(c, p, "vcs:rollback:"+f.Path, "Rollback") {
 				m.AskRollback(f)
 			}
 		}
@@ -132,25 +132,25 @@ func (m *Model) searchRows(c *ui.Context, p *ui.Theme) {
 	})
 	ui.Row(c).Padding(0, 8).Gap(6).AlignItems(ui.Center).Children(func() {
 		if s.running {
-			ui.Button(c, "停止").OnClick(func() {
+			ui.Button(c, "Stop").OnClick(func() {
 				m.cancelSearch()
 				m.invalidate()
 			})
 		} else {
-			ui.Button(c, "搜索").OnClick(func() { m.RunSearch() })
+			ui.Button(c, "Search").OnClick(func() { m.RunSearch() })
 		}
 		if s.scopePath != "" {
 			if rel, err := filepath.Rel(m.Root(), s.scopePath); err == nil {
-				ui.Text(c, "范围："+filepath.ToSlash(rel)).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+				ui.Text(c, "Scope: "+filepath.ToSlash(rel)).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
 			}
 		}
 		ui.Spacer(c)
 		text := s.summary
 		if s.running {
-			text = "搜索中…"
+			text = "Searching…"
 		}
 		if s.cancelled && text != "" {
-			text = "已停止 · " + text
+			text = "Stopped · " + text
 		}
 		if text != "" {
 			ui.Text(c, text).FontSize(10.5).TextColor(p.TextMuted).SingleLine().Ellipsis("…")
@@ -163,16 +163,16 @@ func (m *Model) searchRows(c *ui.Context, p *ui.Theme) {
 	}
 	if s.truncated {
 		ui.Row(c).Padding(4, 8).Children(func() {
-			ui.Text(c, "结果过多，仅显示前面的部分").FontSize(10.5).TextColor(p.TextMuted)
+			ui.Text(c, "Too many results; only the first ones are shown").FontSize(10.5).TextColor(p.TextMuted)
 		})
 	}
 	if len(s.files) == 0 {
-		hint := "输入关键词后按 Enter"
+		hint := "Type a query and press Enter"
 		switch {
 		case s.running:
-			hint = "正在遍历项目文件…"
+			hint = "Walking the project files…"
 		case s.done:
-			hint = "没有匹配"
+			hint = "No matches"
 		}
 		ui.Row(c).Padding(8, 8).Children(func() {
 			ui.Text(c, hint).FontSize(11.5).TextColor(p.TextMuted)
@@ -263,7 +263,7 @@ func (m *Model) treeRow(c *ui.Context, p *ui.Theme, row *treeNode) {
 				if bookmarked {
 					tone = p.Accent
 				}
-				ui.Text(c, "书签").FontSize(10.5).TextColor(tone).SingleLine()
+				ui.Text(c, "Bookmarks").FontSize(10.5).TextColor(tone).SingleLine()
 			})
 			if chip.Clicked() {
 				m.ToggleFolderBookmark(row.path, row.dir)
@@ -298,10 +298,10 @@ func (m *Model) bannerRow(c *ui.Context, p *ui.Theme) {
 		Children(func() {
 			ui.Text(c, m.banner).FontSize(12).TextColor(p.Warning).SingleLine().Ellipsis("…").Grow(1)
 			if m.bannerPath != "" {
-				ui.Button(c, "重新同步").OnClick(func() { m.resolveActive(false) })
-				ui.Button(c, "以本地为准").OnClick(func() { m.resolveActive(true) })
+				ui.Button(c, "Resync").OnClick(func() { m.resolveActive(false) })
+				ui.Button(c, "Keep Local").OnClick(func() { m.resolveActive(true) })
 			}
-			ui.Button(c, "关闭").OnClick(func() {
+			ui.Button(c, "Close").OnClick(func() {
 				m.banner, m.bannerPath = "", ""
 				m.invalidate()
 			})
@@ -428,23 +428,23 @@ func (m *Model) runPanel(c *ui.Context, p *ui.Theme) {
 		ui.Scroll(c).Grow(1).Children(func() {
 			ui.Column(c).Padding(8, 10).Children(func() {
 				if !m.run.trusted {
-					ui.Text(c, "此项目未受信任：构建和运行默认禁止。").
+					ui.Text(c, "This project is not trusted: building and running are disabled.").
 						FontSize(12).TextColor(p.TextMuted)
 					if m.run.trustErr != "" {
 						ui.Text(c, m.run.trustErr).FontSize(11.5).TextColor(p.Warning)
 					}
 					ui.Row(c).Padding(6, 0).Children(func() {
-						ui.Button(c, "信任此项目并启用运行").OnClick(func() { m.TrustProject() })
+						ui.Button(c, "Trust Project").OnClick(func() { m.TrustProject() })
 					})
 					return
 				}
 				if len(m.run.output) == 0 {
-					ui.Text(c, "尚无输出。按“运行”开始。").
+					ui.Text(c, "No output yet. Press Run to start.").
 						FontSize(11.5).TextColor(p.TextMuted)
 					return
 				}
 				if m.run.truncated {
-					ui.Text(c, "（输出过长，已省略较早的行）").
+					ui.Text(c, "(Output truncated: earlier lines were omitted)").
 						FontSize(11).TextColor(p.TextMuted)
 				}
 				ui.Text(c, m.run.renderText()).FontSize(11.5).TextColor(p.Text)
@@ -467,20 +467,20 @@ func (m *Model) buildPanel(c *ui.Context, p *ui.Theme) {
 		ui.Scroll(c).Grow(1).Children(func() {
 			ui.Column(c).Padding(8, 10).Children(func() {
 				if !m.run.trusted {
-					ui.Text(c, "此项目未受信任：构建默认禁止。").
+					ui.Text(c, "This project is not trusted: building is disabled.").
 						FontSize(12).TextColor(p.TextMuted)
 					ui.Row(c).Padding(6, 0).Children(func() {
-						ui.Button(c, "信任此项目并启用运行").OnClick(func() { m.TrustProject() })
+						ui.Button(c, "Trust Project").OnClick(func() { m.TrustProject() })
 					})
 					return
 				}
 				if len(b.output) == 0 {
-					ui.Text(c, "尚无输出。按“构建项目”开始。").
+					ui.Text(c, "No output yet. Press Build Project to start.").
 						FontSize(11.5).TextColor(p.TextMuted)
 					return
 				}
 				if b.truncated {
-					ui.Text(c, "（输出过长，已省略较早的行）").
+					ui.Text(c, "(Output truncated: earlier lines were omitted)").
 						FontSize(11).TextColor(p.TextMuted)
 				}
 				ui.Text(c, b.renderText()).FontSize(11.5).TextColor(p.Text)
@@ -493,10 +493,10 @@ func (m *Model) buildHeader(c *ui.Context, p *ui.Theme) {
 	b := &m.build
 	ui.Row(c).Height(30).Padding(0, 8).Gap(8).AlignItems(ui.Center).
 		BorderWidth(0, 0, 1, 0).BorderColor(p.Border).Children(func() {
-		ui.Text(c, "构建").FontSize(12).Bold().TextColor(p.Text)
+		ui.Text(c, "Build").FontSize(12).Bold().TextColor(p.Text)
 		title := b.title
 		if title == "" {
-			title = "构建"
+			title = "Build"
 		}
 		if b.system != "" {
 			title += " · " + b.system
@@ -508,12 +508,12 @@ func (m *Model) buildHeader(c *ui.Context, p *ui.Theme) {
 			ui.Text(c, summary).FontSize(11).TextColor(p.TextMuted).SingleLine().Ellipsis("…")
 		}
 		if b.busy {
-			ui.Button(c, "停止").OnClick(func() { m.StopBuild() })
+			ui.Button(c, "Stop").OnClick(func() { m.StopBuild() })
 		} else {
-			ui.Button(c, "构建").OnClick(func() { m.BuildProject() })
+			ui.Button(c, "Build").OnClick(func() { m.BuildProject() })
 		}
-		ui.Button(c, "清空").OnClick(func() { m.ClearBuild() })
-		ui.Button(c, "收起").OnClick(func() { m.ShowBuild() })
+		ui.Button(c, "Clear").OnClick(func() { m.ClearBuild() })
+		ui.Button(c, "Collapse").OnClick(func() { m.ShowBuild() })
 	})
 }
 
@@ -525,52 +525,52 @@ func (m *Model) buildSummaryText() string {
 		if b.progress != "" {
 			return b.progress
 		}
-		return "正在构建…"
+		return "Building…"
 	}
 	if b.success == nil {
 		return ""
 	}
 	if *b.success {
 		if b.warnings > 0 {
-			return fmt.Sprintf("成功 · %s · %d 个警告", formatBuildDuration(b.duration), b.warnings)
+			return fmt.Sprintf("Succeeded · %s · %d warnings", formatBuildDuration(b.duration), b.warnings)
 		}
-		return "成功 · " + formatBuildDuration(b.duration)
+		return "Succeeded · " + formatBuildDuration(b.duration)
 	}
-	return fmt.Sprintf("失败 · %d 个错误 · %d 个警告", b.errors, b.warnings)
+	return fmt.Sprintf("Failed · %d errors · %d warnings", b.errors, b.warnings)
 }
 
 func (m *Model) runHeader(c *ui.Context, p *ui.Theme) {
 	ui.Row(c).Height(30).Padding(0, 8).Gap(8).AlignItems(ui.Center).
 		BorderWidth(0, 0, 1, 0).BorderColor(p.Border).Children(func() {
-		ui.Text(c, "运行").FontSize(12).Bold().TextColor(p.Text)
+		ui.Text(c, "Run").FontSize(12).Bold().TextColor(p.Text)
 		// The section-8 readiness: when a state is missing, the header names
 		// it instead of failing silently.
 		if reason := m.readyFor(false); reason != "" && m.run.trusted {
 			ui.Text(c, reason).FontSize(10.5).TextColor(p.TextMuted).SingleLine().Grow(1)
 		} else if m.run.trusted {
 			ui.Button(c, "‹").OnClick(func() { m.CycleRunConfig(-1) })
-			name := "正在读取配置…"
+			name := "Reading configurations…"
 			if cfg := m.run.current(); cfg != nil {
 				name = cfg.Name
 			}
 			ui.Text(c, name).FontSize(12).TextColor(p.Text).SingleLine().Ellipsis("…").Grow(1)
 			ui.Button(c, "›").OnClick(func() { m.CycleRunConfig(1) })
 		} else {
-			ui.Text(c, "未信任的项目不会构建或运行").
+			ui.Text(c, "An untrusted project does not build or run").
 				FontSize(11.5).TextColor(p.TextMuted).SingleLine().Ellipsis("…").Grow(1)
 		}
 		if m.run.running || m.run.awaiting {
-			ui.Button(c, "停止").OnClick(func() { m.StopRun() })
+			ui.Button(c, "Stop").OnClick(func() { m.StopRun() })
 		} else {
 			// The failed-tests rerun sits next to Run, as upstream RunView's
 			// toolbar does when the run reported tests.
 			if m.run.tests != nil && len(adapter.FailedTestPaths(m.run.tests)) > 0 {
-				ui.Button(c, "重跑失败测试").OnClick(func() { m.RerunFailedTests() })
+				ui.Button(c, "Rerun Failed Tests").OnClick(func() { m.RerunFailedTests() })
 			}
-			ui.Button(c, "运行").OnClick(func() { m.Run() })
+			ui.Button(c, "Run").OnClick(func() { m.Run() })
 		}
-		ui.Button(c, "清空").OnClick(func() { m.ClearRun() })
-		ui.Button(c, "收起").OnClick(func() { m.ShowRun() })
+		ui.Button(c, "Clear").OnClick(func() { m.ClearRun() })
+		ui.Button(c, "Collapse").OnClick(func() { m.ShowRun() })
 	})
 }
 
@@ -605,32 +605,32 @@ func (m *Model) termPanel(c *ui.Context, p *ui.Theme) {
 	col.Children(func() {
 		ui.Row(c).Height(30).Shrink(0).Padding(0, 8).Gap(6).AlignItems(ui.Center).
 			BorderWidth(0, 0, 1, 0).BorderColor(p.Border).Children(func() {
-			ui.Text(c, "终端").FontSize(12).Bold().TextColor(p.Text)
+			ui.Text(c, "Terminal").FontSize(12).Bold().TextColor(p.Text)
 			if n := t.total(); n > 0 {
-				ui.Text(c, fmt.Sprintf("%d 个会话", n)).
+				ui.Text(c, count(n, "session", "sessions")).
 					FontSize(11).TextColor(p.TextMuted)
 			}
 			ui.Spacer(c)
-			ui.Button(c, "新建").OnClick(func() { m.OpenTermTab() })
+			ui.Button(c, "New").OnClick(func() { m.OpenTermTab() })
 			ui.Button(c, "⌄").OnClick(func() { m.OpenTermShellPicker() })
-			ui.Button(c, "拆分").OnClick(func() { m.SplitTermRight() })
-			ui.Button(c, "拆分↓").OnClick(func() { m.SplitTermDown() })
+			ui.Button(c, "Split").OnClick(func() { m.SplitTermRight() })
+			ui.Button(c, "Split Down").OnClick(func() { m.SplitTermDown() })
 			if t.split != "" {
-				ui.Button(c, "合并").OnClick(func() { m.UnsplitTerm() })
+				ui.Button(c, "Unsplit").OnClick(func() { m.UnsplitTerm() })
 			}
 			if s := t.current(); s == nil || (s.id == 0 && !s.starting) {
-				ui.Button(c, "启动").OnClick(func() { m.SpawnTerm() })
+				ui.Button(c, "Start").OnClick(func() { m.SpawnTerm() })
 			} else {
-				ui.Button(c, "结束").OnClick(func() { m.KillTerm() })
+				ui.Button(c, "Kill").OnClick(func() { m.KillTerm() })
 			}
-			ui.Button(c, "清空").OnClick(func() { m.ClearTerm() })
-			ui.Button(c, "收起").OnClick(func() { m.ShowTerm() })
+			ui.Button(c, "Clear").OnClick(func() { m.ClearTerm() })
+			ui.Button(c, "Collapse").OnClick(func() { m.ShowTerm() })
 		})
 		if t.err != "" {
 			ui.Row(c).Shrink(0).Padding(4, 10).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, t.err).FontSize(11.5).TextColor(p.Danger).
 					SingleLine().Ellipsis("…").Grow(1)
-				ui.Button(c, "关闭").OnClick(func() {
+				ui.Button(c, "Close").OnClick(func() {
 					t.err = ""
 					m.invalidate()
 				})
@@ -639,7 +639,7 @@ func (m *Model) termPanel(c *ui.Context, p *ui.Theme) {
 		if t.finding {
 			ui.Row(c).Height(30).Shrink(0).Padding(3, 8).Gap(6).AlignItems(ui.Center).
 				BorderWidth(0, 0, 1, 0).BorderColor(p.Border).Children(func() {
-				ui.Text(c, "查找").FontSize(11.5).TextColor(p.TextMuted)
+				ui.Text(c, "Find").FontSize(11.5).TextColor(p.TextMuted)
 				in := ui.TextInput(c, &t.find).Grow(1)
 				if in.Submitted() {
 					m.FindTermStep(1)
@@ -647,9 +647,9 @@ func (m *Model) termPanel(c *ui.Context, p *ui.Theme) {
 				if label := m.termFindLabel(); label != "" {
 					ui.Text(c, label).FontSize(11).TextColor(p.TextMuted)
 				}
-				ui.Button(c, "上一个").OnClick(func() { m.FindTermStep(-1) })
-				ui.Button(c, "下一个").OnClick(func() { m.FindTermStep(1) })
-				ui.Button(c, "关闭").OnClick(func() { m.HideTermFind() })
+				ui.Button(c, "Previous").OnClick(func() { m.FindTermStep(-1) })
+				ui.Button(c, "Next").OnClick(func() { m.FindTermStep(1) })
+				ui.Button(c, "Close").OnClick(func() { m.HideTermFind() })
 			})
 		}
 		if t.split != "" && len(t.groups) > 1 {
@@ -688,13 +688,13 @@ func (m *Model) termPaneBody(c *ui.Context, p *ui.Theme, g int) {
 				s := &gr.tabs[i]
 				label := s.shell
 				if label == "" {
-					label = fmt.Sprintf("终端 %d", i+1)
+					label = fmt.Sprintf("Terminal %d", i+1)
 				}
 				switch {
 				case s.starting:
-					label = "正在启动…"
+					label = "Starting…"
 				case s.id == 0 && s.ended:
-					label += "（已结束）"
+					label += " (ended)"
 				}
 				selected := t.active == g && gr.active == i
 				tabColor := p.TextMuted
@@ -720,7 +720,7 @@ func (m *Model) termPaneBody(c *ui.Context, p *ui.Theme, g int) {
 				}
 			}
 			if len(gr.tabs) == 0 {
-				ui.Text(c, "未运行").FontSize(11.5).TextColor(p.TextMuted)
+				ui.Text(c, "Not running").FontSize(11.5).TextColor(p.TextMuted)
 			}
 			ui.Spacer(c)
 			if t.split != "" {
@@ -737,15 +737,15 @@ func (m *Model) termPaneBody(c *ui.Context, p *ui.Theme, g int) {
 		scroll.Children(func() {
 			ui.Column(c).Padding(8, 10).Children(func() {
 				if s == nil || len(s.lines) == 0 {
-					hint := "终端输出显示在这里。Enter 发送这一行。"
+					hint := "The terminal's output appears here. Enter sends the line."
 					if s == nil || (s.id == 0 && !s.starting) {
-						hint = "点“新建”打开一个登录 shell。"
+						hint = "Press New to open a login shell."
 					}
 					ui.Text(c, hint).FontSize(11.5).TextColor(p.TextMuted)
 					return
 				}
 				if s.truncated {
-					ui.Text(c, "（输出过长，已省略较早的行）").
+					ui.Text(c, "(Output truncated: earlier lines were omitted)").
 						FontSize(11).TextColor(p.TextMuted)
 				}
 				var hits map[int]bool
@@ -799,7 +799,7 @@ func (m *Model) debugPanel(c *ui.Context, p *ui.Theme) {
 				Background(p.Background).Children(func() {
 				ui.Text(c, m.debug.err).FontSize(11.5).TextColor(p.Danger).
 					SingleLine().Ellipsis("…").Grow(1)
-				ui.Button(c, "关闭").OnClick(func() {
+				ui.Button(c, "Close").OnClick(func() {
 					m.debug.err = ""
 					m.invalidate()
 				})
@@ -817,28 +817,28 @@ func (m *Model) debugHeader(c *ui.Context, p *ui.Theme) {
 	d := &m.debug
 	ui.Row(c).Height(30).Shrink(0).Padding(0, 8).Gap(8).AlignItems(ui.Center).
 		BorderWidth(0, 0, 1, 0).BorderColor(p.Border).Children(func() {
-		ui.Text(c, "调试").FontSize(12).Bold().TextColor(p.Text)
+		ui.Text(c, "Debug").FontSize(12).Bold().TextColor(p.Text)
 		config := d.config
 		if config == "" {
-			config = "当前文件的主类"
+			config = "Main class of the current file"
 		}
 		ui.Text(c, config).FontSize(12).TextColor(p.TextMuted).
 			SingleLine().Ellipsis("…").Grow(1)
 		if d.session == 0 && !d.starting {
-			ui.Button(c, "调试").OnClick(func() { m.Debug() })
+			ui.Button(c, "Debug").OnClick(func() { m.Debug() })
 		}
 		if d.paused {
-			ui.Button(c, "继续").OnClick(func() { m.DebugContinue() })
-			ui.Button(c, "步过").OnClick(func() { m.StepOver() })
-			ui.Button(c, "步入").OnClick(func() { m.StepInto() })
-			ui.Button(c, "步出").OnClick(func() { m.StepOut() })
+			ui.Button(c, "Resume").OnClick(func() { m.DebugContinue() })
+			ui.Button(c, "Step Over").OnClick(func() { m.StepOver() })
+			ui.Button(c, "Step Into").OnClick(func() { m.StepInto() })
+			ui.Button(c, "Step Out").OnClick(func() { m.StepOut() })
 		} else if d.session != 0 && !d.ended {
-			ui.Button(c, "暂停").OnClick(func() { m.DebugPause() })
+			ui.Button(c, "Pause").OnClick(func() { m.DebugPause() })
 		}
 		if d.session != 0 && !d.ended {
-			ui.Button(c, "停止").OnClick(func() { m.StopDebug() })
+			ui.Button(c, "Stop").OnClick(func() { m.StopDebug() })
 		}
-		ui.Button(c, "收起").OnClick(func() { m.ShowDebug() })
+		ui.Button(c, "Collapse").OnClick(func() { m.ShowDebug() })
 	})
 }
 
@@ -847,9 +847,9 @@ func (m *Model) debugFrames(c *ui.Context, p *ui.Theme) {
 	ui.Column(c).Width(260).Shrink(0).MinHeight(0).
 		BorderWidth(0, 1, 0, 0).BorderColor(p.Border).Children(func() {
 		ui.Row(c).Height(24).Padding(0, 8).AlignItems(ui.Center).Children(func() {
-			thread := "调用栈"
+			thread := "Call Stack"
 			if len(d.threads) > 0 {
-				thread = fmt.Sprintf("调用栈 · %s", d.threads[0].Name)
+				thread = fmt.Sprintf("Call Stack · %s", d.threads[0].Name)
 			}
 			ui.Text(c, thread).FontSize(11.5).Bold().TextColor(p.TextMuted).
 				SingleLine().Ellipsis("…")
@@ -886,9 +886,9 @@ func (m *Model) debugVars(c *ui.Context, p *ui.Theme) {
 	ui.Column(c).Width(320).Shrink(0).MinHeight(0).
 		BorderWidth(0, 1, 0, 0).BorderColor(p.Border).Children(func() {
 		ui.Row(c).Height(24).Padding(0, 8).AlignItems(ui.Center).Children(func() {
-			name := "变量"
+			name := "Variables"
 			if len(d.scopes) > 0 {
-				name = "变量 · " + d.scopes[0].Name
+				name = "Variables · " + d.scopes[0].Name
 			}
 			ui.Text(c, name).FontSize(11.5).Bold().TextColor(p.TextMuted).
 				SingleLine().Ellipsis("…")
@@ -908,7 +908,7 @@ func (m *Model) debugVars(c *ui.Context, p *ui.Theme) {
 					} else if d.paused && d.evalBusy {
 						value = "…"
 					} else if value == "" {
-						value = "（空）"
+						value = "(empty)"
 					}
 					ui.Text(c, value).FontSize(11.5).TextColor(color).
 						SingleLine().Ellipsis("…").Grow(1)
@@ -921,9 +921,9 @@ func (m *Model) debugVars(c *ui.Context, p *ui.Theme) {
 				if len(d.watches) > 0 {
 					return
 				}
-				hint := "暂停后显示局部变量"
+				hint := "Local variables appear when paused"
 				if d.paused {
-					hint = "没有局部变量"
+					hint = "No local variables"
 				}
 				ui.Row(c).Padding(8, 8).Children(func() {
 					ui.Text(c, hint).FontSize(11.5).TextColor(p.TextMuted)
@@ -944,7 +944,7 @@ func (m *Model) debugVars(c *ui.Context, p *ui.Theme) {
 		ui.Row(c).Height(32).Shrink(0).Padding(0, 8).Gap(6).AlignItems(ui.Center).
 			BorderWidth(1, 0, 0, 0).BorderColor(p.Border).Children(func() {
 			if !d.paused {
-				ui.Text(c, "暂停后可在当前帧求值").FontSize(10.5).
+				ui.Text(c, "Evaluate in the current frame when paused").FontSize(10.5).
 					TextColor(p.TextMuted).SingleLine().Ellipsis("…")
 				return
 			}
@@ -952,7 +952,7 @@ func (m *Model) debugVars(c *ui.Context, p *ui.Theme) {
 			if in.Submitted() {
 				m.SubmitWatch()
 			}
-			ui.Button(c, "求值").Disabled(d.evalBusy).OnClick(func() { m.SubmitWatch() })
+			ui.Button(c, "Evaluate").Disabled(d.evalBusy).OnClick(func() { m.SubmitWatch() })
 		})
 	})
 }
@@ -961,18 +961,18 @@ func (m *Model) debugConsole(c *ui.Context, p *ui.Theme) {
 	d := &m.debug
 	ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Children(func() {
 		ui.Row(c).Height(24).Padding(0, 8).Children(func() {
-			ui.Text(c, "调试控制台").FontSize(11.5).Bold().TextColor(p.TextMuted)
+			ui.Text(c, "Debug Console").FontSize(11.5).Bold().TextColor(p.TextMuted)
 		})
 		ui.Scroll(c).Grow(1).Children(func() {
 			if len(d.output) == 0 {
 				ui.Row(c).Padding(8, 8).Children(func() {
-					ui.Text(c, "程序的输出显示在这里").FontSize(11.5).TextColor(p.TextMuted)
+					ui.Text(c, "The program's output appears here").FontSize(11.5).TextColor(p.TextMuted)
 				})
 				return
 			}
 			if d.truncated {
 				ui.Row(c).Padding(4, 8).Children(func() {
-					ui.Text(c, "（输出过长，已省略较早的行）").
+					ui.Text(c, "(Output truncated: earlier lines were omitted)").
 						FontSize(11).TextColor(p.TextMuted)
 				})
 			}

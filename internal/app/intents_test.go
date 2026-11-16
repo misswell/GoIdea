@@ -40,18 +40,18 @@ func TestParseIntentActionsWithoutKind(t *testing.T) {
 
 func TestIntentKindLabel(t *testing.T) {
 	cases := map[string]string{
-		"":                       "操作",
-		"quickfix":               "快速修复",
-		"refactor":               "重构",
-		"refactor.extract":       "提取",
-		"refactor.inline":        "内联",
-		"refactor.move":          "移动",
-		"refactor.rewrite":       "改写",
-		"refactor.rewrite.var":   "改写",
-		"source":                 "源码",
-		"source.organizeImports": "整理导入",
-		"source.fixAll":          "修复全部",
-		"other.kind":             "操作",
+		"":                       "Action",
+		"quickfix":               "Quick Fix",
+		"refactor":               "Refactor",
+		"refactor.extract":       "Extract",
+		"refactor.inline":        "Inline",
+		"refactor.move":          "Move",
+		"refactor.rewrite":       "Rewrite",
+		"refactor.rewrite.var":   "Rewrite",
+		"source":                 "Source",
+		"source.organizeImports": "Optimize Imports",
+		"source.fixAll":          "Fix All",
+		"other.kind":             "Action",
 	}
 	for kind, want := range cases {
 		if got := intentKindLabel(kind); got != want {

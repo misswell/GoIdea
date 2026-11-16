@@ -26,19 +26,19 @@ func hotSwapMessage(changed int, errors []string, bottomFrame bool) (string, str
 		}
 	}
 	if len(errors) > 0 {
-		body := "活动栈帧在返回前继续运行旧代码；新的调用使用重载后的代码。"
+		body := "Active frames keep running the old code until they return; new calls use the reloaded code."
 		if bottomFrame {
-			body += " 最底层的栈帧无法重置：重新进入该方法或重启调试会话以运行新代码。"
+			body += " The lowest stack frame cannot be reset: re-enter the method or restart the debug session to run the new code."
 		}
-		return "warning", "类已重新加载", body
+		return "warning", "Classes reloaded", body
 	}
 	if changed == 0 {
-		return "info", "已加载的类是最新的，没有需要重新加载的内容。", ""
+		return "info", "The loaded classes are current; nothing to reload.", ""
 	}
 	if changed == 1 {
-		return "info", "已重新加载 1 个类", ""
+		return "info", "Reloaded 1 class", ""
 	}
-	return "info", fmt.Sprintf("已重新加载 %d 个类", changed), ""
+	return "info", fmt.Sprintf("Reloaded %d classes", changed), ""
 }
 
 // HotSwapReload is debug.reloadChangedClasses: compile the changed classes
@@ -46,7 +46,7 @@ func hotSwapMessage(changed int, errors []string, bottomFrame bool) (string, str
 // refuses the reload instead of applying stale classes.
 func (m *Model) HotSwapReload() {
 	if m.debug.session == 0 || m.debug.ended {
-		m.debug.err = "没有可以重新加载类的调试会话"
+		m.debug.err = "There is no debug session to reload classes into"
 		m.invalidate()
 		return
 	}
@@ -55,7 +55,7 @@ func (m *Model) HotSwapReload() {
 	}
 	m.debug.reloading = true
 	m.debug.hotSwapStage = "called"
-	m.debug.status = "正在编译变更的类…"
+	m.debug.status = "Compiling the changed classes…"
 	m.invalidate()
 	go func() {
 		defer func() { m.post(func() { m.debug.reloading = false }) }()
@@ -104,14 +104,14 @@ func (m *Model) HotSwapReload() {
 			"module": module, "request": m.nextRequest(),
 		})
 		if err != nil {
-			done("error", "Hot Swap failed", "编译失败：修复错误后重新加载。("+err.Error()+")")
+			done("error", "Hot Swap failed", "Compilation failed: fix the errors and reload. ("+err.Error()+")")
 			return
 		}
 		var buildStatus string
 		_ = json.Unmarshal(raw, &buildStatus)
 		m.post(func() { m.debug.hotSwapBuild = buildStatus })
 		if buildStatus == "failed" || buildStatus == "withErrors" || buildStatus == "" {
-			done("error", "Hot Swap failed", "编译失败：修复错误后重新加载。（编译状态："+buildStatus+"）")
+			done("error", "Hot Swap failed", "Compilation failed: fix the errors and reload. (Compiler state: "+buildStatus+"）")
 			return
 		}
 		// Reload into the session.
@@ -146,6 +146,6 @@ func (m *Model) offerHotSwapAfterBuild() {
 	if m.debug.session == 0 || m.debug.ended {
 		return
 	}
-	m.notifyInfo("debug.hotswap", "jdtls 已完成编译", "可以重新加载变更的类到调试会话。")
+	m.notifyInfo("debug.hotswap", "jdtls finished compiling", "The changed classes can be reloaded into the debug session.")
 	m.invalidate()
 }

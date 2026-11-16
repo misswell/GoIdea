@@ -104,7 +104,7 @@ func (m *Model) loadBuildModel() {
 				return
 			}
 			if err != nil {
-				m.maven.err = "读取构建模型失败：" + err.Error()
+				m.maven.err = "Could not read the build model: " + err.Error()
 			} else {
 				m.maven.model = model
 				m.refreshReadiness()
@@ -134,14 +134,14 @@ func (m *Model) mavenPanel(c *ui.Context, p *ui.Theme) {
 			}
 			ui.Spacer(c)
 			if m.maven.loading {
-				ui.Text(c, "读取中…").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+				ui.Text(c, "Loading…").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
 			}
 			b := ui.ButtonBase(c.Key("maven:refresh")).Height(20).Padding(0, 6).Radius(4).
 				AlignItems(ui.Center).Cursor(ui.CursorPointer)
 			if b.Hovered() {
 				b.Background(p.SurfaceHover)
 			}
-			b.Children(func() { ui.Text(c, "刷新").FontSize(10.5).TextColor(p.TextMuted).SingleLine() })
+			b.Children(func() { ui.Text(c, "Refresh").FontSize(10.5).TextColor(p.TextMuted).SingleLine() })
 			b.OnClick(func() { m.loadBuildModel() })
 		})
 		if m.maven.err != "" {
@@ -166,7 +166,7 @@ func (m *Model) mavenPanel(c *ui.Context, p *ui.Theme) {
 					}
 				}
 				if m.maven.model.Maven == nil && len(m.maven.model.Gradle) == 0 && !m.maven.loading && m.maven.err == "" {
-					ui.Text(c, "没有 Maven/Gradle 构建").FontSize(11).TextColor(p.TextMuted).Padding(8, 8).SingleLine()
+					ui.Text(c, "No Maven/Gradle build").FontSize(11).TextColor(p.TextMuted).Padding(8, 8).SingleLine()
 				}
 			})
 		})
@@ -274,7 +274,7 @@ func (m *Model) SmokeMaven(ctx context.Context) (map[string]any, error) {
 			return out, nil
 		}
 		if time.Now().After(deadline) {
-			return out, fmt.Errorf("读取构建模型超时")
+			return out, fmt.Errorf("Reading the build model timed out")
 		}
 		select {
 		case <-ctx.Done():

@@ -135,12 +135,12 @@ func (m *Model) selectCommit(i int) {
 			}
 			m.log.detailing = false
 			if detailsErr != nil {
-				m.log.detailErr = "读取提交详情失败：" + detailsErr.Error()
+				m.log.detailErr = "Could not read the commit: " + detailsErr.Error()
 			} else {
 				m.log.details = details
 			}
 			if changesErr != nil && m.log.detailErr == "" {
-				m.log.detailErr = "读取提交文件失败：" + changesErr.Error()
+				m.log.detailErr = "Could not read the commit's files: " + changesErr.Error()
 			}
 			m.log.changes = changes
 			m.invalidate()
@@ -215,17 +215,17 @@ func (m *Model) logPanel(c *ui.Context, p *ui.Theme) {
 	col.Children(func() {
 		ui.Row(c).Height(30).Padding(0, 8).Gap(8).AlignItems(ui.Center).
 			BorderWidth(0, 0, 1, 0).BorderColor(p.Border).Children(func() {
-			ui.Text(c, "Git 日志").FontSize(12).Bold().TextColor(p.Text)
-			ui.Text(c, "提交历史").FontSize(12).TextColor(p.TextMuted)
+			ui.Text(c, "Git Log").FontSize(12).Bold().TextColor(p.Text)
+			ui.Text(c, "Commit History").FontSize(12).TextColor(p.TextMuted)
 			ui.Spacer(c)
 			if l.loading {
-				ui.Text(c, "正在读取…").FontSize(11).TextColor(p.TextMuted)
+				ui.Text(c, "Reading…").FontSize(11).TextColor(p.TextMuted)
 			} else if l.loaded {
-				ui.Text(c, fmt.Sprintf("最近 %d 个提交", len(l.commits))).
+				ui.Text(c, fmt.Sprintf("The last %d commits", len(l.commits))).
 					FontSize(11).TextColor(p.TextMuted)
 			}
-			ui.Button(c, "刷新").OnClick(func() { m.RefreshLog() })
-			ui.Button(c, "关闭").OnClick(func() { m.CloseLog() })
+			ui.Button(c, "Refresh").OnClick(func() { m.RefreshLog() })
+			ui.Button(c, "Close").OnClick(func() { m.CloseLog() })
 		})
 		ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
 			ui.Column(c).Width(420).Children(func() {
@@ -249,11 +249,11 @@ func (m *Model) logRows(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	if !l.loaded && l.loading {
-		ui.Text(c, "正在读取提交历史…").FontSize(11.5).TextColor(p.TextMuted)
+		ui.Text(c, "Reading the commit history…").FontSize(11.5).TextColor(p.TextMuted)
 		return
 	}
 	if len(l.commits) == 0 {
-		ui.Text(c, "没有提交记录").FontSize(11.5).TextColor(p.TextMuted)
+		ui.Text(c, "No commits").FontSize(11.5).TextColor(p.TextMuted)
 		return
 	}
 	for i, cm := range l.commits {
@@ -285,7 +285,7 @@ func (m *Model) logRows(c *ui.Context, p *ui.Theme) {
 func (m *Model) logDetails(c *ui.Context, p *ui.Theme) {
 	l := &m.log
 	if l.selected < 0 || l.selected >= len(l.commits) {
-		ui.Text(c, "选择一个提交查看详情").FontSize(11.5).TextColor(p.TextMuted)
+		ui.Text(c, "Select a commit to see its details").FontSize(11.5).TextColor(p.TextMuted)
 		return
 	}
 	cm := l.commits[l.selected]
@@ -293,7 +293,7 @@ func (m *Model) logDetails(c *ui.Context, p *ui.Theme) {
 		ui.Text(c, cm.Summary).FontSize(12.5).Bold().TextColor(p.Text)
 		ui.Text(c, cm.ShortID+" · "+cm.Author).FontSize(11).TextColor(p.TextMuted)
 		if l.detailing {
-			ui.Text(c, "正在读取提交详情…").FontSize(11).TextColor(p.TextMuted)
+			ui.Text(c, "Reading the commit…").FontSize(11).TextColor(p.TextMuted)
 		}
 		if l.detailErr != "" {
 			ui.Text(c, l.detailErr).FontSize(11.5).TextColor(p.Warning)
@@ -308,16 +308,16 @@ func (m *Model) logDetails(c *ui.Context, p *ui.Theme) {
 			})
 		}
 		if len(l.details.ContainingBranches) > 0 {
-			ui.Text(c, "所在分支："+strings.Join(l.details.ContainingBranches, ", ")).
+			ui.Text(c, "Branches: "+strings.Join(l.details.ContainingBranches, ", ")).
 				FontSize(11).TextColor(p.TextMuted).SingleLine().Ellipsis("…")
 		}
 		if l.details.Signature != "" {
-			ui.Text(c, "签名："+l.details.Signature).FontSize(11).TextColor(p.TextMuted)
+			ui.Text(c, "Signed by: "+l.details.Signature).FontSize(11).TextColor(p.TextMuted)
 		}
 		if len(l.changes) == 0 {
 			return
 		}
-		ui.Text(c, fmt.Sprintf("%d 个文件", len(l.changes))).FontSize(11).TextColor(p.TextMuted)
+		ui.Text(c, count(len(l.changes), "file", "files")).FontSize(11).TextColor(p.TextMuted)
 		ui.Scroll(c).Grow(1).Children(func() {
 			ui.Column(c).Children(func() {
 				for i, ch := range l.changes {

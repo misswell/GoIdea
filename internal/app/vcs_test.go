@@ -15,15 +15,15 @@ func TestVCSBadge(t *testing.T) {
 		unstaged     *string
 		letter, word string
 	}{
-		{"modified in worktree", nil, str("modified"), "M", "已修改"},
-		{"staged addition", str("added"), nil, "A", "新增"},
-		{"staged and edited", str("added"), str("modified"), "M", "已修改"},
-		{"deleted", nil, str("deleted"), "D", "已删除"},
-		{"renamed", str("renamed"), nil, "R", "已重命名"},
-		{"conflicted", nil, str("conflicted"), "!", "冲突"},
-		{"untracked", nil, str("untracked"), "U", "未跟踪"},
-		{"ignored", nil, str("ignored"), "I", "已忽略"},
-		{"no kind", nil, nil, "?", "已更改"},
+		{"modified in worktree", nil, str("modified"), "M", "Modified"},
+		{"staged addition", str("added"), nil, "A", "Added"},
+		{"staged and edited", str("added"), str("modified"), "M", "Modified"},
+		{"deleted", nil, str("deleted"), "D", "Deleted"},
+		{"renamed", str("renamed"), nil, "R", "Renamed"},
+		{"conflicted", nil, str("conflicted"), "!", "Conflict"},
+		{"untracked", nil, str("untracked"), "U", "Untracked"},
+		{"ignored", nil, str("ignored"), "I", "Ignored"},
+		{"no kind", nil, nil, "?", "Changed"},
 	}
 	for _, c := range cases {
 		f := openidea.FileStatus{RelPath: "a.java", Staged: c.staged, Unstaged: c.unstaged}

@@ -129,9 +129,9 @@ func (m *Model) finishImplementations(locs []openidea.Location, err error) {
 	}
 	switch {
 	case err != nil:
-		m.status = "查找实现失败：" + err.Error()
+		m.status = "Finding implementations failed: " + err.Error()
 	case len(locs) == 0:
-		m.status = "未找到实现"
+		m.status = "No implementation found"
 	case len(locs) == 1:
 		m.impl.found = 1
 		m.openImplTarget(implTargetOf(locs[0]))
@@ -172,9 +172,9 @@ func (m *Model) implHas(t implTarget) bool {
 
 func (m *Model) implementationTitle() string {
 	if m.impl.name == "" {
-		return fmt.Sprintf("选择实现（%d）", len(m.impl.items))
+		return fmt.Sprintf("Choose Implementation (%d)", len(m.impl.items))
 	}
-	return fmt.Sprintf("选择实现：%s（%d）", m.impl.name, len(m.impl.items))
+	return fmt.Sprintf("Choose Implementation: %s (%d)", m.impl.name, len(m.impl.items))
 }
 
 // stepImplementation moves the chooser's selection, wrapping around.
@@ -216,7 +216,7 @@ func (m *Model) openImplTarget(t implTarget) {
 	m.impl.landed = t.path
 	m.impl.done = true
 	if strings.Contains(t.path, "://") {
-		m.status = "实现在外部依赖中，无法作为文件打开"
+		m.status = "The implementation is in an external dependency and cannot open as a file"
 		m.invalidate()
 		return
 	}
@@ -263,9 +263,9 @@ func (m *Model) implementationDialog(c *ui.Context, p *ui.Theme) {
 	ui.Modal(c, &open, func() {
 		ui.Column(c).Width(560).Gap(8).Children(func() {
 			ui.Text(c, title).FontSize(13).Bold().TextColor(p.Text).SingleLine().Ellipsis("…")
-			hint := fmt.Sprintf("%d 个实现 · Enter 打开 · Esc 取消", len(items))
+			hint := fmt.Sprintf("%s · Enter opens · Esc cancels", count(len(items), "implementation", "implementations"))
 			if busy {
-				hint = fmt.Sprintf("%d 个实现 · 继续查找中… · Esc 取消", len(items))
+				hint = fmt.Sprintf("%s · still searching… · Esc cancels", count(len(items), "implementation", "implementations"))
 			}
 			ui.Text(c, hint).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
 			root := m.Root()
@@ -318,7 +318,7 @@ func (m *Model) SmokeTypeDeclaration(ctx context.Context, relFile, needle string
 	out := map[string]any{}
 	root := m.Root()
 	if root == "" {
-		return out, fmt.Errorf("没有打开项目")
+		return out, fmt.Errorf("No project is open")
 	}
 	if _, err := m.mgr.Invoke(ctx, Window, "project_trust_set", map[string]any{
 		"path": root, "trusted": true, "folder": true,
@@ -335,7 +335,7 @@ func (m *Model) SmokeTypeDeclaration(ctx context.Context, relFile, needle string
 	}
 	off := strings.Index(string(src), needle)
 	if off < 0 {
-		return out, fmt.Errorf("%s 里没有 %q", relFile, needle)
+		return out, fmt.Errorf("%q was not found in %s", relFile, needle)
 	}
 	out["file"], out["needle"] = relFile, needle
 	m.post(func() { m.openFile(path) })
@@ -347,7 +347,7 @@ func (m *Model) SmokeTypeDeclaration(ctx context.Context, relFile, needle string
 			break
 		}
 		if time.Now().After(deadline) {
-			return out, fmt.Errorf("打开 %s 超时", relFile)
+			return out, fmt.Errorf("Opening %s timed out", relFile)
 		}
 		select {
 		case <-ctx.Done():
@@ -380,7 +380,7 @@ func (m *Model) SmokeTypeDeclaration(ctx context.Context, relFile, needle string
 			return out, nil
 		}
 		if time.Now().After(deadline) {
-			return out, fmt.Errorf("类型声明查找没有返回")
+			return out, fmt.Errorf("Finding the type declaration returned nothing")
 		}
 		select {
 		case <-ctx.Done():
@@ -396,7 +396,7 @@ func (m *Model) SmokeImplementation(ctx context.Context, relFile, needle string)
 	out := map[string]any{}
 	root := m.Root()
 	if root == "" {
-		return out, fmt.Errorf("没有打开项目")
+		return out, fmt.Errorf("No project is open")
 	}
 	if _, err := m.mgr.Invoke(ctx, Window, "project_trust_set", map[string]any{
 		"path": root, "trusted": true, "folder": true,
@@ -413,7 +413,7 @@ func (m *Model) SmokeImplementation(ctx context.Context, relFile, needle string)
 	}
 	off := strings.Index(string(src), needle)
 	if off < 0 {
-		return out, fmt.Errorf("%s 里没有 %q", relFile, needle)
+		return out, fmt.Errorf("%q was not found in %s", relFile, needle)
 	}
 	out["file"], out["needle"] = relFile, needle
 	m.post(func() { m.openFile(path) })
@@ -425,7 +425,7 @@ func (m *Model) SmokeImplementation(ctx context.Context, relFile, needle string)
 			break
 		}
 		if time.Now().After(deadline) {
-			return out, fmt.Errorf("打开 %s 超时", relFile)
+			return out, fmt.Errorf("Opening %s timed out", relFile)
 		}
 		select {
 		case <-ctx.Done():
@@ -476,7 +476,7 @@ func (m *Model) SmokeImplementation(ctx context.Context, relFile, needle string)
 			return out, nil
 		}
 		if time.Now().After(deadline) {
-			return out, fmt.Errorf("查找实现没有返回")
+			return out, fmt.Errorf("Finding implementations returned nothing")
 		}
 		select {
 		case <-ctx.Done():

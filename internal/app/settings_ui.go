@@ -120,7 +120,7 @@ func (m *Model) SetThemePref(theme string) {
 	m.prefs.Theme = theme
 	m.applyPreferences()
 	m.savePreferences()
-	m.status = "外观已更新"
+	m.status = "Appearance updated"
 	m.invalidate()
 }
 
@@ -150,7 +150,7 @@ func (m *Model) setFontSize(size int) {
 	m.prefs.FontSize = float32(size)
 	m.applyPreferences()
 	m.savePreferences()
-	m.status = fmt.Sprintf("编辑器字号 %d", size)
+	m.status = fmt.Sprintf("Editor font size %d", size)
 	m.invalidate()
 }
 
@@ -173,7 +173,7 @@ func (m *Model) savePreferences() {
 		return
 	}
 	if err := m.prefs.Save(m.cfg.SettingsPath); err != nil {
-		m.status = "保存设置失败：" + err.Error()
+		m.status = "Saving settings failed: " + err.Error()
 	}
 }
 
@@ -227,9 +227,9 @@ func (m *Model) SmokeSettings() map[string]any {
 // install action, so a fresh data directory can get a working Java toolchain
 // without leaving the app.
 func (m *Model) javaToolsSection(c *ui.Context, p *ui.Theme) {
-	ui.Text(c, "Java 语言服务与调试器").FontSize(11).TextColor(p.TextMuted).SingleLine()
+	ui.Text(c, "Java Language Services and Debugger").FontSize(11).TextColor(p.TextMuted).SingleLine()
 	if m.Root() == "" {
-		ui.Text(c, "打开一个 Java 项目后可安装").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+		ui.Text(c, "Open a Java project to install it").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
 		return
 	}
 	busy := m.toolsBusy != ""
@@ -248,7 +248,7 @@ func (m *Model) javaToolsSection(c *ui.Context, p *ui.Theme) {
 			}
 			ui.Spacer(c)
 			if t.Status == "missing" && t.CanInstall && !busy {
-				ui.Button(c, "安装").OnClick(func() { m.InstallJavaToolchain() })
+				ui.Button(c, "Install").OnClick(func() { m.InstallJavaToolchain() })
 			}
 			if t.Status == "missing" && !t.CanInstall && t.Reason != "" && !busy {
 				ui.Text(c, t.Reason).FontSize(10.5).TextColor(p.Danger).SingleLine().Ellipsis("…")
@@ -257,18 +257,18 @@ func (m *Model) javaToolsSection(c *ui.Context, p *ui.Theme) {
 	}
 	switch {
 	case m.toolsLoading:
-		ui.Text(c, "正在读取工具状态…").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+		ui.Text(c, "Reading the tool status…").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
 	case !m.toolsLoaded:
 		ui.Row(c).Height(26).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "尚未读取工具状态").FontSize(10.5).TextColor(p.TextMuted)
+			ui.Text(c, "The tool status has not been read").FontSize(10.5).TextColor(p.TextMuted)
 			ui.Spacer(c)
-			ui.Button(c, "检查").OnClick(func() { m.LoadJavaTools() })
+			ui.Button(c, "Check").OnClick(func() { m.LoadJavaTools() })
 		})
 	case busy:
 		ui.Row(c).Height(26).Gap(8).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, m.toolsBusy).FontSize(11).TextColor(p.Text).SingleLine()
 			ui.Spacer(c)
-			ui.Button(c, "取消").OnClick(func() { m.CancelToolInstall() })
+			ui.Button(c, "Cancel").OnClick(func() { m.CancelToolInstall() })
 		})
 	}
 	if busy && m.toolsProgress != "" {
@@ -284,7 +284,7 @@ func (m *Model) javaToolsSection(c *ui.Context, p *ui.Theme) {
 		ui.Text(c, m.toolsErr).FontSize(10.5).TextColor(p.Danger).SingleLine().Ellipsis("…")
 	}
 	if !busy && len(m.javaTools) > 0 && len(javaToolsMissing(m.javaTools)) == 0 {
-		ui.Text(c, "Java 编辑、构建与调试可用").FontSize(10.5).TextColor(p.Success).SingleLine()
+		ui.Text(c, "Java editing, building and debugging are available").FontSize(10.5).TextColor(p.Success).SingleLine()
 	}
 }
 
@@ -304,7 +304,7 @@ func (m *Model) SetAccentPref(id string) {
 	m.prefs.Accent = id
 	m.applyPreferences()
 	m.savePreferences()
-	m.status = "强调色已更新"
+	m.status = "Accent color updated"
 	m.invalidate()
 }
 

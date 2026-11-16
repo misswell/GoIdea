@@ -178,16 +178,16 @@ func (m *Model) SmokeCodeIntel(ctx context.Context) (map[string]any, error) {
 	out := map[string]any{}
 	root := m.Root()
 	if root == "" {
-		return out, errors.New("没有打开项目")
+		return out, errors.New("No project is open")
 	}
 	if t := m.tab(); t == nil {
 		candidate := findSmokeFile(root)
 		if candidate == "" {
-			return out, errors.New("项目里没有可打开的源码文件")
+			return out, errors.New("The project has no source file to open")
 		}
 		m.post(func() { m.openFile(candidate) })
 		if !m.waitDebug(ctx, func(*DebugPane) bool { return m.tab() != nil }, 60*time.Second) {
-			return out, errors.New("打开 " + candidate + " 超时")
+			return out, errors.New("Opening " + candidate + " timed out")
 		}
 	}
 	var path string

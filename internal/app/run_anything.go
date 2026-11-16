@@ -307,7 +307,7 @@ func (m *Model) runAnythingLine(line string) {
 	if !m.run.trusted {
 		m.run.visible = true
 		m.occupyBottom("run")
-		m.status = "未信任的项目不会构建或运行"
+		m.status = "An untrusted project does not build or run"
 		m.invalidate()
 		return
 	}
@@ -323,7 +323,7 @@ func (m *Model) runAnythingLine(line string) {
 	if err != nil {
 		m.run.visible = true
 		m.occupyBottom("run")
-		m.run.err = "启动失败：" + err.Error()
+		m.run.err = "Starting failed: " + err.Error()
 		m.invalidate()
 		return
 	}

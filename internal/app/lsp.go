@@ -154,9 +154,9 @@ func (m *Model) lspGoto(t *Tab, off int, kind string) {
 	}
 	docID := t.doc.ID()
 	pos := t.doc.UTF16Pos(off)
-	notFound := "未找到定义"
+	notFound := "No definition found"
 	if kind == "typeDefinition" {
-		notFound = "未找到类型声明"
+		notFound = "No type declaration found"
 	}
 	t.defGen++
 	gen := t.defGen
@@ -178,11 +178,11 @@ func (m *Model) lspGoto(t *Tab, off int, kind string) {
 			m.navDone = true
 			switch {
 			case err != nil:
-				m.status = "跳转失败：" + err.Error()
+				m.status = "Navigation failed: " + err.Error()
 			case len(locs) == 0:
 				m.status = notFound
 			case strings.Contains(locs[0].Path, "://"):
-				m.status = "定义在外部依赖中，无法作为文件打开"
+				m.status = "The definition is in an external dependency and cannot open as a file"
 			default:
 				loc := locs[0]
 				m.navLanded = loc.Path
@@ -426,7 +426,7 @@ func (m *Model) SmokeLSP(ctx context.Context) (map[string]any, error) {
 	out := map[string]any{}
 	root := m.Root()
 	if root == "" {
-		return out, errors.New("没有打开项目")
+		return out, errors.New("No project is open")
 	}
 	// The language server executes JDT LS, which restricted mode forbids; the
 	// smoke is an explicit check of a project the developer chose to run.
@@ -445,20 +445,20 @@ func (m *Model) SmokeLSP(ctx context.Context) (map[string]any, error) {
 	if need {
 		candidate := findSmokeFile(root)
 		if !strings.HasSuffix(candidate, ".java") {
-			return out, errors.New("项目里没有 Java 文件可做语言服务检查")
+			return out, errors.New("The project has no Java file for the language service check")
 		}
 		mygo.RunOnMain(func() { m.openFile(candidate) })
 		if !m.waitDebug(ctx, func(*DebugPane) bool { return m.tab() != nil }, 60*time.Second) {
-			return out, errors.New("打开 " + candidate + " 超时")
+			return out, errors.New("Opening " + candidate + " timed out")
 		}
 	}
 	var t *Tab
 	mygo.RunOnMain(func() { t = m.tab() })
 	if t == nil {
-		return out, errors.New("没有可检查的文件")
+		return out, errors.New("No file to check")
 	}
 	if !strings.HasSuffix(t.doc.Path(), ".java") {
-		return out, errors.New("当前文件不是 Java 文件，JDT 语言服务不处理它")
+		return out, errors.New("The current file is not Java; the JDT language server does not handle it")
 	}
 	out["path"] = t.doc.Path()
 	text := t.doc.Text()
@@ -472,11 +472,11 @@ func (m *Model) SmokeLSP(ctx context.Context) (map[string]any, error) {
 	servers := m.smokeLSPServers(ctx)
 	out["servers"] = servers
 	if !lspHasJavaServer(servers) {
-		out["completionError"] = "没有配置 Java 语言服务器（jdtls）"
+		out["completionError"] = "No Java language server (jdtls) is configured"
 		return out, nil
 	}
 	if lspJavaStalled(servers) {
-		out["completionError"] = "Java 语言服务器无法启动：" + lspJavaStates(servers)
+		out["completionError"] = "The Java language server could not start: " + lspJavaStates(servers)
 		return out, nil
 	}
 
@@ -497,7 +497,7 @@ func (m *Model) SmokeLSP(ctx context.Context) (map[string]any, error) {
 		servers = m.smokeLSPServers(ctx)
 		if lspJavaStalled(servers) {
 			out["servers"] = servers
-			out["completionError"] = "Java 语言服务器无法启动：" + lspJavaStates(servers)
+			out["completionError"] = "The Java language server could not start: " + lspJavaStates(servers)
 			return out, nil
 		}
 		if items > 0 || time.Now().After(deadline) {
@@ -1273,7 +1273,7 @@ func lspJavaStates(servers []lspServerState) string {
 		}
 	}
 	if len(parts) == 0 {
-		return "无"
+		return "None"
 	}
 	return strings.Join(parts, ", ")
 }

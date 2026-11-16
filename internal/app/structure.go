@@ -128,7 +128,7 @@ func (m *Model) structureRowsUI(c *ui.Context, p *ui.Theme) {
 	path, items := m.structureOutline()
 	if path == "" {
 		ui.Row(c).Padding(8, 8).Children(func() {
-			ui.Text(c, "先打开一个文件，再查看结构").FontSize(11.5).TextColor(p.TextMuted)
+			ui.Text(c, "Open a file, then look at its structure").FontSize(11.5).TextColor(p.TextMuted)
 		})
 		return
 	}
@@ -138,15 +138,15 @@ func (m *Model) structureRowsUI(c *ui.Context, p *ui.Theme) {
 	})
 	if t := m.tab(); t != nil && t.outlineLoading && len(items) == 0 {
 		ui.Row(c).Padding(8, 8).Children(func() {
-			ui.Text(c, "正在读取结构…").FontSize(11.5).TextColor(p.TextMuted)
+			ui.Text(c, "Reading the structure…").FontSize(11.5).TextColor(p.TextMuted)
 		})
 		return
 	}
 	rows := structureRows(items, s.filter, s.collapsed, 0, "")
 	if len(rows) == 0 {
-		hint := "这个文件没有可显示的结构"
+		hint := "This file has no structure to show"
 		if strings.TrimSpace(s.filter) != "" {
-			hint = "没有匹配的符号"
+			hint = "No matching symbols"
 		}
 		ui.Row(c).Padding(8, 8).Children(func() {
 			ui.Text(c, hint).FontSize(11.5).TextColor(p.TextMuted)

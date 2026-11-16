@@ -34,7 +34,7 @@ func TestSearchEverywhereEmptyState(t *testing.T) {
 	defer m.CloseSearchEverywhere()
 	tt := ui.NewTester(func(c *ui.Context) { m.View(c) }, 1440, 900)
 	tt.Frame()
-	if !tt.HasText("输入以搜索类、文件、符号、操作和文本") {
+	if !tt.HasText("Type to search classes, files, symbols, actions and text") {
 		t.Fatalf("the empty Search Everywhere has no hint: %q", tt.Texts())
 	}
 }

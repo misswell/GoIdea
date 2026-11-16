@@ -38,11 +38,11 @@ func TestBranchLabelWordsAnOperation(t *testing.T) {
 	m := branchModel()
 	m.branch.head = str("main")
 	m.branch.operation = str("rebase")
-	if got := m.branchLabel(); got != "正在变基 main" {
+	if got := m.branchLabel(); got != "Rebasing main" {
 		t.Fatalf("label = %q, want the rebase wording", got)
 	}
 	m.branch.head = nil
-	if got := m.branchLabel(); got != "正在变基" {
+	if got := m.branchLabel(); got != "Rebasing" {
 		t.Fatalf("label = %q, want the bare operation", got)
 	}
 }

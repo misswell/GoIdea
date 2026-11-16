@@ -432,11 +432,11 @@ func (m *Model) settingsKeymapBody(c *ui.Context, oi oiColors) {
 	}
 	if len(conflicts) > 0 {
 		ui.Row(c).Padding(0, 0, 6, 0).Children(func() {
-			ui.Text(c, fmt.Sprintf("%d 个快捷键冲突；同一按键被两个 Action 使用。", len(conflicts))).
+			ui.Text(c, fmt.Sprintf("%s; one key is bound to two actions.", count(len(conflicts), "shortcut conflict", "shortcut conflicts"))).
 				FontSize(10.5).TextColor(oi.danger).SingleLine().Ellipsis("…")
 		})
 	}
-	reset := ui.Button(c, "恢复默认键位").OnClick(func() {
+	reset := ui.Button(c, "Restore Default Keymap").OnClick(func() {
 		m.KeymapSetOverrides(nil)
 		m.saveKeymapPrefs()
 	})
@@ -456,7 +456,7 @@ func (m *Model) settingsKeymapBody(c *ui.Context, oi oiColors) {
 				SingleLine().Ellipsis("…").Grow(1)
 			label := strings.Join(bindings, " / ")
 			if label == "" {
-				label = "未绑定"
+				label = "Unbound"
 			}
 			ui.Text(c, label).FontSize(10.5).TextColor(oi.textMuted).SingleLine()
 			if _, custom := m.keymapUserBindings()[cmd.id]; custom {

@@ -83,7 +83,7 @@ func (m *Model) runConfigChooser(c *ui.Context, p *ui.Theme, oi oiColors) {
 		ui.Icon(c, iconChevronDown).Size(12, 12).TextColor(oi.textSubtle)
 	})
 	w.Menu(func(menu *ui.Menu) {
-		if menu.Item("选择运行/调试配置…").Chosen() {
+		if menu.Item("Choose Run/Debug Configuration…").Chosen() {
 			m.RunCommand("run.chooseConfig")
 		}
 		menu.Separator()

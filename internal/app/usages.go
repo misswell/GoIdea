@@ -61,7 +61,7 @@ func (m *Model) FindUsages() {
 	ch := m.nextChannel()
 	m.usages = UsagesPane{symbol: symbol, channel: ch, running: true}
 	m.showUsages()
-	m.status = "正在查找用法…"
+	m.status = "Finding usages…"
 	m.invalidate()
 	docID := t.doc.ID()
 	pos := t.doc.UTF16Pos(off)
@@ -137,18 +137,18 @@ func (m *Model) finishUsages(ch uint32, err error, refs *openidea.References) {
 	switch {
 	case err != nil:
 		if openidea.ErrorKind(err) == "cancelled" {
-			m.status = "已停止查找用法"
+			m.status = "Stopped finding usages"
 			break
 		}
-		m.usages.err = "查找用法失败：" + err.Error()
-		m.status = "查找用法失败"
+		m.usages.err = "Finding usages failed: " + err.Error()
+		m.status = "Finding usages failed"
 	case refs != nil:
 		m.setUsages(refs)
 		switch {
 		case len(m.usages.locs) == 0:
-			m.status = "未找到用法"
+			m.status = "No usages found"
 		default:
-			m.status = fmt.Sprintf("找到 %d 处用法", len(m.usages.locs))
+			m.status = fmt.Sprintf("Found %d usages", len(m.usages.locs))
 		}
 	}
 	m.invalidate()
@@ -173,18 +173,18 @@ func (m *Model) setUsages(refs *openidea.References) {
 func incompleteText(kind string) string {
 	switch kind {
 	case "indexing":
-		return "语言服务器仍在索引，结果可能不完整"
+		return "The language server is still indexing; results may be incomplete"
 	case "tooManyFiles":
-		return "提及该名称的文件过多，只检查了一部分"
+		return "Too many files mention the name; only some were checked"
 	case "filesSkipped":
-		return "部分文件过大或无法读取，未检查"
+		return "Some files were too large or unreadable and were not checked"
 	case "serverFailed":
-		return "服务端查询失败，结果可能不完整"
+		return "The server query failed; results may be incomplete"
 	}
 	if kind == "" {
 		return ""
 	}
-	return "结果可能不完整（" + kind + "）"
+	return "Results may be incomplete (" + kind + ")"
 }
 
 // wordAt expands the identifier around off, the name the usages pane titles
@@ -239,16 +239,16 @@ func (m *Model) usagesRows(c *ui.Context, p *ui.Theme) {
 	ui.Row(c).Padding(6, 8).Gap(6).AlignItems(ui.Center).Children(func() {
 		name := u.symbol
 		if name == "" {
-			name = "当前符号"
+			name = "Current symbol"
 		}
 		ui.Text(c, name).FontSize(12).Bold().TextColor(p.Text).SingleLine().Ellipsis("…")
 		ui.Spacer(c)
-		text := fmt.Sprintf("%d 处", len(u.locs))
+		text := count(len(u.locs), "usage", "usages")
 		if u.running {
-			text = "查找中…"
+			text = "Searching…"
 		}
 		if u.done && len(u.locs) == 0 && u.err == "" {
-			text = "未找到"
+			text = "Not found"
 		}
 		ui.Text(c, text).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
 	})
@@ -264,21 +264,21 @@ func (m *Model) usagesRows(c *ui.Context, p *ui.Theme) {
 	}
 	if u.librariesSkipped {
 		ui.Row(c).Padding(4, 8).Children(func() {
-			ui.Text(c, "未搜索依赖与 JDK，仅限项目源码").FontSize(10.5).TextColor(p.TextMuted)
+			ui.Text(c, "Dependencies and the JDK were not searched; project sources only").FontSize(10.5).TextColor(p.TextMuted)
 		})
 	}
 	if u.truncated {
 		ui.Row(c).Padding(4, 8).Children(func() {
-			ui.Text(c, fmt.Sprintf("用法过多，仅显示前 %d 处", maxUsages)).FontSize(10.5).TextColor(p.TextMuted)
+			ui.Text(c, fmt.Sprintf("Too many usages; showing the first %d", maxUsages)).FontSize(10.5).TextColor(p.TextMuted)
 		})
 	}
 	if len(u.locs) == 0 {
-		hint := "把光标放在符号上再查找"
+		hint := "Put the caret on a symbol, then find its usages"
 		switch {
 		case u.running:
-			hint = "语言服务器正在查找…"
+			hint = "The language server is searching…"
 		case u.done:
-			hint = "没有找到该符号的用法"
+			hint = "No usages of that symbol were found"
 		}
 		if u.err != "" {
 			return
@@ -316,12 +316,12 @@ func (m *Model) usagesRows(c *ui.Context, p *ui.Theme) {
 				ui.Text(c, fmt.Sprintf("%d:%d", line, col)).FontSize(11).TextColor(p.Text).
 					SingleLine()
 				if strings.Contains(loc.Path, "://") {
-					ui.Text(c, "外部依赖").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+					ui.Text(c, "External dependencies").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
 				}
 			})
 			if strings.Contains(loc.Path, "://") {
 				if r.Clicked() {
-					m.status = "用法在外部依赖中，无法作为文件打开"
+					m.status = "The usage is in an external dependency and cannot open as a file"
 					m.invalidate()
 				}
 				continue

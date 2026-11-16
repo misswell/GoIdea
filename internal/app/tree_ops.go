@@ -87,37 +87,37 @@ func treeMenuItems(t treeTarget, clipboard bool) []treeMenuItem {
 	}
 	sep := treeMenuItem{Act: treeActSeparator}
 	items := []treeMenuItem{
-		{Label: "新建", Items: []treeMenuItem{
-			item(treeActNewFile, "文件…", true),
-			item(treeActNewDir, "目录…", true),
+		{Label: "New", Items: []treeMenuItem{
+			item(treeActNewFile, "File…", true),
+			item(treeActNewDir, "Directory…", true),
 		}},
 		sep,
-		item(treeActCut, "剪切", !t.root),
-		item(treeActCopy, "复制", !t.root),
-		{Label: "复制路径/引用", Items: []treeMenuItem{
-			item(treeActCopyPath, "绝对路径", true),
-			item(treeActCopyPath, "文件名", true),
-			item(treeActCopyPath, "从内容根开始的路径", true),
+		item(treeActCut, "Cut", !t.root),
+		item(treeActCopy, "Copy", !t.root),
+		{Label: "Copy Path/Reference", Items: []treeMenuItem{
+			item(treeActCopyPath, "Absolute Path", true),
+			item(treeActCopyPath, "File Name", true),
+			item(treeActCopyPath, "Path From Content Root", true),
 		}},
-		item(treeActPaste, "粘贴", clipboard),
+		item(treeActPaste, "Paste", clipboard),
 		sep,
-		item(treeActJump, "跳到源码", !t.dir),
-		item(treeActFindInFolder, "在文件夹中查找…", t.dir),
-		item(treeActTerminal, "在终端中打开", t.dir),
-		{Label: "本地历史", Items: []treeMenuItem{
-			item(treeActShowHistory, "显示历史…", true),
-			item(treeActPutLabel, "标记版本…", true),
+		item(treeActJump, "Jump to Source", !t.dir),
+		item(treeActFindInFolder, "Find in Folder…", t.dir),
+		item(treeActTerminal, "Open in Terminal", t.dir),
+		{Label: "Local History", Items: []treeMenuItem{
+			item(treeActShowHistory, "Show History…", true),
+			item(treeActPutLabel, "Put Label…", true),
 		}},
 	}
 	if t.git {
 		items = append(items, treeGitMenu(t))
 	}
 	return append(items,
-		item(treeActCompareDirs, "比较目录…", t.dir),
-		item(treeActReload, "从磁盘重新加载", true),
+		item(treeActCompareDirs, "Compare Directories…", t.dir),
+		item(treeActReload, "Reload from Disk", true),
 		sep,
-		item(treeActRename, "重命名…", !t.root),
-		item(treeActDelete, "删除…", !t.root),
+		item(treeActRename, "Rename…", !t.root),
+		item(treeActDelete, "Delete…", !t.root),
 	)
 }
 
@@ -130,24 +130,24 @@ func treeGitMenu(t treeTarget) treeMenuItem {
 	item := func(act treeAct, label string, on bool) treeMenuItem {
 		return treeMenuItem{Act: act, Label: label, Enabled: on}
 	}
-	commit := "提交文件…"
+	commit := "Commit File…"
 	if t.dir {
-		commit = "提交…"
+		commit = "Commit…"
 	}
 	return treeMenuItem{Label: "Git", Items: []treeMenuItem{
 		item(treeActGitCommit, commit, t.dir || t.kind != "conflicted"),
-		item(treeActGitAdd, "添加", t.kind == "untracked"),
-		{Label: "添加到 .gitignore", Items: []treeMenuItem{
+		item(treeActGitAdd, "Add", t.kind == "untracked"),
+		{Label: "Add to .gitignore", Items: []treeMenuItem{
 			item(treeActGitIgnoreShared, ".gitignore", !t.root),
 			item(treeActGitIgnoreLocal, ".git/info/exclude", !t.root),
 		}},
 		{Act: treeActSeparator},
-		item(treeActGitAnnotate, "使用 Git Blame 注解", !t.dir),
-		item(treeActGitDiff, "显示差异", !t.dir),
-		item(treeActGitHistory, "显示历史", true),
-		item(treeActGitRollback, "回滚…", t.rollback),
+		item(treeActGitAnnotate, "Annotate with Git Blame", !t.dir),
+		item(treeActGitDiff, "Show Diff", !t.dir),
+		item(treeActGitHistory, "Show History", true),
+		item(treeActGitRollback, "Rollback…", t.rollback),
 		{Act: treeActSeparator},
-		item(treeActGitBranches, "分支…", true),
+		item(treeActGitBranches, "Branches…", true),
 	}}
 }
 
@@ -283,9 +283,9 @@ func (m *Model) SetTreeClip(path string, cut bool) {
 		return
 	}
 	m.treeClip = &treeClipState{path: path, cut: cut}
-	word := "已复制 "
+	word := "Copied "
 	if cut {
-		word = "已剪切 "
+		word = "Cut "
 	}
 	m.status = word + filepath.Base(path)
 	m.invalidate()
@@ -311,7 +311,7 @@ func (m *Model) OpenTreeRename(path string) {
 	}
 	info, err := os.Stat(path)
 	if err != nil {
-		m.status = "重命名失败：" + err.Error()
+		m.status = "Rename failed: " + err.Error()
 		m.invalidate()
 		return
 	}
@@ -343,11 +343,11 @@ func treeOpName(v *treeOpState) (string, error) {
 	name := strings.TrimSpace(v.name)
 	switch {
 	case name == "":
-		return "", errors.New("名称不能为空")
+		return "", errors.New("The name cannot be empty")
 	case name == "." || name == "..":
-		return "", errors.New("名称不合法")
+		return "", errors.New("The name is not valid")
 	case strings.ContainsAny(name, `/\`):
-		return "", errors.New("名称不能包含路径分隔符")
+		return "", errors.New("The name cannot contain a path separator")
 	}
 	return name, nil
 }
@@ -389,13 +389,13 @@ func (m *Model) ConfirmTreeOp() {
 		target = to
 	}
 	if _, err := os.Stat(target); err == nil {
-		v.err = "已存在同名文件或目录"
+		v.err = "A file or directory with that name already exists"
 		m.invalidate()
 		return
 	}
 	if v.kind == treeOpRename {
 		if bad := m.treeDirtyUnder(from); bad != "" {
-			v.err = "先在编辑器中保存或关闭 " + bad
+			v.err = "Save or close it in the editor first: " + bad
 			m.invalidate()
 			return
 		}
@@ -414,24 +414,24 @@ func (m *Model) ConfirmTreeOp() {
 				return
 			}
 			if err != nil {
-				v.err = "操作失败：" + err.Error()
+				v.err = "The operation failed: " + err.Error()
 				m.invalidate()
 				return
 			}
 			m.treeOp = nil
 			switch v.kind {
 			case treeOpNewFile:
-				m.status = "已创建 " + name
+				m.status = "Created " + name
 				m.refreshTree(filepath.Dir(target))
 				m.openFile(target)
 			case treeOpNewDir:
-				m.status = "已创建目录 " + name
+				m.status = "Created directory " + name
 				m.refreshTree(filepath.Dir(target))
 			case treeOpRename:
 				m.closedTreeTabs(from)
 				m.moveBookmarkPaths(from, to)
 				m.refreshTree(filepath.Dir(to))
-				m.status = "已重命名为 " + name
+				m.status = "Renamed to " + name
 			}
 			m.invalidate()
 		})
@@ -441,7 +441,7 @@ func (m *Model) ConfirmTreeOp() {
 // deleteTreeEntry asks the backend to move path to the trash.
 func (m *Model) deleteTreeEntry(v *treeOpState) {
 	if bad := m.treeDirtyUnder(v.path); bad != "" {
-		v.err = "先在编辑器中保存或关闭 " + bad
+		v.err = "Save or close it in the editor first: " + bad
 		m.invalidate()
 		return
 	}
@@ -460,7 +460,7 @@ func (m *Model) deleteTreeEntry(v *treeOpState) {
 				return
 			}
 			if err != nil {
-				v.err = "删除失败：" + err.Error()
+				v.err = "Delete failed: " + err.Error()
 				m.invalidate()
 				return
 			}
@@ -468,7 +468,7 @@ func (m *Model) deleteTreeEntry(v *treeOpState) {
 			m.closedTreeTabs(path)
 			m.dropBookmarksUnder(path)
 			m.refreshTree(filepath.Dir(path))
-			m.status = "已删除 " + name
+			m.status = "Deleted " + name
 			m.invalidate()
 		})
 	}()
@@ -482,12 +482,12 @@ func (m *Model) PasteTreeEntry(dir string) {
 	}
 	to := filepath.Join(dir, filepath.Base(clip.path))
 	if to == clip.path {
-		m.status = "已经在该目录中"
+		m.status = "It is already in that directory"
 		m.invalidate()
 		return
 	}
 	if _, err := os.Stat(to); err == nil {
-		m.status = "目标中已存在 " + filepath.Base(to)
+		m.status = "The destination already has " + filepath.Base(to)
 		m.invalidate()
 		return
 	}
@@ -497,14 +497,14 @@ func (m *Model) PasteTreeEntry(dir string) {
 	}
 	if clip.cut {
 		if bad := m.treeDirtyUnder(clip.path); bad != "" {
-			m.status = "先在编辑器中保存或关闭 " + bad
+			m.status = "Save or close it in the editor first: " + bad
 			m.invalidate()
 			return
 		}
 	}
 	root := m.Root()
 	from := clip.path
-	m.status = "正在粘贴 " + filepath.Base(from) + "…"
+	m.status = "Pasting " + filepath.Base(from) + "…"
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, time.Minute)
@@ -515,7 +515,7 @@ func (m *Model) PasteTreeEntry(dir string) {
 				return
 			}
 			if err != nil {
-				m.status = "粘贴失败：" + err.Error()
+				m.status = "Paste failed: " + err.Error()
 				m.invalidate()
 				return
 			}
@@ -525,7 +525,7 @@ func (m *Model) PasteTreeEntry(dir string) {
 				m.moveBookmarkPaths(from, to)
 			}
 			m.refreshTree(dir)
-			m.status = "已粘贴 " + filepath.Base(to)
+			m.status = "Pasted " + filepath.Base(to)
 			m.invalidate()
 		})
 	}()
@@ -539,15 +539,15 @@ func (m *Model) CopyTreePath(c *ui.Context, path, mode string) {
 	}
 	text := path
 	switch mode {
-	case "文件名":
+	case "File Name":
 		text = filepath.Base(path)
-	case "从内容根开始的路径":
+	case "Path From Content Root":
 		if rel, err := filepath.Rel(m.Root(), path); err == nil {
 			text = rel
 		}
 	}
 	c.WriteClipboard(text)
-	m.status = "已复制 " + text
+	m.status = "Copied " + text
 	m.invalidate()
 }
 
@@ -652,7 +652,7 @@ func (m *Model) dropBookmarksUnder(path string) {
 func (m *Model) SmokeFiles(ctx context.Context) (map[string]any, error) {
 	root := m.Root()
 	if root == "" {
-		return nil, errors.New("没有打开项目")
+		return nil, errors.New("No project is open")
 	}
 	base := filepath.Join(root, "goidea-tree-smoke")
 	_ = os.RemoveAll(base)
@@ -672,7 +672,7 @@ func (m *Model) SmokeFiles(ctx context.Context) (map[string]any, error) {
 				return nil
 			}
 			if time.Now().After(deadline) {
-				return fmt.Errorf("%s 超时", what)
+				return fmt.Errorf("%s timed out", what)
 			}
 			select {
 			case <-ctx.Done():
@@ -689,7 +689,7 @@ func (m *Model) SmokeFiles(ctx context.Context) (map[string]any, error) {
 			}
 			m.ConfirmTreeOp()
 		})
-		return wait(filepath.Join(dir, name), true, "新建 "+name)
+		return wait(filepath.Join(dir, name), true, "new "+name)
 	}
 	rename := func(path, name string) error {
 		run(func() {
@@ -699,24 +699,24 @@ func (m *Model) SmokeFiles(ctx context.Context) (map[string]any, error) {
 			}
 			m.ConfirmTreeOp()
 		})
-		if err := wait(path, false, "重命名前的 "+name); err != nil {
+		if err := wait(path, false, "the name before renaming "+name); err != nil {
 			return err
 		}
-		return wait(filepath.Join(filepath.Dir(path), name), true, "重命名 "+name)
+		return wait(filepath.Join(filepath.Dir(path), name), true, "renaming "+name)
 	}
 	paste := func(from, dir string, cut bool) error {
 		run(func() {
 			m.SetTreeClip(from, cut)
 			m.PasteTreeEntry(dir)
 		})
-		return wait(filepath.Join(dir, filepath.Base(from)), true, "粘贴 "+filepath.Base(from))
+		return wait(filepath.Join(dir, filepath.Base(from)), true, "pasting "+filepath.Base(from))
 	}
 	drop := func(path string, dir bool) error {
 		run(func() {
 			m.AskTreeDelete(path, dir)
 			m.ConfirmTreeOp()
 		})
-		return wait(path, false, "删除 "+filepath.Base(path))
+		return wait(path, false, "deleting "+filepath.Base(path))
 	}
 	rows := func() int {
 		n := 0
@@ -735,7 +735,7 @@ func (m *Model) SmokeFiles(ctx context.Context) (map[string]any, error) {
 				return n, nil
 			}
 			if time.Now().After(deadline) {
-				return n, errors.New("展开全部超时")
+				return n, errors.New("Expand All timed out")
 			}
 			select {
 			case <-ctx.Done():
@@ -773,7 +773,7 @@ func (m *Model) SmokeFiles(ctx context.Context) (map[string]any, error) {
 			break
 		}
 		if time.Now().After(deadline) {
-			return out, errors.New("打开 one.txt 超时")
+			return out, errors.New("Opening one.txt timed out")
 		}
 		select {
 		case <-ctx.Done():
@@ -825,7 +825,7 @@ func (m *Model) SmokeFiles(ctx context.Context) (map[string]any, error) {
 			break
 		}
 		if time.Now().After(reloadDeadline) {
-			return out, errors.New("从磁盘重新加载超时")
+			return out, errors.New("Reload from disk timed out")
 		}
 		select {
 		case <-ctx.Done():
@@ -861,7 +861,7 @@ func (m *Model) SmokeFiles(ctx context.Context) (map[string]any, error) {
 				return len(rels), rels, nil
 			}
 			if time.Now().After(deadline) {
-				return len(rels), rels, errors.New("在文件夹中查找超时")
+				return len(rels), rels, errors.New("Find in Folder timed out")
 			}
 			select {
 			case <-ctx.Done():
@@ -907,7 +907,7 @@ func (m *Model) SmokeFiles(ctx context.Context) (map[string]any, error) {
 			break
 		}
 		if time.Now().After(tabDeadline) {
-			return out, errors.New("打开 hist.txt 超时")
+			return out, errors.New("Opening hist.txt timed out")
 		}
 		select {
 		case <-ctx.Done():
@@ -935,7 +935,7 @@ func (m *Model) SmokeFiles(ctx context.Context) (map[string]any, error) {
 				return nil
 			}
 			if time.Now().After(deadline) {
-				return errors.New("保存 hist.txt 超时")
+				return errors.New("Saving hist.txt timed out")
 			}
 			select {
 			case <-ctx.Done():
@@ -973,7 +973,7 @@ func (m *Model) SmokeFiles(ctx context.Context) (map[string]any, error) {
 			break
 		}
 		if time.Now().After(histDeadline) {
-			return out, errors.New("读取 hist.txt 的历史超时")
+			return out, errors.New("Reading hist.txt's history timed out")
 		}
 		select {
 		case <-ctx.Done():
@@ -992,7 +992,7 @@ func (m *Model) SmokeFiles(ctx context.Context) (map[string]any, error) {
 		}
 	}
 	if oldest < 0 {
-		return out, errors.New("hist.txt 没有可恢复的历史")
+		return out, errors.New("hist.txt has no restorable history")
 	}
 	run(func() {
 		m.history.sel = oldest
@@ -1020,14 +1020,14 @@ func (m *Model) SmokeFiles(ctx context.Context) (map[string]any, error) {
 	run(func() {
 		m.OpenHistoryLabel()
 		if m.history != nil {
-			m.history.label = "e2e 标签"
+			m.history.label = "e2e label"
 		}
 		m.ConfirmHistoryLabel()
 	})
 	labeled := false
 	deadline = time.Now().Add(30 * time.Second)
 	for {
-		run(func() { labeled = m.history == nil && strings.Contains(m.status, "已标记版本 e2e 标签") })
+		run(func() { labeled = m.history == nil && strings.Contains(m.status, "Put label e2e label") })
 		if labeled {
 			break
 		}
@@ -1054,7 +1054,7 @@ func (m *Model) SmokeFiles(ctx context.Context) (map[string]any, error) {
 			}
 			loading = h.loading
 			for _, e := range h.entries {
-				if e.Kind == "label" && e.Label == "e2e 标签" {
+				if e.Kind == "label" && e.Label == "e2e label" {
 					listed = true
 				}
 			}
@@ -1123,7 +1123,7 @@ func (m *Model) SmokeFiles(ctx context.Context) (map[string]any, error) {
 			break
 		}
 		if time.Now().After(deadline) {
-			return out, errors.New("比较目录超时")
+			return out, errors.New("Compare Directories timed out")
 		}
 		select {
 		case <-ctx.Done():
@@ -1156,7 +1156,7 @@ func (m *Model) SmokeFiles(ctx context.Context) (map[string]any, error) {
 			break
 		}
 		if time.Now().After(deadline) {
-			return out, errors.New("比较两个文件超时")
+			return out, errors.New("Comparing the two files timed out")
 		}
 		select {
 		case <-ctx.Done():
@@ -1210,7 +1210,7 @@ func (m *Model) ExpandProjectAll() {
 		return
 	}
 	m.tree.ExpandAll(m.Root())
-	m.status = "已展开全部"
+	m.status = "Expanded All"
 	m.invalidate()
 }
 
@@ -1221,7 +1221,7 @@ func (m *Model) CollapseProjectAll() {
 		return
 	}
 	m.tree.CollapseAll()
-	m.status = "已折叠全部"
+	m.status = "Collapsed All"
 	m.invalidate()
 }
 
@@ -1232,7 +1232,7 @@ func (m *Model) ReloadProjectTree() {
 		return
 	}
 	m.tree.Refresh()
-	m.status = "已从磁盘重新加载"
+	m.status = "Reloaded from Disk"
 	m.invalidate()
 }
 
@@ -1247,7 +1247,7 @@ func (m *Model) ReloadPathFromDisk(path string) {
 		dir = filepath.Dir(path)
 	}
 	m.tree.RefreshDir(dir)
-	m.status = "已从磁盘重新加载"
+	m.status = "Reloaded from Disk"
 	m.invalidate()
 }
 
@@ -1275,7 +1275,7 @@ func (m *Model) SelectInProjectView() {
 		t = m.tabs[m.active]
 	}
 	if t == nil || t.doc.Path() == "" {
-		m.status = "先打开一个文件"
+		m.status = "Open a file first"
 		m.invalidate()
 		return
 	}
@@ -1291,7 +1291,7 @@ func (m *Model) selectInProjectView(path string) {
 	m.leftHidden = false
 	m.tree.reveal(path)
 	m.tree.Select(path)
-	m.status = "已在项目视图中定位 " + filepath.Base(path)
+	m.status = "Selected in the Project view: " + filepath.Base(path)
 	m.rememberLayout()
 	m.invalidate()
 }
@@ -1303,20 +1303,20 @@ func (m *Model) treeOpDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := v.open
-	title, hint, action := "新建文件", "新文件在项目视图中创建，并在这里打开。", "创建"
+	title, hint, action := "New File", "The file is created in the Project view and opened here.", "Create"
 	switch v.kind {
 	case treeOpNewDir:
-		title, hint, action = "新建目录", "新目录在项目视图中创建。", "创建"
+		title, hint, action = "New Directory", "The directory is created in the Project view.", "Create"
 	case treeOpRename:
-		title, hint, action = "重命名", "新名称替代原名，条目仍在同一目录中。", "重命名"
+		title, hint, action = "Rename", "The new name replaces the old one; the entry stays in the same directory.", "Rename"
 	case treeOpDelete:
-		title = "删除"
+		title = "Delete"
 	}
 	d := ui.Modal(c, &open, func() {
 		ui.Column(c).Width(420).Gap(8).Children(func() {
 			ui.Text(c, title).FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			if v.kind == treeOpDelete {
-				ui.Text(c, fmt.Sprintf("把“%s”移到废纸篓？", filepath.Base(v.path))).
+				ui.Text(c, fmt.Sprintf("Move “%s” to the Trash?", filepath.Base(v.path))).
 					FontSize(11.5).TextColor(p.TextMuted)
 			} else {
 				in := ui.TextInput(c, &v.name).AutoFocus()
@@ -1330,9 +1330,9 @@ func (m *Model) treeOpDialog(c *ui.Context, p *ui.Theme) {
 				ui.Text(c, v.err).FontSize(11).TextColor(p.Danger).SingleLine().Ellipsis("…")
 			}
 			ui.Row(c).Gap(8).Children(func() {
-				ui.Button(c, "取消").OnClick(func() { m.CloseTreeOp() })
+				ui.Button(c, "Cancel").OnClick(func() { m.CloseTreeOp() })
 				if v.kind == treeOpDelete {
-					ui.Button(c, "删除").Disabled(v.busy).OnClick(func() { m.ConfirmTreeOp() })
+					ui.Button(c, "Delete").Disabled(v.busy).OnClick(func() { m.ConfirmTreeOp() })
 				} else {
 					ui.Button(c, action).Disabled(v.busy).OnClick(func() { m.ConfirmTreeOp() })
 				}

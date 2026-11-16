@@ -582,16 +582,16 @@ func New(cfg Config) *Model {
 		fail := func(err error) error {
 			m.post(func() {
 				m.setStartPhase("failed")
-				m.status = "后端重启后恢复项目失败"
-				m.banner = "后端重启后恢复项目失败：" + err.Error()
+				m.status = "Restoring the project after the backend restart failed"
+				m.banner = "Restoring the project after the backend restart failed: " + err.Error()
 				m.bannerPath = ""
-				m.notifyError("backend-restore", "后端已重启，但项目恢复失败", err.Error())
+				m.notifyError("backend-restore", "The backend restarted, but restoring the project failed", err.Error())
 				m.invalidate()
 			})
 			return err
 		}
 		m.setStartPhase("restoring")
-		m.post(func() { m.status = "后端已重启，正在恢复项目…"; m.invalidate() })
+		m.post(func() { m.status = "The backend restarted; restoring the project…"; m.invalidate() })
 		if err := m.openBackendProject(ctx, root); err != nil {
 			return fail(err)
 		}
@@ -604,13 +604,13 @@ func New(cfg Config) *Model {
 			m.run.busy = false
 			m.run.exitCode = nil
 			if m.run.visible {
-				m.run.err = "后端已重启，运行已中断"
+				m.run.err = "The backend restarted; the run was interrupted"
 			}
 			m.debug.starting = false
 			m.debug.paused = false
 			m.debug.session = 0
 			if m.debug.visible {
-				m.debug.err = "后端已重启，调试已中断"
+				m.debug.err = "The backend restarted; the debug session was interrupted"
 			}
 			for gi := range m.term.groups {
 				tabs := m.term.groups[gi].tabs
@@ -622,7 +622,7 @@ func New(cfg Config) *Model {
 				}
 			}
 			if m.term.visible {
-				m.term.err = "后端已重启，终端已关闭"
+				m.term.err = "The backend restarted; the terminal was closed"
 			}
 			if m.run.trusted {
 				m.loadRunConfigs()
@@ -672,7 +672,7 @@ func (m *Model) Phase() string {
 
 // Start restores the last session in the background.
 func (m *Model) Start() {
-	m.post(func() { m.busy = true; m.status = "正在连接 GoIDEA 后端…" })
+	m.post(func() { m.busy = true; m.status = "Connecting to the GoIDEA backend…" })
 	go m.start()
 	go m.syncLoop()
 }
@@ -706,8 +706,8 @@ func (m *Model) start() {
 		m.setStartPhase("failed")
 		m.post(func() {
 			m.busy = false
-			m.status = "GoIDEA 后端启动失败"
-			m.banner = "GoIDEA 后端启动失败：" + startErr.Error()
+			m.status = "The GoIDEA backend failed to start"
+			m.banner = "The GoIDEA backend failed to start: " + startErr.Error()
 			m.notifyError("backend", "GoIDEA backend failed to start", startErr.Error())
 			m.invalidate()
 		})
@@ -734,7 +734,7 @@ func (m *Model) start() {
 	}
 	if root == "" {
 		m.setStartPhase("ready")
-		m.post(func() { m.busy = false; m.status = "请打开一个 Java 项目" })
+		m.post(func() { m.busy = false; m.status = "Open a Java project" })
 		return
 	}
 	m.setStartPhase("opening")
@@ -807,7 +807,7 @@ func (m *Model) watchState() {
 				switch {
 				case state.Err != nil:
 					m.setStartPhase("failed")
-					m.status = "后端不可用：" + state.Err.Error()
+					m.status = "Backend unavailable: " + state.Err.Error()
 					m.run.running = false
 					m.run.awaiting = false
 					m.run.busy = false
@@ -815,7 +815,7 @@ func (m *Model) watchState() {
 					m.debug.paused = false
 					m.debug.session = 0
 				case state.Running:
-					m.status = "已连接 GoIDEA 后端"
+					m.status = "Connected to the GoIDEA backend"
 				}
 				m.invalidate()
 			})
@@ -866,9 +866,9 @@ func (m *Model) confirmSwitch(dir string) {
 	detail := strings.Join(m.dirtyPaths(), "\n")
 	go func() {
 		res, err := mygo.Dialog.Message(mygo.MessageOptions{
-			Parent: m.win, Type: mygo.MessageWarning, Title: "切换项目",
-			Message: "有未保存的更改", Detail: detail,
-			Buttons: []string{"保存并切换", "放弃更改", "取消"}, DefaultButton: 0, CancelButton: 2,
+			Parent: m.win, Type: mygo.MessageWarning, Title: "Switch Project",
+			Message: "There are unsaved changes", Detail: detail,
+			Buttons: []string{"Save and Switch", "Discard Changes", "Cancel"}, DefaultButton: 0, CancelButton: 2,
 		})
 		if err != nil {
 			return
@@ -890,7 +890,7 @@ func (m *Model) OpenProject(dir string) { m.confirmSwitch(dir) }
 func (m *Model) openProjectSaving(dir string) {
 	tabs := append([]*Tab(nil), m.tabs...)
 	m.busy = true
-	m.status = "正在保存…"
+	m.status = "Saving…"
 	m.invalidate()
 	p := m.prefs.SaveFiles
 	go func() {
@@ -1003,7 +1003,7 @@ func (m *Model) openProject(dir string, files []string) {
 	m.maven = mavenPane{visible: mavenVisible}
 	m.refactor, m.redoRefactor = nil, nil
 	m.busy = true
-	m.status = "正在打开 " + filepath.Base(dir) + "…"
+	m.status = "Opening " + filepath.Base(dir) + "…"
 	m.setRoot(dir)
 	if mavenVisible {
 		m.loadBuildModel()
@@ -1037,8 +1037,8 @@ func (m *Model) openProject(dir string, files []string) {
 				if prevRoot != "" {
 					name = filepath.Base(prevRoot)
 				}
-				m.status = "打开 " + filepath.Base(dir) + " 失败，仍在 " + name
-				m.banner = "打开项目失败：" + err.Error()
+				m.status = "Opening " + filepath.Base(dir) + " failed; still in " + name
+				m.banner = "Opening the project failed: " + err.Error()
 				m.bannerPath = ""
 				m.invalidate()
 			})
@@ -1125,9 +1125,9 @@ func (m *Model) openProject(dir string, files []string) {
 			}
 			m.tree = NewTree(dir, m.post, m.invalidate)
 			m.busy = false
-			m.status = fmt.Sprintf("%s · %d 个文件已打开", filepath.Base(dir), len(m.tabs))
+			m.status = fmt.Sprintf("%s · %d files opened", filepath.Base(dir), len(m.tabs))
 			if len(failed) > 0 {
-				m.banner = "无法打开：" + strings.Join(failed, "、")
+				m.banner = "Could not open: " + strings.Join(failed, ", ")
 			}
 			m.applyActive()
 			m.applyLayout(dir)
@@ -1166,7 +1166,7 @@ func (m *Model) openBackendProjectAt(ctx context.Context, dir, restoreTo string)
 		}
 		if time.Now().After(deadline) {
 			m.restoreBackendProject(ctx, restoreTo, dir)
-			return fmt.Errorf("GoIDEA 后端未在 60 秒内把 %s 设为当前项目", filepath.Base(dir))
+			return fmt.Errorf("The GoIDEA backend did not make %s the current project within 60 seconds", filepath.Base(dir))
 		}
 		select {
 		case <-ctx.Done():
@@ -1290,7 +1290,7 @@ func (m *Model) openWith(path string, spec openSpec) {
 		return
 	}
 	m.busy = true
-	m.status = "正在打开 " + filepath.Base(path) + "…"
+	m.status = "Opening " + filepath.Base(path) + "…"
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -1334,7 +1334,7 @@ func (m *Model) openWith(path string, spec openSpec) {
 				delete(m.pendingJump, path)
 				m.tabs[m.active].state.GoTo(editor.Pos{Line: line, Col: 0})
 			}
-			m.status = "已打开 " + filepath.Base(path)
+			m.status = "Opened " + filepath.Base(path)
 			m.applyActive()
 			m.saveSession()
 			m.invalidate()
@@ -1438,7 +1438,7 @@ func (m *Model) saveTabAsync(t *Tab, done func()) {
 		return
 	}
 	t.saving = true
-	m.status = "正在保存 " + filepath.Base(t.doc.Path()) + "…"
+	m.status = "Saving " + filepath.Base(t.doc.Path()) + "…"
 	m.invalidate()
 	p := m.prefs.SaveFiles
 	go func() {
@@ -1458,7 +1458,7 @@ func (m *Model) saveTabAsync(t *Tab, done func()) {
 			if err == nil {
 				t.synced = v
 				t.noteDisk()
-				m.status = "已保存 " + filepath.Base(t.doc.Path())
+				m.status = "Saved " + filepath.Base(t.doc.Path())
 			} else {
 				m.fail(t.doc.Path(), err)
 			}
@@ -1592,7 +1592,7 @@ func (m *Model) resolveActive(ours bool) {
 				return
 			}
 			t.synced = doc.Buffer().Version()
-			m.status = "已解决冲突：" + filepath.Base(path)
+			m.status = "Conflict resolved: " + filepath.Base(path)
 			m.invalidate()
 		})
 	}()
@@ -1612,7 +1612,7 @@ func (m *Model) SmokeRoundTrip(ctx context.Context) (edited, undone bool) {
 	if doc == nil {
 		return false, false
 	}
-	const marker = "// smoke 世界 😀\n"
+	const marker = "// smoke world 😀\n"
 	m.post(func() {
 		doc.Buffer().Edit(editor.Edit{Start: 0, End: 0, Text: marker})
 		m.invalidate()
@@ -1789,9 +1789,9 @@ func (m *Model) requestQuit(prevent func()) {
 	detail := strings.Join(m.dirtyPaths(), "\n")
 	go func() {
 		res, err := mygo.Dialog.Message(mygo.MessageOptions{
-			Parent: m.win, Type: mygo.MessageWarning, Title: "退出 GoIDEA",
-			Message: "有未保存的更改，退出前是否保存？", Detail: detail,
-			Buttons: []string{"保存并退出", "不保存", "取消"}, DefaultButton: 0, CancelButton: 2,
+			Parent: m.win, Type: mygo.MessageWarning, Title: "Quit GoIDEA",
+			Message: "There are unsaved changes. Save before quitting?", Detail: detail,
+			Buttons: []string{"Save and Quit", "Don't Save", "Cancel"}, DefaultButton: 0, CancelButton: 2,
 		})
 		if err != nil {
 			m.post(func() {

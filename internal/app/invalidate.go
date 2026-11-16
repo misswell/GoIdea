@@ -93,7 +93,7 @@ func invalidationMarker(dataDir string) string {
 // restart.
 func writeInvalidationSchedule(dataDir string, opts *InvalidateOptions) error {
 	if dataDir == "" {
-		return errors.New("没有可用的数据目录")
+		return errors.New("No data directory is available")
 	}
 	plan := invalidationSchedule{}
 	if opts != nil {
@@ -146,7 +146,7 @@ func ApplyPendingInvalidation(cfg Config) {
 func (m *Model) scheduleInvalidation(opts *InvalidateOptions) {
 	if err := writeInvalidationSchedule(filepath.Dir(m.cfg.SettingsPath), opts); err != nil {
 		if v := m.invalidateDlg; v != nil {
-			v.err = "无法安排清除缓存：" + err.Error()
+			v.err = "Could not schedule clearing the caches: " + err.Error()
 		}
 		m.invalidate()
 		return
@@ -167,24 +167,24 @@ func (m *Model) invalidateCachesDialog(c *ui.Context, p *ui.Theme) {
 	open := v.open
 	d := ui.Modal(c, &open, func() {
 		ui.Column(c).Width(480).Gap(10).Children(func() {
-			ui.Text(c, "清除缓存").FontSize(13).Bold().TextColor(p.Text).SingleLine()
-			ui.Text(c, "下一次启动会重建缓存：每个项目的符号索引和语法缓存。").
+			ui.Text(c, "Clear Caches").FontSize(13).Bold().TextColor(p.Text).SingleLine()
+			ui.Text(c, "The next start rebuilds the caches: each project's symbol index and syntax caches.").
 				FontSize(11).TextColor(p.TextMuted)
-			ui.Text(c, "可选：").FontSize(11).TextColor(p.Text).SingleLine()
+			ui.Text(c, "Optional: ").FontSize(11).TextColor(p.Text).SingleLine()
 			local := v.localHistory
-			if ui.Checkbox(c, &local, "清除文件系统缓存和本地历史").Changed() {
+			if ui.Checkbox(c, &local, "Clear file system caches and local history").Changed() {
 				v.localHistory = local
 			}
 			servers := v.languageServers
-			if ui.Checkbox(c, &servers, "清除语言服务工作区（Java 导入数据和索引）").Changed() {
+			if ui.Checkbox(c, &servers, "Clear the language server workspace (Java import data and indexes)").Changed() {
 				v.languageServers = servers
 			}
 			build := v.buildCaches
-			if ui.Checkbox(c, &build, "清除构建工具缓存（Maven / Gradle 同步结果）").Changed() {
+			if ui.Checkbox(c, &build, "Clear the build tool caches (Maven / Gradle sync results)").Changed() {
 				v.buildCaches = build
 			}
 			if v.localHistory {
-				ui.Text(c, "所有项目的本地历史都会被删除。").
+				ui.Text(c, "Local history of every project is deleted.").
 					FontSize(10.5).TextColor(p.Danger).SingleLine()
 			}
 			if v.err != "" {
@@ -192,9 +192,9 @@ func (m *Model) invalidateCachesDialog(c *ui.Context, p *ui.Theme) {
 					SingleLine().Ellipsis("…")
 			}
 			ui.Row(c).Gap(8).Children(func() {
-				ui.Button(c, "清除并重启").OnClick(m.InvalidateAndRestart)
-				ui.Button(c, "仅重启").OnClick(m.RestartIDE)
-				ui.Button(c, "取消").OnClick(m.closeInvalidateCaches)
+				ui.Button(c, "Clear and Restart").OnClick(m.InvalidateAndRestart)
+				ui.Button(c, "Restart Only").OnClick(m.RestartIDE)
+				ui.Button(c, "Cancel").OnClick(m.closeInvalidateCaches)
 			})
 		})
 	})

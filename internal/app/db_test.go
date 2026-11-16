@@ -23,11 +23,11 @@ func TestUTF16Len(t *testing.T) {
 
 func TestDBOutcomeSummary(t *testing.T) {
 	affected := 3.0
-	if got := dbOutcomeSummary(openidea.DBOutcome{Result: &openidea.DBQueryResult{Affected: &affected, ElapsedMs: 1.25}}); got != "影响 3 行 · 1.2 ms" {
+	if got := dbOutcomeSummary(openidea.DBOutcome{Result: &openidea.DBQueryResult{Affected: &affected, ElapsedMs: 1.25}}); got != "3 rows affected · 1.2 ms" {
 		t.Fatalf("affected summary = %q", got)
 	}
 	rows := &openidea.DBQueryResult{Rows: make([][]*string, 2), HasMore: true, ElapsedMs: 0.5}
-	if got := dbOutcomeSummary(openidea.DBOutcome{Result: rows}); got != "2 行 · 0.5 ms · 还有更多" {
+	if got := dbOutcomeSummary(openidea.DBOutcome{Result: rows}); got != "2 rows · 0.5 ms · more rows" {
 		t.Fatalf("rows summary = %q", got)
 	}
 	if got := dbOutcomeSummary(openidea.DBOutcome{Error: "boom"}); got != "" {
@@ -37,19 +37,19 @@ func TestDBOutcomeSummary(t *testing.T) {
 
 func TestDBStatusText(t *testing.T) {
 	v := &dbView{}
-	if got := dbStatusText(v); got != "没有数据源" {
+	if got := dbStatusText(v); got != "No data source" {
 		t.Fatalf("empty status = %q", got)
 	}
 	v.source = "a"
-	if got := dbStatusText(v); got != "未连接" {
+	if got := dbStatusText(v); got != "Not connected" {
 		t.Fatalf("disconnected status = %q", got)
 	}
 	v.connected = map[string]bool{"a": true}
-	if got := dbStatusText(v); got != "已连接" {
+	if got := dbStatusText(v); got != "Connected" {
 		t.Fatalf("connected status = %q", got)
 	}
 	v.running = true
-	if got := dbStatusText(v); got != "正在执行…" {
+	if got := dbStatusText(v); got != "Running…" {
 		t.Fatalf("running status = %q", got)
 	}
 }

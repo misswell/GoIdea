@@ -129,17 +129,17 @@ func (m *Model) readinessNow(ctx context.Context) Readiness {
 func (r Readiness) readinessReason() string {
 	switch {
 	case !r.Backend:
-		return "后端未连接"
+		return "The backend is not connected"
 	case !r.Project:
-		return "项目尚未打开"
+		return "The project is not open yet"
 	case !r.Java && r.Importing:
-		return "Java 项目导入中，请等待导入完成"
+		return "The Java project is importing; wait for it to finish"
 	case !r.Java:
-		return fmt.Sprintf("Java 语言服务未就绪（%s）", r.JavaDetail)
+		return fmt.Sprintf("Java language services are not ready (%s)", r.JavaDetail)
 	case !r.BuildModel:
-		return "构建模型尚未加载"
+		return "The build model is not loaded yet"
 	case !r.Run:
-		return "运行配置尚未加载（项目未信任或仍在读取）"
+		return "Run configurations are not loaded (project untrusted or still loading)"
 	}
 	return ""
 }
@@ -176,7 +176,7 @@ func (m *Model) readyFor(debug bool) string {
 		return reason
 	}
 	if debug && !r.Java {
-		return "Java 项目导入中，请等待导入完成"
+		return "The Java project is importing; wait for it to finish"
 	}
 	return ""
 }

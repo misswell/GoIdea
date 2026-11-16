@@ -165,7 +165,7 @@ func (m *Model) RefreshDBSources() {
 			}
 			v.loading = false
 			if err != nil {
-				v.err = "读取数据源失败：" + err.Error()
+				v.err = "Could not read the data sources: " + err.Error()
 				m.invalidate()
 				return
 			}
@@ -220,7 +220,7 @@ func (m *Model) ConnectDBSource(id string) {
 			}
 			v.loading = false
 			if err != nil {
-				v.err = "连接失败：" + err.Error()
+				v.err = "Connect failed: " + err.Error()
 				m.invalidate()
 				return
 			}
@@ -249,7 +249,7 @@ func (m *Model) DisconnectDBSource(id string) {
 				return
 			}
 			if err != nil {
-				v.err = "断开失败：" + err.Error()
+				v.err = "Disconnect failed: " + err.Error()
 			} else {
 				delete(v.connected, id)
 				v.schemas = nil
@@ -269,9 +269,9 @@ func (m *Model) AddSQLiteSource() {
 	}
 	go func() {
 		paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
-			Title: "选择 SQLite 数据库文件",
+			Title: "Choose a SQLite Database File",
 			Filters: []mygo.FileFilter{
-				{Name: "SQLite 数据库", Extensions: []string{"db", "sqlite", "sqlite3"}},
+				{Name: "SQLite Databases", Extensions: []string{"db", "sqlite", "sqlite3"}},
 			},
 		})
 		if err != nil || len(paths) == 0 {
@@ -287,7 +287,7 @@ func (m *Model) AddSQLiteSource() {
 				return
 			}
 			if err != nil {
-				v.err = "添加数据源失败：" + err.Error()
+				v.err = "Could not add the data source: " + err.Error()
 			}
 			m.RefreshDBSources()
 			m.invalidate()
@@ -311,7 +311,7 @@ func (m *Model) loadDBSchemas(id string) {
 				return
 			}
 			if err != nil {
-				v.err = "读取架构失败：" + err.Error()
+				v.err = "Could not read the schemas: " + err.Error()
 				m.invalidate()
 				return
 			}
@@ -349,7 +349,7 @@ func (m *Model) loadDBTables(id, schema string) {
 				return
 			}
 			if err != nil {
-				v.err = "读取表失败：" + err.Error()
+				v.err = "Could not read the tables: " + err.Error()
 				m.invalidate()
 				return
 			}
@@ -367,18 +367,18 @@ func (m *Model) RunDB() {
 		return
 	}
 	if v.source == "" {
-		v.err = "请先选择数据源"
+		v.err = "Choose a data source first"
 		m.invalidate()
 		return
 	}
 	if !v.connected[v.source] {
-		v.err = "请先连接数据源"
+		v.err = "Connect the data source first"
 		m.invalidate()
 		return
 	}
 	sql := strings.TrimSpace(v.sql)
 	if sql == "" {
-		v.err = "请输入 SQL"
+		v.err = "Enter SQL"
 		m.invalidate()
 		return
 	}
@@ -386,7 +386,7 @@ func (m *Model) RunDB() {
 	v.err = ""
 	v.outcomes = nil
 	v.active = 0
-	v.outLog = append(v.outLog, "运行："+oneLine(sql))
+	v.outLog = append(v.outLog, "Run: "+oneLine(sql))
 	if len(v.outLog) > 200 {
 		v.outLog = v.outLog[len(v.outLog)-200:]
 	}
@@ -412,11 +412,11 @@ func (m *Model) RunDB() {
 			}
 			switch {
 			case err != nil:
-				v.addDBResult(title, nil, "执行失败："+err.Error())
-				v.outLog = append(v.outLog, "执行失败："+err.Error())
+				v.addDBResult(title, nil, "Execution failed: "+err.Error())
+				v.outLog = append(v.outLog, "Execution failed: "+err.Error())
 			case len(statements) == 0:
-				v.addDBResult(title, outcomes, "没有可执行的语句")
-				v.outLog = append(v.outLog, "没有可执行的语句")
+				v.addDBResult(title, outcomes, "There is no statement to execute")
+				v.outLog = append(v.outLog, "There is no statement to execute")
 			default:
 				v.addDBResult(title, outcomes, "")
 				for _, o := range outcomes {
@@ -450,15 +450,15 @@ func utf16Len(s string) uint32 {
 func dbStatusText(v *dbView) string {
 	switch {
 	case v.loading:
-		return "正在连接…"
+		return "Connecting…"
 	case v.running:
-		return "正在执行…"
+		return "Running…"
 	case v.source == "":
-		return "没有数据源"
+		return "No data source"
 	case v.connected[v.source]:
-		return "已连接"
+		return "Connected"
 	}
-	return "未连接"
+	return "Not connected"
 }
 
 // dbOutcomeSummary describes a statement's result in one line.
@@ -468,11 +468,11 @@ func dbOutcomeSummary(o openidea.DBOutcome) string {
 	}
 	r := o.Result
 	if r.Affected != nil {
-		return fmt.Sprintf("影响 %d 行 · %.1f ms", int(*r.Affected), r.ElapsedMs)
+		return fmt.Sprintf("%s affected · %.1f ms", count(int(*r.Affected), "row", "rows"), r.ElapsedMs)
 	}
-	s := fmt.Sprintf("%d 行 · %.1f ms", len(r.Rows), r.ElapsedMs)
+	s := fmt.Sprintf("%s · %.1f ms", count(len(r.Rows), "row", "rows"), r.ElapsedMs)
 	if r.HasMore {
-		s += " · 还有更多"
+		s += " · more rows"
 	}
 	return s
 }
@@ -497,15 +497,15 @@ func (m *Model) dbDialog(c *ui.Context, p *ui.Theme) {
 	dlg := ui.Modal(c, &open, func() {
 		ui.Column(c).Width(980).Height(640).Gap(10).Children(func() {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, "数据库").FontSize(14).Bold().TextColor(p.Text).SingleLine()
+				ui.Text(c, "Database").FontSize(14).Bold().TextColor(p.Text).SingleLine()
 				ui.Spacer(c)
 				ui.Text(c, dbStatusText(v)).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
 			})
 			ui.Row(c).Grow(1).MinHeight(0).Gap(14).AlignItems(ui.Stretch).Children(func() {
 				ui.Column(c).Width(250).Gap(6).Children(func() {
-					ui.Text(c, "数据源").FontSize(11).TextColor(p.TextMuted).SingleLine()
+					ui.Text(c, "Data Sources").FontSize(11).TextColor(p.TextMuted).SingleLine()
 					if len(v.sources) == 0 {
-						ui.Text(c, "还没有数据源").FontSize(11).TextColor(p.TextMuted).SingleLine()
+						ui.Text(c, "No data sources yet").FontSize(11).TextColor(p.TextMuted).SingleLine()
 					}
 					ui.Scroll(c).Height(140).Children(func() {
 						ui.Column(c).Children(func() {
@@ -539,12 +539,12 @@ func (m *Model) dbDialog(c *ui.Context, p *ui.Theme) {
 						})
 					})
 					ui.Row(c).Gap(6).Children(func() {
-						ui.Button(c, "连接").OnClick(func() { m.ConnectDBSource(v.source) })
-						ui.Button(c, "断开").OnClick(func() { m.DisconnectDBSource(v.source) })
-						ui.Button(c, "添加 SQLite…").OnClick(func() { m.AddSQLiteSource() })
+						ui.Button(c, "Connect").OnClick(func() { m.ConnectDBSource(v.source) })
+						ui.Button(c, "Disconnect").OnClick(func() { m.DisconnectDBSource(v.source) })
+						ui.Button(c, "Add SQLite…").OnClick(func() { m.AddSQLiteSource() })
 					})
 					if len(v.schemas) > 0 {
-						ui.Text(c, "架构").FontSize(11).TextColor(p.TextMuted).SingleLine()
+						ui.Text(c, "Schemas").FontSize(11).TextColor(p.TextMuted).SingleLine()
 						ui.Scroll(c).Height(88).Children(func() {
 							ui.Column(c).Children(func() {
 								for _, schema := range v.schemas {
@@ -564,7 +564,7 @@ func (m *Model) dbDialog(c *ui.Context, p *ui.Theme) {
 							})
 						})
 					}
-					ui.Text(c, "表").FontSize(11).TextColor(p.TextMuted).SingleLine()
+					ui.Text(c, "Tables").FontSize(11).TextColor(p.TextMuted).SingleLine()
 					ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
 						ui.Column(c).Children(func() {
 							for _, t := range v.tables {
@@ -602,10 +602,10 @@ func (m *Model) dbDialog(c *ui.Context, p *ui.Theme) {
 					area := ui.TextArea(c, &v.sql).Height(120).Font("monospace").FontSize(12)
 					area.OnShortcut(ui.Cmd, ui.KeyEnter, func() { m.RunDB() })
 					ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-						ui.Button(c, "运行").Disabled(v.running).OnClick(func() { m.RunDB() })
-						ui.Button(c, "历史").OnClick(func() { m.OpenDBHistory() })
-						ui.Button(c, "解释").OnClick(func() { m.ExplainDB() })
-						ui.Text(c, "Cmd+Enter 运行，结果最多显示前 50 行").FontSize(10.5).
+						ui.Button(c, "Run").Disabled(v.running).OnClick(func() { m.RunDB() })
+						ui.Button(c, "History").OnClick(func() { m.OpenDBHistory() })
+						ui.Button(c, "Explain").OnClick(func() { m.ExplainDB() })
+						ui.Text(c, "Cmd+Enter runs the statement; results show the first 50 rows").FontSize(10.5).
 							TextColor(p.TextMuted).SingleLine()
 					})
 					ui.Row(c).Gap(2).Children(func() {
@@ -1019,7 +1019,7 @@ func (m *Model) loadDBTablePage() {
 			}
 			s.loading = false
 			if err != nil {
-				s.err = "读取表数据失败：" + err.Error()
+				s.err = "Could not read the table: " + err.Error()
 			} else {
 				s.page = page
 			}
@@ -1067,7 +1067,7 @@ func (m *Model) ToggleDBTableDDL() {
 			}
 			s.ddlLoad = false
 			if err != nil {
-				s.ddlErr = "读取 DDL 失败：" + err.Error()
+				s.ddlErr = "Could not read the DDL: " + err.Error()
 			} else {
 				s.ddl = ddl
 			}
@@ -1090,32 +1090,32 @@ func (m *Model) ToggleDBTableDetails() {
 
 // dbTableDetailLines lists a table's schema as the details view shows it.
 func dbTableDetailLines(d openidea.DBTableDetails) []string {
-	out := []string{fmt.Sprintf("列（%d）", len(d.Columns))}
+	out := []string{fmt.Sprintf("Columns (%d)", len(d.Columns))}
 	for _, c := range d.Columns {
 		flags := ""
 		if c.PrimaryKey {
-			flags += " · 主键"
+			flags += " · primary key"
 		}
 		if !c.Nullable {
-			flags += " · 非空"
+			flags += " · not null"
 		}
 		if c.Default != nil && *c.Default != "" {
-			flags += " · 默认 " + *c.Default
+			flags += " · default " + *c.Default
 		}
 		out = append(out, fmt.Sprintf("  %s  %s%s", c.Name, c.DataType, flags))
 	}
 	if len(d.Indexes) > 0 {
-		out = append(out, fmt.Sprintf("索引（%d）", len(d.Indexes)))
+		out = append(out, fmt.Sprintf("Indexes (%d)", len(d.Indexes)))
 		for _, ix := range d.Indexes {
 			kind := ""
 			if ix.Unique {
-				kind = " · 唯一"
+				kind = " · unique"
 			}
 			out = append(out, fmt.Sprintf("  %s (%s)%s", ix.Name, strings.Join(ix.Columns, ", "), kind))
 		}
 	}
 	if len(d.ForeignKeys) > 0 {
-		out = append(out, fmt.Sprintf("外键（%d）", len(d.ForeignKeys)))
+		out = append(out, fmt.Sprintf("Foreign keys (%d)", len(d.ForeignKeys)))
 		for _, fk := range d.ForeignKeys {
 			ref := fk.RefSchema + "." + fk.RefTable
 			out = append(out, fmt.Sprintf("  %s → %s(%s)",
@@ -1123,7 +1123,7 @@ func dbTableDetailLines(d openidea.DBTableDetails) []string {
 		}
 	}
 	if len(d.Triggers) > 0 {
-		out = append(out, fmt.Sprintf("触发器（%d）", len(d.Triggers)))
+		out = append(out, fmt.Sprintf("Triggers (%d)", len(d.Triggers)))
 		for _, tg := range d.Triggers {
 			out = append(out, fmt.Sprintf("  %s  %s %s", tg.Name, tg.Timing, tg.Events))
 		}
@@ -1134,11 +1134,11 @@ func dbTableDetailLines(d openidea.DBTableDetails) []string {
 // dbTableRange labels the rows a page shows.
 func dbTableRange(s *dbTableSheet) string {
 	if s == nil || len(s.page.Result.Rows) == 0 {
-		return "没有行"
+		return "No rows"
 	}
 	from := s.offset + 1
 	to := s.offset + len(s.page.Result.Rows)
-	return fmt.Sprintf("%d–%d 行", from, to)
+	return fmt.Sprintf("Rows %d–%d", from, to)
 }
 
 // dbTableDialog draws the data page.
@@ -1151,21 +1151,21 @@ func (m *Model) dbTableDialog(c *ui.Context, p *ui.Theme) {
 	ui.Modal(c, &open, func() {
 		ui.Column(c).Width(860).Height(520).Gap(8).Children(func() {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, "表数据："+s.table).FontSize(13).Bold().TextColor(p.Text).SingleLine()
+				ui.Text(c, "Table data: "+s.table).FontSize(13).Bold().TextColor(p.Text).SingleLine()
 				if s.loading {
-					ui.Text(c, "读取中…").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+					ui.Text(c, "Loading…").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
 				} else {
 					ui.Text(c, dbTableRange(s)).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
 				}
 				ui.Spacer(c)
-				ui.Button(c, "刷新").OnClick(func() { m.loadDBTablePage() })
-				ui.Button(c, "上一页").Disabled(s.offset == 0 || s.loading).
+				ui.Button(c, "Refresh").OnClick(func() { m.loadDBTablePage() })
+				ui.Button(c, "Previous Page").Disabled(s.offset == 0 || s.loading).
 					OnClick(func() { m.DBTableStepPage(-1) })
-				ui.Button(c, "下一页").Disabled(!s.page.Result.HasMore || s.loading).
+				ui.Button(c, "Next Page").Disabled(!s.page.Result.HasMore || s.loading).
 					OnClick(func() { m.DBTableStepPage(1) })
-				ui.Button(c, "详情").OnClick(func() { m.ToggleDBTableDetails() })
+				ui.Button(c, "Details").OnClick(func() { m.ToggleDBTableDetails() })
 				ui.Button(c, "DDL").OnClick(func() { m.ToggleDBTableDDL() })
-				ui.Button(c, "关闭").OnClick(func() { m.closeDBTable() })
+				ui.Button(c, "Close").OnClick(func() { m.closeDBTable() })
 			})
 			if s.err != "" {
 				ui.Text(c, s.err).FontSize(11).TextColor(p.Danger).SingleLine().Ellipsis("…")
@@ -1269,7 +1269,7 @@ func (m *Model) OpenDBHistory() {
 			}
 			h.loading = false
 			if err != nil {
-				h.err = "读取历史失败：" + err.Error()
+				h.err = "Could not read the history: " + err.Error()
 			} else {
 				h.items = items
 			}
@@ -1321,7 +1321,7 @@ func (m *Model) ExplainDB() {
 		defer cancel()
 		stmts, err := m.mgr.DBStatements(ctx, Window, source, text, 0, uint32(byteToUTF16Offset(text, len(text))))
 		if err == nil && len(stmts) == 0 {
-			err = fmt.Errorf("没有可解释的语句")
+			err = fmt.Errorf("There is no statement to explain")
 		}
 		var nodes []openidea.DBPlanNode
 		if err == nil {
@@ -1334,7 +1334,7 @@ func (m *Model) ExplainDB() {
 			}
 			p.loading = false
 			if err != nil {
-				p.err = "读取执行计划失败：" + err.Error()
+				p.err = "Could not read the plan: " + err.Error()
 			} else {
 				p.nodes = nodes
 				p.rows = dbPlanRows(nodes)
@@ -1391,15 +1391,15 @@ func (m *Model) dbHistoryDialog(c *ui.Context, p *ui.Theme) {
 	jump := -1
 	ui.Modal(c, &open, func() {
 		ui.Column(c).Width(620).Gap(8).Children(func() {
-			ui.Text(c, "执行历史").FontSize(13).Bold().TextColor(p.Text).SingleLine()
+			ui.Text(c, "Execution History").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			if h.loading {
-				ui.Text(c, "读取中…").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+				ui.Text(c, "Loading…").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
 			} else if h.err != "" {
 				ui.Text(c, h.err).FontSize(11).TextColor(p.Danger).SingleLine().Ellipsis("…")
 			} else if len(h.items) == 0 {
-				ui.Text(c, "还没有执行过 SQL。").FontSize(11).TextColor(p.TextMuted).SingleLine()
+				ui.Text(c, "No SQL has been executed yet.").FontSize(11).TextColor(p.TextMuted).SingleLine()
 			} else {
-				ui.Text(c, fmt.Sprintf("%d 条 · Enter 放入控制台 · Esc 关闭", len(h.items))).
+				ui.Text(c, fmt.Sprintf("%s · Enter puts it in the console · Esc closes", count(len(h.items), "statement", "statements"))).
 					FontSize(10.5).TextColor(p.TextMuted).SingleLine()
 				ui.Scroll(c).Height(320).Children(func() {
 					ui.Column(c).Children(func() {
@@ -1441,11 +1441,11 @@ func (m *Model) dbPlanDialog(c *ui.Context, p *ui.Theme) {
 	open := pl.open
 	ui.Modal(c, &open, func() {
 		ui.Column(c).Width(720).Gap(8).Children(func() {
-			ui.Text(c, "执行计划").FontSize(13).Bold().TextColor(p.Text).SingleLine()
+			ui.Text(c, "Execution Plan").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			ui.Text(c, strings.TrimSpace(strings.SplitN(pl.statement, "\n", 2)[0])).FontSize(10.5).
 				TextColor(p.TextMuted).SingleLine().Ellipsis("…")
 			if pl.loading {
-				ui.Text(c, "解释中…").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+				ui.Text(c, "Explaining…").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
 			} else if pl.err != "" {
 				ui.Text(c, pl.err).FontSize(11).TextColor(p.Danger).SingleLine().Ellipsis("…")
 			} else {
@@ -1467,7 +1467,7 @@ func (m *Model) dbPlanDialog(c *ui.Context, p *ui.Theme) {
 			}
 			ui.Row(c).Children(func() {
 				ui.Spacer(c)
-				ui.Button(c, "关闭").OnClick(func() { m.closeDBPlan() })
+				ui.Button(c, "Close").OnClick(func() { m.closeDBPlan() })
 			})
 		})
 	})
