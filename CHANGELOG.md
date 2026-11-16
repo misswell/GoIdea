@@ -3,7 +3,7 @@
 The update window shows the section of the version it offers. Every release
 needs a `## <version>` section here, or its build fails.
 
-## Unreleased
+## 0.1.17
 
 - **Add SQLite…** 添加的数据源现在能真正连接：数据源 id 不再含冒号，与后端 `<id>[:<database>]` 的目标格式一致。
 - 数据库的**表数据**、**执行历史**与**执行计划**子窗口显示在数据库窗口之上；历史与计划列表按行数收缩。

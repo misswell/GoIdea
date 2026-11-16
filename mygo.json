@@ -2,7 +2,7 @@
   "name": "GoIDEA",
   "slug": "goidea",
   "identifier": "io.github.misswell.goidea",
-  "version": "0.1.16",
+  "version": "0.1.17",
   "copyright": "Copyright © 2026 GoIDEA contributors",
   "publisher": "GoIDEA contributors",
   "main": "./cmd/goidea",
