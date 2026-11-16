@@ -3,7 +3,7 @@
 The update window shows the section of the version it offers. Every release
 needs a `## <version>` section here, or its build fails.
 
-## Unreleased
+## 0.1.13
 
 - 界面与错误提示统一为 **GoIDEA** 命名：客户端错误前缀改为 `goidea:`，缺失后端时提示「未找到 GoIDEA 后端程序」。
 
