@@ -41,7 +41,7 @@ func hasRow(tr *Tree, path string) bool {
 // the project's build output show.
 func TestTreeLoadsOnDemandFromTheWorkspace(t *testing.T) {
 	root := t.TempDir()
-	for _, dir := range []string{"src/main/java/com/example", ".idea", "target", "build"} {
+	for _, dir := range []string{"src/main/java/com/example", ".idea", ".git", "target", "build"} {
 		if err := os.MkdirAll(filepath.Join(root, dir), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -60,10 +60,22 @@ func TestTreeLoadsOnDemandFromTheWorkspace(t *testing.T) {
 
 	src := filepath.Join(root, "src")
 	q.drain(t, "the root's children", func() bool { return hasRow(tr, src) })
-	for _, hidden := range []string{".idea", "target", "build"} {
-		if p := filepath.Join(root, hidden); hasRow(tr, p) {
-			t.Errorf("%s shows in the tree", hidden)
+	// Build output and tool folders show shaded ("excluded"), as OpenIDEA
+	// draws them; VCS metadata stays out of the tree.
+	for _, excluded := range []string{".idea", "target", "build"} {
+		p := filepath.Join(root, excluded)
+		var row *treeNode
+		for _, r := range tr.Rows() {
+			if r.path == p {
+				row = r
+			}
 		}
+		if row == nil || !row.excluded {
+			t.Errorf("%s is not drawn as an excluded row: %v", excluded, row)
+		}
+	}
+	if p := filepath.Join(root, ".git"); hasRow(tr, p) {
+		t.Errorf(".git shows in the tree")
 	}
 
 	tr.Toggle(src)
@@ -105,4 +117,52 @@ func TestTreeFollowsTheDisk(t *testing.T) {
 		t.Fatal(err)
 	}
 	q.drain(t, "the removed file", func() bool { return !hasRow(tr, old) })
+}
+
+// TestTreeCompactsMiddlePackages checks the way OpenIDEA shows an opened
+// package chain: com/example/app draws as one row, com.example.app, whose path
+// is the deepest package; a package with two children keeps its own row.
+func TestTreeCompactsMiddlePackages(t *testing.T) {
+	root := t.TempDir()
+	deep := filepath.Join(root, "src/main/java/com/example/app")
+	if err := os.MkdirAll(deep, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	main := filepath.Join(deep, "Main.java")
+	if err := os.WriteFile(main, []byte("package com.example.app;\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, dir := range []string{"src/main/java/org/one", "src/main/java/org/two"} {
+		if err := os.MkdirAll(filepath.Join(root, dir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	q := make(mainQueue, 128)
+	tr := NewTree(root, q.post, func() {})
+	defer tr.Close()
+
+	// reveal is what opening a file does: it opens the folders down to the file.
+	tr.reveal(main)
+	q.drain(t, "the revealed file", func() bool { return hasRow(tr, main) })
+
+	var joined *treeNode
+	for _, row := range tr.Rows() {
+		if row.dir && row.name == "com.example.app" {
+			joined = row
+		}
+		if row.dir && (row.name == "com" || row.name == "example") {
+			t.Fatalf("%q still has its own row at %s", row.name, row.path)
+		}
+	}
+	if joined == nil {
+		t.Fatalf("com.example.app was not compacted: %v", tr.Rows())
+	}
+	if joined.path != deep {
+		t.Fatalf("the compacted row points at %s, want the deepest package %s", joined.path, deep)
+	}
+	// A package with two children is not a middle package: it keeps its row.
+	java := filepath.Join(root, "src/main/java")
+	if !hasRow(tr, filepath.Join(java, "org")) {
+		t.Fatalf("org has no row: %v", tr.Rows())
+	}
 }

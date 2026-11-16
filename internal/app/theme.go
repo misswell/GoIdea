@@ -16,6 +16,7 @@ type oiColors struct {
 	textSubtle, textFaint      ui.Color
 	accent, link               ui.Color
 	danger, warning, success   ui.Color
+	ignored                    ui.Color
 	selected, selectedInactive ui.Color
 	hoverTint                  ui.Color
 	buttonBorder, buttonHover  ui.Color
@@ -49,6 +50,7 @@ func openideaColors(dark bool) oiColors {
 			textFaint:         ui.Hex("#5f6269"),
 			accent:            ui.Hex("#3871e1"),
 			link:              ui.Hex("#71a1fe"),
+			ignored:           ui.Hex("#d69a6b"),
 			danger:            ui.Hex("#f57e84"),
 			warning:           ui.Hex("#d59637"),
 			success:           ui.Hex("#6db083"),
@@ -85,6 +87,7 @@ func openideaColors(dark bool) oiColors {
 		textFaint:         ui.Hex("#9fa2a8"),
 		accent:            ui.Hex("#3871e1"),
 		link:              ui.Hex("#2f5eb9"),
+		ignored:           ui.Hex("#8c4f00"),
 		danger:            ui.Hex("#c54e58"),
 		warning:           ui.Hex("#a56906"),
 		success:           ui.Hex("#338555"),

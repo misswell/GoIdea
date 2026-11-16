@@ -23,6 +23,14 @@ type treeNode struct {
 	dir      bool
 	depth    int
 	expanded bool
+	// excluded marks build output and tool folders the tree shows shaded,
+	// as OpenIDEA shades target/build; module marks a Maven or Gradle module
+	// folder, whose name is bold.
+	excluded bool
+	module   bool
+	// package is a compacted package row (com.example), drawn with the
+	// package icon rather than a folder.
+	packageDir bool
 }
 
 // Tree is the project's file tree, with the rows visible in it. It is a view
@@ -208,7 +216,16 @@ func (t *Tree) rebuild() {
 			if hidden(name, dir) {
 				continue
 			}
-			walk(&treeNode{path: p, name: name, dir: dir, depth: n.depth + 1, expanded: t.open[p]})
+			leaf := p
+			pkg := false
+			if dir && inPackageTree(p) {
+				if joined, deep, ok := t.packageChain(p); ok {
+					name, leaf, pkg = joined, deep, true
+				}
+			}
+			walk(&treeNode{path: leaf, name: name, dir: dir, depth: n.depth + 1,
+				expanded: t.open[leaf], excluded: dir && excludedDir(name), module: dir && t.isModule(leaf, name),
+				packageDir: pkg})
 		}
 	}
 	walk(t.root)
@@ -252,11 +269,107 @@ func (t *Tree) expandSettled(dir string) bool {
 	return true
 }
 
-// hidden reports whether the tree leaves a name out: tool folders and their
-// caches, and the dot files an editor or the system writes.
+// packageChain joins the package directories below a source root: while a
+// directory holds exactly one visible entry and that entry is a directory, the
+// chain draws as one dotted row, as OpenIDEA's tree shows
+// com.example.app on one line. The row's path is the deepest directory, so
+// opening the row reads the packages under it.
+func (t *Tree) packageChain(dir string) (name, leaf string, ok bool) {
+	if t.ws == nil || !t.ws.IsDir(dir) {
+		return "", dir, false
+	}
+	base := filepath.Base(dir)
+	if !t.ws.Loaded(dir) {
+		t.ws.Load(dir)
+		return "", dir, false
+	}
+	kids := t.visibleChildren(dir)
+	if len(kids) != 1 || !t.ws.IsDir(kids[0]) {
+		return "", dir, false
+	}
+	if deeper, deepLeaf, ok := t.packageChain(kids[0]); ok {
+		return base + "." + deeper, deepLeaf, true
+	}
+	return base + "." + filepath.Base(kids[0]), kids[0], true
+}
+
+// visibleChildren lists a directory's entries the tree draws.
+func (t *Tree) visibleChildren(dir string) []string {
+	var out []string
+	for _, p := range t.ws.Children(dir) {
+		name := filepath.Base(p)
+		if hidden(name, t.ws.IsDir(p)) {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
+}
+
+// isSourceRoot reports whether path is a source root of the project: a
+// language folder under src/<configuration>/ (src/main/java and siblings).
+func isSourceRoot(path string) bool {
+	base := filepath.Base(path)
+	switch base {
+	case "java", "kotlin", "groovy", "scala":
+	default:
+		return false
+	}
+	p := filepath.ToSlash(path)
+	for _, root := range []string{"/src/main/", "/src/test/", "/src/integrationTest/"} {
+		if strings.Contains(p, root) {
+			return true
+		}
+	}
+	return false
+}
+
+// inPackageTree reports whether path is a package below a source root
+// (src/main/java and its siblings): only those chains compact, never logs,
+// src or other plain folders.
+func inPackageTree(path string) bool {
+	p := filepath.ToSlash(path)
+	for _, root := range []string{
+		"/src/main/java", "/src/test/java",
+		"/src/main/kotlin", "/src/test/kotlin",
+		"/src/main/groovy", "/src/test/groovy",
+		"/src/main/scala", "/src/test/scala",
+	} {
+		if strings.Contains(p, root+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+// hidden reports whether the tree leaves a name out. OpenIDEA shows most
+// dotfiles and the build output; only VCS metadata and system files are gone
+// (build output draws shaded, through excludedDir).
 func hidden(name string, dir bool) bool {
-	if strings.HasPrefix(name, ".") {
+	switch name {
+	case ".git", ".hg", ".svn", ".DS_Store", "Thumbs.db":
 		return true
 	}
-	return dir && hiddenDirs[name]
+	return false
+}
+
+// excludedDir reports whether a shown folder is build output or tool state,
+// which IDEs dim and shade: "excluded" content.
+func excludedDir(name string) bool {
+	return hiddenDirs[name] || name == ".idea" || name == ".vscode" || name == ".openidea"
+}
+
+// isModule reports whether a folder is a Maven or Gradle module: it has a
+// pom.xml or a build.gradle(.kts) beside its other entries.
+func (t *Tree) isModule(path, name string) bool {
+	if !t.ws.Loaded(path) {
+		return false
+	}
+	for _, p := range t.ws.Children(path) {
+		switch filepath.Base(p) {
+		case "pom.xml", "build.gradle", "build.gradle.kts":
+			return true
+		}
+	}
+	return false
 }

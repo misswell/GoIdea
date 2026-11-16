@@ -118,6 +118,26 @@ func (m *Model) SmokeShots(ctx context.Context, dir string) (map[string]any, err
 	wait(func() bool { return m.tab() != nil }, 60*time.Second)
 	shot("workbench")
 
+	// The project tree with the source chain open: OpenIDEA compacts
+	// com/example into one package row.
+	m.post(func() {
+		m.tree.reveal(filepath.Join(m.Root(), "src/main/java/com/example/App.java"))
+	})
+	wait(func() bool {
+		for _, row := range m.tree.Rows() {
+			if row.packageDir {
+				return true
+			}
+		}
+		return false
+	}, 30*time.Second)
+	shot("left-packages")
+	m.post(func() {
+		if m.tree.open[filepath.Join(m.Root(), "src")] {
+			m.tree.Toggle(filepath.Join(m.Root(), "src"))
+		}
+	})
+
 	// The editor alone, as Distraction Free Mode shows it: the action, not the
 	// flag, so the gutter and the hint come out as they do for the user.
 	m.post(func() { m.ToggleZen() })

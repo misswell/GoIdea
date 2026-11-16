@@ -222,8 +222,11 @@ func (m *Model) searchRows(c *ui.Context, p *ui.Theme) {
 func (m *Model) treeRow(c *ui.Context, p *ui.Theme, row *treeNode) {
 	r := ui.Row(c.Key("tree:"+row.path)).Height(24).Padding(0, 6).
 		PaddingStart(6 + float32(row.depth)*14).Gap(5).AlignItems(ui.Center)
+	oi := oiPaletteOf(p)
 	if row.path == m.tree.Selected() {
 		r.Background(p.Selection)
+	} else if row.excluded {
+		r.Background(p.Background.Mix(oi.ignored, 0.14))
 	} else if row.dir && row.expanded {
 		r.Background(p.Background)
 	}
@@ -246,11 +249,31 @@ func (m *Model) treeRow(c *ui.Context, p *ui.Theme, row *treeNode) {
 			}
 			ui.Text(c, arrow).FontSize(10).TextColor(p.TextMuted)
 		}
-		color := p.Text
-		if row.dir {
-			color = p.Accent
+		// OpenIDEA's tree: a module icon on the root, a blue folder on a
+		// source root, a package icon on a compacted package, a grey folder
+		// on any other directory, and a file icon — labels in the normal
+		// text colour, not the accent.
+		switch {
+		case row.path == m.Root() || row.module:
+			ui.Icon(c, iconMavenProject).Size(14, 14).TextColor(p.TextMuted)
+		case row.packageDir:
+			ui.Icon(c, iconPackage).Size(14, 14).TextColor(p.TextMuted)
+		case row.dir && isSourceRoot(row.path):
+			ui.Icon(c, iconWelcomeFolder).Size(14, 14).TextColor(p.Accent)
+		case row.dir:
+			ui.Icon(c, iconWelcomeFolder).Size(14, 14).TextColor(p.TextMuted)
+		default:
+			icon, tone := treeFileIcon(row.name, p)
+			ui.Icon(c, icon).Size(14, 14).TextColor(tone)
 		}
-		ui.Text(c, label).FontSize(12.5).TextColor(color).SingleLine().Ellipsis("…")
+		tone := p.Text
+		if row.excluded {
+			tone = oi.ignored
+		}
+		text := ui.Text(c, label).FontSize(12.5).TextColor(tone).SingleLine().Ellipsis("…")
+		if row.module {
+			text.Bold()
+		}
 		if bookmarked || r.Hovered() {
 			ui.Spacer(c)
 			chip := ui.Row(c.Key("treeBookmark:"+row.path)).Height(16).Padding(0, 5).
