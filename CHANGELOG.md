@@ -3,7 +3,7 @@
 The update window shows the section of the version it offers. Every release
 needs a `## <version>` section here, or its build fails.
 
-## Unreleased
+## 0.1.22
 
 - 修复从 **Maven** 窗口运行生命周期阶段失败：现在发送完整的运行配置（含 `isTest`、`debugAdapter`），不再被后端以 `missing field isTest` 拒绝。
 
