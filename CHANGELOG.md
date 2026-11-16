@@ -3,6 +3,12 @@
 The update window shows the section of the version it offers. Every release
 needs a `## <version>` section here, or its build fails.
 
+## Unreleased
+
+- **Run › Edit Configurations…** 现在会打开配置对话框：此前对话框以关闭状态创建，命令没有反应。
+- 差异视图的增删行与区块标题改为淡色底，之前整行是实色块、文字几乎看不清。
+- 后端返回的错误信息中的 OpenIDEA 统一显示为 **GoIDEA**，保留 `openidea-server`、`.openidea` 等真实名称。
+
 ## 0.1.14
 
 - **File › New Project…** 现在会打开向导：此前命令和欢迎页按钮都不显示任何界面。

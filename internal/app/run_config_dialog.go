@@ -61,6 +61,7 @@ func (m *Model) OpenRunConfigs() {
 		items[i] = &m.run.configs[i]
 	}
 	d := &runConfigDlg{
+		open:  true,
 		items: items,
 		sel:   m.run.sel,
 	}

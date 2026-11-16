@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egoist/mygo/ui"
+
 	"mayoi/internal/openidea"
 )
 
@@ -37,6 +39,25 @@ func (h *runCfgHook) hook(ctx context.Context, cmd string, args any) (json.RawMe
 		return json.Marshal([]map[string]any{mvn})
 	}
 	return json.Marshal(nil)
+}
+
+func TestRunConfigDialogDrawsAsASheet(t *testing.T) {
+	m := &Model{postHook: func(fn func()) { fn() }, ctx: context.Background()}
+	m.run.configs, _ = openidea.DecodeRunConfigs(mustJSON(t, []map[string]any{{
+		"id": "maven:test", "name": "test", "kind": "maven", "command": "mvn",
+		"args": []string{"test"}, "detected": true,
+	}}))
+	m.OpenRunConfigs()
+	if m.runCfgDlg == nil || !m.runCfgDlg.open {
+		t.Fatal("Edit Configurations opened without its sheet flag")
+	}
+	tt := ui.NewTester(func(c *ui.Context) { m.View(c) }, 1440, 900)
+	tt.Frame()
+	// The sheet used to be created with open=false, so the modal closed it in
+	// the same frame and Run › Edit Configurations… showed nothing.
+	if _, ok := tt.Find("运行/调试配置"); !ok {
+		t.Fatalf("the Edit Configurations sheet was not drawn: %v", tt.Texts())
+	}
 }
 
 func TestRunConfigDialogSavesAUserCopy(t *testing.T) {

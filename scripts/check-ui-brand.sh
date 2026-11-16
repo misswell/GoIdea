@@ -1,22 +1,24 @@
 #!/usr/bin/env bash
 # The interface says GoIDEA. This check fails when a Go string literal the app
 # can render still contains "openidea" — except the names that really exist on
-# disk: the backend binary, its log, and the project's .openidea directory.
+# disk: the backend binary, its log, the project's .openidea directory, and the
+# environment variable the client sets for it.
 #
+# The scan covers the whole client boundary, not only internal/app: the
+# adapter composes the text Run and Debug show, and internal/openidea turns
+# remote errors into the sentences the status bar and notifications draw.
 # Code comments and docs may cite the upstream by name; only string literals
 # are scanned, and tests are skipped (they name the upstream in assertions).
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-allowed='^(openidea-server|openidea-server\.log|\.openidea|\.openidea/|openidea-server/)$'
+allowed='^"(openidea-server|openidea-server\.log|\.openidea|\.openidea/|openidea|OPENIDEA_SERVER_HOME=|mayoi/internal/openidea)"$'
 
-# User-visible surface: the UI package and the entry point.
-files=(internal/app/*.go cmd/goidea/*.go)
-
-# Names that really exist on disk (or the Go package) are not product wording:
-# the backend binary, its log, the project's .openidea directory, the import.
-allowed='^"(openidea-server|openidea-server\.log|\.openidea|mayoi/internal/openidea)"$'
+# The client boundary: the UI package, the entry point, the ports of
+# OpenIDEA's run/debug logic, and the protocol package that normalises what
+# the backend sends back.
+files=(internal/app/*.go cmd/goidea/*.go internal/adapter/*.go internal/openidea/*.go)
 
 offenders=$(
   for f in "${files[@]}"; do

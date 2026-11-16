@@ -340,9 +340,12 @@ func (m *Model) diffDialog(c *ui.Context, p *ui.Theme) {
 				ui.Text(c, d.message).FontSize(11.5).TextColor(p.TextMuted).SingleLine()
 			}
 			if len(d.rows) > 0 {
-				addTint := p.Success.Mix(p.Background, 0.14)
-				delTint := p.Danger.Mix(p.Background, 0.14)
-				hunkTint := p.Accent.Mix(p.Background, 0.08)
+				// Mix(tint, 0.14) keeps 86% of the tint: the row became a
+				// solid bar with its text barely readable. The background is
+				// the base and the change's colour the small share.
+				addTint := p.Background.Mix(p.Success, 0.14)
+				delTint := p.Background.Mix(p.Danger, 0.14)
+				hunkTint := p.Background.Mix(p.Accent, 0.08)
 				ui.Scroll(c).Height(480).Children(func() {
 					ui.Column(c).Children(func() {
 						for i, r := range d.rows {

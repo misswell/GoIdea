@@ -208,6 +208,48 @@ func (m *Model) SmokeShots(ctx context.Context, dir string) (map[string]any, err
 	shot("dialog")
 	m.post(func() { m.closeInvalidateCaches() })
 
+	// Run › Edit Configurations… over the configurations the backend detects.
+	wait(func() bool { return len(m.run.configs) > 0 }, 60*time.Second)
+	m.post(func() { m.OpenRunConfigs() })
+	wait(func() bool { return m.runCfgDlg != nil }, 30*time.Second)
+	shot("run-configs")
+	m.post(func() { m.closeRunConfigs() })
+
+	// Run › Attach to Process… with the backend's process list.
+	m.post(func() { m.OpenAttach() })
+	wait(func() bool { return m.attach != nil && !m.attach.busy }, 60*time.Second)
+	shot("attach")
+	m.post(func() { m.closeAttach() })
+
+	// Git › Commit… over the project's uncommitted change.
+	m.post(func() { m.OpenCommit() })
+	wait(func() bool {
+		return m.commit != nil && m.vcs.loaded && !m.vcs.loading && len(m.vcs.files) > 0
+	}, 60*time.Second)
+	shot("commit")
+	m.post(func() { m.commit = nil })
+
+	// The diff of that change, from the open file's buffer.
+	m.post(func() {
+		if t := m.tab(); t != nil {
+			m.ShowDiff(t.doc.Path())
+		}
+	})
+	wait(func() bool { return m.diff != nil && !m.diff.loading }, 60*time.Second)
+	shot("diff")
+	m.post(func() { m.closeDiff() })
+
+	// View › Tool Windows › Database with the project's data sources.
+	m.post(func() { m.OpenDatabase() })
+	wait(func() bool { return m.db != nil && m.db.open && !m.db.loading }, 60*time.Second)
+	shot("database")
+	m.post(func() { m.closeDatabase() })
+
+	// The Trust Project prompt a project asks before it may build.
+	m.post(func() { m.trustAsk = true })
+	shot("trust")
+	m.post(func() { m.trustAsk = false })
+
 	// Notifications: the bottom-right balloons and the tool window's history.
 	m.post(func() { m.notifyGroupSample() })
 	shot("balloons")

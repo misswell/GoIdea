@@ -28,7 +28,8 @@ SHOT_STATES = {
     "workbench", "editor", "bottom-todo", "split", "settings", "palette",
     "popup-quick-files", "search-everywhere", "balloons", "notifications",
     "left-structure", "services", "new-project", "dialog", "welcome-empty", "welcome",
-    "welcome-customize", "welcome-plugins",
+    "welcome-customize", "welcome-plugins", "run-configs", "attach", "commit", "diff",
+    "database", "trust",
 }
 
 

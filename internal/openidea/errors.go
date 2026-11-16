@@ -62,9 +62,9 @@ func parseServerError(code int64, message string) *Error {
 		Data    json.RawMessage `json:"data"`
 	}
 	if err := json.Unmarshal([]byte(message), &payload); err == nil && payload.Kind != "" {
-		return &Error{Code: code, Kind: payload.Kind, Message: payload.Message, Data: payload.Data}
+		return &Error{Code: code, Kind: payload.Kind, Message: NormalizeBrand(payload.Message), Data: payload.Data}
 	}
-	return &Error{Code: code, Message: message}
+	return &Error{Code: code, Message: NormalizeBrand(message)}
 }
 
 // ErrClosed is returned to calls when the connection or process is gone.
