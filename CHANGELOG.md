@@ -3,7 +3,7 @@
 The update window shows the section of the version it offers. Every release
 needs a `## <version>` section here, or its build fails.
 
-## Unreleased
+## 0.1.21
 
 - 编辑器标签页按文件类型显示图标（Java/XML/YAML/JSON/脚本等），与项目树使用同一套图标。
 
