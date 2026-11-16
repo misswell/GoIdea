@@ -3,7 +3,7 @@
 The update window shows the section of the version it offers. Every release
 needs a `## <version>` section here, or its build fails.
 
-## Unreleased
+## 0.1.15
 
 - **Run › Edit Configurations…** 现在会打开配置对话框：此前对话框以关闭状态创建，命令没有反应。
 - 差异视图的增删行与区块标题改为淡色底，之前整行是实色块、文字几乎看不清。
