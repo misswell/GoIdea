@@ -568,7 +568,7 @@ func (m *Model) runHeader(c *ui.Context, p *ui.Theme) {
 		ui.Text(c, "Run").FontSize(12).Bold().TextColor(p.Text)
 		// The section-8 readiness: when a state is missing, the header names
 		// it instead of failing silently.
-		if reason := m.readyFor(false); reason != "" && m.run.trusted {
+		if reason := m.readyFor(); reason != "" && m.run.trusted {
 			ui.Text(c, reason).FontSize(10.5).TextColor(p.TextMuted).SingleLine().Grow(1)
 		} else if m.run.trusted {
 			ui.Button(c, "‹").OnClick(func() { m.CycleRunConfig(-1) })
@@ -849,6 +849,9 @@ func (m *Model) debugHeader(c *ui.Context, p *ui.Theme) {
 			SingleLine().Ellipsis("…").Grow(1)
 		if d.session == 0 && !d.starting {
 			ui.Button(c, "Debug").OnClick(func() { m.Debug() })
+		}
+		if d.starting {
+			ui.Button(c, "Stop").OnClick(func() { m.StopDebug() })
 		}
 		if d.paused {
 			ui.Button(c, "Resume").OnClick(func() { m.DebugContinue() })

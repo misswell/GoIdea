@@ -34,8 +34,12 @@ var (
 type DebugPane struct {
 	visible  bool
 	starting bool
-	session  uint32 // backend DebugSessionId; 0 before the first start
-	config   string // main class being debugged
+	// startCancel stops a launch that is still waiting or preparing (Stop
+	// while the Java project imports), so no session starts after the user
+	// gave up.
+	startCancel context.CancelFunc
+	session     uint32 // backend DebugSessionId; 0 before the first start
+	config      string // main class being debugged
 
 	// lastID/lastRaw/lastKind remember the configuration this pane debugged,
 	// so the widget's rerun restarts it as saved now.
@@ -97,6 +101,9 @@ const maxDebugLines = 2000
 // resetDebug drops the previous project's debug state, breakpoints included:
 // a line number means nothing in another project.
 func (m *Model) resetDebug() {
+	if m.debug.startCancel != nil {
+		m.debug.startCancel()
+	}
 	m.debug = DebugPane{stopLine: -1}
 }
 
@@ -592,8 +599,9 @@ func (m *Model) DebugRunConfig(rc *openidea.RunConfig) {
 		m.invalidate()
 		return
 	}
-	if reason := m.readyFor(true); reason != "" && m.run.loaded {
-		m.debug.err = reason
+	gate, wait := m.debugReadiness()
+	if gate != "" {
+		m.debug.err = gate
 		m.invalidate()
 		return
 	}
@@ -638,13 +646,17 @@ func (m *Model) DebugRunConfig(rc *openidea.RunConfig) {
 	m.debug.truncated = false
 	m.debug.err = ""
 	m.debug.status = "Saving and building…"
+	if wait {
+		m.debug.status = "Waiting for the Java project to finish importing…"
+	}
 	m.refreshDecorations()
 	m.invalidate()
 
 	p := m.prefs.SaveFiles
 	tabs := append([]*Tab(nil), m.tabs...)
+	ctx, cancel := context.WithTimeout(m.ctx, 10*time.Minute)
+	m.debug.startCancel = cancel
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, 10*time.Minute)
 		defer cancel()
 		fail := func(msg string, err error) {
 			text := msg
@@ -652,11 +664,22 @@ func (m *Model) DebugRunConfig(rc *openidea.RunConfig) {
 				text += "：" + err.Error()
 			}
 			m.post(func() {
+				if !m.debug.starting {
+					return
+				}
 				m.debug.starting = false
+				m.debug.startCancel = nil
 				m.debug.err = text
 				m.debug.status = ""
 				m.invalidate()
 			})
+		}
+		if wait {
+			if err := m.waitJavaReady(ctx); err != nil {
+				fail("The Java project did not finish importing", err)
+				return
+			}
+			m.post(func() { m.debug.status = "Saving and building…"; m.invalidate() })
 		}
 		// The build reads the files from disk.
 		if err := saveAll(ctx, tabs, p); err != nil {
@@ -696,9 +719,9 @@ func (m *Model) DebugRunConfig(rc *openidea.RunConfig) {
 			return
 		}
 		m.post(func() {
-			if m.Root() != root {
-				// The project changed while the session started: stop the
-				// old project's debugger and leave the new state alone.
+			if m.Root() != root || !m.debug.starting {
+				// The project changed, or the user stopped while it started:
+				// stop the backend session at once.
 				go func(id uint32) {
 					ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
 					defer cancel()
@@ -707,6 +730,7 @@ func (m *Model) DebugRunConfig(rc *openidea.RunConfig) {
 				return
 			}
 			m.debug.starting = false
+			m.debug.startCancel = nil
 			if m.debug.session == 0 {
 				m.debug.session = session
 			}
@@ -770,8 +794,9 @@ func (m *Model) DebugContext() {
 		m.invalidate()
 		return
 	}
-	if reason := m.readyFor(true); reason != "" && m.run.loaded {
-		m.debug.err = reason
+	gateCtx, waitImport := m.debugReadiness()
+	if gateCtx != "" {
+		m.debug.err = gateCtx
 		m.invalidate()
 		return
 	}
@@ -816,12 +841,16 @@ func (m *Model) DebugContext() {
 	m.debug.truncated = false
 	m.debug.err = ""
 	m.debug.status = "Saving and building…"
+	if waitImport {
+		m.debug.status = "Waiting for the Java project to finish importing…"
+	}
 	m.refreshDecorations()
 	m.invalidate()
 
 	p := m.prefs.SaveFiles
+	ctx, cancel := context.WithTimeout(m.ctx, 10*time.Minute)
+	m.debug.startCancel = cancel
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, 10*time.Minute)
 		defer cancel()
 		fail := func(msg string, err error) {
 			text := msg
@@ -829,11 +858,22 @@ func (m *Model) DebugContext() {
 				text += "：" + err.Error()
 			}
 			m.post(func() {
+				if !m.debug.starting {
+					return
+				}
 				m.debug.starting = false
+				m.debug.startCancel = nil
 				m.debug.err = text
 				m.debug.status = ""
 				m.invalidate()
 			})
+		}
+		if waitImport {
+			if err := m.waitJavaReady(ctx); err != nil {
+				fail("The Java project did not finish importing", err)
+				return
+			}
+			m.post(func() { m.debug.status = "Saving and building…"; m.invalidate() })
 		}
 		// The build reads the files from disk.
 		if err := saveAll(ctx, tabs, p); err != nil {
@@ -874,9 +914,9 @@ func (m *Model) DebugContext() {
 			return
 		}
 		m.post(func() {
-			if m.Root() != root {
-				// The project changed while the session started: stop the
-				// old project's debugger and leave the new state alone.
+			if m.Root() != root || !m.debug.starting {
+				// The project changed, or the user stopped while it started:
+				// stop the backend session at once.
 				go func(id uint32) {
 					ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
 					defer cancel()
@@ -885,6 +925,7 @@ func (m *Model) DebugContext() {
 				return
 			}
 			m.debug.starting = false
+			m.debug.startCancel = nil
 			if m.debug.session == 0 {
 				m.debug.session = session
 			}
@@ -997,7 +1038,19 @@ func (m *Model) RunToCursor(force bool) {
 func (m *Model) ForceRunToCursor() { m.RunToCursor(true) }
 
 // StopDebug ends the session.
+// StopDebug stops the session, or a launch still waiting for the project's
+// import.
 func (m *Model) StopDebug() {
+	if m.debug.starting {
+		if m.debug.startCancel != nil {
+			m.debug.startCancel()
+			m.debug.startCancel = nil
+		}
+		m.debug.starting = false
+		m.debug.status = ""
+		m.debug.err = ""
+		m.invalidate()
+	}
 	if m.debug.session == 0 || m.debug.ended {
 		return
 	}
@@ -1572,6 +1625,90 @@ func (m *Model) SmokeDebug(ctx context.Context) (map[string]any, error) {
 		out["output"] = m.debug.text()
 		out["outputLines"] = len(m.debug.output)
 	})
+	return out, nil
+}
+
+// SmokeDebugImport starts a debug while the Java project is still importing
+// and reports that it waits instead of refusing, for the real-server acceptance
+// run. It stops the pending launch before any build starts.
+func (m *Model) SmokeDebugImport(ctx context.Context) (map[string]any, error) {
+	out := map[string]any{}
+	root := m.Root()
+	if root == "" {
+		return out, errors.New("没有打开项目")
+	}
+	if _, err := m.mgr.Invoke(ctx, Window, "project_trust_set", map[string]any{
+		"path": root, "trusted": true, "folder": true,
+	}); err != nil {
+		return out, err
+	}
+	// The grant above is the backend's; the model's run pane learns it through
+	// the same check the UI uses when a project opens.
+	m.checkTrust(root)
+	trusted := false
+	for !trusted {
+		m.post(func() { trusted = m.run.trusted })
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+	if err := m.reg.ReopenAll(ctx); err != nil {
+		out["reopenError"] = err.Error()
+	}
+	candidate := findJavaMain(root)
+	if candidate == "" {
+		return out, errors.New("项目里没有带 main 方法的 Java 文件")
+	}
+	m.post(func() { m.openFile(candidate) })
+	if !m.waitDebug(ctx, func(*DebugPane) bool { return m.tab() != nil }, 60*time.Second) {
+		return out, errors.New("打开 " + candidate + " 超时")
+	}
+	out["file"] = candidate
+	// The import window: jdtls reports starting or its analysis running.
+	deadline := time.Now().Add(90 * time.Second)
+	caught := false
+	for time.Now().Before(deadline) {
+		r := m.readinessNow(ctx)
+		if r.Importing || (!r.Java && r.JavaDetail == "starting") {
+			out["readiness"] = r.JavaDetail
+			caught = true
+			break
+		}
+		if r.Java {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(200 * time.Millisecond):
+		}
+	}
+	if !caught {
+		out["skipped"] = "the Java project was already imported"
+		return out, nil
+	}
+	m.post(func() { m.DebugContext() })
+	if !m.waitDebug(ctx, func(d *DebugPane) bool {
+		return d.starting || d.err != "" || d.session != 0
+	}, 20*time.Second) {
+		return out, errors.New("Debug did not react")
+	}
+	m.post(func() {
+		out["starting"] = m.debug.starting
+		out["status"] = m.debug.status
+		out["err"] = m.debug.err
+		m.StopDebug()
+		out["stopped"] = !m.debug.starting && m.debug.session == 0 && m.debug.err == ""
+	})
+	// A stopped waiting launch must not start a session once the import ends.
+	select {
+	case <-ctx.Done():
+		return out, ctx.Err()
+	case <-time.After(2 * time.Second):
+	}
+	m.post(func() { out["sessionAfterStop"] = m.debug.session })
 	return out, nil
 }
 

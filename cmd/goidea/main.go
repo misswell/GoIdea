@@ -367,6 +367,15 @@ func smoke(m *app.Model) {
 			fields["debugError"] = debugErr.Error()
 		}
 	}
+	if os.Getenv("GOIDEA_SMOKE_DEBUG_IMPORT") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
+		di, diErr := m.SmokeDebugImport(ctx)
+		cancel()
+		fields["debugImport"] = di
+		if diErr != nil {
+			fields["debugImportError"] = diErr.Error()
+		}
+	}
 	if os.Getenv("GOIDEA_SMOKE_SEARCH") == "1" && root != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		search, searchErr := m.SmokeSearch(ctx)

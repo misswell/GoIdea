@@ -163,22 +163,66 @@ func (m *Model) refreshReadiness() {
 	}()
 }
 
-// readyFor reports the first reason an operation cannot run yet, "" when it
-// can: Debug and HotSwap need Java Ready on top of Run Ready.
-func (m *Model) readyFor(debug bool) string {
+// readyFor reports the first reason Run cannot run yet, "" when it can. Debug
+// uses debugReadiness instead, which waits through an import.
+func (m *Model) readyFor() string {
 	if m.ready == nil {
 		// The snapshot has not been taken yet (no project open): the
 		// operation's own checks report their reasons.
 		return ""
 	}
+	return m.readiness().readinessReason()
+}
+
+// debugReadiness separates what blocks a Java debug session outright from
+// what only asks for waiting: an import in progress is transient, and upstream
+// explicit requests wait for the language server instead of refusing
+// (ide-lsp loading.rs). A missing backend, project or failed Java server
+// cannot resolve by waiting.
+func (m *Model) debugReadiness() (gate string, wait bool) {
+	if m.ready == nil {
+		return "", false
+	}
 	r := m.readiness()
-	if reason := r.readinessReason(); reason != "" {
-		return reason
+	switch {
+	case !r.Backend:
+		return "The backend is not connected", false
+	case !r.Project:
+		return "The project is not open yet", false
+	case r.Java:
+		return "", false
+	case r.Importing || r.JavaDetail == "starting":
+		return "", true
 	}
-	if debug && !r.Java {
-		return "The Java project is importing; wait for it to finish"
+	return fmt.Sprintf("Java language services are not ready (%s)", r.JavaDetail), false
+}
+
+// waitJavaReady polls the project until its Java import finished, so a debug
+// started during the import begins as soon as jdtls can answer.
+func (m *Model) waitJavaReady(ctx context.Context) error {
+	deadline := time.Now().Add(8 * time.Minute)
+	for {
+		r := m.readinessNow(ctx)
+		if r.Java {
+			return nil
+		}
+		switch {
+		case !r.Backend:
+			return fmt.Errorf("the backend stopped while the Java project was importing")
+		case !r.Project:
+			return fmt.Errorf("the project closed while the Java project was importing")
+		case !r.Importing && r.JavaDetail != "starting":
+			return fmt.Errorf("the Java project stopped importing before it was ready (%s)", r.JavaDetail)
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("the Java project did not finish importing in 8 minutes")
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(700 * time.Millisecond):
+		}
 	}
-	return ""
 }
 
 // readiness returns the cached snapshot; an empty one reads as not ready.
