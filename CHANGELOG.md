@@ -3,7 +3,7 @@
 The update window shows the section of the version it offers. Every release
 needs a `## <version>` section here, or its build fails.
 
-## Unreleased
+## 0.1.23
 
 - Java 项目导入完成前点 **Debug** 不再报错：等待导入结束后自动继续，期间可 **Stop** 取消。
 
