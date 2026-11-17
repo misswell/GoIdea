@@ -3,7 +3,7 @@
 The update window shows the section of the version it offers. Every release
 needs a `## <version>` section here, or its build fails.
 
-## Unreleased
+## 0.1.24
 
 - 启动先显示欢迎页，不再自动打开上次的项目；可在欢迎页 **Customize** 勾选恢复。
 - 新增 **File › Close Project**：关闭项目并回到欢迎页，应用继续运行。
