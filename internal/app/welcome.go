@@ -640,16 +640,12 @@ func (m *Model) welcomeCustomize(c *ui.Context, oi oiColors) {
 					}
 				})
 				m.welcomeField(c, oi, "Startup", func() {
-					mode := "Reopen last project"
-					if m.prefs.Startup == "welcome" {
-						mode = "Show Welcome screen"
-					}
-					sel := ui.Select(c, &mode, []string{"Reopen last project", "Show Welcome screen"}).Width(200)
-					if sel.Changed() {
-						if mode == "Show Welcome screen" {
-							m.SetStartupPref("welcome")
+					reopen := m.prefs.Startup == "reopen"
+					if ui.Checkbox(c, &reopen, "Reopen last project on startup").Changed() {
+						if reopen {
+							m.SetStartupPref("reopen")
 						} else {
-							m.SetStartupPref("")
+							m.SetStartupPref("welcome")
 						}
 					}
 				})

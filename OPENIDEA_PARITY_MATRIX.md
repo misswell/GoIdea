@@ -1893,7 +1893,7 @@ Local-only commands and the per-command argument lists are in
 | `clipboard_set_file_list` | clipboard | no |  | missing |
 | `clipboard_text` | clipboard | no |  | missing |
 | `clipboard_write_text` | clipboard | no |  | missing |
-| `close_project` | app | yes |  | missing |
+| `close_project` | app | yes | yes | missing |
 | `coverage_collect` | coverage | yes |  | missing |
 | `coverage_import` | coverage | yes |  | missing |
 | `coverage_prepare` | coverage | yes |  | missing |
@@ -2488,7 +2488,7 @@ Local-only commands and the per-command argument lists are in
 | `wsl_distros` | wsl | no |  | missing |
 | `wsl_resolve` | wsl | no |  | missing |
 
-476 commands are served over stdio and 112 are called by GoIDEA today. A command
+476 commands are served over stdio and 113 are called by GoIDEA today. A command
 that is registered only in the desktop shell needs an `ops` module before stdio
 can serve it; a GoIDEA check counts only when the UI path works end to end.
 

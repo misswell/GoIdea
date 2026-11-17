@@ -3,7 +3,10 @@ package app
 import (
 	"net/http"
 	"net/http/httptest"
+	"runtime"
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/egoist/mygo/ui/editor"
 )
@@ -157,19 +160,32 @@ func TestCompareVersions(t *testing.T) {
 }
 
 func TestFetchLatestRelease(t *testing.T) {
+	dmg := "goidea-9.9.9-" + runtime.GOARCH + ".dmg"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("User-Agent") == "" {
 			t.Errorf("release request lacks a User-Agent")
 		}
-		_, _ = w.Write([]byte(`{"tag_name":"v9.9.9","html_url":"https://example.invalid/releases/9.9.9"}`))
+		_, _ = w.Write([]byte(`{"tag_name":"v9.9.9","html_url":"https://example.invalid/releases/9.9.9",
+			"body":"First paragraph.\n\nSecond paragraph.",
+			"assets":[
+				{"name":"` + dmg + `","browser_download_url":"https://example.invalid/dmg"},
+				{"name":"` + dmg + `.sha256","browser_download_url":"https://example.invalid/sha"},
+				{"name":"goidea-9.9.9-source.zip","browser_download_url":"https://example.invalid/src"}
+			]}`))
 	}))
 	defer srv.Close()
-	version, page, err := fetchLatestRelease(srv.URL)
+	rel, err := fetchLatestRelease(srv.URL)
 	if err != nil {
 		t.Fatalf("fetchLatestRelease: %v", err)
 	}
-	if version != "9.9.9" || page != "https://example.invalid/releases/9.9.9" {
-		t.Fatalf("release = %q %q", version, page)
+	if rel.Version != "9.9.9" || rel.Page != "https://example.invalid/releases/9.9.9" {
+		t.Fatalf("release = %q %q", rel.Version, rel.Page)
+	}
+	if rel.Notes != "First paragraph.\n\nSecond paragraph." {
+		t.Fatalf("notes = %q", rel.Notes)
+	}
+	if rel.DMG != "https://example.invalid/dmg" || rel.SHA != "https://example.invalid/sha" {
+		t.Fatalf("assets = %q %q", rel.DMG, rel.SHA)
 	}
 }
 
@@ -178,7 +194,70 @@ func TestFetchLatestReleaseReportsHTTPFailure(t *testing.T) {
 		w.WriteHeader(http.StatusForbidden)
 	}))
 	defer srv.Close()
-	if _, _, err := fetchLatestRelease(srv.URL); err == nil {
+	if _, err := fetchLatestRelease(srv.URL); err == nil {
 		t.Fatalf("403 reported as a release")
+	}
+}
+
+func TestPickUpdateAssetForThisMac(t *testing.T) {
+	assets := []updateAssetName{
+		{Name: "goidea-1.0.0-x86_64.dmg", URL: "dmg-x86"},
+		{Name: "goidea-1.0.0-" + runtime.GOARCH + ".dmg", URL: "dmg"},
+		{Name: "goidea-1.0.0-" + runtime.GOARCH + ".dmg.sha256", URL: "sha"},
+	}
+	if dmg, sha := pickUpdateAsset(assets, "1.0.0", runtime.GOARCH); dmg != "dmg" || sha != "sha" {
+		t.Fatalf("assets = %q %q", dmg, sha)
+	}
+	if dmg, sha := pickUpdateAsset(assets, "2.0.0", runtime.GOARCH); dmg != "" || sha != "" {
+		t.Fatalf("a release without assets gave %q %q", dmg, sha)
+	}
+}
+
+func TestParseChecksum(t *testing.T) {
+	digest := strings.Repeat("a1", 32)
+	if got, err := parseChecksum(digest + "  goidea.dmg\n"); err != nil || got != digest {
+		t.Fatalf("shasum line = %q %v", got, err)
+	}
+	if got, err := parseChecksum(digest); err != nil || got != digest {
+		t.Fatalf("bare digest = %q %v", got, err)
+	}
+	if _, err := parseChecksum("not-a-digest  goidea.dmg"); err == nil {
+		t.Fatalf("garbage accepted as a checksum")
+	}
+	if _, err := parseChecksum(""); err == nil {
+		t.Fatalf("empty checksum accepted")
+	}
+}
+
+func TestUpdateSummaryIsTheFirstParagraph(t *testing.T) {
+	notes := "First paragraph.\n\nSecond paragraph."
+	if got := updateSummary(notes); got != "First paragraph." {
+		t.Fatalf("summary = %q", got)
+	}
+	long := strings.Repeat("x", 400)
+	if got := updateSummary(long); utf8.RuneCountInString(got) != 301 || !strings.HasSuffix(got, "…") {
+		t.Fatalf("long summary = %d runes", utf8.RuneCountInString(got))
+	}
+	if got := updateSummary("  "); got != "" {
+		t.Fatalf("empty summary = %q", got)
+	}
+}
+
+func TestInstallerScriptReplacesTheBundle(t *testing.T) {
+	script := installerScript(installWaitPID(1234), "/tmp/a b/GoIDEA 1.dmg", "/Applications/GoIDEA.app")
+	for _, want := range []string{
+		"kill -0 1234",
+		"hdiutil attach -nobrowse -readonly '/tmp/a b/GoIDEA 1.dmg'",
+		"ditto \"$src\" '/Applications/GoIDEA.app.new'",
+		"rm -rf '/Applications/GoIDEA.app'",
+		"mv '/Applications/GoIDEA.app.new' '/Applications/GoIDEA.app'",
+		"open '/Applications/GoIDEA.app'",
+	} {
+		if !strings.Contains(script, want) {
+			t.Errorf("installer lacks %q:\n%s", want, script)
+		}
+	}
+	if got := shellQuote("it's"); got != `'it'\''s'` {
+		t.Fatalf("shellQuote = %s", got)
 	}
 }

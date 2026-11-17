@@ -308,10 +308,12 @@ func (m *Model) SetAccentPref(id string) {
 	m.invalidate()
 }
 
-// SetStartupPref stores what a start shows: "" reopens the last project,
-// "welcome" shows the Welcome screen.
+// SetStartupPref stores what a start shows: "" or "welcome" shows the Welcome
+// screen, "reopen" opens the last project.
 func (m *Model) SetStartupPref(mode string) {
-	if mode != "" && mode != "welcome" {
+	switch mode {
+	case "", "welcome", "reopen":
+	default:
 		return
 	}
 	if m.prefs.Startup == mode {
@@ -322,17 +324,9 @@ func (m *Model) SetStartupPref(mode string) {
 	m.invalidate()
 }
 
-// startupShowsWelcome is the stored startup choice, as read at start.
-func (m *Model) startupShowsWelcome() bool { return m.prefs.Startup == "welcome" }
-
-// applyStartupBehaviour shows the Welcome screen when the appearance chose it
-// for startup; the last project is still loaded behind it.
-func (m *Model) applyStartupBehaviour() {
-	if !m.startupShowsWelcome() {
-		return
-	}
-	m.post(func() { m.showWelcome() })
-}
+// startupReopensProject is the opt-in "Reopen last project on startup"; the
+// Welcome screen is what an untouched start shows.
+func (m *Model) startupReopensProject() bool { return m.prefs.Startup == "reopen" }
 
 // keymapPreset is the keymap the build ships, shown in Appearance.
 func keymapPreset() string { return keymapPresetTitle }

@@ -28,6 +28,7 @@ func builtinCommands() []appCommand {
 		{"project.new", "New Project…", "File", "Cmd+N", "new project create", func(m *Model) { m.NewProject() }},
 		{"file.newScratchFile", "New Scratch File…", "File", "Cmd+Shift+N", "scratch temporary buffer new file language", func(m *Model) { m.OpenScratchChooser() }},
 		{"project.open", "Open…", "File", "Cmd+O", "open project folder", func(m *Model) { m.ChooseProject() }},
+		{"project.close", "Close Project", "File", "", "close project welcome", func(m *Model) { m.CloseProject() }},
 		{"welcome.manageProjects", "Manage Projects…", "File", "", "manage projects welcome recent", func(m *Model) { m.showWelcome() }},
 		{"navigate.searchEverywhere", "Search Everywhere", "Navigate", "Shift Shift", "search everywhere find class file symbol action text", func(m *Model) { m.OpenSearchEverywhere() }},
 		{"app.commandPalette", "Find Action…", "Navigate", "Cmd+Shift+A", "find action command palette search", func(m *Model) { m.OpenCommands() }},

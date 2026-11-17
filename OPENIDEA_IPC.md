@@ -37,7 +37,7 @@ release can be called today.
 | AI agent sessions | `agent` | 36 | 3 | 0 |
 | Code analysis | `analysis` | 5 | 0 | 0 |
 | Android devices | `android` | 0 | 2 | 0 |
-| Application and projects | `app` | 12 | 15 | 5 |
+| Application and projects | `app` | 12 | 15 | 6 |
 | Maven/Gradle builds | `build` | 12 | 0 | 5 |
 | Binary file reads | `bytes` | 3 | 0 | 0 |
 | Caches and restart | `caches` | 0 | 4 | 0 |
@@ -88,7 +88,7 @@ release can be called today.
 ## Served by `openidea-server --stdio`
 
 476 commands. `GoIDEA` marks the ones a non-test Go source invokes today
-(112 of 476).
+(113 of 476).
 
 | Command | Domain | Arguments | GoIDEA |
 | --- | --- | --- | --- |
@@ -136,7 +136,7 @@ release can be called today.
 | `build_sync` | Maven/Gradle builds | `buildDir`, `offline`, `onProgress`, `profiles`, `request`, `tool` | yes |
 | `cancel_request` | Application and projects | — | yes |
 | `cancel_task` | Application and projects | — | — |
-| `close_project` | Application and projects | — | — |
+| `close_project` | Application and projects | — | yes |
 | `coverage_collect` | Coverage | `report` | — |
 | `coverage_import` | Coverage | `path` | — |
 | `coverage_prepare` | Coverage | `config` | — |
@@ -782,7 +782,7 @@ GoIDEA needs to do for each:
 
 ## What this means for GoIDEA
 
-476 remote commands are available today; GoIDEA uses 112. The parity work is
+476 remote commands are available today; GoIDEA uses 113. The parity work is
 first to cover the remote surface OpenIDEA's own frontend uses, then to move
 `shared-op`/`host`/`crate` commands onto stdio through the OpenIDEA fork
 (a submodule bump and a server release), and to implement `desktop` commands

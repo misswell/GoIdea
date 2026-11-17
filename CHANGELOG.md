@@ -3,6 +3,12 @@
 The update window shows the section of the version it offers. Every release
 needs a `## <version>` section here, or its build fails.
 
+## Unreleased
+
+- 启动先显示欢迎页，不再自动打开上次的项目；可在欢迎页 **Customize** 勾选恢复。
+- 新增 **File › Close Project**：关闭项目并回到欢迎页，应用继续运行。
+- **Help › Check for Updates…** 支持后台检查、更新说明、带校验的下载安装与自动重启。
+
 ## 0.1.23
 
 - Java 项目导入完成前点 **Debug** 不再报错：等待导入结束后自动继续，期间可 **Stop** 取消。

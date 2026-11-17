@@ -448,8 +448,8 @@ type Preferences struct {
 	// recent first.
 	ScratchRecent []string `json:"scratchRecent,omitempty"`
 	// Accent is the appearance's accent colour id ("" for OpenIDEA blue), and
-	// Startup is "welcome" to show the Welcome screen at start, "" to reopen
-	// the last project.
+	// Startup is "reopen" to open the last project at start; "" and "welcome"
+	// show the Welcome screen.
 	Accent  string `json:"accent,omitempty"`
 	Startup string `json:"startup,omitempty"`
 	// Keymap maps an action id to the user's bindings, replacing the default

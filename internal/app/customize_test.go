@@ -44,26 +44,34 @@ func TestAccentAndStartupPersist(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")
 	m := &Model{cfg: Config{SettingsPath: path}}
 	m.SetAccentPref("purple")
-	m.SetStartupPref("welcome")
+	m.SetStartupPref("reopen")
 	got := LoadPreferences(path)
-	if got.Accent != "purple" || got.Startup != "welcome" {
+	if got.Accent != "purple" || got.Startup != "reopen" {
 		t.Fatalf("stored = %+v", got)
 	}
-	m.SetStartupPref("")
+	m.SetStartupPref("welcome")
 	got = LoadPreferences(path)
-	if got.Startup != "" {
+	if got.Startup != "welcome" {
 		t.Fatalf("startup = %q", got.Startup)
 	}
 }
 
-func TestStartupWelcomeChoice(t *testing.T) {
+func TestStartupIsWelcomeUnlessReopenChosen(t *testing.T) {
 	m := &Model{}
-	if m.startupShowsWelcome() {
-		t.Fatal("the default start shows Welcome")
+	if m.startupReopensProject() {
+		t.Fatal("an untouched start reopens the last project")
+	}
+	m.SetStartupPref("reopen")
+	if !m.startupReopensProject() {
+		t.Fatal("the reopen choice is not read")
 	}
 	m.SetStartupPref("welcome")
-	if !m.startupShowsWelcome() {
-		t.Fatal("the Welcome choice is not read")
+	if m.startupReopensProject() {
+		t.Fatal("the Welcome choice still reopens the last project")
+	}
+	m.SetStartupPref("nonsense")
+	if m.prefs.Startup != "welcome" {
+		t.Fatalf("an unknown choice was stored: %q", m.prefs.Startup)
 	}
 }
 

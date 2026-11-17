@@ -481,7 +481,7 @@ type Model struct {
 	quitting  bool
 	forceQuit bool
 
-	// startupRoot opens this project instead of the session's, for `goidea
+	// startupRoot opens this project instead of the Welcome screen, for `goidea
 	// <dir>` and the offscreen smoke run.
 	startupRoot string
 	// startupFiles opens these files beside startupRoot, so an offscreen run
@@ -714,8 +714,9 @@ func (m *Model) start() {
 		return
 	}
 	root := m.startupRoot
+	m.startUpdateChecks()
 	var files []string
-	if root == "" {
+	if root == "" && m.startupReopensProject() {
 		s := m.session()
 		root = s.Root
 		if root != "" {
@@ -725,7 +726,7 @@ func (m *Model) start() {
 				}
 			}
 		}
-	} else {
+	} else if root != "" {
 		for _, p := range m.startupFiles {
 			if inProject(root, p) {
 				files = append(files, p)
@@ -740,7 +741,6 @@ func (m *Model) start() {
 	m.setStartPhase("opening")
 	m.setRoot(root)
 	m.openProject(root, files)
-	m.applyStartupBehaviour()
 }
 
 func (m *Model) session() Session {
@@ -902,6 +902,167 @@ func (m *Model) openProjectSaving(dir string) {
 	}()
 }
 
+// resetProjectState drops everything the previous project put on screen —
+// tabs, terminals, tool windows, searches and their caches — and reports
+// whether Maven was visible, so a new project can load its build model.
+func (m *Model) resetProjectState(dir string) (mavenVisible bool) {
+	m.tabs, m.active = nil, 0
+	m.split, m.splitDown, m.splitFirst, m.focusQueued = nil, false, false, false
+	m.banner, m.bannerPath = "", ""
+	m.showingWelcome = false
+	m.resetRun()
+	m.resetDebug()
+	m.resetBuild()
+	m.resetTerm()
+	m.resetVCS()
+	m.resetBranch()
+	m.rollback = nil
+	m.bookmarksView = nil
+	m.mnemonics = nil
+	m.bookmarks = bookmarksInProject(m.session().Bookmarks, dir)
+	m.pathBookmarks = pathBookmarksInProject(m.session().PathBookmarks, dir)
+	m.bookmarkLists = normalizeBookmarkLists(m.session().BookmarkLists)
+	m.defaultList = m.session().DefaultList
+	m.defaultList = m.defaultBookmarkList()
+	m.newList = nil
+	m.deleteList = nil
+	m.move = nil
+	m.editDesc = nil
+	m.resetLog()
+	m.resetProblems()
+	m.structure = StructurePane{}
+	m.tool = ""
+	m.toolStash = nil
+	m.toolStashMax = false
+	m.splitNames = nil
+	m.maximized = false
+	m.commit = nil
+	m.cancelSearch()
+	m.resetSearch()
+	m.resetUsages()
+	m.resetTodo()
+	m.resetHierarchy()
+	m.closeSymbols()
+	m.closeIntents()
+	m.closeQuickFiles()
+	m.closeCommands()
+	m.diff = nil
+	m.db = nil
+	m.dbTable = nil
+	m.dbHist = nil
+	m.dbPlan = nil
+	mavenVisible = m.maven.visible
+	m.maven = mavenPane{visible: mavenVisible}
+	m.refactor, m.redoRefactor = nil, nil
+	return mavenVisible
+}
+
+// CloseProject closes the open project and returns to Welcome; the app keeps
+// running. Unsaved changes are asked about first, as a project switch does.
+func (m *Model) CloseProject() {
+	if m.busy {
+		return
+	}
+	if m.Root() == "" || m.showingWelcome {
+		m.showWelcome()
+		m.invalidate()
+		return
+	}
+	if !m.hasDirty() {
+		m.closeProjectNow()
+		return
+	}
+	detail := strings.Join(m.dirtyPaths(), "\n")
+	go func() {
+		res, err := mygo.Dialog.Message(mygo.MessageOptions{
+			Parent: m.win, Type: mygo.MessageWarning, Title: "Close Project",
+			Message: "There are unsaved changes", Detail: detail,
+			Buttons: []string{"Save and Close", "Discard Changes", "Cancel"}, DefaultButton: 0, CancelButton: 2,
+		})
+		if err != nil {
+			return
+		}
+		m.post(func() {
+			switch res.Button {
+			case 0:
+				m.closeProjectSaving()
+			case 1:
+				m.closeProjectNow()
+			}
+		})
+	}()
+}
+
+func (m *Model) closeProjectSaving() {
+	tabs := append([]*Tab(nil), m.tabs...)
+	m.busy = true
+	m.status = "Saving…"
+	m.invalidate()
+	p := m.prefs.SaveFiles
+	go func() {
+		if err := saveAll(m.ctx, tabs, p); err != nil {
+			m.post(func() { m.fail("", err); m.busy = false })
+			return
+		}
+		m.post(m.closeProjectNow)
+	}()
+}
+
+// closeProjectNow stops the project's processes, closes it in the backend and
+// shows Welcome. A backend failure is only reported: this window has already
+// left the project.
+func (m *Model) closeProjectNow() {
+	prev := m.Root()
+	if prev == "" {
+		return
+	}
+	if m.layouts == nil {
+		m.layouts = map[string]Layout{}
+	}
+	m.layouts[layoutKey(prev)] = m.currentLayout()
+	oldRun := m.run.runID
+	oldDebug := m.debug.session
+	var oldTerms []uint32
+	for gi := range m.term.groups {
+		tabs := m.term.groups[gi].tabs
+		for ti := range tabs {
+			if id := tabs[ti].id; id != 0 {
+				oldTerms = append(oldTerms, id)
+			}
+		}
+	}
+	m.resetProjectState("")
+	m.setRoot("")
+	m.showingWelcome = true
+	m.welcomePage = ""
+	m.busy = false
+	m.status = "Open a Java project"
+	m.saveSession()
+	m.invalidate()
+	if m.mgr == nil {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if oldRun != 0 {
+			_, _ = m.mgr.Invoke(ctx, Window, "run_stop", map[string]any{"id": oldRun})
+		}
+		if oldDebug != 0 {
+			_, _ = m.mgr.Invoke(ctx, Window, "debug_stop", map[string]any{"session": oldDebug})
+		}
+		for _, id := range oldTerms {
+			_, _ = m.mgr.Invoke(ctx, Window, "term_kill", map[string]any{"id": id})
+		}
+		if _, err := m.mgr.Invoke(ctx, Window, "close_project", nil); err != nil {
+			m.post(func() {
+				m.banner = "Closing the project in the backend failed: " + err.Error()
+				m.invalidate()
+			})
+		}
+	}()
+}
+
 // openProject switches the backend project and restores files, all in the
 // background.
 func (m *Model) openProject(dir string, files []string) {
@@ -954,54 +1115,7 @@ func (m *Model) openProject(dir string, files []string) {
 			}
 		}
 	}
-	m.tabs, m.active = nil, 0
-	m.split, m.splitDown, m.splitFirst, m.focusQueued = nil, false, false, false
-	m.banner, m.bannerPath = "", ""
-	m.showingWelcome = false
-	m.resetRun()
-	m.resetDebug()
-	m.resetBuild()
-	m.resetTerm()
-	m.resetVCS()
-	m.resetBranch()
-	m.rollback = nil
-	m.bookmarksView = nil
-	m.mnemonics = nil
-	m.bookmarks = bookmarksInProject(m.session().Bookmarks, dir)
-	m.pathBookmarks = pathBookmarksInProject(m.session().PathBookmarks, dir)
-	m.bookmarkLists = normalizeBookmarkLists(m.session().BookmarkLists)
-	m.defaultList = m.session().DefaultList
-	m.defaultList = m.defaultBookmarkList()
-	m.newList = nil
-	m.deleteList = nil
-	m.move = nil
-	m.editDesc = nil
-	m.resetLog()
-	m.resetProblems()
-	m.structure = StructurePane{}
-	m.tool = ""
-	m.toolStash = nil
-	m.toolStashMax = false
-	m.splitNames = nil
-	m.maximized = false
-	m.commit = nil
-	m.cancelSearch()
-	m.resetSearch()
-	m.resetUsages()
-	m.resetTodo()
-	m.resetHierarchy()
-	m.closeSymbols()
-	m.closeIntents()
-	m.closeQuickFiles()
-	m.closeCommands()
-	m.diff = nil
-	m.db = nil
-	m.dbTable = nil
-	m.dbHist = nil
-	m.dbPlan = nil
-	mavenVisible := m.maven.visible
-	m.maven = mavenPane{visible: mavenVisible}
-	m.refactor, m.redoRefactor = nil, nil
+	mavenVisible := m.resetProjectState(dir)
 	m.busy = true
 	m.status = "Opening " + filepath.Base(dir) + "…"
 	m.setRoot(dir)
@@ -1898,6 +2012,9 @@ func (m *Model) View(c *ui.Context) {
 				m.bannerRow(c, p)
 			}
 			m.welcome(c, p)
+			// The Welcome screen has no status bar, so balloons are the only
+			// place an update or backend notice can show, as upstream's are.
+			m.balloons(c, p)
 			return
 		}
 		m.workbench(c, p)
