@@ -3,7 +3,7 @@
 The GitHub release notes, which **Help › What's New** shows, come from the
 `## <version>` section here. Every release needs one, or its build fails.
 
-## Unreleased
+## 0.1.25
 
 - **Check for Updates** 按 OpenIDEA 改为后台任务：检查与下载显示在状态栏，可从 **Background Tasks** 弹窗取消。
 - 检查结果显示为通知气泡：有新版本时提供 **Install and Restart**，已是最新或检查失败时给出说明。
