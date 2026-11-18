@@ -339,6 +339,10 @@ func (m *Model) editorArea(c *ui.Context, p *ui.Theme, g groupView) {
 		m.emptyEditor(c, p)
 		return
 	}
+	if t.kind == tabKindWhatsNew {
+		m.whatsNewPage(c, p, t)
+		return
+	}
 	key := "editor:" + t.doc.Path()
 	if g.ref == groupSplit {
 		key += ":split"

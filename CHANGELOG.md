@@ -1,7 +1,17 @@
 # Changelog
 
-The update window shows the section of the version it offers. Every release
-needs a `## <version>` section here, or its build fails.
+The GitHub release notes, which **Help › What's New** shows, come from the
+`## <version>` section here. Every release needs one, or its build fails.
+
+## Unreleased
+
+- **Check for Updates** 按 OpenIDEA 改为后台任务：检查与下载显示在状态栏，可从 **Background Tasks** 弹窗取消。
+- 检查结果显示为通知气泡：有新版本时提供 **Install and Restart**，已是最新或检查失败时给出说明。
+- 下载显示 `x MB of y MB` 进度；校验发布包的 `.sha256` 后替换应用并重启，取消或失败可 **Retry**。
+- 启动后自动检查一次，之后每 4 小时检查一次；每个新版本只提示一次。
+- 新增 **Settings › Updates**：当前版本、上次检查时间与 **Check Now**、自动检查开关、更新后显示 What's New。
+- 新增 **Help › What's New**：以页面展示当前版本的发布说明，可勾选更新后是否再次显示。
+- 状态栏显示正在进行的任务及其进度，点击可查看任务列表。
 
 ## 0.1.24
 

@@ -273,6 +273,15 @@ func mainMenuGroups() []menuEntry {
 			rule(),
 			platform(mygo.RoleWindow),
 		),
+		// Help, as OpenIDEA's menu.rs builds it on macOS: Find Action, What's
+		// New and the log; its Check for Updates sits in the gear menu there,
+		// and stays here as well since GoIDEA has no custom app menu.
+		submenu("Help",
+			action("Find Action…", "app.commandPalette", "CmdOrCtrl+Shift+A"),
+			rule(),
+			action("What's New", "app.whatsNew", ""),
+			action("Check for Updates…", "app.checkForUpdates", ""),
+		),
 	}
 }
 

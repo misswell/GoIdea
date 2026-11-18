@@ -801,3 +801,20 @@ func TestCoordinatesCatchUpAfterWidgetEdit(t *testing.T) {
 	}
 	requireMapper(t, doc)
 }
+
+func TestVirtualDocumentReachesNoBackend(t *testing.T) {
+	doc := Virtual("What's New", "")
+	if doc.Path() != "What's New" || !doc.Info().ReadOnly {
+		t.Fatalf("virtual doc = %q readOnly %v", doc.Path(), doc.Info().ReadOnly)
+	}
+	if doc.ModifiedFromSaved() {
+		t.Fatal("a new virtual document reports unsaved text")
+	}
+	for name, run := range map[string]func(context.Context) error{
+		"Sync": doc.Sync, "Save": doc.Save, "Resync": doc.Resync, "Close": doc.Close,
+	} {
+		if err := run(context.Background()); err != nil {
+			t.Fatalf("%s on a virtual document: %v", name, err)
+		}
+	}
+}

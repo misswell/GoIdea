@@ -24,7 +24,7 @@ func TestMainMenuCommandsResolve(t *testing.T) {
 }
 
 func TestMainMenuFollowsOpenIDEAOrder(t *testing.T) {
-	want := []string{"File", "Edit", "View", "Navigate", "Code", "Refactor", "Build", "Run", "Git", "Tools", "Window"}
+	want := []string{"File", "Edit", "View", "Navigate", "Code", "Refactor", "Build", "Run", "Git", "Tools", "Window", "Help"}
 	groups := mainMenuGroups()
 	if len(groups) != len(want) {
 		t.Fatalf("menu has %d titles, want %d", len(groups), len(want))

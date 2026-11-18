@@ -44,6 +44,7 @@ const (
 	settingsPageTodo             = "editor.todo"
 	settingsPageNotifications    = "notifications"
 	settingsPageJava             = "languages.java"
+	settingsPageUpdates          = "general.updates"
 )
 
 // settingsDraft is the value of each staged setting. The zero value follows
@@ -361,6 +362,21 @@ func settingsPages() []settingsPageSpec {
 				"eclipse jdt", "shared jdtls", "linked builds", "server process",
 			},
 			section: "java",
+		},
+		{
+			id:    settingsPageUpdates,
+			title: "Updates",
+			group: "Appearance & Behavior",
+			order: 3,
+			keywords: []string{
+				"update", "upgrade", "version", "automatic", "GitHub",
+			},
+			labels: []string{
+				"Current version", "Last checked", "Check Now",
+				"Check for updates automatically", "Show What's New after an update",
+				"Update source",
+			},
+			section: "updates",
 		},
 	}
 }

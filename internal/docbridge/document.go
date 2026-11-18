@@ -81,8 +81,11 @@ type Document struct {
 	saved    uint64 // hash of the text on disk at the last open or save
 	savedTxt string // the text on disk at the last open or save
 	closed   bool
-	pending  *pendingRemote
-	wake     chan struct{}
+	// virtual marks a read-only page that has no file and no backend document
+	// (What's New), so syncing, saving and closing it reach no backend.
+	virtual bool
+	pending *pendingRemote
+	wake    chan struct{}
 }
 
 type pendingRemote struct {
@@ -102,6 +105,15 @@ func Open(ctx context.Context, backend Backend, window, path string) (*Document,
 	return newDocument(backend, window, info), nil
 }
 
+// Virtual returns a read-only document of text for a page that has no file
+// and no backend document, such as What's New: the buffer renders and can be
+// selected, while syncing, saving and closing reach no backend.
+func Virtual(path, text string) *Document {
+	return newDocument(nil, "", openidea.DocInfo{Path: path, Text: text, ReadOnly: true, Dirty: false})
+}
+
+// newDocument builds the document of an open file, or of a virtual page when
+// backend is nil.
 func newDocument(backend Backend, window string, info openidea.DocInfo) *Document {
 	text := lf(info.Text)
 	buf := editor.NewBuffer(text)
@@ -122,6 +134,7 @@ func newDocument(backend Backend, window string, info openidea.DocInfo) *Documen
 		saved:    textHash(text),
 		savedTxt: text,
 		wake:     make(chan struct{}, 1),
+		virtual:  backend == nil,
 	}
 	d.baseBuf = d.base.Version()
 	d.indexed = d.base.Version()
@@ -418,6 +431,9 @@ func (d *Document) Save(ctx context.Context) error {
 	if d.closed {
 		return ErrClosed
 	}
+	if d.virtual {
+		return nil
+	}
 	if err := d.syncLocked(ctx); err != nil {
 		return err
 	}
@@ -467,6 +483,10 @@ func (d *Document) Sync(ctx context.Context) error {
 	if d.closed {
 		return ErrClosed
 	}
+	if d.virtual {
+		d.markSynced()
+		return nil
+	}
 	return d.syncLocked(ctx)
 }
 
@@ -477,6 +497,9 @@ func (d *Document) Resync(ctx context.Context) error {
 	defer d.mu.Unlock()
 	if d.closed {
 		return ErrClosed
+	}
+	if d.virtual {
+		return nil
 	}
 	return d.resyncLocked(ctx, 0)
 }
@@ -542,6 +565,9 @@ func (d *Document) Reopen(ctx context.Context) error {
 	if d.closed {
 		return ErrClosed
 	}
+	if d.virtual {
+		return nil
+	}
 	info, err := d.backend.DocOpen(ctx, d.window, d.path)
 	if err != nil {
 		return err
@@ -583,6 +609,9 @@ func (d *Document) Close(ctx context.Context) error {
 		return nil
 	}
 	d.closed = true
+	if d.virtual {
+		return nil
+	}
 	return d.backend.DocClose(ctx, d.window, d.id)
 }
 

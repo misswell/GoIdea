@@ -1576,6 +1576,7 @@ func (m *Model) statusBar(c *ui.Context, p *ui.Theme) {
 			it.Render(m, c, p, oi)
 		}
 		ui.Spacer(c)
+		m.taskStatus(c, p, oi)
 		for _, it := range m.statusSide("right") {
 			it.Render(m, c, p, oi)
 		}

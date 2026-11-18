@@ -59,7 +59,7 @@ func (m *Model) watchFiles(now time.Time) {
 	}
 	m.watched = now
 	for _, t := range m.tabs {
-		if t.reloading || !t.changedOutside() {
+		if t.kind != "" || t.reloading || !t.changedOutside() {
 			continue
 		}
 		if t.unsaved() || t.syncing {
@@ -78,7 +78,7 @@ func (m *Model) watchFiles(now time.Time) {
 func (m *Model) ReloadAllFromDisk() {
 	n := 0
 	for _, t := range m.tabs {
-		if t.reloading || t.syncing {
+		if t.kind != "" || t.reloading || t.syncing {
 			continue
 		}
 		if t.unsaved() {

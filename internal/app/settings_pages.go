@@ -10,6 +10,7 @@ import (
 	"math"
 	"strings"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 )
 
@@ -43,7 +44,55 @@ func (m *Model) settingsPageBody(c *ui.Context, p *ui.Theme, oi oiColors, node s
 		m.settingsNotificationsBody(c, oi)
 	case "java":
 		m.javaToolsSection(c, p)
+	case "updates":
+		m.settingsUpdatesBody(c, oi)
 	}
+}
+
+// settingsUpdatesBody is Settings › Updates, as upstream's updates.tsx: the
+// version and the last check with Check Now, then the two switches the update
+// flow keeps, then where the build updates from.
+func (m *Model) settingsUpdatesBody(c *ui.Context, oi oiColors) {
+	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+		settingsFormLabel(c, oi, "Current version", 220)
+		ui.Text(c, mygo.App.Version()).FontSize(12).TextColor(oi.text).SingleLine()
+	})
+	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+		settingsFormLabel(c, oi, "Last checked", 220)
+		when := "Never"
+		if t := m.lastUpdateCheck(); !t.IsZero() {
+			when = t.Format("Jan 2, 2006, 15:04")
+		}
+		ui.Text(c, when).FontSize(12).TextColor(oi.textMuted).SingleLine()
+		ui.Spacer(c)
+		label := "Check Now"
+		if m.update.checking {
+			label = "Checking for updates…"
+		}
+		ui.Button(c, label).Disabled(m.update.checking).
+			OnClick(func() { m.CheckForUpdates() })
+	})
+	ui.Row(c).Height(10)
+	auto := m.autoCheckUpdates()
+	if ui.Checkbox(c, &auto, "Check for updates automatically").Changed() {
+		m.SetAutoCheckUpdates(auto)
+	}
+	ui.Text(c, "At startup and every 4 hours while GoIDEA runs. Each new version is announced once.").
+		FontSize(10.5).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
+	ui.Row(c).Height(10)
+	whats := m.showWhatsNewAfterUpdate()
+	if ui.Checkbox(c, &whats, "Show What's New after an update").Changed() {
+		m.SetShowWhatsNewAfterUpdate(whats)
+	}
+	ui.Text(c, "Opens a page with the release notes when a new version starts. Help › What's New opens it any time.").
+		FontSize(10.5).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
+	ui.Row(c).Height(10)
+	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+		settingsFormLabel(c, oi, "Update source", 220)
+		ui.Text(c, "GitHub").FontSize(12).TextColor(oi.text).SingleLine()
+	})
+	ui.Text(c, "GoIDEA downloads its updates from its GitHub releases.").
+		FontSize(10.5).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
 }
 
 // settingsGroupPage is a group folder: the description above the links to the

@@ -1,11 +1,13 @@
 package app
 
-// Check for Updates, as OpenIDEA's Help › Check for Updates and its update
-// balloon do: the app asks the release feed in the background (at startup and
-// every few hours) and in a manual check, offers an available version with its
-// release notes, and downloads and installs it in place — verifying the
-// release's SHA-256 — then restarts. What's New shows the notes of the version
-// that was just installed.
+// Check for Updates, after OpenIDEA's features/app/updates.tsx: both the check
+// and the install are background tasks in the status bar (the Welcome screen
+// has no status bar, so their balloon shows the progress there), and their
+// results arrive as notifications rather than a dialog. A check that finds a
+// newer version posts a sticky "is available" balloon with Install and
+// Restart; the install downloads with progress and Cancel, verifies the
+// release's SHA-256, replaces this app and reopens it. What's New is a page in
+// the editor area with the notes of the version the update installed.
 
 import (
 	"context"
@@ -24,7 +26,6 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
-	"github.com/egoist/mygo/ui"
 )
 
 var updateFeedURL = "https://api.github.com/repos/misswell/GoIdea/releases/latest"
@@ -34,8 +35,14 @@ var updateFeedURL = "https://api.github.com/repos/misswell/GoIdea/releases/lates
 var updateHTTP = &http.Client{}
 
 const (
-	updateCheckInterval = 6 * time.Hour
+	updateCheckInterval = 4 * time.Hour
 	updateFirstCheck    = 5 * time.Second
+
+	// updateKey is the one key every update notification shares: the newest
+	// replaces the earlier one, as upstream's UPDATE_KEY does.
+	updateKey           = "app.update"
+	updateCheckTaskID   = "app.update.check"
+	updateInstallTaskID = "app.update.install"
 )
 
 // updateRelease is the release the feed offers: its version, page, notes and
@@ -48,35 +55,27 @@ type updateRelease struct {
 	SHA     string
 }
 
-// updateState is the Check for Updates dialog and the install it runs.
+// updateState is the check and install in flight. A repeated request joins
+// the running one instead of starting another.
 type updateState struct {
-	Open   bool
-	Busy   bool
-	Status string
-	Latest string
-	URL    string
-	Notes  string
-	Err    string
-	Newer  bool
-
-	Installing   bool
-	Progress     float64 // 0..1, <0 while unknown
-	ProgressText string
-	// What's New shows the notes of the version just installed, not a release
-	// the user can still choose.
-	whatsNew bool
-
-	cancel context.CancelFunc
+	checking   bool
+	installing bool
+	// latest is the release the last check found newer than this build.
+	latest updateRelease
+	// gen drops a check's answer that a Cancel superseded.
 	gen    uint64
+	cancel context.CancelFunc
 }
 
-// updatePrefs remembers which version was announced or skipped, and the notes
-// the next launch shows as What's New.
+// updatePrefs remembers which version was announced, the notes the next
+// launch shows as What's New, the version this start last ran, and the
+// nightly prompt's last time.
 type updatePrefs struct {
-	Skipped        string `json:"skipped,omitempty"`
-	Announced      string `json:"announced,omitempty"`
-	PendingVersion string `json:"pendingVersion,omitempty"`
-	PendingNotes   string `json:"pendingNotes,omitempty"`
+	Announced         string `json:"announced,omitempty"`
+	PendingVersion    string `json:"pendingVersion,omitempty"`
+	PendingNotes      string `json:"pendingNotes,omitempty"`
+	LastRunVersion    string `json:"lastRunVersion,omitempty"`
+	NightlyPromptedAt int64  `json:"nightlyPromptedAt,omitempty"`
 }
 
 func updatePrefsPath(sessionPath string) string {
@@ -115,8 +114,60 @@ func saveUpdatePrefs(path string, p updatePrefs) {
 	_ = os.WriteFile(path, raw, 0o644)
 }
 
-// startUpdateChecks asks the feed shortly after startup and then periodically,
-// and shows what the last install left as What's New.
+// UpdatePrefs are Settings › Updates: the automatic check and the What's New
+// page stay on unless turned off, and LastChecked is when the feed was asked.
+type UpdatePrefs struct {
+	NoAutoCheck bool  `json:"noAutoCheck,omitempty"`
+	NoWhatsNew  bool  `json:"noWhatsNew,omitempty"`
+	LastChecked int64 `json:"lastChecked,omitempty"`
+}
+
+func (m *Model) autoCheckUpdates() bool {
+	return m.prefs.Updates == nil || !m.prefs.Updates.NoAutoCheck
+}
+
+func (m *Model) showWhatsNewAfterUpdate() bool {
+	return m.prefs.Updates == nil || !m.prefs.Updates.NoWhatsNew
+}
+
+// lastUpdateCheck is when the feed was last asked, zero before the first.
+func (m *Model) lastUpdateCheck() time.Time {
+	if m.prefs.Updates == nil || m.prefs.Updates.LastChecked == 0 {
+		return time.Time{}
+	}
+	return time.UnixMilli(m.prefs.Updates.LastChecked)
+}
+
+// setUpdatePrefs changes one setting and stores it, as the Updates page's
+// controls do.
+func (m *Model) setUpdatePrefs(change func(*UpdatePrefs)) {
+	p := UpdatePrefs{}
+	if m.prefs.Updates != nil {
+		p = *m.prefs.Updates
+	}
+	change(&p)
+	m.prefs.Updates = &p
+	m.savePreferences()
+	m.invalidate()
+}
+
+func (m *Model) setUpdateLastChecked(t time.Time) {
+	m.setUpdatePrefs(func(p *UpdatePrefs) { p.LastChecked = t.UnixMilli() })
+}
+
+// SetAutoCheckUpdates is Settings › Updates' automatic check.
+func (m *Model) SetAutoCheckUpdates(on bool) {
+	m.setUpdatePrefs(func(p *UpdatePrefs) { p.NoAutoCheck = !on })
+}
+
+// SetShowWhatsNewAfterUpdate is Settings › Updates' What's New page.
+func (m *Model) SetShowWhatsNewAfterUpdate(on bool) {
+	m.setUpdatePrefs(func(p *UpdatePrefs) { p.NoWhatsNew = !on })
+}
+
+// startUpdateChecks asks the feed shortly after startup and then every four
+// hours while the app runs, unless Settings turned the automatic check off,
+// and opens what the last update left as What's New.
 func (m *Model) startUpdateChecks() {
 	m.post(m.showWhatsNewIfPending)
 	go func() {
@@ -126,7 +177,11 @@ func (m *Model) startUpdateChecks() {
 			return
 		}
 		for {
-			m.post(func() { m.checkForUpdates(false) })
+			m.post(func() {
+				if m.autoCheckUpdates() {
+					m.checkForUpdates(false)
+				}
+			})
 			select {
 			case <-time.After(updateCheckInterval):
 			case <-m.ctx.Done():
@@ -136,92 +191,106 @@ func (m *Model) startUpdateChecks() {
 	}()
 }
 
-// CheckForUpdates is Help › Check for Updates.
+// CheckForUpdates is Help › Check for Updates: a manual check whose answer
+// pops up even with balloon notifications turned off.
 func (m *Model) CheckForUpdates() { m.checkForUpdates(true) }
 
 func (m *Model) checkForUpdates(manual bool) {
-	if m.update.Busy || m.update.Installing {
+	if m.update.installing {
 		if manual {
-			m.update.Open = true
+			m.status = "GoIDEA is installing an update"
 			m.invalidate()
 		}
 		return
 	}
+	if m.update.checking {
+		return
+	}
+	m.update.checking = true
 	m.update.gen++
 	gen := m.update.gen
-	if manual {
-		m.update.Open = true
-		m.update.Busy = true
-		m.update.Err = ""
-		m.update.whatsNew = false
-		m.update.Status = "Checking for updates…"
-		m.invalidate()
-	}
+	title := "Checking for updates…"
+	m.upsertTask(BackgroundTask{ID: updateCheckTaskID, Title: title, Fraction: -1,
+		Cancel: func() {
+			// The check only reads: cancelling drops its answer, as upstream's
+			// abandoned promise does, while the request finishes on its own.
+			m.post(func() {
+				if m.update.gen != gen {
+					return
+				}
+				m.update.gen++
+				m.update.checking = false
+				m.removeTask(updateCheckTaskID)
+			})
+		}})
 	go func() {
 		rel, err := fetchLatestRelease(updateFeedURL)
 		m.post(func() {
 			if m.update.gen != gen {
 				return
 			}
-			m.update.Busy = false
+			m.update.checking = false
+			m.setUpdateLastChecked(time.Now())
+			m.upsertTask(BackgroundTask{ID: updateCheckTaskID, Title: title, Fraction: 1, Done: true})
 			current := mygo.App.Version()
 			switch {
 			case err != nil:
-				if manual {
-					m.update.Err = err.Error()
-					m.update.Status = "Could not check for updates."
-					m.invalidate()
-				}
+				m.notifyUser(updateKey, "error", "Update check failed", err.Error())
 			case compareVersions(rel.Version, current) > 0:
-				m.update.Latest, m.update.URL, m.update.Notes = rel.Version, rel.Page, rel.Notes
-				m.update.Newer = true
-				if manual {
-					m.update.Status = fmt.Sprintf("Version %s is available.", rel.Version)
-					m.invalidate()
-				}
-				m.announceUpdate(rel)
+				m.update.latest = rel
+				m.announceUpdate(rel, manual)
 			default:
-				if manual {
-					m.update.Newer = false
-					m.update.Latest = current
-					m.update.Status = fmt.Sprintf("You are running the latest version (%s).", current)
-					m.invalidate()
-				}
+				m.notifyUser(updateKey, "info", "GoIDEA "+current+" is up to date", "")
 			}
 		})
 	}()
 }
 
-// announceUpdate shows the update balloon once per version unless the user
-// skipped it, as upstream's appUpdateAnnouncement.
-func (m *Model) announceUpdate(rel updateRelease) {
-	path := updatePrefsPath(m.cfg.SessionPath)
-	prefs := loadUpdatePrefs(path)
-	if rel.Version == "" || prefs.Skipped == rel.Version || prefs.Announced == rel.Version {
-		return
+// announceUpdate offers the newer release once per version, as upstream's
+// announcement claim does; a manual check always shows it.
+func (m *Model) announceUpdate(rel updateRelease, manual bool) {
+	if !manual {
+		if !m.claimUpdateAnnouncement(rel.Version) {
+			return
+		}
+		if strings.Contains(rel.Version, "-nightly.") && !m.nightlyPromptDue() {
+			return
+		}
 	}
-	prefs.Announced = rel.Version
-	saveUpdatePrefs(path, prefs)
-	summary := updateSummary(rel.Notes)
-	m.notifyInfo("update.available", "Update available: v"+rel.Version, summary,
-		notifyAction{label: "Install and Restart", run: func(m *Model) { m.InstallUpdate() }},
-		notifyAction{label: "Release Notes", run: func(m *Model) {
-			m.update.Open = true
-			m.update.Latest = rel.Version
-			m.update.Notes = rel.Notes
-			m.update.whatsNew = false
-			m.update.Status = fmt.Sprintf("Version %s is available.", rel.Version)
-			m.invalidate()
-		}},
-		notifyAction{label: "Skip This Version", run: func(m *Model) {
-			prefs := loadUpdatePrefs(path)
-			prefs.Skipped = rel.Version
-			saveUpdatePrefs(path, prefs)
-		}},
-	)
+	m.notifySticky(updateKey, "info", "GoIDEA "+rel.Version+" is available",
+		updateSummary(rel.Notes), manual,
+		notifyAction{label: "Install and Restart", run: func(m *Model) { m.InstallUpdate() }})
 }
 
-// updateSummary is the first paragraph of the notes, as the balloon shows it.
+// claimUpdateAnnouncement reports whether the automatic check may announce
+// version: each one is offered once, across starts.
+func (m *Model) claimUpdateAnnouncement(version string) bool {
+	path := updatePrefsPath(m.cfg.SessionPath)
+	prefs := loadUpdatePrefs(path)
+	if version == "" || prefs.Announced == version {
+		return false
+	}
+	prefs.Announced = version
+	saveUpdatePrefs(path, prefs)
+	return true
+}
+
+// nightlyPromptDue throttles a nightly build's prompt to one a day, since
+// they come out more often than anyone wants to be asked.
+func (m *Model) nightlyPromptDue() bool {
+	path := updatePrefsPath(m.cfg.SessionPath)
+	prefs := loadUpdatePrefs(path)
+	now := time.Now().UnixMilli()
+	if now-prefs.NightlyPromptedAt < int64(24*time.Hour/time.Millisecond) {
+		return false
+	}
+	prefs.NightlyPromptedAt = now
+	saveUpdatePrefs(path, prefs)
+	return true
+}
+
+// updateSummary is the first paragraph of the notes, as the balloon shows it;
+// the whole notes belong to the What's New page.
 func updateSummary(notes string) string {
 	text := strings.TrimSpace(notes)
 	if text == "" {
@@ -237,90 +306,100 @@ func updateSummary(notes string) string {
 	return paragraph
 }
 
-// skipUpdateVersion drops the balloon for version.
-func (m *Model) skipUpdateVersion(version string) {
-	path := updatePrefsPath(m.cfg.SessionPath)
-	prefs := loadUpdatePrefs(path)
-	prefs.Skipped = version
-	saveUpdatePrefs(path, prefs)
-}
-
 // InstallUpdate downloads the offered release beside its checksum, verifies
 // it, replaces this app once it quits and reopens it. Outside a macOS app
-// bundle it opens the release page instead.
+// bundle it opens the release page instead. A second call joins the install.
 func (m *Model) InstallUpdate() {
-	if m.update.Installing {
-		m.update.Open = true
-		m.invalidate()
+	if m.update.installing {
+		return
+	}
+	rel := m.update.latest
+	if runtime.GOOS != "darwin" || appBundlePath() == "" {
+		if rel.Page != "" {
+			openReleasePage(rel.Page)
+		} else if rel.DMG != "" {
+			openReleasePage(rel.DMG)
+		}
+		return
+	}
+	if rel.Version == "" {
+		return
+	}
+	ctx, cancel := context.WithCancel(m.ctx)
+	m.update.installing = true
+	m.update.cancel = cancel
+	title := "Downloading GoIDEA " + rel.Version
+	m.upsertTask(BackgroundTask{ID: updateInstallTaskID, Title: title, Fraction: -1, Cancel: cancel})
+	m.notifySticky(updateKey, "info", title, "Preparing the download…", true,
+		notifyAction{label: "Cancel", run: func(m *Model) { m.cancelUpdateInstall() }})
+	go m.installWorker(ctx, rel)
+}
+
+// installWorker downloads and starts the installer; its failures and its
+// completion replace the progress notification.
+func (m *Model) installWorker(ctx context.Context, want updateRelease) {
+	title := "Downloading GoIDEA " + want.Version
+	failed := func(err error) {
+		cancelled := ctx.Err() != nil
+		m.post(func() {
+			m.update.installing = false
+			m.update.cancel = nil
+			m.upsertTask(BackgroundTask{ID: updateInstallTaskID, Title: title, Fraction: 1, Done: true})
+			notifyUpdateFailure(m, cancelled, err)
+		})
+	}
+	rel, err := fetchLatestRelease(updateFeedURL)
+	if err == nil && (rel.Version != want.Version || rel.DMG == "" || rel.SHA == "") {
+		err = fmt.Errorf("the release assets of %s are not available yet", want.Version)
+	}
+	var dmg string
+	if err == nil {
+		dmg, err = downloadUpdate(ctx, m, rel)
+	}
+	if err != nil {
+		failed(err)
 		return
 	}
 	target := appBundlePath()
-	if runtime.GOOS != "darwin" || target == "" {
-		if m.update.URL != "" {
-			openReleasePage(m.update.URL)
-		}
+	script := installerScript(installWaitPID(os.Getpid()), dmg, target)
+	cmd := exec.Command("/bin/sh", "-c", script)
+	cmd.Stdout, cmd.Stderr = nil, nil
+	if err := cmd.Start(); err != nil {
+		_ = os.Remove(dmg)
+		failed(err)
 		return
 	}
-	want := m.update.Latest
-	ctx, cancel := context.WithCancel(m.ctx)
-	m.update.Open = true
-	m.update.Installing = true
-	m.update.Err = ""
-	m.update.whatsNew = false
-	m.update.Progress = -1
-	m.update.ProgressText = "Preparing the download…"
-	m.update.Status = fmt.Sprintf("Installing GoIDEA %s…", want)
-	m.update.cancel = cancel
-	m.invalidate()
-	go func() {
-		rel, err := fetchLatestRelease(updateFeedURL)
-		if err == nil && (rel.Version != want || rel.DMG == "" || rel.SHA == "") {
-			err = fmt.Errorf("the release assets of %s are not available yet", want)
-		}
-		var dmg string
-		if err == nil {
-			dmg, err = downloadUpdate(ctx, m, rel)
-		}
-		if err != nil {
-			cancel()
-			m.post(func() {
-				if !m.update.Installing {
-					return
-				}
-				m.update.Installing = false
-				m.update.Err = err.Error()
-				m.update.Status = "The update could not be installed."
-				if ctx.Err() != nil {
-					m.update.Status = "The update was cancelled."
-				}
-				m.invalidate()
-			})
-			return
-		}
-		script := installerScript(installWaitPID(os.Getpid()), dmg, target)
-		cmd := exec.Command("/bin/sh", "-c", script)
-		cmd.Stdout, cmd.Stderr = nil, nil
-		if err := cmd.Start(); err != nil {
-			_ = os.Remove(dmg)
-			m.post(func() {
-				m.update.Installing = false
-				m.update.Err = "Starting the installer failed: " + err.Error()
-				m.update.Status = "The update could not be installed."
-				m.invalidate()
-			})
-			return
-		}
-		// The next launch shows these notes as What's New.
-		path := updatePrefsPath(m.cfg.SessionPath)
-		prefs := loadUpdatePrefs(path)
-		prefs.PendingVersion, prefs.PendingNotes = rel.Version, rel.Notes
-		saveUpdatePrefs(path, prefs)
-		m.post(func() {
-			m.status = fmt.Sprintf("Installing GoIDEA %s and restarting…", rel.Version)
-			m.invalidate()
-			m.finishQuit(true)
-		})
-	}()
+	// The next launch shows these notes as What's New.
+	path := updatePrefsPath(m.cfg.SessionPath)
+	prefs := loadUpdatePrefs(path)
+	prefs.PendingVersion, prefs.PendingNotes = rel.Version, rel.Notes
+	saveUpdatePrefs(path, prefs)
+	m.post(func() {
+		m.update.installing = false
+		m.update.cancel = nil
+		m.upsertTask(BackgroundTask{ID: updateInstallTaskID, Title: title, Fraction: 1, Done: true})
+		// Stays if the restart does not happen: the update applies on the
+		// next start, as upstream's installed notification says.
+		m.notifySticky(updateKey, "info", "GoIDEA "+rel.Version+" is installed",
+			"It is used after GoIDEA restarts.", true,
+			notifyAction{label: "Restart", run: func(m *Model) { m.finishQuit(true) }})
+		m.status = fmt.Sprintf("Installing GoIDEA %s and restarting…", rel.Version)
+		m.invalidate()
+		// The installer waits for this process to quit, replaces the bundle
+		// and opens it again.
+		m.finishQuit(true)
+	})
+}
+
+// notifyUpdateFailure replaces the download's progress with why it ended:
+// a cancelled download offers Retry, a failure offers it with the reason.
+func notifyUpdateFailure(m *Model, cancelled bool, err error) {
+	retry := notifyAction{label: "Retry", run: func(m *Model) { m.InstallUpdate() }}
+	if cancelled {
+		m.notifyUser(updateKey, "info", "Update cancelled", "", retry)
+		return
+	}
+	m.notifyUser(updateKey, "error", "Could not install the update", err.Error(), retry)
 }
 
 // downloadUpdate streams the DMG to a temporary file, reporting progress, and
@@ -355,7 +434,7 @@ func downloadUpdate(ctx context.Context, m *Model, rel updateRelease) (string, e
 			}
 			if time.Since(last) > 200*time.Millisecond {
 				last = time.Now()
-				m.reportDownload(done, total)
+				m.reportDownload(rel.Version, done, total)
 			}
 		}
 		if rerr == io.EOF {
@@ -376,29 +455,33 @@ func downloadUpdate(ctx context.Context, m *Model, rel updateRelease) (string, e
 	if got := hex.EncodeToString(h.Sum(nil)); !strings.EqualFold(want, got) {
 		return fail(fmt.Errorf("the download's SHA-256 does not match the release"))
 	}
-	m.reportDownload(done, done)
+	m.reportDownload(rel.Version, done, done)
 	return path, nil
 }
 
-// reportDownload posts the download's progress to the dialog.
-func (m *Model) reportDownload(done, total int64) {
+// reportDownload posts the download's progress to the status bar's task and
+// the balloon, in the megabytes upstream shows.
+func (m *Model) reportDownload(version string, done, total int64) {
+	bytes := func(n int64) string { return fmt.Sprintf("%.1f", float64(n)/(1024*1024)) }
+	message := bytes(done) + " MB"
+	fraction := -1.0
+	if total > 0 {
+		message = bytes(done) + " MB of " + bytes(total) + " MB"
+		fraction = float64(done) / float64(total)
+	}
 	m.post(func() {
-		if !m.update.Installing {
+		if !m.update.installing {
 			return
 		}
-		megabytes := func(n int64) string { return fmt.Sprintf("%.1f", float64(n)/(1024*1024)) }
-		if total > 0 {
-			m.update.Progress = float64(done) / float64(total)
-			m.update.ProgressText = fmt.Sprintf("Downloading %s of %s MB…", megabytes(done), megabytes(total))
-		} else {
-			m.update.Progress = -1
-			m.update.ProgressText = fmt.Sprintf("Downloading %s MB…", megabytes(done))
-		}
-		m.invalidate()
+		m.upsertTask(BackgroundTask{ID: updateInstallTaskID,
+			Title: "Downloading GoIDEA " + version, Message: message,
+			Fraction: fraction, Cancel: m.update.cancel})
+		m.updateNotificationBody(updateKey, message)
 	})
 }
 
-// cancelUpdateInstall stops a download in progress.
+// cancelUpdateInstall stops a download in progress; the install step itself
+// is one move that must not be cut short.
 func (m *Model) cancelUpdateInstall() {
 	if m.update.cancel != nil {
 		m.update.cancel()
@@ -586,22 +669,74 @@ func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
-// showWhatsNewIfPending opens the notes of the version this install replaced.
+// showWhatsNewIfPending opens the notes of a version this start runs for the
+// first time, as upstream's checkAfterUpdate does: one start of a different
+// version opens the page, unless the setting turned it off.
 func (m *Model) showWhatsNewIfPending() {
 	path := updatePrefsPath(m.cfg.SessionPath)
 	prefs := loadUpdatePrefs(path)
 	current := mygo.App.Version()
-	if prefs.PendingVersion == "" || prefs.PendingVersion != current {
+	if current == "" || prefs.LastRunVersion == current {
 		return
 	}
-	m.update.Open = true
-	m.update.Latest = prefs.PendingVersion
-	m.update.Notes = prefs.PendingNotes
-	m.update.whatsNew = true
-	m.update.Status = fmt.Sprintf("What's new in GoIDEA %s", current)
-	m.invalidate()
-	prefs.PendingVersion, prefs.PendingNotes = "", ""
+	previous := prefs.LastRunVersion
+	prefs.LastRunVersion = current
+	notes := ""
+	if prefs.PendingVersion == current {
+		notes, prefs.PendingVersion, prefs.PendingNotes = prefs.PendingNotes, "", ""
+	}
 	saveUpdatePrefs(path, prefs)
+	// The first run has nothing to compare against.
+	if previous == "" || !m.showWhatsNewAfterUpdate() {
+		return
+	}
+	m.OpenWhatsNew(current, notes)
+}
+
+// OpenWhatsNew is the page of one version, with its notes when the install
+// recorded them.
+func (m *Model) OpenWhatsNew(version, notes string) {
+	if version == "" {
+		version = mygo.App.Version()
+	}
+	m.openWhatsNewPage(version, notes)
+	if notes != "" {
+		return
+	}
+	// An update installed outside the app recorded no notes: read the release
+	// the page belongs to, as upstream's page does.
+	if t := m.whatsNewTab(); t != nil {
+		t.pageLoading = true
+	}
+	m.invalidate()
+	go func() {
+		found := fetchReleaseNotes(version)
+		m.post(func() {
+			t := m.whatsNewTab()
+			if t == nil || t.pageVersion != version {
+				return
+			}
+			t.pageLoading = false
+			if found != "" {
+				t.pageNotes = found
+			}
+			m.invalidate()
+		})
+	}()
+}
+
+// OpenCurrentWhatsNew is Help › What's New.
+func (m *Model) OpenCurrentWhatsNew() { m.OpenWhatsNew(mygo.App.Version(), "") }
+
+// fetchReleaseNotes reads the notes of one version's release, "" when the
+// feed has none.
+func fetchReleaseNotes(version string) string {
+	feed := "https://api.github.com/repos/misswell/GoIdea/releases/tags/v" + version
+	rel, err := fetchLatestRelease(feed)
+	if err != nil || rel.Version != version {
+		return ""
+	}
+	return rel.Notes
 }
 
 // compareVersions orders dotted versions by their numeric parts, ignoring a
@@ -660,72 +795,4 @@ func openReleasePage(url string) {
 		cmd = exec.Command("xdg-open", url)
 	}
 	_ = cmd.Start()
-}
-
-// updateDialog draws Check for Updates and What's New.
-func (m *Model) updateDialog(c *ui.Context, p *ui.Theme) {
-	if !m.update.Open {
-		return
-	}
-	open := m.update.Open
-	dlg := ui.Modal(c, &open, func() {
-		ui.Column(c).Width(520).Gap(10).Children(func() {
-			title := "Check for Updates"
-			if m.update.whatsNew {
-				title = "What's New"
-			}
-			ui.Text(c, title).FontSize(14).Bold().TextColor(p.Text).SingleLine()
-			ui.Text(c, m.update.Status).FontSize(12).TextColor(p.Text).SingleLine().Ellipsis("…")
-			if m.update.Err != "" {
-				ui.Text(c, m.update.Err).FontSize(10.5).TextColor(p.TextMuted).SingleLine().Ellipsis("…")
-			}
-			if m.update.Installing {
-				ui.Text(c, m.update.ProgressText).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
-				frac := m.update.Progress
-				if frac < 0 {
-					frac = 0
-				}
-				if frac > 1 {
-					frac = 1
-				}
-				ui.Row(c).Width(500).Height(6).Background(p.Border).Radius(3).Children(func() {
-					ui.Row(c).Width(float32(500 * frac)).Height(6).Background(p.Accent).Radius(3)
-				})
-			}
-			if m.update.Notes != "" {
-				ui.Scroll(c).Height(240).Children(func() {
-					ui.Column(c).Gap(4).Children(func() {
-						for _, line := range strings.Split(strings.TrimRight(m.update.Notes, "\n"), "\n") {
-							ui.Text(c, line).FontSize(11.5).TextColor(p.Text).SingleLine().Ellipsis("…")
-						}
-					})
-				})
-			}
-			ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
-				if m.update.Installing {
-					ui.Button(c, "Cancel").OnClick(func() { m.cancelUpdateInstall() })
-				} else if m.update.Newer && m.update.Latest != "" {
-					canInstall := runtime.GOOS == "darwin" && appBundlePath() != ""
-					if canInstall {
-						ui.Button(c, "Skip This Version").OnClick(func() {
-							m.skipUpdateVersion(m.update.Latest)
-							m.update.Open = false
-							open = false
-						})
-						ui.Button(c, "Install and Restart").OnClick(func() { m.InstallUpdate() })
-					} else if m.update.URL != "" {
-						url := m.update.URL
-						ui.Button(c, "Download").OnClick(func() { openReleasePage(url) })
-					}
-				}
-				ui.Button(c, "Close").OnClick(func() {
-					m.update.Open = false
-					open = false
-				})
-			})
-		})
-	})
-	if dlg.Dismissed() || !open {
-		m.update.Open = false
-	}
 }

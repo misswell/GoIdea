@@ -110,9 +110,6 @@ func init() {
 	reg("toolbarCustomize", overlayLayerDialog, 240, true,
 		func(m *Model) bool { return m.toolbarCustomize },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.toolbarCustomizeDialog(c, p) })
-	reg("updates", overlayLayerDialog, 250, true,
-		func(m *Model) bool { return m.update.Open },
-		func(m *Model, c *ui.Context, p *ui.Theme) { m.updateDialog(c, p) })
 	reg("invalidateCaches", overlayLayerDialog, 260, true,
 		func(m *Model) bool { return m.invalidateDlg != nil },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.invalidateCachesDialog(c, p) })

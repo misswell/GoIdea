@@ -104,6 +104,14 @@ type Tab struct {
 	compOff  time.Time
 	hoverGen uint64
 	defGen   uint64
+
+	// kind marks a built-in page tab ("whatsNew") whose body the page draws
+	// instead of the document's text; pageVersion and pageNotes are What's
+	// New's release, and pageLoading is a notes fetch in flight.
+	kind        string
+	pageVersion string
+	pageNotes   string
+	pageLoading bool
 }
 
 // Model is the app's state.
@@ -289,6 +297,10 @@ type Model struct {
 	toolbarAdding   bool
 	toolbarAddQuery string
 	update          updateState
+	// tasks are the background tasks the status bar shows, and tasksOpen
+	// tells whether its Background Tasks popup is up.
+	tasks     []BackgroundTask
+	tasksOpen bool
 
 	// invalidateDlg is File › Invalidate Caches… while it is open, and
 	// restartPending relaunches the app once the quit flow finishes.
@@ -1493,6 +1505,13 @@ func (m *Model) applyActive() {
 	}
 	if t := m.tab(); t != nil {
 		name := filepath.Base(t.doc.Path())
+		if t.kind != "" {
+			name = t.doc.Path()
+			m.win.SetTitle(name + " — GoIDEA")
+			m.win.SetRepresentedFile("")
+			m.win.SetDocumentEdited(false)
+			return
+		}
 		m.win.SetTitle(name + " — GoIDEA")
 		m.win.SetRepresentedFile(t.doc.Path())
 		m.win.SetDocumentEdited(t.dirty())
@@ -1507,7 +1526,7 @@ func (m *Model) dropTab(i int) { m.removeTab(m.tabs[i]) }
 
 // removeTab closes t and puts it in the closed history Reopen Closed Tab pops.
 func (m *Model) removeTab(t *Tab) {
-	if g, ok := m.groupOf(t); ok && t.doc != nil {
+	if g, ok := m.groupOf(t); ok && t.doc != nil && t.kind == "" {
 		m.rememberClosed(closedTab{path: t.doc.Path(), index: tabIndexIn(m.groupTabsAt(g), t), pinned: t.pinned})
 	}
 	m.removeTabNow(t)
@@ -1525,7 +1544,7 @@ func (m *Model) removeTabNow(t *Tab) {
 		m.rename = nil
 	}
 	m.settleGroups()
-	if t.doc != nil {
+	if t.doc != nil && t.kind == "" {
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
@@ -1760,7 +1779,13 @@ func (m *Model) SmokeRoundTrip(ctx context.Context) (edited, undone bool) {
 // writes it never reads state the user is still changing.
 func (m *Model) sessionSnapshot() (Session, bool) {
 	root := m.Root()
-	if root == "" && len(m.tabs) == 0 && len(m.recents) == 0 && len(m.recentGroups) == 0 &&
+	fileTabs := 0
+	for _, t := range m.tabs {
+		if t.kind == "" {
+			fileTabs++
+		}
+	}
+	if root == "" && fileTabs == 0 && len(m.recents) == 0 && len(m.recentGroups) == 0 &&
 		len(m.searchHistory) == 0 {
 		// Nothing to remember; keep the previous session rather than
 		// writing an empty one after a failed start.
@@ -1769,18 +1794,25 @@ func (m *Model) sessionSnapshot() (Session, bool) {
 	var files, pinned []string
 	focus := ""
 	for _, t := range m.tabs {
+		if t.kind != "" {
+			// A page like What's New is not restorable, as upstream's tab says.
+			continue
+		}
 		files = append(files, t.doc.Path())
 		if t.pinned {
 			pinned = append(pinned, t.doc.Path())
 		}
 	}
-	if t := m.tab(); t != nil {
+	if t := m.tab(); t != nil && t.kind == "" {
 		focus = t.doc.Path()
 	}
 	var splitFiles []string
 	splitActive := 0
 	if m.split != nil {
 		for _, t := range m.split.tabs {
+			if t.kind != "" {
+				continue
+			}
 			splitFiles = append(splitFiles, t.doc.Path())
 		}
 		splitActive = m.split.active
@@ -2007,11 +2039,16 @@ func (m *Model) View(c *ui.Context) {
 	ui.Column(c).Fill().Background(p.Background).Children(func() {
 		if m.Root() == "" || m.showingWelcome {
 			// With no project open the Welcome screen owns the window, as
-			// OpenIDEA's does.
+			// OpenIDEA's does; What's New is standalone, so while it is on
+			// show it takes the window instead.
 			if m.banner != "" {
 				m.bannerRow(c, p)
 			}
-			m.welcome(c, p)
+			if m.Root() == "" && m.whatsNewShown() {
+				m.whatsNewStandalone(c, p)
+			} else {
+				m.welcome(c, p)
+			}
 			// The Welcome screen has no status bar, so balloons are the only
 			// place an update or backend notice can show, as upstream's are.
 			m.balloons(c, p)

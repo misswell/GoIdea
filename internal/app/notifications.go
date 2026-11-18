@@ -46,10 +46,11 @@ type ideNotification struct {
 	logged        bool
 	userInitiated bool
 	// balloon is whether it still shows in the corner; sticky is whether it
-	// may fade on its own at all.
-	balloon bool
-	sticky  bool
-	hover   bool
+	// may fade on its own at all, and permanent keeps it until dismissed.
+	balloon   bool
+	sticky    bool
+	permanent bool
+	hover     bool
 
 	timer     *time.Timer
 	deadline  time.Time
@@ -80,6 +81,34 @@ func (m *Model) notifyError(key, title, body string, actions ...notifyAction) {
 	m.postNotification(ideNotification{key: key, level: "error", title: title, body: body, actions: actions})
 }
 
+// notifyUser posts the answer to a command the user ran: it pops up even with
+// balloon notifications turned off, as upstream's userInitiated does.
+func (m *Model) notifyUser(key, level, title, body string, actions ...notifyAction) {
+	m.postNotification(ideNotification{key: key, level: level, title: title, body: body,
+		actions: actions, userInitiated: true})
+}
+
+// notifySticky posts a notification that stays until it is dismissed or
+// replaced, as upstream's update announcements do.
+func (m *Model) notifySticky(key, level, title, body string, userInitiated bool, actions ...notifyAction) {
+	m.postNotification(ideNotification{key: key, level: level, title: title, body: body,
+		actions: actions, userInitiated: userInitiated, permanent: true})
+}
+
+// updateNotificationBody changes the newest notification of a key in place,
+// so a download's progress replaces its balloon's text instead of restarting
+// the notification.
+func (m *Model) updateNotificationBody(key, body string) {
+	for i := range m.notify.items {
+		if m.notify.items[i].key != key {
+			continue
+		}
+		m.notify.items[i].body = body
+		m.invalidate()
+		return
+	}
+}
+
 // notifyBeep plays the system alert; a test replaces it.
 var notifyBeep = func() { mygo.Shell.Beep() }
 
@@ -91,7 +120,7 @@ func (m *Model) postNotification(n ideNotification) {
 	n.group = notifyGroupOf(n)
 	prefs := m.notifyPrefsFor(n.group)
 	n.balloon = n.userInitiated || (!m.notifyOff() && prefs.Display != "none")
-	n.sticky = prefs.Display == "sticky" || n.level == "error"
+	n.sticky = n.sticky || prefs.Display == "sticky" || n.level == "error"
 	n.logged = !prefs.NoLog
 	if n.balloon && m.prefs.Notify != nil && m.prefs.Notify.Sound {
 		notifyBeep()
@@ -131,6 +160,10 @@ func (m *Model) startNotifyTimer(id int) {
 		it := &m.notify.items[i]
 		if it.id != id {
 			continue
+		}
+		if it.permanent {
+			// Stays until dismissed, as an update's announcement does.
+			return
 		}
 		wait := notifyInfoTimeout
 		if it.sticky {
@@ -566,7 +599,7 @@ func (m *Model) loggedNotifications() []ideNotification {
 // canSuppress reports whether a balloon offers "Don't Show Again": errors
 // always show, and a group already silenced has no balloon to offer it on.
 func (m *Model) canSuppress(n ideNotification) bool {
-	return n.level != "error" && m.notifyPrefsFor(n.group).Display != "none"
+	return n.key != updateKey && n.level != "error" && m.notifyPrefsFor(n.group).Display != "none"
 }
 
 // SuppressGroup is "Don't Show Again": the group stops popping up but keeps

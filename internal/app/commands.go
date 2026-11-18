@@ -190,6 +190,7 @@ func builtinCommands() []appCommand {
 		{"toolbar.customize", "Customize Main Toolbar…", "View", "", "toolbar widgets title bar customize", func(m *Model) { m.OpenToolbarCustomize() }},
 		{"toolbar.reset", "Restore Default Toolbar", "View", "", "toolbar default widgets restore", func(m *Model) { m.RestoreDefaultToolbar() }},
 		{"app.checkForUpdates", "Check for Updates…", "Help", "", "update upgrade version release", func(m *Model) { m.CheckForUpdates() }},
+		{"app.whatsNew", "What's New", "Help", "", "whats new release notes changelog update notes", func(m *Model) { m.OpenCurrentWhatsNew() }},
 	}
 }
 

@@ -29,6 +29,9 @@ func (m *Model) tabLabel(t *Tab) (name, dir string) {
 // tabLabelIn is tabLabel over a window group: each strip decides its folder
 // suffixes from its own tabs, as OpenIDEA's strips label independently.
 func (m *Model) tabLabelIn(tabs []*Tab, t *Tab) (name, dir string) {
+	if t != nil && t.kind == tabKindWhatsNew {
+		return "What's New", ""
+	}
 	paths := make([]string, len(tabs))
 	for i, x := range tabs {
 		paths[i] = tabPath(x)

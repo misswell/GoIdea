@@ -444,6 +444,9 @@ type Preferences struct {
 	Notify *NotifyPrefs `json:"notifications,omitempty"`
 	// Run are the run flow's stored choices; nil keeps OpenIDEA's defaults.
 	Run *RunPrefs `json:"run,omitempty"`
+	// Updates are Help › Check for Updates' settings, nil until changed: the
+	// automatic check and the What's New page stay on, as app.update.* does.
+	Updates *UpdatePrefs `json:"updates,omitempty"`
 	// ScratchRecent are the languages New Scratch File lists first, most
 	// recent first.
 	ScratchRecent []string `json:"scratchRecent,omitempty"`
