@@ -79,7 +79,7 @@ func (m *Model) welcomeSidebar(c *ui.Context, oi oiColors) {
 				})
 			})
 			ui.Text(c, "An open-source IDE inspired by IntelliJ IDEA").
-				FontSize(11).TextColor(oi.textMuted).Padding(0, 6).Margin(0, 0, 20, 0)
+				FontSize(12).TextColor(oi.textMuted).Padding(0, 6).Margin(0, 0, 20, 0)
 			ui.Column(c).Gap(2).Children(func() {
 				m.welcomeNavItem(c, oi, "projects", "Projects")
 				m.welcomeNavItem(c, oi, "customize", "Customize")
@@ -129,7 +129,7 @@ func (m *Model) welcomeGear(c *ui.Context, oi oiColors) {
 		g.Background(oi.hoverTint)
 	}
 	g.Children(func() {
-		ui.Icon(c, iconWelcomeGear).Size(16, 16).TextColor(oi.textSecondary)
+		oiIconEl(c, "general/settings", 16, oi, oi.icon)
 	})
 	if g.Clicked() {
 		m.welcomeGearOpen = !m.welcomeGearOpen
@@ -252,22 +252,46 @@ func (m *Model) welcomeGroupRow(c *ui.Context, oi oiColors, g RecentGroup, count
 	if r.Hovered() {
 		r.Background(oi.hoverTint)
 	}
+	moreClicked := false
 	r.Children(func() {
-		ui.Icon(c, iconChevronDown).Size(10, 10).TextColor(oi.textMuted)
-		ui.Text(c, g.Name).FontSize(11.5).Bold().TextColor(oi.textMuted).SingleLine()
-		ui.Text(c, "("+fmt.Sprintf("%d", count)+")").FontSize(11).TextColor(oi.textFaint).SingleLine()
+		chevron := "general/chevronDown"
+		if g.Collapsed {
+			chevron = "general/chevronRight"
+		}
+		oiIconEl(c, chevron, 16, oi, oi.textMuted)
+		oiIconEl(c, "nodes/folder", 16, oi, oi.textMuted)
+		ui.Text(c, g.Name).FontSize(13).TextColor(oi.textStrong).SingleLine().Ellipsis("…")
+		ui.Spacer(c)
+		ui.Text(c, fmt.Sprintf("%d", count)).FontSize(13).TextColor(oi.textFaint).SingleLine()
+		more := ui.ButtonBase(c.Key("welcomeGroupMore:"+g.Name)).Size(24, 24).Radius(6).
+			Justify(ui.Center).AlignItems(ui.Center).Cursor(ui.CursorPointer)
+		if r.Hovered() {
+			if more.Hovered() {
+				more.Background(oi.hoverTint)
+			}
+			more.Children(func() {
+				oiIconEl(c, "general/moreVertical", 16, oi, oi.icon)
+			})
+			more.Menu(func(menu *ui.Menu) { m.welcomeGroupMenu(menu, g.Name) })
+			if more.Clicked() {
+				moreClicked = true
+			}
+		}
 	})
-	if r.Clicked() {
+	if r.Clicked() && !moreClicked {
 		m.ToggleRecentGroup(g.Name)
 	}
-	r.ContextMenu(func(menu *ui.Menu) {
-		if menu.Item("Rename Group…").Chosen() {
-			m.openRecentGroupDialog(g.Name)
-		}
-		if menu.Item("Delete Group").Chosen() {
-			m.DeleteRecentGroup(g.Name)
-		}
-	})
+	r.ContextMenu(func(menu *ui.Menu) { m.welcomeGroupMenu(menu, g.Name) })
+}
+
+// welcomeGroupMenu is the group's menu, shared by the row and its More button.
+func (m *Model) welcomeGroupMenu(menu *ui.Menu, name string) {
+	if menu.Item("Rename Group…").Chosen() {
+		m.openRecentGroupDialog(name)
+	}
+	if menu.Item("Delete Group").Chosen() {
+		m.DeleteRecentGroup(name)
+	}
 }
 
 // welcomeHeader is the search field and the buttons above the list.
@@ -277,8 +301,7 @@ func (m *Model) welcomeHeader(c *ui.Context, oi oiColors) {
 		Children(func() {
 			ui.Row(c).Grow(1).MinWidth(0).Height(28).Gap(2).AlignItems(ui.Center).
 				Children(func() {
-					ui.Icon(c, iconWelcomeSearch).Size(14, 14).TextColor(oi.textMuted).
-						MarginEnd(4)
+					oiIconEl(c, "general/search", 14, oi, oi.textSubtle).MarginEnd(4)
 					input := ui.TextInputBase(c, &m.welcomeQuery).Grow(1).AutoFocus()
 					input.Placeholder("Search projects")
 					input.OnShortcut(0, ui.KeyDown, func() { m.WelcomeSelect(1) })
@@ -335,10 +358,10 @@ func (m *Model) welcomeLanding(c *ui.Context, oi oiColors) {
 		ui.Text(c, "Open a folder from disk or clone a repository from version control.").
 			FontSize(13).TextColor(oi.textMuted)
 		ui.Row(c).Gap(24).Margin(16, 0, 0, 0).Children(func() {
-			m.welcomeLandingAction(c, oi, "New Project", iconWelcomeFolder, true, m.NewProject)
-			m.welcomeLandingAction(c, oi, "Open", iconWelcomeOpen, true, m.chooseProject)
-			m.welcomeLandingAction(c, oi, "Clone Repository", iconWelcomeClone, true, m.openCloneDialog)
-			m.welcomeLandingAction(c, oi, "Remote Development", iconWelcomeRemote, false, nil)
+			m.welcomeLandingAction(c, oi, "New Project", "general/add", true, m.NewProject)
+			m.welcomeLandingAction(c, oi, "Open", "nodes/folder", true, m.chooseProject)
+			m.welcomeLandingAction(c, oi, "Clone Repository", "general/vcs", true, m.openCloneDialog)
+			m.welcomeLandingAction(c, oi, "Remote Development", "toolwindows/terminal", false, nil)
 		})
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Margin(8, 0, 0, 0).Children(func() {
 			ui.Text(c, "Open a folder").FontSize(13).TextColor(oi.textFaint)
@@ -349,7 +372,7 @@ func (m *Model) welcomeLanding(c *ui.Context, oi oiColors) {
 
 // welcomeLandingAction is one of the landing's tiles: the icon in its
 // 48px square over the action's name.
-func (m *Model) welcomeLandingAction(c *ui.Context, oi oiColors, label string, icon *ui.SVG, enabled bool, run func()) {
+func (m *Model) welcomeLandingAction(c *ui.Context, oi oiColors, label, icon string, enabled bool, run func()) {
 	b := ui.ButtonBase(c.Key("welcomeLanding:" + label)).Width(150).
 		AlignItems(ui.Center).Cursor(ui.CursorPointer)
 	b.Children(func() {
@@ -361,11 +384,11 @@ func (m *Model) welcomeLandingAction(c *ui.Context, oi oiColors, label string, i
 				tile.Background(oi.hover)
 			}
 			tile.Children(func() {
-				tone := oi.textMuted
+				tone := oi.icon
 				if !enabled {
 					tone = oi.textFaint
 				}
-				ui.Icon(c, icon).Size(20, 20).TextColor(tone)
+				oiIconEl(c, icon, 20, oi, tone)
 			})
 			tone := oi.textStrong
 			if !enabled {
@@ -410,12 +433,12 @@ func (m *Model) welcomeRecentRow(c *ui.Context, oi oiColors, mt recentMatch, sel
 		})
 		ui.Column(c).Grow(1).MinWidth(0).Children(func() {
 			m.welcomeName(c, oi, name, mt.nameIdx)
-			ui.Text(c, shortenHome(dir)).FontSize(13).TextColor(oi.textMuted).
+			ui.Text(c, shortenHome(dir)).FontSize(12).TextColor(oi.textSubtle).
 				SingleLine().Ellipsis("…")
 			if branch := m.branchOf(dir); branch != "" {
 				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-					ui.Icon(c, iconWelcomeBranch).Size(14, 14).TextColor(oi.textMuted)
-					ui.Text(c, branch).FontSize(13).TextColor(oi.textMuted).SingleLine()
+					oiIconEl(c, "general/vcs", 14, oi, oi.textSubtle)
+					ui.Text(c, branch).FontSize(12).TextColor(oi.textSubtle).SingleLine()
 				})
 			}
 		})
@@ -426,7 +449,7 @@ func (m *Model) welcomeRecentRow(c *ui.Context, oi oiColors, mt recentMatch, sel
 				more.Background(oi.hoverTint)
 			}
 			more.Children(func() {
-				ui.Icon(c, iconWelcomeMore).Size(16, 16).TextColor(oi.textMuted)
+				oiIconEl(c, "general/moreVertical", 16, oi, oi.icon)
 			})
 			more.Menu(func(menu *ui.Menu) { m.welcomeRecentMenu(menu, dir) })
 			if more.Clicked() {
@@ -633,7 +656,7 @@ func (m *Model) welcomeCustomize(c *ui.Context, oi oiColors) {
 				})
 				m.welcomeField(c, oi, "Keymap", func() {
 					ui.Text(c, keymapPreset()).FontSize(13).TextColor(oi.text).SingleLine()
-					open := ui.Text(c, "Open Settings…").FontSize(12.5).TextColor(oi.link).
+					open := ui.Text(c, "Open Settings…").FontSize(13).TextColor(oi.link).
 						Cursor(ui.CursorPointer)
 					if open.Clicked() {
 						m.OpenSettingsPage(settingsPageKeymap)
@@ -743,19 +766,19 @@ func (m *Model) welcomeCloneDialog(c *ui.Context, oi oiColors) {
 	open := m.welcomeCloneOpen
 	ui.Modal(c, &open, func() {
 		ui.Column(c).Width(460).Gap(10).Children(func() {
-			ui.Text(c, "Clone Repository").FontSize(14).Bold().
+			ui.Text(c, "Clone Repository").FontSize(13).Bold().
 				TextColor(oi.textStrong).SingleLine()
-			ui.Text(c, "Repository URL").FontSize(11).TextColor(oi.textMuted).
+			ui.Text(c, "Repository URL").FontSize(12).TextColor(oi.textMuted).
 				SingleLine()
 			urlInput := ui.TextInput(c, &m.welcomeCloneURL).FillWidth()
 			urlInput.Placeholder("https://github.com/user/repo.git")
-			ui.Text(c, "Directory").FontSize(11).TextColor(oi.textMuted).SingleLine()
+			ui.Text(c, "Directory").FontSize(12).TextColor(oi.textMuted).SingleLine()
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.TextInput(c, &m.welcomeCloneDir).Grow(1)
 				ui.Button(c, "Choose…").OnClick(m.chooseCloneDir)
 			})
 			if dest := m.cloneDestination(); dest != "" {
-				ui.Text(c, "Clones into "+shortenHome(dest)).FontSize(11).
+				ui.Text(c, "Clones into "+shortenHome(dest)).FontSize(12).
 					TextColor(oi.textFaint).SingleLine().Ellipsis("…")
 			}
 			if m.welcomeCloneErr != "" {
@@ -916,7 +939,7 @@ func (m *Model) welcomeRemoveDialog(c *ui.Context, oi oiColors) {
 	open := m.welcomeRemoveOpen
 	ui.Modal(c, &open, func() {
 		ui.Column(c).Width(400).Gap(12).Children(func() {
-			ui.Text(c, "Remove Recent Project").FontSize(14).Bold().
+			ui.Text(c, "Remove Recent Project").FontSize(13).Bold().
 				TextColor(oi.textStrong).SingleLine()
 			ui.Textf(c, "Remove '%s' from the list of recent projects?",
 				filepath.Base(m.welcomeRemovePath)).FontSize(13).TextColor(oi.text)
@@ -1018,7 +1041,7 @@ func (m *Model) recentGroupDialog(c *ui.Context, p *ui.Theme) {
 	}
 	ui.Modal(c, &open, func() {
 		ui.Column(c).Width(420).Gap(12).Children(func() {
-			ui.Text(c, title).FontSize(14).Bold().TextColor(p.Text).SingleLine()
+			ui.Text(c, title).FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			in := ui.TextInput(c, &d.text).AutoFocus()
 			in.Placeholder("Group name")
 			if in.Submitted() {

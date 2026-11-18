@@ -486,13 +486,29 @@ func dbOutcomeSummary(o openidea.DBOutcome) string {
 	return s
 }
 
+// dbDriverIcon is the data source icon of its driver, the database glyph when
+// the build has no drawing for it.
+func dbDriverIcon(driver string) string {
+	switch strings.ToLower(driver) {
+	case "sqlite", "mysql", "mariadb", "postgres", "postgresql", "oracle", "sqlserver", "clickhouse",
+		"cockroach", "redshift", "snowflake", "tidb", "timescale", "yugabyte", "supabase", "singlestore",
+		"greenplum", "oceanbase", "neon", "aurora":
+		name := strings.ToLower(driver)
+		if name == "postgresql" {
+			name = "postgres"
+		}
+		return "openidea/database/" + name
+	}
+	return "openidea/toolwindows/database"
+}
+
 // dbCell renders one cell; NULL is the backend's nil.
 func dbCell(c *ui.Context, p *ui.Theme, cell *string) {
 	text, color := "NULL", p.TextMuted
 	if cell != nil {
 		text, color = *cell, p.Text
 	}
-	ui.Text(c, text).FontSize(11).TextColor(color).Width(dbCellWidth).
+	ui.Text(c, text).FontSize(12).Font("monospace").TextColor(color).Width(dbCellWidth).
 		SingleLine().Ellipsis("…")
 }
 
@@ -506,36 +522,37 @@ func (m *Model) dbDialog(c *ui.Context, p *ui.Theme) {
 	dlg := ui.Modal(c, &open, func() {
 		ui.Column(c).Width(980).Height(640).Gap(10).Children(func() {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, "Database").FontSize(14).Bold().TextColor(p.Text).SingleLine()
+				ui.Text(c, "Database").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 				ui.Spacer(c)
-				ui.Text(c, dbStatusText(v)).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+				ui.Text(c, dbStatusText(v)).FontSize(12).TextColor(p.TextMuted).SingleLine()
 			})
 			ui.Row(c).Grow(1).MinHeight(0).Gap(14).AlignItems(ui.Stretch).Children(func() {
 				ui.Column(c).Width(250).Gap(6).Children(func() {
-					ui.Text(c, "Data Sources").FontSize(11).TextColor(p.TextMuted).SingleLine()
+					ui.Text(c, "Data Sources").FontSize(12).TextColor(p.TextMuted).SingleLine()
 					if len(v.sources) == 0 {
-						ui.Text(c, "No data sources yet").FontSize(11).TextColor(p.TextMuted).SingleLine()
+						ui.Text(c, "No data sources yet").FontSize(12).TextColor(p.TextMuted).SingleLine()
 					}
 					ui.Scroll(c).Height(140).Children(func() {
-						ui.Column(c).Children(func() {
+						ui.Column(c).Padding(0, 6).Children(func() {
 							for _, s := range v.sources {
 								s := s
 								sel := v.source == s.ID
-								r := ui.Row(c.Key("dbsrc:"+s.ID)).Height(24).Padding(0, 6).
-									Gap(6).AlignItems(ui.Center)
+								r := ui.Row(c.Key("dbsrc:" + s.ID)).Height(24).PaddingStart(4).
+									PaddingEnd(8).Gap(4).Radius(5).AlignItems(ui.Center)
 								if sel || r.Hovered() {
 									r.Background(p.SurfaceHover)
 								}
 								r.Children(func() {
-									mark := "○"
+									oiIconEl(c, dbDriverIcon(s.Driver), 16, oiPaletteOf(p), p.TextMuted).
+										MarginEnd(2)
+									name := oiPaletteOf(p).text
 									if v.connected[s.ID] {
-										mark = "●"
+										name = oiPaletteOf(p).textStrong
 									}
-									ui.Text(c, mark).FontSize(11).TextColor(p.Accent).Width(12)
-									ui.Text(c, s.Name).FontSize(12).TextColor(p.Text).
+									ui.Text(c, s.Name).FontSize(13).TextColor(name).
 										SingleLine().Ellipsis("…")
 									ui.Spacer(c)
-									ui.Text(c, s.Driver).FontSize(10).TextColor(p.TextMuted).SingleLine()
+									ui.Text(c, s.Driver).FontSize(12).TextColor(p.TextMuted).SingleLine()
 								})
 								if r.Clicked() {
 									m.SelectDBSource(s.ID)
@@ -553,17 +570,20 @@ func (m *Model) dbDialog(c *ui.Context, p *ui.Theme) {
 						ui.Button(c, "Add SQLite…").OnClick(func() { m.AddSQLiteSource() })
 					})
 					if len(v.schemas) > 0 {
-						ui.Text(c, "Schemas").FontSize(11).TextColor(p.TextMuted).SingleLine()
+						ui.Text(c, "Schemas").FontSize(12).TextColor(p.TextMuted).SingleLine()
 						ui.Scroll(c).Height(88).Children(func() {
-							ui.Column(c).Children(func() {
+							ui.Column(c).Padding(0, 6).Children(func() {
 								for _, schema := range v.schemas {
 									schema := schema
-									r := ui.Row(c.Key("dbschema:"+schema)).Height(22).Padding(0, 6)
+									r := ui.Row(c.Key("dbschema:" + schema)).Height(24).PaddingStart(4).
+										PaddingEnd(8).Gap(4).Radius(5).AlignItems(ui.Center)
 									if v.schema == schema || r.Hovered() {
 										r.Background(p.SurfaceHover)
 									}
 									r.Children(func() {
-										ui.Text(c, schema).FontSize(12).TextColor(p.Text).
+										oiIconEl(c, "openidea/database/schema", 16, oiPaletteOf(p), p.TextMuted).
+											MarginEnd(2)
+										ui.Text(c, schema).FontSize(13).TextColor(p.Text).
 											SingleLine().Ellipsis("…")
 									})
 									if r.Clicked() {
@@ -573,23 +593,23 @@ func (m *Model) dbDialog(c *ui.Context, p *ui.Theme) {
 							})
 						})
 					}
-					ui.Text(c, "Tables").FontSize(11).TextColor(p.TextMuted).SingleLine()
+					ui.Text(c, "Tables").FontSize(12).TextColor(p.TextMuted).SingleLine()
 					ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
-						ui.Column(c).Children(func() {
+						ui.Column(c).Padding(0, 6).Children(func() {
 							for _, t := range v.tables {
 								t := t
-								icon := "▤"
+								icon := "openidea/database/table"
 								if t.Kind != "table" {
-									icon = "◇"
+									icon = "openidea/database/view"
 								}
-								r := ui.Row(c.Key("dbtable:"+t.Name)).Height(22).Padding(0, 6).
-									Gap(6).AlignItems(ui.Center)
+								r := ui.Row(c.Key("dbtable:" + t.Name)).Height(24).PaddingStart(4).
+									PaddingEnd(8).Gap(4).Radius(5).AlignItems(ui.Center)
 								if r.Hovered() {
 									r.Background(p.SurfaceHover)
 								}
 								r.Children(func() {
-									ui.Text(c, icon).FontSize(10).TextColor(p.TextMuted).Width(10)
-									ui.Text(c, t.Name).FontSize(12).TextColor(p.Text).
+									oiIconEl(c, icon, 16, oiPaletteOf(p), p.TextMuted).MarginEnd(2)
+									ui.Text(c, t.Name).FontSize(13).TextColor(p.Text).
 										SingleLine().Ellipsis("…")
 								})
 								if r.Clicked() {
@@ -614,7 +634,7 @@ func (m *Model) dbDialog(c *ui.Context, p *ui.Theme) {
 						ui.Button(c, "Run").Disabled(v.running).OnClick(func() { m.RunDB() })
 						ui.Button(c, "History").OnClick(func() { m.OpenDBHistory() })
 						ui.Button(c, "Explain").OnClick(func() { m.ExplainDB() })
-						ui.Text(c, "Cmd+Enter runs the statement; results show the first 50 rows").FontSize(10.5).
+						ui.Text(c, "Cmd+Enter runs the statement; results show the first 50 rows").FontSize(12).
 							TextColor(p.TextMuted).SingleLine()
 					})
 					ui.Row(c).Gap(2).Children(func() {
@@ -625,7 +645,7 @@ func (m *Model) dbDialog(c *ui.Context, p *ui.Theme) {
 								title = v.results[i].title
 							}
 							on := v.active == i
-							b := ui.ButtonBase(c.Key(fmt.Sprintf("dbresult:%d", i))).Height(22).
+							b := ui.ButtonBase(c.Key(fmt.Sprintf("dbresult:%d", i))).Height(24).
 								Padding(0, 8).Radius(4).AlignItems(ui.Center).Cursor(ui.CursorPointer)
 							if on {
 								b.Background(p.SurfaceHover)
@@ -634,7 +654,7 @@ func (m *Model) dbDialog(c *ui.Context, p *ui.Theme) {
 								b.Background(p.SurfaceHover)
 							}
 							b.Children(func() {
-								ui.Text(c, title).FontSize(11).TextColor(p.TextMuted).
+								ui.Text(c, title).FontSize(12).TextColor(p.TextMuted).
 									SingleLine().Ellipsis("…")
 							})
 							b.OnClick(func() { m.selectDBResult(i) })
@@ -658,14 +678,14 @@ func (m *Model) dbDialog(c *ui.Context, p *ui.Theme) {
 						}
 					})
 					if v.err != "" {
-						ui.Text(c, v.err).FontSize(11).TextColor(p.Danger).
+						ui.Text(c, v.err).FontSize(12).TextColor(p.Danger).
 							SingleLine().Ellipsis("…")
 					}
 					ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
 						if v.active < 0 {
 							ui.Column(c).Padding(4, 6).Gap(2).Children(func() {
 								for _, line := range v.outLog {
-									ui.Text(c, line).FontSize(10.5).TextColor(p.TextMuted).
+									ui.Text(c, line).FontSize(12).TextColor(p.TextMuted).
 										SingleLine().Ellipsis("…")
 								}
 							})
@@ -676,13 +696,13 @@ func (m *Model) dbDialog(c *ui.Context, p *ui.Theme) {
 								i, o := i, o
 								ui.Column(c).Gap(4).Children(func() {
 									ui.Row(c).Gap(8).Children(func() {
-										ui.Text(c, oneLine(o.Statement.Text)).FontSize(11).
+										ui.Text(c, oneLine(o.Statement.Text)).FontSize(12).
 											TextColor(p.TextMuted).SingleLine().Ellipsis("…").Grow(1)
-										ui.Text(c, dbOutcomeSummary(o)).FontSize(10.5).
+										ui.Text(c, dbOutcomeSummary(o)).FontSize(12).
 											TextColor(p.TextMuted).SingleLine()
 									})
 									if o.Error != "" {
-										ui.Text(c, o.Error).FontSize(11).TextColor(p.Danger).SingleLine()
+										ui.Text(c, o.Error).FontSize(12).TextColor(p.Danger).SingleLine()
 										return
 									}
 									r := o.Result
@@ -698,7 +718,7 @@ func (m *Model) dbDialog(c *ui.Context, p *ui.Theme) {
 									row.Background(p.Surface)
 									row.Children(func() {
 										for _, col := range cols {
-											ui.Text(c, col.Name).FontSize(11).Bold().TextColor(p.Text).
+											ui.Text(c, col.Name).FontSize(12).Bold().TextColor(p.Text).
 												Width(dbCellWidth).SingleLine().Ellipsis("…")
 										}
 									})
@@ -709,7 +729,7 @@ func (m *Model) dbDialog(c *ui.Context, p *ui.Theme) {
 									for ri, cells := range rows {
 										ri, cells := ri, cells
 										rr := ui.Row(c.Key(fmt.Sprintf("dbrow:%d:%d", i, ri))).
-											Height(22).Padding(0, 6).Gap(4).AlignItems(ui.Center)
+											Height(24).Padding(0, 6).Gap(4).AlignItems(ui.Center)
 										if ri%2 == 1 || rr.Hovered() {
 											rr.Background(p.SurfaceHover)
 										}
@@ -1162,9 +1182,9 @@ func (m *Model) dbTableDialog(c *ui.Context, p *ui.Theme) {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "Table data: "+s.table).FontSize(13).Bold().TextColor(p.Text).SingleLine()
 				if s.loading {
-					ui.Text(c, "Loading…").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+					ui.Text(c, "Loading…").FontSize(12).TextColor(p.TextMuted).SingleLine()
 				} else {
-					ui.Text(c, dbTableRange(s)).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+					ui.Text(c, dbTableRange(s)).FontSize(12).TextColor(p.TextMuted).SingleLine()
 				}
 				ui.Spacer(c)
 				ui.Button(c, "Refresh").OnClick(func() { m.loadDBTablePage() })
@@ -1177,16 +1197,16 @@ func (m *Model) dbTableDialog(c *ui.Context, p *ui.Theme) {
 				ui.Button(c, "Close").OnClick(func() { m.closeDBTable() })
 			})
 			if s.err != "" {
-				ui.Text(c, s.err).FontSize(11).TextColor(p.Danger).SingleLine().Ellipsis("…")
+				ui.Text(c, s.err).FontSize(12).TextColor(p.Danger).SingleLine().Ellipsis("…")
 			}
 			if s.showDDL {
 				ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
 					ui.Column(c).Padding(8, 8).Children(func() {
 						if s.ddlErr != "" {
-							ui.Text(c, s.ddlErr).FontSize(11).TextColor(p.Danger)
+							ui.Text(c, s.ddlErr).FontSize(12).TextColor(p.Danger)
 						}
 						for _, line := range strings.Split(strings.TrimRight(s.ddl, "\n"), "\n") {
-							ui.Text(c, line).FontSize(11.5).Font("monospace").TextColor(p.Text).SingleLine()
+							ui.Text(c, line).FontSize(12).Font("monospace").TextColor(p.Text).SingleLine()
 						}
 					})
 				})
@@ -1196,7 +1216,7 @@ func (m *Model) dbTableDialog(c *ui.Context, p *ui.Theme) {
 				ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
 					ui.Column(c).Padding(8, 8).Children(func() {
 						for _, line := range dbTableDetailLines(s.page.Details) {
-							ui.Text(c, line).FontSize(11.5).Font("monospace").TextColor(p.Text).SingleLine()
+							ui.Text(c, line).FontSize(12).Font("monospace").TextColor(p.Text).SingleLine()
 						}
 					})
 				})
@@ -1206,18 +1226,18 @@ func (m *Model) dbTableDialog(c *ui.Context, p *ui.Theme) {
 				ui.Column(c).Children(func() {
 					ui.Row(c).Height(24).Children(func() {
 						for _, col := range s.page.Result.Columns {
-							ui.Text(c, col.Name).FontSize(10.5).Bold().TextColor(p.TextMuted).
+							ui.Text(c, col.Name).FontSize(12).Bold().TextColor(p.TextMuted).
 								Width(140).SingleLine().Ellipsis("…")
 						}
 					})
 					for _, row := range s.page.Result.Rows {
-						ui.Row(c).Height(22).Children(func() {
+						ui.Row(c).Height(24).Children(func() {
 							for _, cell := range row {
 								text, tone := "NULL", p.TextMuted
 								if cell != nil {
 									text, tone = *cell, p.Text
 								}
-								ui.Text(c, text).FontSize(11).TextColor(tone).
+								ui.Text(c, text).FontSize(12).Font("monospace").TextColor(tone).
 									Width(140).SingleLine().Ellipsis("…")
 							}
 						})
@@ -1402,14 +1422,14 @@ func (m *Model) dbHistoryDialog(c *ui.Context, p *ui.Theme) {
 		ui.Column(c).Width(620).Gap(8).Children(func() {
 			ui.Text(c, "Execution History").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			if h.loading {
-				ui.Text(c, "Loading…").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+				ui.Text(c, "Loading…").FontSize(12).TextColor(p.TextMuted).SingleLine()
 			} else if h.err != "" {
-				ui.Text(c, h.err).FontSize(11).TextColor(p.Danger).SingleLine().Ellipsis("…")
+				ui.Text(c, h.err).FontSize(12).TextColor(p.Danger).SingleLine().Ellipsis("…")
 			} else if len(h.items) == 0 {
-				ui.Text(c, "No SQL has been executed yet.").FontSize(11).TextColor(p.TextMuted).SingleLine()
+				ui.Text(c, "No SQL has been executed yet.").FontSize(12).TextColor(p.TextMuted).SingleLine()
 			} else {
 				ui.Text(c, fmt.Sprintf("%s · Enter puts it in the console · Esc closes", count(len(h.items), "statement", "statements"))).
-					FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+					FontSize(12).TextColor(p.TextMuted).SingleLine()
 				// The list hugs its rows up to the cap; a fixed box left a
 				// mostly empty sheet for a handful of statements.
 				historyHeight := float32(len(h.items) * 24)
@@ -1426,7 +1446,7 @@ func (m *Model) dbHistoryDialog(c *ui.Context, p *ui.Theme) {
 								row.Background(p.SurfaceHover)
 							}
 							row.Children(func() {
-								ui.Text(c, dbHistoryLabel(e)).FontSize(11.5).TextColor(p.Text).
+								ui.Text(c, dbHistoryLabel(e)).FontSize(13).TextColor(p.Text).
 									SingleLine().Ellipsis("…")
 							})
 							if row.Clicked() {
@@ -1457,26 +1477,28 @@ func (m *Model) dbPlanDialog(c *ui.Context, p *ui.Theme) {
 	ui.Modal(c, &open, func() {
 		ui.Column(c).Width(720).Gap(8).Children(func() {
 			ui.Text(c, "Execution Plan").FontSize(13).Bold().TextColor(p.Text).SingleLine()
-			ui.Text(c, strings.TrimSpace(strings.SplitN(pl.statement, "\n", 2)[0])).FontSize(10.5).
+			ui.Text(c, strings.TrimSpace(strings.SplitN(pl.statement, "\n", 2)[0])).FontSize(12).
 				TextColor(p.TextMuted).SingleLine().Ellipsis("…")
 			if pl.loading {
-				ui.Text(c, "Explaining…").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+				ui.Text(c, "Explaining…").FontSize(12).TextColor(p.TextMuted).SingleLine()
 			} else if pl.err != "" {
-				ui.Text(c, pl.err).FontSize(11).TextColor(p.Danger).SingleLine().Ellipsis("…")
+				ui.Text(c, pl.err).FontSize(12).TextColor(p.Danger).SingleLine().Ellipsis("…")
 			} else {
-				planHeight := float32(len(pl.rows) * 22)
+				planHeight := float32(len(pl.rows) * 24)
 				if planHeight > 340 {
 					planHeight = 340
 				}
 				ui.Scroll(c).Height(planHeight).Children(func() {
-					ui.Column(c).Children(func() {
+					ui.Column(c).Padding(0, 6).Children(func() {
 						for _, r := range pl.rows {
 							n := pl.nodes[r.index]
-							ui.Row(c).Height(22).Padding(0, float32(8+r.depth*16)).Gap(6).
-								AlignItems(ui.Center).Children(func() {
-								ui.Text(c, n.Operation).FontSize(11.5).TextColor(p.Text).SingleLine()
+							ui.Row(c).Height(24).PaddingStart(4 + float32(r.depth)*20).
+								PaddingEnd(8).Gap(4).AlignItems(ui.Center).Children(func() {
+								oiIconEl(c, "openidea/database/plan", 16, oiPaletteOf(p), p.TextMuted).
+									MarginEnd(2)
+								ui.Text(c, n.Operation).FontSize(13).TextColor(p.Text).SingleLine()
 								if n.Params != "" {
-									ui.Text(c, n.Params).FontSize(10.5).TextColor(p.TextMuted).
+									ui.Text(c, n.Params).FontSize(12).TextColor(p.TextMuted).
 										SingleLine().Ellipsis("…")
 								}
 							})

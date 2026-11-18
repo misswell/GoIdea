@@ -1344,13 +1344,13 @@ func (m *Model) newTab(doc *docbridge.Document) *Tab {
 		doc: doc,
 		state: &editor.State{
 			Buffer:     doc.Buffer(),
-			LineHeight: 1.45,
+			LineHeight: editorLineHeight(m.prefs.fontSize()),
 			Bindings:   intellijEditorBindings(),
 		},
 		synced: v,
 		seen:   v,
 	}
-	t.state.Font = ui.Font{Size: m.prefs.fontSize()}
+	t.state.Font = ui.Font{Family: oiFontMono, Size: m.prefs.fontSize()}
 	m.applyTabZenGutter(t)
 	m.noteTabUse(t)
 	t.state.OnGutterClick = func(line int) { m.toggleBreakpointAt(path, line) }

@@ -66,6 +66,9 @@ func themeForName(name string) *ui.Theme {
 func (m *Model) applyEditorFont(size float32) {
 	for _, t := range m.tabs {
 		t.state.Font = ui.Font{Family: t.state.Font.Family, Size: size}
+		if t.kind != tabKindWhatsNew {
+			t.state.LineHeight = editorLineHeight(size)
+		}
 	}
 }
 
@@ -227,9 +230,9 @@ func (m *Model) SmokeSettings() map[string]any {
 // install action, so a fresh data directory can get a working Java toolchain
 // without leaving the app.
 func (m *Model) javaToolsSection(c *ui.Context, p *ui.Theme) {
-	ui.Text(c, "Java Language Services and Debugger").FontSize(11).TextColor(p.TextMuted).SingleLine()
+	ui.Text(c, "Java Language Services and Debugger").FontSize(12).TextColor(p.TextMuted).SingleLine()
 	if m.Root() == "" {
-		ui.Text(c, "Open a Java project to install it").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+		ui.Text(c, "Open a Java project to install it").FontSize(12).TextColor(p.TextMuted).SingleLine()
 		return
 	}
 	busy := m.toolsBusy != ""
@@ -242,49 +245,49 @@ func (m *Model) javaToolsSection(c *ui.Context, p *ui.Theme) {
 			if t.Status != "missing" {
 				color = p.Success
 			}
-			ui.Text(c, label).FontSize(11).TextColor(color).SingleLine()
+			ui.Text(c, label).FontSize(12).TextColor(color).SingleLine()
 			if t.Version != "" {
-				ui.Text(c, t.Version).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+				ui.Text(c, t.Version).FontSize(12).TextColor(p.TextMuted).SingleLine()
 			}
 			ui.Spacer(c)
 			if t.Status == "missing" && t.CanInstall && !busy {
 				ui.Button(c, "Install").OnClick(func() { m.InstallJavaToolchain() })
 			}
 			if t.Status == "missing" && !t.CanInstall && t.Reason != "" && !busy {
-				ui.Text(c, t.Reason).FontSize(10.5).TextColor(p.Danger).SingleLine().Ellipsis("…")
+				ui.Text(c, t.Reason).FontSize(12).TextColor(p.Danger).SingleLine().Ellipsis("…")
 			}
 		})
 	}
 	switch {
 	case m.toolsLoading:
-		ui.Text(c, "Reading the tool status…").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+		ui.Text(c, "Reading the tool status…").FontSize(12).TextColor(p.TextMuted).SingleLine()
 	case !m.toolsLoaded:
 		ui.Row(c).Height(26).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "The tool status has not been read").FontSize(10.5).TextColor(p.TextMuted)
+			ui.Text(c, "The tool status has not been read").FontSize(12).TextColor(p.TextMuted)
 			ui.Spacer(c)
 			ui.Button(c, "Check").OnClick(func() { m.LoadJavaTools() })
 		})
 	case busy:
 		ui.Row(c).Height(26).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, m.toolsBusy).FontSize(11).TextColor(p.Text).SingleLine()
+			ui.Text(c, m.toolsBusy).FontSize(12).TextColor(p.Text).SingleLine()
 			ui.Spacer(c)
 			ui.Button(c, "Cancel").OnClick(func() { m.CancelToolInstall() })
 		})
 	}
 	if busy && m.toolsProgress != "" {
-		ui.Text(c, m.toolsProgress).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+		ui.Text(c, m.toolsProgress).FontSize(12).TextColor(p.TextMuted).SingleLine()
 	}
 	if len(m.toolsLog) > 0 {
 		from := max(0, len(m.toolsLog)-2)
 		for _, line := range m.toolsLog[from:] {
-			ui.Text(c, line).FontSize(10).TextColor(p.TextMuted).SingleLine().Ellipsis("…")
+			ui.Text(c, line).FontSize(12).TextColor(p.TextMuted).SingleLine().Ellipsis("…")
 		}
 	}
 	if m.toolsErr != "" {
-		ui.Text(c, m.toolsErr).FontSize(10.5).TextColor(p.Danger).SingleLine().Ellipsis("…")
+		ui.Text(c, m.toolsErr).FontSize(12).TextColor(p.Danger).SingleLine().Ellipsis("…")
 	}
 	if !busy && len(m.javaTools) > 0 && len(javaToolsMissing(m.javaTools)) == 0 {
-		ui.Text(c, "Java editing, building and debugging are available").FontSize(10.5).TextColor(p.Success).SingleLine()
+		ui.Text(c, "Java editing, building and debugging are available").FontSize(12).TextColor(p.Success).SingleLine()
 	}
 }
 

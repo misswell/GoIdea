@@ -1426,11 +1426,11 @@ func (m *Model) trustDialog(c *ui.Context, p *ui.Theme) {
 	oi := oiPaletteOf(p)
 	ui.Modal(c, &open, func() {
 		ui.Column(c).Width(460).Gap(10).Children(func() {
-			ui.Text(c, "Trust Project").FontSize(14).Bold().TextColor(oi.text).SingleLine()
+			ui.Text(c, "Trust Project").FontSize(13).Bold().TextColor(oi.text).SingleLine()
 			ui.Text(c, "This project comes from an external source. Building, running, debugging and language services execute its code.").
 				FontSize(12).TextColor(oi.textMuted)
 			if m.run.trustErr != "" {
-				ui.Text(c, m.run.trustErr).FontSize(11).TextColor(oi.danger)
+				ui.Text(c, m.run.trustErr).FontSize(12).TextColor(oi.danger)
 			}
 			ui.Row(c).Gap(8).Children(func() {
 				ui.Spacer(c)

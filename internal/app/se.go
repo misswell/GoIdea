@@ -97,6 +97,8 @@ type seItem struct {
 	line   int
 	col    int
 	action string
+	// symbol is the workspace symbol's kind, which picks its node icon.
+	symbol string
 }
 
 // seRow is a section header or one item in the flattened list.
@@ -521,6 +523,7 @@ func (m *Model) seRows() []seRow {
 			}
 			items = append(items, seItem{
 				kind:   "symbol",
+				symbol: strings.ToLower(sym.Kind),
 				title:  sym.Name,
 				detail: detail,
 				path:   sym.Location.Path,
@@ -726,7 +729,7 @@ func (m *Model) searchEverywhereDialog(c *ui.Context, p *ui.Theme) {
 						if on {
 							col = p.Text
 						}
-						ui.Text(c, t.label).FontSize(11.5).TextColor(col).SingleLine()
+						ui.Text(c, t.label).FontSize(12).TextColor(col).SingleLine()
 					})
 					b.OnClick(func() { m.SetSearchEverywhereTab(t.id) })
 				}
@@ -741,7 +744,7 @@ func (m *Model) searchEverywhereDialog(c *ui.Context, p *ui.Theme) {
 					}
 					b.Tooltip("Filter")
 					b.Children(func() {
-						ui.Text(c, "Filter").FontSize(11.5).TextColor(p.TextMuted).SingleLine()
+						ui.Text(c, "Filter").FontSize(12).TextColor(p.TextMuted).SingleLine()
 					})
 					b.OnClick(func() { s.filterOpen = !s.filterOpen })
 				}
@@ -779,13 +782,13 @@ func (m *Model) searchEverywhereDialog(c *ui.Context, p *ui.Theme) {
 				return
 			}
 			ui.Text(c, count(m.seItemCount(rows), "result", "results")).
-				FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+				FontSize(12).TextColor(p.TextMuted).SingleLine()
 			ui.Scroll(c).Height(380).Children(func() {
 				ui.Column(c).Children(func() {
 					for i, row := range rows {
 						i, row := i, row
 						if row.header {
-							ui.Text(c, seSectionTitles[row.section]).FontSize(10).
+							ui.Text(c, seSectionTitles[row.section]).FontSize(12).
 								TextColor(p.TextMuted).Padding(6, 8).SingleLine()
 							continue
 						}
@@ -796,7 +799,7 @@ func (m *Model) searchEverywhereDialog(c *ui.Context, p *ui.Theme) {
 								r.Background(p.SurfaceHover)
 							}
 							r.Children(func() {
-								ui.Text(c, "More…").FontSize(11.5).TextColor(p.TextMuted).SingleLine()
+								ui.Text(c, "More…").FontSize(12).TextColor(p.TextMuted).SingleLine()
 							})
 							r.OnClick(func() {
 								s.sel = i
@@ -812,10 +815,11 @@ func (m *Model) searchEverywhereDialog(c *ui.Context, p *ui.Theme) {
 							r.Background(p.SurfaceHover)
 						}
 						r.Children(func() {
+							m.seRowIcon(c, p, row.item)
 							ui.Text(c, row.item.title).FontSize(12).TextColor(p.Text).
 								SingleLine().Ellipsis("…")
 							ui.Spacer(c)
-							ui.Text(c, row.item.detail).FontSize(10.5).
+							ui.Text(c, row.item.detail).FontSize(12).
 								TextColor(p.TextMuted).SingleLine().Ellipsis("…")
 						})
 						r.OnClick(func() {
@@ -830,6 +834,75 @@ func (m *Model) searchEverywhereDialog(c *ui.Context, p *ui.Theme) {
 	if !open {
 		m.CloseSearchEverywhere()
 	}
+}
+
+// seRowIcon is the row's leading 16px drawing: the file type for files and
+// text matches, the symbol's node icon for declarations, and an empty slot
+// where upstream's action rows have no icon of their own.
+func (m *Model) seRowIcon(c *ui.Context, p *ui.Theme, it seItem) {
+	oi := oiPaletteOf(p)
+	switch it.kind {
+	case "file":
+		fileIconEl(c, oi, it.path, 16, oi.textSubtle)
+	case "text":
+		oiIconEl(c, "openidea/nodes/textMatch", 16, oi, oi.textSubtle)
+	case "symbol":
+		if asset := symbolIcon(it.symbol); asset != "" {
+			oiIconEl(c, asset, 16, oi, oi.textSubtle)
+			return
+		}
+		letter := "?"
+		if it.symbol != "" {
+			letter = strings.ToUpper(it.symbol[:1])
+		}
+		ui.Row(c).Size(16, 16).Shrink(0).Justify(ui.Center).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, letter).FontSize(12).TextColor(oi.textSubtle).SingleLine()
+		})
+	default:
+		ui.Row(c).Size(16, 16).Shrink(0)
+	}
+}
+
+// symbolIcon is the expui node drawing for a symbol kind, as SYMBOL_ICONS maps
+// it; "" when the kind has none and upstream draws a letter badge instead.
+func symbolIcon(kind string) string {
+	switch kind {
+	case "class":
+		return "nodes/class"
+	case "interface", "trait":
+		return "nodes/interface"
+	case "enum":
+		return "nodes/enum"
+	case "struct", "record":
+		return "nodes/record"
+	case "method":
+		return "nodes/method"
+	case "function":
+		return "nodes/function"
+	case "constructor":
+		return "nodes/constructor"
+	case "field":
+		return "nodes/field"
+	case "property":
+		return "nodes/property"
+	case "variable":
+		return "nodes/variable"
+	case "constant":
+		return "nodes/constant"
+	case "parameter":
+		return "nodes/parameter"
+	case "module":
+		return "nodes/module"
+	case "namespace", "package":
+		return "nodes/package"
+	case "type":
+		return "nodes/type"
+	case "annotation":
+		return "nodes/annotation"
+	case "snippet":
+		return "nodes/template"
+	}
+	return ""
 }
 
 // seItemCount counts the item rows, leaving out headers and More rows.

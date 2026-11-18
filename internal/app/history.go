@@ -287,11 +287,11 @@ func (m *Model) historyDialog(c *ui.Context, p *ui.Theme) {
 			}
 			ui.Text(c, title).FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			if rel, err := filepath.Rel(m.Root(), h.path); err == nil && !strings.HasPrefix(rel, "..") {
-				ui.Text(c, filepath.ToSlash(rel)).FontSize(10.5).TextColor(p.TextMuted).
+				ui.Text(c, filepath.ToSlash(rel)).FontSize(12).TextColor(p.TextMuted).
 					SingleLine().Ellipsis("…")
 			}
 			if h.err != "" {
-				ui.Text(c, h.err).FontSize(11).TextColor(p.Danger).SingleLine().Ellipsis("…")
+				ui.Text(c, h.err).FontSize(12).TextColor(p.Danger).SingleLine().Ellipsis("…")
 			}
 			if h.labeling {
 				in := ui.TextInput(c, &h.label).AutoFocus()
@@ -299,7 +299,7 @@ func (m *Model) historyDialog(c *ui.Context, p *ui.Theme) {
 				if in.Submitted() {
 					m.ConfirmHistoryLabel()
 				}
-				ui.Text(c, "The label records the state of every file in the project.").FontSize(10.5).TextColor(p.TextMuted)
+				ui.Text(c, "The label records the state of every file in the project.").FontSize(12).TextColor(p.TextMuted)
 				ui.Row(c).Gap(8).Children(func() {
 					ui.Button(c, "Cancel").OnClick(func() { m.closeHistory() })
 					ui.Button(c, "Save").Disabled(h.busy).OnClick(func() { m.ConfirmHistoryLabel() })
@@ -308,9 +308,9 @@ func (m *Model) historyDialog(c *ui.Context, p *ui.Theme) {
 			}
 			switch {
 			case h.loading:
-				ui.Text(c, "Reading the history…").FontSize(11.5).TextColor(p.TextMuted)
+				ui.Text(c, "Reading the history…").FontSize(12).TextColor(p.TextMuted)
 			case len(h.entries) == 0:
-				ui.Text(c, "No history yet").FontSize(11.5).TextColor(p.TextMuted)
+				ui.Text(c, "No history yet").FontSize(12).TextColor(p.TextMuted)
 			default:
 				ui.Scroll(c).Height(380).Children(func() {
 					ui.Column(c).Children(func() {
@@ -325,17 +325,17 @@ func (m *Model) historyDialog(c *ui.Context, p *ui.Theme) {
 							}
 							row.Children(func() {
 								ui.Row(c).Width(118).Shrink(0).Children(func() {
-									ui.Text(c, historyTime(e.Ms)).FontSize(10.5).
+									ui.Text(c, historyTime(e.Ms)).FontSize(12).
 										TextColor(p.TextMuted).SingleLine()
 								})
-								ui.Text(c, e.Label).FontSize(11.5).TextColor(p.Text).
+								ui.Text(c, e.Label).FontSize(13).TextColor(p.Text).
 									SingleLine().Ellipsis("…")
 								if e.Kind != "label" {
 									if rel, err := filepath.Rel(m.Root(), e.Path); err == nil {
 										ui.Spacer(c)
-										ui.Text(c, filepath.ToSlash(rel)).FontSize(10.5).
+										ui.Text(c, filepath.ToSlash(rel)).FontSize(12).
 											TextColor(p.TextMuted).SingleLine().Ellipsis("…")
-										ui.Text(c, historySize(e.Size)).FontSize(10.5).
+										ui.Text(c, historySize(e.Size)).FontSize(12).
 											TextColor(p.TextMuted).SingleLine()
 									}
 								}

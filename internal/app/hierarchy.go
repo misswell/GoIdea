@@ -436,28 +436,28 @@ func (m *Model) hierarchyRightView(c *ui.Context, p *ui.Theme, oi oiColors) {
 			ui.Text(c, "Hierarchy").FontSize(13).TextColor(oi.textStrong).
 				SingleLine().Ellipsis("…")
 			ui.Spacer(c)
-			m.headerIcon(c, p, oi, "hierarchy-close", "Hide", iconClose, m.CloseHierarchyWindow)
+			m.headerIcon(c, p, oi, "hierarchy-close", "Hide", "general/remove", m.CloseHierarchyWindow)
 		})
 		m.hierarchyTabs(c, p, oi)
 		ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
 			if m.hierarchy.err != "" {
-				ui.Text(c, m.hierarchy.err).FontSize(11).TextColor(p.Danger).
+				ui.Text(c, m.hierarchy.err).FontSize(12).TextColor(p.Danger).
 					Padding(8, 10).Ellipsis("…")
 				return
 			}
 			if len(m.hierarchy.loading) > 0 && len(m.hierarchy.children) == 0 {
-				ui.Text(c, "Loading…").FontSize(11).TextColor(oi.textMuted).
+				ui.Text(c, "Loading…").FontSize(12).TextColor(oi.textMuted).
 					Padding(8, 10).SingleLine()
 				return
 			}
 			if !m.hierarchy.active() {
-				ui.Text(c, "Ctrl+Alt+H runs a Call Hierarchy here.").FontSize(11).
+				ui.Text(c, "Ctrl+Alt+H runs a Call Hierarchy here.").FontSize(12).
 					TextColor(oi.textMuted).Padding(8, 10).Ellipsis("…")
 				return
 			}
 			rows := m.hierarchyRows()
 			if len(rows) == 0 {
-				ui.Text(c, m.hierarchyEmptyLabel()).FontSize(11).
+				ui.Text(c, m.hierarchyEmptyLabel()).FontSize(12).
 					TextColor(oi.textMuted).Padding(8, 10).SingleLine()
 				return
 			}
@@ -490,7 +490,7 @@ func (m *Model) hierarchyTabs(c *ui.Context, p *ui.Theme, oi oiColors) {
 				if active {
 					tone = oi.textStrong
 				}
-				ui.Text(c, text).FontSize(12).TextColor(tone).SingleLine()
+				ui.Text(c, text).FontSize(13).TextColor(tone).SingleLine()
 			})
 			if tab.Clicked() {
 				m.SetHierarchyDirection(dir)
@@ -499,44 +499,56 @@ func (m *Model) hierarchyTabs(c *ui.Context, p *ui.Theme, oi oiColors) {
 	})
 }
 
-// hierarchyRow draws one row: the expand caret, the name, its detail and the
-// call-site count.
+// hierarchyRow draws one row: the expand caret, the symbol badge, the name,
+// its detail and the call-site count.
 func (m *Model) hierarchyRow(c *ui.Context, p *ui.Theme, oi oiColors, node hierarchyNode) {
-	row := ui.Row(c.Key("hierarchy:" + node.id)).Height(24).Gap(6).
-		PaddingStart(6 + float32(node.depth)*12).PaddingEnd(8).
+	row := ui.Row(c.Key("hierarchy:" + node.id)).Height(24).Gap(4).
+		PaddingStart(4 + float32(node.depth)*20).PaddingEnd(8).Radius(5).
 		AlignItems(ui.Center).Cursor(ui.CursorPointer)
+	if row.Hovered() {
+		row.Background(oi.hoverTint)
+	}
 	row.Children(func() {
 		expandable := !node.recursion
+		chevron := ui.Row(c.Key("hierarchy:caret:"+node.id)).Size(16, 16).
+			Shrink(0).Justify(ui.Center).AlignItems(ui.Center).Cursor(ui.CursorPointer)
 		if expandable {
-			caret := "▸"
+			glyph := "general/chevronRight"
 			if m.hierarchy.expanded[node.id] {
-				caret = "▾"
+				glyph = "general/chevronDown"
 			}
-			btn := ui.Row(c.Key("hierarchy:caret:"+node.id)).Size(14, 14).
-				AlignItems(ui.Center).Cursor(ui.CursorPointer)
-			btn.Children(func() {
-				ui.Text(c, caret).FontSize(11).TextColor(oi.textMuted)
-			})
-			if btn.Clicked() {
+			chevron.Children(func() { oiIconEl(c, glyph, 16, oi, oi.textMuted) })
+			if chevron.Clicked() {
 				m.ToggleHierarchyNode(node.id)
 				return
 			}
-		} else {
-			ui.Text(c, "·").FontSize(11).TextColor(oi.textFaint)
 		}
-		ui.Text(c, node.item.Name).FontSize(12).TextColor(oi.text).
+		kind := strings.ToLower(node.item.Kind)
+		if m.hierarchy.mode == "type" {
+			kind = "class"
+		}
+		if asset := symbolIcon(kind); asset != "" {
+			oiIconEl(c, asset, 16, oi, oi.textSubtle).MarginEnd(2)
+		} else {
+			ui.Row(c).Size(16, 16).Shrink(0).MarginEnd(2)
+		}
+		ui.Text(c, node.item.Name).FontSize(13).TextColor(oi.text).
 			SingleLine().Ellipsis("…")
 		if node.item.Detail != nil && *node.item.Detail != "" {
-			ui.Text(c, *node.item.Detail).FontSize(11).TextColor(oi.textMuted).
+			ui.Text(c, *node.item.Detail).FontSize(13).TextColor(oi.textSubtle).
 				SingleLine().Ellipsis("…")
 		}
 		ui.Spacer(c)
-		if n := len(node.item.FromRanges); n > 0 {
-			ui.Text(c, fmt.Sprintf("%d", n)).FontSize(10.5).
-				TextColor(oi.textFaint).SingleLine()
-		} else if node.item.Path != "" {
-			ui.Text(c, filepath.Base(node.item.Path)).FontSize(10.5).
-				TextColor(oi.textFaint).SingleLine().Ellipsis("…")
+		if node.item.Path != "" {
+			ui.Text(c, fmt.Sprintf("%s:%d", filepath.Base(node.item.Path), node.item.SelectionRange.Start.Line+1)).
+				FontSize(13).TextColor(oi.textSubtle).SingleLine().Ellipsis("…")
+		}
+		if node.recursion {
+			ui.Text(c, "recursive").FontSize(13).TextColor(oi.textSubtle).SingleLine()
+		}
+		if n := len(node.item.FromRanges); n > 1 {
+			ui.Text(c, fmt.Sprintf("(%d calls)", n)).FontSize(13).
+				TextColor(oi.textSubtle).SingleLine()
 		}
 	})
 	if row.Clicked() {

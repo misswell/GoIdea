@@ -256,10 +256,10 @@ func (m *Model) intentionsDialog(c *ui.Context, p *ui.Theme) {
 				hint = "No context actions are available here"
 			}
 			if hint != "" {
-				ui.Text(c, hint).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+				ui.Text(c, hint).FontSize(12).TextColor(p.TextMuted).SingleLine()
 			}
 			if pn.err != "" {
-				ui.Text(c, pn.err).FontSize(11).TextColor(p.Danger).SingleLine().Ellipsis("…")
+				ui.Text(c, pn.err).FontSize(12).TextColor(p.Danger).SingleLine().Ellipsis("…")
 			}
 			if len(pn.items) == 0 {
 				return
@@ -275,14 +275,14 @@ func (m *Model) intentionsDialog(c *ui.Context, p *ui.Theme) {
 					ui.Text(c, it.title).FontSize(12).Bold().TextColor(color).
 						SingleLine().Ellipsis("…")
 					if it.preferred && it.disabled == "" {
-						ui.Text(c, "Suggested").FontSize(10).TextColor(p.Accent).SingleLine()
+						ui.Text(c, "Suggested").FontSize(12).TextColor(p.Accent).SingleLine()
 					}
 					ui.Spacer(c)
 					right := intentKindLabel(it.kind)
 					if it.disabled != "" {
 						right = it.disabled
 					}
-					ui.Text(c, right).FontSize(10.5).TextColor(p.TextMuted).
+					ui.Text(c, right).FontSize(12).TextColor(p.TextMuted).
 						SingleLine().Ellipsis("…")
 				})
 				if r.Clicked() {

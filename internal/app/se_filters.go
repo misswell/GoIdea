@@ -204,7 +204,7 @@ func (m *Model) seFilterPanel(c *ui.Context, p *ui.Theme, s *sePane) {
 	col := ui.Column(c).Gap(2).Padding(6, 4).Radius(6).Background(p.Surface)
 	col.Children(func() {
 		if s.tab == seTabText {
-			ui.Text(c, "File mask").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+			ui.Text(c, "File mask").FontSize(12).TextColor(p.TextMuted).SingleLine()
 			in := ui.TextInput(c, &s.filters.Text)
 			in.OnChange(func() {
 				m.seFilters = s.filters
@@ -212,7 +212,7 @@ func (m *Model) seFilterPanel(c *ui.Context, p *ui.Theme, s *sePane) {
 				m.refreshSearchEverywhere()
 			})
 		} else {
-			ui.Text(c, "Show symbol kinds").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+			ui.Text(c, "Show symbol kinds").FontSize(12).TextColor(p.TextMuted).SingleLine()
 			for _, kind := range seFilterKinds(s.tab) {
 				kind := kind
 				on := !s.filters.kindExcluded(s.tab, kind)
@@ -226,7 +226,7 @@ func (m *Model) seFilterPanel(c *ui.Context, p *ui.Theme, s *sePane) {
 					if on {
 						box = "☑"
 					}
-					ui.Text(c, box+" "+seKindLabels[kind]).FontSize(11.5).TextColor(p.Text).SingleLine()
+					ui.Text(c, box+" "+seKindLabels[kind]).FontSize(12).TextColor(p.Text).SingleLine()
 				})
 				b.OnClick(func() {
 					s.filters = s.filters.toggleKind(s.tab, kind)
@@ -243,7 +243,7 @@ func (m *Model) seFilterPanel(c *ui.Context, p *ui.Theme, s *sePane) {
 				r.Background(p.SurfaceHover)
 			}
 			r.Children(func() {
-				ui.Text(c, "Reset Filter").FontSize(11.5).TextColor(p.TextMuted).SingleLine()
+				ui.Text(c, "Reset Filter").FontSize(12).TextColor(p.TextMuted).SingleLine()
 			})
 			r.OnClick(func() {
 				s.filters = s.filters.clearTab(s.tab)

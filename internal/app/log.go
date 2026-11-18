@@ -219,16 +219,17 @@ func (m *Model) logPanel(c *ui.Context, p *ui.Theme) {
 			ui.Text(c, "Commit History").FontSize(12).TextColor(p.TextMuted)
 			ui.Spacer(c)
 			if l.loading {
-				ui.Text(c, "Reading…").FontSize(11).TextColor(p.TextMuted)
+				ui.Text(c, "Reading…").FontSize(12).TextColor(p.TextMuted)
 			} else if l.loaded {
 				ui.Text(c, fmt.Sprintf("The last %d commits", len(l.commits))).
-					FontSize(11).TextColor(p.TextMuted)
+					FontSize(12).TextColor(p.TextMuted)
 			}
 			ui.Button(c, "Refresh").OnClick(func() { m.RefreshLog() })
 			ui.Button(c, "Close").OnClick(func() { m.CloseLog() })
 		})
 		ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
 			ui.Column(c).Width(420).Children(func() {
+				m.logColumnHeader(c, p)
 				ui.Scroll(c).Grow(1).Children(func() {
 					ui.Column(c).Padding(4, 0).Children(func() { m.logRows(c, p) })
 				})
@@ -240,25 +241,37 @@ func (m *Model) logPanel(c *ui.Context, p *ui.Theme) {
 	})
 }
 
+func (m *Model) logColumnHeader(c *ui.Context, p *ui.Theme) {
+	ui.Row(c).Height(26).Padding(0, 8).Gap(8).AlignItems(ui.Center).
+		Background(p.Background).BorderWidth(0, 0, 1, 0).BorderColor(p.Border).
+		Children(func() {
+			ui.Text(c, "Subject").FontSize(13).TextColor(p.TextMuted).SingleLine()
+			ui.Spacer(c)
+			ui.Text(c, "Author").FontSize(13).TextColor(p.TextMuted).SingleLine().Width(130)
+			ui.Text(c, "Date").FontSize(13).TextColor(p.TextMuted).SingleLine().Width(120)
+			ui.Text(c, "Hash").FontSize(13).TextColor(p.TextMuted).SingleLine().Width(72)
+		})
+}
+
 func (m *Model) logRows(c *ui.Context, p *ui.Theme) {
 	l := &m.log
 	if l.err != "" {
 		ui.Row(c).Padding(8, 6).Children(func() {
-			ui.Text(c, l.err).FontSize(11.5).TextColor(p.Warning)
+			ui.Text(c, l.err).FontSize(12).TextColor(p.Warning)
 		})
 		return
 	}
 	if !l.loaded && l.loading {
-		ui.Text(c, "Reading the commit history…").FontSize(11.5).TextColor(p.TextMuted)
+		ui.Text(c, "Reading the commit history…").FontSize(12).TextColor(p.TextMuted)
 		return
 	}
 	if len(l.commits) == 0 {
-		ui.Text(c, "No commits").FontSize(11.5).TextColor(p.TextMuted)
+		ui.Text(c, "No commits").FontSize(12).TextColor(p.TextMuted)
 		return
 	}
 	for i, cm := range l.commits {
 		i, cm := i, cm
-		r := ui.Row(c.Key(fmt.Sprintf("log:%d", i))).Height(24).Padding(0, 8).Gap(8).
+		r := ui.Row(c.Key(fmt.Sprintf("log:%d", i))).Height(26).Padding(0, 8).Gap(8).
 			AlignItems(ui.Center)
 		if i == l.selected {
 			r.Background(p.SurfaceHover)
@@ -266,15 +279,16 @@ func (m *Model) logRows(c *ui.Context, p *ui.Theme) {
 			r.Background(p.SurfaceHover)
 		}
 		r.Children(func() {
-			ui.Text(c, cm.ShortID).FontSize(10.5).TextColor(p.Accent).SingleLine()
+			ui.Text(c, cm.Summary).FontSize(13).TextColor(p.Text).SingleLine().Ellipsis("…")
+			ui.Spacer(c)
 			if len(cm.Refs) > 0 {
-				ui.Text(c, strings.Join(cm.Refs, ", ")).FontSize(10).TextColor(p.Success).
+				ui.Text(c, strings.Join(cm.Refs, ", ")).FontSize(13).TextColor(p.TextMuted).
 					SingleLine().Ellipsis("…")
 			}
-			ui.Text(c, cm.Summary).FontSize(12).TextColor(p.Text).SingleLine().Ellipsis("…")
-			ui.Spacer(c)
-			ui.Text(c, cm.Author).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
-			ui.Text(c, logTime(cm.TimeMs)).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+			ui.Text(c, cm.Author).FontSize(13).TextColor(p.TextMuted).SingleLine().Width(130)
+			ui.Text(c, logTime(cm.TimeMs)).FontSize(13).TextColor(p.TextMuted).SingleLine().Width(120)
+			ui.Text(c, cm.ShortID).FontSize(13).Font("monospace").TextColor(p.TextMuted).
+				SingleLine().Width(72)
 		})
 		if r.Clicked() && i != l.selected {
 			m.selectCommit(i)
@@ -285,18 +299,19 @@ func (m *Model) logRows(c *ui.Context, p *ui.Theme) {
 func (m *Model) logDetails(c *ui.Context, p *ui.Theme) {
 	l := &m.log
 	if l.selected < 0 || l.selected >= len(l.commits) {
-		ui.Text(c, "Select a commit to see its details").FontSize(11.5).TextColor(p.TextMuted)
+		ui.Text(c, "Select a commit to see its details").FontSize(12).TextColor(p.TextMuted)
 		return
 	}
 	cm := l.commits[l.selected]
+	oi := oiPaletteOf(p)
 	ui.Column(c).Gap(6).Children(func() {
-		ui.Text(c, cm.Summary).FontSize(12.5).Bold().TextColor(p.Text)
-		ui.Text(c, cm.ShortID+" · "+cm.Author).FontSize(11).TextColor(p.TextMuted)
+		ui.Text(c, cm.Summary).FontSize(13).Bold().TextColor(p.Text)
+		ui.Text(c, cm.ShortID+" · "+cm.Author).FontSize(12).TextColor(p.TextMuted)
 		if l.detailing {
-			ui.Text(c, "Reading the commit…").FontSize(11).TextColor(p.TextMuted)
+			ui.Text(c, "Reading the commit…").FontSize(12).TextColor(p.TextMuted)
 		}
 		if l.detailErr != "" {
-			ui.Text(c, l.detailErr).FontSize(11.5).TextColor(p.Warning)
+			ui.Text(c, l.detailErr).FontSize(12).TextColor(p.Warning)
 		}
 		message := l.details.Message
 		if message == "" {
@@ -304,31 +319,30 @@ func (m *Model) logDetails(c *ui.Context, p *ui.Theme) {
 		}
 		if message != "" {
 			ui.Scroll(c).Height(90).Children(func() {
-				ui.Text(c, message).FontSize(11.5).TextColor(p.Text)
+				ui.Text(c, message).FontSize(13).TextColor(p.Text)
 			})
 		}
 		if len(l.details.ContainingBranches) > 0 {
 			ui.Text(c, "Branches: "+strings.Join(l.details.ContainingBranches, ", ")).
-				FontSize(11).TextColor(p.TextMuted).SingleLine().Ellipsis("…")
+				FontSize(12).TextColor(p.TextMuted).SingleLine().Ellipsis("…")
 		}
 		if l.details.Signature != "" {
-			ui.Text(c, "Signed by: "+l.details.Signature).FontSize(11).TextColor(p.TextMuted)
+			ui.Text(c, "Signed by: "+l.details.Signature).FontSize(12).TextColor(p.TextMuted)
 		}
 		if len(l.changes) == 0 {
 			return
 		}
-		ui.Text(c, count(len(l.changes), "file", "files")).FontSize(11).TextColor(p.TextMuted)
+		ui.Text(c, count(len(l.changes), "file", "files")).FontSize(12).TextColor(p.TextMuted)
 		ui.Scroll(c).Grow(1).Children(func() {
 			ui.Column(c).Children(func() {
 				for i, ch := range l.changes {
 					i, ch := i, ch
-					letter, color := logChangeBadge(ch.Kind, p)
-					r := ui.Row(c.Key(fmt.Sprintf("logfile:%d", i))).Height(22).Gap(6).
+					r := ui.Row(c.Key(fmt.Sprintf("logfile:%d", i))).Height(24).Gap(4).
 						AlignItems(ui.Center)
 					r.Children(func() {
-						ui.Text(c, letter).FontSize(11).Bold().TextColor(color)
-						ui.Text(c, filepath.Base(ch.Path)).FontSize(11.5).TextColor(p.Text).
-							SingleLine().Ellipsis("…")
+						fileIconEl(c, oi, ch.Path, 16, oi.textMuted)
+						ui.Text(c, filepath.Base(ch.Path)).FontSize(13).
+							TextColor(logChangeColor(ch.Kind, p)).SingleLine().Ellipsis("…")
 						ui.Spacer(c)
 					})
 				}
@@ -337,19 +351,21 @@ func (m *Model) logDetails(c *ui.Context, p *ui.Theme) {
 	})
 }
 
-// logChangeBadge is the letter and colour of a changed file in a commit.
-func logChangeBadge(kind string, p *ui.Theme) (string, ui.Color) {
+// logChangeColor is the colour of a changed file in a commit, as the VCS
+// change list colours its names.
+func logChangeColor(kind string, p *ui.Theme) ui.Color {
+	oi := oiPaletteOf(p)
 	switch kind {
 	case "added":
-		return "A", p.Success
+		return oi.vcsAdded
 	case "deleted":
-		return "D", p.Danger
-	case "renamed":
-		return "R", p.Success
+		return oi.vcsDeleted
+	case "untracked":
+		return oi.vcsUntracked
 	case "conflicted":
-		return "!", p.Danger
+		return oi.vcsConflict
 	}
-	return "M", p.Accent
+	return oi.vcsModified
 }
 
 // logTime is a commit's time as the log list shows it: the date, or the time

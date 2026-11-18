@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # The interface says GoIDEA. This check fails when a Go string literal the app
 # can render still contains "openidea" — except the names that really exist on
-# disk: the backend binary, its log, the project's .openidea directory, and the
-# environment variable the client sets for it.
+# disk: the backend binary, its log, the project's .openidea directory, the
+# environment variable the client sets for it, and the vendored icon asset
+# paths under assets/icons/openidea.
 #
 # The scan covers the whole client boundary, not only internal/app: the
 # adapter composes the text Run and Debug show, and internal/openidea turns
@@ -13,7 +14,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-allowed='^"(openidea-server|openidea-server\.log|\.openidea|\.openidea/|openidea|OPENIDEA_SERVER_HOME=|mayoi/internal/openidea)"$'
+allowed='^"(openidea-server|openidea-server\.log|\.openidea|\.openidea/|openidea|OPENIDEA_SERVER_HOME=|mayoi/internal/openidea|openidea/|openidea/[^"]*)"$'
 
 # The client boundary: the UI package, the entry point, the ports of
 # OpenIDEA's run/debug logic, and the protocol package that normalises what

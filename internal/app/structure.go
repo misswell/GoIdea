@@ -128,17 +128,17 @@ func (m *Model) structureRowsUI(c *ui.Context, p *ui.Theme) {
 	path, items := m.structureOutline()
 	if path == "" {
 		ui.Row(c).Padding(8, 8).Children(func() {
-			ui.Text(c, "Open a file, then look at its structure").FontSize(11.5).TextColor(p.TextMuted)
+			ui.Text(c, "Open a file, then look at its structure").FontSize(12).TextColor(p.TextMuted)
 		})
 		return
 	}
 	ui.Row(c).Padding(0, 8).Children(func() {
-		ui.Text(c, filepath.Base(path)).FontSize(10.5).TextColor(p.TextMuted).
+		ui.Text(c, filepath.Base(path)).FontSize(12).TextColor(p.TextMuted).
 			SingleLine().Ellipsis("…")
 	})
 	if t := m.tab(); t != nil && t.outlineLoading && len(items) == 0 {
 		ui.Row(c).Padding(8, 8).Children(func() {
-			ui.Text(c, "Reading the structure…").FontSize(11.5).TextColor(p.TextMuted)
+			ui.Text(c, "Reading the structure…").FontSize(12).TextColor(p.TextMuted)
 		})
 		return
 	}
@@ -149,45 +149,54 @@ func (m *Model) structureRowsUI(c *ui.Context, p *ui.Theme) {
 			hint = "No matching symbols"
 		}
 		ui.Row(c).Padding(8, 8).Children(func() {
-			ui.Text(c, hint).FontSize(11.5).TextColor(p.TextMuted)
+			ui.Text(c, hint).FontSize(12).TextColor(p.TextMuted)
 		})
 		return
 	}
-	for i, row := range rows {
-		i, row := i, row
-		r := ui.Row(c.Key(fmt.Sprintf("structure:%d", i))).Height(22).Padding(0, 8).
-			PaddingStart(8 + float32(row.Depth)*12).Gap(5).AlignItems(ui.Center)
-		if r.Hovered() {
-			r.Background(p.SurfaceHover)
-		}
-		r.Children(func() {
-			if row.HasKids {
-				caret := ui.Row(c).Width(14).Height(18).AlignItems(ui.Center).Justify(ui.Center)
-				caret.Children(func() {
-					glyph := "▾"
+	oi := oiPaletteOf(p)
+	ui.Column(c).Padding(0, 6).Children(func() {
+		for i, row := range rows {
+			i, row := i, row
+			r := ui.Row(c.Key(fmt.Sprintf("structure:%d", i))).Height(24).
+				PaddingStart(4 + float32(row.Depth)*20).PaddingEnd(8).Gap(4).
+				Radius(5).AlignItems(ui.Center)
+			if r.Hovered() {
+				r.Background(oi.hoverTint)
+			}
+			r.Children(func() {
+				// The chevron slot is reserved on every row, as the tree does.
+				chevron := ui.Row(c).Size(16, 16).Shrink(0).
+					Justify(ui.Center).AlignItems(ui.Center)
+				if row.HasKids {
+					glyph := "general/chevronDown"
 					if row.Collapsed {
-						glyph = "▸"
+						glyph = "general/chevronRight"
 					}
-					ui.Text(c, glyph).FontSize(10).TextColor(p.TextMuted)
-				})
-				if caret.Clicked() {
-					m.toggleStructure(row.Path)
+					chevron.Children(func() {
+						oiIconEl(c, glyph, 16, oi, oi.textMuted)
+					})
+					if chevron.Clicked() {
+						m.toggleStructure(row.Path)
+					}
 				}
-			} else {
-				ui.Row(c).Width(14)
+				if asset := symbolIcon(strings.ToLower(row.Kind)); asset != "" {
+					oiIconEl(c, asset, 16, oi, oi.textSubtle).MarginEnd(2)
+				} else if row.HasKids {
+					ui.Row(c).Size(16, 16).Shrink(0).MarginEnd(2)
+				}
+				color := oi.textStrong
+				if row.Container {
+					color = oi.textMuted
+				}
+				ui.Text(c, row.Name).FontSize(13).TextColor(color).SingleLine().Ellipsis("…")
+				ui.Spacer(c)
+				ui.Text(c, symbolKindLabel(row.Kind)).FontSize(13).TextColor(oi.textSubtle).SingleLine()
+			})
+			if r.Clicked() {
+				m.revealAt(path, row.Line, row.Col)
 			}
-			color := p.Text
-			if row.Container {
-				color = p.TextMuted
-			}
-			ui.Text(c, row.Name).FontSize(12).TextColor(color).SingleLine().Ellipsis("…")
-			ui.Spacer(c)
-			ui.Text(c, symbolKindLabel(row.Kind)).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
-		})
-		if r.Clicked() {
-			m.revealAt(path, row.Line, row.Col)
 		}
-	}
+	})
 }
 
 // structureReport opens the Structure window and reports what it would show:

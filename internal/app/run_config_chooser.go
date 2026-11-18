@@ -153,7 +153,7 @@ func (m *Model) runChooserDialog(c *ui.Context, p *ui.Theme) {
 			ui.Scroll(c).Height(320).Children(func() {
 				ui.Column(c).Children(func() {
 					if len(rows) == 0 {
-						ui.Text(c, "No matching run configurations").FontSize(11).TextColor(p.TextMuted).SingleLine()
+						ui.Text(c, "No matching run configurations").FontSize(12).TextColor(p.TextMuted).SingleLine()
 					}
 					for i, cfg := range rows {
 						i, cfg := i, cfg
@@ -178,9 +178,9 @@ func (m *Model) runChooserDialog(c *ui.Context, p *ui.Theme) {
 						r.Children(func() {
 							checked := m.run.current() != nil && m.run.current().ID == cfg.ID
 							ui.Text(c, cfg.Name).FontSize(12).Bold().TextColor(p.Text).SingleLine().Ellipsis("…")
-							ui.Text(c, adapter.KindLabel(cfg.Kind)).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+							ui.Text(c, adapter.KindLabel(cfg.Kind)).FontSize(12).TextColor(p.TextMuted).SingleLine()
 							if checked {
-								ui.Text(c, "Current").FontSize(10).TextColor(p.TextMuted).SingleLine()
+								ui.Text(c, "Current").FontSize(12).TextColor(p.TextMuted).SingleLine()
 							}
 						})
 					}
@@ -192,7 +192,7 @@ func (m *Model) runChooserDialog(c *ui.Context, p *ui.Theme) {
 						r.OnClick(m.chooseCurrentFile)
 						r.Children(func() {
 							ui.Text(c, "Current File").FontSize(12).TextColor(p.Text).SingleLine()
-							ui.Text(c, "Debug Active File").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+							ui.Text(c, "Debug Active File").FontSize(12).TextColor(p.TextMuted).SingleLine()
 						})
 					}
 				})

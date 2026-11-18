@@ -328,13 +328,13 @@ func (m *Model) scratchChooserDialog(c *ui.Context, p *ui.Theme) {
 			}
 			switch {
 			case v.loading:
-				ui.Text(c, "Reading the languages…").FontSize(11).TextColor(p.TextMuted).SingleLine()
+				ui.Text(c, "Reading the languages…").FontSize(12).TextColor(p.TextMuted).SingleLine()
 			case v.err != "":
-				ui.Text(c, v.err).FontSize(10.5).TextColor(p.Danger).SingleLine().Ellipsis("…")
+				ui.Text(c, v.err).FontSize(12).TextColor(p.Danger).SingleLine().Ellipsis("…")
 			default:
 				rows := m.scratchRows()
 				if len(rows) == 0 {
-					ui.Text(c, "No matching languages").FontSize(11).TextColor(p.TextMuted).SingleLine()
+					ui.Text(c, "No matching languages").FontSize(12).TextColor(p.TextMuted).SingleLine()
 				}
 				first := v.active - 5
 				if first < 0 {
@@ -355,7 +355,7 @@ func (m *Model) scratchChooserDialog(c *ui.Context, p *ui.Theme) {
 						row.Children(func() {
 							ui.Text(c, lang.name).FontSize(12).TextColor(p.Text).
 								SingleLine().Grow(1)
-							ui.Text(c, "."+lang.ext).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+							ui.Text(c, "."+lang.ext).FontSize(12).TextColor(p.TextMuted).SingleLine()
 						})
 						if row.Clicked() {
 							m.CreateScratchLanguage(lang.id)

@@ -300,6 +300,12 @@ func updateSummary(notes string) string {
 	if paragraph == "" {
 		paragraph = text
 	}
+	// Release notes are Markdown; the balloon draws plain text, so drop the
+	// heading and list markers and the emphasis the notes carry.
+	paragraph = strings.TrimLeft(paragraph, "# \t")
+	paragraph = strings.TrimPrefix(paragraph, "- ")
+	paragraph = strings.NewReplacer("**", "", "__", "", "`", "").Replace(paragraph)
+	paragraph = strings.Join(strings.Fields(paragraph), " ")
 	if runes := []rune(paragraph); len(runes) > 300 {
 		paragraph = string(runes[:300]) + "…"
 	}

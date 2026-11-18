@@ -25,13 +25,13 @@ func init() {
 		}})
 	registerTitleWidget(&TitleWidget{ID: toolbarSearch, Title: "Search Everywhere",
 		Render: func(m *Model, c *ui.Context, p *ui.Theme, oi oiColors) {
-			m.titleTool(c, p, oi, "search", "Search Everywhere", iconWelcomeSearch, func() {
+			m.titleTool(c, p, oi, "search", "Search Everywhere", "general/search", func() {
 				m.RunCommand(toolbarAction(toolbarSearch))
 			})
 		}})
 	registerTitleWidget(&TitleWidget{ID: toolbarTerminal, Title: "Terminal",
 		Render: func(m *Model, c *ui.Context, p *ui.Theme, oi oiColors) {
-			m.titleTool(c, p, oi, "term", "Terminal", iconTerminal, func() {
+			m.titleTool(c, p, oi, "term", "Terminal", "toolwindows/terminal", func() {
 				m.RunCommand(toolbarAction(toolbarTerminal))
 			})
 		}})

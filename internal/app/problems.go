@@ -286,13 +286,13 @@ func (m *Model) problemsStatus(c *ui.Context, p *ui.Theme) {
 	}
 	r.Children(func() {
 		if errors > 0 {
-			ui.Text(c, count(errors, "error", "errors")).FontSize(11.5).TextColor(p.Danger)
+			ui.Text(c, count(errors, "error", "errors")).FontSize(12).TextColor(p.Danger)
 		}
 		if warnings > 0 {
-			ui.Text(c, count(warnings, "warning", "warnings")).FontSize(11.5).TextColor(p.Warning)
+			ui.Text(c, count(warnings, "warning", "warnings")).FontSize(12).TextColor(p.Warning)
 		}
 		if infos > 0 {
-			ui.Text(c, fmt.Sprintf("%d info", infos)).FontSize(11.5).TextColor(p.Accent)
+			ui.Text(c, fmt.Sprintf("%d info", infos)).FontSize(12).TextColor(p.Accent)
 		}
 	})
 	if r.Clicked() {
@@ -326,7 +326,7 @@ func (m *Model) problemsPanel(c *ui.Context, p *ui.Theme) {
 					if m.problems.project {
 						hint = "No problems in the project"
 					}
-					ui.Text(c, hint).FontSize(11.5).TextColor(p.TextMuted)
+					ui.Text(c, hint).FontSize(12).TextColor(p.TextMuted)
 					return
 				}
 				for gi, items := range groups {
@@ -351,7 +351,7 @@ func (m *Model) problemFilter(c *ui.Context, p *ui.Theme, label string, n int, c
 		color = p.TextMuted
 	}
 	r.Children(func() {
-		ui.Text(c, text).FontSize(11).TextColor(color).SingleLine()
+		ui.Text(c, text).FontSize(12).TextColor(color).SingleLine()
 	})
 	if r.Clicked() {
 		*on = !*on
@@ -374,7 +374,7 @@ func (m *Model) problemScope(c *ui.Context, p *ui.Theme, label string, project b
 		color = p.Text
 	}
 	r.Children(func() {
-		ui.Text(c, label).FontSize(11.5).TextColor(color).SingleLine()
+		ui.Text(c, label).FontSize(12).TextColor(color).SingleLine()
 	})
 	if r.Clicked() && !active {
 		m.problems.project = project
@@ -388,18 +388,42 @@ func (m *Model) problemFileRow(c *ui.Context, p *ui.Theme, gi int, items []Probl
 	dir := filepath.Dir(first.Path)
 	dir = strings.TrimPrefix(dir, m.Root())
 	dir = strings.TrimPrefix(dir, string(filepath.Separator))
-	head := ui.Row(c.Key(fmt.Sprintf("problemfile:%d", gi))).Height(22).Gap(6).
-		Padding(0, 6).AlignItems(ui.Center)
+	oi := oiPaletteOf(p)
+	head := ui.Row(c.Key(fmt.Sprintf("problemfile:%d", gi))).Height(24).
+		PaddingStart(4).PaddingEnd(8).Gap(6).Radius(5).AlignItems(ui.Center)
 	if head.Hovered() {
-		head.Background(p.SurfaceHover)
+		head.Background(oi.hoverTint)
 	}
 	head.Children(func() {
-		ui.Text(c, filepath.Base(first.Path)).FontSize(12).Bold().TextColor(p.Text).SingleLine()
+		fileIconEl(c, oi, first.Path, 16, oi.textMuted)
+		ui.Text(c, filepath.Base(first.Path)).FontSize(13).TextColor(oi.textStrong).SingleLine()
 		if dir != "" && dir != "." {
-			ui.Text(c, dir).FontSize(10.5).TextColor(p.TextMuted).SingleLine().Ellipsis("…")
+			ui.Text(c, dir).FontSize(13).TextColor(oi.textSubtle).SingleLine().Ellipsis("…")
 		}
 		ui.Spacer(c)
-		ui.Text(c, fmt.Sprintf("%d", len(items))).FontSize(10.5).TextColor(p.TextMuted)
+		var errors, warnings, infos int
+		for _, item := range items {
+			switch item.Severity {
+			case "error":
+				errors++
+			case "warning":
+				warnings++
+			default:
+				infos++
+			}
+		}
+		var parts []string
+		if errors > 0 {
+			parts = append(parts, count(errors, "error", "errors"))
+		}
+		if warnings > 0 {
+			parts = append(parts, count(warnings, "warning", "warnings"))
+		}
+		if infos > 0 {
+			parts = append(parts, fmt.Sprintf("%d info", infos))
+		}
+		ui.Text(c, strings.Join(parts, ", ")).FontSize(13).TextColor(oi.textSubtle).
+			SingleLine().MarginStart(4)
 	})
 	if head.Clicked() {
 		m.previewAt(first.Path, first.Line, first.Col)
@@ -409,23 +433,21 @@ func (m *Model) problemFileRow(c *ui.Context, p *ui.Theme, gi int, items []Probl
 	}
 	for i, item := range items {
 		i, item := i, item
-		letter, color := problemBadge(item.Severity, p)
-		r := ui.Row(c.Key(fmt.Sprintf("problem:%d:%d", gi, i))).Height(22).Padding(0, 6).
-			Gap(6).AlignItems(ui.Center)
+		r := ui.Row(c.Key(fmt.Sprintf("problem:%d:%d", gi, i))).Height(24).
+			PaddingStart(24).PaddingEnd(8).Gap(6).Radius(5).AlignItems(ui.Center)
 		if r.Hovered() {
-			r.Background(p.SurfaceHover)
+			r.Background(oi.hoverTint)
 		}
 		r.Children(func() {
-			ui.Spacer(c)
-			ui.Text(c, letter).FontSize(11).Bold().TextColor(color)
-			ui.Text(c, item.Message).FontSize(11.5).TextColor(p.Text).
+			oiIconEl(c, problemSeverityIcon(item.Severity), 14, oi, oi.textMuted)
+			ui.Text(c, firstLineOf(item.Message)).FontSize(13).TextColor(oi.text).
 				SingleLine().Ellipsis("…")
-			if item.Code != "" {
-				ui.Text(c, "("+item.Code+")").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
-			}
+			ui.Text(c, fmt.Sprintf(":%d", item.Line+1)).FontSize(13).
+				TextColor(oi.textSubtle).SingleLine()
 			ui.Spacer(c)
-			ui.Text(c, fmt.Sprintf("Line %d", item.Line+1)).FontSize(10.5).
-				TextColor(p.TextMuted).SingleLine()
+			if item.Code != "" {
+				ui.Text(c, item.Code).FontSize(13).TextColor(oi.textFaint).SingleLine()
+			}
 		})
 		if r.Clicked() {
 			m.previewAt(item.Path, item.Line, item.Col)
@@ -434,6 +456,26 @@ func (m *Model) problemFileRow(c *ui.Context, p *ui.Theme, gi int, items []Probl
 			m.revealAt(item.Path, item.Line, item.Col)
 		}
 	}
+}
+
+// problemSeverityIcon is OpenIDEA's severity drawing, the one it picks from
+// "error", "warning" and "info".
+func problemSeverityIcon(severity string) string {
+	switch severity {
+	case "error":
+		return "status/error"
+	case "warning":
+		return "status/warning"
+	}
+	return "status/info"
+}
+
+// firstLineOf is the message's first line, which a problem row shows.
+func firstLineOf(text string) string {
+	if i := strings.IndexByte(text, '\n'); i >= 0 {
+		return text[:i]
+	}
+	return text
 }
 
 // problemBadge is the letter and colour of a problem's severity.

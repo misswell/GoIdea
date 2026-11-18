@@ -44,8 +44,11 @@ func dockSlotOfName(name string) (dockSlot, bool) {
 // registerToolWindow takes, minus the parts GoIDEA has no host for (header
 // menu contributions arrive with the features that need them).
 type toolWindowSpec struct {
-	id     string
-	title  string
+	id    string
+	title string
+	// icon is OpenIDEA's drawing for the window's stripe button and header,
+	// as its ToolWindowContribution.icon names it.
+	icon   string
 	anchor dockSlot
 	order  int
 	stripe bool

@@ -430,11 +430,11 @@ func (m *Model) branchesDialog(c *ui.Context, p *ui.Theme) {
 					text = count(len(rows), "branch", "branches")
 				}
 				if text != "" {
-					ui.Text(c, text).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+					ui.Text(c, text).FontSize(12).TextColor(p.TextMuted).SingleLine()
 				}
 			})
 			if m.branch.err != "" {
-				ui.Text(c, m.branch.err).FontSize(11).TextColor(p.Danger).SingleLine().Ellipsis("…")
+				ui.Text(c, m.branch.err).FontSize(12).TextColor(p.Danger).SingleLine().Ellipsis("…")
 			}
 			if len(rows) == 0 {
 				return
@@ -455,20 +455,20 @@ func (m *Model) branchesDialog(c *ui.Context, p *ui.Theme) {
 							if b.Remote {
 								color = p.TextMuted
 							}
-							ui.Text(c, b.Name).FontSize(12).TextColor(color).SingleLine().Ellipsis("…")
+							ui.Text(c, b.Name).FontSize(13).TextColor(color).SingleLine().Ellipsis("…")
 							if b.Current {
-								ui.Text(c, "Current").FontSize(10.5).TextColor(p.Accent).SingleLine()
+								ui.Text(c, "Current").FontSize(12).TextColor(p.Accent).SingleLine()
 							}
 							if b.Upstream != nil && !b.Remote {
-								ui.Text(c, "Tracking "+*b.Upstream).FontSize(10.5).TextColor(p.TextMuted).
+								ui.Text(c, "Tracking "+*b.Upstream).FontSize(12).TextColor(p.TextMuted).
 									SingleLine().Ellipsis("…")
 							}
 							if b.Behind > 0 {
-								ui.Text(c, fmt.Sprintf("↓%d", b.Behind)).FontSize(10.5).
+								ui.Text(c, fmt.Sprintf("↓%d", b.Behind)).FontSize(12).
 									TextColor(p.TextMuted).SingleLine()
 							}
 							if b.Ahead > 0 {
-								ui.Text(c, fmt.Sprintf("↑%d", b.Ahead)).FontSize(10.5).
+								ui.Text(c, fmt.Sprintf("↑%d", b.Ahead)).FontSize(12).
 									TextColor(p.TextMuted).SingleLine()
 							}
 						})

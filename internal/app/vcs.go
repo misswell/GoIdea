@@ -152,6 +152,25 @@ func vcsBadge(f openidea.FileStatus) (letter, word, tone string) {
 	return "?", "Changed", "mod"
 }
 
+// vcsKindColor is the colour of a change's name, as OpenIDEA's KIND_COLOR
+// paints it.
+func vcsKindColor(p *ui.Theme, f openidea.FileStatus) ui.Color {
+	oi := oiPaletteOf(p)
+	switch effectiveVCSKind(f) {
+	case "added":
+		return oi.vcsAdded
+	case "deleted":
+		return oi.vcsDeleted
+	case "untracked":
+		return oi.vcsUntracked
+	case "ignored":
+		return oi.vcsIgnored
+	case "conflicted":
+		return oi.vcsConflict
+	}
+	return oi.vcsModified
+}
+
 // vcsStaged and vcsUnstaged split the changes the way OpenIDEA's changes view
 // groups them; a file staged and then edited again is in both.
 func vcsStaged(files []openidea.FileStatus) []openidea.FileStatus {
@@ -315,10 +334,10 @@ func (m *Model) rollbackDialog(c *ui.Context, p *ui.Theme) {
 	d := ui.Modal(c, &open, func() {
 		ui.Column(c).Width(420).Gap(10).Children(func() {
 			ui.Text(c, "Roll Back Changes").FontSize(13).Bold().TextColor(p.Text).SingleLine()
-			ui.Text(c, "Roll back "+r.name+"? Unstaged changes are lost.").FontSize(11.5).
+			ui.Text(c, "Roll back "+r.name+"? Unstaged changes are lost.").FontSize(12).
 				TextColor(p.TextMuted)
 			if r.err != "" {
-				ui.Text(c, r.err).FontSize(11).TextColor(p.Danger).SingleLine().Ellipsis("…")
+				ui.Text(c, r.err).FontSize(12).TextColor(p.Danger).SingleLine().Ellipsis("…")
 			}
 			ui.Row(c).Gap(8).Children(func() {
 				label := "Roll Back"

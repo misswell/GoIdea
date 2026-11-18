@@ -874,11 +874,11 @@ func (m *Model) pluginTopBar(c *ui.Context, oi oiColors, pg *pluginPage) {
 			fmt.Sprintf("%d", len(pg.reg.Plugins())))
 		ui.Row(c).Height(18).Padding(0, 6).Radius(9).Background(oi.selected).
 			AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "Preview").FontSize(10).TextColor(oi.link).SingleLine()
+			ui.Text(c, "Preview").FontSize(12).TextColor(oi.link).SingleLine()
 		})
 		ui.Spacer(c)
 		if pg.busy != "" {
-			ui.Text(c, "Installing…").FontSize(11).TextColor(oi.textMuted).SingleLine()
+			ui.Text(c, "Installing…").FontSize(12).TextColor(oi.textMuted).SingleLine()
 		}
 		m.pluginGear(c, oi, pg)
 	})
@@ -901,7 +901,7 @@ func (m *Model) pluginTabLabel(c *ui.Context, oi oiColors, pg *pluginPage, label
 		}
 		ui.Text(c, label).FontSize(13).TextColor(tone).SingleLine()
 		if count != "" {
-			ui.Text(c, count).FontSize(11).TextColor(oi.textMuted).SingleLine()
+			ui.Text(c, count).FontSize(12).TextColor(oi.textMuted).SingleLine()
 		}
 	})
 	if r.Clicked() {
@@ -922,7 +922,7 @@ func (m *Model) pluginGear(c *ui.Context, oi oiColors, pg *pluginPage) {
 		g.Background(oi.hoverTint)
 	}
 	g.Children(func() {
-		ui.Icon(c, iconWelcomeGear).Size(16, 16).TextColor(oi.textSecondary)
+		oiIconEl(c, "general/settings", 16, oi, oi.icon)
 	})
 	if g.Clicked() {
 		pg.gearOpen = !pg.gearOpen
@@ -993,8 +993,7 @@ func (m *Model) pluginSide(c *ui.Context, oi oiColors, pg *pluginPage) {
 		BorderWidth(0, 1, 0, 0).BorderColor(oi.border).Children(func() {
 		ui.Row(c).Height(44).Shrink(0).Padding(8, 10).Gap(2).AlignItems(ui.Center).
 			Children(func() {
-				ui.Icon(c, iconWelcomeSearch).Size(14, 14).
-					TextColor(oi.textMuted).MarginEnd(4)
+				oiIconEl(c, "general/search", 14, oi, oi.textSubtle).MarginEnd(4)
 				input := ui.TextInputBase(c, &pg.query).Grow(1)
 				if pg.tab == 1 {
 					input.Placeholder("Search plugins")
@@ -1020,8 +1019,8 @@ func (m *Model) pluginSide(c *ui.Context, oi oiColors, pg *pluginPage) {
 func (m *Model) pluginGroupHeader(c *ui.Context, oi oiColors, title string, count int) {
 	ui.Row(c).Height(28).Shrink(0).Padding(0, 12).Gap(6).AlignItems(ui.Center).
 		Children(func() {
-			ui.Text(c, title).FontSize(11).TextColor(oi.textMuted).SingleLine()
-			ui.Text(c, fmt.Sprintf("%d", count)).FontSize(11).
+			ui.Text(c, title).FontSize(12).TextColor(oi.textMuted).SingleLine()
+			ui.Text(c, fmt.Sprintf("%d", count)).FontSize(12).
 				TextColor(oi.textFaint).SingleLine()
 		})
 }
@@ -1079,7 +1078,7 @@ func (m *Model) pluginRow(c *ui.Context, oi oiColors, pg *pluginPage, p *plugin.
 			if p.Author != "" {
 				meta = p.Author + " · " + meta
 			}
-			ui.Text(c, meta).FontSize(11).TextColor(oi.textMuted).
+			ui.Text(c, meta).FontSize(12).TextColor(oi.textMuted).
 				SingleLine().Ellipsis(meta)
 		})
 		on := m.pluginIsEnabled(p)
@@ -1141,11 +1140,11 @@ func (m *Model) pluginIndexList(c *ui.Context, oi oiColors, pg *pluginPage) {
 			ui.Column(c).Grow(1).MinWidth(0).Gap(1).Children(func() {
 				ui.Text(c, title).FontSize(13).TextColor(oi.textStrong).
 					SingleLine().Ellipsis(title)
-				ui.Text(c, e.Author).FontSize(11).TextColor(oi.textMuted).
+				ui.Text(c, e.Author).FontSize(12).TextColor(oi.textMuted).
 					SingleLine().Ellipsis(e.Author)
 			})
 			if installed {
-				ui.Text(c, "Installed").FontSize(11).TextColor(oi.textMuted).SingleLine()
+				ui.Text(c, "Installed").FontSize(12).TextColor(oi.textMuted).SingleLine()
 			} else {
 				spec := e.Repository
 				if spec == "" {
@@ -1201,13 +1200,13 @@ func (m *Model) pluginDetails(c *ui.Context, oi oiColors, pg *pluginPage) {
 
 func (m *Model) pluginDetailsEmpty(c *ui.Context, oi oiColors, pg *pluginPage) {
 	ui.Column(c).Grow(1).Padding(16, 20).Gap(6).AlignItems(ui.Start).Children(func() {
-		ui.Text(c, "No plugin selected").FontSize(14).TextColor(oi.textStrong).SingleLine()
+		ui.Text(c, "No plugin selected").FontSize(13).TextColor(oi.textStrong).SingleLine()
 		ui.Text(c, "Plugins are folders with a plugin.json manifest.").
 			FontSize(12).TextColor(oi.textMuted).Wrap()
 		ui.Text(c, "Install one from Git with the gear menu.").
 			FontSize(12).TextColor(oi.textMuted).Wrap()
 		if pg.dirs.Plugins != "" {
-			ui.Text(c, shortenHome(pg.dirs.Plugins)).FontSize(11).
+			ui.Text(c, shortenHome(pg.dirs.Plugins)).FontSize(12).
 				TextColor(oi.textFaint).Margin(0, 4, 0, 0).Wrap()
 		}
 	})
@@ -1423,7 +1422,7 @@ func (m *Model) pluginLogs(c *ui.Context, oi oiColors, pg *pluginPage, p *plugin
 				tone = oi.danger
 			}
 			text := line.Level + ": " + line.Message
-			ui.Text(c, text).FontSize(11).TextColor(tone).SingleLine().Ellipsis(text)
+			ui.Text(c, text).FontSize(12).TextColor(tone).SingleLine().Ellipsis(text)
 		}
 	})
 }
@@ -1442,7 +1441,7 @@ func (m *Model) pluginAvailableDetails(c *ui.Context, oi oiColors, pg *pluginPag
 		if entry == nil {
 			ui.Column(c).Grow(1).Padding(16, 20).Gap(6).AlignItems(ui.Start).
 				Children(func() {
-					ui.Text(c, "No plugin selected").FontSize(14).
+					ui.Text(c, "No plugin selected").FontSize(13).
 						TextColor(oi.textStrong).SingleLine()
 					ui.Text(c, "Install a plugin from a Git URL with the gear menu.").
 						FontSize(12).TextColor(oi.textMuted).Wrap()

@@ -1416,7 +1416,7 @@ func (m *Model) settingsSideWidth() float32 {
 func (m *Model) settingsTitle(c *ui.Context, oi oiColors) {
 	ui.Row(c).Height(settingsTitleHeight).Shrink(0).Padding(0, 16).
 		AlignItems(ui.Center).Children(func() {
-		ui.Text(c, "Settings").FontSize(14).Bold().TextColor(oi.textStrong).SingleLine()
+		ui.Text(c, "Settings").FontSize(13).Bold().TextColor(oi.textStrong).SingleLine()
 	})
 }
 
@@ -1558,7 +1558,7 @@ func (m *Model) settingsFooter(c *ui.Context, p *ui.Theme, oi oiColors) {
 	ui.Row(c).Height(settingsFooterHeight).Shrink(0).Padding(10, 16).
 		Gap(10).AlignItems(ui.Center).Children(func() {
 		if m.settingsErr != "" {
-			ui.Text(c, "Could not save: "+m.settingsErr).FontSize(11).
+			ui.Text(c, "Could not save: "+m.settingsErr).FontSize(12).
 				TextColor(oi.danger).SingleLine().Ellipsis("…").Grow(1)
 		} else {
 			ui.Spacer(c)

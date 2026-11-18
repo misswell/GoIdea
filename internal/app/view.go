@@ -16,12 +16,12 @@ import (
 func (m *Model) vcsRows(c *ui.Context, p *ui.Theme) {
 	if m.vcs.err != "" {
 		ui.Row(c).Padding(8, 8).Children(func() {
-			ui.Text(c, m.vcs.err).FontSize(11.5).TextColor(p.Warning)
+			ui.Text(c, m.vcs.err).FontSize(12).TextColor(p.Warning)
 		})
 		return
 	}
 	if len(m.vcs.files) == 0 {
-		hint := "No uncommitted changes"
+		hint := "No local changes"
 		if !m.vcs.loaded && !m.vcs.loading {
 			hint = "Press Refresh to read the Git status"
 		}
@@ -29,74 +29,73 @@ func (m *Model) vcsRows(c *ui.Context, p *ui.Theme) {
 			hint = "Reading Git status…"
 		}
 		ui.Row(c).Padding(8, 8).Children(func() {
-			ui.Text(c, hint).FontSize(11.5).TextColor(p.TextMuted)
+			ui.Text(c, hint).FontSize(12).TextColor(p.TextMuted)
 		})
 		return
 	}
 	if m.vcs.opErr != "" {
 		ui.Row(c).Padding(4, 8).Children(func() {
-			ui.Text(c, m.vcs.opErr).FontSize(11).TextColor(p.Danger).SingleLine().
+			ui.Text(c, m.vcs.opErr).FontSize(12).TextColor(p.Danger).SingleLine().
 				Ellipsis("…")
 		})
 	}
 	// The staging groups OpenIDEA's changes view draws: a file staged and then
-	// edited again is listed under both.
+	// edited again is listed under both. The rows are inset like a tree's.
 	staged, unstaged := vcsStaged(m.vcs.files), vcsUnstaged(m.vcs.files)
-	if len(staged) > 0 {
-		m.vcsGroup(c, p, "Staged", len(staged))
-		for i, f := range staged {
-			m.vcsRow(c, p, "staged", i, f)
+	ui.Column(c).Padding(0, 6).Children(func() {
+		if len(staged) > 0 {
+			m.vcsGroup(c, p, "Staged Changes", len(staged))
+			for i, f := range staged {
+				m.vcsRow(c, p, "staged", i, f)
+			}
 		}
-	}
-	if len(unstaged) > 0 {
-		m.vcsGroup(c, p, "Unstaged", len(unstaged))
-		for i, f := range unstaged {
-			m.vcsRow(c, p, "unstaged", i, f)
+		if len(unstaged) > 0 {
+			m.vcsGroup(c, p, "Unstaged Changes", len(unstaged))
+			for i, f := range unstaged {
+				m.vcsRow(c, p, "unstaged", i, f)
+			}
 		}
-	}
+	})
 }
 
 func (m *Model) vcsGroup(c *ui.Context, p *ui.Theme, label string, n int) {
-	ui.Row(c).Height(22).Padding(6, 8).Gap(4).AlignItems(ui.Center).Children(func() {
-		ui.Text(c, label).FontSize(11).Bold().TextColor(p.TextMuted).SingleLine()
-		ui.Text(c, fmt.Sprintf("%d", n)).FontSize(10.5).TextColor(p.TextMuted)
+	oi := oiPaletteOf(p)
+	ui.Row(c).Height(24).PaddingStart(4).PaddingEnd(8).Gap(4).AlignItems(ui.Center).Children(func() {
+		ui.Text(c, label).FontSize(13).TextColor(oi.textStrong).SingleLine()
+		ui.Text(c, count(n, "file", "files")).FontSize(13).TextColor(oi.textSubtle).SingleLine()
 	})
 }
 
 func (m *Model) vcsRow(c *ui.Context, p *ui.Theme, side string, i int, f openidea.FileStatus) {
-	letter, word, tone := vcsBadge(f)
-	color := p.TextMuted
-	switch tone {
-	case "add":
-		color = p.Success
-	case "mod":
-		color = p.Accent
-	case "del":
-		color = p.Danger
-	}
-	r := ui.Row(c.Key(fmt.Sprintf("vcs:%s:%d", side, i))).Height(22).Padding(0, 8).Gap(6).
-		AlignItems(ui.Center)
+	_, word, _ := vcsBadge(f)
+	oi := oiPaletteOf(p)
+	r := ui.Row(c.Key(fmt.Sprintf("vcs:%s:%d", side, i))).Height(24).
+		PaddingStart(24).PaddingEnd(8).Gap(4).Radius(5).AlignItems(ui.Center)
 	if r.Hovered() {
-		r.Background(p.SurfaceHover)
+		r.Background(oi.hoverTint)
 	}
+	r.Tooltip(word)
 	r.Children(func() {
-		ui.Text(c, letter).FontSize(11).Bold().TextColor(color)
-		ui.Text(c, filepath.Base(f.RelPath)).FontSize(12).TextColor(p.Text).
+		fileIconEl(c, oi, f.Path, 16, oi.textMuted)
+		ui.Text(c, filepath.Base(f.RelPath)).FontSize(13).TextColor(vcsKindColor(p, f)).
 			SingleLine().Ellipsis("…")
 		ui.Spacer(c)
-		if side == "staged" {
-			if m.rowChip(c, p, "vcs:unstage:"+f.Path, "Unstage") {
-				m.UnstageChange(f)
-			}
-		} else {
-			if m.rowChip(c, p, "vcs:stage:"+f.Path, "Stage") {
-				m.StageChange(f)
-			}
-			if m.rowChip(c, p, "vcs:rollback:"+f.Path, "Rollback") {
-				m.AskRollback(f)
+		// The row actions stay hidden until the row is under the pointer, as
+		// OpenIDEA's tree rows carry no visible buttons.
+		if r.Hovered() {
+			if side == "staged" {
+				if m.rowChip(c, p, "vcs:unstage:"+f.Path, "Unstage") {
+					m.UnstageChange(f)
+				}
+			} else {
+				if m.rowChip(c, p, "vcs:stage:"+f.Path, "Stage") {
+					m.StageChange(f)
+				}
+				if m.rowChip(c, p, "vcs:rollback:"+f.Path, "Rollback") {
+					m.AskRollback(f)
+				}
 			}
 		}
-		ui.Text(c, word).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
 	})
 	if r.Clicked() {
 		m.ShowDiff(f.Path)
@@ -117,7 +116,7 @@ func (m *Model) rowChip(c *ui.Context, p *ui.Theme, key, label string) bool {
 		chip.Background(p.SurfacePressed)
 	}
 	chip.Children(func() {
-		ui.Text(c, label).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+		ui.Text(c, label).FontSize(12).TextColor(p.TextMuted).SingleLine()
 	})
 	return chip.Clicked()
 }
@@ -141,7 +140,7 @@ func (m *Model) searchRows(c *ui.Context, p *ui.Theme) {
 		}
 		if s.scopePath != "" {
 			if rel, err := filepath.Rel(m.Root(), s.scopePath); err == nil {
-				ui.Text(c, "Scope: "+filepath.ToSlash(rel)).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+				ui.Text(c, "Scope: "+filepath.ToSlash(rel)).FontSize(12).TextColor(p.TextMuted).SingleLine()
 			}
 		}
 		ui.Spacer(c)
@@ -153,17 +152,17 @@ func (m *Model) searchRows(c *ui.Context, p *ui.Theme) {
 			text = "Stopped · " + text
 		}
 		if text != "" {
-			ui.Text(c, text).FontSize(10.5).TextColor(p.TextMuted).SingleLine().Ellipsis("…")
+			ui.Text(c, text).FontSize(12).TextColor(p.TextMuted).SingleLine().Ellipsis("…")
 		}
 	})
 	if s.err != "" {
 		ui.Row(c).Padding(4, 8).Children(func() {
-			ui.Text(c, s.err).FontSize(11).TextColor(p.Warning)
+			ui.Text(c, s.err).FontSize(12).TextColor(p.Warning)
 		})
 	}
 	if s.truncated {
 		ui.Row(c).Padding(4, 8).Children(func() {
-			ui.Text(c, "Too many results; only the first ones are shown").FontSize(10.5).TextColor(p.TextMuted)
+			ui.Text(c, "Too many results; only the first ones are shown").FontSize(12).TextColor(p.TextMuted)
 		})
 	}
 	if len(s.files) == 0 {
@@ -175,19 +174,22 @@ func (m *Model) searchRows(c *ui.Context, p *ui.Theme) {
 			hint = "No matches"
 		}
 		ui.Row(c).Padding(8, 8).Children(func() {
-			ui.Text(c, hint).FontSize(11.5).TextColor(p.TextMuted)
+			ui.Text(c, hint).FontSize(12).TextColor(p.TextMuted)
 		})
 		return
 	}
 	shown := 0
 	for fi, f := range s.files {
 		f := f
-		ui.Row(c).Height(22).Padding(0, 8).Gap(6).AlignItems(ui.Center).
+		oi := oiPaletteOf(p)
+		ui.Row(c).Height(24).PaddingStart(4).PaddingEnd(8).Gap(6).AlignItems(ui.Center).
 			Children(func() {
-				ui.Text(c, filepath.Base(f.RelPath)).FontSize(11.5).Bold().TextColor(p.Accent).
+				fileIconEl(c, oi, f.Path, 16, oi.textMuted)
+				ui.Text(c, filepath.Base(f.RelPath)).FontSize(13).TextColor(oi.textStrong).
 					SingleLine().Ellipsis("…")
 				ui.Spacer(c)
-				ui.Text(c, fmt.Sprintf("%d", len(f.Matches))).FontSize(10.5).TextColor(p.TextMuted)
+				ui.Text(c, count(len(f.Matches), "match", "matches")).FontSize(12).
+					TextColor(oi.textFaint)
 			})
 		for mi, mm := range f.Matches {
 			if mi >= 40 || shown >= 200 {
@@ -195,15 +197,17 @@ func (m *Model) searchRows(c *ui.Context, p *ui.Theme) {
 			}
 			mi, mm := mi, mm
 			shown++
-			r := ui.Row(c.Key(fmt.Sprintf("hit:%d:%d", fi, mi))).Height(20).Padding(0, 8).
-				Gap(6).AlignItems(ui.Center).PaddingStart(14)
+			r := ui.Row(c.Key(fmt.Sprintf("hit:%d:%d", fi, mi))).Height(24).PaddingStart(26).
+				PaddingEnd(8).Gap(6).AlignItems(ui.Center)
 			if r.Hovered() {
-				r.Background(p.SurfaceHover)
+				r.Background(oi.hoverTint)
 			}
 			r.Children(func() {
-				ui.Text(c, fmt.Sprintf("%d", mm.Line+1)).FontSize(10.5).TextColor(p.TextMuted)
-				ui.Text(c, strings.TrimSpace(mm.Text)).FontSize(11).TextColor(p.Text).
-					SingleLine().Ellipsis("…")
+				ui.Text(c, fmt.Sprintf("%d", mm.Line+1)).FontSize(12).Font("monospace").
+					TextColor(oi.textFaint)
+				code := strings.ReplaceAll(mm.Text, "\t", "    ")
+				ui.Text(c, strings.TrimLeft(code, " ")).FontSize(13).Font("monospace").
+					TextColor(oi.text).SingleLine().Ellipsis("…")
 			})
 			col := 0
 			if len(mm.Ranges) > 0 {
@@ -220,8 +224,8 @@ func (m *Model) searchRows(c *ui.Context, p *ui.Theme) {
 }
 
 func (m *Model) treeRow(c *ui.Context, p *ui.Theme, row *treeNode) {
-	r := ui.Row(c.Key("tree:"+row.path)).Height(24).Padding(0, 6).
-		PaddingStart(6 + float32(row.depth)*14).Gap(5).AlignItems(ui.Center)
+	r := ui.Row(c.Key("tree:" + row.path)).Height(24).
+		PaddingStart(4 + float32(row.depth)*20).PaddingEnd(8).Gap(5).Radius(5).AlignItems(ui.Center)
 	oi := oiPaletteOf(p)
 	if row.path == m.tree.Selected() {
 		r.Background(p.Selection)
@@ -242,36 +246,41 @@ func (m *Model) treeRow(c *ui.Context, p *ui.Theme, row *treeNode) {
 	}
 	r.Children(func() {
 		label := row.name
+		// The chevron slot is reserved on every row, as OpenIDEA's tree does,
+		// so files and folders line up at the same depth.
+		chevron := ui.Row(c).Size(16, 16).Shrink(0).
+			Justify(ui.Center).AlignItems(ui.Center)
 		if row.dir {
-			arrow := "▸"
+			glyph := "general/chevronRight"
 			if row.expanded {
-				arrow = "▾"
+				glyph = "general/chevronDown"
 			}
-			ui.Text(c, arrow).FontSize(10).TextColor(p.TextMuted)
+			chevron.Children(func() {
+				oiIconEl(c, glyph, 16, oi, oi.textMuted)
+			})
 		}
-		// OpenIDEA's tree: a module icon on the root, a blue folder on a
-		// source root, a package icon on a compacted package, a grey folder
-		// on any other directory, and a file icon — labels in the normal
-		// text colour, not the accent.
+		// OpenIDEA's tree: a module icon on the root and on modules, the
+		// package icon on a compacted package, a source folder on a source
+		// root, a grey folder on any other directory, and the file type's
+		// own icon — labels in the normal text colour.
 		switch {
 		case row.path == m.Root() || row.module:
-			ui.Icon(c, iconMavenProject).Size(14, 14).TextColor(p.TextMuted)
+			folderIconEl(c, oi, "module", 16, oi.textSubtle)
 		case row.packageDir:
-			ui.Icon(c, iconPackage).Size(14, 14).TextColor(p.TextMuted)
+			folderIconEl(c, oi, "package", 16, oi.textSubtle)
 		case row.dir && isSourceRoot(row.path):
-			ui.Icon(c, iconWelcomeFolder).Size(14, 14).TextColor(p.Accent)
+			folderIconEl(c, oi, "source", 16, oi.textSubtle)
 		case row.dir:
-			ui.Icon(c, iconWelcomeFolder).Size(14, 14).TextColor(p.TextMuted)
+			folderIconEl(c, oi, "plain", 16, oi.textSubtle)
 		default:
-			icon, tone := treeFileIcon(row.name, p)
-			ui.Icon(c, icon).Size(14, 14).TextColor(tone)
+			fileIconEl(c, oi, row.name, 16, oi.textMuted)
 		}
 		tone := p.Text
 		if row.excluded {
 			tone = oi.ignored
 		}
-		text := ui.Text(c, label).FontSize(12.5).TextColor(tone).SingleLine().Ellipsis("…")
-		if row.module {
+		text := ui.Text(c, label).FontSize(13).TextColor(tone).SingleLine().Ellipsis("…")
+		if row.module || row.path == m.Root() {
 			text.Bold()
 		}
 		if bookmarked || r.Hovered() {
@@ -286,7 +295,7 @@ func (m *Model) treeRow(c *ui.Context, p *ui.Theme, row *treeNode) {
 				if bookmarked {
 					tone = p.Accent
 				}
-				ui.Text(c, "Bookmarks").FontSize(10.5).TextColor(tone).SingleLine()
+				ui.Text(c, "Bookmarks").FontSize(12).TextColor(tone).SingleLine()
 			})
 			if chip.Clicked() {
 				m.ToggleFolderBookmark(row.path, row.dir)
@@ -380,18 +389,18 @@ func (m *Model) breadcrumbs(c *ui.Context, p *ui.Theme, t *Tab, g groupView) {
 	chain := outlinePath(t.outline, pos.Line)
 	ui.Row(c).Height(26).Shrink(0).Padding(0, 10).Gap(4).AlignItems(ui.Center).
 		Children(func() {
-			ui.Text(c, filepath.Base(t.doc.Path())).FontSize(11.5).
+			ui.Text(c, filepath.Base(t.doc.Path())).FontSize(12).
 				TextColor(p.TextMuted).SingleLine()
 			for i, it := range chain {
 				it := it
-				ui.Text(c, "›").FontSize(11).TextColor(p.TextMuted)
+				ui.Text(c, "›").FontSize(12).TextColor(p.TextMuted)
 				chip := ui.Row(c.Key(fmt.Sprintf("bc:%d:%d:%s", g.ref, i, it.Name))).Padding(2, 4).
 					AlignItems(ui.Center)
 				if chip.Hovered() {
 					chip.Background(p.SurfaceHover)
 				}
 				chip.Children(func() {
-					ui.Text(c, it.Name).FontSize(11.5).TextColor(p.Text).SingleLine()
+					ui.Text(c, it.Name).FontSize(12).TextColor(p.Text).SingleLine()
 				})
 				if chip.Clicked() {
 					line, col := t.doc.BytePos(
@@ -416,7 +425,7 @@ func (m *Model) runPanel(c *ui.Context, p *ui.Theme) {
 		m.runHeader(c, p)
 		if m.run.err != "" {
 			ui.Row(c).Height(24).Padding(0, 10).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, m.run.err).FontSize(11.5).TextColor(p.Warning).SingleLine().Ellipsis("…")
+				ui.Text(c, m.run.err).FontSize(12).TextColor(p.Warning).SingleLine().Ellipsis("…")
 			})
 		}
 		// The test results tree, above the console like upstream RunView's
@@ -441,14 +450,14 @@ func (m *Model) runPanel(c *ui.Context, p *ui.Theme) {
 							m.openTestLocation(line.loc)
 						}
 						row.Children(func() {
-							ui.Text(c, line.mark+" "+line.text).FontSize(11.5).TextColor(p.Text).SingleLine().Ellipsis("…")
+							ui.Text(c, line.mark+" "+line.text).FontSize(12).TextColor(p.Text).SingleLine().Ellipsis("…")
 						})
 					}
 				})
 			})
 			if node := m.run.tests.Get(m.run.selTest); node != nil && len(node.Output) > 0 {
 				ui.Row(c).Padding(4, 10).Children(func() {
-					ui.Text(c, adapter.NodeOutputText(node)).FontSize(11).TextColor(p.TextMuted)
+					ui.Text(c, adapter.NodeOutputText(node)).FontSize(12).TextColor(p.TextMuted)
 				})
 			}
 		}
@@ -458,7 +467,7 @@ func (m *Model) runPanel(c *ui.Context, p *ui.Theme) {
 					ui.Text(c, "This project is not trusted: building and running are disabled.").
 						FontSize(12).TextColor(p.TextMuted)
 					if m.run.trustErr != "" {
-						ui.Text(c, m.run.trustErr).FontSize(11.5).TextColor(p.Warning)
+						ui.Text(c, m.run.trustErr).FontSize(12).TextColor(p.Warning)
 					}
 					ui.Row(c).Padding(6, 0).Children(func() {
 						ui.Button(c, "Trust Project").OnClick(func() { m.TrustProject() })
@@ -467,14 +476,14 @@ func (m *Model) runPanel(c *ui.Context, p *ui.Theme) {
 				}
 				if len(m.run.output) == 0 {
 					ui.Text(c, "No output yet. Press Run to start.").
-						FontSize(11.5).TextColor(p.TextMuted)
+						FontSize(12).TextColor(p.TextMuted)
 					return
 				}
 				if m.run.truncated {
 					ui.Text(c, "(Output truncated: earlier lines were omitted)").
-						FontSize(11).TextColor(p.TextMuted)
+						FontSize(12).TextColor(p.TextMuted)
 				}
-				ui.Text(c, m.run.renderText()).FontSize(11.5).TextColor(p.Text)
+				ui.Text(c, m.run.renderText()).FontSize(12).TextColor(p.Text)
 			})
 		})
 	})
@@ -488,7 +497,7 @@ func (m *Model) buildPanel(c *ui.Context, p *ui.Theme) {
 		m.buildHeader(c, p)
 		if b.err != "" {
 			ui.Row(c).Height(24).Padding(0, 10).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, b.err).FontSize(11.5).TextColor(p.Warning).SingleLine().Ellipsis("…")
+				ui.Text(c, b.err).FontSize(12).TextColor(p.Warning).SingleLine().Ellipsis("…")
 			})
 		}
 		ui.Scroll(c).Grow(1).Children(func() {
@@ -503,14 +512,14 @@ func (m *Model) buildPanel(c *ui.Context, p *ui.Theme) {
 				}
 				if len(b.output) == 0 {
 					ui.Text(c, "No output yet. Press Build Project to start.").
-						FontSize(11.5).TextColor(p.TextMuted)
+						FontSize(12).TextColor(p.TextMuted)
 					return
 				}
 				if b.truncated {
 					ui.Text(c, "(Output truncated: earlier lines were omitted)").
-						FontSize(11).TextColor(p.TextMuted)
+						FontSize(12).TextColor(p.TextMuted)
 				}
-				ui.Text(c, b.renderText()).FontSize(11.5).TextColor(p.Text)
+				ui.Text(c, b.renderText()).FontSize(12).TextColor(p.Text)
 			})
 		})
 	})
@@ -532,7 +541,7 @@ func (m *Model) buildHeader(c *ui.Context, p *ui.Theme) {
 		ui.Spacer(c)
 		summary := m.buildSummaryText()
 		if summary != "" {
-			ui.Text(c, summary).FontSize(11).TextColor(p.TextMuted).SingleLine().Ellipsis("…")
+			ui.Text(c, summary).FontSize(12).TextColor(p.TextMuted).SingleLine().Ellipsis("…")
 		}
 		if b.busy {
 			ui.Button(c, "Stop").OnClick(func() { m.StopBuild() })
@@ -573,7 +582,7 @@ func (m *Model) runHeader(c *ui.Context, p *ui.Theme) {
 		// The section-8 readiness: when a state is missing, the header names
 		// it instead of failing silently.
 		if reason := m.readyFor(); reason != "" && m.run.trusted {
-			ui.Text(c, reason).FontSize(10.5).TextColor(p.TextMuted).SingleLine().Grow(1)
+			ui.Text(c, reason).FontSize(12).TextColor(p.TextMuted).SingleLine().Grow(1)
 		} else if m.run.trusted {
 			ui.Button(c, "‹").OnClick(func() { m.CycleRunConfig(-1) })
 			name := "Reading configurations…"
@@ -584,7 +593,7 @@ func (m *Model) runHeader(c *ui.Context, p *ui.Theme) {
 			ui.Button(c, "›").OnClick(func() { m.CycleRunConfig(1) })
 		} else {
 			ui.Text(c, "An untrusted project does not build or run").
-				FontSize(11.5).TextColor(p.TextMuted).SingleLine().Ellipsis("…").Grow(1)
+				FontSize(12).TextColor(p.TextMuted).SingleLine().Ellipsis("…").Grow(1)
 		}
 		if m.run.running || m.run.awaiting {
 			ui.Button(c, "Stop").OnClick(func() { m.StopRun() })
@@ -635,7 +644,7 @@ func (m *Model) termPanel(c *ui.Context, p *ui.Theme) {
 			ui.Text(c, "Terminal").FontSize(12).Bold().TextColor(p.Text)
 			if n := t.total(); n > 0 {
 				ui.Text(c, count(n, "session", "sessions")).
-					FontSize(11).TextColor(p.TextMuted)
+					FontSize(12).TextColor(p.TextMuted)
 			}
 			ui.Spacer(c)
 			ui.Button(c, "New").OnClick(func() { m.OpenTermTab() })
@@ -655,7 +664,7 @@ func (m *Model) termPanel(c *ui.Context, p *ui.Theme) {
 		})
 		if t.err != "" {
 			ui.Row(c).Shrink(0).Padding(4, 10).Gap(8).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, t.err).FontSize(11.5).TextColor(p.Danger).
+				ui.Text(c, t.err).FontSize(12).TextColor(p.Danger).
 					SingleLine().Ellipsis("…").Grow(1)
 				ui.Button(c, "Close").OnClick(func() {
 					t.err = ""
@@ -666,13 +675,13 @@ func (m *Model) termPanel(c *ui.Context, p *ui.Theme) {
 		if t.finding {
 			ui.Row(c).Height(30).Shrink(0).Padding(3, 8).Gap(6).AlignItems(ui.Center).
 				BorderWidth(0, 0, 1, 0).BorderColor(p.Border).Children(func() {
-				ui.Text(c, "Find").FontSize(11.5).TextColor(p.TextMuted)
+				ui.Text(c, "Find").FontSize(12).TextColor(p.TextMuted)
 				in := ui.TextInput(c, &t.find).Grow(1)
 				if in.Submitted() {
 					m.FindTermStep(1)
 				}
 				if label := m.termFindLabel(); label != "" {
-					ui.Text(c, label).FontSize(11).TextColor(p.TextMuted)
+					ui.Text(c, label).FontSize(12).TextColor(p.TextMuted)
 				}
 				ui.Button(c, "Previous").OnClick(func() { m.FindTermStep(-1) })
 				ui.Button(c, "Next").OnClick(func() { m.FindTermStep(1) })
@@ -734,7 +743,7 @@ func (m *Model) termPaneBody(c *ui.Context, p *ui.Theme, g int) {
 					tab.Background(p.SurfacePressed)
 				}
 				tab.Children(func() {
-					ui.Text(c, label).FontSize(11.5).TextColor(tabColor).
+					ui.Text(c, label).FontSize(12).TextColor(tabColor).
 						SingleLine().Ellipsis("…")
 					ui.Button(c, "×").OnClick(func() { m.CloseTermTab(g, i) })
 				})
@@ -747,7 +756,7 @@ func (m *Model) termPaneBody(c *ui.Context, p *ui.Theme, g int) {
 				}
 			}
 			if len(gr.tabs) == 0 {
-				ui.Text(c, "Not running").FontSize(11.5).TextColor(p.TextMuted)
+				ui.Text(c, "Not running").FontSize(12).TextColor(p.TextMuted)
 			}
 			ui.Spacer(c)
 			if t.split != "" {
@@ -768,12 +777,12 @@ func (m *Model) termPaneBody(c *ui.Context, p *ui.Theme, g int) {
 					if s == nil || (s.id == 0 && !s.starting) {
 						hint = "Press New to open a login shell."
 					}
-					ui.Text(c, hint).FontSize(11.5).TextColor(p.TextMuted)
+					ui.Text(c, hint).FontSize(12).TextColor(p.TextMuted)
 					return
 				}
 				if s.truncated {
 					ui.Text(c, "(Output truncated: earlier lines were omitted)").
-						FontSize(11).TextColor(p.TextMuted)
+						FontSize(12).TextColor(p.TextMuted)
 				}
 				var hits map[int]bool
 				if t.finding && t.find != "" && t.active == g {
@@ -787,7 +796,7 @@ func (m *Model) termPaneBody(c *ui.Context, p *ui.Theme, g int) {
 					if text == "" {
 						text = " "
 					}
-					row := ui.Text(c, text).FontSize(11.5).TextColor(p.Text).
+					row := ui.Text(c, text).FontSize(13).Font("monospace").TextColor(p.Text).
 						Key(fmt.Sprintf("termLine:%d:%d", s.channel, i))
 					if hits[i] {
 						if i == s.findAt {
@@ -824,7 +833,7 @@ func (m *Model) debugPanel(c *ui.Context, p *ui.Theme) {
 		if m.debug.err != "" {
 			ui.Row(c).Shrink(0).Padding(4, 10).Gap(8).AlignItems(ui.Center).
 				Background(p.Background).Children(func() {
-				ui.Text(c, m.debug.err).FontSize(11.5).TextColor(p.Danger).
+				ui.Text(c, m.debug.err).FontSize(12).TextColor(p.Danger).
 					SingleLine().Ellipsis("…").Grow(1)
 				ui.Button(c, "Close").OnClick(func() {
 					m.debug.err = ""
@@ -842,14 +851,14 @@ func (m *Model) debugPanel(c *ui.Context, p *ui.Theme) {
 
 func (m *Model) debugHeader(c *ui.Context, p *ui.Theme) {
 	d := &m.debug
-	ui.Row(c).Height(30).Shrink(0).Padding(0, 8).Gap(8).AlignItems(ui.Center).
+	ui.Row(c).Height(32).Shrink(0).Padding(0, 8).Gap(8).AlignItems(ui.Center).
 		BorderWidth(0, 0, 1, 0).BorderColor(p.Border).Children(func() {
-		ui.Text(c, "Debug").FontSize(12).Bold().TextColor(p.Text)
+		ui.Text(c, "Debug").FontSize(13).Bold().TextColor(p.Text)
 		config := d.config
 		if config == "" {
 			config = "Main class of the current file"
 		}
-		ui.Text(c, config).FontSize(12).TextColor(p.TextMuted).
+		ui.Text(c, config).FontSize(13).TextColor(p.TextMuted).
 			SingleLine().Ellipsis("…").Grow(1)
 		if d.session == 0 && !d.starting {
 			ui.Button(c, "Debug").OnClick(func() { m.Debug() })
@@ -876,32 +885,32 @@ func (m *Model) debugFrames(c *ui.Context, p *ui.Theme) {
 	d := &m.debug
 	ui.Column(c).Width(260).Shrink(0).MinHeight(0).
 		BorderWidth(0, 1, 0, 0).BorderColor(p.Border).Children(func() {
-		ui.Row(c).Height(24).Padding(0, 8).AlignItems(ui.Center).Children(func() {
+		ui.Row(c).Height(26).Padding(0, 8).AlignItems(ui.Center).Children(func() {
 			thread := "Call Stack"
 			if len(d.threads) > 0 {
 				thread = fmt.Sprintf("Call Stack · %s", d.threads[0].Name)
 			}
-			ui.Text(c, thread).FontSize(11.5).Bold().TextColor(p.TextMuted).
+			ui.Text(c, thread).FontSize(13).Bold().TextColor(p.TextMuted).
 				SingleLine().Ellipsis("…")
 		})
 		ui.Scroll(c).Grow(1).Children(func() {
 			if !d.paused || len(d.frames) == 0 {
 				ui.Row(c).Padding(8, 8).Children(func() {
-					ui.Text(c, d.status).FontSize(11.5).TextColor(p.TextMuted).
+					ui.Text(c, d.status).FontSize(12).TextColor(p.TextMuted).
 						SingleLine().Ellipsis("…")
 				})
 				return
 			}
 			for i, f := range d.frames {
 				i, f := i, f
-				row := ui.Row(c.Key(fmt.Sprintf("dframe:%d", i))).Height(22).Padding(0, 8).
+				row := ui.Row(c.Key(fmt.Sprintf("dframe:%d", i))).Height(24).Padding(0, 8).
 					Gap(6).AlignItems(ui.Center)
 				if i == d.selFrame {
 					row.Background(p.SurfaceHover)
 				}
 				row.Children(func() {
 					ui.Text(c, fmt.Sprintf("%s  :%d", f.Name, f.Line+1)).
-						FontSize(11.5).TextColor(p.Text).SingleLine().Ellipsis("…")
+						FontSize(13).TextColor(p.Text).SingleLine().Ellipsis("…")
 				})
 				if row.Clicked() {
 					m.SelectFrame(i)
@@ -915,23 +924,23 @@ func (m *Model) debugVars(c *ui.Context, p *ui.Theme) {
 	d := &m.debug
 	ui.Column(c).Width(320).Shrink(0).MinHeight(0).
 		BorderWidth(0, 1, 0, 0).BorderColor(p.Border).Children(func() {
-		ui.Row(c).Height(24).Padding(0, 8).AlignItems(ui.Center).Children(func() {
+		ui.Row(c).Height(26).Padding(0, 8).AlignItems(ui.Center).Children(func() {
 			name := "Variables"
 			if len(d.scopes) > 0 {
 				name = "Variables · " + d.scopes[0].Name
 			}
-			ui.Text(c, name).FontSize(11.5).Bold().TextColor(p.TextMuted).
+			ui.Text(c, name).FontSize(13).Bold().TextColor(p.TextMuted).
 				SingleLine().Ellipsis("…")
 		})
 		ui.Scroll(c).Grow(1).Children(func() {
 			for i, w := range d.watches {
 				i, w := i, w
-				row := ui.Row(c.Key(fmt.Sprintf("dwatch:%d", i))).Height(22).Padding(0, 8).
+				row := ui.Row(c.Key(fmt.Sprintf("dwatch:%d", i))).Height(24).Padding(0, 8).
 					Gap(6).AlignItems(ui.Center)
 				row.Children(func() {
-					ui.Text(c, w.Expr).FontSize(11.5).TextColor(p.TextMuted).
+					ui.Text(c, w.Expr).FontSize(13).TextColor(p.TextMuted).
 						SingleLine().Ellipsis("…")
-					ui.Text(c, "=").FontSize(11.5).TextColor(p.TextMuted)
+					ui.Text(c, "=").FontSize(13).TextColor(p.TextMuted)
 					value, color := w.Value, p.Text
 					if w.Err != "" {
 						value, color = w.Err, p.Danger
@@ -940,7 +949,7 @@ func (m *Model) debugVars(c *ui.Context, p *ui.Theme) {
 					} else if value == "" {
 						value = "(empty)"
 					}
-					ui.Text(c, value).FontSize(11.5).TextColor(color).
+					ui.Text(c, value).FontSize(13).TextColor(color).
 						SingleLine().Ellipsis("…").Grow(1)
 					if b := ui.Button(c, "×"); b.Clicked() {
 						m.RemoveWatch(i)
@@ -956,17 +965,17 @@ func (m *Model) debugVars(c *ui.Context, p *ui.Theme) {
 					hint = "No local variables"
 				}
 				ui.Row(c).Padding(8, 8).Children(func() {
-					ui.Text(c, hint).FontSize(11.5).TextColor(p.TextMuted)
+					ui.Text(c, hint).FontSize(12).TextColor(p.TextMuted)
 				})
 				return
 			}
 			for _, v := range d.vars {
-				ui.Row(c).Height(22).Padding(0, 8).Gap(6).AlignItems(ui.Center).
+				ui.Row(c).Height(24).Padding(0, 8).Gap(6).AlignItems(ui.Center).
 					Children(func() {
-						ui.Text(c, v.Name).FontSize(11.5).TextColor(p.TextMuted).
+						ui.Text(c, v.Name).FontSize(13).TextColor(p.TextMuted).
 							SingleLine().Ellipsis("…")
-						ui.Text(c, "=").FontSize(11.5).TextColor(p.TextMuted)
-						ui.Text(c, v.Value).FontSize(11.5).TextColor(p.Text).
+						ui.Text(c, "=").FontSize(13).TextColor(p.TextMuted)
+						ui.Text(c, v.Value).FontSize(13).TextColor(p.Text).
 							SingleLine().Ellipsis("…").Grow(1)
 					})
 			}
@@ -974,7 +983,7 @@ func (m *Model) debugVars(c *ui.Context, p *ui.Theme) {
 		ui.Row(c).Height(32).Shrink(0).Padding(0, 8).Gap(6).AlignItems(ui.Center).
 			BorderWidth(1, 0, 0, 0).BorderColor(p.Border).Children(func() {
 			if !d.paused {
-				ui.Text(c, "Evaluate in the current frame when paused").FontSize(10.5).
+				ui.Text(c, "Evaluate in the current frame when paused").FontSize(12).
 					TextColor(p.TextMuted).SingleLine().Ellipsis("…")
 				return
 			}
@@ -990,20 +999,20 @@ func (m *Model) debugVars(c *ui.Context, p *ui.Theme) {
 func (m *Model) debugConsole(c *ui.Context, p *ui.Theme) {
 	d := &m.debug
 	ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Children(func() {
-		ui.Row(c).Height(24).Padding(0, 8).Children(func() {
-			ui.Text(c, "Debug Console").FontSize(11.5).Bold().TextColor(p.TextMuted)
+		ui.Row(c).Height(26).Padding(0, 8).Children(func() {
+			ui.Text(c, "Debug Console").FontSize(13).Bold().TextColor(p.TextMuted)
 		})
 		ui.Scroll(c).Grow(1).Children(func() {
 			if len(d.output) == 0 {
 				ui.Row(c).Padding(8, 8).Children(func() {
-					ui.Text(c, "The program's output appears here").FontSize(11.5).TextColor(p.TextMuted)
+					ui.Text(c, "The program's output appears here").FontSize(12).TextColor(p.TextMuted)
 				})
 				return
 			}
 			if d.truncated {
 				ui.Row(c).Padding(4, 8).Children(func() {
 					ui.Text(c, "(Output truncated: earlier lines were omitted)").
-						FontSize(11).TextColor(p.TextMuted)
+						FontSize(12).TextColor(p.TextMuted)
 				})
 			}
 			for _, line := range d.output {
@@ -1016,7 +1025,7 @@ func (m *Model) debugConsole(c *ui.Context, p *ui.Theme) {
 					text = " "
 				}
 				ui.Row(c).Height(18).Padding(0, 8).Children(func() {
-					ui.Text(c, text).FontSize(11.5).TextColor(color).SingleLine()
+					ui.Text(c, text).FontSize(13).TextColor(color).SingleLine()
 				})
 			}
 		})

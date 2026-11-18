@@ -404,24 +404,24 @@ func (m *Model) commitDialog(c *ui.Context, p *ui.Theme) {
 		ui.Column(c).Width(560).Gap(8).Children(func() {
 			ui.Text(c, "Commit Changes").FontSize(13).Bold().TextColor(p.Text)
 			ui.TextArea(c, &s.message).Height(84)
-			ui.Text(c, "Commit message, for example: Fix the login timeout").FontSize(11).TextColor(p.TextMuted)
+			ui.Text(c, "Commit message, for example: Fix the login timeout").FontSize(12).TextColor(p.TextMuted)
 			ui.Text(c, fmt.Sprintf("%s selected", count(len(m.planCommit(s).included), "file", "files"))).
-				FontSize(11).TextColor(p.TextMuted)
+				FontSize(12).TextColor(p.TextMuted)
 			if len(files) == 0 {
-				ui.Text(c, "There are no changes to commit").FontSize(11.5).TextColor(p.TextMuted)
+				ui.Text(c, "There are no changes to commit").FontSize(12).TextColor(p.TextMuted)
 			} else {
 				ui.Scroll(c).Height(220).Children(func() {
 					for i, f := range files {
 						i, f := i, f
 						on := m.commitIncluded(s, f)
-						row := ui.Row(c.Key(fmt.Sprintf("commit:%d", i))).Gap(6).AlignItems(ui.Center)
+						row := ui.Row(c.Key(fmt.Sprintf("commit:%d", i))).Gap(4).AlignItems(ui.Center)
+						_, word, _ := vcsBadge(f)
+						row.Tooltip(word)
 						row.Children(func() {
 							ui.Checkbox(c, &on, "")
-							_, word, _ := vcsBadge(f)
-							ui.Text(c, filepath.Base(f.RelPath)).FontSize(12).TextColor(p.Text).
-								SingleLine().Ellipsis("…")
-							ui.Spacer(c)
-							ui.Text(c, word).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+							fileIconEl(c, oiPaletteOf(p), f.Path, 16, p.TextMuted)
+							ui.Text(c, filepath.Base(f.RelPath)).FontSize(13).
+								TextColor(vcsKindColor(p, f)).SingleLine().Ellipsis("…")
 						})
 						if on != m.commitIncluded(s, f) {
 							s.checks[f.Path] = on
@@ -436,11 +436,11 @@ func (m *Model) commitDialog(c *ui.Context, p *ui.Theme) {
 				ui.Checkbox(c, &s.runHooks, "Run Git hooks")
 			})
 			if s.err != "" {
-				ui.Text(c, s.err).FontSize(11).TextColor(p.Danger)
+				ui.Text(c, s.err).FontSize(12).TextColor(p.Danger)
 			}
 			ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
 				if s.busy {
-					ui.Text(c, "Committing…").FontSize(11.5).TextColor(p.TextMuted)
+					ui.Text(c, "Committing…").FontSize(12).TextColor(p.TextMuted)
 				}
 				if s.amend {
 					ui.Button(c, "Amend Commit").Disabled(s.busy).OnClick(m.submitCommit)

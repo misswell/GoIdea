@@ -870,14 +870,14 @@ func (m *Model) todoPanel(c *ui.Context, p *ui.Theme) {
 		if m.todo.limit {
 			ui.Row(c).Padding(2, 10).BorderWidth(0, 0, 1, 0).BorderColor(p.Border).
 				Children(func() {
-					ui.Text(c, "Too many matches; only the first ones are shown").FontSize(10.5).
+					ui.Text(c, "Too many matches; only the first ones are shown").FontSize(12).
 						TextColor(p.Warning).SingleLine()
 				})
 		}
 		ui.Scroll(c).Grow(1).Children(func() {
 			ui.Column(c).Padding(4, 0).Children(func() {
 				if hint := m.todoEmptyHint(); hint != "" {
-					ui.Text(c, hint).FontSize(11.5).TextColor(p.TextMuted)
+					ui.Text(c, hint).FontSize(12).TextColor(p.TextMuted)
 					return
 				}
 				for gi, g := range groups {
@@ -935,9 +935,9 @@ func (m *Model) todoTab(c *ui.Context, p *ui.Theme, id, label string, count int)
 		color = p.Text
 	}
 	r.Children(func() {
-		ui.Text(c, label).FontSize(11.5).TextColor(color).SingleLine()
+		ui.Text(c, label).FontSize(13).TextColor(color).SingleLine()
 		if count > 0 {
-			ui.Text(c, fmt.Sprintf("%d", count)).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+			ui.Text(c, fmt.Sprintf("%d", count)).FontSize(12).TextColor(p.TextMuted).SingleLine()
 		}
 	})
 	if r.Clicked() && !active {
@@ -959,7 +959,7 @@ func (m *Model) todoKeywordFilter(c *ui.Context, p *ui.Theme, pat TodoPattern) {
 		color = p.TextMuted
 	}
 	r.Children(func() {
-		ui.Text(c, key).FontSize(11).TextColor(color).SingleLine()
+		ui.Text(c, key).FontSize(12).TextColor(color).SingleLine()
 	})
 	if r.Clicked() {
 		m.toggleTodoKeyword(key)
@@ -980,7 +980,7 @@ func (m *Model) todoAction(c *ui.Context, p *ui.Theme, label string, active bool
 		color = p.Text
 	}
 	r.Children(func() {
-		ui.Text(c, label).FontSize(11).TextColor(color).SingleLine()
+		ui.Text(c, label).FontSize(12).TextColor(color).SingleLine()
 	})
 	if r.Clicked() {
 		run()
@@ -1000,10 +1000,10 @@ func (m *Model) todoScopeBar(c *ui.Context, p *ui.Theme) {
 	chosen := current
 	ui.Row(c).Height(32).Padding(0, 8).Gap(6).AlignItems(ui.Center).
 		BorderWidth(0, 0, 1, 0).BorderColor(p.Border).Children(func() {
-		ui.Text(c, "Scope: ").FontSize(10.5).TextColor(p.TextMuted)
+		ui.Text(c, "Scope: ").FontSize(12).TextColor(p.TextMuted)
 		ui.Select(c, &chosen, labels).Width(240)
 		if m.todo.scopeRunning {
-			ui.Text(c, "Scanning…").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+			ui.Text(c, "Scanning…").FontSize(12).TextColor(p.TextMuted).SingleLine()
 		}
 	})
 	if chosen != current && chosen != "" {
@@ -1022,25 +1022,28 @@ func (m *Model) todoFileRows(c *ui.Context, p *ui.Theme, gi int, g todoGroup) {
 	dir = strings.TrimPrefix(dir, m.Root())
 	dir = strings.TrimPrefix(dir, string(filepath.Separator))
 	collapsed := m.todo.collapsed[g.path]
-	head := ui.Row(c.Key(fmt.Sprintf("todofile:%d", gi))).Height(22).Gap(6).
-		Padding(0, 6).AlignItems(ui.Center)
+	oi := oiPaletteOf(p)
+	head := ui.Row(c.Key(fmt.Sprintf("todofile:%d", gi))).Height(24).Gap(4).
+		PaddingStart(4).PaddingEnd(8).Radius(5).AlignItems(ui.Center)
 	if head.Hovered() {
-		head.Background(p.SurfaceHover)
+		head.Background(oi.hoverTint)
 	}
 	head.Children(func() {
-		glyph := "▾"
+		chevron := ui.Row(c).Size(16, 16).Shrink(0).
+			Justify(ui.Center).AlignItems(ui.Center)
+		glyph := "general/chevronDown"
 		if collapsed {
-			glyph = "▸"
+			glyph = "general/chevronRight"
 		}
-		ui.Text(c, glyph).FontSize(10).TextColor(p.TextMuted)
-		ui.Text(c, filepath.Base(g.path)).FontSize(12).Bold().TextColor(p.Text).
-			SingleLine()
+		chevron.Children(func() { oiIconEl(c, glyph, 16, oi, oi.textMuted) })
+		fileIconEl(c, oi, g.path, 16, oi.textMuted).MarginEnd(2)
+		ui.Text(c, filepath.Base(g.path)).FontSize(13).TextColor(oi.text).SingleLine()
 		if dir != "" && dir != "." {
-			ui.Text(c, dir).FontSize(10.5).TextColor(p.TextMuted).SingleLine().Ellipsis("…")
+			ui.Text(c, dir).FontSize(12).TextColor(oi.textSubtle).SingleLine().Ellipsis("…")
 		}
 		ui.Spacer(c)
-		ui.Text(c, count(len(g.items), "item", "items")).FontSize(10.5).
-			TextColor(p.TextMuted).SingleLine()
+		ui.Text(c, count(len(g.items), "item", "items")).FontSize(12).
+			TextColor(oi.textSubtle).SingleLine()
 	})
 	if head.Clicked() {
 		m.ToggleTodoGroup(g.path)
@@ -1051,24 +1054,24 @@ func (m *Model) todoFileRows(c *ui.Context, p *ui.Theme, gi int, g todoGroup) {
 	for i, item := range g.items {
 		i, item := i, item
 		color := m.todoTone(item.Keyword, p)
-		r := ui.Row(c.Key(fmt.Sprintf("todo:%d:%d", gi, i))).Height(22).Padding(0, 6).
-			Gap(6).AlignItems(ui.Center).PaddingStart(22)
+		r := ui.Row(c.Key(fmt.Sprintf("todo:%d:%d", gi, i))).Height(24).
+			PaddingStart(26).PaddingEnd(8).Gap(6).Radius(5).AlignItems(ui.Center)
 		if r.Hovered() {
-			r.Background(p.SurfaceHover)
+			r.Background(oi.hoverTint)
 		}
 		r.Children(func() {
-			ui.Text(c, fmt.Sprintf("(%d, %d)", item.Line+1, item.Col+1)).FontSize(10.5).
-				TextColor(p.TextMuted).SingleLine()
+			ui.Text(c, fmt.Sprintf("(%d, %d)", item.Line+1, item.Col+1)).FontSize(12).
+				Font("monospace").TextColor(oi.textSubtle).SingleLine()
 			kw := item.Keyword
 			rest := strings.TrimPrefix(item.Text, item.Keyword)
 			if strings.HasPrefix(item.Text, kw) {
-				ui.Text(c, kw).FontSize(11).Bold().TextColor(color).SingleLine()
+				ui.Text(c, kw).FontSize(13).Bold().TextColor(color).SingleLine()
 				if rest != "" {
-					ui.Text(c, rest).FontSize(11).Italic().TextColor(color).
+					ui.Text(c, rest).FontSize(13).Italic().TextColor(color).
 						SingleLine().Ellipsis("…")
 				}
 			} else {
-				ui.Text(c, item.Text).FontSize(11).Italic().TextColor(color).
+				ui.Text(c, item.Text).FontSize(13).Italic().TextColor(color).
 					SingleLine().Ellipsis("…")
 			}
 		})

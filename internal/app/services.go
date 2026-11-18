@@ -136,7 +136,7 @@ func (m *Model) servicesPanel(c *ui.Context, p *ui.Theme) {
 					row := row
 					if row.section != section {
 						section = row.section
-						ui.Text(c, section).FontSize(10.5).Bold().TextColor(p.TextMuted).
+						ui.Text(c, section).FontSize(12).Bold().TextColor(p.TextMuted).
 							Padding(8, 4).SingleLine()
 					}
 					r := ui.Row(c.Key("service:"+section+":"+row.label)).Height(22).Padding(16, 6).
@@ -148,7 +148,7 @@ func (m *Model) servicesPanel(c *ui.Context, p *ui.Theme) {
 						ui.Text(c, row.label).FontSize(12).TextColor(p.Text).SingleLine()
 						ui.Spacer(c)
 						if row.detail != "" {
-							ui.Text(c, row.detail).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+							ui.Text(c, row.detail).FontSize(12).TextColor(p.TextMuted).SingleLine()
 						}
 						_ = i
 					})

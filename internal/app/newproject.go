@@ -258,7 +258,7 @@ func (m *Model) newProjectDialog(c *ui.Context, p *ui.Theme) {
 	path := m.NewProjectPath()
 	ui.Modal(c, &open, func() {
 		ui.Column(c).Width(760).Gap(12).Children(func() {
-			ui.Text(c, "New Project").FontSize(15).Bold().TextColor(p.Text).SingleLine()
+			ui.Text(c, "New Project").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			m.newProjectScaffoldPanel(c, p)
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "Name:").FontSize(12).TextColor(p.Text).Width(64).SingleLine()
@@ -282,13 +282,13 @@ func (m *Model) newProjectDialog(c *ui.Context, p *ui.Theme) {
 			if nameErr != "" {
 				tone = p.Danger
 			}
-			ui.Text(c, hint).FontSize(10.5).TextColor(tone).SingleLine().Ellipsis("…")
+			ui.Text(c, hint).FontSize(12).TextColor(tone).SingleLine().Ellipsis("…")
 			git := st.gitInit
 			if ui.Checkbox(c, &git, "Create Git repository").Changed() {
 				st.gitInit = git
 			}
 			if st.err != "" {
-				ui.Text(c, st.err).FontSize(11).TextColor(p.Danger).SingleLine().Ellipsis("…")
+				ui.Text(c, st.err).FontSize(12).TextColor(p.Danger).SingleLine().Ellipsis("…")
 			}
 			ui.Row(c).Justify(ui.End).Gap(8).Children(func() {
 				if ui.Button(c, "Cancel").Clicked() {
@@ -309,7 +309,7 @@ func (m *Model) newProjectDialog(c *ui.Context, p *ui.Theme) {
 					m.CreateNewProject()
 				}
 				if st.busy {
-					ui.Text(c, "Creating…").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+					ui.Text(c, "Creating…").FontSize(12).TextColor(p.TextMuted).SingleLine()
 				}
 			})
 		})

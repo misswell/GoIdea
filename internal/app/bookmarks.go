@@ -903,10 +903,10 @@ func (m *Model) newListDialog(c *ui.Context, p *ui.Theme) {
 			if in.Submitted() {
 				m.CreateBookmarkList()
 			}
-			ui.Text(c, hint).FontSize(10.5).TextColor(p.TextMuted).
+			ui.Text(c, hint).FontSize(12).TextColor(p.TextMuted).
 				SingleLine()
 			if v.err != "" {
-				ui.Text(c, v.err).FontSize(11).TextColor(p.Danger).SingleLine().Ellipsis("…")
+				ui.Text(c, v.err).FontSize(12).TextColor(p.Danger).SingleLine().Ellipsis("…")
 			}
 			ui.Row(c).Gap(8).Children(func() {
 				ui.Button(c, "Cancel").OnClick(func() { m.closeNewBookmarkList() })
@@ -930,7 +930,7 @@ func (m *Model) moveBookmarkDialog(c *ui.Context, p *ui.Theme) {
 	d := ui.Modal(c, &open, func() {
 		ui.Column(c).Width(360).Gap(6).Children(func() {
 			ui.Text(c, "Move to List").FontSize(13).Bold().TextColor(p.Text).SingleLine()
-			ui.Text(c, "Choose the bookmark's new list:").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+			ui.Text(c, "Choose the bookmark's new list:").FontSize(12).TextColor(p.TextMuted).SingleLine()
 			for _, l := range normalizeBookmarkLists(m.bookmarkLists) {
 				if l.ID == src {
 					continue
@@ -963,7 +963,7 @@ func (m *Model) bookmarkDescriptionDialog(c *ui.Context, p *ui.Theme) {
 			if in.Submitted() {
 				m.SaveBookmarkDescription()
 			}
-			ui.Text(c, "The description shows in the bookmark list; empty shows the line's text.").FontSize(10.5).
+			ui.Text(c, "The description shows in the bookmark list; empty shows the line's text.").FontSize(12).
 				TextColor(p.TextMuted).SingleLine()
 			ui.Row(c).Gap(8).Children(func() {
 				ui.Button(c, "Cancel").OnClick(func() { m.closeBookmarkDescription() })
@@ -987,7 +987,7 @@ func (m *Model) deleteListDialog(c *ui.Context, p *ui.Theme) {
 		ui.Column(c).Width(420).Gap(10).Children(func() {
 			ui.Text(c, "Delete Bookmark List").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			ui.Text(c, fmt.Sprintf("Delete the list “%s”? Its %d bookmarks are deleted too.", v.name, v.count)).
-				FontSize(11.5).TextColor(p.TextMuted)
+				FontSize(12).TextColor(p.TextMuted)
 			ui.Row(c).Gap(8).Children(func() {
 				ui.Button(c, "Delete").OnClick(m.ConfirmDeleteBookmarkList)
 				ui.Button(c, "Cancel").OnClick(m.closeDeleteBookmarkList)
@@ -1010,7 +1010,7 @@ func (m *Model) bookmarkWindowRows(c *ui.Context, p *ui.Theme) {
 	root := m.Root()
 	ui.Row(c).Height(26).Padding(0, 8).Gap(6).AlignItems(ui.Center).Children(func() {
 		ui.Text(c, count(len(m.bookmarks)+len(m.pathBookmarks), "bookmark", "bookmarks")).
-			FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+			FontSize(12).TextColor(p.TextMuted).SingleLine()
 		ui.Spacer(c)
 		if m.rowChip(c, p, "bookmark-window:newList", "New List") {
 			m.OpenNewBookmarkList()
@@ -1019,102 +1019,129 @@ func (m *Model) bookmarkWindowRows(c *ui.Context, p *ui.Theme) {
 	empty := len(m.bookmarks) == 0 && len(m.pathBookmarks) == 0
 	if empty {
 		ui.Row(c).Padding(10, 8).Children(func() {
-			ui.Text(c, "No bookmarks yet; press F3 in the editor to mark the current line.").FontSize(11).
+			ui.Text(c, "No bookmarks yet; press F3 in the editor to mark the current line.").FontSize(12).
 				TextColor(p.TextMuted)
 		})
 	}
 	var jumpPath, removePath, makeDefault, renameList, deleteList string
 	var moveFilePath, moveLinePath string
 	var jumpLine, removeLine, moveLine = -1, -1, -1
-	for _, l := range lists {
-		l := l
-		paths := pathBookmarksInList(m.pathBookmarks, l.ID)
-		marks := bookmarksInList(m.bookmarks, l.ID)
-		ui.Row(c).Height(22).Padding(6, 8).Gap(6).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, l.Name).FontSize(10.5).Bold().TextColor(p.TextMuted).SingleLine()
-			ui.Text(c, fmt.Sprintf("%d", len(paths)+len(marks))).FontSize(10).
-				TextColor(p.TextMuted)
-			ui.Spacer(c)
-			if l.ID == m.defaultList {
-				ui.Text(c, "Default").FontSize(9.5).TextColor(p.TextMuted)
-			} else if m.rowChip(c, p, "bookmark-window:default:"+l.ID, "Set as Default") {
-				makeDefault = l.ID
+	oi := oiPaletteOf(p)
+	ui.Column(c).Padding(0, 6).Children(func() {
+		for _, l := range lists {
+			l := l
+			paths := pathBookmarksInList(m.pathBookmarks, l.ID)
+			marks := bookmarksInList(m.bookmarks, l.ID)
+			head := ui.Row(c).Height(24).PaddingStart(4).PaddingEnd(8).Gap(4).
+				Radius(5).AlignItems(ui.Center)
+			if head.Hovered() {
+				head.Background(oi.hoverTint)
 			}
-			if m.rowChip(c, p, "bookmark-window:rename:"+l.ID, "Rename") {
-				renameList = l.ID
-			}
-			if m.rowChip(c, p, "bookmark-window:deleteList:"+l.ID, "Delete") {
-				deleteList = l.ID
-			}
-		})
-		for _, pb := range paths {
-			pb := pb
-			r := ui.Row(c.Key("bookmark-window:path:"+l.ID+":"+pb.Path)).Height(22).
-				Padding(0, 8).Gap(6).AlignItems(ui.Center)
-			if r.Hovered() {
-				r.Background(p.SurfaceHover)
-			}
-			r.Children(func() {
-				label := pathBookmarkLabel(root, pb.Path)
-				if pb.Dir {
-					label += "/"
+			head.Children(func() {
+				oiIconEl(c, "toolwindows/bookmarks", 16, oi, oi.textMuted).MarginEnd(2)
+				label := ui.Text(c, l.Name).FontSize(13).SingleLine().Ellipsis("…")
+				if l.ID == m.defaultList {
+					label.TextColor(oi.textStrong).Bold()
+				} else {
+					label.TextColor(oi.textStrong)
 				}
-				ui.Text(c, label).FontSize(11.5).TextColor(p.Text).
-					SingleLine().Ellipsis("…")
+				ui.Text(c, count(len(paths)+len(marks), "bookmark", "bookmarks")).FontSize(13).
+					TextColor(oi.textSubtle).SingleLine()
 				ui.Spacer(c)
-				if m.rowChip(c, p, "bookmark-window:pathMove:"+l.ID+":"+pb.Path, "Move") {
-					moveFilePath = pb.Path
-				}
-				if m.rowChip(c, p, "bookmark-window:pathDel:"+l.ID+":"+pb.Path, "Delete") {
-					removePath = pb.Path
+				if head.Hovered() {
+					if l.ID == m.defaultList {
+						ui.Text(c, "Default").FontSize(12).TextColor(oi.textSubtle)
+					} else if m.rowChip(c, p, "bookmark-window:default:"+l.ID, "Set as Default") {
+						makeDefault = l.ID
+					}
+					if m.rowChip(c, p, "bookmark-window:rename:"+l.ID, "Rename") {
+						renameList = l.ID
+					}
+					if m.rowChip(c, p, "bookmark-window:deleteList:"+l.ID, "Delete") {
+						deleteList = l.ID
+					}
 				}
 			})
-			if r.Clicked() {
-				if pb.Dir {
-					m.ShowProject()
-					if m.tree != nil {
-						m.tree.reveal(pb.Path)
-					}
-					m.invalidate()
-				} else {
-					jumpPath = pb.Path
-				}
-			}
-		}
-		for _, b := range marks {
-			b := b
-			key := fmt.Sprintf("bookmark-window:%s:%s:%d", l.ID, b.Path, b.Line)
-			ui.Column(c).Children(func() {
-				r := ui.Row(c.Key(key)).Height(22).Padding(0, 8).Gap(6).
-					AlignItems(ui.Center)
+			for _, pb := range paths {
+				pb := pb
+				r := ui.Row(c.Key("bookmark-window:path:" + l.ID + ":" + pb.Path)).Height(24).
+					PaddingStart(24).PaddingEnd(8).Gap(4).Radius(5).AlignItems(ui.Center)
 				if r.Hovered() {
-					r.Background(p.SurfaceHover)
+					r.Background(oi.hoverTint)
 				}
 				r.Children(func() {
-					if b.Mnemonic != "" {
-						ui.Text(c, b.Mnemonic).FontSize(10.5).Bold().TextColor(p.Accent).
-							SingleLine()
+					label := pathBookmarkLabel(root, pb.Path)
+					if pb.Dir {
+						folderIconEl(c, oi, "plain", 16, oi.textMuted)
+						label += "/"
+					} else {
+						fileIconEl(c, oi, pb.Path, 16, oi.textMuted)
 					}
-					ui.Text(c, bookmarkTitle(b)).FontSize(12).TextColor(p.Text).
+					ui.Text(c, label).FontSize(13).TextColor(oi.textStrong).
 						SingleLine().Ellipsis("…")
 					ui.Spacer(c)
-					if m.rowChip(c, p, key+":move", "Move") {
-						moveLinePath, moveLine = b.Path, b.Line
-					}
-					if m.rowChip(c, p, key+":del", "Delete") {
-						removePath, removeLine = b.Path, b.Line
+					if r.Hovered() {
+						if m.rowChip(c, p, "bookmark-window:pathMove:"+l.ID+":"+pb.Path, "Move") {
+							moveFilePath = pb.Path
+						}
+						if m.rowChip(c, p, "bookmark-window:pathDel:"+l.ID+":"+pb.Path, "Delete") {
+							removePath = pb.Path
+						}
 					}
 				})
 				if r.Clicked() {
-					jumpPath, jumpLine = b.Path, b.Line
+					if pb.Dir {
+						m.ShowProject()
+						if m.tree != nil {
+							m.tree.reveal(pb.Path)
+						}
+						m.invalidate()
+					} else {
+						jumpPath = pb.Path
+					}
 				}
-				ui.Row(c).Padding(0, 8).Children(func() {
-					ui.Text(c, symbolWhere(root, b.Path, b.Line)).FontSize(10).
-						TextColor(p.TextMuted).SingleLine().Ellipsis("…")
+			}
+			for _, b := range marks {
+				b := b
+				key := fmt.Sprintf("bookmark-window:%s:%s:%d", l.ID, b.Path, b.Line)
+				ui.Column(c).Children(func() {
+					r := ui.Row(c.Key(key)).Height(24).PaddingStart(44).PaddingEnd(8).Gap(4).
+						Radius(5).AlignItems(ui.Center)
+					if r.Hovered() {
+						r.Background(oi.hoverTint)
+					}
+					r.Children(func() {
+						if b.Mnemonic != "" {
+							ui.Row(c).Size(14, 14).Shrink(0).Justify(ui.Center).AlignItems(ui.Center).
+								Radius(2).Background(oi.accent.Mix(oi.island, 0.82)).
+								Border(1, oi.accent).Children(func() {
+								ui.Text(c, b.Mnemonic).FontSize(12).Bold().TextColor(oi.textStrong).SingleLine()
+							})
+						}
+						oiIconEl(c, "bookmarks/bookmark", 16, oi, oi.textSubtle).MarginEnd(2)
+						ui.Text(c, bookmarkTitle(b)).FontSize(13).TextColor(oi.textStrong).
+							SingleLine().Ellipsis("…")
+						ui.Spacer(c)
+						if r.Hovered() {
+							if m.rowChip(c, p, key+":move", "Move") {
+								moveLinePath, moveLine = b.Path, b.Line
+							}
+							if m.rowChip(c, p, key+":del", "Delete") {
+								removePath, removeLine = b.Path, b.Line
+							}
+						}
+					})
+					if r.Clicked() {
+						jumpPath, jumpLine = b.Path, b.Line
+					}
+					ui.Row(c).PaddingStart(68).PaddingEnd(8).Children(func() {
+						ui.Text(c, symbolWhere(root, b.Path, b.Line)).FontSize(12).
+							TextColor(oi.textSubtle).SingleLine().Ellipsis("…")
+					})
 				})
-			})
+			}
 		}
-	}
+	})
 	switch {
 	case renameList != "":
 		m.OpenRenameBookmarkList(renameList)
@@ -1441,11 +1468,11 @@ func (m *Model) bookmarksDialog(c *ui.Context, p *ui.Theme) {
 		ui.Column(c).Width(520).Gap(8).Children(func() {
 			ui.Text(c, "Bookmarks").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			if len(items) == 0 {
-				ui.Text(c, "No bookmarks yet; press F3 in the editor to mark the current line.").FontSize(11).
+				ui.Text(c, "No bookmarks yet; press F3 in the editor to mark the current line.").FontSize(12).
 					TextColor(p.TextMuted).SingleLine()
 				return
 			}
-			ui.Text(c, fmt.Sprintf("%s · Enter opens · Cmd+F3 closes", count(len(items), "bookmark", "bookmarks"))).FontSize(10.5).
+			ui.Text(c, fmt.Sprintf("%s · Enter opens · Cmd+F3 closes", count(len(items), "bookmark", "bookmarks"))).FontSize(12).
 				TextColor(p.TextMuted).SingleLine()
 			root := m.Root()
 			var jump, remove = -1, -1
@@ -1456,7 +1483,7 @@ func (m *Model) bookmarksDialog(c *ui.Context, p *ui.Theme) {
 						r := r
 						if !r.IsItem {
 							ui.Row(c).Height(22).Padding(6, 8).Children(func() {
-								ui.Text(c, r.Header).FontSize(10.5).Bold().
+								ui.Text(c, r.Header).FontSize(12).Bold().
 									TextColor(p.TextMuted).SingleLine()
 							})
 							continue
@@ -1476,13 +1503,13 @@ func (m *Model) bookmarksDialog(c *ui.Context, p *ui.Theme) {
 							} else {
 								b, _ := bookmarkAt(m.bookmarks, r.Item.Path, r.Item.Line)
 								if b.Mnemonic != "" {
-									ui.Text(c, b.Mnemonic).FontSize(10.5).Bold().
+									ui.Text(c, b.Mnemonic).FontSize(12).Bold().
 										TextColor(p.Accent).SingleLine()
 								}
 								ui.Text(c, bookmarkTitle(b)).FontSize(12).TextColor(p.Text).
 									SingleLine().Ellipsis("…")
 								ui.Spacer(c)
-								ui.Text(c, symbolWhere(root, b.Path, b.Line)).FontSize(10.5).
+								ui.Text(c, symbolWhere(root, b.Path, b.Line)).FontSize(12).
 									TextColor(p.Accent).SingleLine().Ellipsis("…")
 							}
 							if m.rowChip(c, p, fmt.Sprintf("bookmark:del:%d", i), "Delete") {
@@ -1541,7 +1568,7 @@ func (m *Model) mnemonicDialog(c *ui.Context, p *ui.Theme) {
 			ui.Text(c, "Bookmark Mnemonics").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			t := m.tab()
 			if t == nil {
-				ui.Text(c, "Open a file first.").FontSize(11).TextColor(p.TextMuted).SingleLine()
+				ui.Text(c, "Open a file first.").FontSize(12).TextColor(p.TextMuted).SingleLine()
 				return
 			}
 			pos := t.state.CursorPos()
@@ -1552,7 +1579,7 @@ func (m *Model) mnemonicDialog(c *ui.Context, p *ui.Theme) {
 				}
 			}
 			ui.Text(c, fmt.Sprintf("%s:%d · a bookmark with that key loses it", filepath.Base(t.doc.Path()), pos.Line+1)).
-				FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+				FontSize(12).TextColor(p.TextMuted).SingleLine()
 			clear := false
 			pick := ""
 			for _, group := range []string{"1234567890", "ABCDEFGHI", "JKLMNOPQR", "STUVWXYZ"} {

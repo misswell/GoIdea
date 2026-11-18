@@ -222,11 +222,11 @@ func (m *Model) filesDialog(c *ui.Context, p *ui.Theme) {
 					}
 				}
 				if text != "" {
-					ui.Text(c, text).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+					ui.Text(c, text).FontSize(12).TextColor(p.TextMuted).SingleLine()
 				}
 			})
 			if f.err != "" {
-				ui.Text(c, f.err).FontSize(11).TextColor(p.Danger).SingleLine().Ellipsis("…")
+				ui.Text(c, f.err).FontSize(12).TextColor(p.Danger).SingleLine().Ellipsis("…")
 			}
 			if len(f.items) == 0 {
 				return
@@ -245,11 +245,12 @@ func (m *Model) filesDialog(c *ui.Context, p *ui.Theme) {
 							r.Background(p.SurfaceHover)
 						}
 						r.Children(func() {
+							fileIconEl(c, oiPaletteOf(p), fm.Path, 16, p.TextMuted)
 							name, dir := filePathParts(fm.RelPath)
 							ui.Text(c, name).FontSize(12).Bold().TextColor(p.Text).
 								SingleLine().Ellipsis("…")
 							if dir != "" {
-								ui.Text(c, dir).FontSize(10.5).TextColor(p.TextMuted).
+								ui.Text(c, dir).FontSize(12).TextColor(p.TextMuted).
 									SingleLine().Ellipsis("…")
 							}
 						})

@@ -25,30 +25,33 @@ func (m *Model) runWidget(c *ui.Context, p *ui.Theme, oi oiColors) {
 		}
 		if live || debugging {
 			// While a session runs the widget offers Rerun, and Resume when
-			// the debugger is paused, as OpenIDEA does.
+			// the debugger is paused, as OpenIDEA does. The solid buttons
+			// carry the white stroke drawings upstream swaps in.
 			if debugging && m.debug.paused {
-				m.runWidgetButton(c, p, oi, "resume", "Resume Program", iconRun, ui.Transparent, func() {
+				m.runWidgetButton(c, p, oi, "resume", "Resume Program", "run/resume", 20, ui.Transparent, func() {
 					m.RunCommand("run.continue")
 				})
 			}
+			rerunIcon := "run/rerun_stroke"
 			if debugging {
-				m.runWidgetButton(c, p, oi, "rerun", titled("Rerun", name), iconRun, oi.success, func() {
-					m.DebugRerun()
-				})
-			} else {
-				m.runWidgetButton(c, p, oi, "rerun", titled("Rerun", name), iconRun, oi.success, func() {
-					m.Rerun()
-				})
+				rerunIcon = "run/restartDebug_stroke"
 			}
-			m.runWidgetButton(c, p, oi, "stop", titled("Stop", name), iconStop, oi.danger, func() {
+			m.runWidgetButton(c, p, oi, "rerun", titled("Rerun", name), rerunIcon, 16, oi.success, func() {
+				if debugging {
+					m.DebugRerun()
+					return
+				}
+				m.Rerun()
+			})
+			m.runWidgetButton(c, p, oi, "stop", titled("Stop", name), "run/stop_stroke", 16, oi.danger, func() {
 				m.RunCommand("run.stop")
 			})
 			return
 		}
-		m.runWidgetButton(c, p, oi, "run", titled("Run", name), iconRun, ui.Transparent, func() {
+		m.runWidgetButton(c, p, oi, "run", titled("Run", name), "run/run", 20, ui.Transparent, func() {
 			m.RunCommand("run.start")
 		})
-		m.runWidgetButton(c, p, oi, "debug", titled("Debug", name), iconDebug, ui.Transparent, func() {
+		m.runWidgetButton(c, p, oi, "debug", titled("Debug", name), "run/debug", 20, ui.Transparent, func() {
 			m.RunCommand("run.debug")
 		})
 	})
@@ -78,9 +81,9 @@ func (m *Model) runConfigChooser(c *ui.Context, p *ui.Theme, oi oiColors) {
 	}
 	w.Tooltip("Run/Debug Configurations")
 	w.Children(func() {
-		ui.Icon(c, iconRun).Size(16, 16).TextColor(oi.textSecondary)
+		oiIconEl(c, "run/run", 16, oi, oi.icon)
 		ui.Text(c, label).FontSize(13).TextColor(oi.textStrong).SingleLine().Ellipsis("…")
-		ui.Icon(c, iconChevronDown).Size(12, 12).TextColor(oi.textSubtle)
+		oiIconEl(c, "general/chevronDown", 14, oi, oi.textSubtle)
 	})
 	w.Menu(func(menu *ui.Menu) {
 		if menu.Item("Choose Run/Debug Configuration…").Chosen() {
@@ -111,20 +114,19 @@ func (m *Model) runConfigChooser(c *ui.Context, p *ui.Theme, oi oiColors) {
 }
 
 // runWidgetButton is one 30px control of the widget, solid in the colour of
-// its state while a session is live and transparent otherwise.
-func (m *Model) runWidgetButton(c *ui.Context, p *ui.Theme, oi oiColors, key, tip string, icon *ui.SVG, fill ui.Color, onClick func()) {
+// its state while a session is live and transparent otherwise. icon is the
+// drawing under expui/run and size its DIP size, as the React widget sets.
+func (m *Model) runWidgetButton(c *ui.Context, p *ui.Theme, oi oiColors, key, tip, icon string, size float32, fill ui.Color, onClick func()) {
 	b := ui.ButtonBase(c.Key("title:run-"+key)).Size(oiStripeButton, oiStripeButton).
 		Radius(6).Justify(ui.Center).AlignItems(ui.Center).Cursor(ui.CursorPointer)
-	tone := oi.textSecondary
 	if fill != ui.Transparent {
 		b.Background(fill)
-		tone = ui.Hex("#ffffff")
 	} else if b.Hovered() {
 		b.Background(oi.toolbarHover)
 	}
 	b.Tooltip(tip)
 	b.Children(func() {
-		ui.Icon(c, icon).Size(18, 18).TextColor(tone)
+		oiIconEl(c, icon, size, oi, oi.icon)
 	})
 	if b.Clicked() {
 		onClick()
@@ -140,7 +142,7 @@ func (m *Model) runMoreButton(c *ui.Context, p *ui.Theme, oi oiColors) {
 	}
 	b.Tooltip("More Actions")
 	b.Children(func() {
-		ui.Icon(c, iconWelcomeMore).Size(18, 18).TextColor(oi.textSecondary)
+		oiIconEl(c, "general/moreVertical", 20, oi, oi.icon)
 	})
 	b.Menu(func(menu *ui.Menu) {
 		name := ""

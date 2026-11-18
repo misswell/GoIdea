@@ -267,7 +267,7 @@ func (m *Model) implementationDialog(c *ui.Context, p *ui.Theme) {
 			if busy {
 				hint = fmt.Sprintf("%s · still searching… · Esc cancels", count(len(items), "implementation", "implementations"))
 			}
-			ui.Text(c, hint).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+			ui.Text(c, hint).FontSize(12).TextColor(p.TextMuted).SingleLine()
 			root := m.Root()
 			ui.Scroll(c).Height(320).Children(func() {
 				ui.Column(c).Children(func() {

@@ -88,6 +88,20 @@ func TestCheckForUpdatesAnnouncesAsAStickyNotification(t *testing.T) {
 	}
 }
 
+func TestUpdateSummaryReadsAsPlainText(t *testing.T) {
+	cases := map[string]string{
+		"The first paragraph.\n\n- one fix":          "The first paragraph.",
+		"- **Check for Updates** now runs in a task": "Check for Updates now runs in a task",
+		"# Heading\n\n`code` and __bold__":           "Heading",
+		"":                                           "",
+	}
+	for notes, want := range cases {
+		if got := updateSummary(notes); got != want {
+			t.Errorf("updateSummary(%q) = %q, want %q", notes, got, want)
+		}
+	}
+}
+
 func TestCancellingACheckDropsItsAnswer(t *testing.T) {
 	release := make(chan struct{})
 	updateFeedAt(t, "99.0.0", "", release)

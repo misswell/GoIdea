@@ -11,15 +11,20 @@ type oiColors struct {
 	island, elev, frame, popup ui.Color
 	hover, pressed             ui.Color
 	border, borderStrong       ui.Color
+	popupBorder                ui.Color
 	textStrong, text           ui.Color
 	textSecondary, textMuted   ui.Color
 	textSubtle, textFaint      ui.Color
+	icon                       ui.Color
 	accent, link               ui.Color
 	danger, warning, success   ui.Color
 	ignored                    ui.Color
-	selected, selectedInactive ui.Color
-	hoverTint                  ui.Color
-	buttonBorder, buttonHover  ui.Color
+	// The change colours of a VCS row's label.
+	vcsModified, vcsAdded, vcsDeleted     ui.Color
+	vcsUntracked, vcsIgnored, vcsConflict ui.Color
+	selected, selectedInactive            ui.Color
+	hoverTint                             ui.Color
+	buttonBorder, buttonHover             ui.Color
 	// Workbench chrome: the title bar widgets and stripes hover, a stripe's
 	// selected button, and the selected editor tab.
 	toolbarHover, stripeHover, stripeSelected ui.Color
@@ -42,15 +47,23 @@ func openideaColors(dark bool) oiColors {
 			pressed:           ui.Hex("#40434a"),
 			border:            ui.Hex("#26282c"),
 			borderStrong:      ui.Hex("#40434a"),
+			popupBorder:       ui.Hex("#33353b"),
 			textStrong:        ui.Hex("#dfe1e5"),
 			text:              ui.Hex("#d1d3d9"),
 			textSecondary:     ui.Hex("#9fa2a8"),
 			textMuted:         ui.Hex("#8c8f95"),
 			textSubtle:        ui.Hex("#73767c"),
 			textFaint:         ui.Hex("#5f6269"),
+			icon:              ui.Hex("#ced0d6"),
 			accent:            ui.Hex("#3871e1"),
 			link:              ui.Hex("#71a1fe"),
 			ignored:           ui.Hex("#d69a6b"),
+			vcsModified:       ui.Hex("#70aeff"),
+			vcsAdded:          ui.Hex("#73bd79"),
+			vcsDeleted:        ui.Hex("#6f737a"),
+			vcsUntracked:      ui.Hex("#e88f89"),
+			vcsIgnored:        ui.Hex("#d69a6b"),
+			vcsConflict:       ui.Hex("#de6a66"),
 			danger:            ui.Hex("#f57e84"),
 			warning:           ui.Hex("#d59637"),
 			success:           ui.Hex("#6db083"),
@@ -79,15 +92,23 @@ func openideaColors(dark bool) oiColors {
 		pressed:           ui.Hex("#e2e5ea"),
 		border:            ui.Hex("#e9eaee"),
 		borderStrong:      ui.Hex("#d1d3d9"),
+		popupBorder:       ui.Hex("#d1d3d9"),
 		textStrong:        ui.Hex("#000000"),
 		text:              ui.Hex("#000000"),
 		textSecondary:     ui.Hex("#5f6269"),
 		textMuted:         ui.Hex("#6c707e"),
 		textSubtle:        ui.Hex("#73767c"),
 		textFaint:         ui.Hex("#9fa2a8"),
+		icon:              ui.Hex("#6c707e"),
 		accent:            ui.Hex("#3871e1"),
 		link:              ui.Hex("#2f5eb9"),
 		ignored:           ui.Hex("#8c4f00"),
+		vcsModified:       ui.Hex("#0033b3"),
+		vcsAdded:          ui.Hex("#067d17"),
+		vcsDeleted:        ui.Hex("#6c707e"),
+		vcsUntracked:      ui.Hex("#b23247"),
+		vcsIgnored:        ui.Hex("#8c4f00"),
+		vcsConflict:       ui.Hex("#de1b2e"),
 		danger:            ui.Hex("#c54e58"),
 		warning:           ui.Hex("#a56906"),
 		success:           ui.Hex("#338555"),
@@ -129,6 +150,7 @@ func openideaTheme(dark bool) *ui.Theme {
 	accentPressed := oi.accent.Mix(ui.Hex("#000000"), 0.2)
 	return &ui.Theme{
 		Dark:           dark,
+		Font:           oiFontUI,
 		Background:     oi.island,
 		Surface:        oi.elev,
 		SurfaceHover:   oi.hover,

@@ -273,7 +273,7 @@ func (m *Model) runConfigsDialog(c *ui.Context, p *ui.Theme) {
 		ui.Column(c).Width(640).Gap(8).Children(func() {
 			ui.Text(c, "Run/Debug Configurations").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			if len(d.items) == 0 {
-				ui.Text(c, "The project has no run configurations yet.").FontSize(11).TextColor(p.TextMuted).SingleLine()
+				ui.Text(c, "The project has no run configurations yet.").FontSize(12).TextColor(p.TextMuted).SingleLine()
 			}
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				list := make([]string, 0, len(d.items))
@@ -305,44 +305,44 @@ func (m *Model) runConfigsDialog(c *ui.Context, p *ui.Theme) {
 			if cfg := d.selected(); cfg != nil {
 				ui.Column(c).Gap(6).Children(func() {
 					ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-						ui.Text(c, "Name").FontSize(11).TextColor(p.TextMuted).Width(140).SingleLine()
+						ui.Text(c, "Name").FontSize(12).TextColor(p.TextMuted).Width(140).SingleLine()
 						ui.TextInput(c, &d.name).Width(300)
-						ui.Text(c, adapter.KindLabel(cfg.Kind)).FontSize(11).TextColor(p.TextMuted).SingleLine()
+						ui.Text(c, adapter.KindLabel(cfg.Kind)).FontSize(12).TextColor(p.TextMuted).SingleLine()
 					})
 					if e := d.errs["name"]; e != "" {
-						ui.Text(c, e).FontSize(10.5).TextColor(p.Danger).SingleLine()
+						ui.Text(c, e).FontSize(12).TextColor(p.Danger).SingleLine()
 					}
 					ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-						ui.Text(c, "Command").FontSize(11).TextColor(p.TextMuted).Width(140).SingleLine()
+						ui.Text(c, "Command").FontSize(12).TextColor(p.TextMuted).Width(140).SingleLine()
 						ui.TextInput(c, &cfg.Command).Width(430)
 					})
 					if e := d.errs["command"]; e != "" {
-						ui.Text(c, e).FontSize(10.5).TextColor(p.Danger).SingleLine()
+						ui.Text(c, e).FontSize(12).TextColor(p.Danger).SingleLine()
 					}
 					ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-						ui.Text(c, "Program arguments").FontSize(11).TextColor(p.TextMuted).Width(140).SingleLine()
+						ui.Text(c, "Program arguments").FontSize(12).TextColor(p.TextMuted).Width(140).SingleLine()
 						ui.TextInput(c, &d.args).Width(430)
 					})
 					ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-						ui.Text(c, "Working directory").FontSize(11).TextColor(p.TextMuted).Width(140).SingleLine()
-						ui.Text(c, m.Root()+"/").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+						ui.Text(c, "Working directory").FontSize(12).TextColor(p.TextMuted).Width(140).SingleLine()
+						ui.Text(c, m.Root()+"/").FontSize(12).TextColor(p.TextMuted).SingleLine()
 						ui.TextInput(c, &d.cwd).Width(240)
 					})
 					if e := d.errs["cwd"]; e != "" {
-						ui.Text(c, e).FontSize(10.5).TextColor(p.Danger).SingleLine()
+						ui.Text(c, e).FontSize(12).TextColor(p.Danger).SingleLine()
 					}
 					ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-						ui.Text(c, "Environment variables").FontSize(11).TextColor(p.TextMuted).Width(140).SingleLine()
+						ui.Text(c, "Environment variables").FontSize(12).TextColor(p.TextMuted).Width(140).SingleLine()
 						ui.TextInput(c, &d.env).Width(430)
 					})
 					if e := d.errs["env"]; e != "" {
-						ui.Text(c, e).FontSize(10.5).TextColor(p.Danger).SingleLine()
+						ui.Text(c, e).FontSize(12).TextColor(p.Danger).SingleLine()
 					}
 					if adapter.IsJVMApplication(cfg.Kind) {
 						ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-							ui.Text(c, "Module").FontSize(11).TextColor(p.TextMuted).Width(140).SingleLine()
+							ui.Text(c, "Module").FontSize(12).TextColor(p.TextMuted).Width(140).SingleLine()
 							ui.TextInput(c, &d.module).Width(300)
-							ui.Text(c, "Empty: detected when saving").FontSize(10).TextColor(p.TextMuted).SingleLine()
+							ui.Text(c, "Empty: detected when saving").FontSize(12).TextColor(p.TextMuted).SingleLine()
 						})
 					}
 					if adapter.BuildPolicyApplies(cfg.Kind) {
@@ -352,7 +352,7 @@ func (m *Model) runConfigsDialog(c *ui.Context, p *ui.Theme) {
 							labels = append(labels, o.Label)
 						}
 						ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-							ui.Text(c, "Build before launch").FontSize(11).TextColor(p.TextMuted).Width(140).SingleLine()
+							ui.Text(c, "Build before launch").FontSize(12).TextColor(p.TextMuted).Width(140).SingleLine()
 							if sel := ui.Select(c, &d.policyLabel, labels); sel.Changed() {
 								for _, o := range opts {
 									if o.Label == d.policyLabel {
@@ -365,7 +365,7 @@ func (m *Model) runConfigsDialog(c *ui.Context, p *ui.Theme) {
 				})
 			}
 			if d.saveErr != "" {
-				ui.Text(c, d.saveErr).FontSize(10.5).TextColor(p.Danger).SingleLine()
+				ui.Text(c, d.saveErr).FontSize(12).TextColor(p.Danger).SingleLine()
 			}
 			ui.Row(c).Gap(8).Children(func() {
 				ui.Button(c, "Save").OnClick(m.SaveRunConfigs)
@@ -523,7 +523,7 @@ func (m *Model) rerunConfirmDialog(c *ui.Context, p *ui.Theme) {
 		ui.Column(c).Width(440).Gap(10).Children(func() {
 			ui.Text(c, "Process '"+ask.name+"' Is Running").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			ui.Text(c, "'"+ask.name+"' does not allow parallel runs.\nStop the running process and run it again?").
-				FontSize(11).TextColor(p.Text)
+				FontSize(12).TextColor(p.Text)
 			dontAsk := ask.dontAsk
 			if ui.Checkbox(c, &dontAsk, "Don't ask again").Changed() {
 				ask.dontAsk = dontAsk

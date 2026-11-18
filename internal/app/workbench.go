@@ -120,7 +120,7 @@ func (m *Model) projectWidget(c *ui.Context, p *ui.Theme, oi oiColors) {
 				TextColor(ui.Hex("#ffffff")).LetterSpacing(0.02).SingleLine()
 		})
 		ui.Text(c, name).FontSize(13).TextColor(oi.textStrong).SingleLine().Ellipsis("…")
-		ui.Icon(c, iconChevronDown).Size(12, 12).TextColor(oi.textMuted)
+		oiIconEl(c, "general/chevronDown", 12, oi, oi.textMuted)
 	})
 	w.Menu(func(menu *ui.Menu) {
 		if menu.Item("New Project…").Chosen() {
@@ -145,9 +145,9 @@ func (m *Model) branchWidget(c *ui.Context, p *ui.Theme, oi oiColors, label stri
 	}
 	w.Tooltip("Git branches")
 	w.Children(func() {
-		ui.Icon(c, iconWelcomeBranch).Size(16, 16).TextColor(oi.textMuted)
+		oiIconEl(c, "general/vcs", 16, oi, oi.icon)
 		ui.Text(c, label).FontSize(13).TextColor(oi.textStrong).SingleLine().Ellipsis("…")
-		ui.Icon(c, iconChevronDown).Size(14, 14).TextColor(oi.textSubtle)
+		oiIconEl(c, "general/chevronDown", 14, oi, oi.textSubtle)
 	})
 	if w.Clicked() {
 		m.ToggleBranches()
@@ -165,7 +165,7 @@ func (m *Model) vcsFallbackWidget(c *ui.Context, p *ui.Theme, oi oiColors) {
 	w.Tooltip("Version Control")
 	w.Children(func() {
 		ui.Text(c, "Version Control").FontSize(13).TextColor(oi.textStrong).SingleLine()
-		ui.Icon(c, iconChevronDown).Size(12, 12).TextColor(oi.textSubtle)
+		oiIconEl(c, "general/chevronDown", 12, oi, oi.textSubtle)
 	})
 	w.Menu(func(menu *ui.Menu) {
 		if menu.Item("Clone…").Chosen() {
@@ -179,16 +179,14 @@ func (m *Model) vcsFallbackWidget(c *ui.Context, p *ui.Theme, oi oiColors) {
 }
 
 // titleTool is one 30px icon control on the right of the title bar.
-func (m *Model) titleTool(c *ui.Context, p *ui.Theme, oi oiColors, key, tip string, icon *ui.SVG, onClick func()) {
+func (m *Model) titleTool(c *ui.Context, p *ui.Theme, oi oiColors, key, tip, icon string, onClick func()) {
 	b := ui.ButtonBase(c.Key("title:"+key)).Size(oiStripeButton, oiStripeButton).
 		Radius(8).Justify(ui.Center).AlignItems(ui.Center).Cursor(ui.CursorPointer)
 	if b.Hovered() {
 		b.Background(oi.toolbarHover)
 	}
 	b.Tooltip(tip)
-	b.Children(func() {
-		ui.Icon(c, icon).Size(20, 20).TextColor(oi.textSecondary)
-	})
+	b.Children(func() { oiIconEl(c, icon, 20, oi, oi.icon) })
 	if b.Clicked() {
 		onClick()
 	}
@@ -202,9 +200,7 @@ func (m *Model) gearButton(c *ui.Context, p *ui.Theme, oi oiColors) {
 		b.Background(oi.toolbarHover)
 	}
 	b.Tooltip("IDE and Project Settings")
-	b.Children(func() {
-		ui.Icon(c, iconWelcomeGear).Size(20, 20).TextColor(oi.textSecondary)
-	})
+	b.Children(func() { oiIconEl(c, "general/settings", 20, oi, oi.icon) })
 	b.Menu(func(menu *ui.Menu) { addMenuEntries(menu, m, gearGroup(m)) })
 }
 
@@ -304,16 +300,16 @@ func (m *Model) showWelcome() {
 func (m *Model) toolStripe(c *ui.Context, p *ui.Theme, oi oiColors) {
 	ui.Column(c).Width(oiStripeWidth).Shrink(0).Padding(5, oiIslandGap, 6, 4).
 		Gap(oiStripeGap).Children(func() {
-		m.stripeButton(c, p, oi, "project", iconWelcomeFolder, "Project", m.sideMode == "" && !m.leftHidden, func() {
+		m.stripeButton(c, p, oi, "project", "toolwindows/project", "Project", m.sideMode == "" && !m.leftHidden, func() {
 			m.modeClick("")
 		})
-		m.stripeButton(c, p, oi, "vcs", iconWelcomeBranch, "Commit", m.sideMode == "vcs" && !m.leftHidden, func() {
+		m.stripeButton(c, p, oi, "vcs", "toolwindows/commit", "Commit", m.sideMode == "vcs" && !m.leftHidden, func() {
 			m.modeClick("vcs")
 		})
-		m.stripeButton(c, p, oi, "structure", iconStructure, "Structure", m.dockWindowShown("structure"), func() {
+		m.stripeButton(c, p, oi, "structure", "toolwindows/structure", "Structure", m.dockWindowShown("structure"), func() {
 			m.splitClick("structure")
 		})
-		m.stripeButton(c, p, oi, "bookmarks", iconBookmark, "Bookmarks", m.dockWindowShown("bookmarks"), func() {
+		m.stripeButton(c, p, oi, "bookmarks", "toolwindows/bookmarks", "Bookmarks", m.dockWindowShown("bookmarks"), func() {
 			m.splitClick("bookmarks")
 		})
 		// Plugin views have a stripe button of their own, under the built-in
@@ -327,12 +323,12 @@ func (m *Model) toolStripe(c *ui.Context, p *ui.Theme, oi oiColors) {
 				continue
 			}
 			id, title := id, spec.title
-			m.stripeButton(c, p, oi, id, iconStructure, title, m.dockWindowShown(id), func() {
+			m.stripeButton(c, p, oi, id, pluginWindowIcon(spec), title, m.dockWindowShown(id), func() {
 				m.DockToggle(id)
 			})
 		}
 		ui.Spacer(c)
-		m.stripeButton(c, p, oi, "commands", iconWelcomeSearch, "Search Everywhere", false, func() {
+		m.stripeButton(c, p, oi, "commands", "general/search", "Search Everywhere", false, func() {
 			m.OpenCommands()
 		})
 	})
@@ -380,7 +376,7 @@ func (m *Model) splitClick(mode string) {
 	}
 }
 
-func (m *Model) stripeButton(c *ui.Context, p *ui.Theme, oi oiColors, key string, icon *ui.SVG, tip string, active bool, onClick func()) {
+func (m *Model) stripeButton(c *ui.Context, p *ui.Theme, oi oiColors, key, icon, tip string, active bool, onClick func()) {
 	b := ui.ButtonBase(c.Key("stripe:"+key)).Size(oiStripeButton, oiStripeButton).
 		Radius(6).Justify(ui.Center).AlignItems(ui.Center).Cursor(ui.CursorPointer)
 	switch {
@@ -390,11 +386,11 @@ func (m *Model) stripeButton(c *ui.Context, p *ui.Theme, oi oiColors, key string
 		b.Background(oi.stripeHover)
 	}
 	b.Tooltip(tip)
-	tone := oi.textMuted
+	tone := oi.icon
 	if active && !m.leftHidden {
 		tone = oi.text
 	}
-	b.Children(func() { ui.Icon(c, icon).Size(20, 20).TextColor(tone) })
+	b.Children(func() { oiIconEl(c, icon, 20, oi, tone) })
 	if b.Clicked() {
 		onClick()
 	}
@@ -661,7 +657,7 @@ func (m *Model) rightStripe(c *ui.Context, p *ui.Theme, oi oiColors) {
 		Gap(oiStripeGap).Children(func() {
 		ui.Spacer(c)
 		if m.hierarchy.active() || m.rightTool == "hierarchy" {
-			m.stripeButton(c, p, oi, "hierarchy", iconStructure, "Hierarchy",
+			m.stripeButton(c, p, oi, "hierarchy", "toolwindows/hierarchy", "Hierarchy",
 				m.rightShown() && m.rightTool == "hierarchy", m.ToggleHierarchyWindow)
 		}
 		m.stripeBell(c, p, oi)
@@ -673,10 +669,19 @@ func (m *Model) rightStripe(c *ui.Context, p *ui.Theme, oi oiColors) {
 			if _, shown := m.dockSlotOf(id); !shown && !spec.stripe {
 				continue
 			}
-			m.stripeButton(c, p, oi, id, iconStructure, spec.title,
+			m.stripeButton(c, p, oi, id, pluginWindowIcon(spec), spec.title,
 				m.dockWindowShown(id), func() { m.DockToggle(id) })
 		}
 	})
+}
+
+// pluginWindowIcon is a window's OpenIDEA drawing; contributed views without
+// one draw the plugin glyph, as upstream's generic tool window does.
+func pluginWindowIcon(spec *toolWindowSpec) string {
+	if spec != nil && spec.icon != "" {
+		return spec.icon
+	}
+	return "nodes/plugin"
 }
 
 // stripeBell is the Notifications stripe button with its unread badge.
@@ -696,15 +701,18 @@ func (m *Model) stripeBell(c *ui.Context, p *ui.Theme, oi oiColors) {
 		tone = oi.text
 	}
 	b.Children(func() {
-		ui.Icon(c, notifyIcon).Size(20, 20).TextColor(tone)
+		oiIconEl(c, "toolwindows/notifications", 20, oi, tone)
 		if n := m.unreadNotifications(); n > 0 {
-			// The badge sits inside the 30px button's right edge: at Left(20)
-			// it overhangs the right rail and is cut by the window.
-			ui.Row(c).Absolute().Left(16).Top(3).MinWidth(13).Height(13).
-				Padding(0, 3).Radius(7).Background(p.Danger).Justify(ui.Center).
+			// Upstream's StripeBadge: a 13px pill overhanging the button's top
+			// edge, in bg-active with fg-emphasis text.
+			label := fmt.Sprintf("%d", n)
+			if n > 99 {
+				label = "99+"
+			}
+			ui.Row(c).Absolute().Left(10).Top(-5).MinWidth(13).Height(13).
+				Padding(0, 3).Radius(7).Background(oi.badge).Justify(ui.Center).
 				AlignItems(ui.Center).Children(func() {
-				ui.Text(c, fmt.Sprintf("%d", n)).FontSize(9).Bold().
-					TextColor(ui.Hex("#ffffff")).SingleLine()
+				ui.Text(c, label).FontSize(9).Bold().TextColor(oi.text).SingleLine()
 			})
 		}
 	})
@@ -892,11 +900,11 @@ func (m *Model) leftIsland(c *ui.Context, p *ui.Theme, oi oiColors, grow float32
 				}
 				ui.Button(c, label).OnClick(func() { m.RefreshVCS() })
 			} else if m.tree != nil {
-				m.headerIcon(c, p, oi, "tree-expand", "Expand All", iconExpandAll, func() {
+				m.headerIcon(c, p, oi, "tree-expand", "Expand All", "general/expandAll", func() {
 					m.tree.ExpandAll(m.Root())
 					m.invalidate()
 				})
-				m.headerIcon(c, p, oi, "tree-collapse", "Collapse All", iconCollapseAll, func() {
+				m.headerIcon(c, p, oi, "tree-collapse", "Collapse All", "general/collapseAll", func() {
 					m.tree.CollapseAll()
 					m.invalidate()
 				})
@@ -910,9 +918,11 @@ func (m *Model) leftIsland(c *ui.Context, p *ui.Theme, oi oiColors, grow float32
 			if m.tree == nil {
 				return
 			}
-			for _, row := range m.tree.Rows() {
-				m.treeRow(c, p, row)
-			}
+			ui.Column(c).Padding(0, 6).Children(func() {
+				for _, row := range m.tree.Rows() {
+					m.treeRow(c, p, row)
+				}
+			})
 		})
 	})
 }
@@ -931,7 +941,7 @@ func (m *Model) leftSplitIsland(c *ui.Context, p *ui.Theme, oi oiColors, grow fl
 			Gap(6).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, title).FontSize(13).TextColor(oi.textStrong).SingleLine().Ellipsis("…")
 			ui.Spacer(c)
-			m.headerIcon(c, p, oi, "split-hide", "Hide", iconClose, func() {
+			m.headerIcon(c, p, oi, "split-hide", "Hide", "general/remove", func() {
 				if id := m.dockOccupant(dockLeftSplit); id != "" {
 					m.DockHide(id)
 				}
@@ -949,14 +959,14 @@ func (m *Model) leftSplitIsland(c *ui.Context, p *ui.Theme, oi oiColors, grow fl
 
 // headerIcon is a 24px header action, which OpenIDEA shows faded until the
 // window is under the pointer.
-func (m *Model) headerIcon(c *ui.Context, p *ui.Theme, oi oiColors, key, tip string, icon *ui.SVG, onClick func()) {
-	b := ui.ButtonBase(c.Key("panel:"+key)).Size(24, 24).Radius(4).
+func (m *Model) headerIcon(c *ui.Context, p *ui.Theme, oi oiColors, key, tip, icon string, onClick func()) {
+	b := ui.ButtonBase(c.Key("panel:"+key)).Size(20, 20).Radius(4).
 		Justify(ui.Center).AlignItems(ui.Center).Cursor(ui.CursorPointer)
 	if b.Hovered() {
 		b.Background(oi.toolbarHover)
 	}
 	b.Tooltip(tip)
-	b.Children(func() { ui.Icon(c, icon).Size(16, 16).TextColor(oi.textMuted) })
+	b.Children(func() { oiIconEl(c, icon, 16, oi, oi.icon) })
 	if b.Clicked() {
 		onClick()
 	}
@@ -1134,7 +1144,7 @@ func (m *Model) tabOverflow(c *ui.Context, p *ui.Theme, oi oiColors, g groupView
 		b.Background(oi.toolbarHover)
 	}
 	b.Children(func() {
-		ui.Icon(c, iconChevronDown).Size(14, 14).TextColor(oi.textMuted)
+		oiIconEl(c, "general/chevronDown", 14, oi, oi.textMuted)
 	})
 	if b.Clicked() {
 		*g.menuOpen = !*g.menuOpen
@@ -1155,8 +1165,7 @@ func (m *Model) tabOverflow(c *ui.Context, p *ui.Theme, oi oiColors, g groupView
 				}
 				name, dir := m.tabLabelIn(g.tabs, row.Tab)
 				r.Children(func() {
-					icon, tone := treeFileIcon(name, p)
-					ui.Icon(c, icon).Size(14, 14).TextColor(tone)
+					fileIconEl(c, oi, name, 14, oi.textMuted)
 					ui.Text(c, name).FontSize(13).TextColor(oi.text).SingleLine().
 						Ellipsis("…")
 					if dir != "" {
@@ -1282,7 +1291,7 @@ func (m *Model) tabButtons(c *ui.Context, p *ui.Theme, oi oiColors, g groupView,
 						close.Background(oi.hover)
 					}
 					close.Children(func() {
-						ui.Icon(c, iconClose).Size(14, 14).TextColor(oi.textMuted)
+						oiIconEl(c, "general/close", 14, oi, oi.icon)
 					})
 					if close.Clicked() {
 						m.closeTabThen(t, nil)
@@ -1292,8 +1301,7 @@ func (m *Model) tabButtons(c *ui.Context, p *ui.Theme, oi oiColors, g groupView,
 					closeButton()
 				}
 				if !m.tabPrefs.HideFileIcon {
-					icon, tone := treeFileIcon(name, p)
-					ui.Icon(c, icon).Size(14, 14).TextColor(tone)
+					fileIconEl(c, oi, name, 14, oi.textMuted)
 				}
 				if t.dirty() {
 					ui.Text(c, "●").FontSize(9).TextColor(oi.accent)
@@ -1313,7 +1321,7 @@ func (m *Model) tabButtons(c *ui.Context, p *ui.Theme, oi oiColors, g groupView,
 					}
 				}
 				if t.pinned {
-					ui.Icon(c, iconPin).Size(11, 11).TextColor(oi.textMuted)
+					oiIconEl(c, "general/pin", 11, oi, oi.icon)
 				}
 				if !m.tabPrefs.NoCloseButton && !m.tabPrefs.CloseButtonLeft {
 					closeButton()
@@ -1481,7 +1489,8 @@ func (m *Model) tabGhost(c *ui.Context, oi oiColors, t *Tab) {
 			Shadow(0, 8, 24, 0, ui.RGBA(0, 0, 0, 0.35)).Opacity(0.85)
 		g.Children(func() {
 			if !m.tabPrefs.HideFileIcon {
-				ui.Icon(c, iconFile).Size(14, 14).TextColor(oi.textMuted)
+				name, _ := m.tabLabel(t)
+				fileIconEl(c, oi, name, 14, oi.textMuted)
 			}
 			if t.dirty() {
 				ui.Text(c, "●").FontSize(9).TextColor(oi.accent)
@@ -1497,10 +1506,10 @@ func (m *Model) tabGhost(c *ui.Context, oi oiColors, t *Tab) {
 					PaddingStart(4).SingleLine().MinWidth(0).Ellipsis("…")
 			}
 			if t.pinned {
-				ui.Icon(c, iconPin).Size(11, 11).TextColor(oi.textMuted)
+				oiIconEl(c, "general/pin", 11, oi, oi.icon)
 			}
 			if !m.tabPrefs.NoCloseButton {
-				ui.Icon(c, iconClose).Size(14, 14).TextColor(oi.textMuted)
+				oiIconEl(c, "general/close", 14, oi, oi.icon)
 			}
 		})
 	})

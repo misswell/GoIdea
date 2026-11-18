@@ -72,7 +72,7 @@ func init() {
 			}
 			b.Tooltip("Git branches")
 			b.Children(func() {
-				ui.Icon(c, iconWelcomeBranch).Size(14, 14).TextColor(oi.textMuted)
+				oiIconEl(c, "general/vcs", 14, oi, oi.textMuted)
 				ui.Text(c, label).FontSize(tk.FontSizeM).TextColor(oi.textMuted).SingleLine()
 			})
 			if b.Clicked() {

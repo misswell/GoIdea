@@ -299,11 +299,11 @@ func (m *Model) symbolsDialog(c *ui.Context, p *ui.Theme) {
 					}
 				}
 				if text != "" {
-					ui.Text(c, text).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+					ui.Text(c, text).FontSize(12).TextColor(p.TextMuted).SingleLine()
 				}
 			})
 			if s.err != "" {
-				ui.Text(c, s.err).FontSize(11).TextColor(p.Danger).SingleLine().Ellipsis("…")
+				ui.Text(c, s.err).FontSize(12).TextColor(p.Danger).SingleLine().Ellipsis("…")
 			}
 			if len(s.items) == 0 {
 				return
@@ -323,15 +323,15 @@ func (m *Model) symbolsDialog(c *ui.Context, p *ui.Theme) {
 						r.Children(func() {
 							ui.Text(c, sym.Name).FontSize(12).Bold().TextColor(p.Text).
 								SingleLine()
-							ui.Text(c, symbolKindLabel(sym.Kind)).FontSize(10.5).
+							ui.Text(c, symbolKindLabel(sym.Kind)).FontSize(12).
 								TextColor(p.TextMuted).SingleLine()
 							if sym.Container != nil && *sym.Container != "" {
-								ui.Text(c, *sym.Container).FontSize(10.5).
+								ui.Text(c, *sym.Container).FontSize(12).
 									TextColor(p.TextMuted).SingleLine().Ellipsis("…")
 							}
 							ui.Spacer(c)
 							line := int(sym.Location.Range.Start.Line)
-							ui.Text(c, symbolWhere(root, sym.Location.Path, line)).FontSize(10.5).
+							ui.Text(c, symbolWhere(root, sym.Location.Path, line)).FontSize(12).
 								TextColor(p.Accent).SingleLine().Ellipsis("…")
 						})
 						if r.Clicked() {

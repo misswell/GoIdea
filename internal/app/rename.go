@@ -254,14 +254,14 @@ func (m *Model) renameDialog(c *ui.Context, p *ui.Theme) {
 				m.submitRename()
 			}
 			if r.warning != "" {
-				ui.Text(c, r.warning).FontSize(11).TextColor(p.Warning)
+				ui.Text(c, r.warning).FontSize(12).TextColor(p.Warning)
 			}
 			if r.err != "" {
-				ui.Text(c, r.err).FontSize(11).TextColor(p.Danger)
+				ui.Text(c, r.err).FontSize(12).TextColor(p.Danger)
 			}
 			ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
 				if r.busy {
-					ui.Text(c, "Working…").FontSize(11.5).TextColor(p.TextMuted)
+					ui.Text(c, "Working…").FontSize(12).TextColor(p.TextMuted)
 				}
 				if len(r.pending) > 0 {
 					label := fmt.Sprintf("Apply to %d files", r.files)

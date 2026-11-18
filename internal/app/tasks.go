@@ -170,10 +170,10 @@ func (m *Model) taskStatus(c *ui.Context, p *ui.Theme, oi oiColors) {
 		panel.Width(320).Padding(8).Background(oi.popup).
 			BorderWidth(1).BorderColor(oi.borderStrong).Radius(8)
 		panel.Children(func() {
-			ui.Text(c, "Background Tasks").FontSize(12.5).Bold().
+			ui.Text(c, "Background Tasks").FontSize(13).Bold().
 				TextColor(oi.text).SingleLine().Padding(0, 2, 6, 2)
 			if len(m.tasks) == 0 {
-				ui.Text(c, "No background tasks").FontSize(11.5).
+				ui.Text(c, "No background tasks").FontSize(12).
 					TextColor(oi.textMuted).SingleLine()
 			}
 			for i := range m.tasks {
@@ -195,22 +195,22 @@ func (m *Model) taskRow(c *ui.Context, p *ui.Theme, oi oiColors, t *BackgroundTa
 			ui.Text(c, t.Title).FontSize(12).TextColor(oi.text).SingleLine().
 				Ellipsis("…").Grow(1)
 			if t.Fraction >= 0 {
-				ui.Text(c, fmt.Sprintf("%d%%", int(t.Fraction*100+0.5))).FontSize(10.5).
+				ui.Text(c, fmt.Sprintf("%d%%", int(t.Fraction*100+0.5))).FontSize(11).
 					TextColor(oi.textMuted).SingleLine()
 			}
 			switch {
 			case t.Cancelling:
-				ui.Text(c, "Cancelling…").FontSize(10.5).TextColor(oi.textMuted).SingleLine()
+				ui.Text(c, "Cancelling…").FontSize(11).TextColor(oi.textMuted).SingleLine()
 			case t.Cancel != nil && !t.Done:
 				ui.Button(c, "Cancel").OnClick(func() { m.cancelTask(t.ID) })
 			case t.Uncancellable != "":
-				ui.Text(c, t.Uncancellable).FontSize(10.5).TextColor(oi.textMuted).
+				ui.Text(c, t.Uncancellable).FontSize(11).TextColor(oi.textMuted).
 					SingleLine().Ellipsis("…").MaxWidth(150)
 			}
 		})
 		m.taskBar(c, p, oi, t.Fraction, 0)
 		if t.Message != "" {
-			ui.Text(c, t.Message).FontSize(10.5).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
+			ui.Text(c, t.Message).FontSize(11).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
 		}
 	})
 }

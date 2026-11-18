@@ -8,7 +8,7 @@ import "github.com/egoist/mygo/ui"
 
 func init() {
 	registerToolWindow(&toolWindowSpec{
-		id: "problems", title: "Problems", anchor: dockBottom, order: 60,
+		id: "problems", title: "Problems", icon: "toolwindows/problems", anchor: dockBottom, order: 60,
 		open:  func(m *Model) { m.problems.visible = true },
 		close: func(m *Model) { m.problems.visible = false },
 		shown: func(m *Model) bool { return m.problems.visible },
@@ -17,7 +17,7 @@ func init() {
 		},
 	})
 	registerToolWindow(&toolWindowSpec{
-		id: "todo", title: "TODO", anchor: dockBottom, order: 70,
+		id: "todo", title: "TODO", icon: "toolwindows/todo", anchor: dockBottom, order: 70,
 		open: func(m *Model) {
 			m.todo.visible = true
 			if m.ctx == nil || m.mgr == nil {
@@ -37,7 +37,7 @@ func init() {
 		},
 	})
 	registerToolWindow(&toolWindowSpec{
-		id: "services", title: "Services", anchor: dockBottom, order: 80,
+		id: "services", title: "Services", icon: "toolwindows/services", anchor: dockBottom, order: 80,
 		open:  func(m *Model) { m.services.visible = true; m.loadBuildModel() },
 		close: func(m *Model) { m.services.visible = false },
 		shown: func(m *Model) bool { return m.services.visible },
@@ -46,7 +46,7 @@ func init() {
 		},
 	})
 	registerToolWindow(&toolWindowSpec{
-		id: "run", title: "Run", anchor: dockBottom, order: 10,
+		id: "run", title: "Run", icon: "toolwindows/run", anchor: dockBottom, order: 10,
 		open: func(m *Model) {
 			m.run.visible = true
 			if m.run.trusted && !m.run.loaded && m.ctx != nil && m.mgr != nil {
@@ -58,7 +58,7 @@ func init() {
 		render: func(m *Model, c *ui.Context, p *ui.Theme, _ oiColors) { m.runPanel(c, p) },
 	})
 	registerToolWindow(&toolWindowSpec{
-		id: "debug", title: "Debug", anchor: dockBottom, order: 20,
+		id: "debug", title: "Debug", icon: "toolwindows/debug", anchor: dockBottom, order: 20,
 		open:  func(m *Model) { m.debug.visible = true },
 		close: func(m *Model) { m.debug.visible = false },
 		shown: func(m *Model) bool { return m.debug.visible },
@@ -67,7 +67,7 @@ func init() {
 		},
 	})
 	registerToolWindow(&toolWindowSpec{
-		id: "build", title: "Build", anchor: dockBottom, order: 30,
+		id: "build", title: "Build", icon: "toolwindows/build", anchor: dockBottom, order: 30,
 		open:  func(m *Model) { m.build.visible = true },
 		close: func(m *Model) { m.build.visible = false },
 		shown: func(m *Model) bool { return m.build.visible },
@@ -76,7 +76,7 @@ func init() {
 		},
 	})
 	registerToolWindow(&toolWindowSpec{
-		id: "term", title: "Terminal", anchor: dockBottom, order: 40,
+		id: "term", title: "Terminal", icon: "toolwindows/terminal", anchor: dockBottom, order: 40,
 		open: func(m *Model) {
 			m.term.visible = true
 			if m.ctx == nil || m.mgr == nil {
@@ -91,7 +91,7 @@ func init() {
 		render: func(m *Model, c *ui.Context, p *ui.Theme, _ oiColors) { m.termPanel(c, p) },
 	})
 	registerToolWindow(&toolWindowSpec{
-		id: "log", title: "Git Log", anchor: dockBottom, order: 50,
+		id: "log", title: "Git Log", icon: "toolwindows/vcs", anchor: dockBottom, order: 50,
 		open: func(m *Model) {
 			m.log.visible = true
 			if m.Root() != "" && m.ctx != nil && m.mgr != nil {
@@ -103,14 +103,14 @@ func init() {
 		render: func(m *Model, c *ui.Context, p *ui.Theme, _ oiColors) { m.logPanel(c, p) },
 	})
 	registerToolWindow(&toolWindowSpec{
-		id: "maven", title: "Maven", anchor: dockRight, order: 110, stripe: true,
+		id: "maven", title: "Maven", icon: "toolwindows/maven", anchor: dockRight, order: 110, stripe: true,
 		open:   func(m *Model) { m.maven.visible = true; m.loadBuildModel() },
 		close:  func(m *Model) { m.maven.visible = false },
 		shown:  func(m *Model) bool { return m.maven.visible },
 		render: func(m *Model, c *ui.Context, p *ui.Theme, _ oiColors) { m.mavenPanel(c, p) },
 	})
 	registerToolWindow(&toolWindowSpec{
-		id: "find", title: "Find", anchor: dockBottom, order: 90,
+		id: "find", title: "Find", icon: "toolwindows/find", anchor: dockBottom, order: 90,
 		open:  func(m *Model) { m.search.visible = true },
 		close: func(m *Model) { m.search.visible = false },
 		shown: func(m *Model) bool { return m.search.visible },
@@ -119,7 +119,7 @@ func init() {
 		},
 	})
 	registerToolWindow(&toolWindowSpec{
-		id: "usages", title: "Find Usages", anchor: dockBottom, order: 100,
+		id: "usages", title: "Find Usages", icon: "actions/findEntireFile", anchor: dockBottom, order: 100,
 		open:  func(m *Model) { m.usages.visible = true },
 		close: func(m *Model) { m.usages.visible = false },
 		shown: func(m *Model) bool { return m.usages.visible },
@@ -128,7 +128,7 @@ func init() {
 		},
 	})
 	registerToolWindow(&toolWindowSpec{
-		id: "structure", title: "Structure", anchor: dockLeftSplit, order: 20, stripe: true,
+		id: "structure", title: "Structure", icon: "toolwindows/structure", anchor: dockLeftSplit, order: 20, stripe: true,
 		open: func(m *Model) {
 			m.structure.visible = true
 			m.leftHidden = false
@@ -141,7 +141,7 @@ func init() {
 		},
 	})
 	registerToolWindow(&toolWindowSpec{
-		id: "bookmarks", title: "Bookmarks", anchor: dockLeftSplit, order: 30, stripe: true,
+		id: "bookmarks", title: "Bookmarks", icon: "toolwindows/bookmarks", anchor: dockLeftSplit, order: 30, stripe: true,
 		open: func(m *Model) {
 			m.structure.visible = false
 			m.leftHidden = false
@@ -151,14 +151,14 @@ func init() {
 		},
 	})
 	registerToolWindow(&toolWindowSpec{
-		id: "notifications", title: "Notifications", anchor: dockRight, order: 10, stripe: true,
+		id: "notifications", title: "Notifications", icon: "toolwindows/notifications", anchor: dockRight, order: 10, stripe: true,
 		open: func(m *Model) { m.markNotificationsRead() },
 		render: func(m *Model, c *ui.Context, p *ui.Theme, oi oiColors) {
 			m.notificationsView(c, p, oi)
 		},
 	})
 	registerToolWindow(&toolWindowSpec{
-		id: "hierarchy", title: "Hierarchy", anchor: dockRight, order: 40, stripe: true,
+		id: "hierarchy", title: "Hierarchy", icon: "toolwindows/hierarchy", anchor: dockRight, order: 40, stripe: true,
 		render: func(m *Model, c *ui.Context, p *ui.Theme, oi oiColors) {
 			m.hierarchyRightView(c, p, oi)
 		},

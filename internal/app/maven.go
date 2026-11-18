@@ -646,11 +646,11 @@ func (m *Model) mavenPanel(c *ui.Context, p *ui.Theme) {
 		m.mavenToolbar(c, p)
 		m.mavenBanner(c, p)
 		if m.maven.err != "" {
-			ui.Text(c, m.maven.err).FontSize(11).TextColor(p.Danger).Padding(6, 10).
+			ui.Text(c, m.maven.err).FontSize(12).TextColor(p.Danger).Padding(4, 10).
 				SingleLine().Ellipsis("…")
 		}
 		ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
-			ui.Column(c).Padding(4, 4).Children(func() {
+			ui.Column(c).Padding(0, 6).Children(func() {
 				m.mavenTreeRows(c, p, m.mavenRootRows())
 			})
 		})
@@ -660,57 +660,60 @@ func (m *Model) mavenPanel(c *ui.Context, p *ui.Theme) {
 // mavenToolbar is OpenIDEA's icon row: reload, generate sources, run, execute
 // goal, offline, skip tests, expand and collapse.
 func (m *Model) mavenToolbar(c *ui.Context, p *ui.Theme) {
-	ui.Row(c).Height(30).Padding(0, 6).Gap(2).AlignItems(ui.Center).
-		BorderWidth(0, 0, 1, 0).BorderColor(p.Border).Children(func() {
+	ui.Row(c).Height(32).Padding(0, 6).Gap(2).AlignItems(ui.Center).Children(func() {
 		if m.maven.loading || m.maven.syncing {
-			m.mavenAction(c, p, "maven:reload", iconMavenStop, "Stop", func() {})
+			m.mavenAction(c, p, "maven:reload", "run/stop", "Stop", func() {})
 		} else {
-			m.mavenAction(c, p, "maven:reload", iconMavenRefresh, "Reload Maven Projects", func() { m.loadBuildModel() })
+			m.mavenAction(c, p, "maven:reload", "general/refresh", "Reload Maven Projects", func() { m.loadBuildModel() })
 		}
-		m.mavenAction(c, p, "maven:sources", iconMavenSources, "Generate Sources", func() {
+		m.mavenAction(c, p, "maven:sources", "nodes/generatedSource", "Generate Sources", func() {
 			if proj := m.mavenRootProject(); proj != nil {
 				m.runMavenGoal(proj, []string{"generate-sources"})
 			}
 		})
-		m.mavenActionDisabled(c, p, "maven:add", iconMavenPlus, "Add Maven Projects", true)
+		m.mavenActionDisabled(c, p, "maven:add", "general/add", "Add Maven Projects", true)
 		m.mavenSeparator(c, p)
 		runnable := m.maven.sel.kind == "phase" || m.maven.sel.kind == "goal" || m.maven.sel.kind == "runConfig"
 		if runnable {
-			m.mavenAction(c, p, "maven:run", iconMavenRun, "Run Maven Build", func() { m.RunMavenSelection() })
+			m.mavenAction(c, p, "maven:run", "run/run", "Run Maven Build", func() { m.RunMavenSelection() })
 		} else {
-			m.mavenActionDisabled(c, p, "maven:run", iconMavenRun, "Run Maven Build", false)
+			m.mavenActionDisabled(c, p, "maven:run", "run/run", "Run Maven Build", false)
 		}
-		m.mavenAction(c, p, "maven:goal", iconMavenGoal, "Execute Maven Goal", func() {
+		m.mavenAction(c, p, "maven:goal", "general/runAnything", "Execute Maven Goal", func() {
 			m.OpenRunAnything()
 			if m.runAnything != nil {
 				m.runAnything.query = "mvn "
 			}
 			m.invalidate()
 		})
-		m.mavenToggle(c, p, "maven:offline", iconMavenOffline, "Work Offline", m.maven.offline,
+		m.mavenToggle(c, p, "maven:offline", "build/toggleOfflineMode", "Work Offline", m.maven.offline,
 			func() { m.ToggleMavenOffline() })
-		m.mavenActionDisabled(c, p, "maven:analyze", iconMavenAnalyze, "Analyze Dependencies", true)
-		m.mavenToggle(c, p, "maven:skipTests", iconMavenSkip, "Skip Tests", m.maven.skipTests,
+		m.mavenActionDisabled(c, p, "maven:analyze", "build/dependencyAnalyzer", "Analyze Dependencies", true)
+		m.mavenToggle(c, p, "maven:skipTests", "run/showIgnored", "Skip Tests", m.maven.skipTests,
 			func() { m.ToggleMavenSkipTests() })
 		m.mavenSeparator(c, p)
-		m.mavenAction(c, p, "maven:expand", iconMavenExpand, "Expand All", func() { m.ExpandMavenAll() })
-		m.mavenAction(c, p, "maven:collapse", iconMavenCollapse, "Collapse All", func() { m.CollapseMavenAll() })
-		m.mavenActionDisabled(c, p, "maven:settings", iconWelcomeGear, "Maven Settings…", true)
+		m.mavenAction(c, p, "maven:expand", "general/expandAll", "Expand All", func() { m.ExpandMavenAll() })
+		m.mavenAction(c, p, "maven:collapse", "general/collapseAll", "Collapse All", func() { m.CollapseMavenAll() })
+		m.mavenActionDisabled(c, p, "maven:settings", "general/settings", "Maven Settings…", true)
 	})
 }
 
 func (m *Model) mavenSeparator(c *ui.Context, p *ui.Theme) {
-	ui.Row(c).Width(1).Height(16).Shrink(0).Background(p.Border)
+	ui.Row(c).Width(1).Height(16).Shrink(0).Margin(0, 4).Background(p.Border)
 }
 
-func (m *Model) mavenAction(c *ui.Context, p *ui.Theme, key string, icon *ui.SVG, tip string, run func()) {
-	b := ui.ButtonBase(c.Key(key)).Size(22, 22).Radius(4).Justify(ui.Center).AlignItems(ui.Center).
+// mavenAction is one of OpenIDEA's small IconButtons: 20px, a 16px glyph in
+// fg-muted that brightens on hover.
+func (m *Model) mavenAction(c *ui.Context, p *ui.Theme, key, icon, tip string, run func()) {
+	oi := oiPaletteOf(p)
+	b := ui.ButtonBase(c.Key(key)).Size(20, 20).Radius(4).Justify(ui.Center).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer)
+	tone := oi.textMuted
 	if b.Hovered() {
-		b.Background(p.SurfaceHover)
+		tone = oi.textStrong
 	}
 	b.Tooltip(tip)
-	b.Children(func() { ui.Icon(c, icon).Size(16, 16).TextColor(p.TextMuted) })
+	b.Children(func() { oiIconEl(c, icon, 16, oi, tone) })
 	if b.Clicked() {
 		run()
 	}
@@ -718,27 +721,27 @@ func (m *Model) mavenAction(c *ui.Context, p *ui.Theme, key string, icon *ui.SVG
 
 // mavenActionDisabled draws an action this build does not carry yet: it stays
 // visible for the toolbar's shape but does nothing, as OpenIDEA disables it.
-func (m *Model) mavenActionDisabled(c *ui.Context, p *ui.Theme, key string, icon *ui.SVG, tip string, always bool) {
+func (m *Model) mavenActionDisabled(c *ui.Context, p *ui.Theme, key, icon, tip string, always bool) {
 	_ = always
-	b := ui.ButtonBase(c.Key(key)).Size(22, 22).Radius(4).Justify(ui.Center).AlignItems(ui.Center)
+	oi := oiPaletteOf(p)
+	b := ui.ButtonBase(c.Key(key)).Size(20, 20).Radius(4).Justify(ui.Center).AlignItems(ui.Center)
 	b.Tooltip(tip)
-	b.Children(func() { ui.Icon(c, icon).Size(16, 16).TextColor(p.TextMuted.Alpha(80)) })
+	b.Children(func() { oiIconEl(c, icon, 16, oi, oi.textMuted.Alpha(0.4)) })
 }
 
-func (m *Model) mavenToggle(c *ui.Context, p *ui.Theme, key string, icon *ui.SVG, tip string, on bool, run func()) {
-	b := ui.ButtonBase(c.Key(key)).Size(22, 22).Radius(4).Justify(ui.Center).AlignItems(ui.Center).
+func (m *Model) mavenToggle(c *ui.Context, p *ui.Theme, key, icon, tip string, on bool, run func()) {
+	oi := oiPaletteOf(p)
+	b := ui.ButtonBase(c.Key(key)).Size(20, 20).Radius(4).Justify(ui.Center).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer)
+	tone := oi.textMuted
 	if on {
-		b.Background(p.SurfaceHover)
+		b.Background(oi.selectedInactive)
+		tone = oi.textStrong
 	} else if b.Hovered() {
-		b.Background(p.SurfaceHover)
+		tone = oi.textStrong
 	}
 	b.Tooltip(tip)
-	tone := p.TextMuted
-	if on {
-		tone = p.Accent
-	}
-	b.Children(func() { ui.Icon(c, icon).Size(16, 16).TextColor(tone) })
+	b.Children(func() { oiIconEl(c, icon, 16, oi, tone) })
 	if b.Clicked() {
 		run()
 	}
@@ -747,36 +750,47 @@ func (m *Model) mavenToggle(c *ui.Context, p *ui.Theme, key string, icon *ui.SVG
 // mavenBanner shows the sync's progress, the changed-build-files notice with
 // Load Maven Changes, or the last sync error.
 func (m *Model) mavenBanner(c *ui.Context, p *ui.Theme) {
+	oi := oiPaletteOf(p)
 	mm := m.maven.model.Maven
 	switch {
 	case m.maven.syncing:
-		ui.Row(c).Height(30).Padding(0, 10).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, m.maven.syncMsg).FontSize(11).TextColor(p.TextMuted).SingleLine().Grow(1).Ellipsis("…")
+		ui.Row(c).MinHeight(28).Padding(2, 10).Gap(6).AlignItems(ui.Center).
+			BorderWidth(0, 0, 1, 0).BorderColor(oi.border).Children(func() {
+			ui.Text(c, m.maven.syncMsg).FontSize(12).TextColor(oi.textSecondary).SingleLine().Grow(1).Ellipsis("…")
 			if f := m.maven.syncFrac; f != nil {
-				ui.Text(c, fmt.Sprintf("%d%%", int(*f*100))).FontSize(10.5).TextColor(p.TextMuted)
+				ui.Text(c, fmt.Sprintf("%d%%", int(*f*100))).FontSize(12).TextColor(oi.textSubtle)
 			}
 		})
 	case mm != nil && mm.Stale:
-		ui.Row(c).Height(34).Padding(0, 10).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.Icon(c, iconMavenLoad).Size(16, 16).TextColor(p.TextMuted)
-			ui.Text(c, "Build files changed since the last reload").FontSize(11).TextColor(p.Text).
+		ui.Row(c).MinHeight(28).Padding(2, 10).Gap(6).AlignItems(ui.Center).
+			BorderWidth(0, 0, 1, 0).BorderColor(oi.border).Children(func() {
+			oiIconEl(c, "maven/mavenLoadChanges", 16, oi, oi.textMuted)
+			ui.Text(c, "Build files changed since the last reload").FontSize(12).TextColor(oi.textSecondary).
 				SingleLine().Grow(1).Ellipsis("…")
-			b := ui.ButtonBase(c.Key("maven:load")).Height(22).Padding(0, 8).Radius(4).
-				AlignItems(ui.Center).Cursor(ui.CursorPointer)
-			if b.Hovered() {
-				b.Background(p.SurfaceHover)
-			}
-			b.Children(func() {
-				ui.Text(c, "Load Maven Changes").FontSize(11).TextColor(p.Accent).SingleLine()
-			})
-			b.OnClick(func() { m.SyncMaven() })
+			m.bannerButton(c, p, "maven:load", "Load Maven Changes", func() { m.SyncMaven() })
 		})
 	case mm != nil && mm.SyncErr != nil && *mm.SyncErr != "":
-		ui.Row(c).Height(30).Padding(0, 10).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, strings.SplitN(*mm.SyncErr, "\n", 2)[0]).FontSize(11).TextColor(p.Danger).
-				SingleLine().Ellipsis("…")
+		ui.Row(c).MinHeight(28).Padding(2, 10).Gap(6).AlignItems(ui.Center).
+			BorderWidth(0, 0, 1, 0).BorderColor(oi.border).Children(func() {
+			oiIconEl(c, "status/warning", 16, oi, oi.warning)
+			ui.Text(c, strings.SplitN(*mm.SyncErr, "\n", 2)[0]).FontSize(12).TextColor(oi.warning).
+				SingleLine().Grow(1).Ellipsis("…")
 		})
 	}
+}
+
+// bannerButton is the banner's ghost Button in its small size.
+func (m *Model) bannerButton(c *ui.Context, p *ui.Theme, key, label string, run func()) {
+	oi := oiPaletteOf(p)
+	b := ui.ButtonBase(c.Key(key)).Height(20).Padding(0, 8).Radius(4).AlignItems(ui.Center).
+		Cursor(ui.CursorPointer)
+	if b.Hovered() {
+		b.Background(oi.hoverTint)
+	}
+	b.Children(func() {
+		ui.Text(c, label).FontSize(12).TextColor(oi.textStrong).SingleLine()
+	})
+	b.OnClick(run)
 }
 
 // mavenTreeRows draws rows and, for expanded ones, their children.
@@ -791,13 +805,14 @@ func (m *Model) mavenTreeRows(c *ui.Context, p *ui.Theme, rows []mavenRow) {
 }
 
 func (m *Model) mavenRow(c *ui.Context, p *ui.Theme, r mavenRow) {
+	oi := oiPaletteOf(p)
 	row := ui.Row(c.Key(r.key)).
-		Height(22).PaddingStart(6 + float32(r.depth)*14).PaddingEnd(6).Gap(6).
+		Height(24).PaddingStart(4 + float32(r.depth)*20).PaddingEnd(8).Gap(4).Radius(5).
 		AlignItems(ui.Center).Cursor(ui.CursorPointer)
 	if m.maven.selKey == r.key {
-		row.Background(p.SurfaceHover)
+		row.Background(oi.selectedInactive)
 	} else if row.Hovered() {
-		row.Background(p.SurfaceHover)
+		row.Background(oi.hoverTint)
 	}
 	row.Children(func() {
 		if r.kind == "profile" {
@@ -807,26 +822,28 @@ func (m *Model) mavenRow(c *ui.Context, p *ui.Theme, r mavenRow) {
 			}
 			return
 		}
+		chevron := ui.Row(c).Size(16, 16).Shrink(0).Justify(ui.Center).AlignItems(ui.Center)
 		if r.hasKids {
-			glyph := "▸"
+			glyph := "general/chevronRight"
 			if m.maven.expanded[r.key] {
-				glyph = "▾"
+				glyph = "general/chevronDown"
 			}
-			ui.Text(c, glyph).FontSize(9.5).TextColor(p.TextMuted)
-		} else {
-			ui.Row(c).Width(10)
+			chevron.Children(func() { oiIconEl(c, glyph, 16, oi, oi.textMuted) })
 		}
-		if ic := mavenRowIcon(r.kind); ic != nil {
-			ui.Icon(c, ic).Size(14, 14).TextColor(mavenRowIconTone(r.kind, p))
+		if name := mavenRowIcon(r.kind); name != "" {
+			oiIconEl(c, name, 16, oi, oi.textMuted).MarginEnd(2)
 		}
 		label := r.label
-		tone := p.Text
-		if r.kind == "phase" && m.maven.skipTests && label == "test" {
-			tone = p.TextMuted
+		tone := oi.text
+		if m.maven.selKey == r.key {
+			tone = oi.textStrong
 		}
-		ui.Text(c, label).FontSize(11.5).TextColor(tone).SingleLine().Ellipsis("…")
+		t := ui.Text(c, label).FontSize(13).TextColor(tone).SingleLine().Ellipsis("…")
+		if r.kind == "phase" && m.maven.skipTests && label == "test" {
+			t.TextColor(oi.textMuted).Strikethrough()
+		}
 		if r.detail != "" {
-			ui.Text(c, r.detail).FontSize(10).TextColor(p.TextMuted).SingleLine().Ellipsis("…")
+			ui.Text(c, r.detail).FontSize(12).TextColor(oi.textSubtle).SingleLine().Ellipsis("…")
 		}
 	})
 	if r.hasKids {
@@ -974,32 +991,25 @@ func pathBase(p string) string {
 	return p
 }
 
-func mavenRowIcon(kind string) *ui.SVG {
-	switch kind {
-	case "project", "module":
-		return iconMavenProject
-	case "lifecycle", "phase":
-		return iconMavenRun
-	case "plugins", "plugin", "goal":
-		return iconWelcomePlugin
-	case "profiles", "profile":
-		return iconStructure
-	case "dependencies", "dependency":
-		return iconMavenDependency
-	case "runConfigs", "runConfig":
-		return iconMavenRun
-	}
-	return nil
-}
-
-func mavenRowIconTone(kind string, p *ui.Theme) ui.Color {
+// mavenRowIcon is the row's expui drawing, as nodeIcon picks it upstream.
+func mavenRowIcon(kind string) string {
 	switch kind {
 	case "project":
-		return p.Accent
-	case "goal", "phase":
-		return p.TextMuted
+		return "maven/mavenProject"
+	case "module":
+		return "maven/mavenModule"
+	case "lifecycle", "profiles", "plugins", "runConfigs", "dependencies", "tasks":
+		return "nodes/folder"
+	case "phase":
+		return "maven/mavenGoal"
+	case "plugin":
+		return "maven/mavenPlugin"
+	case "goal", "runConfig":
+		return "maven/mavenPluginGoal"
+	case "dependency":
+		return "nodes/libraryFolder"
 	}
-	return p.TextMuted
+	return ""
 }
 
 // SmokeMaven loads the build model for the open project and reports its size,

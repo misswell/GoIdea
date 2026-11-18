@@ -310,7 +310,7 @@ func (m *Model) newProjectScaffoldPanel(c *ui.Context, p *ui.Theme) {
 	st := &m.newProject
 	if len(st.catalog) == 0 {
 		if st.catalogErr != "" {
-			ui.Text(c, st.catalogErr).FontSize(10.5).TextColor(p.Danger).SingleLine().Ellipsis("…")
+			ui.Text(c, st.catalogErr).FontSize(12).TextColor(p.Danger).SingleLine().Ellipsis("…")
 		}
 		return
 	}
@@ -323,7 +323,7 @@ func (m *Model) newProjectScaffoldPanel(c *ui.Context, p *ui.Theme) {
 						g := g
 						if g.Group != group {
 							group = g.Group
-							ui.Text(c, group).FontSize(10).TextColor(p.TextMuted).Padding(6, 4).SingleLine()
+							ui.Text(c, group).FontSize(12).TextColor(p.TextMuted).Padding(6, 4).SingleLine()
 						}
 						on := st.generator == g.ID
 						r := ui.Row(c.Key("scaffold:"+g.ID)).Height(22).Padding(0, 6).
@@ -354,7 +354,7 @@ func (m *Model) newProjectScaffoldPanel(c *ui.Context, p *ui.Theme) {
 				switch f.Kind.Type {
 				case "choice":
 					ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-						ui.Text(c, f.Label).FontSize(11).TextColor(p.TextMuted).Width(70).SingleLine()
+						ui.Text(c, f.Label).FontSize(12).TextColor(p.TextMuted).Width(70).SingleLine()
 						cur := st.scaffoldValue(f.ID)
 						for _, o := range f.Kind.Options {
 							o := o
@@ -368,7 +368,7 @@ func (m *Model) newProjectScaffoldPanel(c *ui.Context, p *ui.Theme) {
 								b.Background(p.SurfaceHover)
 							}
 							b.Children(func() {
-								ui.Text(c, o.Label).FontSize(10.5).TextColor(p.Text).SingleLine()
+								ui.Text(c, o.Label).FontSize(12).TextColor(p.Text).SingleLine()
 							})
 							b.OnClick(func() { m.setScaffoldValue(f.ID, o.Value) })
 						}
@@ -380,7 +380,7 @@ func (m *Model) newProjectScaffoldPanel(c *ui.Context, p *ui.Theme) {
 					}
 				default:
 					ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-						ui.Text(c, f.Label).FontSize(11).TextColor(p.TextMuted).Width(70).SingleLine()
+						ui.Text(c, f.Label).FontSize(12).TextColor(p.TextMuted).Width(70).SingleLine()
 						v := st.scaffoldValue(f.ID)
 						in := ui.TextInput(c, &v)
 						in.OnChange(func() { m.setScaffoldValue(f.ID, v) })
@@ -388,14 +388,14 @@ func (m *Model) newProjectScaffoldPanel(c *ui.Context, p *ui.Theme) {
 							in.Placeholder(f.Kind.Placeholder)
 						}
 						if errText := st.scaffoldFieldError(f); errText != "" {
-							ui.Text(c, errText).FontSize(10).TextColor(p.Danger).SingleLine()
+							ui.Text(c, errText).FontSize(12).TextColor(p.Danger).SingleLine()
 						}
 					})
 				}
 			}
 			if len(st.steps) > 0 {
 				last := st.steps[len(st.steps)-1]
-				ui.Text(c, last).FontSize(10.5).TextColor(p.TextMuted).SingleLine().Ellipsis("…")
+				ui.Text(c, last).FontSize(12).TextColor(p.TextMuted).SingleLine().Ellipsis("…")
 			}
 		})
 	})

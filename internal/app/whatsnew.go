@@ -61,12 +61,12 @@ func (m *Model) openWhatsNewPage(version, notes string) {
 	doc := docbridge.Virtual("What's New", "")
 	t := &Tab{
 		doc:         doc,
-		state:       &editor.State{Buffer: doc.Buffer(), LineHeight: 1.45, Bindings: intellijEditorBindings(), ReadOnly: true},
+		state:       &editor.State{Buffer: doc.Buffer(), LineHeight: 1.65, Bindings: intellijEditorBindings(), ReadOnly: true},
 		kind:        tabKindWhatsNew,
 		pageVersion: version,
 		pageNotes:   notes,
 	}
-	t.state.Font = ui.Font{Size: m.prefs.fontSize()}
+	t.state.Font = ui.Font{Family: oiFontUI, Size: m.prefs.fontSize()}
 	t.synced = doc.Buffer().Version()
 	t.seen = t.synced
 	m.noteTabUse(t)
@@ -98,7 +98,7 @@ func (m *Model) whatsNewPage(c *ui.Context, p *ui.Theme, t *Tab) {
 			ui.Column(c).Width(whatsNewColumn).MaxWidthPercent(100).
 				Padding(22, 32, 14, 32).Gap(3).Children(func() {
 				ui.Text(c, "What's New").FontSize(20).Bold().TextColor(p.Text).SingleLine()
-				ui.Text(c, "GoIDEA "+t.pageVersion).FontSize(11.5).
+				ui.Text(c, "GoIDEA "+t.pageVersion).FontSize(12).
 					TextColor(p.TextMuted).SingleLine()
 			})
 		})
@@ -131,7 +131,7 @@ func (m *Model) whatsNewStandalone(c *ui.Context, p *ui.Theme) {
 		ui.Row(c).Height(oiTabBarHeight).Shrink(0).Padding(0, 6).
 			AlignItems(ui.Center).Gap(6).Background(p.Surface).
 			BorderWidth(0, 0, 1, 0).BorderColor(p.Border).Children(func() {
-			ui.Text(c, "What's New").FontSize(12.5).TextColor(p.Text).SingleLine()
+			ui.Text(c, "What's New").FontSize(13).TextColor(p.Text).SingleLine()
 			ui.Spacer(c)
 			close := ui.ButtonBase(c.Key("whatsNew:close")).Size(22, 22).Radius(4).
 				Justify(ui.Center).AlignItems(ui.Center).Cursor(ui.CursorPointer).
@@ -140,7 +140,7 @@ func (m *Model) whatsNewStandalone(c *ui.Context, p *ui.Theme) {
 				close.Background(p.SurfaceHover)
 			}
 			close.Children(func() {
-				ui.Text(c, "×").FontSize(14).TextColor(p.TextMuted).SingleLine()
+				oiIconEl(c, "general/close", 16, oiPaletteOf(p), p.TextMuted)
 			})
 			close.OnClick(func() { m.CloseWhatsNew() })
 		})

@@ -285,15 +285,15 @@ func (m *Model) attachDialog(c *ui.Context, p *ui.Theme) {
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 				switch {
 				case d.busy:
-					ui.Text(c, "Reading the processes…").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+					ui.Text(c, "Reading the processes…").FontSize(12).TextColor(p.TextMuted).SingleLine()
 				case d.err != "":
-					ui.Text(c, d.err).FontSize(10.5).TextColor(p.Danger).SingleLine().Ellipsis("…")
+					ui.Text(c, d.err).FontSize(12).TextColor(p.Danger).SingleLine().Ellipsis("…")
 				case len(rows) == 0:
 					ui.Text(c, "No attachable Java (JDWP) processes: processes started with -agentlib:jdwp=transport=dt_socket,server=y appear here").
-						FontSize(10.5).TextColor(p.TextMuted)
+						FontSize(12).TextColor(p.TextMuted)
 				default:
 					ui.Text(c, fmt.Sprintf("Java (JDWP) · %d processes, Enter attaches", len(rows))).
-						FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+						FontSize(12).TextColor(p.TextMuted).SingleLine()
 				}
 			})
 			if len(rows) > 0 {
@@ -321,7 +321,7 @@ func (m *Model) attachDialog(c *ui.Context, p *ui.Theme) {
 									detail = fmt.Sprintf("%s:%d", host, *proc.Port)
 								}
 								ui.Text(c, proc.Name).FontSize(12).TextColor(p.Text).SingleLine().Ellipsis("…")
-								ui.Text(c, detail).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+								ui.Text(c, detail).FontSize(12).TextColor(p.TextMuted).SingleLine()
 							})
 						}
 					})

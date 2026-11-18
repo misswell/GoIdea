@@ -156,14 +156,14 @@ func (m *Model) dirCompareDialog(c *ui.Context, p *ui.Theme) {
 				title = "Compare Directories · Comparing…"
 			}
 			ui.Text(c, title).FontSize(13).Bold().TextColor(p.Text).SingleLine()
-			ui.Text(c, filepath.ToSlash(d.left)).FontSize(10.5).TextColor(p.TextMuted).
+			ui.Text(c, filepath.ToSlash(d.left)).FontSize(12).TextColor(p.TextMuted).
 				SingleLine().Ellipsis("…")
 			if d.other != "" {
-				ui.Text(c, filepath.ToSlash(d.other)).FontSize(10.5).TextColor(p.TextMuted).
+				ui.Text(c, filepath.ToSlash(d.other)).FontSize(12).TextColor(p.TextMuted).
 					SingleLine().Ellipsis("…")
 			}
 			if d.err != "" {
-				ui.Text(c, d.err).FontSize(11).TextColor(p.Danger).SingleLine().Ellipsis("…")
+				ui.Text(c, d.err).FontSize(12).TextColor(p.Danger).SingleLine().Ellipsis("…")
 			}
 			if d.asking {
 				in := ui.TextInput(c, &d.other).AutoFocus()
@@ -172,7 +172,7 @@ func (m *Model) dirCompareDialog(c *ui.Context, p *ui.Theme) {
 					m.ConfirmDirCompare()
 				}
 				ui.Text(c, "Enter the other directory's path; relative paths start at the project root.").
-					FontSize(10.5).TextColor(p.TextMuted)
+					FontSize(12).TextColor(p.TextMuted)
 				ui.Row(c).Gap(8).Children(func() {
 					ui.Button(c, "Cancel").OnClick(func() { m.closeDirCompare() })
 					ui.Button(c, "Compare").OnClick(func() { m.ConfirmDirCompare() })
@@ -180,14 +180,14 @@ func (m *Model) dirCompareDialog(c *ui.Context, p *ui.Theme) {
 				return
 			}
 			if d.loading {
-				ui.Text(c, "Reading both directories…").FontSize(11.5).TextColor(p.TextMuted)
+				ui.Text(c, "Reading both directories…").FontSize(12).TextColor(p.TextMuted)
 				ui.Button(c, "Cancel").OnClick(func() { m.closeDirCompare() })
 				return
 			}
 			counts := dirCompareCounts(d.entries)
 			ui.Text(c, fmt.Sprintf("%d differ, %d only on the left, %d only on the right, %d identical",
 				counts["different"], counts["leftOnly"], counts["rightOnly"], counts["equal"])).
-				FontSize(11).TextColor(p.TextMuted).SingleLine()
+				FontSize(12).TextColor(p.TextMuted).SingleLine()
 			shown := 0
 			ui.Scroll(c).Height(400).Children(func() {
 				ui.Column(c).Children(func() {
@@ -197,17 +197,17 @@ func (m *Model) dirCompareDialog(c *ui.Context, p *ui.Theme) {
 							continue
 						}
 						shown++
-						row := ui.Row(c.Key(fmt.Sprintf("dircmp:%d", i))).Height(22).
+						row := ui.Row(c.Key(fmt.Sprintf("dircmp:%d", i))).Height(24).
 							Padding(0, 8).Gap(8).AlignItems(ui.Center)
 						if row.Hovered() {
 							row.Background(p.SurfaceHover)
 						}
 						row.Children(func() {
 							ui.Row(c).Width(64).Shrink(0).Children(func() {
-								ui.Text(c, dirCompareStatus(e.Status)).FontSize(10.5).
+								ui.Text(c, dirCompareStatus(e.Status)).FontSize(12).
 									TextColor(dirCompareTint(e.Status, p)).SingleLine()
 							})
-							ui.Text(c, e.Path).FontSize(11.5).TextColor(p.Text).
+							ui.Text(c, e.Path).FontSize(13).TextColor(p.Text).
 								SingleLine().Ellipsis("…")
 						})
 						if row.Clicked() && e.LeftKind != "dir" && e.RightKind != "dir" {
@@ -218,7 +218,7 @@ func (m *Model) dirCompareDialog(c *ui.Context, p *ui.Theme) {
 					}
 					if shown == 0 {
 						ui.Row(c).Padding(6, 8).Children(func() {
-							ui.Text(c, "The two directories have no differences").FontSize(11.5).TextColor(p.TextMuted)
+							ui.Text(c, "The two directories have no differences").FontSize(12).TextColor(p.TextMuted)
 						})
 					}
 				})

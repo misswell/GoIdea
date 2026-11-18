@@ -20,7 +20,7 @@ const (
 	notifyStickyTime   = 5 * time.Minute
 	notifyMaxBalloons  = 3
 	notifyMaxHistory   = 200
-	notifyBalloonWidth = 376
+	notifyBalloonWidth = 340
 )
 
 // notifyAction is one button on a notification.
@@ -62,9 +62,6 @@ type notifier struct {
 	items []ideNotification
 	seq   int
 }
-
-// notifyIcon is OpenIDEA's bell for the stripe and the empty state.
-var notifyIcon = welcomeIcon(`<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>`)
 
 // notifyInfo, notifyWarning and notifyError post a notification. A key
 // replaces the earlier notification with the same key, as OpenIDEA's
@@ -339,9 +336,9 @@ func (m *Model) balloons(c *ui.Context, p *ui.Theme) {
 // the balloon actually shows: the suppression balloonView appends counts, and
 // leaving it out clipped the last action row of the bottom balloon.
 func notifyHeight(n ideNotification, actions int) float32 {
-	h := float32(50)
+	h := float32(46)
 	if n.body != "" {
-		h += 16
+		h += 20
 	}
 	if actions > 0 {
 		h += 24
@@ -360,52 +357,64 @@ func (m *Model) balloonActions(n ideNotification) []notifyAction {
 	return actions
 }
 
-// balloonView draws one balloon, as OpenIDEA's Toast: accent bar, title, body,
-// actions, and a close button on the corner.
+// balloonView draws one balloon as OpenIDEA's Toast does: the level icon, the
+// title with a close button, the body and the action links, on the popup
+// surface with the balloon shadow.
 func (m *Model) balloonView(c *ui.Context, p *ui.Theme, n ideNotification) {
+	oi := oiPaletteOf(p)
 	actions := m.balloonActions(n)
 	height := notifyHeight(n, len(actions))
+	shade := float32(0.14)
+	if oi.dark {
+		shade = 0.45
+	}
 	r := ui.Row(c.Key(fmt.Sprintf("balloon:%d", n.id))).Height(height).
-		Radius(10).Background(p.Surface).BorderWidth(1).BorderColor(p.Border).
-		Shadow(0, 8, 24, 0, ui.RGBA(0, 0, 0, 0.35))
+		Padding(14, 34, 14, 14).Gap(10).AlignItems(ui.Start).
+		Radius(10).Background(oi.popup).BorderWidth(1).BorderColor(oi.popupBorder).
+		Shadow(0, 8, 24, 0, ui.RGBA(0, 0, 0, shade))
 	if r.Hovered() != n.hover {
 		m.SetBalloonHover(n.id, r.Hovered())
 	}
+	icon := "status/info"
+	switch n.level {
+	case "error":
+		icon = "status/error"
+	case "warning":
+		icon = "status/warning"
+	case "success":
+		icon = "status/success"
+	}
 	r.Children(func() {
-		ui.Row(c).Width(3).Height(height).Radius(10).
-			Background(notifyLevelColor(p, n.level))
-		ui.Column(c).Grow(1).Padding(10, 12).Gap(3).Children(func() {
+		oiIconEl(c, icon, 16, oi, notifyLevelColor(p, n.level))
+		ui.Column(c).Grow(1).MinWidth(0).Gap(4).Children(func() {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, n.title).FontSize(12.5).Bold().TextColor(p.Text).SingleLine()
+				ui.Text(c, n.title).FontSize(13).Bold().TextColor(oi.textStrong).
+					SingleLine().Ellipsis("…")
 				ui.Spacer(c)
 				close := ui.ButtonBase(c.Key(fmt.Sprintf("balloon:close:%d", n.id))).
-					Size(18, 18).Radius(4).Justify(ui.Center).AlignItems(ui.Center).
+					Size(20, 20).Radius(4).Justify(ui.Center).AlignItems(ui.Center).
 					Cursor(ui.CursorPointer)
 				if close.Hovered() {
-					close.Background(p.SurfaceHover)
+					close.Background(oi.hoverTint)
 				}
+				close.Tooltip("Dismiss")
 				close.Children(func() {
-					ui.Text(c, "×").FontSize(13).TextColor(p.TextMuted).SingleLine()
+					oiIconEl(c, "general/close", 12, oi, oi.textSubtle)
 				})
 				close.OnClick(func() { m.dismissBalloon(n.id) })
 			})
 			if n.body != "" {
-				ui.Text(c, n.body).FontSize(11.5).TextColor(p.TextMuted).
+				ui.Text(c, n.body).FontSize(13).TextColor(oi.textSecondary).
 					SingleLine().Ellipsis("…")
 			}
-			actions := m.balloonActions(n)
 			if len(actions) > 0 {
-				ui.Row(c).Gap(6).Children(func() {
+				ui.Row(c).Gap(14).Margin(4, 0, 0, 0).Children(func() {
 					for i, a := range actions {
 						a := a
 						b := ui.ButtonBase(c.Key(fmt.Sprintf("balloon:act:%d:%d", n.id, i))).
-							Height(20).Padding(0, 6).Radius(4).AlignItems(ui.Center).
-							Cursor(ui.CursorPointer)
-						if b.Hovered() {
-							b.Background(p.SurfaceHover)
-						}
+							Padding(0, 0).Cursor(ui.CursorPointer)
 						b.Children(func() {
-							ui.Text(c, a.label).FontSize(11.5).TextColor(p.Accent).SingleLine()
+							ui.Text(c, a.label).FontSize(13).TextColor(oi.link).SingleLine()
 						})
 						b.OnClick(func() {
 							m.dismissBalloon(n.id)
@@ -419,75 +428,78 @@ func (m *Model) balloonView(c *ui.Context, p *ui.Theme, n ideNotification) {
 }
 
 // notificationsView is the Notifications tool window: history newest first,
-// each entry a balloon-like card with its time.
+// each entry a balloon-like card with its time. OpenIDEA's content is the
+// list alone; the window chrome carries the title.
 func (m *Model) notificationsView(c *ui.Context, p *ui.Theme, oi oiColors) {
 	ui.Column(c).Key("notifications:window").Grow(1).Children(func() {
-		ui.Row(c).Height(oiHeaderHeight).Padding(12, 10).Gap(8).AlignItems(ui.Center).
-			Children(func() {
-				ui.Text(c, "Notifications").FontSize(12.5).Bold().TextColor(p.Text).SingleLine()
-				ui.Spacer(c)
-				clear := ui.ButtonBase(c.Key("notifications:clear")).Size(22, 22).
-					Radius(4).Justify(ui.Center).AlignItems(ui.Center).Cursor(ui.CursorPointer)
-				if clear.Hovered() {
-					clear.Background(p.SurfaceHover)
-				}
-				clear.Tooltip("Clear All")
-				clear.Children(func() {
-					ui.Text(c, "⌫").FontSize(12).TextColor(p.TextMuted).SingleLine()
-				})
-				clear.OnClick(func() { m.ClearNotifications() })
-			})
 		logged := m.loggedNotifications()
 		if len(logged) == 0 {
+			// OpenIDEA's empty text is centred grey lines without an
+			// illustration, even though the call site names the bell icon.
 			ui.Column(c).Grow(1).Justify(ui.Center).AlignItems(ui.Center).Gap(8).Children(func() {
-				ui.Icon(c, notifyIcon).Size(24, 24).TextColor(p.TextMuted)
-				ui.Text(c, "No notifications").FontSize(11.5).TextColor(p.TextMuted).SingleLine()
+				ui.Text(c, "No notifications").FontSize(13).TextColor(p.TextMuted).SingleLine()
 			})
 			return
 		}
 		ui.Scroll(c).Grow(1).Children(func() {
-			ui.Column(c).Padding(8, 8).Gap(6).Children(func() {
-				for _, it := range logged {
+			ui.Column(c).Children(func() {
+				for i, it := range logged {
 					it := it
-					card := ui.Column(c.Key(fmt.Sprintf("notify:%d", it.id))).Padding(8, 10).
-						Gap(3).Radius(8).Background(p.Surface).
-						BorderWidth(1).BorderColor(notifyLevelColor(p, it.level))
+					last := i == len(logged)-1
+					icon := "status/info"
+					switch it.level {
+					case "error":
+						icon = "status/error"
+					case "warning":
+						icon = "status/warning"
+					case "success":
+						icon = "status/success"
+					}
+					// OpenIDEA's toast inside the tool window: a full-width
+					// row separated by a bottom border, no card background.
+					card := ui.Row(c.Key(fmt.Sprintf("notify:%d", it.id))).
+						Padding(14, 34, 14, 14).Gap(10).AlignItems(ui.Start)
+					if !last {
+						card.BorderWidth(0, 0, 1, 0).BorderColor(oi.border)
+					}
 					card.Children(func() {
-						ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-							ui.Text(c, it.title).FontSize(12).Bold().TextColor(p.Text).SingleLine()
-							ui.Spacer(c)
-							ui.Text(c, it.at.Format("15:04")).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
-							x := ui.ButtonBase(c.Key(fmt.Sprintf("notify:close:%d", it.id))).
-								Size(18, 18).Radius(4).Justify(ui.Center).AlignItems(ui.Center).
-								Cursor(ui.CursorPointer)
-							if x.Hovered() {
-								x.Background(p.SurfaceHover)
-							}
-							x.Children(func() {
-								ui.Text(c, "×").FontSize(12).TextColor(p.TextMuted).SingleLine()
-							})
-							x.OnClick(func() { m.removeNotification(it.id) })
-						})
-						if it.body != "" {
-							ui.Text(c, it.body).FontSize(11).TextColor(p.TextMuted).SingleLine().Ellipsis("…")
-						}
-						if len(it.actions) > 0 {
-							ui.Row(c).Gap(6).Children(func() {
-								for i, a := range it.actions {
-									a := a
-									b := ui.ButtonBase(c.Key(fmt.Sprintf("notify:act:%d:%d", it.id, i))).
-										Height(20).Padding(0, 6).Radius(4).AlignItems(ui.Center).
-										Cursor(ui.CursorPointer)
-									if b.Hovered() {
-										b.Background(p.SurfaceHover)
-									}
-									b.Children(func() {
-										ui.Text(c, a.label).FontSize(11).TextColor(p.Accent).SingleLine()
-									})
-									b.OnClick(func() { a.run(m) })
+						oiIconEl(c, icon, 16, oi, notifyLevelColor(p, it.level))
+						ui.Column(c).Grow(1).MinWidth(0).Gap(4).Children(func() {
+							ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+								ui.Text(c, it.title).FontSize(13).Bold().TextColor(oi.textStrong).
+									SingleLine().Ellipsis("…")
+								ui.Spacer(c)
+								ui.Text(c, it.at.Format("15:04")).FontSize(12).
+									TextColor(oi.textSubtle).SingleLine()
+								x := ui.ButtonBase(c.Key(fmt.Sprintf("notify:close:%d", it.id))).
+									Size(20, 20).Radius(4).Justify(ui.Center).AlignItems(ui.Center).
+									Cursor(ui.CursorPointer)
+								if x.Hovered() {
+									x.Background(oi.hoverTint)
 								}
+								x.Tooltip("Dismiss")
+								x.Children(func() {
+									oiIconEl(c, "general/close", 12, oi, oi.textSubtle)
+								})
+								x.OnClick(func() { m.removeNotification(it.id) })
 							})
-						}
+							if it.body != "" {
+								ui.Text(c, it.body).FontSize(13).TextColor(oi.textSecondary)
+							}
+							if len(it.actions) > 0 {
+								ui.Row(c).Gap(14).Margin(4, 0, 0, 0).Children(func() {
+									for i, a := range it.actions {
+										a := a
+										b := ui.ButtonBase(c.Key(fmt.Sprintf("notify:act:%d:%d", it.id, i))).
+											Padding(0, 0).Cursor(ui.CursorPointer)
+										b.Children(func() {
+											ui.Text(c, a.label).FontSize(13).TextColor(oi.link).SingleLine()
+										})
+										b.OnClick(func() { a.run(m) })
+									}
+								})
+							}
+						})
 					})
 				}
 			})

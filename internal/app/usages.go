@@ -241,7 +241,7 @@ func (m *Model) usagesRows(c *ui.Context, p *ui.Theme) {
 		if name == "" {
 			name = "Current symbol"
 		}
-		ui.Text(c, name).FontSize(12).Bold().TextColor(p.Text).SingleLine().Ellipsis("…")
+		ui.Text(c, name).FontSize(13).Bold().TextColor(p.Text).SingleLine().Ellipsis("…")
 		ui.Spacer(c)
 		text := count(len(u.locs), "usage", "usages")
 		if u.running {
@@ -250,26 +250,26 @@ func (m *Model) usagesRows(c *ui.Context, p *ui.Theme) {
 		if u.done && len(u.locs) == 0 && u.err == "" {
 			text = "Not found"
 		}
-		ui.Text(c, text).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+		ui.Text(c, text).FontSize(12).TextColor(p.TextMuted).SingleLine()
 	})
 	if u.err != "" {
 		ui.Row(c).Padding(4, 8).Children(func() {
-			ui.Text(c, u.err).FontSize(11).TextColor(p.Warning)
+			ui.Text(c, u.err).FontSize(12).TextColor(p.Warning)
 		})
 	}
 	if u.incomplete != "" {
 		ui.Row(c).Padding(4, 8).Children(func() {
-			ui.Text(c, u.incomplete).FontSize(10.5).TextColor(p.Warning)
+			ui.Text(c, u.incomplete).FontSize(12).TextColor(p.Warning)
 		})
 	}
 	if u.librariesSkipped {
 		ui.Row(c).Padding(4, 8).Children(func() {
-			ui.Text(c, "Dependencies and the JDK were not searched; project sources only").FontSize(10.5).TextColor(p.TextMuted)
+			ui.Text(c, "Dependencies and the JDK were not searched; project sources only").FontSize(12).TextColor(p.TextMuted)
 		})
 	}
 	if u.truncated {
 		ui.Row(c).Padding(4, 8).Children(func() {
-			ui.Text(c, fmt.Sprintf("Too many usages; showing the first %d", maxUsages)).FontSize(10.5).TextColor(p.TextMuted)
+			ui.Text(c, fmt.Sprintf("Too many usages; showing the first %d", maxUsages)).FontSize(12).TextColor(p.TextMuted)
 		})
 	}
 	if len(u.locs) == 0 {
@@ -284,7 +284,7 @@ func (m *Model) usagesRows(c *ui.Context, p *ui.Theme) {
 			return
 		}
 		ui.Row(c).Padding(8, 8).Children(func() {
-			ui.Text(c, hint).FontSize(11.5).TextColor(p.TextMuted)
+			ui.Text(c, hint).FontSize(12).TextColor(p.TextMuted)
 		})
 		return
 	}
@@ -296,27 +296,34 @@ func (m *Model) usagesRows(c *ui.Context, p *ui.Theme) {
 				rel = r
 			}
 		}
-		ui.Row(c).Height(22).Padding(0, 8).Gap(6).AlignItems(ui.Center).
-			Children(func() {
-				ui.Text(c, rel).FontSize(11.5).Bold().TextColor(p.Accent).
-					SingleLine().Ellipsis("…")
-				ui.Spacer(c)
-				ui.Text(c, fmt.Sprintf("%d", len(f.locs))).FontSize(10.5).TextColor(p.TextMuted)
-			})
+		oi := oiPaletteOf(p)
+		dir, base := filePathParts(rel)
+		ui.Row(c).Height(24).PaddingStart(4).PaddingEnd(8).Gap(6).Radius(5).
+			AlignItems(ui.Center).Children(func() {
+			fileIconEl(c, oi, f.path, 16, oi.textMuted)
+			ui.Text(c, base).FontSize(13).TextColor(oi.textStrong).
+				SingleLine().Ellipsis("…")
+			if dir != "." && dir != "" {
+				ui.Text(c, dir).FontSize(13).TextColor(oi.textSubtle).SingleLine().Ellipsis("…")
+			}
+			ui.Spacer(c)
+			ui.Text(c, count(len(f.locs), "usage", "usages")).FontSize(13).
+				TextColor(oi.textSubtle)
+		})
 		for li, loc := range f.locs {
 			fi, li, loc := fi, li, loc
-			r := ui.Row(c.Key(fmt.Sprintf("usage:%d:%d", fi, li))).Height(21).Padding(0, 8, 0, 18).
-				Gap(6).AlignItems(ui.Center)
+			r := ui.Row(c.Key(fmt.Sprintf("usage:%d:%d", fi, li))).Height(24).
+				PaddingStart(24).PaddingEnd(8).Gap(6).AlignItems(ui.Center)
 			if r.Hovered() {
-				r.Background(p.SurfaceHover)
+				r.Background(oi.hoverTint)
 			}
 			r.Children(func() {
 				line := int(loc.Range.Start.Line) + 1
 				col := int(loc.Range.Start.Col) + 1
-				ui.Text(c, fmt.Sprintf("%d:%d", line, col)).FontSize(11).TextColor(p.Text).
-					SingleLine()
+				ui.Text(c, fmt.Sprintf("%d:%d", line, col)).FontSize(12).
+					Font("monospace").TextColor(oi.text).SingleLine()
 				if strings.Contains(loc.Path, "://") {
-					ui.Text(c, "External dependencies").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+					ui.Text(c, "External dependencies").FontSize(13).TextColor(oi.textMuted).SingleLine()
 				}
 			})
 			if strings.Contains(loc.Path, "://") {

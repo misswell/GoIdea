@@ -137,16 +137,16 @@ func (m *Model) annotateDialog(c *ui.Context, p *ui.Theme) {
 			}
 			ui.Text(c, title).FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			if rel, err := filepath.Rel(m.Root(), a.path); err == nil && !strings.HasPrefix(rel, "..") {
-				ui.Text(c, filepath.ToSlash(rel)).FontSize(10.5).TextColor(p.TextMuted).
+				ui.Text(c, filepath.ToSlash(rel)).FontSize(12).TextColor(p.TextMuted).
 					SingleLine().Ellipsis("…")
 			}
 			switch {
 			case a.err != "":
-				ui.Text(c, a.err).FontSize(11.5).TextColor(p.Danger).SingleLine().Ellipsis("…")
+				ui.Text(c, a.err).FontSize(12).TextColor(p.Danger).SingleLine().Ellipsis("…")
 			case a.loading:
-				ui.Text(c, "Reading the commit of each line…").FontSize(11.5).TextColor(p.TextMuted)
+				ui.Text(c, "Reading the commit of each line…").FontSize(12).TextColor(p.TextMuted)
 			case len(a.rows) == 0:
-				ui.Text(c, "No lines to annotate").FontSize(11.5).TextColor(p.TextMuted)
+				ui.Text(c, "No lines to annotate").FontSize(12).TextColor(p.TextMuted)
 			}
 			if len(a.rows) > 0 {
 				ui.Scroll(c).Height(460).Children(func() {
@@ -160,7 +160,7 @@ func (m *Model) annotateDialog(c *ui.Context, p *ui.Theme) {
 							}
 							row.Children(func() {
 								ui.Row(c).Width(56).Shrink(0).Justify(ui.End).Children(func() {
-									ui.Text(c, annotateLines(r)).FontSize(10.5).
+									ui.Text(c, annotateLines(r)).FontSize(12).
 										TextColor(p.TextMuted).SingleLine()
 								})
 								ui.Row(c).Width(72).Shrink(0).Children(func() {
@@ -168,17 +168,17 @@ func (m *Model) annotateDialog(c *ui.Context, p *ui.Theme) {
 									if len(short) > 8 {
 										short = short[:8]
 									}
-									ui.Text(c, short).FontSize(10.5).TextColor(p.Accent).SingleLine()
+									ui.Text(c, short).FontSize(12).TextColor(p.Accent).SingleLine()
 								})
 								ui.Row(c).Width(120).Shrink(0).Children(func() {
-									ui.Text(c, r.Author).FontSize(10.5).TextColor(p.Text).
+									ui.Text(c, r.Author).FontSize(12).TextColor(p.Text).
 										SingleLine().Ellipsis("…")
 								})
 								ui.Row(c).Width(86).Shrink(0).Children(func() {
-									ui.Text(c, annotateTime(r.TimeMs)).FontSize(10.5).
+									ui.Text(c, annotateTime(r.TimeMs)).FontSize(12).
 										TextColor(p.TextMuted).SingleLine()
 								})
-								ui.Text(c, r.Summary).FontSize(11.5).TextColor(p.Text).
+								ui.Text(c, r.Summary).FontSize(12).TextColor(p.Text).
 									SingleLine().Ellipsis("…")
 							})
 						}

@@ -1317,17 +1317,17 @@ func (m *Model) treeOpDialog(c *ui.Context, p *ui.Theme) {
 			ui.Text(c, title).FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			if v.kind == treeOpDelete {
 				ui.Text(c, fmt.Sprintf("Move “%s” to the Trash?", filepath.Base(v.path))).
-					FontSize(11.5).TextColor(p.TextMuted)
+					FontSize(12).TextColor(p.TextMuted)
 			} else {
 				in := ui.TextInput(c, &v.name).AutoFocus()
 				in.OnChange(func() { v.err = "" })
 				if in.Submitted() {
 					m.ConfirmTreeOp()
 				}
-				ui.Text(c, hint).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+				ui.Text(c, hint).FontSize(12).TextColor(p.TextMuted).SingleLine()
 			}
 			if v.err != "" {
-				ui.Text(c, v.err).FontSize(11).TextColor(p.Danger).SingleLine().Ellipsis("…")
+				ui.Text(c, v.err).FontSize(12).TextColor(p.Danger).SingleLine().Ellipsis("…")
 			}
 			ui.Row(c).Gap(8).Children(func() {
 				ui.Button(c, "Cancel").OnClick(func() { m.CloseTreeOp() })

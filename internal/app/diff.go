@@ -322,22 +322,22 @@ func (m *Model) diffDialog(c *ui.Context, p *ui.Theme) {
 				ui.Spacer(c)
 				if !d.loading && d.err == "" && d.message == "" {
 					ui.Text(c, fmt.Sprintf("+%d  −%d", d.added, d.gone)).
-						FontSize(11).TextColor(p.TextMuted).SingleLine()
+						FontSize(12).TextColor(p.TextMuted).SingleLine()
 				}
 			})
 			if rel, err := filepath.Rel(m.Root(), d.path); err == nil && !strings.HasPrefix(rel, "..") {
-				ui.Text(c, filepath.ToSlash(rel)).FontSize(10.5).TextColor(p.TextMuted).
+				ui.Text(c, filepath.ToSlash(rel)).FontSize(12).TextColor(p.TextMuted).
 					SingleLine().Ellipsis("…")
 			}
 			if d.other != "" {
-				ui.Text(c, filepath.ToSlash(d.other)).FontSize(10.5).TextColor(p.TextMuted).
+				ui.Text(c, filepath.ToSlash(d.other)).FontSize(12).TextColor(p.TextMuted).
 					SingleLine().Ellipsis("…")
 			}
 			switch {
 			case d.err != "":
-				ui.Text(c, d.err).FontSize(11.5).TextColor(p.Danger).SingleLine().Ellipsis("…")
+				ui.Text(c, d.err).FontSize(12).TextColor(p.Danger).SingleLine().Ellipsis("…")
 			case d.message != "":
-				ui.Text(c, d.message).FontSize(11.5).TextColor(p.TextMuted).SingleLine()
+				ui.Text(c, d.message).FontSize(12).TextColor(p.TextMuted).SingleLine()
 			}
 			if len(d.rows) > 0 {
 				// Mix(tint, 0.14) keeps 86% of the tint: the row became a
@@ -350,7 +350,7 @@ func (m *Model) diffDialog(c *ui.Context, p *ui.Theme) {
 					ui.Column(c).Children(func() {
 						for i, r := range d.rows {
 							i, r := i, r
-							row := ui.Row(c.Key(fmt.Sprintf("diff:%d", i))).Height(20).
+							row := ui.Row(c.Key(fmt.Sprintf("diff:%d", i))).Height(22).
 								Padding(0, 8).AlignItems(ui.Center)
 							switch r.Kind {
 							case textdiff.Add:
@@ -363,22 +363,23 @@ func (m *Model) diffDialog(c *ui.Context, p *ui.Theme) {
 							row.Children(func() {
 								switch r.Kind {
 								case textdiff.Hunk:
-									ui.Text(c, r.Text).FontSize(11).TextColor(p.Accent).
+									ui.Text(c, r.Text).FontSize(13).Font("monospace").TextColor(p.Accent).
 										SingleLine().Ellipsis("…")
 								default:
 									ui.Row(c).Width(34).Shrink(0).Children(func() {
-										ui.Text(c, lineNumber(r.Old)).FontSize(10.5).
+										ui.Text(c, lineNumber(r.Old)).FontSize(12).Font("monospace").
 											TextColor(p.TextMuted).SingleLine()
 									})
 									ui.Row(c).Width(34).Shrink(0).Children(func() {
-										ui.Text(c, lineNumber(r.New)).FontSize(10.5).
+										ui.Text(c, lineNumber(r.New)).FontSize(12).Font("monospace").
 											TextColor(p.TextMuted).SingleLine()
 									})
 									ui.Row(c).Width(16).Shrink(0).Justify(ui.Center).Children(func() {
-										ui.Text(c, diffSign(r.Kind)).FontSize(11).
+										ui.Text(c, diffSign(r.Kind)).FontSize(13).Font("monospace").
 											TextColor(diffColor(r.Kind, p)).SingleLine()
 									})
-									ui.Text(c, r.Text).FontSize(11.5).TextColor(diffColor(r.Kind, p)).
+									ui.Text(c, r.Text).FontSize(13).Font("monospace").
+										TextColor(diffColor(r.Kind, p)).
 										SingleLine().Ellipsis("…")
 								}
 							})

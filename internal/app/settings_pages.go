@@ -78,21 +78,21 @@ func (m *Model) settingsUpdatesBody(c *ui.Context, oi oiColors) {
 		m.SetAutoCheckUpdates(auto)
 	}
 	ui.Text(c, "At startup and every 4 hours while GoIDEA runs. Each new version is announced once.").
-		FontSize(10.5).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
+		FontSize(12).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
 	ui.Row(c).Height(10)
 	whats := m.showWhatsNewAfterUpdate()
 	if ui.Checkbox(c, &whats, "Show What's New after an update").Changed() {
 		m.SetShowWhatsNewAfterUpdate(whats)
 	}
 	ui.Text(c, "Opens a page with the release notes when a new version starts. Help › What's New opens it any time.").
-		FontSize(10.5).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
+		FontSize(12).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
 	ui.Row(c).Height(10)
 	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Update source", 220)
 		ui.Text(c, "GitHub").FontSize(12).TextColor(oi.text).SingleLine()
 	})
 	ui.Text(c, "GoIDEA downloads its updates from its GitHub releases.").
-		FontSize(10.5).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
+		FontSize(12).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
 }
 
 // settingsGroupPage is a group folder: the description above the links to the
@@ -188,7 +188,7 @@ func (m *Model) settingsGeneralBody(c *ui.Context, oi oiColors) {
 		}
 	})
 	ui.Text(c, "Use ; to separate patterns. * matches every file.").
-		FontSize(10.5).TextColor(oi.textMuted).PaddingStart(20).SingleLine().Ellipsis("…")
+		FontSize(12).TextColor(oi.textMuted).PaddingStart(20).SingleLine().Ellipsis("…")
 	ui.Row(c).Height(10)
 	settingsSectionTitle(c, oi, "Virtual Space")
 	end := m.settingsDraft.scrollPastEnd
@@ -396,7 +396,7 @@ func (m *Model) settingsEditorTabsBody(c *ui.Context, oi oiColors) {
 		m.settingsSetActivateOnClose(activate)
 	}
 	ui.Text(c, "Tabs with unsaved changes are never closed automatically.").
-		FontSize(10.5).TextColor(oi.textMuted).PaddingStart(20).SingleLine().Ellipsis("…")
+		FontSize(12).TextColor(oi.textMuted).PaddingStart(20).SingleLine().Ellipsis("…")
 }
 
 // tabPlacementLabel is the select's label for a stored placement.
@@ -470,7 +470,7 @@ func (m *Model) settingsKeymapBody(c *ui.Context, oi oiColors) {
 	})
 	ui.Row(c).Padding(0, 0, 6, 0).Children(func() {
 		ui.Text(c, "The actions this build carries, with the keys of the IntelliJ macOS map.").
-			FontSize(10.5).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
+			FontSize(12).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
 	})
 	conflicts := m.KeymapConflicts()
 	conflicted := map[string]bool{}
@@ -482,7 +482,7 @@ func (m *Model) settingsKeymapBody(c *ui.Context, oi oiColors) {
 	if len(conflicts) > 0 {
 		ui.Row(c).Padding(0, 0, 6, 0).Children(func() {
 			ui.Text(c, fmt.Sprintf("%s; one key is bound to two actions.", count(len(conflicts), "shortcut conflict", "shortcut conflicts"))).
-				FontSize(10.5).TextColor(oi.danger).SingleLine().Ellipsis("…")
+				FontSize(12).TextColor(oi.danger).SingleLine().Ellipsis("…")
 		})
 	}
 	reset := ui.Button(c, "Restore Default Keymap").OnClick(func() {
@@ -507,7 +507,7 @@ func (m *Model) settingsKeymapBody(c *ui.Context, oi oiColors) {
 			if label == "" {
 				label = "Unbound"
 			}
-			ui.Text(c, label).FontSize(10.5).TextColor(oi.textMuted).SingleLine()
+			ui.Text(c, label).FontSize(12).TextColor(oi.textMuted).SingleLine()
 			if _, custom := m.keymapUserBindings()[cmd.id]; custom {
 				x := ui.ButtonBase(c.Key("keymap:clear:"+cmd.id)).Size(18, 18).Radius(4).
 					Justify(ui.Center).AlignItems(ui.Center).Cursor(ui.CursorPointer)
@@ -704,7 +704,7 @@ func (m *Model) settingsNotificationsBody(c *ui.Context, oi oiColors) {
 					if on {
 						tone = oi.text
 					}
-					ui.Text(c, opt.label).FontSize(11).TextColor(tone).SingleLine()
+					ui.Text(c, opt.label).FontSize(12).TextColor(tone).SingleLine()
 				})
 				b.OnClick(func() {
 					p := m.settingsDraft.notifyGroups[g.id]

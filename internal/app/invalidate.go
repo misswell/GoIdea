@@ -169,8 +169,8 @@ func (m *Model) invalidateCachesDialog(c *ui.Context, p *ui.Theme) {
 		ui.Column(c).Width(480).Gap(10).Children(func() {
 			ui.Text(c, "Clear Caches").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			ui.Text(c, "The next start rebuilds the caches: each project's symbol index and syntax caches.").
-				FontSize(11).TextColor(p.TextMuted)
-			ui.Text(c, "Optional: ").FontSize(11).TextColor(p.Text).SingleLine()
+				FontSize(12).TextColor(p.TextMuted)
+			ui.Text(c, "Optional: ").FontSize(12).TextColor(p.Text).SingleLine()
 			local := v.localHistory
 			if ui.Checkbox(c, &local, "Clear file system caches and local history").Changed() {
 				v.localHistory = local
@@ -185,10 +185,10 @@ func (m *Model) invalidateCachesDialog(c *ui.Context, p *ui.Theme) {
 			}
 			if v.localHistory {
 				ui.Text(c, "Local history of every project is deleted.").
-					FontSize(10.5).TextColor(p.Danger).SingleLine()
+					FontSize(12).TextColor(p.Danger).SingleLine()
 			}
 			if v.err != "" {
-				ui.Text(c, v.err).FontSize(10.5).TextColor(p.Danger).
+				ui.Text(c, v.err).FontSize(12).TextColor(p.Danger).
 					SingleLine().Ellipsis("…")
 			}
 			ui.Row(c).Gap(8).Children(func() {

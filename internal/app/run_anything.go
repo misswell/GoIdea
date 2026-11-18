@@ -375,7 +375,7 @@ func (m *Model) runAnythingDialog(c *ui.Context, p *ui.Theme) {
 	d := ui.Modal(c, &open, func() {
 		ui.Column(c).Width(620).Gap(0).Children(func() {
 			ui.Row(c).Height(26).Padding(4, 10).Gap(8).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, "Run Anything").FontSize(11.5).Bold().TextColor(p.Text).SingleLine().Grow(1)
+				ui.Text(c, "Run Anything").FontSize(12).Bold().TextColor(p.Text).SingleLine().Grow(1)
 				if len(history) > 0 {
 					link := ui.ButtonBase(c.Key("runanything:clear")).Height(20).Padding(0, 2).
 						Radius(4).AlignItems(ui.Center).Cursor(ui.CursorPointer)
@@ -383,7 +383,7 @@ func (m *Model) runAnythingDialog(c *ui.Context, p *ui.Theme) {
 						link.Background(p.SurfaceHover)
 					}
 					link.Children(func() {
-						ui.Text(c, "Clear History").FontSize(10.5).TextColor(p.Accent).SingleLine()
+						ui.Text(c, "Clear History").FontSize(12).TextColor(p.Accent).SingleLine()
 					})
 					if link.Clicked() {
 						m.clearRunAnythingHistory()
@@ -392,7 +392,7 @@ func (m *Model) runAnythingDialog(c *ui.Context, p *ui.Theme) {
 			})
 			ui.Row(c).Padding(6, 10).Gap(6).AlignItems(ui.Center).
 				BorderWidth(0, 0, 1, 0).BorderColor(p.Border).Children(func() {
-				ui.Icon(c, iconRun).Size(16, 16).TextColor(p.TextMuted)
+				oiIconEl(c, "run/run", 16, oiPaletteOf(p), p.TextMuted)
 				in := ui.TextInput(c, &v.query).Grow(1).AutoFocus().
 					Placeholder("Run a command, configuration or goal")
 				in.OnChange(func() { m.refreshRunAnything() })
@@ -411,7 +411,7 @@ func (m *Model) runAnythingDialog(c *ui.Context, p *ui.Theme) {
 					text = "Press Enter to run the command in the project directory"
 				}
 				ui.Row(c).Padding(6, 10).Children(func() {
-					ui.Text(c, text).FontSize(10.5).TextColor(p.TextMuted).SingleLine().Ellipsis("…")
+					ui.Text(c, text).FontSize(12).TextColor(p.TextMuted).SingleLine().Ellipsis("…")
 				})
 			} else {
 				ui.Scroll(c).Height(360).Children(func() {
@@ -421,7 +421,7 @@ func (m *Model) runAnythingDialog(c *ui.Context, p *ui.Theme) {
 							r := v.rows[ri]
 							if !r.isItem {
 								ui.Row(c).Height(22).Padding(0, 10).Gap(10).AlignItems(ui.Center).Children(func() {
-									ui.Text(c, r.section).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+									ui.Text(c, r.section).FontSize(12).TextColor(p.TextMuted).SingleLine()
 									ui.Row(c).Height(1).Grow(1).Background(p.Border)
 								})
 								continue
@@ -434,11 +434,11 @@ func (m *Model) runAnythingDialog(c *ui.Context, p *ui.Theme) {
 								row.Background(p.SurfaceHover)
 							}
 							row.Children(func() {
-								ui.Icon(c, iconRun).Size(16, 16).TextColor(p.TextMuted)
+								oiIconEl(c, "run/run", 16, oiPaletteOf(p), p.TextMuted)
 								ui.Text(c, r.label).FontSize(12).TextColor(p.Text).
 									SingleLine().Ellipsis("…").Grow(1)
 								if r.detail != "" {
-									ui.Text(c, r.detail).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+									ui.Text(c, r.detail).FontSize(12).TextColor(p.TextMuted).SingleLine()
 								}
 							})
 							if row.Clicked() {
@@ -451,7 +451,7 @@ func (m *Model) runAnythingDialog(c *ui.Context, p *ui.Theme) {
 			}
 			ui.Row(c).Padding(6, 10).BorderWidth(1, 0, 0, 0).BorderColor(p.Border).Children(func() {
 				ui.Text(c, "Enter to run, Tab to complete. Other commands run in the project directory.").
-					FontSize(10.5).TextColor(p.TextMuted).SingleLine().Ellipsis("…")
+					FontSize(12).TextColor(p.TextMuted).SingleLine().Ellipsis("…")
 			})
 		})
 	})

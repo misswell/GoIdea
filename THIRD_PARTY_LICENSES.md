@@ -138,8 +138,16 @@ submodule plus its prebuilt server.
 ## Icons, fonts and other assets
 
 - `resources/icon.png` is GoIDEA's own icon, generated for this project.
-- mygo's built-in UI draws with the system fonts; it ships no font files of its
-  own in this build.
+- The interface font is Inter 4.1 (SIL Open Font License 1.1, Copyright 2016
+  The Inter Project Authors) and the editor font is JetBrains Mono 2.304
+  (SIL Open Font License 1.1, Copyright 2020 The JetBrains Mono Project
+  Authors). The static TTFs live in `internal/app/assets/fonts`; the license
+  texts are `third_party/inter/LICENSE.txt` and
+  `third_party/jetbrains-mono/OFL.txt`.
+- `internal/app/assets/icons/{expui,openidea}` carry the icons OpenIDEA ships
+  (Apache-2.0, IntelliJ platform UI icons, plus the OpenIDEA-drawn additions).
+  They are unmodified copies; the tool windows, tree, tab strip and welcome
+  screen draw them through `oiIconEl`.
 
 ## Keeping this list true
 

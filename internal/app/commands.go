@@ -347,7 +347,7 @@ func (m *Model) commandsDialog(c *ui.Context, p *ui.Theme) {
 			case strings.TrimSpace(pal.query) != "":
 				hint = fmt.Sprintf("%d commands", len(pal.items))
 			}
-			ui.Text(c, hint).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+			ui.Text(c, hint).FontSize(12).TextColor(p.TextMuted).SingleLine()
 			if len(pal.items) == 0 {
 				return
 			}
@@ -366,9 +366,9 @@ func (m *Model) commandsDialog(c *ui.Context, p *ui.Theme) {
 							ui.Text(c, cmd.title).FontSize(12).TextColor(p.Text).
 								SingleLine().Ellipsis("…")
 							ui.Spacer(c)
-							ui.Text(c, cmd.group).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+							ui.Text(c, cmd.group).FontSize(12).TextColor(p.TextMuted).SingleLine()
 							if cmd.shortcut != "" {
-								ui.Text(c, cmd.shortcut).FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+								ui.Text(c, cmd.shortcut).FontSize(12).TextColor(p.TextMuted).SingleLine()
 							}
 						})
 						if r.Clicked() {

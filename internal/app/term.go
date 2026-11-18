@@ -951,11 +951,11 @@ func (m *Model) termShellDialog(c *ui.Context, p *ui.Theme) {
 			ui.Text(c, "New Terminal Tab").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			switch {
 			case pk.loading:
-				ui.Text(c, "Reading the shells…").FontSize(10.5).TextColor(p.TextMuted).SingleLine()
+				ui.Text(c, "Reading the shells…").FontSize(12).TextColor(p.TextMuted).SingleLine()
 			case pk.err != "":
-				ui.Text(c, pk.err).FontSize(11).TextColor(p.Danger).SingleLine().Ellipsis("…")
+				ui.Text(c, pk.err).FontSize(12).TextColor(p.Danger).SingleLine().Ellipsis("…")
 			case len(pk.shells) == 0:
-				ui.Text(c, "No usable shell was found.").FontSize(11).TextColor(p.TextMuted).SingleLine()
+				ui.Text(c, "No usable shell was found.").FontSize(12).TextColor(p.TextMuted).SingleLine()
 			}
 			for i := range pk.shells {
 				i := i

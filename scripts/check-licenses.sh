@@ -18,7 +18,8 @@ for f in LICENSE NOTICE THIRD_PARTY_LICENSES.md \
          third_party/x-sys/LICENSE third_party/x-sys/PATENTS \
          third_party/moejs/LICENSE third_party/moego/LICENSE \
          third_party/chroma/COPYING third_party/regexp2/LICENSE \
-         third_party/fsnotify/LICENSE third_party/goldmark/LICENSE; do
+         third_party/fsnotify/LICENSE third_party/goldmark/LICENSE \
+         third_party/inter/LICENSE.txt third_party/jetbrains-mono/OFL.txt; do
   if [[ -f "$f" ]]; then echo "  ok  $f"; else echo "  missing $f"; fail=1; fi
 done
 

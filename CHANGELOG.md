@@ -3,6 +3,14 @@
 The GitHub release notes, which **Help › What's New** shows, come from the
 `## <version>` section here. Every release needs one, or its build fails.
 
+## Unreleased
+
+- 界面换用与 OpenIDEA 相同的 Inter、JetBrains Mono 字体，字号与行高一致。
+- 项目树、更改、结构、书签、TODO、问题、调用层级、查找用法与 Git Log 统一为 OpenIDEA 的行高、间距与选中样式。
+- 更改列表按 OpenIDEA 用颜色区分新增、修改、删除和未跟踪文件，提交对话框同款文件图标。
+- 问题窗口使用严重性图标，数据库、调试与终端窗口补齐 OpenIDEA 的图标和文字大小。
+- 更新通知气泡不再显示 Markdown 符号，发布说明按纯文本展示。
+
 ## 0.1.25
 
 - **Check for Updates** 按 OpenIDEA 改为后台任务：检查与下载显示在状态栏，可从 **Background Tasks** 弹窗取消。
