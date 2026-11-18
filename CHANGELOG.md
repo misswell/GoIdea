@@ -3,7 +3,7 @@
 The GitHub release notes, which **Help › What's New** shows, come from the
 `## <version>` section here. Every release needs one, or its build fails.
 
-## Unreleased
+## 0.1.26
 
 - 界面换用与 OpenIDEA 相同的 Inter、JetBrains Mono 字体，字号与行高一致。
 - 项目树、更改、结构、书签、TODO、问题、调用层级、查找用法与 Git Log 统一为 OpenIDEA 的行高、间距与选中样式。
