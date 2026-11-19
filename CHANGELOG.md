@@ -3,7 +3,7 @@
 The GitHub release notes, which **Help › What's New** shows, come from the
 `## <version>` section here. Every release needs one, or its build fails.
 
-## Unreleased
+## 0.1.28
 
 - Java 正在导入或索引时，**Debug** 由后端准备启动，支持用 **Stop** 取消。
 
