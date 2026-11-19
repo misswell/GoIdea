@@ -3,7 +3,7 @@
 The GitHub release notes, which **Help › What's New** shows, come from the
 `## <version>` section here. Every release needs one, or its build fails.
 
-## Unreleased
+## 0.1.27
 
 - 在 **Navigate › Go to Line:Column…** 或状态栏输入行列号，直接跳转到对应位置。
 - **Navigate** 新增 **Recent Files** 和 **Recent Locations**，支持按文件名、代码和编辑记录筛选。
