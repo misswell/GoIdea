@@ -237,24 +237,12 @@ func (m *Model) SmokeDebugSelectedConfig(ctx context.Context) (map[string]any, e
 		m.run.trusted = true
 		m.run.loaded = true
 		m.run.configs = toValueConfigs(configs)
-		m.invalidate()
+		// Reproduce the cached status that used to block Debug. The launch,
+		// build, classpath and debugger still go to the real backend.
+		m.ready = &Readiness{Backend: true, Project: true, Importing: true, JavaDetail: "busy"}
+		out["cachedJavaStatus"] = m.ready.JavaDetail
+		m.DebugRunConfig(app)
 	})
-	// Debug requires Java Ready (section 8): wait for the import before
-	// the readiness gate would refuse the launch.
-	readyDeadline := time.Now().Add(4 * time.Minute)
-	for time.Now().Before(readyDeadline) {
-		if m.readinessNow(ctx).Java {
-			break
-		}
-		select {
-		case <-ctx.Done():
-			return out, ctx.Err()
-		case <-time.After(500 * time.Millisecond):
-		}
-	}
-	m.refreshReadiness()
-	time.Sleep(300 * time.Millisecond)
-	m.DebugRunConfig(app)
 	deadline := time.Now().Add(4 * time.Minute)
 	for time.Now().Before(deadline) {
 		var started, ended bool

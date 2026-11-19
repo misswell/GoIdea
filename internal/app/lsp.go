@@ -199,7 +199,7 @@ func (m *Model) cancelRequest(id uint32) {
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 2*time.Second)
 		defer cancel()
-		_, _ = m.mgr.Invoke(ctx, Window, "cancel_request", map[string]any{"id": id})
+		_, _ = m.invoke(ctx, "cancel_request", map[string]any{"id": id})
 	}()
 }
 

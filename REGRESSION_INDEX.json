@@ -1350,7 +1350,7 @@
   },
   {
    "id": "dbgcfg.session",
-   "label": "the detected application configuration was debugged directly and ran to its end",
+   "label": "Debug ran the detected application to completion with a cached busy Java status",
    "feature": "run.debug: debug the selected run configuration",
    "area": "build-run",
    "gate": "main",

@@ -3,6 +3,10 @@
 The GitHub release notes, which **Help › What's New** shows, come from the
 `## <version>` section here. Every release needs one, or its build fails.
 
+## Unreleased
+
+- Java 正在导入或索引时，**Debug** 由后端准备启动，支持用 **Stop** 取消。
+
 ## 0.1.27
 
 - 在 **Navigate › Go to Line:Column…** 或状态栏输入行列号，直接跳转到对应位置。

@@ -239,7 +239,7 @@ CHECKS = {
     ],
     "dbgcfg": [
         ("dbgcfgError", *absent("dbgcfgError")),
-        ("session", "the detected application configuration was debugged directly and ran to its end", lambda d: (get(d, "dbgcfg.sessionEnded") is True and bool(get(d, "dbgcfg.config")), get(d, "dbgcfg"))),
+        ("session", "Debug ran the detected application to completion with a cached busy Java status", lambda d: (get(d, "dbgcfg.sessionEnded") is True and get(d, "dbgcfg.cachedJavaStatus") == "busy" and bool(get(d, "dbgcfg.config")), get(d, "dbgcfg"))),
     ],
     "hotswap": [
         ("hotswapError", *absent("hotswapError")),

@@ -10,12 +10,92 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"mayoi/internal/adapter"
 	"mayoi/internal/openidea"
 )
 
 func strPtr(s string) *string { return &s }
+
+func TestDebugUsesBackendWhileJavaBusy(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	m := &Model{ctx: ctx, ready: &Readiness{Backend: true, Project: true, JavaDetail: "busy"}}
+	m.setRoot(t.TempDir())
+	m.run.trusted = true
+	finished := make(chan string, 1)
+	m.postHook = func(fn func()) {
+		fn()
+		if !m.debug.starting {
+			finished <- m.debug.err
+		}
+	}
+	m.invokeHook = func(_ context.Context, cmd string, args any) (json.RawMessage, error) {
+		if cmd != "java_resolve_launch" || args.(map[string]any)["module"] != "web" {
+			return nil, fmt.Errorf("unexpected Java preparation request %s: %v", cmd, args)
+		}
+		return nil, errors.New("backend launch result")
+	}
+	cfg, err := openidea.DecodeRunConfig(runConfigJSON(t, map[string]any{
+		"id": "app", "name": "BootstrapApplication", "kind": "application",
+		"command": "java", "args": []string{"-cp", "${classpath}", "example.BootstrapApplication"}, "module": "web",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.DebugRunConfig(cfg)
+	select {
+	case got := <-finished:
+		if got != "backend launch result" {
+			t.Fatalf("debug preparation error = %q", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatalf("Debug bypassed backend Java preparation: %s", m.debug.err)
+	}
+}
+
+func TestDebugStopCancelsJavaPreparation(t *testing.T) {
+	m := &Model{ctx: context.Background(), postHook: func(fn func()) { fn() }}
+	m.setRoot(t.TempDir())
+	m.run.trusted = true
+	waiting := make(chan uint32, 1)
+	cancelled := make(chan uint32, 1)
+	m.invokeHook = func(ctx context.Context, cmd string, args any) (json.RawMessage, error) {
+		params := args.(map[string]any)
+		switch cmd {
+		case "java_resolve_launch":
+			waiting <- params["request"].(uint32)
+			<-ctx.Done()
+			return nil, ctx.Err()
+		case "cancel_request":
+			cancelled <- params["id"].(uint32)
+			return nil, nil
+		default:
+			return nil, fmt.Errorf("unexpected Java preparation request %s", cmd)
+		}
+	}
+	m.DebugRunConfig(&openidea.RunConfig{
+		Name: "Application", Kind: "application", Command: "java", Module: strPtr("web"),
+		Args: []string{"-cp", "${classpath}", "example.Application"},
+	})
+	t.Cleanup(m.StopDebug)
+	var request uint32
+	select {
+	case request = <-waiting:
+	case <-time.After(time.Second):
+		t.Fatal("debug preparation did not reach the backend")
+	}
+	m.StopDebug()
+	select {
+	case got := <-cancelled:
+		if request == 0 || got != request {
+			t.Fatalf("cancelled request = %d, want %d", got, request)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Stop did not cancel the backend preparation request")
+	}
+}
 
 func TestJavaTargetForMavenLayout(t *testing.T) {
 	root := "/p"

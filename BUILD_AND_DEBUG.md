@@ -102,8 +102,9 @@ reaches `run_start`:
   the shared `PrepareJavaLaunch` and `javaDebugLaunch`; a Maven or Gradle
   configuration and an unshipped adapter (Kotlin) are refused with the real
   reason instead of silently starting. The e2e negative phase's
-  `GOIDEA_SMOKE_DBGCFG=1` debugs the detected application configuration of
-  the real Maven project to its end.
+  `GOIDEA_SMOKE_DBGCFG=1` starts with a cached Java `busy` status and debugs the
+  detected application in a real Maven project to its end. The backend waits
+  for the target module as needed. **Stop** cancels pending Java preparation.
 - **重新运行失败的测试** (`run.rerunFailed`) is not ported yet: it needs the
   test-results pipeline upstream builds from the run console's test output
   (the `testing` feature's parsers and results tree). It stays listed

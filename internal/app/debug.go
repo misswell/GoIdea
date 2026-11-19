@@ -589,30 +589,34 @@ func (m *Model) Debug() {
 // reported instead of silently starting.
 func (m *Model) DebugRunConfig(rc *openidea.RunConfig) {
 	root := m.Root()
+	if m.canStartDebug(root) {
+		m.startJavaDebug(rc, root)
+	}
+}
+
+func (m *Model) canStartDebug(root string) bool {
 	m.DockShow("debug")
 	if root == "" || m.busy {
 		m.invalidate()
-		return
+		return false
 	}
 	if !m.run.trusted {
 		m.debug.err = "The project is not trusted: allow building and debugging first"
 		m.invalidate()
-		return
-	}
-	gate, wait := m.debugReadiness()
-	if gate != "" {
-		m.debug.err = gate
-		m.invalidate()
-		return
+		return false
 	}
 	if m.debug.starting {
-		return
+		return false
 	}
 	if m.debug.session != 0 && !m.debug.ended {
 		m.debug.err = "A debug session is already running: stop it first"
 		m.invalidate()
-		return
+		return false
 	}
+	return true
+}
+
+func (m *Model) startJavaDebug(rc *openidea.RunConfig, root string) {
 	if !adapter.IsJVMApplication(rc.Kind) {
 		m.debug.err = fmt.Sprintf("GoIDEA cannot debug %s run configurations yet", adapter.KindLabel(rc.Kind))
 		m.invalidate()
@@ -646,9 +650,6 @@ func (m *Model) DebugRunConfig(rc *openidea.RunConfig) {
 	m.debug.truncated = false
 	m.debug.err = ""
 	m.debug.status = "Saving and building…"
-	if wait {
-		m.debug.status = "Waiting for the Java project to finish importing…"
-	}
 	m.refreshDecorations()
 	m.invalidate()
 
@@ -664,7 +665,7 @@ func (m *Model) DebugRunConfig(rc *openidea.RunConfig) {
 				text += "：" + err.Error()
 			}
 			m.post(func() {
-				if !m.debug.starting {
+				if ctx.Err() == context.Canceled || m.Root() != root || !m.debug.starting {
 					return
 				}
 				m.debug.starting = false
@@ -674,21 +675,14 @@ func (m *Model) DebugRunConfig(rc *openidea.RunConfig) {
 				m.invalidate()
 			})
 		}
-		if wait {
-			if err := m.waitJavaReady(ctx); err != nil {
-				fail("The Java project did not finish importing", err)
-				return
-			}
-			m.post(func() { m.debug.status = "Saving and building…"; m.invalidate() })
-		}
 		// The build reads the files from disk.
 		if err := saveAll(ctx, tabs, p); err != nil {
 			fail("Saving before debugging failed", err)
 			return
 		}
 		_ = m.pushBreakpoints(ctx, "")
-		// Run and Debug share one preparation, exactly like OpenIDEA's
-		// prepareJavaLaunch. A failure stops the launch here.
+		// OpenIDEA's launch RPC waits for the target module's import.
+		// Language-server activity is only advisory.
 		prepared, err := adapter.PrepareJavaLaunch(ctx, javaBackend{m}, rc, &adapter.Preparation{
 			Request: m.nextRequest(),
 			Report:  m.reportDebugConsole(root),
@@ -708,6 +702,10 @@ func (m *Model) DebugRunConfig(rc *openidea.RunConfig) {
 			fail(err.Error(), nil)
 			return
 		}
+		if err := ctx.Err(); err != nil {
+			fail("Starting the debug session failed", err)
+			return
+		}
 		rawSession, err := m.mgr.Invoke(ctx, Window, "debug_start", map[string]any{"config": launch})
 		if err != nil {
 			fail("Starting the debug session failed", err)
@@ -719,7 +717,7 @@ func (m *Model) DebugRunConfig(rc *openidea.RunConfig) {
 			return
 		}
 		m.post(func() {
-			if m.Root() != root || !m.debug.starting {
+			if ctx.Err() != nil || m.Root() != root || !m.debug.starting {
 				// The project changed, or the user stopped while it started:
 				// stop the backend session at once.
 				go func(id uint32) {
@@ -784,28 +782,7 @@ func (m *Model) DebugRerun() {
 // configuration (upstream runContext(true, arg)).
 func (m *Model) DebugContext() {
 	root := m.Root()
-	m.DockShow("debug")
-	if root == "" || m.busy {
-		m.invalidate()
-		return
-	}
-	if !m.run.trusted {
-		m.debug.err = "The project is not trusted: allow building and debugging first"
-		m.invalidate()
-		return
-	}
-	gateCtx, waitImport := m.debugReadiness()
-	if gateCtx != "" {
-		m.debug.err = gateCtx
-		m.invalidate()
-		return
-	}
-	if m.debug.starting {
-		return
-	}
-	if m.debug.session != 0 && !m.debug.ended {
-		m.debug.err = "A debug session is already running: stop it first"
-		m.invalidate()
+	if !m.canStartDebug(root) {
 		return
 	}
 	t := m.tab()
@@ -821,119 +798,7 @@ func (m *Model) DebugContext() {
 		return
 	}
 	rel := relPathUnder(root, t.doc.Path())
-	rc := applicationConfig(target, adapter.JVMModuleDir(rel, m.run.configs, nil))
-	m.debug.lastID = rc.ID
-	m.debug.lastRaw = append(json.RawMessage(nil), rc.Raw()...)
-	m.debug.lastKind = rc.Kind
-	tabs := append([]*Tab(nil), m.tabs...)
-	m.debug.starting = true
-	m.debug.session = 0
-	m.debug.ended = false
-	m.debug.paused = false
-	m.debug.stopLine = -1
-	m.debug.stopFile = ""
-	m.debug.config = target.mainClass
-	m.debug.frames = nil
-	m.debug.scopes = nil
-	m.debug.vars = nil
-	m.debug.threads = nil
-	m.debug.output = nil
-	m.debug.truncated = false
-	m.debug.err = ""
-	m.debug.status = "Saving and building…"
-	if waitImport {
-		m.debug.status = "Waiting for the Java project to finish importing…"
-	}
-	m.refreshDecorations()
-	m.invalidate()
-
-	p := m.prefs.SaveFiles
-	ctx, cancel := context.WithTimeout(m.ctx, 10*time.Minute)
-	m.debug.startCancel = cancel
-	go func() {
-		defer cancel()
-		fail := func(msg string, err error) {
-			text := msg
-			if err != nil {
-				text += "：" + err.Error()
-			}
-			m.post(func() {
-				if !m.debug.starting {
-					return
-				}
-				m.debug.starting = false
-				m.debug.startCancel = nil
-				m.debug.err = text
-				m.debug.status = ""
-				m.invalidate()
-			})
-		}
-		if waitImport {
-			if err := m.waitJavaReady(ctx); err != nil {
-				fail("The Java project did not finish importing", err)
-				return
-			}
-			m.post(func() { m.debug.status = "Saving and building…"; m.invalidate() })
-		}
-		// The build reads the files from disk.
-		if err := saveAll(ctx, tabs, p); err != nil {
-			fail("Saving before debugging failed", err)
-			return
-		}
-		_ = m.pushBreakpoints(ctx, "")
-		// Run and Debug share one preparation: module, build and classpath
-		// through java_resolve_launch, exactly like OpenIDEA's
-		// prepareJavaLaunch. A failure stops the launch here.
-		prepared, err := adapter.PrepareJavaLaunch(ctx, javaBackend{m}, rc, &adapter.Preparation{
-			Request: m.nextRequest(),
-			Report:  m.reportDebugConsole(root),
-		})
-		if err != nil {
-			fail(err.Error(), nil)
-			return
-		}
-		if prepared.Info.ErrorCount > 0 {
-			m.post(func() {
-				m.debug.status = "There are compilation errors; debugging the last compiled classes"
-				m.invalidate()
-			})
-		}
-		launch, err := m.javaDebugLaunch(ctx, rc, root, prepared, m.reportDebugConsole(root))
-		if err != nil {
-			fail(err.Error(), nil)
-			return
-		}
-		rawSession, err := m.mgr.Invoke(ctx, Window, "debug_start", map[string]any{"config": launch})
-		if err != nil {
-			fail("Starting the debug session failed", err)
-			return
-		}
-		var session uint32
-		if err := json.Unmarshal(rawSession, &session); err != nil {
-			fail("Reading the debug session failed", err)
-			return
-		}
-		m.post(func() {
-			if m.Root() != root || !m.debug.starting {
-				// The project changed, or the user stopped while it started:
-				// stop the backend session at once.
-				go func(id uint32) {
-					ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
-					defer cancel()
-					_, _ = m.mgr.Invoke(ctx, Window, "debug_stop", map[string]any{"session": id})
-				}(session)
-				return
-			}
-			m.debug.starting = false
-			m.debug.startCancel = nil
-			if m.debug.session == 0 {
-				m.debug.session = session
-			}
-			m.debug.status = "Debugging started: " + target.mainClass
-			m.refreshDecorations()
-			m.invalidate()
-		})
-	}()
+	m.startJavaDebug(applicationConfig(target, adapter.JVMModuleDir(rel, m.run.configs, nil)), root)
 }
 
 // Continue resumes the paused thread.
@@ -1037,9 +902,7 @@ func (m *Model) RunToCursor(force bool) {
 // ForceRunToCursor runs to the caret ignoring breakpoints.
 func (m *Model) ForceRunToCursor() { m.RunToCursor(true) }
 
-// StopDebug ends the session.
-// StopDebug stops the session, or a launch still waiting for the project's
-// import.
+// StopDebug stops the session or cancels pending Java launch preparation.
 func (m *Model) StopDebug() {
 	if m.debug.starting {
 		if m.debug.startCancel != nil {
@@ -1628,9 +1491,8 @@ func (m *Model) SmokeDebug(ctx context.Context) (map[string]any, error) {
 	return out, nil
 }
 
-// SmokeDebugImport starts a debug while the Java project is still importing
-// and reports that it waits instead of refusing, for the real-server acceptance
-// run. It stops the pending launch before any build starts.
+// SmokeDebugImport checks that Debug starts Java preparation during import and
+// that Stop prevents a pending launch from creating a session.
 func (m *Model) SmokeDebugImport(ctx context.Context) (map[string]any, error) {
 	out := map[string]any{}
 	root := m.Root()

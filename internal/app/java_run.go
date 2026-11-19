@@ -55,9 +55,18 @@ func (b javaBackend) RunConfigs(ctx context.Context) ([]openidea.RunConfig, erro
 }
 
 func (b javaBackend) ResolveLaunch(ctx context.Context, module string, test bool, policy string, request uint32) (json.RawMessage, error) {
-	return b.m.invoke(ctx, "java_resolve_launch", map[string]any{
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	raw, err := b.m.invoke(ctx, "java_resolve_launch", map[string]any{
 		"module": module, "test": test, "policy": policy, "request": request,
 	})
+	if err != nil && ctx.Err() != nil && request != 0 {
+		// Dropping the stdio reply leaves the backend's import and build request
+		// alive. Stop it by the same id that was sent for this launch.
+		b.m.cancelRequest(request)
+	}
+	return raw, err
 }
 
 func (b javaBackend) SaveRunConfigs(ctx context.Context, configs []map[string]any, removedDetectedIDs any) (json.RawMessage, error) {
