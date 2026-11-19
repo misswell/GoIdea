@@ -186,10 +186,12 @@ type Model struct {
 	symbols *symbolPicker
 
 	// files is the open Quick Open picker, or nil.
-	files      *filePicker
-	recentNav  recentNavigation
-	gotoLine   *gotoLineState
-	stackTrace *stackTraceState
+	files         *filePicker
+	recentNav     recentNavigation
+	gotoLine      *gotoLineState
+	stackTrace    *stackTraceState
+	documentation documentationState
+	coverage      coverageState
 
 	// palette is the open command palette, or nil.
 	palette *commandPicker
@@ -921,6 +923,8 @@ func (m *Model) openProjectSaving(dir string) {
 // tabs, terminals, tool windows, searches and their caches — and reports
 // whether Maven was visible, so a new project can load its build model.
 func (m *Model) resetProjectState(dir string) (mavenVisible bool) {
+	m.resetDocumentation()
+	m.coverage = coverageState{}
 	m.recentNav = recentNavigation{}
 	m.gotoLine = nil
 	m.stackTrace = nil
@@ -1358,6 +1362,7 @@ func (m *Model) newTab(doc *docbridge.Document) *Tab {
 		seen:   v,
 	}
 	t.state.Font = ui.Font{Family: oiFontMono, Size: m.prefs.fontSize()}
+	t.state.GutterMarks = m.coverageGutterMarks(path)
 	m.applyTabZenGutter(t)
 	m.noteTabUse(t)
 	t.state.OnGutterClick = func(line int) { m.toggleBreakpointAt(path, line) }
@@ -2070,6 +2075,11 @@ func (m *Model) View(c *ui.Context) {
 }
 
 func (m *Model) shortcuts(c *ui.Context) {
+	if (!m.overlayOpen() || m.documentation.popup != nil) &&
+		(c.Shortcut(0, ui.KeyF1) || c.Shortcut(ui.Ctrl, ui.KeyJ)) {
+		m.RunCommand("code.quickDocumentation")
+		return
+	}
 	if m.recentNav.popup != nil {
 		return
 	}
@@ -2128,6 +2138,26 @@ func (m *Model) shortcuts(c *ui.Context) {
 	// A modal sheet owns the keyboard; only its own dismiss keys apply.
 	if m.modalOverlayOpen() {
 		return
+	}
+	if !m.overlayOpen() || m.se != nil {
+		if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyA) {
+			m.RunCommand("navigate.findAction")
+			return
+		}
+		if m.Root() != "" {
+			if c.Shortcut(ui.Cmd, ui.KeyO) {
+				m.RunCommand("navigate.gotoClass")
+				return
+			}
+			if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyO) {
+				m.RunCommand("navigate.gotoFile")
+				return
+			}
+			if c.Shortcut(ui.Cmd|ui.Alt, ui.KeyO) {
+				m.RunCommand("navigate.gotoSymbol")
+				return
+			}
+		}
 	}
 	if !m.overlayOpen() {
 		if c.Shortcut(ui.Cmd, ui.KeyL) {
@@ -2209,7 +2239,7 @@ func (m *Model) shortcuts(c *ui.Context) {
 	if c.Shortcut(ui.Cmd, ui.KeyW) {
 		m.closeTab(m.active)
 	}
-	if c.Shortcut(ui.Cmd, ui.KeyO) {
+	if c.Shortcut(ui.Cmd|ui.Shift|ui.Alt, ui.KeyO) {
 		m.chooseProject()
 	}
 	// OpenIDEA's IntelliJ keymap keeps Cmd+1..9 for the tool windows and

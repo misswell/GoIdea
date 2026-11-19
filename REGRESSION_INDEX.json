@@ -45,6 +45,14 @@
    "doc": "RPC_PROTOCOL.md"
   },
   {
+   "id": "base.coverage.report",
+   "label": "Coverage imports LCOV and opens marked source",
+   "feature": "Native Coverage parses a report through the backend and navigates to covered source",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
    "id": "base.tabs",
    "label": "a file is open in a tab",
    "feature": "Startup file restore",
@@ -211,6 +219,14 @@
    "area": "search",
    "gate": "release",
    "doc": "README.md"
+  },
+  {
+   "id": "lsp.se.navigation",
+   "label": "navigation actions open the matching search tabs",
+   "feature": "Class, file, symbol and action navigation open the corresponding Search Everywhere tabs",
+   "area": "search",
+   "gate": "release",
+   "doc": "EDITOR.md"
   },
   {
    "id": "lsp.se.symbols",
@@ -1491,6 +1507,14 @@
    "area": "java-lsp",
    "gate": "release",
    "doc": "JAVA_SUPPORT.md"
+  },
+  {
+   "id": "lsp.documentation",
+   "label": "Quick Documentation docks real Java hover content",
+   "feature": "Native Quick Documentation queries JDT at the caret and preserves the result when docked",
+   "area": "java-lsp",
+   "gate": "release",
+   "doc": "EDITOR.md"
   },
   {
    "id": "lsp.definition",

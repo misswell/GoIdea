@@ -58,6 +58,14 @@ CHECKS = {
     ],
     "base": [
         ("backend", "backend is up", lambda d: (d.get("backend") is True, d.get("backend"))),
+        ("coverage.report", "Coverage imports LCOV and opens marked source", lambda d: (
+            not d.get("coverageError")
+            and all(get(d, "coverage." + key) is True for key in ("open", "visible", "managed", "opened"))
+            and get(d, "coverage.linesCovered") == 1 and get(d, "coverage.linesTotal") == 2
+            and get(d, "coverage.firstFile") == "src/main/java/com/example/Greeter.java"
+            and (get(d, "coverage.editorMarks") or 0) >= 2,
+            d.get("coverageError") or d.get("coverage"),
+        )),
         ("tabs", "a file is open in a tab", lambda d: ((d.get("tabs") or 0) >= 1, d.get("tabs"))),
         ("edited", "edit reached the backend", lambda d: (d.get("edited") is True, d.get("edited"))),
         ("undone", "undo round-tripped", lambda d: (d.get("undone") is True, d.get("undone"))),
@@ -271,6 +279,10 @@ CHECKS = {
         ("completion.items", "completion returned items", lambda d: ((get(d, "lsp.completionItems") or 0) > 0, get(d, "lsp.completionItems"))),
         ("completion.first", "completion has a first label", lambda d: (bool(get(d, "lsp.completionFirst")), get(d, "lsp.completionFirst"))),
         ("hover", "hover returned documentation", lambda d: (bool(get(d, "lsp.hoverText")), get(d, "lsp.hoverText"))),
+        ("documentation", "Quick Documentation docks real Java hover content", lambda d: (
+            (get(d, "lsp.documentation.blocks") or 0) > 0 and get(d, "lsp.documentation.docked") is True,
+            get(d, "lsp.documentation"),
+        )),
         ("definition", "definition resolved to App.java", lambda d: ((get(d, "lsp.definitionPath") or "").endswith("App.java"), get(d, "lsp.definitionPath"))),
         ("format", "format changed the buffer", lambda d: (get(d, "lsp.format.changed") is True, get(d, "lsp.format.changed"))),
         ("references.count", "find usages returned references", lambda d: ((get(d, "lsp.references.count") or 0) > 0, get(d, "lsp.references.count"))),
@@ -288,6 +300,11 @@ CHECKS = {
         ("hierarchy.visible", "the hierarchy window showed on the right", lambda d: (get(d, "hierarchy.visible") is True and get(d, "hierarchy.mode") == "call", {"visible": get(d, "hierarchy.visible"), "mode": get(d, "hierarchy.mode")})),
         ("hierarchyError", *absent("hierarchyError")),
         ("se.files", "Search Everywhere listed files", lambda d: ((get(d, "searchEverywhere.files") or 0) >= 1, get(d, "searchEverywhere.files"))),
+        ("se.navigation", "navigation actions open the matching search tabs", lambda d: (
+            get(d, "searchEverywhere.entryTabs") == {"navigate.gotoClass": "classes", "navigate.gotoFile": "files", "navigate.gotoSymbol": "symbols", "navigate.findAction": "actions"}
+            and (get(d, "searchEverywhere.classes") or 0) >= 1,
+            {"tabs": get(d, "searchEverywhere.entryTabs"), "classes": get(d, "searchEverywhere.classes")},
+        )),
         ("se.symbols", "Search Everywhere listed symbols from the language server", lambda d: ((get(d, "searchEverywhere.symbols") or 0) >= 1, get(d, "searchEverywhere.symbols"))),
         ("se.actions", "Search Everywhere listed actions", lambda d: ((get(d, "searchEverywhere.actions") or 0) >= 1, get(d, "searchEverywhere.actions"))),
         ("se.text", "Search Everywhere listed text matches", lambda d: ((get(d, "searchEverywhere.text") or 0) >= 1, get(d, "searchEverywhere.text"))),

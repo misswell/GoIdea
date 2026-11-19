@@ -26,7 +26,8 @@ func init() {
 				t := m.tab()
 				return t != nil && t.kind == "" && t.doc != nil && m.canCompileFile(t.doc.Path())
 			}
-		case "navigate.recentFiles", "navigate.recentLocations", "analyze.stackTrace":
+		case "navigate.recentFiles", "navigate.recentLocations", "analyze.stackTrace",
+			"navigate.gotoClass", "navigate.gotoFile", "navigate.gotoSymbol", "navigate.findAction":
 			a.When = func(m *Model) bool { return m.Root() != "" && !m.showingWelcome }
 		}
 		_ = registerAction(a)

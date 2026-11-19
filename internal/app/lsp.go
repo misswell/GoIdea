@@ -526,6 +526,7 @@ func (m *Model) SmokeLSP(ctx context.Context) (map[string]any, error) {
 	} else if hover != nil {
 		out["hoverText"] = hoverText(hover.Contents)
 	}
+	out["documentation"] = m.smokeDocumentation(ctx, t, symbolOff)
 
 	var locs []openidea.Location
 	if err := m.smokeLSPCall(ctx, "lsp_goto", map[string]any{

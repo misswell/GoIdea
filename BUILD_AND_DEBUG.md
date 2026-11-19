@@ -18,6 +18,18 @@ shows the output, and runs the DAP session. Everything below was verified with
   the backend, which keeps run and debug on one resolver
   (`run_configs` and `java_resolve_launch`).
 
+## Coverage
+
+**Run › Run with Coverage** asks the OpenIDEA backend to prepare the selected
+configuration and read the report after the process exits. **Run › Coverage**
+also offers report import and management. The backend reads LCOV, JaCoCo XML
+and Go cover profiles. The native **Coverage** window lists the covered files
+with line and branch totals. Selecting a file opens its source with gutter
+marks, and the project tree shows files' line coverage percentages.
+
+The base smoke imports LCOV through the shipped backend, opens a covered
+source file from the Coverage window and checks its editor marks.
+
 ## Edit Configurations, Re-run and Build Before Launch
 
 - **编辑运行配置…** (`Ctrl+Alt+Shift+R`, `run.editConfigs`) opens the

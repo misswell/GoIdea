@@ -1540,8 +1540,9 @@ func (m *Model) emptyEditor(c *ui.Context, p *ui.Theme) {
 	ui.Column(c).Grow(1).FillHeight().AlignItems(ui.Center).Justify(ui.Center).
 		Padding(24, 24).Children(func() {
 		ui.Column(c).Gap(8).Children(func() {
-			hint("search", "Search Everywhere", "⌘⇧P", func() { m.OpenCommands() })
-			hint("goto", "Go to File", "⌘P", func() { m.OpenQuickFiles() })
+			hint("search", "Search Everywhere", "", m.OpenSearchEverywhere)
+			hint("goto", "Go to File", "⌘⇧O", func() { m.RunCommand("navigate.gotoFile") })
+			hint("recent", "Recent Files", "⌘E", func() { m.RunCommand("navigate.recentFiles") })
 			ui.Row(c).Padding(0, 0, 0, 0).Children(func() {
 				ui.Text(c, "Drop files here to open them").FontSize(13).
 					TextColor(oi.textFaint).SingleLine()

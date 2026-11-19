@@ -640,6 +640,15 @@ func smoke(m *app.Model) {
 			fields["logError"] = logErr.Error()
 		}
 	}
+	if path := os.Getenv("GOIDEA_SMOKE_COVERAGE"); path != "" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		coverage, err := m.SmokeCoverage(ctx, path)
+		cancel()
+		fields["coverage"] = coverage
+		if err != nil {
+			fields["coverageError"] = err.Error()
+		}
+	}
 	// The commit goes last: the checks above read the working tree the project
 	// started with, and committing changes it.
 	if os.Getenv("GOIDEA_SMOKE_COMMIT") == "1" && root != "" {

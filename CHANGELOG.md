@@ -3,6 +3,12 @@
 The GitHub release notes, which **Help › What's New** shows, come from the
 `## <version>` section here. Every release needs one, or its build fails.
 
+## Unreleased
+
+- **Run › Run with Coverage** 和 **Coverage** 工具窗口支持运行、导入和查看覆盖率。
+- **Code › Quick Documentation** 支持从编辑器查看文档，也可停靠在 Documentation 窗口。
+- **Navigate** 的类、文件、符号和操作快捷键进入 **Search Everywhere** 对应页签。
+
 ## 0.1.28
 
 - Java 正在导入或索引时，**Debug** 由后端准备启动，支持用 **Stop** 取消。

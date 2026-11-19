@@ -11,7 +11,71 @@
     },
     "action:navigate.findAction": {
       "status": "integrated",
-      "evidence": "base.commands"
+      "evidence": "lsp.se.navigation, lsp.se.actions"
+    },
+    "action:navigate.gotoClass": {
+      "status": "integrated",
+      "evidence": "lsp.se.navigation; Classes uses the real workspace symbol query"
+    },
+    "action:navigate.gotoSymbol": {
+      "status": "integrated",
+      "evidence": "lsp.se.navigation, lsp.se.symbols"
+    },
+    "feature:coverage": {
+      "status": "partial",
+      "evidence": "base.coverage.report; internal/app/coverage_run.go runs the selected configuration; context executor and tooltip are pending"
+    },
+    "action:coverage.importReport": {
+      "status": "integrated",
+      "evidence": "base.coverage.report"
+    },
+    "action:coverage.manageReports": {
+      "status": "partial",
+      "evidence": "base.coverage.report; internal/app/coverage_test.go verifies report persistence and removal"
+    },
+    "action:coverage.show": {
+      "status": "partial",
+      "evidence": "internal/app/coverage.go SetCoverageVisible"
+    },
+    "action:coverage.hide": {
+      "status": "partial",
+      "evidence": "internal/app/coverage.go SetCoverageVisible"
+    },
+    "action:run.coverage": {
+      "status": "partial",
+      "evidence": "internal/app/coverage_run.go; TestCoverageCollectsAnExitBeforeTheRunStartReply"
+    },
+    "toolwindow:coverage": {
+      "status": "partial",
+      "evidence": "base.coverage.report; internal/app/coverage_test.go tests rendering of line and branch metrics"
+    },
+    "editor-contribution:coverage.gutter": {
+      "status": "partial",
+      "evidence": "base.coverage.report proves gutter marks; hover and remapping after edits are pending"
+    },
+    "overlay:coverage.manageReports": {
+      "status": "partial",
+      "evidence": "base.coverage.report opens native report management"
+    },
+    "toolwindow:documentation": {
+      "status": "partial",
+      "evidence": "lsp.documentation and TestDocumentationFocusAndKeyboardDock; completion and dependency-editor triggers are pending"
+    },
+    "action:code.quickDocumentation": {
+      "status": "partial",
+      "evidence": "internal/app/app.go routes F1 and Ctrl+J to Quick Documentation"
+    },
+    "command:coverage_import": {
+      "status": "integrated",
+      "evidence": "base.coverage.report"
+    },
+    "command:coverage_prepare": {
+      "status": "partial",
+      "evidence": "internal/app/coverage_run.go prepares the selected configuration with the backend"
+    },
+    "command:coverage_collect": {
+      "status": "partial",
+      "evidence": "internal/app/coverage_run.go collects the backend report after process exit"
     },
     "action:navigate.typeHierarchy": {
       "status": "integrated",
@@ -311,7 +375,7 @@
     },
     "action:navigate.gotoFile": {
       "status": "integrated",
-      "evidence": "internal/app/quickopen_test.go"
+      "evidence": "lsp.se.navigation, lsp.se.files"
     },
     "action:navigate.searchText": {
       "status": "integrated",

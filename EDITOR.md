@@ -4,6 +4,16 @@ The editor is MyGo's `ui/editor` over buffers owned by `internal/docbridge`.
 Draw and input belong to MyGo; text, positions and backend synchronization
 belong to GoIDEA.
 
+## Navigation and quick documentation
+
+**Navigate › Go to Class**, **Go to File**, **Go to Symbol** and **Find Action**
+open the corresponding Search Everywhere tabs. Their macOS shortcuts are
+`Cmd+O`, `Cmd+Shift+O`, `Cmd+Option+O` and `Cmd+Shift+A`.
+
+**Code › Quick Documentation** queries the language server for the symbol at
+the caret and displays the result in a native popup. `F1` focuses the popup,
+then moves the documentation to the right tool window on the next press.
+
 ## Documents and tabs
 
 - One `docbridge.Document` exists per path; several tabs can show the same

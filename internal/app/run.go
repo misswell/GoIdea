@@ -37,6 +37,9 @@ type RunPane struct {
 	// pendingTrust is a Run the user asked for before trusting the project;
 	// it starts once the grant lands.
 	pendingTrust bool
+	// pendingCoverage selects the coverage executor for the next pending Run.
+	pendingCoverage bool
+	coverage        *coverageExecution
 	// inline is a configuration that is not in the detected list, such as the
 	// command line Run Anything starts; current() reports it while it is set.
 	inline *openidea.RunConfig
@@ -202,6 +205,10 @@ func (m *Model) loadRunConfigs() {
 				return
 			}
 			if err != nil {
+				if m.run.pendingCoverage {
+					m.run.pendingStart = false
+					m.run.pendingCoverage = false
+				}
 				m.run.err = "Could not read the run configurations: " + err.Error()
 				m.run.visible = true
 				m.occupyBottom("run")
@@ -272,6 +279,7 @@ func (m *Model) ShowRun() { m.dockActivate("run") }
 
 // Run starts the selected configuration, after saving what the build must see.
 func (m *Model) Run() {
+	m.run.pendingCoverage = false
 	m.DockShow("run")
 	if m.busy {
 		m.invalidate()
@@ -297,7 +305,17 @@ func (m *Model) startRun() {
 	m.run.inline = nil
 	cfg := m.run.current()
 	if cfg == nil {
+		if m.run.pendingCoverage {
+			m.run.pendingCoverage = false
+			m.notifyInfo("run.coverage", "Choose a run configuration to collect coverage", "")
+			return
+		}
 		m.loadRunConfigs()
+		return
+	}
+	if m.run.pendingCoverage {
+		m.run.pendingCoverage = false
+		m.startRunWithCoverage(cfg.Raw(), cfg.Name, &coverageExecution{name: cfg.Name, root: m.Root()})
 		return
 	}
 	m.startRunWith(json.RawMessage(cfg.Raw()), cfg.Name)
@@ -306,6 +324,10 @@ func (m *Model) startRun() {
 // startRunWith starts an arbitrary configuration, which is how a typed
 // command line (Run Anything) runs beside the detected configurations.
 func (m *Model) startRunWith(raw json.RawMessage, name string) bool {
+	return m.startRunWithCoverage(raw, name, nil)
+}
+
+func (m *Model) startRunWithCoverage(raw json.RawMessage, name string, coverage *coverageExecution) bool {
 	if !m.run.trusted {
 		m.invalidate()
 		return false
@@ -406,6 +428,7 @@ func (m *Model) startRunWith(raw json.RawMessage, name string) bool {
 	m.run.awaiting = true
 	m.run.running = false
 	m.run.runID = 0
+	m.run.coverage = coverage
 	m.run.channel = ch
 	m.run.pid = nil
 	m.run.exitCode = nil
@@ -424,24 +447,40 @@ func (m *Model) startRunWith(raw json.RawMessage, name string) bool {
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 5*time.Minute)
 		defer cancel()
+		fail := func(message string, plan *coveragePlan, err error) {
+			m.post(func() {
+				if m.Root() != root || m.run.channel != ch {
+					return
+				}
+				m.run.busy = false
+				m.run.awaiting = false
+				m.run.coverage = nil
+				m.run.err = message + err.Error()
+				if plan != nil {
+					m.reportCoveragePreparationError(name, *plan, err)
+				}
+				m.invalidate()
+			})
+		}
 		// The backend builds from disk, so unsaved text must be written first.
 		if err := saveAll(ctx, tabs, p); err != nil {
-			m.post(func() {
-				m.run.busy = false
-				m.run.awaiting = false
-				m.run.err = "Saving before running failed: " + err.Error()
-				m.invalidate()
-			})
+			fail("Saving before running failed: ", nil, err)
 			return
 		}
-		resolved, err := m.resolveJVMConfig(ctx, raw, root, m.reportRunConsole(root, ch))
+		launch := raw
+		var plan coveragePlan
+		if coverage != nil {
+			var err error
+			plan, err = m.prepareCoverage(ctx, raw)
+			if err != nil {
+				fail("Preparing coverage failed: ", &plan, err)
+				return
+			}
+			launch = plan.Launch
+		}
+		resolved, err := m.resolveJVMConfig(ctx, launch, root, m.reportRunConsole(root, ch))
 		if err != nil {
-			m.post(func() {
-				m.run.busy = false
-				m.run.awaiting = false
-				m.run.err = "Starting failed: " + err.Error()
-				m.invalidate()
-			})
+			fail("Starting failed: ", nil, err)
 			return
 		}
 		args["config"] = resolved
@@ -468,6 +507,7 @@ func (m *Model) startRunWith(raw json.RawMessage, name string) bool {
 			if err != nil {
 				m.run.awaiting = false
 				m.run.running = false
+				m.run.coverage = nil
 				m.run.err = "Starting failed: " + err.Error()
 				m.invalidate()
 				return
@@ -475,8 +515,19 @@ func (m *Model) startRunWith(raw json.RawMessage, name string) bool {
 			m.run.runID = info.ID
 			m.run.pid = info.PID
 			m.run.running = info.Running
+			if coverage != nil {
+				coverage.report = plan.Report
+				for _, exit := range coverage.early {
+					if exit.Run == info.ID {
+						m.acceptExit(exit)
+						return
+					}
+				}
+				coverage.early = nil
+			}
 			if !info.Running {
 				m.run.awaiting = false
+				m.run.coverage = nil
 			}
 			m.status = "Running: " + info.Name
 			m.invalidate()
@@ -497,12 +548,19 @@ func (m *Model) StopRun() {
 		return
 	}
 	m.status = "Stopping…"
+	coverage := m.run.coverage
+	if coverage != nil {
+		coverage.stopped = true
+	}
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
 		defer cancel()
 		if _, err := m.invoke(ctx, "run_stop", map[string]any{"id": id}); err != nil {
 			m.post(func() {
+				if coverage != nil && m.run.coverage == coverage {
+					coverage.stopped = false
+				}
 				m.run.err = "Stopping failed: " + err.Error()
 				m.invalidate()
 			})
@@ -794,6 +852,15 @@ func (m *Model) acceptExit(e openidea.RunExitedEvent) {
 	}
 	if m.run.runID != 0 && e.Run != m.run.runID {
 		return
+	}
+	if coverage := m.run.coverage; coverage != nil {
+		// A short-lived process can exit before run_start returns its ID.
+		if m.run.runID == 0 {
+			coverage.saveEarlyExit(e)
+			return
+		}
+		m.run.coverage = nil
+		m.collectCoverage(coverage, e)
 	}
 	m.run.awaiting = false
 	m.run.running = false
@@ -1440,6 +1507,7 @@ func (m *Model) trustDialog(c *ui.Context, p *ui.Theme) {
 				ui.Button(c, "Cancel").OnClick(func() {
 					m.trustAsk = false
 					m.run.pendingTrust = false
+					m.run.pendingCoverage = false
 					m.invalidate()
 				})
 				ui.Button(c, "Trust Project").OnClick(func() {
@@ -1453,6 +1521,7 @@ func (m *Model) trustDialog(c *ui.Context, p *ui.Theme) {
 	if !open {
 		m.trustAsk = false
 		m.run.pendingTrust = false
+		m.run.pendingCoverage = false
 		m.invalidate()
 	}
 }

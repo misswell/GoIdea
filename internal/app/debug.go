@@ -221,7 +221,10 @@ func (m *Model) pushFileBreakpoints(ctx context.Context, path string) error {
 // refreshDecorations paints breakpoints and Git changes in the gutter, and the
 // paused line behind the code of every open tab.
 func (m *Model) refreshDecorations() {
-	for _, t := range m.tabs {
+	for _, t := range m.allTabs() {
+		if t.doc == nil || t.state == nil {
+			continue
+		}
 		path := t.doc.Path()
 		lines := m.debug.breakpointLines(path)
 		bps := make(map[int]bool, len(lines))
@@ -233,6 +236,12 @@ func (m *Model) refreshDecorations() {
 		seen := make(map[int]bool, len(marks)+len(t.gitMarks))
 		for _, mark := range marks {
 			seen[mark.Line] = true
+		}
+		for _, mark := range m.coverageGutterMarks(path) {
+			if !seen[mark.Line] {
+				marks = append(marks, mark)
+				seen[mark.Line] = true
+			}
 		}
 		for _, mark := range t.gitMarks {
 			if !seen[mark.Line] {

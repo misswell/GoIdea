@@ -26,12 +26,12 @@ new action, tool window, page or command appears automatically.
 
 | Kind | Items | Integrated | Partial | Engine | Blocked | Missing |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Feature folders | 44 | 2 | 13 | 0 | 0 | 29 |
-| Actions | 673 | 45 | 100 | 0 | 0 | 528 |
+| Feature folders | 44 | 2 | 14 | 0 | 0 | 28 |
+| Actions | 673 | 48 | 105 | 0 | 0 | 520 |
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
-| Tool windows | 30 | 10 | 9 | 0 | 0 | 11 |
-| Overlays | 56 | 3 | 4 | 0 | 0 | 49 |
-| Editor contributions | 37 | 0 | 1 | 0 | 0 | 36 |
+| Tool windows | 30 | 10 | 11 | 0 | 0 | 9 |
+| Overlays | 56 | 3 | 5 | 0 | 0 | 48 |
+| Editor contributions | 37 | 0 | 2 | 0 | 0 | 35 |
 | Editor kinds | 4 | 0 | 0 | 0 | 0 | 4 |
 | File editor providers | 4 | 0 | 0 | 0 | 0 | 4 |
 | Settings pages | 84 | 1 | 10 | 0 | 0 | 73 |
@@ -57,7 +57,7 @@ directory registers.
 | `build-tools` | 23 | 2 | 1 | 3 | 0 | partial - internal/app/maven.go, pom_completion.go and pom_goto.go; Maven window and POM completion/navigation; internal/app/maven_test.go; see separate Maven and Gradle rows |
 | `code-insight` | 6 | 3 | 1 | 0 | 0 | partial - lsp.references.count, lsp.symbols |
 | `color-preview` | 0 | 0 | 0 | 1 | 0 | missing |
-| `coverage` | 6 | 1 | 1 | 1 | 0 | missing |
+| `coverage` | 6 | 1 | 1 | 1 | 0 | partial - base.coverage.report; internal/app/coverage_run.go runs the selected configuration; context executor and tooltip are pending |
 | `database` | 46 | 1 | 1 | 1 | 0 | partial - UPSTREAM_FEATURE_MATRIX.md database console; db_* commands |
 | `debugger` | 40 | 1 | 1 | 1 | 0 | partial - debug.paused, debug.step.paused, debug.vars; internal/app/debug.go builds the file's application config (upstream applicationConfig port) and calls the shared adapter.PrepareJavaLaunch, then java_debug_server + debug_start with the resolved classpaths, modulePaths, projectName, javaExec, VM and program arguments (upstream javaLaunchConfig java-debug branch); java-debug missing offers the one-click install; HotSwap (internal/app/hotswap.go) compiles with java_build_workspace and redefines via debug_redefine_classes, proven by hotswap.* release-gate checks (the reloaded code prints the new text) |
 | `dependencies` | 0 | 0 | 0 | 1 | 0 | missing |
@@ -189,11 +189,11 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 
 | Action | Title | Source | Status |
 | --- | --- | --- | --- |
-| `coverage.hide` | Hide Coverage | `src/features/coverage/index.ts` | missing |
-| `coverage.importReport` | Import a Coverage Report… | `src/features/coverage/index.ts` | missing |
-| `coverage.manageReports` | Manage Coverage Reports… | `src/features/coverage/index.ts` | missing |
-| `coverage.show` | Show Coverage | `src/features/coverage/index.ts` | missing |
-| `run.coverage` | Run with Coverage | `src/features/coverage/index.ts` | missing |
+| `coverage.hide` | Hide Coverage | `src/features/coverage/index.ts` | partial - internal/app/coverage.go SetCoverageVisible |
+| `coverage.importReport` | Import a Coverage Report… | `src/features/coverage/index.ts` | integrated - base.coverage.report |
+| `coverage.manageReports` | Manage Coverage Reports… | `src/features/coverage/index.ts` | partial - base.coverage.report; internal/app/coverage_test.go verifies report persistence and removal |
+| `coverage.show` | Show Coverage | `src/features/coverage/index.ts` | partial - internal/app/coverage.go SetCoverageVisible |
+| `run.coverage` | Run with Coverage | `src/features/coverage/index.ts` | partial - internal/app/coverage_run.go; TestCoverageCollectsAnExitBeforeTheRunStartReply |
 | `run.coverageContext` | Run Context Configuration with Coverage | `src/features/coverage/index.ts` | missing |
 
 ### database
@@ -512,11 +512,11 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `find.replaceInPath` | Replace in Files… | `src/features/search/index.ts` | missing |
 | `find.rerun` | Rerun Search | `src/features/search/index.ts` | missing |
 | `navigate.fileStructure` | File Structure | `src/features/search/index.ts` | missing |
-| `navigate.findAction` | Find Action… | `src/features/search/index.ts` | integrated - base.commands |
+| `navigate.findAction` | Find Action… | `src/features/search/index.ts` | integrated - lsp.se.navigation, lsp.se.actions |
 | `navigate.gotoBookmark${d}` |  | `src/features/search/index.ts` | partial - internal/app/bookmarks.go JumpBookmarkMnemonic bound to Ctrl+digit for 0-9; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go |
-| `navigate.gotoClass` | Go to Class… | `src/features/search/index.ts` | missing |
-| `navigate.gotoFile` | Go to File… | `src/features/search/index.ts` | integrated - internal/app/quickopen_test.go |
-| `navigate.gotoSymbol` | Go to Symbol… | `src/features/search/index.ts` | missing |
+| `navigate.gotoClass` | Go to Class… | `src/features/search/index.ts` | integrated - lsp.se.navigation; Classes uses the real workspace symbol query |
+| `navigate.gotoFile` | Go to File… | `src/features/search/index.ts` | integrated - lsp.se.navigation, lsp.se.files |
+| `navigate.gotoSymbol` | Go to Symbol… | `src/features/search/index.ts` | integrated - lsp.se.navigation, lsp.se.symbols |
 | `navigate.nextBookmark` | Next Bookmark | `src/features/search/index.ts` | partial - internal/app/bookmarks.go NextBookmark and stepBookmark wrap; base.bookmark.next; internal/app/bookmarks_test.go |
 | `navigate.prevBookmark` | Previous Bookmark | `src/features/search/index.ts` | partial - internal/app/bookmarks.go PrevBookmark and stepBookmark wrap; base.bookmark.prev; internal/app/bookmarks_test.go |
 | `navigate.recentFiles` | Recent Files | `src/features/search/index.ts` | partial - internal/app/recent_navigation.go and recent_navigation_view.go; Navigate or Cmd+E, previous-file selection, filter, tool windows and Show edited only; internal/app/recent_navigation_test.go; multi-select, opening to the side, Delete for recent files, and the separate Switcher are pending |
@@ -825,7 +825,7 @@ expected to come from a plugin or a hidden registration.
 | `code.pasteAsPlainText` | intellij-macos, intellij-windows, vscode-macos, vscode-windows | missing |
 | `code.pasteFromHistory` | intellij-macos, intellij-windows, vscode-macos | missing |
 | `code.quickDefinition` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `code.quickDocumentation` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
+| `code.quickDocumentation` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | partial - internal/app/app.go routes F1 and Ctrl+J to Quick Documentation |
 | `code.reformat` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
 | `code.reformatDialog` | intellij-macos, intellij-windows, vscode-macos | missing |
 | `code.reverseLines` | intellij-macos, intellij-windows, vscode-macos | missing |
@@ -999,10 +999,10 @@ same bindings until a check records it.
 | `build` | Build | bottom | `src/features/build/index.ts` | partial - base.build.console, base.build.lines; internal/app/view.go buildPanel |
 | `commit` | Commit | left | `src/features/vcs/index.ts` | partial - internal/app/commit.go commitDialog; base.commit.id |
 | `compare` | Compare | left | `src/features/vcs/compareTool.tsx` | missing |
-| `coverage` | Coverage | right | `src/features/coverage/index.ts` | missing |
+| `coverage` | Coverage | right | `src/features/coverage/index.ts` | partial - base.coverage.report; internal/app/coverage_test.go tests rendering of line and branch metrics |
 | `database` | Database | right | `src/features/database/index.ts` | partial - UPSTREAM_FEATURE_MATRIX.md database console; db_* commands |
 | `debug` | Debug | bottom | `src/features/debugger/index.ts` | integrated - debug.paused, debug.vars, debug.step.paused, debug.watch |
-| `documentation` | Documentation | right | `src/editor/lsp/index.ts` | missing |
+| `documentation` | Documentation | right | `src/editor/lsp/index.ts` | partial - lsp.documentation and TestDocumentationFocusAndKeyboardDock; completion and dependency-editor triggers are pending |
 | `dotnet` | .NET | right | `src/features/dotnet/index.ts` | missing |
 | `duplicates` | Duplicates | bottom | `src/features/analysis/index.ts` | missing |
 | `find` | Find | bottom | `src/features/search/index.ts` | integrated - base.search.done, base.search.files, base.search.matches; internal/app/search.go searchPanel; bottom anchor in internal/app/anchor_test.go |
@@ -1039,7 +1039,7 @@ same bindings until a check records it.
 | `app.workspace` | `src/features/app/index.ts` | missing |
 | `build-tools.execute` | `src/features/build-tools/index.ts` | missing |
 | `code-insight.usagesPopup` | `src/features/code-insight/index.ts` | missing |
-| `coverage.manageReports` | `src/features/coverage/index.ts` | missing |
+| `coverage.manageReports` | `src/features/coverage/index.ts` | partial - base.coverage.report opens native report management |
 | `database.dialogs` | `src/features/database/index.ts` | missing |
 | `debugger` | `src/features/debugger/index.ts` | missing |
 | `deployment.dialogs` | `src/features/deployment/index.ts` | missing |
@@ -1097,7 +1097,7 @@ same bindings until a check records it.
 | `build-tools.pomNavigation` | `src/features/build-tools/index.ts` | missing |
 | `build-tools.versionCatalog` | `src/features/build-tools/index.ts` | missing |
 | `colorPreview.gutter` | `src/features/color-preview/index.ts` | missing |
-| `coverage.gutter` | `src/features/coverage/index.ts` | missing |
+| `coverage.gutter` | `src/features/coverage/index.ts` | partial - base.coverage.report proves gutter marks; hover and remapping after edits are pending |
 | `database.console` | `src/features/database/index.ts` | missing |
 | `debugger` | `src/features/debugger/index.ts` | missing |
 | `dependency-versions` | `src/features/dependencies/index.ts` | missing |
@@ -1894,9 +1894,9 @@ Local-only commands and the per-command argument lists are in
 | `clipboard_text` | clipboard | no |  | missing |
 | `clipboard_write_text` | clipboard | no |  | missing |
 | `close_project` | app | yes | yes | missing |
-| `coverage_collect` | coverage | yes |  | missing |
-| `coverage_import` | coverage | yes |  | missing |
-| `coverage_prepare` | coverage | yes |  | missing |
+| `coverage_collect` | coverage | yes | yes | partial - internal/app/coverage_run.go collects the backend report after process exit |
+| `coverage_import` | coverage | yes | yes | integrated - base.coverage.report |
+| `coverage_prepare` | coverage | yes | yes | partial - internal/app/coverage_run.go prepares the selected configuration with the backend |
 | `db_apply_edits` | db | yes |  | missing |
 | `db_completion` | db | yes |  | missing |
 | `db_connect` | db | yes | yes | missing |
@@ -1990,7 +1990,7 @@ Local-only commands and the per-command argument lists are in
 | `doc_folding` | doc | yes |  | missing |
 | `doc_highlights` | doc | yes |  | missing |
 | `doc_open` | doc | yes | yes | missing |
-| `doc_open_virtual` | doc | yes |  | missing |
+| `doc_open_virtual` | doc | yes | yes | missing |
 | `doc_outline` | doc | yes | yes | missing |
 | `doc_save` | doc | yes | yes | missing |
 | `doc_save_all` | doc | yes |  | missing |
@@ -2124,7 +2124,7 @@ Local-only commands and the per-command argument lists are in
 | `lsp_servers` | lsp | yes | yes | missing |
 | `lsp_signature_help` | lsp | yes |  | missing |
 | `lsp_type_hierarchy` | lsp | yes | yes | missing |
-| `lsp_virtual_document` | lsp | yes |  | missing |
+| `lsp_virtual_document` | lsp | yes | yes | missing |
 | `lsp_workspace_symbols` | lsp | yes | yes | missing |
 | `mark_recent` | nav | yes | yes | missing |
 | `maven_dependency_completion` | build | yes | yes | missing |
@@ -2488,7 +2488,7 @@ Local-only commands and the per-command argument lists are in
 | `wsl_distros` | wsl | no |  | missing |
 | `wsl_resolve` | wsl | no |  | missing |
 
-476 commands are served over stdio and 115 are called by GoIDEA today. A command
+476 commands are served over stdio and 120 are called by GoIDEA today. A command
 that is registered only in the desktop shell needs an `ops` module before stdio
 can serve it; a GoIDEA check counts only when the UI path works end to end.
 

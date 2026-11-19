@@ -16,6 +16,12 @@ func init() {
 			Modal: modal, Open: open, Render: render})
 	}
 	// Popups and pickers, in the order the View drew them.
+	reg("documentation.popup", overlayLayerPopup, 35, false,
+		func(m *Model) bool { return m.documentation.popup != nil },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.documentationPopup(c, p) })
+	reg("coverage.manageReports", overlayLayerDialog, 258, true,
+		func(m *Model) bool { return m.coverage.manage },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.coverageManageDialog(c, p) })
 	reg("rename", overlayLayerPopup, 10, false,
 		func(m *Model) bool { return m.rename != nil },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.renameDialog(c, p) })

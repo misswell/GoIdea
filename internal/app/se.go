@@ -143,10 +143,18 @@ const seQueryTimeout = 30 * time.Second
 
 // OpenSearchEverywhere opens the overlay over the window.
 func (m *Model) OpenSearchEverywhere() {
+	m.openSearchEverywhereAt(seTabAll)
+}
+
+func (m *Model) openSearchEverywhereAt(tab seTab) {
 	if m.se != nil {
+		m.SetSearchEverywhereTab(tab)
 		return
 	}
-	m.se = &sePane{open: true, tab: seTabAll, extra: map[seSection]int{}, filters: m.seFilters}
+	m.se = &sePane{open: true, tab: tab, extra: map[seSection]int{}, filters: m.seFilters}
+	if t := m.tab(); t != nil && t.state != nil {
+		m.se.query = t.state.SelectedText()
+	}
 	m.refreshSearchEverywhere()
 	m.invalidate()
 }
@@ -982,6 +990,7 @@ func (m *Model) SmokeSearchEverywhere(ctx context.Context, query string) map[str
 		return st
 	}
 	all := sample(seTabAll)
+	classes := sample(seTabClasses)
 	files := sample(seTabFiles)
 	symbols := sample(seTabSymbols)
 	actions := sample(seTabActions)
@@ -994,11 +1003,19 @@ func (m *Model) SmokeSearchEverywhere(ctx context.Context, query string) map[str
 		out["open"] = true
 		out["allRows"] = all.rows
 		out["allSections"] = all.sections
+		out["classes"] = classes.items
 		out["files"] = files.items
 		out["symbols"] = symbols.items
 		out["actions"] = actions.items
 		out["text"] = text.items
 		out["tab"] = string(m.se.tab)
+		entryTabs := map[string]string{}
+		for _, id := range []string{"navigate.gotoClass", "navigate.gotoFile", "navigate.gotoSymbol", "navigate.findAction"} {
+			if m.RunCommand(id) && m.se != nil {
+				entryTabs[id] = string(m.se.tab)
+			}
+		}
+		out["entryTabs"] = entryTabs
 		m.CloseSearchEverywhere()
 	})
 	return out

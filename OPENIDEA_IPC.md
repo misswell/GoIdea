@@ -42,12 +42,12 @@ release can be called today.
 | Binary file reads | `bytes` | 3 | 0 | 0 |
 | Caches and restart | `caches` | 0 | 4 | 0 |
 | Clipboard | `clipboard` | 0 | 6 | 0 |
-| Coverage | `coverage` | 3 | 0 | 0 |
+| Coverage | `coverage` | 3 | 0 | 3 |
 | Database | `db` | 31 | 1 | 13 |
 | Debugger | `debug` | 36 | 2 | 14 |
 | Dependencies | `dependencies` | 1 | 0 | 0 |
 | Deployment | `deploy` | 16 | 0 | 0 |
-| Documents | `doc` | 18 | 0 | 6 |
+| Documents | `doc` | 18 | 0 | 7 |
 | Docker | `docker` | 1 | 16 | 0 |
 | Environment | `env` | 1 | 0 | 0 |
 | File dialogs | `file_dialog` | 0 | 2 | 0 |
@@ -59,7 +59,7 @@ release can be called today.
 | hotkeys | `hotkeys` | 0 | 1 | 0 |
 | HTTP client | `http` | 0 | 11 | 0 |
 | Java | `java` | 3 | 0 | 3 |
-| Language services | `lsp` | 43 | 1 | 17 |
+| Language services | `lsp` | 43 | 1 | 18 |
 | MCP | `mcp` | 3 | 4 | 0 |
 | Navigation and index | `nav` | 15 | 1 | 3 |
 | Notebooks | `notebook` | 12 | 0 | 0 |
@@ -88,7 +88,7 @@ release can be called today.
 ## Served by `openidea-server --stdio`
 
 476 commands. `GoIDEA` marks the ones a non-test Go source invokes today
-(115 of 476).
+(120 of 476).
 
 | Command | Domain | Arguments | GoIDEA |
 | --- | --- | --- | --- |
@@ -137,9 +137,9 @@ release can be called today.
 | `cancel_request` | Application and projects | — | yes |
 | `cancel_task` | Application and projects | — | — |
 | `close_project` | Application and projects | — | yes |
-| `coverage_collect` | Coverage | `report` | — |
-| `coverage_import` | Coverage | `path` | — |
-| `coverage_prepare` | Coverage | `config` | — |
+| `coverage_collect` | Coverage | `report` | yes |
+| `coverage_import` | Coverage | `path` | yes |
+| `coverage_prepare` | Coverage | `config` | yes |
 | `db_apply_edits` | Database | — | — |
 | `db_completion` | Database | — | — |
 | `db_connect` | Database | — | yes |
@@ -230,7 +230,7 @@ release can be called today.
 | `doc_folding` | Documents | `doc` | — |
 | `doc_highlights` | Documents | `doc` | — |
 | `doc_open` | Documents | `path` | yes |
-| `doc_open_virtual` | Documents | `uri` | — |
+| `doc_open_virtual` | Documents | `uri` | yes |
 | `doc_outline` | Documents | `doc` | yes |
 | `doc_save` | Documents | `doc` | yes |
 | `doc_save_all` | Documents | — | — |
@@ -318,7 +318,7 @@ release can be called today.
 | `lsp_servers` | Language services | — | yes |
 | `lsp_signature_help` | Language services | `doc`, `pos` | — |
 | `lsp_type_hierarchy` | Language services | `direction`, `doc`, `pos` | yes |
-| `lsp_virtual_document` | Language services | `uri` | — |
+| `lsp_virtual_document` | Language services | `uri` | yes |
 | `lsp_workspace_symbols` | Language services | `query`, `request` | yes |
 | `mark_recent` | Navigation and index | `path` | yes |
 | `maven_dependency_completion` | Maven/Gradle builds | `doc`, `offset`, `request` | yes |
@@ -782,7 +782,7 @@ GoIDEA needs to do for each:
 
 ## What this means for GoIDEA
 
-476 remote commands are available today; GoIDEA uses 115. The parity work is
+476 remote commands are available today; GoIDEA uses 120. The parity work is
 first to cover the remote surface OpenIDEA's own frontend uses, then to move
 `shared-op`/`host`/`crate` commands onto stdio through the OpenIDEA fork
 (a submodule bump and a server release), and to implement `desktop` commands

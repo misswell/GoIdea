@@ -283,6 +283,9 @@ func (m *Model) treeRow(c *ui.Context, p *ui.Theme, row *treeNode) {
 		if row.module || row.path == m.Root() {
 			text.Bold()
 		}
+		if badge := m.coverageBadge(row.path); badge != "" {
+			ui.Text(c, badge).FontSize(12).TextColor(oi.textMuted).SingleLine()
+		}
 		if bookmarked || r.Hovered() {
 			ui.Spacer(c)
 			chip := ui.Row(c.Key("treeBookmark:"+row.path)).Height(16).Padding(0, 5).
@@ -366,6 +369,7 @@ func (m *Model) editorArea(c *ui.Context, p *ui.Theme, g groupView) {
 			m.breadcrumbs(c, p, t, g)
 		}
 		view := editor.View(c, t.state).Grow(1).MinHeight(0)
+		m.positionDocumentation(t, view)
 		// A click in the unfocused pane takes the keyboard back to the main
 		// group, whose commands act on m.tabs; applyTab always runs before the
 		// next frame, so the queued swap lands between frames.
