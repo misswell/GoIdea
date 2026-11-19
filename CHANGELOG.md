@@ -3,7 +3,7 @@
 The GitHub release notes, which **Help › What's New** shows, come from the
 `## <version>` section here. Every release needs one, or its build fails.
 
-## Unreleased
+## 0.1.29
 
 - **Run › Run with Coverage** 和 **Coverage** 工具窗口支持运行、导入和查看覆盖率。
 - **Code › Quick Documentation** 支持从编辑器查看文档，也可停靠在 Documentation 窗口。
