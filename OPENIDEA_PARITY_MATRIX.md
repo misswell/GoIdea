@@ -26,15 +26,15 @@ new action, tool window, page or command appears automatically.
 
 | Kind | Items | Integrated | Partial | Engine | Blocked | Missing |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Feature folders | 44 | 0 | 12 | 0 | 0 | 32 |
-| Actions | 673 | 42 | 97 | 0 | 1 | 533 |
+| Feature folders | 44 | 2 | 13 | 0 | 0 | 29 |
+| Actions | 673 | 45 | 100 | 0 | 0 | 528 |
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
-| Tool windows | 30 | 10 | 7 | 0 | 0 | 13 |
-| Overlays | 56 | 1 | 1 | 0 | 0 | 54 |
+| Tool windows | 30 | 10 | 9 | 0 | 0 | 11 |
+| Overlays | 56 | 3 | 4 | 0 | 0 | 49 |
 | Editor contributions | 37 | 0 | 1 | 0 | 0 | 36 |
 | Editor kinds | 4 | 0 | 0 | 0 | 0 | 4 |
 | File editor providers | 4 | 0 | 0 | 0 | 0 | 4 |
-| Settings pages | 84 | 1 | 9 | 0 | 0 | 74 |
+| Settings pages | 84 | 1 | 10 | 0 | 0 | 73 |
 | Settings keys | 470 | 0 | 1 | 0 | 0 | 469 |
 | Languages | 82 | 1 | 0 | 0 | 0 | 81 |
 | Backend crates | 43 | 0 | 0 | 35 | 0 | 8 |
@@ -52,9 +52,9 @@ directory registers.
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
 | `agents` | 9 | 0 | 0 | 0 | 0 | missing |
 | `analysis` | 6 | 2 | 1 | 0 | 0 | missing |
-| `app` | 2 | 0 | 6 | 0 | 0 | partial - internal/app/update.go CheckForUpdates GitHub releases check with version compare and result dialog; download and install are not ported; internal/app/gear_test.go |
+| `app` | 2 | 0 | 6 | 0 | 0 | partial - internal/app/update.go, tasks.go and notifications.go cover update checks, background download, cancellation and install/restart; update_flow_test.go; internal/app/invalidate.go covers cache invalidation and restart; other app overlays still have pending scope |
 | `build` | 6 | 1 | 0 | 0 | 0 | missing |
-| `build-tools` | 23 | 2 | 1 | 3 | 0 | missing |
+| `build-tools` | 23 | 2 | 1 | 3 | 0 | partial - internal/app/maven.go, pom_completion.go and pom_goto.go; Maven window and POM completion/navigation; internal/app/maven_test.go; see separate Maven and Gradle rows |
 | `code-insight` | 6 | 3 | 1 | 0 | 0 | partial - lsp.references.count, lsp.symbols |
 | `color-preview` | 0 | 0 | 0 | 1 | 0 | missing |
 | `coverage` | 6 | 1 | 1 | 1 | 0 | missing |
@@ -79,8 +79,8 @@ directory registers.
 | `remote-dev` | 4 | 1 | 1 | 0 | 0 | missing |
 | `run` | 28 | 1 | 5 | 2 | 0 | partial - base.run.config, base.run.exit, base.run.build; internal/adapter/java_launch.go and java_module.go port OpenIDEA's platform/javaLaunch.ts and Run and Debug share it; spring.* release-gate checks run the detected Spring Boot configuration of testdata/java-spring-multimodule; internal/adapter/run_config.go ports configs.ts (upsert/merge/validate/unique), buildCommand.ts (applyBuildPolicyToCommand) and store.ts saveUserConfigs, and internal/app/run_config_dialog.go carries Edit Configurations (action:run.editConfigs) and Rerun with the confirm dialog (action:run.rerun); base.runcfg.* proves the save/policy/run/remove round trip; Build Before Launch is buildCommand.ts's applyBuildPolicyToCommand (internal/adapter/run_config.go), applied at launch for build-tool configs and through BuildPolicyOf for JVM ones, proven by base.runcfg.policy; the testing pipeline port (internal/adapter/testing_*.go) folds surefire/Gradle output into the results tree and run.rerunFailed derives the -Dtest=/--tests filter (rerunfail.* main-gate checks); go test is parsed too (testing_go.go, gorerun.* main-gate checks); the cargo test pipeline (internal/adapter/testing_cargo.go ports cargo.ts: libtest/nextest parsing, panic locations) folds cargo test output into the tree and cargorun.* main-gate checks prove the --exact derivation reruns only the failed test; pytest is parsed too (testing_pytest.go, pyrerun.* main-gate checks); the js/phpunit/ruby/dotnet parsers are not ported yet (node/php/ruby toolchains exist but jest/phpunit/rspec need framework installs; dotnet is absent) |
 | `run-anything` | 1 | 0 | 1 | 0 | 0 | partial - internal/app/run_anything.go Run Anything popup with Recent and Run Configurations sections, Clear History, per-project history and shell command lines; gear menu action:runAnything.show; Ctrl Ctrl keymap deferred, MyGo has no KeyControl constant; internal/app/run_anything_test.go |
-| `scratch` | 1 | 0 | 1 | 0 | 0 | missing |
-| `search` | 24 | 3 | 6 | 2 | 0 | partial - base.search.done, base.search.files, base.search.matches; internal/app/se.go Search Everywhere: All/Classes/Files/Symbols/Actions/Text, section order and limits, Recent Files/Recent Actions on an empty query, Tab/Shift+Tab cycling; e2e searchEverywhere.*; still missing the per-tab filter funnel, search history, the Endpoints section and the double-Shift binding (MyGo exposes no modifier-only key event) |
+| `scratch` | 1 | 0 | 1 | 0 | 0 | integrated - internal/app/commands.go and scratch.go; File menu and Cmd+Shift+N open the language chooser and create a scratch tab; internal/app/scratch_test.go and base.scratch checks |
+| `search` | 24 | 3 | 6 | 2 | 0 | partial - base.search.done, base.search.files, base.search.matches and searchEverywhere.*; internal/app/se.go Search Everywhere tabs, search history and recent files/actions; se_filters.go and se_filters_test.go cover the filter funnel; recent_navigation.go adds Recent Files and Recent Locations; the Endpoints section, double-Shift and full Switcher behavior are pending |
 | `services` | 20 | 1 | 1 | 2 | 0 | missing |
 | `settings` | 11 | 0 | 3 | 0 | 77 | partial - internal/app/settings_window.go; OpenIDEA's 980 DIP sheet: page tree built like model/pages.ts with group folders, search filtering with ancestors, breadcrumbs, Back/Forward history, Reset and Cancel/Apply/OK staging; internal/app/settings_test.go |
 | `ssh` | 2 | 0 | 1 | 0 | 0 | missing |
@@ -93,7 +93,7 @@ directory registers.
 | `vim` | 3 | 0 | 0 | 1 | 0 | missing |
 | `web` | 2 | 0 | 0 | 1 | 0 | missing |
 | `welcome` | 2 | 0 | 1 | 0 | 0 | missing |
-| `whats-new` | 1 | 0 | 0 | 0 | 0 | missing |
+| `whats-new` | 1 | 0 | 0 | 0 | 0 | integrated - internal/app/whatsnew.go; Help menu and app.whatsNew open release notes with the update preference; TestWhatsNewIsAStandalonePage |
 
 Infrastructure folders (`src/editor`, `src/workbench`, `src/platform`, `src/ui`)
 are not product features; the contributions they host are listed below.
@@ -142,7 +142,7 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `build.buildArtifacts` | Build Artifacts | `src/features/build/index.ts` | partial - internal/app/build.go BuildArtifacts (build_run kind=artifacts) |
 | `build.buildModule` | Build Module | `src/features/build/index.ts` | partial - internal/app/build.go BuildModule; base.build.success |
 | `build.buildProject` | Build Project | `src/features/build/index.ts` | integrated - base.build.success, base.build.lines, base.build.console |
-| `build.compileFile` | Compile File | `src/features/build/index.ts` | blocked - build_compile_file is not served by the pinned v0.1.41 server; OPENIDEA_IPC.md |
+| `build.compileFile` | Compile File | `src/features/build/index.ts` | integrated - internal/app/build.go compiles one Java source over build_compile_file; Build menu, action registry, editor, tab and Project view context menus; base.compileFile.success runs real javac in the Maven fixture |
 | `build.rebuildProject` | Rebuild Project | `src/features/build/index.ts` | partial - internal/app/build.go RebuildProject (build_run kind=rebuild) |
 | `build.stop` | Stop Build | `src/features/build/index.ts` | partial - internal/app/build.go StopBuild (cancel_request) |
 
@@ -461,7 +461,7 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 
 | Action | Title | Source | Status |
 | --- | --- | --- | --- |
-| `analyze.stackTrace` | Analyze Stack Trace or Thread Dump… | `src/features/run/stackTrace.tsx` | missing |
+| `analyze.stackTrace` | Analyze Stack Trace or Thread Dump… | `src/features/run/stackTrace.tsx` | partial - Code menu and action registry open internal/app/stack_trace.go; clipboard detection, Run trace tabs, clickable JVM/Python/path source frames and file index resolution; stack_trace_test.go; remaining console link patterns and upstream Run session integration are pending |
 | `go.generate.${scope}` |  | `src/features/run/goActions.ts` | missing |
 | `php.composerInstall` | Composer Install | `src/features/run/composerInstall.ts` | missing |
 | `run.agentStart` | Run Agent Command | `src/features/run/index.ts` | missing |
@@ -519,8 +519,8 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `navigate.gotoSymbol` | Go to Symbol… | `src/features/search/index.ts` | missing |
 | `navigate.nextBookmark` | Next Bookmark | `src/features/search/index.ts` | partial - internal/app/bookmarks.go NextBookmark and stepBookmark wrap; base.bookmark.next; internal/app/bookmarks_test.go |
 | `navigate.prevBookmark` | Previous Bookmark | `src/features/search/index.ts` | partial - internal/app/bookmarks.go PrevBookmark and stepBookmark wrap; base.bookmark.prev; internal/app/bookmarks_test.go |
-| `navigate.recentFiles` | Recent Files | `src/features/search/index.ts` | missing |
-| `navigate.recentLocations` | Recent Locations | `src/features/search/index.ts` | missing |
+| `navigate.recentFiles` | Recent Files | `src/features/search/index.ts` | partial - internal/app/recent_navigation.go and recent_navigation_view.go; Navigate or Cmd+E, previous-file selection, filter, tool windows and Show edited only; internal/app/recent_navigation_test.go; multi-select, opening to the side, Delete for recent files, and the separate Switcher are pending |
+| `navigate.recentLocations` | Recent Locations | `src/features/search/index.ts` | partial - internal/app/recent_navigation.go and recent_navigation_view.go; Navigate or Cmd+Shift+E, bounded caret history, code snippets, changed filter, dismiss and jump; internal/app/recent_navigation_test.go; syntax-highlighted snippets, symbol breadcrumbs and opening to the side are pending |
 | `navigate.searchEverywhere` | Search Everywhere | `src/features/search/index.ts` | integrated - internal/app/se.go OpenSearchEverywhere; internal/app/commands.go navigate.searchEverywhere; Navigate menu and the title bar search button; e2e searchEverywhere.files/symbols/actions/text/allSections; internal/app/se_test.go |
 | `navigate.searchText` | Search Text Everywhere | `src/features/search/index.ts` | integrated - base.search.done, base.search.files, base.search.matches |
 | `navigate.showBookmarks` | Show Bookmarks | `src/features/search/index.ts` | partial - internal/app/bookmarks.go ShowBookmarks popup groups files and lines by list with jump and delete; base.bookmark.popup; Cmd+F3 in internal/app/app.go; internal/app/bookmarks_test.go |
@@ -688,7 +688,7 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 
 | Action | Title | Source | Status |
 | --- | --- | --- | --- |
-| `app.whatsNew` | What's New | `src/features/whats-new/index.ts` | missing |
+| `app.whatsNew` | What's New | `src/features/whats-new/index.ts` | integrated - internal/app/commands.go app.whatsNew; Help menu; internal/app/whatsnew.go and TestWhatsNewIsAStandalonePage |
 
 ### infrastructure
 
@@ -749,7 +749,7 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `find.scrollToResults` | Scroll to Results During Typing | `src/editor/core/actions.ts` | missing |
 | `navigate.back` | Back | `src/editor/core/actions.ts` | missing |
 | `navigate.forward` | Forward | `src/editor/core/actions.ts` | missing |
-| `navigate.gotoLine` | Go to Line:Column… | `src/editor/core/actions.ts` | missing |
+| `navigate.gotoLine` | Go to Line:Column… | `src/editor/core/actions.ts` | integrated - internal/app/goto_line.go accepts one-based line and UTF-16 column, with clamping; Navigate, Cmd+L and the status bar; internal/app/goto_line_test.go and TestRecentNavigationAndGotoLineRenderOffscreen |
 | `navigate.lastEditLocation` | Last Edit Location | `src/editor/core/actions.ts` | missing |
 | `navigate.navigationBar` | Jump to Navigation Bar | `src/editor/core/actions.ts` | missing |
 | `navigate.nextEditLocation` | Next Edit Location | `src/editor/core/actions.ts` | missing |
@@ -1007,11 +1007,11 @@ same bindings until a check records it.
 | `duplicates` | Duplicates | bottom | `src/features/analysis/index.ts` | missing |
 | `find` | Find | bottom | `src/features/search/index.ts` | integrated - base.search.done, base.search.files, base.search.matches; internal/app/search.go searchPanel; bottom anchor in internal/app/anchor_test.go |
 | `git` | Git | bottom | `src/features/vcs/index.ts` | partial - base.vcs.changes, base.diff.rows, internal/app/log.go logPanel, base.log.commits, base.log.details, base.log.changes; internal/app/branch.go branchLabel, base.branch.head, base.branch.list, base.branch.checkout; internal/app/vcs.go vcsRows staging groups, StageChange, UnstageChange, AskRollback, base.stage.roundtrip, base.stage.discard |
-| `gradle` | Gradle | right | `src/features/build-tools/index.ts` | missing |
+| `gradle` | Gradle | right | `src/features/build-tools/index.ts` | partial - internal/app/maven.go uses build_model to list Gradle build directories and errors within the Maven window; separate Gradle window, project/task tree and real Gradle acceptance pending |
 | `hierarchy` | Hierarchy | right | `src/features/code-insight/index.ts` | integrated - internal/app/hierarchy.go hierarchyRightView: right-anchored window with Call/Type direction tabs, lazy children per node and recursion leaves; lsp_call_hierarchy, lsp_type_hierarchy; e2e hierarchy.rows, hierarchy.visible, hierarchyError; internal/app/hierarchy_test.go; internal/app/workbench_render_test.go TestWorkbenchHierarchyRightWindowRenders |
 | `inspection` | Inspection Results | bottom | `src/features/analysis/index.ts` | missing |
 | `logcat` | Logcat | bottom | `src/features/logcat/index.ts` | missing |
-| `maven` | Maven | right | `src/features/build-tools/index.ts` | missing |
+| `maven` | Maven | right | `src/features/build-tools/index.ts` | partial - internal/app/maven.go and dockregistry.go; right-side Maven reactor, lifecycle and plugin goals, profiles, dependencies, and reload; internal/app/maven_test.go and UPSTREAM_FEATURE_MATRIX.md Maven row; dependency navigation, add and exclude are pending |
 | `notifications` | Notifications | right | `src/workbench/activate.ts` | partial - internal/app/notifications.go balloons (3 newest, 10 s fade, sticky errors, hover pause, keyed replacement, actions) and notificationsView history with unread badge and Clear All; build results and failures notify; base.notify.* in the e2e; Settings › Appearance & Behavior › Notifications with the global balloon switch, per-group Balloon/Sticky/No popup and Log, and the balloon's Don't Show Again; missing sound and verbatim plugin text |
 | `problems` | Problems | bottom | `src/features/code-insight/index.ts` | integrated - internal/app/problems.go problemsPanel; lsp.problems.errors, lsp.problems.rows, lsp.problems.visible; internal/app/problems_test.go |
 | `profiler` | Profiler | bottom | `src/features/profiler/index.ts` | missing |
@@ -1045,7 +1045,7 @@ same bindings until a check records it.
 | `deployment.dialogs` | `src/features/deployment/index.ts` | missing |
 | `editor-lsp.hierarchyDialog` | `src/editor/lsp/index.ts` | missing |
 | `editor-lsp.popups` | `src/editor/lsp/index.ts` | missing |
-| `editor.gotoLine` | `src/editor/core/index.ts` | missing |
+| `editor.gotoLine` | `src/editor/core/index.ts` | integrated - internal/app/goto_line.go and overlay_registry.go; TestRecentNavigationAndGotoLineRenderOffscreen draws the popup; goto_line_test.go covers submission, validation and cancellation |
 | `editor.navigationBar` | `src/editor/core/index.ts` | missing |
 | `editor.pasteHistory` | `src/editor/core/index.ts` | missing |
 | `github.dialogs` | `src/features/github/index.ts` | missing |
@@ -1064,14 +1064,14 @@ same bindings until a check records it.
 | `run.dialogs` | `src/features/run/index.ts` | missing |
 | `run.editConfigs` | `src/features/run/index.ts` | partial - internal/app/run_config_dialog.go runConfigsDialog drawn by the overlay registry (internal/app/overlay_registry.go runConfigs) |
 | `run.serviceImport` | `src/features/run/index.ts` | missing |
-| `run.stackTraceDialog` | `src/features/run/stackTrace.tsx` | missing |
+| `run.stackTraceDialog` | `src/features/run/stackTrace.tsx` | partial - internal/app/stack_trace.go provides the native text dialog, clipboard prefill, Analyze and Cancel, and the trace console; internal/app/stack_trace_test.go; remains subject to visual parity verification |
 | `runAnything.popup` | `src/features/run-anything/index.ts` | integrated - internal/app/run_anything.go runAnythingDialog, drawn by View in internal/app/app.go; internal/app/run_anything_test.go |
-| `scratch.chooser` | `src/features/scratch/index.ts` | missing |
+| `scratch.chooser` | `src/features/scratch/index.ts` | integrated - internal/app/scratch.go and overlay_registry.go; internal/app/scratch_test.go and base.scratch checks |
 | `search.bookmarks` | `src/features/search/index.ts` | missing |
 | `search.everywhere` | `src/features/search/index.ts` | missing |
 | `search.fileStructure` | `src/features/search/index.ts` | missing |
 | `search.findInFiles` | `src/features/search/index.ts` | missing |
-| `search.recent` | `src/features/search/index.ts` | missing |
+| `search.recent` | `src/features/search/index.ts` | partial - internal/app/recent_navigation_view.go paints the file and tool window columns plus the locations and snippets list; TestRecentNavigationAndGotoLineRenderOffscreen; see the two navigate.recent actions for gaps |
 | `search.scopes` | `src/features/search/index.ts` | missing |
 | `services.dialogs` | `src/features/services/index.ts` | missing |
 | `settings.assignShortcut` | `src/features/settings/index.ts` | missing |
@@ -1084,7 +1084,7 @@ same bindings until a check records it.
 | `vcs.branches` | `src/features/vcs/index.ts` | missing |
 | `vcs.dialogs` | `src/features/vcs/index.ts` | missing |
 | `welcome.recentProjects` | `src/features/welcome/index.ts` | missing |
-| `workbench.backgroundTasks` | `src/workbench/activate.ts` | missing |
+| `workbench.backgroundTasks` | `src/workbench/activate.ts` | partial - internal/app/tasks.go shows updater task progress and cancellation from the status bar; registration for other background task producers is pending |
 | `workbench.customizeToolbar` | `src/workbench/activate.ts` | missing |
 
 ## Editor contributions and file editor types
@@ -1208,7 +1208,7 @@ The plain text editor is the workbench default and is not registered through
 | `general.dateFormats` | Date Formats |  | `src/features/settings/pages/behavior.tsx` | missing |
 | `general.httpProxy` | HTTP Proxy |  | `src/features/settings/pages/httpProxy.tsx` | missing |
 | `general.language` | Language and Region |  | `src/features/settings/pages/behavior.tsx` | missing |
-| `general.updates` | Updates |  | `src/features/settings/pages/updates.tsx` | missing |
+| `general.updates` | Updates |  | `src/features/settings/pages/updates.tsx` | partial - internal/app/settings_pages.go opens Settings › Updates with version, last checked, Check Now, automatic checks and What's New; update source setting is absent |
 | `keymap` | Keymap |  | `src/features/settings/pages/builtins.tsx` | partial - internal/app/settings_pages.go settingsKeymapBody lists every registry shortcut; rebinding keys is not ported |
 | `languages.go` | Go |  | `src/features/settings/pages/languages.tsx` | missing |
 | `languages.go.buildTags` | Build Tags |  | `src/features/settings/pages/languages.tsx` | missing |
@@ -1877,7 +1877,7 @@ Local-only commands and the per-command argument lists are in
 | `app_update_status` | window | no |  | missing |
 | `app_update_window_ready` | window | no |  | missing |
 | `apply_workspace_edit` | lsp | yes | yes | missing |
-| `build_compile_file` | build | yes |  | missing |
+| `build_compile_file` | build | yes | yes | missing |
 | `build_model` | build | yes | yes | missing |
 | `build_run` | build | yes | yes | missing |
 | `build_sync` | build | yes | yes | missing |
@@ -2242,7 +2242,7 @@ Local-only commands and the per-command argument lists are in
 | `project_trust_set` | app | yes | yes | missing |
 | `project_trust_status` | app | yes | yes | missing |
 | `proxy_check_connection` | http | no |  | missing |
-| `recent_files` | nav | yes |  | missing |
+| `recent_files` | nav | yes | yes | missing |
 | `recent_project_groups` | app | no |  | missing |
 | `recent_projects` | app | no |  | missing |
 | `redo_workspace_edit` | lsp | yes | yes | missing |
@@ -2488,7 +2488,7 @@ Local-only commands and the per-command argument lists are in
 | `wsl_distros` | wsl | no |  | missing |
 | `wsl_resolve` | wsl | no |  | missing |
 
-476 commands are served over stdio and 113 are called by GoIDEA today. A command
+476 commands are served over stdio and 115 are called by GoIDEA today. A command
 that is registered only in the desktop shell needs an `ops` module before stdio
 can serve it; a GoIDEA check counts only when the UI path works end to end.
 

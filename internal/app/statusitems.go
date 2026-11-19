@@ -96,7 +96,13 @@ func init() {
 				if sel := t.state.Selection(); sel.Start() != sel.End() {
 					text += fmt.Sprintf(" (%d chars)", utf16Len(t.state.SelectedText()))
 				}
-				ui.Text(c, text).FontSize(13).TextColor(oi.textMuted).SingleLine()
+				b := ui.Row(c).AlignItems(ui.Center).
+					Tooltip("Go to Line:Column… (Cmd+L)")
+				if b.Hovered() {
+					b.Background(oi.hover)
+				}
+				b.OnClick(func() { m.RunCommand("navigate.gotoLine") })
+				b.Children(func() { ui.Text(c, text).FontSize(13).TextColor(oi.textMuted).SingleLine() })
 			}
 		}})
 	registerStatusItem(&StatusItem{ID: "status.language", Side: "right", Order: 18,

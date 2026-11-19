@@ -262,6 +262,17 @@ read, as OpenIDEA's Reload All does.
 | Quick open (Cmd+P) / command palette | `quickopen.go`, `commands.go` |
 | Vim mode, sticky scroll | Mayoi's implementations are in-tree but not wired into `cmd/goidea` (see `UPSTREAM_FEATURE_MATRIX.md`) |
 
+## Recent navigation
+
+**Navigate › Go to Line:Column…** (`Cmd+L`) and the status bar position open
+the same one-based line and column dialog. A line by itself moves to its start.
+
+**Recent Files** (`Cmd+E`) starts on the previous file and can filter to edited
+files or open a tool window. **Recent Locations** (`Cmd+Shift+E`) lists recent
+caret positions with code snippets and can filter to changed locations. Press
+the shortcut again to toggle the filter. Use the arrow keys to select and
+Enter to open a file or return to a location.
+
 ## Tests
 
 `internal/position` has the offset and edit conversion tests. `internal/docbridge`

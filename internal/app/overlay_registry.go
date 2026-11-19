@@ -45,6 +45,15 @@ func init() {
 	reg("quickFiles", overlayLayerPopup, 40, false,
 		func(m *Model) bool { return m.files != nil },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.filesDialog(c, p) })
+	reg("editor.gotoLine", overlayLayerDialog, 171, true,
+		func(m *Model) bool { return m.gotoLine != nil },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.gotoLineDialog(c, p) })
+	reg("search.recent", overlayLayerDialog, 172, true,
+		func(m *Model) bool { return m.recentNav.popup != nil },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.recentNavigationDialog(c, p) })
+	reg("run.stackTraceDialog", overlayLayerDialog, 190, true,
+		func(m *Model) bool { return m.stackTrace != nil && m.stackTrace.open },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.stackTraceDialog(c, p) })
 	reg("branches", overlayLayerPopup, 50, false,
 		func(m *Model) bool { return m.branch.open },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.branchesDialog(c, p) })

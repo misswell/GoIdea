@@ -186,7 +186,10 @@ type Model struct {
 	symbols *symbolPicker
 
 	// files is the open Quick Open picker, or nil.
-	files *filePicker
+	files      *filePicker
+	recentNav  recentNavigation
+	gotoLine   *gotoLineState
+	stackTrace *stackTraceState
 
 	// palette is the open command palette, or nil.
 	palette *commandPicker
@@ -918,6 +921,10 @@ func (m *Model) openProjectSaving(dir string) {
 // tabs, terminals, tool windows, searches and their caches — and reports
 // whether Maven was visible, so a new project can load its build model.
 func (m *Model) resetProjectState(dir string) (mavenVisible bool) {
+	m.recentNav = recentNavigation{}
+	m.gotoLine = nil
+	m.stackTrace = nil
+	m.reveal = nil
 	m.tabs, m.active = nil, 0
 	m.split, m.splitDown, m.splitFirst, m.focusQueued = nil, false, false, false
 	m.banner, m.bannerPath = "", ""
@@ -1391,6 +1398,7 @@ type openSpec struct {
 // regular open closes the preview tab, as openTab does, and an open that
 // replaces it keeps the preview slot.
 func (m *Model) openWith(path string, spec openSpec) {
+	m.observeRecentLocation(time.Now(), true)
 	preview := spec.preview && m.tabPrefs.previews()
 	path = realPath(path)
 	if i := m.tabForPath(path); i >= 0 {
@@ -1482,6 +1490,7 @@ func (m *Model) activate(i int) {
 // activateIn shows the tab at i in the window group g; g is the focused group
 // by the time the replacement tab is applied.
 func (m *Model) activateIn(g groupRef, i int) {
+	m.observeRecentLocation(time.Now(), true)
 	if g == groupSplit {
 		m.focusGroup(groupSplit)
 	}
@@ -1636,6 +1645,7 @@ func saveAll(ctx context.Context, tabs []*Tab, p SavePrefs) error {
 // stops. It runs once per frame; the backend calls go to other goroutines.
 func (m *Model) syncPump(now time.Time) {
 	m.watchFiles(now)
+	m.observeRecentLocation(now, false)
 	const idle = 220 * time.Millisecond
 	for _, t := range m.tabs {
 		v := t.doc.Buffer().Version()
@@ -2060,6 +2070,9 @@ func (m *Model) View(c *ui.Context) {
 }
 
 func (m *Model) shortcuts(c *ui.Context) {
+	if m.recentNav.popup != nil {
+		return
+	}
 	// The scratch chooser steps its rows with the arrow keys.
 	if m.scratch != nil {
 		if c.Shortcut(ui.Modifiers(0), ui.KeyDown) {
@@ -2115,6 +2128,12 @@ func (m *Model) shortcuts(c *ui.Context) {
 	// A modal sheet owns the keyboard; only its own dismiss keys apply.
 	if m.modalOverlayOpen() {
 		return
+	}
+	if !m.overlayOpen() {
+		if c.Shortcut(ui.Cmd, ui.KeyL) {
+			m.RunCommand("navigate.gotoLine")
+		}
+		m.recentNavigationShortcuts(c)
 	}
 	// The Bookmarks popup steps its rows with the arrow keys.
 	if m.bookmarksView != nil {

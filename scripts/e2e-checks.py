@@ -156,6 +156,7 @@ CHECKS = {
         ("build.lines", "build streamed console lines", lambda d: ((get(d, "build.lines") or 0) >= 2, get(d, "build.lines"))),
         ("build.console", "build console shows the engine's output", lambda d: (any(s in (get(d, "build.console") or "") for s in ("BUILD SUCCESS", "Up to date")), get(d, "build.console"))),
         ("buildError", *absent("buildError")),
+        ("compileFile.success", "Compile File ran real javac for the active source and streamed output", lambda d: (get(d, "compileFile.success") is True and (get(d, "compileFile.lines") or 0) >= 1, {"compile": get(d, "compileFile"), "error": get(d, "compileFileError")})),
         ("commit.id", "vcs_commit returned a commit id", lambda d: (len(get(d, "commit.id") or "") >= 7, get(d, "commit.shortId"))),
         ("commit.staged", "the included unstaged file was staged", lambda d: ((get(d, "commit.staged") or 0) >= 1, get(d, "commit.staged"))),
         ("commit.clean", "the committed change left the status", lambda d: ((get(d, "commit.after") or 0) < (get(d, "commit.before") or 0) and "Greeter.java" not in (get(d, "commit.remaining") or []), {"before": get(d, "commit.before"), "after": get(d, "commit.after"), "remaining": get(d, "commit.remaining")})),

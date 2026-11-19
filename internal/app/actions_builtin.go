@@ -12,13 +12,23 @@ func init() {
 		builtinCategories[c.id] = c.group
 		// A malformed built-in id would be a programming error; the tests
 		// check the whole list instead of failing the app at start.
-		_ = registerAction(&Action{
+		a := &Action{
 			ID:       c.id,
 			Title:    c.title,
 			Category: c.group,
 			Keywords: c.keywords,
 			Run:      c.run,
 			Builtin:  true,
-		})
+		}
+		switch c.id {
+		case "build.compileFile":
+			a.When = func(m *Model) bool {
+				t := m.tab()
+				return t != nil && t.kind == "" && t.doc != nil && m.canCompileFile(t.doc.Path())
+			}
+		case "navigate.recentFiles", "navigate.recentLocations", "analyze.stackTrace":
+			a.When = func(m *Model) bool { return m.Root() != "" && !m.showingWelcome }
+		}
+		_ = registerAction(a)
 	}
 }

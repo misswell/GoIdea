@@ -176,6 +176,10 @@ func (m *Model) markRecent(path string) {
 	if path == "" || m.Root() == "" {
 		return
 	}
+	m.recentNav.visit(path)
+	if m.ctx == nil || m.mgr == nil {
+		return
+	}
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 5*time.Second)
 		defer cancel()

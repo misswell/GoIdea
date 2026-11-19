@@ -38,7 +38,7 @@ release can be called today.
 | Code analysis | `analysis` | 5 | 0 | 0 |
 | Android devices | `android` | 0 | 2 | 0 |
 | Application and projects | `app` | 12 | 15 | 6 |
-| Maven/Gradle builds | `build` | 12 | 0 | 5 |
+| Maven/Gradle builds | `build` | 12 | 0 | 6 |
 | Binary file reads | `bytes` | 3 | 0 | 0 |
 | Caches and restart | `caches` | 0 | 4 | 0 |
 | Clipboard | `clipboard` | 0 | 6 | 0 |
@@ -61,7 +61,7 @@ release can be called today.
 | Java | `java` | 3 | 0 | 3 |
 | Language services | `lsp` | 43 | 1 | 17 |
 | MCP | `mcp` | 3 | 4 | 0 |
-| Navigation and index | `nav` | 15 | 1 | 2 |
+| Navigation and index | `nav` | 15 | 1 | 3 |
 | Notebooks | `notebook` | 12 | 0 | 0 |
 | Performance | `perf` | 0 | 2 | 0 |
 | Plugins | `plugin` | 35 | 33 | 0 |
@@ -88,7 +88,7 @@ release can be called today.
 ## Served by `openidea-server --stdio`
 
 476 commands. `GoIDEA` marks the ones a non-test Go source invokes today
-(113 of 476).
+(115 of 476).
 
 | Command | Domain | Arguments | GoIDEA |
 | --- | --- | --- | --- |
@@ -130,7 +130,7 @@ release can be called today.
 | `agent_unqueue` | AI agent sessions | `queued`, `task` | — |
 | `analysis_locate_duplicates` | Code analysis | `options`, `request`, `scope` | — |
 | `apply_workspace_edit` | Language services | `edit` | yes |
-| `build_compile_file` | Maven/Gradle builds | `clear`, `file`, `onEvent`, `request` | — |
+| `build_compile_file` | Maven/Gradle builds | `clear`, `file`, `onEvent`, `request` | yes |
 | `build_model` | Maven/Gradle builds | — | yes |
 | `build_run` | Maven/Gradle builds | `clear`, `cmake`, `file`, `kind`, `onEvent`, `request` | yes |
 | `build_sync` | Maven/Gradle builds | `buildDir`, `offline`, `onProgress`, `profiles`, `request`, `tool` | yes |
@@ -391,7 +391,7 @@ release can be called today.
 | `project_trust_remove_location` | Application and projects | — | — |
 | `project_trust_set` | Application and projects | `folder`, `trusted` | yes |
 | `project_trust_status` | Application and projects | — | yes |
-| `recent_files` | Navigation and index | — | — |
+| `recent_files` | Navigation and index | — | yes |
 | `redo_workspace_edit` | Language services | `id` | yes |
 | `refactor_can_undo_file_move` | Refactoring | `id` | — |
 | `refactor_file_move_edits` | Refactoring | `moves`, `request` | — |
@@ -782,7 +782,7 @@ GoIDEA needs to do for each:
 
 ## What this means for GoIDEA
 
-476 remote commands are available today; GoIDEA uses 113. The parity work is
+476 remote commands are available today; GoIDEA uses 115. The parity work is
 first to cover the remote surface OpenIDEA's own frontend uses, then to move
 `shared-op`/`host`/`crate` commands onto stdio through the OpenIDEA fork
 (a submodule bump and a server release), and to implement `desktop` commands

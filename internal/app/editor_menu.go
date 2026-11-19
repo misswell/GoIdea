@@ -97,6 +97,17 @@ func (m *Model) editorMenu(menu *ui.Menu, t *Tab) {
 	if menu.Item("Rename…").Shortcut(ui.Shift, ui.KeyF6).Chosen() {
 		m.RenameActive()
 	}
+	m.compileFileMenu(menu, path)
+}
+
+func (m *Model) canCompileFile(path string) bool {
+	return m.Root() != "" && strings.EqualFold(filepath.Ext(path), ".java")
+}
+
+func (m *Model) compileFileMenu(menu *ui.Menu, path string) {
+	if m.canCompileFile(path) && menu.Item("Compile File").Chosen() {
+		m.CompileFilePath(path)
+	}
 }
 
 // copyEditorText puts text on the clipboard and reports it in the status bar,

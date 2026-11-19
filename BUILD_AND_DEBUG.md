@@ -178,6 +178,15 @@ Not in the UI yet: the Build view's message tree (messages are counted in the
 console and shown as diagnostics instead), the interrupted-build context, and
 a dedicated test-run view.
 
+**Build › Compile File** runs `javac` on the selected Java source in a linked
+Maven module. It is also available from the editor, tab and Project view context
+menus. Output and diagnostics appear in **Build**, where the compile can be
+stopped.
+
+**Code › Analyze Stack Trace or Thread Dump…** opens pasted text as a tab in
+**Run**. Recognized Java, Python and file-position frames link to source. The
+Java frame resolver uses the package path to prefer the matching indexed file.
+
 ## Debug pipeline
 
 1. The user sets line breakpoints in Java files (`Cmd+F8`). Breakpoints are stored per

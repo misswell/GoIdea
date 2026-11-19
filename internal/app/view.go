@@ -422,6 +422,9 @@ func (m *Model) runPanel(c *ui.Context, p *ui.Theme) {
 	col := ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Background(p.Surface).
 		BorderWidth(1, 0, 0, 0).BorderColor(p.Border)
 	col.Children(func() {
+		if m.renderStackTraces(c, p) {
+			return
+		}
 		m.runHeader(c, p)
 		if m.run.err != "" {
 			ui.Row(c).Height(24).Padding(0, 10).AlignItems(ui.Center).Children(func() {

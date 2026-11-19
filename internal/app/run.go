@@ -397,6 +397,9 @@ func (m *Model) startRunWith(raw json.RawMessage, name string) bool {
 	tabs := append([]*Tab(nil), m.tabs...)
 	root := m.Root()
 	ch := m.nextChannel()
+	if m.stackTrace != nil {
+		m.stackTrace.active = -1
+	}
 	m.run.visible = true
 	m.occupyBottom("run")
 	m.run.busy = true

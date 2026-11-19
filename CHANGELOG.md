@@ -3,6 +3,14 @@
 The GitHub release notes, which **Help › What's New** shows, come from the
 `## <version>` section here. Every release needs one, or its build fails.
 
+## Unreleased
+
+- 在 **Navigate › Go to Line:Column…** 或状态栏输入行列号，直接跳转到对应位置。
+- **Navigate** 新增 **Recent Files** 和 **Recent Locations**，支持按文件名、代码和编辑记录筛选。
+- **Code › Analyze Stack Trace or Thread Dump…** 在 **Run** 中打开堆栈，点击帧可跳转到源码。
+- **Build › Compile File** 可以单独编译 Maven 项目中的 Java 文件。
+- 恢复 Maven 工具窗口的构建图标，包括离线模式和依赖分析。
+
 ## 0.1.26
 
 - 界面换用与 OpenIDEA 相同的 Inter、JetBrains Mono 字体，字号与行高一致。

@@ -207,7 +207,7 @@
     },
     "feature:search": {
       "status": "partial",
-      "evidence": "base.search.done, base.search.files, base.search.matches; internal/app/se.go Search Everywhere: All/Classes/Files/Symbols/Actions/Text, section order and limits, Recent Files/Recent Actions on an empty query, Tab/Shift+Tab cycling; e2e searchEverywhere.*; still missing the per-tab filter funnel, search history, the Endpoints section and the double-Shift binding (MyGo exposes no modifier-only key event)"
+      "evidence": "base.search.done, base.search.files, base.search.matches and searchEverywhere.*; internal/app/se.go Search Everywhere tabs, search history and recent files/actions; se_filters.go and se_filters_test.go cover the filter funnel; recent_navigation.go adds Recent Files and Recent Locations; the Endpoints section, double-Shift and full Switcher behavior are pending"
     },
     "feature:project-tree": {
       "status": "partial",
@@ -307,7 +307,7 @@
     },
     "feature:app": {
       "status": "partial",
-      "evidence": "internal/app/update.go CheckForUpdates GitHub releases check with version compare and result dialog; download and install are not ported; internal/app/gear_test.go"
+      "evidence": "internal/app/update.go, tasks.go and notifications.go cover update checks, background download, cancellation and install/restart; update_flow_test.go; internal/app/invalidate.go covers cache invalidation and restart; other app overlays still have pending scope"
     },
     "action:navigate.gotoFile": {
       "status": "integrated",
@@ -378,8 +378,8 @@
       "evidence": "internal/app/build.go StopBuild (cancel_request)"
     },
     "action:build.compileFile": {
-      "status": "blocked",
-      "evidence": "build_compile_file is not served by the pinned v0.1.41 server; OPENIDEA_IPC.md"
+      "status": "integrated",
+      "evidence": "internal/app/build.go compiles one Java source over build_compile_file; Build menu, action registry, editor, tab and Project view context menus; base.compileFile.success runs real javac in the Maven fixture"
     },
     "toolwindow:build": {
       "status": "partial",
@@ -736,6 +736,70 @@
     "action:debug.attach": {
       "status": "partial",
       "evidence": "internal/app/attach.go ports attach.ts and java.ts's javaAttachConfig: debug_attachable_processes enumeration, the Java (JDWP) group with the word filter, and the attach request (cwd, javaProjectName, hostName, port, 30 s timeout) with the suspend=y auto-resume; attach.* release-gate checks attach to a real suspended JDWP JVM and require the program's output in the run pane; limits: GoIDEA ships java-debug only, so the popup lists the Java group, and there is no listen-mode remote debug"
+    },
+    "action:navigate.gotoLine": {
+      "status": "integrated",
+      "evidence": "internal/app/goto_line.go accepts one-based line and UTF-16 column, with clamping; Navigate, Cmd+L and the status bar; internal/app/goto_line_test.go and TestRecentNavigationAndGotoLineRenderOffscreen"
+    },
+    "overlay:editor.gotoLine": {
+      "status": "integrated",
+      "evidence": "internal/app/goto_line.go and overlay_registry.go; TestRecentNavigationAndGotoLineRenderOffscreen draws the popup; goto_line_test.go covers submission, validation and cancellation"
+    },
+    "action:navigate.recentFiles": {
+      "status": "partial",
+      "evidence": "internal/app/recent_navigation.go and recent_navigation_view.go; Navigate or Cmd+E, previous-file selection, filter, tool windows and Show edited only; internal/app/recent_navigation_test.go; multi-select, opening to the side, Delete for recent files, and the separate Switcher are pending"
+    },
+    "action:navigate.recentLocations": {
+      "status": "partial",
+      "evidence": "internal/app/recent_navigation.go and recent_navigation_view.go; Navigate or Cmd+Shift+E, bounded caret history, code snippets, changed filter, dismiss and jump; internal/app/recent_navigation_test.go; syntax-highlighted snippets, symbol breadcrumbs and opening to the side are pending"
+    },
+    "overlay:search.recent": {
+      "status": "partial",
+      "evidence": "internal/app/recent_navigation_view.go paints the file and tool window columns plus the locations and snippets list; TestRecentNavigationAndGotoLineRenderOffscreen; see the two navigate.recent actions for gaps"
+    },
+    "action:analyze.stackTrace": {
+      "status": "partial",
+      "evidence": "Code menu and action registry open internal/app/stack_trace.go; clipboard detection, Run trace tabs, clickable JVM/Python/path source frames and file index resolution; stack_trace_test.go; remaining console link patterns and upstream Run session integration are pending"
+    },
+    "overlay:run.stackTraceDialog": {
+      "status": "partial",
+      "evidence": "internal/app/stack_trace.go provides the native text dialog, clipboard prefill, Analyze and Cancel, and the trace console; internal/app/stack_trace_test.go; remains subject to visual parity verification"
+    },
+    "toolwindow:maven": {
+      "status": "partial",
+      "evidence": "internal/app/maven.go and dockregistry.go; right-side Maven reactor, lifecycle and plugin goals, profiles, dependencies, and reload; internal/app/maven_test.go and UPSTREAM_FEATURE_MATRIX.md Maven row; dependency navigation, add and exclude are pending"
+    },
+    "toolwindow:gradle": {
+      "status": "partial",
+      "evidence": "internal/app/maven.go uses build_model to list Gradle build directories and errors within the Maven window; separate Gradle window, project/task tree and real Gradle acceptance pending"
+    },
+    "feature:build-tools": {
+      "status": "partial",
+      "evidence": "internal/app/maven.go, pom_completion.go and pom_goto.go; Maven window and POM completion/navigation; internal/app/maven_test.go; see separate Maven and Gradle rows"
+    },
+    "feature:scratch": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go and scratch.go; File menu and Cmd+Shift+N open the language chooser and create a scratch tab; internal/app/scratch_test.go and base.scratch checks"
+    },
+    "overlay:scratch.chooser": {
+      "status": "integrated",
+      "evidence": "internal/app/scratch.go and overlay_registry.go; internal/app/scratch_test.go and base.scratch checks"
+    },
+    "feature:whats-new": {
+      "status": "integrated",
+      "evidence": "internal/app/whatsnew.go; Help menu and app.whatsNew open release notes with the update preference; TestWhatsNewIsAStandalonePage"
+    },
+    "action:app.whatsNew": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go app.whatsNew; Help menu; internal/app/whatsnew.go and TestWhatsNewIsAStandalonePage"
+    },
+    "settings-page:general.updates": {
+      "status": "partial",
+      "evidence": "internal/app/settings_pages.go opens Settings › Updates with version, last checked, Check Now, automatic checks and What's New; update source setting is absent"
+    },
+    "overlay:workbench.backgroundTasks": {
+      "status": "partial",
+      "evidence": "internal/app/tasks.go shows updater task progress and cancellation from the status bar; registration for other background task producers is pending"
     }
   }
 }

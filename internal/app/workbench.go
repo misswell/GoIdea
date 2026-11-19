@@ -1603,6 +1603,7 @@ func (m *Model) tabMenu(menu *ui.Menu, t *Tab) {
 	tabs := m.groupTabsAt(g)
 	at := tabIndexIn(tabs, t)
 	path := tabPath(t)
+	m.compileFileMenu(menu, path)
 	if menu.Item("Close").Shortcut(ui.Cmd, ui.KeyW).Chosen() {
 		m.closeTabThen(t, nil)
 	}

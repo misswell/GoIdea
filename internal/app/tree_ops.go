@@ -171,6 +171,9 @@ func treeMenuLabels(items []treeMenuItem) []string {
 // treeMenu draws target t's context menu.
 func (m *Model) treeMenu(c *ui.Context, menu *ui.Menu, t treeTarget) {
 	m.buildTreeMenu(c, menu, treeMenuItems(t, m.treeClip != nil), t)
+	if !t.dir {
+		m.compileFileMenu(menu, t.path)
+	}
 }
 
 func (m *Model) buildTreeMenu(c *ui.Context, menu *ui.Menu, items []treeMenuItem, t treeTarget) {

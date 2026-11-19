@@ -55,6 +55,23 @@ func (m *Model) BuildProject() { m.startBuild("build", nil) }
 // BuildModule compiles the module that owns the active file.
 func (m *Model) BuildModule() { m.startBuild("build", m.activeFileOrNil()) }
 
+// CompileFile compiles the active Java source without building its module.
+func (m *Model) CompileFile() {
+	t := m.tab()
+	if t == nil || t.kind != "" || t.doc == nil {
+		return
+	}
+	m.CompileFilePath(t.doc.Path())
+}
+
+// CompileFilePath compiles the Java source selected in a context menu.
+func (m *Model) CompileFilePath(path string) {
+	if !m.canCompileFile(path) {
+		return
+	}
+	m.startBuild("compileFile", &path)
+}
+
 // RebuildProject cleans the outputs, then builds the project.
 func (m *Model) RebuildProject() { m.startBuild("rebuild", nil) }
 
@@ -86,11 +103,11 @@ func (m *Model) startBuild(kind string, file *string) {
 		m.invalidate()
 		return
 	}
-	tabs := append([]*Tab(nil), m.tabs...)
+	tabs := m.allTabs()
 	root := m.Root()
 	req := m.nextRequest()
 	ch := m.nextChannel()
-	clear := append([]string(nil), m.build.files...)
+	clear := append([]string{}, m.build.files...)
 	m.build.kind = kind
 	m.build.busy = true
 	m.build.request = req
@@ -108,14 +125,7 @@ func (m *Model) startBuild(kind string, file *string) {
 	m.status = "Building…"
 	m.invalidate()
 
-	args := map[string]any{
-		"kind":    kind,
-		"file":    file,
-		"cmake":   nil,
-		"request": req,
-		"clear":   clear,
-		"onEvent": map[string]any{"$channel": ch},
-	}
+	command, args := buildInvocation(kind, file, req, ch, clear)
 	p := m.prefs.SaveFiles
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Minute)
@@ -131,7 +141,7 @@ func (m *Model) startBuild(kind string, file *string) {
 			})
 			return
 		}
-		raw, err := m.mgr.Invoke(ctx, Window, "build_run", args)
+		raw, err := m.invoke(ctx, command, args)
 		var result openidea.BuildResult
 		if err == nil {
 			err = json.Unmarshal(raw, &result)
@@ -173,6 +183,20 @@ func (m *Model) startBuild(kind string, file *string) {
 			m.invalidate()
 		})
 	}()
+}
+
+// buildInvocation keeps the single-file RPC separate from module builds.
+func buildInvocation(kind string, file *string, req, ch uint32, clear []string) (string, map[string]any) {
+	args := map[string]any{
+		"file": file, "request": req, "clear": clear,
+		"onEvent": map[string]any{"$channel": ch},
+	}
+	if kind == "compileFile" {
+		return "build_compile_file", args
+	}
+	args["kind"] = kind
+	args["cmake"] = nil
+	return "build_run", args
 }
 
 // StopBuild cancels the running build.
@@ -279,6 +303,8 @@ func kindLabel(kind string) string {
 	switch kind {
 	case "build":
 		return "Build"
+	case "compileFile":
+		return "Compile File"
 	case "rebuild":
 		return "Rebuild"
 	case "artifacts":
@@ -414,4 +440,39 @@ func (m *Model) SmokeBuild(ctx context.Context) (map[string]any, error) {
 		"lines":      lines,
 		"console":    console,
 	}, nil
+}
+
+// SmokeCompileFile compiles the active Java editor through the real backend.
+func (m *Model) SmokeCompileFile(ctx context.Context) (map[string]any, error) {
+	var started bool
+	m.post(func() {
+		started = m.RunCommand("build.compileFile") && m.build.busy && m.build.kind == "compileFile"
+	})
+	if !started {
+		return nil, errors.New("Compile File did not start")
+	}
+	tick := time.NewTicker(25 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		var done, success bool
+		var lines int
+		var detail string
+		m.post(func() {
+			done = !m.build.busy
+			success = m.build.success != nil && *m.build.success
+			lines, detail = len(m.build.output), m.build.err
+		})
+		if done {
+			result := map[string]any{"success": success, "lines": lines}
+			if detail != "" {
+				return result, errors.New(detail)
+			}
+			return result, nil
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-tick.C:
+		}
+	}
 }

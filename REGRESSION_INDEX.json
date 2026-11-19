@@ -1421,6 +1421,14 @@
    "doc": "BUILD_AND_DEBUG.md"
   },
   {
+   "id": "base.compileFile.success",
+   "label": "Compile File ran real javac for the active source and streamed output",
+   "feature": "Compile a single Java file in a Maven module",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
    "id": "tools.toolsError",
    "label": "toolsError is absent",
    "feature": "Toolchain listing and install report no error",

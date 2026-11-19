@@ -357,6 +357,13 @@ func smoke(m *app.Model) {
 		if buildErr != nil {
 			fields["buildError"] = buildErr.Error()
 		}
+		ctx, cancel = context.WithTimeout(context.Background(), 2*time.Minute)
+		file, fileErr := m.SmokeCompileFile(ctx)
+		cancel()
+		fields["compileFile"] = file
+		if fileErr != nil {
+			fields["compileFileError"] = fileErr.Error()
+		}
 	}
 	if os.Getenv("GOIDEA_SMOKE_DEBUG") == "1" && root != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
