@@ -224,6 +224,12 @@ func (m *Model) logPanel(c *ui.Context, p *ui.Theme) {
 				ui.Text(c, fmt.Sprintf("The last %d commits", len(l.commits))).
 					FontSize(12).TextColor(p.TextMuted)
 			}
+			ui.Button(c, "Cherry-Pick").Disabled(!l.loaded || len(l.commits) == 0).
+				OnClick(m.CherryPickSelectedCommit)
+			ui.Button(c, "Revert").Disabled(!l.loaded || len(l.commits) == 0).
+				OnClick(m.RevertSelectedCommit)
+			ui.Button(c, "Reset…").Disabled(!l.loaded || len(l.commits) == 0).
+				OnClick(m.OpenGitReset)
 			ui.Button(c, "Refresh").OnClick(func() { m.RefreshLog() })
 			ui.Button(c, "Close").OnClick(func() { m.CloseLog() })
 		})

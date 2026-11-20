@@ -74,11 +74,22 @@ func (m *Model) KeymapBindings(id string) []string {
 		}
 		return out
 	}
+	id = canonicalActionID(id)
+	if custom, ok := m.keymapUserBindings()[id]; ok {
+		out := make([]string, 0, len(custom))
+		for _, b := range custom {
+			if n := keymapNormalize(b); n != "" {
+				out = append(out, n)
+			}
+		}
+		return out
+	}
 	return append([]string(nil), keymapDefaults[id]...)
 }
 
 // keymapShortcutLabel is the first binding a row shows, formatted for the UI.
 func keymapShortcutLabel(id string) string {
+	id = canonicalActionID(id)
 	return keymapLabelOf(keymapDefaults[id])
 }
 

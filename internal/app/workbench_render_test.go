@@ -282,3 +282,49 @@ func TestWorkbenchHierarchyRightWindowRenders(t *testing.T) {
 		t.Fatalf("Hierarchy is not on the right: %+v, %v", r, ok)
 	}
 }
+
+func TestWorkbenchDebugLaunchShowsConsoleAcrossTheWorkArea(t *testing.T) {
+	m := toolModel()
+	m.debug = DebugPane{
+		starting: true,
+		tabName:  "DemoApplication",
+		view:     debugViewConsole,
+		output:   []outputLine{{kind: "system", text: "Starting debugger for DemoApplication…"}},
+	}
+	m.DockShow("debug")
+	tt := workbenchTester(t, m)
+	project, hasProject := tt.Find("Project")
+	debug, hasDebug := tt.Find("Debug")
+	if !hasProject || !hasDebug || debug.X > project.X+4 || debug.Y <= project.Y {
+		t.Fatalf("Debug is not below and aligned with Project: project=%+v debug=%+v", project, debug)
+	}
+	for _, label := range []string{"DemoApplication", "Threads & Variables", "Console", "Memory", "Starting debugger for DemoApplication…"} {
+		if !tt.HasText(label) {
+			t.Fatalf("Debug launch view is missing %q", label)
+		}
+	}
+	console, _ := tt.Find("Console")
+	output, _ := tt.Find("Starting debugger for DemoApplication…")
+	evaluate, hasEvaluate := tt.Find("Evaluate in the debug console")
+	if output.Y-console.Y > 40 || !hasEvaluate || evaluate.Y-output.Y < 120 {
+		t.Fatalf("the console should start below the toolbar and place evaluation at the bottom: toolbar=%+v output=%+v eval=%+v", console, output, evaluate)
+	}
+	if tt.HasText("Call Stack") {
+		t.Fatal("the launch console should use the entire pane")
+	}
+	for _, tab := range []struct {
+		label string
+		body  string
+		view  debugView
+	}{
+		{"Threads & Variables", "Call Stack", debugViewVariables},
+		{"Memory", "Waiting for the JVM to start…", debugViewMemory},
+		{"Console", "Starting debugger for DemoApplication…", debugViewConsole},
+	} {
+		tt.Click(tab.label)
+		tt.Frame()
+		if m.debug.view != tab.view || !tt.HasText(tab.body) {
+			t.Fatalf("clicking %s did not show %q", tab.label, tab.body)
+		}
+	}
+}

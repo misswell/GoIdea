@@ -147,6 +147,42 @@ func (m *Model) postNotification(n ideNotification) {
 	}
 	m.startNotifyTimer(n.id)
 	m.invalidate()
+	m.saveSession()
+}
+
+// notificationHistory snapshots the logged entries for Session. Timers, hover
+// state and action callbacks are runtime-only and are not written.
+func (m *Model) notificationHistory() []StoredNotification {
+	out := make([]StoredNotification, 0, len(m.notify.items))
+	for _, n := range m.notify.items {
+		if !n.logged {
+			continue
+		}
+		out = append(out, StoredNotification{
+			Key: n.key, Level: n.level, Title: n.title, Body: n.body,
+			At: n.at.UnixMilli(), Read: n.read, Group: n.group, Logged: true,
+		})
+	}
+	return out
+}
+
+// restoreNotificationHistory fills the tool window from the previous session.
+func (m *Model) restoreNotificationHistory(items []StoredNotification) {
+	if len(items) == 0 {
+		return
+	}
+	m.notify.items = make([]ideNotification, 0, min(len(items), notifyMaxHistory))
+	for i, stored := range items {
+		if i >= notifyMaxHistory {
+			break
+		}
+		m.notify.seq++
+		m.notify.items = append(m.notify.items, ideNotification{
+			id: m.notify.seq, key: stored.Key, level: stored.Level,
+			title: stored.Title, body: stored.Body, at: time.UnixMilli(stored.At),
+			read: stored.Read, group: stored.Group, logged: stored.Logged,
+		})
+	}
 }
 
 // startNotifyTimer arms the balloon's fade-out: 10 s for info and warnings,
@@ -169,7 +205,7 @@ func (m *Model) startNotifyTimer(id int) {
 		it.remaining = wait
 		it.deadline = time.Now().Add(wait)
 		it.timer = time.AfterFunc(wait, func() {
-			m.post(func() { m.dismissBalloon(id) })
+			m.post(func() { m.fadeBalloon(id) })
 		})
 		return
 	}
@@ -183,19 +219,33 @@ func stopNotifyTimer(n *ideNotification) {
 	}
 }
 
-// DismissBalloon hides one balloon; the notification stays in the history.
+// dismissBalloon hides one balloon because the user asked: its close button or
+// one of its actions. The hover pause holds back the fade clock, never the
+// user, and the pointer must rest on a balloon to press it.
 func (m *Model) dismissBalloon(id int) {
+	m.hideBalloon(id, false)
+}
+
+// fadeBalloon hides one balloon whose clock ran out: a balloon the pointer
+// rests on stays, as IDEA's smart fade-out does.
+func (m *Model) fadeBalloon(id int) {
+	m.hideBalloon(id, true)
+}
+
+// hideBalloon hides one balloon; the notification stays in the history.
+func (m *Model) hideBalloon(id int, respectHover bool) {
 	for i := range m.notify.items {
 		it := &m.notify.items[i]
 		if it.id != id {
 			continue
 		}
-		if it.hover {
+		if respectHover && it.hover {
 			return
 		}
 		stopNotifyTimer(it)
 		it.balloon = false
 		m.invalidate()
+		m.saveSession()
 		return
 	}
 }
@@ -224,7 +274,7 @@ func (m *Model) SetBalloonHover(id int, hover bool) {
 			}
 			it.deadline = time.Now().Add(wait)
 			it.timer = time.AfterFunc(wait, func() {
-				m.post(func() { m.dismissBalloon(id) })
+				m.post(func() { m.fadeBalloon(id) })
 			})
 		}
 		return
@@ -245,8 +295,15 @@ func (m *Model) unreadNotifications() int {
 // markNotificationsRead is the tool window opening: everything in the list
 // counts as seen.
 func (m *Model) markNotificationsRead() {
+	changed := false
 	for i := range m.notify.items {
+		if !m.notify.items[i].read {
+			changed = true
+		}
 		m.notify.items[i].read = true
+	}
+	if changed {
+		m.saveSession()
 	}
 }
 
@@ -270,6 +327,7 @@ func (m *Model) ClearNotifications() {
 	}
 	m.notify.items = nil
 	m.invalidate()
+	m.saveSession()
 }
 
 // notificationsShown reports whether the right area currently shows the list.

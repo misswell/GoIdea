@@ -1,6 +1,9 @@
 package app
 
-import "testing"
+import (
+	"path/filepath"
+	"testing"
+)
 
 func TestNotificationKeyReplacesAndErrorsStick(t *testing.T) {
 	m := &Model{}
@@ -66,14 +69,41 @@ func TestHoverPausesBalloonDismissal(t *testing.T) {
 	m.notifyInfo("h", "Hover", "")
 	id := m.notify.items[0].id
 	m.SetBalloonHover(id, true)
-	m.dismissBalloon(id)
+	m.fadeBalloon(id)
 	if !m.notify.items[0].balloon {
 		t.Fatalf("a hovered balloon was dismissed")
 	}
 	m.SetBalloonHover(id, false)
-	m.dismissBalloon(id)
+	m.fadeBalloon(id)
 	if m.notify.items[0].balloon {
 		t.Fatalf("the balloon stayed after the pointer left")
+	}
+	m.ClearNotifications()
+}
+
+// TestCloseButtonDismissesAHoveredBalloon: the pointer must rest on a balloon
+// to press its close button, so the hover pause cannot hold that press back.
+func TestCloseButtonDismissesAHoveredBalloon(t *testing.T) {
+	m := &Model{postHook: func(fn func()) { fn() }}
+	m.setRoot(t.TempDir())
+	m.notifyUser("kn", "info", "GoIDEA 0.1.26 is up to date", "")
+	tt := workbenchTester(t, m)
+	title, ok := tt.Find("GoIDEA 0.1.26 is up to date")
+	if !ok {
+		t.Fatalf("the balloon is not on the window: %q", tt.Texts())
+	}
+	// The close button sits at the balloon's right edge, level with its title:
+	// 16 DIPs from the window edge and 34 of the balloon's padding, with the
+	// button 20 wide.
+	x, y := float32(1440-16-34-10), title.Y+title.H/2
+	tt.Move(x, y)
+	tt.Frame()
+	if !m.notify.items[0].hover {
+		t.Fatalf("the pointer on the balloon did not pause it: %+v", m.notify.items[0])
+	}
+	tt.ClickAt(x, y)
+	if m.notify.items[0].balloon {
+		t.Fatalf("the close button left the balloon up")
 	}
 	m.ClearNotifications()
 }
@@ -94,6 +124,29 @@ func TestNotificationsWindowMarksRead(t *testing.T) {
 	m.CloseNotifications()
 	if m.notificationsShown() || !m.rightHidden {
 		t.Fatalf("closing left shown=%v hidden=%v", m.notificationsShown(), m.rightHidden)
+	}
+	m.ClearNotifications()
+}
+
+func TestNotificationHistorySurvivesARestart(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session.json")
+	m := &Model{cfg: Config{SessionPath: path}}
+	m.notifyInfo("saved", "Saved notification", "Its text is restored.")
+	m.notify.items[0].read = true
+	m.saveSessionNow()
+
+	session := LoadSession(path)
+	if len(session.Notifications) != 1 {
+		t.Fatalf("session notifications = %+v", session.Notifications)
+	}
+	restored := &Model{}
+	restored.restoreNotificationHistory(session.Notifications)
+	if len(restored.notify.items) != 1 {
+		t.Fatalf("restored notifications = %+v", restored.notify.items)
+	}
+	got := restored.notify.items[0]
+	if got.title != "Saved notification" || got.body != "Its text is restored." || !got.read || !got.logged || got.balloon {
+		t.Fatalf("restored notification = %+v", got)
 	}
 	m.ClearNotifications()
 }

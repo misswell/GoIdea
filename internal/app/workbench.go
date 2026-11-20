@@ -249,34 +249,25 @@ func (m *Model) workbench(c *ui.Context, p *ui.Theme) {
 			ui.Row(c).Grow(1).MinHeight(0).MinWidth(0).
 				AlignItems(ui.Stretch).Padding(0, 6, 0, 6).Children(func() {
 				m.toolStripe(c, p, oi)
-				m.leftSide(c, p, oi)
-				// The gap beside the side takes the pointer, as OpenIDEA's
-				// GapHandle does; the editor keeps the island gap from the
-				// stripe when the side is closed.
-				if m.leftShown() {
-					m.leftWidthHandle(c, oi)
-				} else {
-					ui.Box(c).Width(oiIslandGap).Shrink(0)
-				}
-				// The bottom windows share the centre column with the editor,
-				// so the side's islands run the workbench's full height as
-				// OpenIDEA's Islands layout draws them.
 				ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Children(func() {
-					m.editorIsland(c, p)
+					ui.Row(c).Grow(1).MinWidth(0).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
+						m.leftSide(c, p, oi)
+						if m.leftShown() {
+							m.leftWidthHandle(c, oi)
+						} else {
+							ui.Box(c).Width(oiIslandGap).Shrink(0)
+						}
+						m.editorIsland(c, p)
+						if m.rightShown() {
+							m.rightWidthHandle(c, oi)
+							m.rightSide(c, p, oi)
+						}
+					})
 					if bottom != "" {
-						ui.Column(c).Shrink(0).Padding(0, 6, 0, 6).
-							Height(float32(m.bottomDrawHeight()) + oiIslandGap).Children(func() {
-							// The gap above the bottom island takes the pointer,
-							// as OpenIDEA's GapHandle does.
-							m.bottomSizeHandle(c)
-							m.bottomSlot(c, p)
-						})
+						m.bottomSizeHandle(c)
+						m.bottomSlot(c, p)
 					}
 				})
-				if m.rightShown() {
-					m.rightWidthHandle(c, oi)
-					m.rightSide(c, p, oi)
-				}
 				m.rightStripe(c, p, oi)
 			})
 		}
@@ -910,7 +901,12 @@ func (m *Model) leftIsland(c *ui.Context, p *ui.Theme, oi oiColors, grow float32
 				})
 			}
 		})
-		ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
+		// The rows scroll both ways, as OpenIDEA's tree does: a name that runs
+		// past the island keeps its whole text, and the tree shows the rest
+		// when it is scrolled sideways.
+		scroll := ui.ScrollBoth(c).Key("tree:scroll").Grow(1).MinHeight(0).
+			TrackScroll(&m.treeScroll)
+		scroll.Children(func() {
 			if m.sideMode == "vcs" {
 				m.vcsRows(c, p)
 				return
@@ -918,7 +914,11 @@ func (m *Model) leftIsland(c *ui.Context, p *ui.Theme, oi oiColors, grow float32
 			if m.tree == nil {
 				return
 			}
-			ui.Column(c).Padding(0, 6).Children(func() {
+			rows := ui.Column(c).Padding(0, 6).
+				// At least as wide as the island, so a narrow tree still paints
+				// its selection and hover across the whole window.
+				MinWidth(m.leftSideWidth())
+			rows.Children(func() {
 				for _, row := range m.tree.Rows() {
 					m.treeRow(c, p, row)
 				}
@@ -1749,12 +1749,7 @@ func (m *Model) tabOpenInMenu(menu *ui.Menu, path string) {
 	})
 }
 
-// tabGitMenu is OpenIDEA's Git › for a tab's file. It carries the entries
-// GoIDEA can run today: commit this file alone, add an unversioned file, the
-// diff against HEAD, the file's history, a rollback of its working-tree
-// change and the Branches popup. OpenIDEA's blame, branch and revision
-// compares, push/pull/fetch, merge/rebase, tag, reset, stash, GitHub and
-// remote entries have no GoIDEA view yet and stay out until they do.
+// tabGitMenu is OpenIDEA's Git › for a tab's file.
 func (m *Model) tabGitMenu(menu *ui.Menu, path string) {
 	f, changed := m.statusFor(path)
 	kind := effectiveVCSKind(f)
@@ -1780,5 +1775,37 @@ func (m *Model) tabGitMenu(menu *ui.Menu, path string) {
 	menu.Separator()
 	if menu.Item("Branches…").Chosen() {
 		m.ShowBranches()
+	}
+	if menu.Item("New Branch…").Chosen() {
+		m.OpenNewGitBranch()
+	}
+	if menu.Item("New Tag…").Chosen() {
+		m.OpenNewGitTag()
+	}
+	menu.Separator()
+	if menu.Item("Update Project…").Chosen() {
+		m.OpenGitPull()
+	}
+	if menu.Item("Push…").Chosen() {
+		m.OpenGitPush()
+	}
+	if menu.Item("Fetch").Chosen() {
+		m.GitFetch()
+	}
+	if menu.Item("Merge…").Chosen() {
+		m.OpenGitMerge()
+	}
+	if menu.Item("Rebase…").Chosen() {
+		m.OpenGitRebase()
+	}
+	menu.Separator()
+	if menu.Item("Stash Changes…").Chosen() {
+		m.OpenGitStash()
+	}
+	if menu.Item("Unstash Changes…").Chosen() {
+		m.OpenGitUnstash()
+	}
+	if menu.Item("Reset HEAD…").Chosen() {
+		m.OpenGitReset()
 	}
 }

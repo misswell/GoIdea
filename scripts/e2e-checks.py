@@ -3,7 +3,7 @@
 
 Usage: e2e-checks.py <phase> <smoke.json> [<smoke.json> ...]
        e2e-checks.py --list
-Phases: base | tools | fresh | lsp | debug | hotswap | spring | rerunfail | gorerun | cargorun | pyrerun | jsrerun | readiness | negjdtls | runswitch | runkill | dbgcfg | attach
+Phases: base | vcsoperations | tools | debugimport | fresh | lsp | debug | hotswap | spring | rerunfail | gorerun | cargorun | pyrerun | jsrerun | readiness | negjdtls | runswitch | runkill | dbgcfg | attach
 Every check has an id. REGRESSION_INDEX.json names the same ids, and --list
 lets scripts/check-regression-index.py prove the two never drift apart, so a
 check cannot be deleted without the index noticing. Every failed assertion is
@@ -175,6 +175,19 @@ CHECKS = {
         ("runcfg.run", "the edited configuration ran through the real run path", lambda d: (get(d, "runcfg.exitCode") == 0, get(d, "runcfg.exitCode"))),
         ("runcfg.removed", "the user copy was deleted and is gone from run_configs", lambda d: (get(d, "runcfg.removed") is True, get(d, "runcfg.removed"))),
     ],
+    "vcsoperations": [
+        ("vcsOperationsError", *absent("vcsOperationsError")),
+        ("tag", "Create Tag made a real annotated tag", lambda d: (get(d, "vcsOperations.tagCreated") is True, get(d, "vcsOperations.tagCreated"))),
+        ("stash", "Stash made and restored a stash", lambda d: (get(d, "vcsOperations.stashCreated") is True, get(d, "vcsOperations.stashCreated"))),
+        ("stashRestored", "Unstash restored the original working-tree content", lambda d: (get(d, "vcsOperations.stashRestored") is True, get(d, "vcsOperations.stashRestored"))),
+        ("branch", "New Branch created and checked out a feature branch", lambda d: (get(d, "vcsOperations.branchCreated") is True, get(d, "vcsOperations.branchCreated"))),
+        ("fetch", "Fetch reached the real local remote", lambda d: (get(d, "vcsOperations.fetched") is True, get(d, "vcsOperations.fetched"))),
+        ("push", "Push published the current branch and set its upstream", lambda d: (get(d, "vcsOperations.pushed") is True, get(d, "vcsOperations.pushed"))),
+        ("pull", "Pull merged a commit made in another clone", lambda d: (get(d, "vcsOperations.pulled") is True, get(d, "vcsOperations.pulled"))),
+        ("rebase", "Rebase moved the feature branch onto the updated main branch", lambda d: (get(d, "vcsOperations.rebased") is True, get(d, "vcsOperations.rebased"))),
+        ("merge", "Merge integrated the rebased feature branch", lambda d: (get(d, "vcsOperations.merged") is True, get(d, "vcsOperations.merged"))),
+        ("reset", "Hard reset restored the original revision", lambda d: (get(d, "vcsOperations.reset") is True, get(d, "vcsOperations.reset"))),
+    ],
     "negjdtls": [
         ("negjdtlsError", *absent("negjdtlsError")),
         ("refused", "without the Java toolchain the launch is refused with the real reason", lambda d: (get(d, "negjdtls.error") not in (None, ""), get(d, "negjdtls.error"))),
@@ -273,6 +286,14 @@ CHECKS = {
         ("jdtls", "jdtls is installed", lambda d: (get(d, "tools.after.jdtls") in ("installed", "onPath", "custom"), get(d, "tools.after.jdtls"))),
         ("java-debug", "java-debug is installed", lambda d: (get(d, "tools.after.java-debug") in ("installed", "onPath", "custom"), get(d, "tools.after.java-debug"))),
     ],
+    "debugimport": [
+        ("debugImportError", *absent("debugImportError")),
+        ("observed", "Debug was started while a fresh Java project was importing", lambda d: (get(d, "debugImport.importObserved") is True and get(d, "debugImport.skipped") is None, get(d, "debugImport"))),
+        ("ready", "the project reached Java Ready without treating busy as a terminal failure", lambda d: (get(d, "debugImport.javaReady") is True, {"ready": get(d, "debugImport.javaReady"), "detail": get(d, "debugImport.javaDetail")})),
+        ("reacted", "the native Debug pane reacted immediately", lambda d: (get(d, "debugImport.starting") is True or (get(d, "debugImport.debugSession") or 0) != 0 or get(d, "debugImport.debugEnded") is True, get(d, "debugImport"))),
+        ("noBusyError", "a normal jdtls busy state was not shown as a failed import", lambda d: (get(d, "debugImport.debugErr") in (None, ""), get(d, "debugImport.debugErr"))),
+        ("stopped", "Stop canceled the pending import-time launch", lambda d: (get(d, "debugImport.stopped") is True and (get(d, "debugImport.sessionAfterStop") or 0) == 0, {"stopped": get(d, "debugImport.stopped"), "session": get(d, "debugImport.sessionAfterStop")})),
+    ],
     "lsp": [
         ("lspError", *absent("lspError")),
         ("jdtls.ready", "jdtls is ready", lambda d: (any(s.get("name") == "jdtls" and s.get("status") == "ready" for s in (get(d, "lsp.servers") or [])), get(d, "lsp.servers"))),
@@ -317,6 +338,8 @@ CHECKS = {
         ("mainClass", "main class resolved", lambda d: (get(d, "debug.mainClass") == "com.example.App", get(d, "debug.mainClass"))),
         ("vars", "variables were read", lambda d: ((get(d, "debug.vars") or 0) > 0, get(d, "debug.vars"))),
         ("watch", "watch expression evaluated", lambda d: (get(d, "debug.watch") == "4", get(d, "debug.watch"))),
+        ("consoleEval", "the Debug Console evaluated an expression in the selected frame", lambda d: (get(d, "debug.consoleEval") is True, get(d, "debug.consoleEval"))),
+        ("memoryRows", "the Memory tab read live JVM classes", lambda d: ((get(d, "debug.memoryRows") or 0) > 0 and not get(d, "debug.memoryError"), {"rows": get(d, "debug.memoryRows"), "error": get(d, "debug.memoryError")})),
         ("runToCursor", "Run to Cursor paused at the caret line", lambda d: (get(d, "debug.runToPaused") is True, [get(d, "debug.runToLine"), get(d, "debug.frameLine")])),
         ("step.paused", "step over paused again", lambda d: (get(d, "debug.afterStepPaused") is True, get(d, "debug.afterStepPaused"))),
         ("step.line", "step moved to the next line", lambda d: ((get(d, "debug.afterStepLine") or 0) > (get(d, "debug.frameLine") or 0), [get(d, "debug.frameLine"), get(d, "debug.afterStepLine")])),

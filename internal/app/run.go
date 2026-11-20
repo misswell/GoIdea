@@ -39,7 +39,12 @@ type RunPane struct {
 	pendingTrust bool
 	// pendingCoverage selects the coverage executor for the next pending Run.
 	pendingCoverage bool
-	coverage        *coverageExecution
+	// pendingContext runs the active file once trust and run configurations
+	// are ready. pendingContextCoverage selects the coverage executor.
+	pendingContext         bool
+	pendingContextCoverage bool
+	pendingDebugContext    bool
+	coverage               *coverageExecution
 	// inline is a configuration that is not in the detected list, such as the
 	// command line Run Anything starts; current() reports it while it is set.
 	inline *openidea.RunConfig
@@ -171,12 +176,80 @@ func (m *Model) TrustProject() {
 				m.status = "This project is trusted; it may build and run"
 				if m.run.pendingTrust {
 					m.run.pendingTrust = false
-					m.run.pendingStart = true
+					if !m.run.pendingContext && !m.run.pendingDebugContext {
+						m.run.pendingStart = true
+					}
 				}
 				m.loadRunConfigs()
 			}
 			if reopenErr != nil {
 				m.run.trustErr = "Reconnecting the language service failed: " + reopenErr.Error()
+			}
+			m.invalidate()
+		})
+	}()
+}
+
+// RevokeProjectTrust turns the current project back into Restricted Mode. Run
+// configurations are forgetten until the project is trusted again.
+func (m *Model) RevokeProjectTrust() {
+	root := m.Root()
+	if root == "" || m.ctx == nil || m.mgr == nil || m.run.busy {
+		return
+	}
+	m.run.busy = true
+	m.invalidate()
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
+		defer cancel()
+		_, err := m.mgr.Invoke(ctx, Window, "project_trust_set", map[string]any{
+			"path": root, "trusted": false, "folder": false,
+		})
+		m.post(func() {
+			m.run.busy = false
+			if m.Root() != root {
+				return
+			}
+			if err != nil {
+				m.run.trustErr = "Could not revoke project trust: " + err.Error()
+				m.invalidate()
+				return
+			}
+			m.run.trusted = false
+			m.run.loaded = false
+			m.run.configs = nil
+			m.run.sel = -1
+			m.run.trustErr = ""
+			m.status = "Project trust revoked"
+			m.invalidate()
+		})
+	}()
+}
+
+// RemoveTrustedLocation removes the selected folder, or the project root,
+// from the backend's trusted-location list.
+func (m *Model) RemoveTrustedLocation() {
+	root := m.Root()
+	if root == "" || m.ctx == nil || m.mgr == nil {
+		return
+	}
+	folder := root
+	if target, ok := m.selectedTreeEntry(); ok {
+		folder = target.folder()
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
+		defer cancel()
+		_, err := m.mgr.Invoke(ctx, Window, "project_trust_remove_location", map[string]any{"path": folder})
+		m.post(func() {
+			if m.Root() != root {
+				return
+			}
+			if err != nil {
+				m.run.trustErr = "Could not remove the trusted location: " + err.Error()
+			} else {
+				m.run.trustErr = ""
+				m.status = "Removed " + folder + " from trusted locations"
 			}
 			m.invalidate()
 		})
@@ -209,6 +282,11 @@ func (m *Model) loadRunConfigs() {
 					m.run.pendingStart = false
 					m.run.pendingCoverage = false
 				}
+				if m.run.pendingContext {
+					m.run.pendingContext = false
+					m.run.pendingContextCoverage = false
+				}
+				m.run.pendingDebugContext = false
 				m.run.err = "Could not read the run configurations: " + err.Error()
 				m.run.visible = true
 				m.occupyBottom("run")
@@ -221,6 +299,14 @@ func (m *Model) loadRunConfigs() {
 			m.refreshReadiness()
 			m.run.sel = pickRunConfig(configs)
 			m.invalidate()
+			if m.run.pendingContext {
+				m.startContextRun()
+				return
+			}
+			if m.run.pendingDebugContext {
+				m.startContextDebug()
+				return
+			}
 			if m.run.pendingStart {
 				m.run.pendingStart = false
 				m.startRun()
@@ -656,6 +742,7 @@ func (m *Model) acceptChunk(id uint32, data json.RawMessage) {
 		return
 	}
 	switch {
+	case m.acceptVCSOperationOutput(id, data):
 	case id != 0 && id == m.run.channel:
 		var chunk openidea.OutputChunk
 		if json.Unmarshal(data, &chunk) != nil {
@@ -1508,6 +1595,9 @@ func (m *Model) trustDialog(c *ui.Context, p *ui.Theme) {
 					m.trustAsk = false
 					m.run.pendingTrust = false
 					m.run.pendingCoverage = false
+					m.run.pendingContext = false
+					m.run.pendingContextCoverage = false
+					m.run.pendingDebugContext = false
 					m.invalidate()
 				})
 				ui.Button(c, "Trust Project").OnClick(func() {
@@ -1522,6 +1612,9 @@ func (m *Model) trustDialog(c *ui.Context, p *ui.Theme) {
 		m.trustAsk = false
 		m.run.pendingTrust = false
 		m.run.pendingCoverage = false
+		m.run.pendingContext = false
+		m.run.pendingContextCoverage = false
+		m.run.pendingDebugContext = false
 		m.invalidate()
 	}
 }

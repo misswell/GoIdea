@@ -36,6 +36,82 @@ func (t treeTarget) folder() string {
 	return filepath.Dir(t.path)
 }
 
+// selectedTreeEntry describes the project-view selection for commands that sit
+// only in the main menu or palette. The root is protected from rename exactly
+// as its context menu does.
+func (m *Model) selectedTreeEntry() (treeTarget, bool) {
+	if m.tree == nil {
+		return treeTarget{}, false
+	}
+	selected := m.tree.Selected()
+	if selected == "" {
+		return treeTarget{}, false
+	}
+	info, err := os.Stat(selected)
+	if err != nil {
+		return treeTarget{}, false
+	}
+	return treeTarget{path: selected, dir: info.IsDir(), root: selected == m.Root()}, true
+}
+
+// RevealSelectedInFinder shows the selected file or folder in the platform's
+// file manager.
+func (m *Model) RevealSelectedInFinder() {
+	if target, ok := m.selectedTreeEntry(); ok {
+		revealPath(target.path)
+	}
+}
+
+// RenameSelectedTreeEntry opens the same rename prompt as the context menu.
+func (m *Model) RenameSelectedTreeEntry() {
+	if target, ok := m.selectedTreeEntry(); ok && !target.root {
+		m.OpenTreeRename(target.path)
+	}
+}
+
+// OpenSelectedTreeInTerminal starts a terminal at the selected folder, or at
+// the file's parent folder.
+func (m *Model) OpenSelectedTreeInTerminal() {
+	if target, ok := m.selectedTreeEntry(); ok {
+		m.OpenTerminalAt(target.folder())
+	}
+}
+
+// CompareSelectedTreeFile opens the selected file and asks for its comparison
+// target, matching the editor's Compare With… action.
+func (m *Model) CompareSelectedTreeFile() {
+	target, ok := m.selectedTreeEntry()
+	if !ok || target.dir {
+		return
+	}
+	m.openFile(target.path)
+	if tab := m.tab(); tab != nil {
+		m.PickCompareFile(tab)
+	}
+}
+
+// FindUsagesOfSelectedTreeFile opens the file and runs Find Usages at the
+// current caret.
+func (m *Model) FindUsagesOfSelectedTreeFile() {
+	target, ok := m.selectedTreeEntry()
+	if !ok || target.dir {
+		return
+	}
+	m.openFile(target.path)
+	m.FindUsages()
+}
+
+// FormatSelectedTreeFile opens the selected source and formats it through the
+// active language service.
+func (m *Model) FormatSelectedTreeFile() {
+	target, ok := m.selectedTreeEntry()
+	if !ok || target.dir {
+		return
+	}
+	m.openFile(target.path)
+	m.FormatActive()
+}
+
 // treeAct is what choosing a project view menu item does.
 type treeAct int
 
@@ -66,6 +142,16 @@ const (
 	treeActGitHistory
 	treeActGitRollback
 	treeActGitBranches
+	treeActGitUpdate
+	treeActGitPush
+	treeActGitFetch
+	treeActGitMerge
+	treeActGitRebase
+	treeActGitNewBranch
+	treeActGitNewTag
+	treeActGitStash
+	treeActGitUnstash
+	treeActGitReset
 )
 
 // treeMenuItem is one row of the project view menu: an action, a separator or
@@ -121,11 +207,7 @@ func treeMenuItems(t treeTarget, clipboard bool) []treeMenuItem {
 	)
 }
 
-// treeGitMenu is the project view's Git submenu, as OpenIDEA orders it: the
-// commit, Add and ignore entries, then Annotate, Show Diff, Show History,
-// Rollback… and Branches…. The entries whose view GoIDEA has no backend for
-// (the branch and revision compares, push/pull/fetch, merge/rebase, new
-// branch/tag, reset and stash) are left out rather than shown disabled.
+// treeGitMenu is the project view's Git submenu, as OpenIDEA orders it.
 func treeGitMenu(t treeTarget) treeMenuItem {
 	item := func(act treeAct, label string, on bool) treeMenuItem {
 		return treeMenuItem{Act: act, Label: label, Enabled: on}
@@ -148,6 +230,16 @@ func treeGitMenu(t treeTarget) treeMenuItem {
 		item(treeActGitRollback, "Rollback…", t.rollback),
 		{Act: treeActSeparator},
 		item(treeActGitBranches, "Branches…", true),
+		item(treeActGitUpdate, "Update Project…", !t.root),
+		item(treeActGitPush, "Push…", !t.root),
+		item(treeActGitFetch, "Fetch", !t.root),
+		item(treeActGitMerge, "Merge…", !t.root),
+		item(treeActGitRebase, "Rebase…", !t.root),
+		item(treeActGitNewBranch, "New Branch…", !t.root),
+		item(treeActGitNewTag, "New Tag…", !t.root),
+		item(treeActGitStash, "Stash Changes…", !t.root),
+		item(treeActGitUnstash, "Unstash Changes…", !t.root),
+		item(treeActGitReset, "Reset HEAD…", !t.root),
 	}}
 }
 
@@ -249,6 +341,26 @@ func (m *Model) runTreeAct(c *ui.Context, it treeMenuItem, t treeTarget) {
 		}
 	case it.Act == treeActGitBranches:
 		m.ShowBranches()
+	case it.Act == treeActGitUpdate:
+		m.OpenGitPull()
+	case it.Act == treeActGitPush:
+		m.OpenGitPush()
+	case it.Act == treeActGitFetch:
+		m.GitFetch()
+	case it.Act == treeActGitMerge:
+		m.OpenGitMerge()
+	case it.Act == treeActGitRebase:
+		m.OpenGitRebase()
+	case it.Act == treeActGitNewBranch:
+		m.OpenNewGitBranch()
+	case it.Act == treeActGitNewTag:
+		m.OpenNewGitTag()
+	case it.Act == treeActGitStash:
+		m.OpenGitStash()
+	case it.Act == treeActGitUnstash:
+		m.OpenGitUnstash()
+	case it.Act == treeActGitReset:
+		m.OpenGitReset()
 	}
 }
 

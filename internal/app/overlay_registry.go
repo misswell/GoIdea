@@ -63,6 +63,12 @@ func init() {
 	reg("branches", overlayLayerPopup, 50, false,
 		func(m *Model) bool { return m.branch.open },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.branchesDialog(c, p) })
+	reg("vcs.operations", overlayLayerDialog, 55, true,
+		func(m *Model) bool { return m.vcsOps.open },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.vcsOperationDialog(c, p) })
+	reg("vcs.quickList", overlayLayerDialog, 56, true,
+		func(m *Model) bool { return m.vcsQuick.open },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.vcsQuickListDialog(c, p) })
 	reg("rollback", overlayLayerDialog, 60, false,
 		func(m *Model) bool { return m.rollback != nil },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.rollbackDialog(c, p) })

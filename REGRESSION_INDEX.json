@@ -1669,6 +1669,22 @@
    "doc": "BUILD_AND_DEBUG.md"
   },
   {
+   "id": "debug.consoleEval",
+   "label": "the Debug Console evaluated an expression in the selected frame",
+   "feature": "Debug Console expression evaluation",
+   "area": "debugger",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "debug.memoryRows",
+   "label": "the Memory tab read live JVM classes",
+   "feature": "JVM memory class list",
+   "area": "debugger",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
    "id": "debug.runToCursor",
    "label": "Run to Cursor paused at the caret line",
    "feature": "Run to Cursor",
@@ -1833,6 +1849,142 @@
    "label": "no orphan JVM outlived the stop",
    "feature": "No orphan JVM after stop",
    "area": "build-run",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "vcsoperations.vcsOperationsError",
+   "label": "vcsOperationsError is absent",
+   "feature": "Native Git operations use the OpenIDEA VCS RPCs",
+   "area": "vcs",
+   "gate": "main",
+   "doc": "UPSTREAM_FEATURE_MATRIX.md"
+  },
+  {
+   "id": "vcsoperations.tag",
+   "label": "Create Tag made a real annotated tag",
+   "feature": "Git Create Tag",
+   "area": "vcs",
+   "gate": "main",
+   "doc": "UPSTREAM_FEATURE_MATRIX.md"
+  },
+  {
+   "id": "vcsoperations.stash",
+   "label": "Stash made and restored a stash",
+   "feature": "Git Stash and Unstash",
+   "area": "vcs",
+   "gate": "main",
+   "doc": "UPSTREAM_FEATURE_MATRIX.md"
+  },
+  {
+   "id": "vcsoperations.stashRestored",
+   "label": "Unstash restored the original working-tree content",
+   "feature": "Git Stash and Unstash",
+   "area": "vcs",
+   "gate": "main",
+   "doc": "UPSTREAM_FEATURE_MATRIX.md"
+  },
+  {
+   "id": "vcsoperations.branch",
+   "label": "New Branch created and checked out a feature branch",
+   "feature": "Git New Branch",
+   "area": "vcs",
+   "gate": "main",
+   "doc": "UPSTREAM_FEATURE_MATRIX.md"
+  },
+  {
+   "id": "vcsoperations.fetch",
+   "label": "Fetch reached the real local remote",
+   "feature": "Git Fetch",
+   "area": "vcs",
+   "gate": "main",
+   "doc": "UPSTREAM_FEATURE_MATRIX.md"
+  },
+  {
+   "id": "vcsoperations.push",
+   "label": "Push published the current branch and set its upstream",
+   "feature": "Git Push",
+   "area": "vcs",
+   "gate": "main",
+   "doc": "UPSTREAM_FEATURE_MATRIX.md"
+  },
+  {
+   "id": "vcsoperations.pull",
+   "label": "Pull merged a commit made in another clone",
+   "feature": "Git Pull",
+   "area": "vcs",
+   "gate": "main",
+   "doc": "UPSTREAM_FEATURE_MATRIX.md"
+  },
+  {
+   "id": "vcsoperations.rebase",
+   "label": "Rebase moved the feature branch onto the updated main branch",
+   "feature": "Git Rebase",
+   "area": "vcs",
+   "gate": "main",
+   "doc": "UPSTREAM_FEATURE_MATRIX.md"
+  },
+  {
+   "id": "vcsoperations.merge",
+   "label": "Merge integrated the rebased feature branch",
+   "feature": "Git Merge",
+   "area": "vcs",
+   "gate": "main",
+   "doc": "UPSTREAM_FEATURE_MATRIX.md"
+  },
+  {
+   "id": "vcsoperations.reset",
+   "label": "Hard reset restored the original revision",
+   "feature": "Git Reset",
+   "area": "vcs",
+   "gate": "main",
+   "doc": "UPSTREAM_FEATURE_MATRIX.md"
+  },
+  {
+   "id": "debugimport.debugImportError",
+   "label": "debugImportError is absent",
+   "feature": "Debug starts while a Java project is importing",
+   "area": "debug",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "debugimport.observed",
+   "label": "Debug was started while a fresh Java project was importing",
+   "feature": "Debug starts while a Java project is importing",
+   "area": "debug",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "debugimport.ready",
+   "label": "the project reached Java Ready without treating busy as a terminal failure",
+   "feature": "Java project import readiness",
+   "area": "debug",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "debugimport.reacted",
+   "label": "the native Debug pane reacted immediately",
+   "feature": "Debug responds during Java import",
+   "area": "debug",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "debugimport.noBusyError",
+   "label": "a normal jdtls busy state was not shown as a failed import",
+   "feature": "Java project import busy state",
+   "area": "debug",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "debugimport.stopped",
+   "label": "Stop canceled the pending import-time launch",
+   "feature": "Debug stop during Java import",
+   "area": "debug",
    "gate": "release",
    "doc": "BUILD_AND_DEBUG.md"
   }

@@ -142,9 +142,17 @@ func (m *Model) AttachToProcess(p openidea.AttachableProcess) {
 	}
 	m.attach = nil
 	m.debug.starting = true
+	m.debug.tabName = p.Name
+	m.debug.lastID, m.debug.lastRaw, m.debug.lastKind = "", nil, ""
+	m.debug.view = debugViewConsole
+	m.debug.console = debugConsoleView{}
+	m.debug.memory = debugMemoryView{}
 	m.debug.session = 0
 	m.debug.ended = false
 	m.debug.paused = false
+	m.debug.pausing = false
+	m.debug.stopThread = 0
+	m.debug.frameID = 0
 	m.debug.stopLine = -1
 	m.debug.stopFile = ""
 	m.debug.frames = nil
@@ -155,10 +163,12 @@ func (m *Model) AttachToProcess(p openidea.AttachableProcess) {
 	m.debug.truncated = false
 	m.debug.err = ""
 	m.debug.status = "Connecting to " + fmt.Sprintf("%s (%d)…", p.Name, p.PID)
+	m.debug.appendOutput(m.debug.status, "system")
 	m.invalidate()
 
+	ctx, cancel := context.WithTimeout(m.ctx, 5*time.Minute)
+	m.debug.startCancel = cancel
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, 5*time.Minute)
 		defer cancel()
 		fail := func(msg string, err error) {
 			text := msg
@@ -166,6 +176,10 @@ func (m *Model) AttachToProcess(p openidea.AttachableProcess) {
 				text += "：" + err.Error()
 			}
 			m.post(func() {
+				if ctx.Err() == context.Canceled || m.Root() != root || !m.debug.starting {
+					return
+				}
+				m.debug.startCancel = nil
 				m.debug.starting = false
 				m.debug.err = text
 				m.debug.status = ""
@@ -233,7 +247,7 @@ func (m *Model) AttachToProcess(p openidea.AttachableProcess) {
 		}
 		_ = filepath.Clean(cwd)
 		m.post(func() {
-			if m.Root() != root {
+			if ctx.Err() != nil || m.Root() != root || !m.debug.starting {
 				go func(id uint32) {
 					ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
 					defer cancel()
@@ -242,6 +256,7 @@ func (m *Model) AttachToProcess(p openidea.AttachableProcess) {
 				return
 			}
 			m.debug.starting = false
+			m.debug.startCancel = nil
 			if m.debug.session == 0 {
 				m.debug.session = session
 			}

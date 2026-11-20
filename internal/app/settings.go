@@ -54,6 +54,21 @@ type Session struct {
 	// SearchHistory is Search Everywhere's recent queries, most recent first,
 	// as OpenIDEA keeps the search history across starts.
 	SearchHistory []string `json:"searchHistory,omitempty"`
+	// Notifications is the notification center's logged history. Runtime
+	// timers and action callbacks stay in memory.
+	Notifications []StoredNotification `json:"notifications,omitempty"`
+}
+
+// StoredNotification is one notification-center history row.
+type StoredNotification struct {
+	Key    string `json:"key,omitempty"`
+	Level  string `json:"level"`
+	Title  string `json:"title"`
+	Body   string `json:"body,omitempty"`
+	At     int64  `json:"at"`
+	Read   bool   `json:"read,omitempty"`
+	Group  string `json:"group,omitempty"`
+	Logged bool   `json:"logged,omitempty"`
 }
 
 // RecentProject is one project of the Welcome screen.

@@ -40,6 +40,10 @@ type DebugPane struct {
 	startCancel context.CancelFunc
 	session     uint32 // backend DebugSessionId; 0 before the first start
 	config      string // main class being debugged
+	tabName     string
+	view        debugView
+	console     debugConsoleView
+	memory      debugMemoryView
 
 	// lastID/lastRaw/lastKind remember the configuration this pane debugged,
 	// so the widget's rerun restarts it as saved now.
@@ -56,6 +60,7 @@ type DebugPane struct {
 	hotSwapStage string
 
 	paused     bool
+	pausing    bool
 	ended      bool
 	stopFile   string
 	stopLine   int // 0-based; -1 when not paused
@@ -76,6 +81,8 @@ type DebugPane struct {
 
 	// bps maps an absolute path to its 0-based breakpoint lines.
 	bps map[string][]int
+	// muted keeps the breakpoints visible while the debugger ignores them.
+	muted bool
 
 	// watches are expressions the user pinned; they evaluate again in each
 	// stopped frame. evalText is the input being typed for a new one.
@@ -207,7 +214,7 @@ func (m *Model) pushBreakpoints(ctx context.Context, path string) error {
 func (m *Model) pushFileBreakpoints(ctx context.Context, path string) error {
 	var list []openidea.Breakpoint
 	for _, line := range m.debug.breakpointLines(path) {
-		list = append(list, openidea.Breakpoint{Line: line, Enabled: true})
+		list = append(list, openidea.Breakpoint{Line: line, Enabled: !m.debug.muted})
 	}
 	if list == nil {
 		list = []openidea.Breakpoint{}
@@ -216,6 +223,25 @@ func (m *Model) pushFileBreakpoints(ctx context.Context, path string) error {
 		"path": path, "breakpoints": list,
 	})
 	return err
+}
+
+// ToggleBreakpointsMuted is OpenIDEA's Mute Breakpoints: the markers stay in
+// place, but the adapter receives them disabled until the command runs again.
+func (m *Model) ToggleBreakpointsMuted() {
+	m.debug.muted = !m.debug.muted
+	m.refreshDecorations()
+	m.invalidate()
+	paths := make([]string, 0, len(m.debug.bps))
+	for path := range m.debug.bps {
+		paths = append(paths, path)
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
+		defer cancel()
+		for _, path := range paths {
+			_ = m.pushFileBreakpoints(ctx, path)
+		}
+	}()
 }
 
 // refreshDecorations paints breakpoints and Git changes in the gutter, and the
@@ -542,27 +568,33 @@ func (m *Model) withEnvFiles(ctx context.Context, rc *openidea.RunConfig, root s
 
 // reportDebugConsole appends preparation messages to the Debug tool window's
 // adapter output of the project they belong to.
-func (m *Model) reportDebugConsole(root string) func(text, kind string) {
+func (m *Model) reportDebugConsole(ctx context.Context, root string) func(text, kind string) {
 	return func(text, kind string) {
 		m.post(func() {
-			if m.Root() != root {
+			if ctx.Err() != nil || m.Root() != root {
 				return
 			}
 			if kind == "" {
 				kind = "system"
 			}
-			for _, line := range strings.Split(strings.TrimSuffix(text, "\n"), "\n") {
-				if line == "" {
-					continue
-				}
-				m.debug.output = append(m.debug.output, outputLine{kind: kind, text: line})
-			}
-			if over := len(m.debug.output) - maxDebugLines; over > 0 {
-				m.debug.output = append(m.debug.output[:0], m.debug.output[over:]...)
-				m.debug.truncated = true
+			if text = strings.TrimSuffix(text, "\n"); text != "" {
+				m.debug.appendOutput(text, kind)
 			}
 			m.invalidate()
 		})
+	}
+}
+
+func (d *DebugPane) appendOutput(text, kind string) {
+	for _, line := range strings.Split(text, "\n") {
+		d.output = append(d.output, outputLine{kind: kind, text: line})
+	}
+	if over := len(d.output) - maxDebugLines; over > 0 {
+		d.output = append(d.output[:0], d.output[over:]...)
+		d.truncated = true
+	}
+	if !d.console.noFollow && !d.console.searching {
+		d.console.list.ScrollToEnd()
 	}
 }
 
@@ -625,6 +657,47 @@ func (m *Model) canStartDebug(root string) bool {
 	return true
 }
 
+// waitForJavaDebugReady closes the window between classpath preparation and
+// java-debug's startDebugSession command. jdtls may still report Busy while
+// indexing immediately after it has resolved the module, and asking it to
+// start a debug server in that state makes OpenIDEA refuse a launch that
+// would succeed a moment later. Only Busy and Starting are wait states: other
+// verdicts go to the backend so Missing, Crashed and Misconfigured keep their
+// precise errors.
+func (m *Model) waitForJavaDebugReady(ctx context.Context) error {
+	for {
+		var servers []lspServerState
+		if err := m.smokeLSPCall(ctx, "lsp_servers", nil, &servers); err != nil {
+			return fmt.Errorf("could not check the Java project import: %w", err)
+		}
+		if !javaDebugProjectBusy(servers) {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("the Java project did not finish importing before Debug started: %w", ctx.Err())
+		case <-time.After(250 * time.Millisecond):
+		}
+	}
+}
+
+// javaDebugProjectBusy is true while every Java server is in an import state.
+// A ready or failed server is left for the backend call to handle immediately.
+func javaDebugProjectBusy(servers []lspServerState) bool {
+	waiting := false
+	for _, server := range servers {
+		if !hasLanguage(server.Languages, "java") {
+			continue
+		}
+		if server.Status == "busy" || server.Status == "starting" {
+			waiting = true
+			continue
+		}
+		return false
+	}
+	return waiting
+}
+
 func (m *Model) startJavaDebug(rc *openidea.RunConfig, root string) {
 	if !adapter.IsJVMApplication(rc.Kind) {
 		m.debug.err = fmt.Sprintf("GoIDEA cannot debug %s run configurations yet", adapter.KindLabel(rc.Kind))
@@ -645,17 +718,24 @@ func (m *Model) startJavaDebug(rc *openidea.RunConfig, root string) {
 	m.debug.lastRaw = append(json.RawMessage(nil), rc.Raw()...)
 	m.debug.lastKind = rc.Kind
 	m.debug.config = adapter.ParseJavaArgs(rc.Args).MainClass
+	m.debug.tabName = rc.Name
+	m.debug.view = debugViewConsole
+	m.debug.console = debugConsoleView{}
+	m.debug.memory = debugMemoryView{}
 	m.debug.starting = true
 	m.debug.session = 0
 	m.debug.ended = false
 	m.debug.paused = false
+	m.debug.pausing = false
+	m.debug.stopThread = 0
+	m.debug.frameID = 0
 	m.debug.stopLine = -1
 	m.debug.stopFile = ""
 	m.debug.frames = nil
 	m.debug.scopes = nil
 	m.debug.vars = nil
 	m.debug.threads = nil
-	m.debug.output = nil
+	m.debug.output = []outputLine{{kind: "system", text: "Starting debugger for " + rc.Name + "…"}}
 	m.debug.truncated = false
 	m.debug.err = ""
 	m.debug.status = "Saving and building…"
@@ -694,10 +774,14 @@ func (m *Model) startJavaDebug(rc *openidea.RunConfig, root string) {
 		// Language-server activity is only advisory.
 		prepared, err := adapter.PrepareJavaLaunch(ctx, javaBackend{m}, rc, &adapter.Preparation{
 			Request: m.nextRequest(),
-			Report:  m.reportDebugConsole(root),
+			Report:  m.reportDebugConsole(ctx, root),
 		})
 		if err != nil {
 			fail(err.Error(), nil)
+			return
+		}
+		if err := m.waitForJavaDebugReady(ctx); err != nil {
+			fail("Java project import failed", err)
 			return
 		}
 		if prepared.Info.ErrorCount > 0 {
@@ -706,7 +790,7 @@ func (m *Model) startJavaDebug(rc *openidea.RunConfig, root string) {
 				m.invalidate()
 			})
 		}
-		launch, err := m.javaDebugLaunch(ctx, rc, root, prepared, m.reportDebugConsole(root))
+		launch, err := m.javaDebugLaunch(ctx, rc, root, prepared, m.reportDebugConsole(ctx, root))
 		if err != nil {
 			fail(err.Error(), nil)
 			return
@@ -787,29 +871,6 @@ func (m *Model) DebugRerun() {
 	}()
 }
 
-// DebugContext is run.debugContext: debug the active file's own
-// configuration (upstream runContext(true, arg)).
-func (m *Model) DebugContext() {
-	root := m.Root()
-	if !m.canStartDebug(root) {
-		return
-	}
-	t := m.tab()
-	if t == nil {
-		m.debug.err = "Open a Java source file first"
-		m.invalidate()
-		return
-	}
-	target, ok := javaTargetFor(root, t.doc.Path(), t.doc.Text())
-	if !ok {
-		m.debug.err = "The current file is not a Java main class"
-		m.invalidate()
-		return
-	}
-	rel := relPathUnder(root, t.doc.Path())
-	m.startJavaDebug(applicationConfig(target, adapter.JVMModuleDir(rel, m.run.configs, nil)), root)
-}
-
 // Continue resumes the paused thread.
 func (m *Model) DebugContinue() {
 	if m.debug.session == 0 || !m.debug.paused {
@@ -829,25 +890,44 @@ func (m *Model) DebugContinue() {
 
 // DebugPause suspends the program.
 func (m *Model) DebugPause() {
-	if m.debug.session == 0 || m.debug.paused {
+	d := &m.debug
+	if d.session == 0 || d.paused || d.ended || d.pausing {
 		return
 	}
-	session := m.debug.session
-	thread := m.debug.stopThread
-	if thread == 0 && len(m.debug.threads) > 0 {
-		thread = m.debug.threads[0].ID
-	}
-	if thread == 0 {
-		m.debug.err = "There is no thread to pause"
-		m.invalidate()
-		return
-	}
+	session, thread := d.session, d.stopThread
+	d.pausing = true
+	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 		defer cancel()
-		if _, err := m.mgr.Invoke(ctx, Window, "debug_pause", map[string]any{"session": session, "threadId": thread}); err != nil {
-			m.post(func() { m.debug.err = "Pause failed: " + err.Error(); m.invalidate() })
+		var err error
+		if thread == 0 {
+			var raw json.RawMessage
+			raw, err = m.invoke(ctx, "debug_threads", map[string]any{"session": session})
+			if err == nil {
+				var threads []openidea.ThreadInfo
+				err = json.Unmarshal(raw, &threads)
+				if err == nil && len(threads) == 0 {
+					err = errors.New("There is no thread to pause")
+				}
+				if err == nil {
+					thread = threads[0].ID
+				}
+			}
 		}
+		if err == nil {
+			_, err = m.invoke(ctx, "debug_pause", map[string]any{"session": session, "threadId": thread})
+		}
+		m.post(func() {
+			if m.debug.session != session {
+				return
+			}
+			m.debug.pausing = false
+			if err != nil && !m.debug.ended {
+				m.debug.err = "Pause failed: " + err.Error()
+			}
+			m.invalidate()
+		})
 	}()
 }
 
@@ -877,6 +957,51 @@ func (m *Model) DebugStep(kind string) {
 func (m *Model) StepOver() { m.DebugStep("over") }
 func (m *Model) StepInto() { m.DebugStep("into") }
 func (m *Model) StepOut()  { m.DebugStep("out") }
+
+// ForceStepOver uses DAP's ignore-breakpoints step when the adapter supports
+// it. OpenIDEA's command is distinct from the normal Step Over for this reason.
+func (m *Model) ForceStepOver() {
+	if m.debug.session == 0 || !m.debug.paused || m.debug.stopThread == 0 {
+		return
+	}
+	session, thread := m.debug.session, m.debug.stopThread
+	m.debug.status = "Force-stepping over…"
+	m.debug.paused = false
+	m.refreshDecorations()
+	m.invalidate()
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
+		defer cancel()
+		if _, err := m.mgr.Invoke(ctx, Window, "debug_force_step_over", map[string]any{
+			"session": session, "threadId": thread,
+		}); err != nil {
+			m.post(func() { m.debug.err = "Force Step Over failed: " + err.Error(); m.invalidate() })
+		}
+	}()
+}
+
+// DAP has no generic ignore-filters flag for Step Into. OpenIDEA's action uses
+// the adapter's own filters, so the normal request is the portable equivalent.
+func (m *Model) ForceStepInto() { m.StepInto() }
+
+// RemoveAllBreakpoints clears every stored breakpoint and pushes the empty set
+// to each file the backend knows about.
+func (m *Model) RemoveAllBreakpoints() {
+	paths := make([]string, 0, len(m.debug.bps))
+	for path := range m.debug.bps {
+		paths = append(paths, path)
+	}
+	m.debug.bps = map[string][]int{}
+	m.refreshDecorations()
+	m.invalidate()
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
+		defer cancel()
+		for _, path := range paths {
+			_ = m.pushFileBreakpoints(ctx, path)
+		}
+	}()
+}
 
 // RunToCursor continues to the caret's line (Alt+F9); force ignores
 // breakpoints on the way (Cmd+Alt+F9).
@@ -961,6 +1086,9 @@ func (m *Model) acceptDebugEvent(session uint32, raw json.RawMessage) {
 		}
 		d.status = "Debugging started"
 	case "stopped":
+		if e.Reason != "step" && d.view != debugViewMemory {
+			d.view = debugViewVariables
+		}
 		d.paused = true
 		d.ended = false
 		d.stopThread = e.ThreadID
@@ -986,13 +1114,7 @@ func (m *Model) acceptDebugEvent(session uint32, raw json.RawMessage) {
 			if kind == "" {
 				kind = "console"
 			}
-			for _, line := range strings.Split(text, "\n") {
-				d.output = append(d.output, outputLine{kind: kind, text: line})
-			}
-			if over := len(d.output) - maxDebugLines; over > 0 {
-				d.output = append(d.output[:0], d.output[over:]...)
-				d.truncated = true
-			}
+			d.appendOutput(text, kind)
 		}
 	case "terminated":
 		d.ended = true
@@ -1148,6 +1270,51 @@ func (m *Model) RemoveWatch(i int) {
 		return
 	}
 	m.debug.watches = append(m.debug.watches[:i], m.debug.watches[i+1:]...)
+	m.invalidate()
+}
+
+// OpenDebugEvaluate brings the watch input forward with the selected text, as
+// the Evaluate Expression command does. Enter evaluates it in the stopped frame.
+func (m *Model) OpenDebugEvaluate() {
+	m.DockShow("debug")
+	m.debug.view = debugViewVariables
+	if t := m.tab(); t != nil {
+		if selected := strings.TrimSpace(t.state.SelectedText()); selected != "" {
+			m.debug.evalText = selected
+		}
+	}
+	m.invalidate()
+}
+
+// QuickEvaluate evaluates the selection, or the identifier at the caret, as a
+// temporary watch in the current paused frame.
+func (m *Model) QuickEvaluate() {
+	if m.debug.session == 0 || !m.debug.paused {
+		return
+	}
+	t := m.tab()
+	if t == nil {
+		return
+	}
+	expr := strings.TrimSpace(t.state.SelectedText())
+	if expr == "" {
+		expr = wordAt(t.doc.Text(), t.state.Cursor())
+	}
+	if expr == "" {
+		return
+	}
+	m.DockShow("debug")
+	m.addWatch(expr)
+}
+
+// ShowExecutionPoint opens the paused frame's source and places the caret on
+// the execution line.
+func (m *Model) ShowExecutionPoint() {
+	if !m.debug.paused || m.debug.stopFile == "" || m.debug.stopLine < 0 {
+		return
+	}
+	m.openFile(m.debug.stopFile)
+	m.revealAt(m.debug.stopFile, m.debug.stopLine, 0)
 	m.invalidate()
 }
 
@@ -1331,7 +1498,7 @@ func (m *Model) SmokeDebug(ctx context.Context) (map[string]any, error) {
 	// The same shared preparation Run and Debug use: no smoke-only shortcut.
 	prepared, err := adapter.PrepareJavaLaunch(ctx, javaBackend{m}, rc, &adapter.Preparation{
 		Request: m.nextRequest(),
-		Report:  m.reportDebugConsole(root),
+		Report:  m.reportDebugConsole(ctx, root),
 	})
 	if err != nil {
 		m.post(func() { m.debug.starting = false })
@@ -1342,7 +1509,7 @@ func (m *Model) SmokeDebug(ctx context.Context) (map[string]any, error) {
 	}
 	out["classPaths"] = len(prepared.Info.ClassPaths)
 	out["errorCount"] = prepared.Info.ErrorCount
-	launch, err := m.javaDebugLaunch(ctx, rc, root, prepared, m.reportDebugConsole(root))
+	launch, err := m.javaDebugLaunch(ctx, rc, root, prepared, m.reportDebugConsole(ctx, root))
 	if err != nil {
 		m.post(func() { m.debug.starting = false })
 		return out, err
@@ -1438,6 +1605,26 @@ func (m *Model) SmokeDebug(ctx context.Context) (map[string]any, error) {
 		case <-time.After(200 * time.Millisecond):
 		}
 	}
+
+	m.post(func() {
+		m.debug.console.expr = "4 + 5"
+		m.evaluateDebugConsole()
+		m.refreshDebugMemory()
+	})
+	m.waitDebug(ctx, func(d *DebugPane) bool {
+		return !d.console.busy && !d.memory.loading
+	}, 35*time.Second)
+	m.post(func() {
+		out["consoleEval"] = false
+		for i, line := range m.debug.output {
+			if line.text == "› 4 + 5" && i+1 < len(m.debug.output) {
+				out["consoleEval"] = m.debug.output[i+1].text == "9"
+				break
+			}
+		}
+		out["memoryRows"] = len(m.debug.memory.snapshot.Rows)
+		out["memoryError"] = m.debug.memory.err
+	})
 
 	// Run to Cursor to the loop body: the same pause must arrive at that line
 	// through debug_run_to, as Alt+F9 does in the UI.
@@ -1560,6 +1747,7 @@ func (m *Model) SmokeDebugImport(ctx context.Context) (map[string]any, error) {
 		out["skipped"] = "the Java project was already imported"
 		return out, nil
 	}
+	out["importObserved"] = true
 	m.post(func() { m.DebugContext() })
 	if !m.waitDebug(ctx, func(d *DebugPane) bool {
 		return d.starting || d.err != "" || d.session != 0
@@ -1570,7 +1758,58 @@ func (m *Model) SmokeDebugImport(ctx context.Context) (map[string]any, error) {
 		out["starting"] = m.debug.starting
 		out["status"] = m.debug.status
 		out["err"] = m.debug.err
+	})
+	// Stay on the busy edge instead of stopping immediately. A correct launch
+	// waits for jdtls to leave Busy, then either starts or reports a real
+	// error. Returning at the first error is what made the shipped app show
+	// "stopped importing before it was ready (busy)" while the project was
+	// still importing normally.
+	debugDeadline := time.Now().Add(6 * time.Minute)
+	for {
+		r := m.readinessNow(ctx)
+		var starting, ended bool
+		var session uint32
+		var debugErr string
+		m.post(func() {
+			starting, ended = m.debug.starting, m.debug.ended
+			session, debugErr = m.debug.session, m.debug.err
+		})
+		out["javaReady"] = r.Java
+		out["javaDetail"] = r.JavaDetail
+		out["debugStarting"] = starting
+		out["debugEnded"] = ended
+		out["debugSession"] = session
+		out["debugErr"] = debugErr
+		if debugErr != "" {
+			lower := strings.ToLower(debugErr)
+			if strings.Contains(lower, "stopped importing") ||
+				strings.Contains(lower, "before it was ready") ||
+				strings.Contains(lower, "busy") {
+				return out, fmt.Errorf("Debug treated a normal Java import as a failure: %s", debugErr)
+			}
+			break
+		}
+		if r.Java || !starting || session != 0 || ended {
+			break
+		}
+		if time.Now().After(debugDeadline) {
+			return out, errors.New("Debug stayed in the import wait state for more than 6 minutes")
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(200 * time.Millisecond):
+		}
+	}
+	m.post(func() {
 		m.StopDebug()
+	})
+	if !m.waitDebug(ctx, func(d *DebugPane) bool {
+		return !d.starting && d.session == 0 && d.err == ""
+	}, 15*time.Second) {
+		return out, errors.New("Stop did not stop the Debug session")
+	}
+	m.post(func() {
 		out["stopped"] = !m.debug.starting && m.debug.session == 0 && m.debug.err == ""
 	})
 	// A stopped waiting launch must not start a session once the import ends.

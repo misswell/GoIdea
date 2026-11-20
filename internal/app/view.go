@@ -279,7 +279,9 @@ func (m *Model) treeRow(c *ui.Context, p *ui.Theme, row *treeNode) {
 		if row.excluded {
 			tone = oi.ignored
 		}
-		text := ui.Text(c, label).FontSize(13).TextColor(tone).SingleLine().Ellipsis("…")
+		// No ellipsis: a name wider than the island keeps its whole text and
+		// scrolls with the tree, as OpenIDEA's rows do.
+		text := ui.Text(c, label).FontSize(13).TextColor(tone).SingleLine()
 		if row.module || row.path == m.Root() {
 			text.Bold()
 		}
@@ -832,62 +834,6 @@ func (m *Model) termPaneBody(c *ui.Context, p *ui.Theme, g int) {
 	})
 }
 
-func (m *Model) debugPanel(c *ui.Context, p *ui.Theme) {
-	col := ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).
-		Background(p.Surface).BorderWidth(1, 0, 0, 0).BorderColor(p.Border)
-	col.Children(func() {
-		m.debugHeader(c, p)
-		if m.debug.err != "" {
-			ui.Row(c).Shrink(0).Padding(4, 10).Gap(8).AlignItems(ui.Center).
-				Background(p.Background).Children(func() {
-				ui.Text(c, m.debug.err).FontSize(12).TextColor(p.Danger).
-					SingleLine().Ellipsis("…").Grow(1)
-				ui.Button(c, "Close").OnClick(func() {
-					m.debug.err = ""
-					m.invalidate()
-				})
-			})
-		}
-		ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
-			m.debugFrames(c, p)
-			m.debugVars(c, p)
-			m.debugConsole(c, p)
-		})
-	})
-}
-
-func (m *Model) debugHeader(c *ui.Context, p *ui.Theme) {
-	d := &m.debug
-	ui.Row(c).Height(32).Shrink(0).Padding(0, 8).Gap(8).AlignItems(ui.Center).
-		BorderWidth(0, 0, 1, 0).BorderColor(p.Border).Children(func() {
-		ui.Text(c, "Debug").FontSize(13).Bold().TextColor(p.Text)
-		config := d.config
-		if config == "" {
-			config = "Main class of the current file"
-		}
-		ui.Text(c, config).FontSize(13).TextColor(p.TextMuted).
-			SingleLine().Ellipsis("…").Grow(1)
-		if d.session == 0 && !d.starting {
-			ui.Button(c, "Debug").OnClick(func() { m.Debug() })
-		}
-		if d.starting {
-			ui.Button(c, "Stop").OnClick(func() { m.StopDebug() })
-		}
-		if d.paused {
-			ui.Button(c, "Resume").OnClick(func() { m.DebugContinue() })
-			ui.Button(c, "Step Over").OnClick(func() { m.StepOver() })
-			ui.Button(c, "Step Into").OnClick(func() { m.StepInto() })
-			ui.Button(c, "Step Out").OnClick(func() { m.StepOut() })
-		} else if d.session != 0 && !d.ended {
-			ui.Button(c, "Pause").OnClick(func() { m.DebugPause() })
-		}
-		if d.session != 0 && !d.ended {
-			ui.Button(c, "Stop").OnClick(func() { m.StopDebug() })
-		}
-		ui.Button(c, "Collapse").OnClick(func() { m.ShowDebug() })
-	})
-}
-
 func (m *Model) debugFrames(c *ui.Context, p *ui.Theme) {
 	d := &m.debug
 	ui.Column(c).Width(260).Shrink(0).MinHeight(0).
@@ -929,8 +875,7 @@ func (m *Model) debugFrames(c *ui.Context, p *ui.Theme) {
 
 func (m *Model) debugVars(c *ui.Context, p *ui.Theme) {
 	d := &m.debug
-	ui.Column(c).Width(320).Shrink(0).MinHeight(0).
-		BorderWidth(0, 1, 0, 0).BorderColor(p.Border).Children(func() {
+	ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Children(func() {
 		ui.Row(c).Height(26).Padding(0, 8).AlignItems(ui.Center).Children(func() {
 			name := "Variables"
 			if len(d.scopes) > 0 {
@@ -999,42 +944,6 @@ func (m *Model) debugVars(c *ui.Context, p *ui.Theme) {
 				m.SubmitWatch()
 			}
 			ui.Button(c, "Evaluate").Disabled(d.evalBusy).OnClick(func() { m.SubmitWatch() })
-		})
-	})
-}
-
-func (m *Model) debugConsole(c *ui.Context, p *ui.Theme) {
-	d := &m.debug
-	ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Children(func() {
-		ui.Row(c).Height(26).Padding(0, 8).Children(func() {
-			ui.Text(c, "Debug Console").FontSize(13).Bold().TextColor(p.TextMuted)
-		})
-		ui.Scroll(c).Grow(1).Children(func() {
-			if len(d.output) == 0 {
-				ui.Row(c).Padding(8, 8).Children(func() {
-					ui.Text(c, "The program's output appears here").FontSize(12).TextColor(p.TextMuted)
-				})
-				return
-			}
-			if d.truncated {
-				ui.Row(c).Padding(4, 8).Children(func() {
-					ui.Text(c, "(Output truncated: earlier lines were omitted)").
-						FontSize(12).TextColor(p.TextMuted)
-				})
-			}
-			for _, line := range d.output {
-				color := p.Text
-				if line.kind == "stderr" {
-					color = p.Warning
-				}
-				text := line.text
-				if text == "" {
-					text = " "
-				}
-				ui.Row(c).Height(18).Padding(0, 8).Children(func() {
-					ui.Text(c, text).FontSize(13).TextColor(color).SingleLine()
-				})
-			}
 		})
 	})
 }

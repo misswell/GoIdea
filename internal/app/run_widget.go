@@ -23,6 +23,10 @@ func (m *Model) runWidget(c *ui.Context, p *ui.Theme, oi oiColors) {
 		if cfg := m.run.current(); cfg != nil {
 			name = cfg.Name
 		}
+		if m.debug.starting {
+			m.runWidgetButton(c, p, oi, "stop", titled("Stop", m.debug.tabName), "run/stop_stroke", 16, oi.danger, m.StopDebug)
+			return
+		}
 		if live || debugging {
 			// While a session runs the widget offers Rerun, and Resume when
 			// the debugger is paused, as OpenIDEA does. The solid buttons

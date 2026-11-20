@@ -204,7 +204,7 @@ func PrepareJavaLaunch(ctx context.Context, backend Backend, config *openidea.Ru
 	if parsed.MainClass == "" {
 		return nil, fmt.Errorf("配置 '%s' 没有主类", config.Name)
 	}
-	report(fmt.Sprintf("正在构建并解析 %s 的 classpath…\n", parsed.MainClass), "system")
+	report(fmt.Sprintf("Building and resolving the classpath of %s…\n", parsed.MainClass), "system")
 	module, err := PrepareJavaModule(ctx, backend, config, preparation)
 	if err != nil {
 		return nil, err

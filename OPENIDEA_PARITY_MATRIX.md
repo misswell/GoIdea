@@ -27,7 +27,7 @@ new action, tool window, page or command appears automatically.
 | Kind | Items | Integrated | Partial | Engine | Blocked | Missing |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Feature folders | 44 | 2 | 14 | 0 | 0 | 28 |
-| Actions | 673 | 48 | 105 | 0 | 0 | 520 |
+| Actions | 673 | 52 | 105 | 0 | 0 | 516 |
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
 | Tool windows | 30 | 10 | 11 | 0 | 0 | 9 |
 | Overlays | 56 | 3 | 5 | 0 | 0 | 48 |
@@ -59,7 +59,7 @@ directory registers.
 | `color-preview` | 0 | 0 | 0 | 1 | 0 | missing |
 | `coverage` | 6 | 1 | 1 | 1 | 0 | partial - base.coverage.report; internal/app/coverage_run.go runs the selected configuration; context executor and tooltip are pending |
 | `database` | 46 | 1 | 1 | 1 | 0 | partial - UPSTREAM_FEATURE_MATRIX.md database console; db_* commands |
-| `debugger` | 40 | 1 | 1 | 1 | 0 | partial - debug.paused, debug.step.paused, debug.vars; internal/app/debug.go builds the file's application config (upstream applicationConfig port) and calls the shared adapter.PrepareJavaLaunch, then java_debug_server + debug_start with the resolved classpaths, modulePaths, projectName, javaExec, VM and program arguments (upstream javaLaunchConfig java-debug branch); java-debug missing offers the one-click install; HotSwap (internal/app/hotswap.go) compiles with java_build_workspace and redefines via debug_redefine_classes, proven by hotswap.* release-gate checks (the reloaded code prints the new text) |
+| `debugger` | 40 | 1 | 1 | 1 | 0 | partial - debug.paused, debug.step.paused, debug.vars; internal/app/debug.go builds the file's application config and calls adapter.PrepareJavaLaunch before java_debug_server + debug_start; waitForJavaDebugReady holds launch through jdtls starting/busy and Stop cancels it, proven by debugimport.*; debug_view.go renders the session tab, toolbar and Console and debug.consoleEval exercises REPL evaluation; debug_memory.go reads live JVM class counts, tested by debug.memoryRows; instances, heap and concurrent sessions remain; java-debug missing offers one-click install; HotSwap uses java_build_workspace and debug_redefine_classes, proven by hotswap.* |
 | `dependencies` | 0 | 0 | 0 | 1 | 0 | missing |
 | `deployment` | 12 | 1 | 1 | 0 | 0 | missing |
 | `dotnet` | 11 | 1 | 0 | 0 | 0 | missing |
@@ -74,7 +74,7 @@ directory registers.
 | `perf` | 0 | 0 | 1 | 0 | 0 | missing |
 | `plugins` | 10 | 0 | 2 | 5 | 0 | missing |
 | `profiler` | 4 | 1 | 0 | 0 | 0 | missing |
-| `project-tree` | 31 | 1 | 3 | 0 | 0 | partial - internal/workspace tree tests; base.tabs; internal/app/tree_ops.go treeGitMenu ports the Git submenu (Commit…/Commit File…, Add, Add to .gitignore, Annotate, Show Diff, Show History, Rollback…, Branches…) when the project's Git status loads, tree_ops_test.go TestTreeGitSubmenuFollowsTheSelection; limits: the branch/revision compares, push/pull/fetch, merge/rebase, new branch/tag, reset and stash entries have no GoIDEA view and stay out |
+| `project-tree` | 31 | 1 | 3 | 0 | 0 | partial - internal/workspace tree tests; base.tabs; internal/app/tree_ops.go treeGitMenu has Commit, Add, Ignore, Annotate, Diff, History, Rollback, branch/tag creation, fetch, pull, push, merge, rebase, stash/unstash and reset; tree_ops_test.go TestTreeGitSubmenuFollowsTheSelection; vcsoperations.* runs the underlying operations; branch/revision compare remains |
 | `project-trust` | 5 | 0 | 1 | 0 | 1 | missing |
 | `remote-dev` | 4 | 1 | 1 | 0 | 0 | missing |
 | `run` | 28 | 1 | 5 | 2 | 0 | partial - base.run.config, base.run.exit, base.run.build; internal/adapter/java_launch.go and java_module.go port OpenIDEA's platform/javaLaunch.ts and Run and Debug share it; spring.* release-gate checks run the detected Spring Boot configuration of testdata/java-spring-multimodule; internal/adapter/run_config.go ports configs.ts (upsert/merge/validate/unique), buildCommand.ts (applyBuildPolicyToCommand) and store.ts saveUserConfigs, and internal/app/run_config_dialog.go carries Edit Configurations (action:run.editConfigs) and Rerun with the confirm dialog (action:run.rerun); base.runcfg.* proves the save/policy/run/remove round trip; Build Before Launch is buildCommand.ts's applyBuildPolicyToCommand (internal/adapter/run_config.go), applied at launch for build-tool configs and through BuildPolicyOf for JVM ones, proven by base.runcfg.policy; the testing pipeline port (internal/adapter/testing_*.go) folds surefire/Gradle output into the results tree and run.rerunFailed derives the -Dtest=/--tests filter (rerunfail.* main-gate checks); go test is parsed too (testing_go.go, gorerun.* main-gate checks); the cargo test pipeline (internal/adapter/testing_cargo.go ports cargo.ts: libtest/nextest parsing, panic locations) folds cargo test output into the tree and cargorun.* main-gate checks prove the --exact derivation reruns only the failed test; pytest is parsed too (testing_pytest.go, pyrerun.* main-gate checks); the js/phpunit/ruby/dotnet parsers are not ported yet (node/php/ruby toolchains exist but jest/phpunit/rspec need framework installs; dotnet is absent) |
@@ -88,7 +88,7 @@ directory registers.
 | `terminal` | 14 | 1 | 0 | 0 | 0 | partial - internal/app/term.go tab groups over backend PTYs, SplitTerm/UnsplitTerm, ShowTermFind scrollback search, per-tab channel routing and exit by id; base.term.output, base.term.tabs, base.term.split, base.term.find; UPSTREAM_FEATURE_MATRIX.md Terminal |
 | `todo` | 2 | 1 | 0 | 1 | 1 | missing |
 | `tools` | 4 | 0 | 0 | 0 | 0 | partial - tools.jdtls, tools.java-debug |
-| `vcs` | 33 | 3 | 2 | 2 | 1 | partial - base.vcs.changes, base.diff.rows, base.commit.id, base.log.commits, base.log.details, base.log.changes; internal/app/branch.go branchLabel and branchesDialog, base.branch.head, base.branch.list, base.branch.checkout; internal/app/vcs.go vcsStaged, vcsUnstaged, StageChange, UnstageChange, AskRollback, AddToIgnore over vcs_add_to_ignore with the .gitignore and .git/info/exclude destinations, base.stage.roundtrip, base.stage.discard; the project view's Git submenu, tabGitMenu, changes view and tab menu reach the same functions |
+| `vcs` | 33 | 3 | 2 | 2 | 1 | partial - base.vcs.changes, base.diff.rows, base.commit.id, base.log.*, base.branch.* and base.stage.*; internal/app/vcs_operations.go supplies branch/tag, fetch, pull, push, merge, rebase, stash/unstash, reset, cherry-pick/revert and continue/abort/skip through one native sheet and the OpenIDEA VCS Operations quick list; vcsoperations.* runs tag, branch, stash round trip, fetch, push, pull, rebase, merge and reset against a real local remote; remote management and worktrees remain |
 | `viewers` | 0 | 0 | 0 | 1 | 0 | missing |
 | `vim` | 3 | 0 | 0 | 1 | 0 | missing |
 | `web` | 2 | 0 | 0 | 1 | 0 | missing |
@@ -953,18 +953,18 @@ expected to come from a plugin or a hidden registration.
 | `vcs.log.copyRevision` | intellij-macos, intellij-windows, vscode-macos | missing |
 | `vcs.log.editMessage` | eclipse-windows | missing |
 | `vcs.log.goToRef` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `vcs.newBranch` | intellij-macos, intellij-windows, vscode-macos | missing |
+| `vcs.newBranch` | intellij-macos, intellij-windows, vscode-macos | integrated - internal/app/vcs_operations.go OpenNewGitBranch and native revision/name sheet; Git menu, project tree, tab menu, palette and VCS Operations quick list; vcsoperations.branch proves a real branch create and checkout |
 | `vcs.nextChange` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `vcs.operations` | intellij-macos, intellij-windows, vscode-macos | missing |
+| `vcs.operations` | intellij-macos, intellij-windows, vscode-macos | integrated - internal/app/vcs_operations.go OpenVCSOperations Ctrl+V quick list with OpenIDEA action ids; Git menu and palette entry; TestVCSOperationsQuickListFiltersAndDispatches and vcsoperations.* |
 | `vcs.prevChange` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `vcs.push` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
+| `vcs.push` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | integrated - internal/app/vcs_operations.go OpenGitPush and native remote, target, force-with-lease, set-upstream and no-verify choices; vcsoperations.push publishes to the real local remote |
 | `vcs.rollback` | eclipse-macos, intellij-macos, intellij-windows, vscode-macos | integrated - internal/app/vcs.go AskRollback and ConfirmRollback over vcs_discard with a confirmation, from the changes view, the tab menu's Git › Rollback… and the project view's Git › Rollback…; SmokeStage |
 | `vcs.shelf.rename` | eclipse-windows | missing |
 | `vcs.showDiff` | intellij-macos, intellij-windows, vscode-macos | integrated - internal/app/diff.go ShowDiff over vcs_file_at with the buffer text, opened from the changes view, the tab menu's Git › Show Diff and the project view's Git › Show Diff; SmokeDiff |
 | `vcs.showDiffInNewWindow` | intellij-macos, intellij-windows, vscode-macos | missing |
 | `vcs.showMessageHistory` | intellij-macos, intellij-windows, vscode-macos | missing |
 | `vcs.toggleAmend` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `vcs.update` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
+| `vcs.update` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | integrated - internal/app/vcs_operations.go OpenGitPull and OpenGitFetch; native remote and strategy choices stream vcs_remote output; vcsoperations.fetch and vcsoperations.pull prove fetch and pull against a real local remote |
 | `view.resetZoom` | intellij-macos, intellij-windows, vscode-macos | missing |
 | `view.zoomIn` | intellij-macos, intellij-windows, vscode-macos | missing |
 | `view.zoomOut` | intellij-macos, intellij-windows, vscode-macos | missing |
@@ -1006,7 +1006,7 @@ same bindings until a check records it.
 | `dotnet` | .NET | right | `src/features/dotnet/index.ts` | missing |
 | `duplicates` | Duplicates | bottom | `src/features/analysis/index.ts` | missing |
 | `find` | Find | bottom | `src/features/search/index.ts` | integrated - base.search.done, base.search.files, base.search.matches; internal/app/search.go searchPanel; bottom anchor in internal/app/anchor_test.go |
-| `git` | Git | bottom | `src/features/vcs/index.ts` | partial - base.vcs.changes, base.diff.rows, internal/app/log.go logPanel, base.log.commits, base.log.details, base.log.changes; internal/app/branch.go branchLabel, base.branch.head, base.branch.list, base.branch.checkout; internal/app/vcs.go vcsRows staging groups, StageChange, UnstageChange, AskRollback, base.stage.roundtrip, base.stage.discard |
+| `git` | Git | bottom | `src/features/vcs/index.ts` | partial - base.vcs.changes, base.log.*, base.branch.* and base.stage.* cover the native changes, log, branch and staging views; internal/app/vcs_operations.go adds fetch, pull, push, merge, rebase, tag, branch, stash and reset and vcsoperations.* exercises the real backend; remote management, worktrees and compare views remain |
 | `gradle` | Gradle | right | `src/features/build-tools/index.ts` | partial - internal/app/maven.go uses build_model to list Gradle build directories and errors within the Maven window; separate Gradle window, project/task tree and real Gradle acceptance pending |
 | `hierarchy` | Hierarchy | right | `src/features/code-insight/index.ts` | integrated - internal/app/hierarchy.go hierarchyRightView: right-anchored window with Call/Type direction tabs, lazy children per node and recursion leaves; lsp_call_hierarchy, lsp_type_hierarchy; e2e hierarchy.rows, hierarchy.visible, hierarchyError; internal/app/hierarchy_test.go; internal/app/workbench_render_test.go TestWorkbenchHierarchyRightWindowRenders |
 | `inspection` | Inspection Results | bottom | `src/features/analysis/index.ts` | missing |
@@ -1935,9 +1935,9 @@ Local-only commands and the per-command argument lists are in
 | `debug_completions` | debug | yes |  | missing |
 | `debug_data_breakpoint_info` | debug | yes |  | missing |
 | `debug_evaluate` | debug | yes | yes | missing |
-| `debug_evaluate_in` | debug | yes |  | missing |
+| `debug_evaluate_in` | debug | yes | yes | missing |
 | `debug_exception_filters` | debug | yes |  | missing |
-| `debug_force_step_over` | debug | yes |  | missing |
+| `debug_force_step_over` | debug | yes | yes | missing |
 | `debug_free_port` | debug | yes |  | missing |
 | `debug_heap_capture` | heap | yes |  | missing |
 | `debug_heap_classes` | heap | yes |  | missing |
@@ -1949,7 +1949,7 @@ Local-only commands and the per-command argument lists are in
 | `debug_heap_save` | heap | yes |  | missing |
 | `debug_hot_reload` | debug | no |  | missing |
 | `debug_hot_restart` | debug | no |  | missing |
-| `debug_jvm_memory_classes` | debug | yes |  | missing |
+| `debug_jvm_memory_classes` | debug | yes | yes | missing |
 | `debug_jvm_memory_fields` | debug | yes |  | missing |
 | `debug_jvm_memory_instances` | debug | yes |  | missing |
 | `debug_jvm_memory_referrers` | debug | yes |  | missing |
@@ -2238,7 +2238,7 @@ Local-only commands and the per-command argument lists are in
 | `project_roots` | app | yes |  | missing |
 | `project_trust_add_location` | app | no |  | missing |
 | `project_trust_list` | app | yes |  | missing |
-| `project_trust_remove_location` | app | yes |  | missing |
+| `project_trust_remove_location` | app | yes | yes | missing |
 | `project_trust_set` | app | yes | yes | missing |
 | `project_trust_status` | app | yes | yes | missing |
 | `proxy_check_connection` | http | no |  | missing |
@@ -2384,9 +2384,9 @@ Local-only commands and the per-command argument lists are in
 | `vcs_conflict_versions` | vcs | yes |  | missing |
 | `vcs_create_branch` | vcs | yes | yes | missing |
 | `vcs_create_patch` | vcs | yes |  | missing |
-| `vcs_create_tag` | vcs | yes |  | missing |
+| `vcs_create_tag` | vcs | yes | yes | missing |
 | `vcs_delete_branch` | vcs | yes | yes | missing |
-| `vcs_delete_tag` | vcs | yes |  | missing |
+| `vcs_delete_tag` | vcs | yes | yes | missing |
 | `vcs_detected_git` | vcs | yes |  | missing |
 | `vcs_diff_hunks` | vcs | yes | yes | missing |
 | `vcs_diff_numstat` | vcs | yes |  | missing |
@@ -2408,14 +2408,14 @@ Local-only commands and the per-command argument lists are in
 | `vcs_log_users` | vcs | yes |  | missing |
 | `vcs_merge` | vcs | yes |  | missing |
 | `vcs_merge_base` | vcs | yes |  | missing |
-| `vcs_merge_with` | vcs | yes |  | missing |
+| `vcs_merge_with` | vcs | yes | yes | missing |
 | `vcs_move_worktree` | vcs | yes |  | missing |
 | `vcs_open_external_log` | vcs | yes |  | missing |
-| `vcs_operation` | vcs | yes |  | missing |
+| `vcs_operation` | vcs | yes | yes | missing |
 | `vcs_patch_preview` | vcs | yes |  | missing |
 | `vcs_rebase` | vcs | yes |  | missing |
-| `vcs_rebase_with` | vcs | yes |  | missing |
-| `vcs_remote` | vcs | yes |  | missing |
+| `vcs_rebase_with` | vcs | yes | yes | missing |
+| `vcs_remote` | vcs | yes | yes | missing |
 | `vcs_remotes` | vcs | yes |  | missing |
 | `vcs_remove_worktree` | vcs | yes |  | missing |
 | `vcs_rename_branch` | vcs | yes |  | missing |
@@ -2436,12 +2436,12 @@ Local-only commands and the per-command argument lists are in
 | `vcs_stage` | vcs | yes | yes | missing |
 | `vcs_stage_hunks` | vcs | yes |  | missing |
 | `vcs_stage_patch` | vcs | yes |  | missing |
-| `vcs_stash_apply` | vcs | yes |  | missing |
+| `vcs_stash_apply` | vcs | yes | yes | missing |
 | `vcs_stash_drop` | vcs | yes |  | missing |
-| `vcs_stash_push` | vcs | yes |  | missing |
-| `vcs_stashes` | vcs | yes |  | missing |
+| `vcs_stash_push` | vcs | yes | yes | missing |
+| `vcs_stashes` | vcs | yes | yes | missing |
 | `vcs_status` | vcs | yes | yes | missing |
-| `vcs_tags` | vcs | yes |  | missing |
+| `vcs_tags` | vcs | yes | yes | missing |
 | `vcs_undo_commit` | vcs | yes |  | missing |
 | `vcs_unshelve` | vcs | yes |  | missing |
 | `vcs_unstage` | vcs | yes | yes | missing |
@@ -2488,7 +2488,7 @@ Local-only commands and the per-command argument lists are in
 | `wsl_distros` | wsl | no |  | missing |
 | `wsl_resolve` | wsl | no |  | missing |
 
-476 commands are served over stdio and 120 are called by GoIDEA today. A command
+476 commands are served over stdio and 134 are called by GoIDEA today. A command
 that is registered only in the desktop shell needs an `ops` module before stdio
 can serve it; a GoIDEA check counts only when the UI path works end to end.
 

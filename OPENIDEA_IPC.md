@@ -37,14 +37,14 @@ release can be called today.
 | AI agent sessions | `agent` | 36 | 3 | 0 |
 | Code analysis | `analysis` | 5 | 0 | 0 |
 | Android devices | `android` | 0 | 2 | 0 |
-| Application and projects | `app` | 12 | 15 | 6 |
+| Application and projects | `app` | 12 | 15 | 7 |
 | Maven/Gradle builds | `build` | 12 | 0 | 6 |
 | Binary file reads | `bytes` | 3 | 0 | 0 |
 | Caches and restart | `caches` | 0 | 4 | 0 |
 | Clipboard | `clipboard` | 0 | 6 | 0 |
 | Coverage | `coverage` | 3 | 0 | 3 |
 | Database | `db` | 31 | 1 | 13 |
-| Debugger | `debug` | 36 | 2 | 14 |
+| Debugger | `debug` | 36 | 2 | 17 |
 | Dependencies | `dependencies` | 1 | 0 | 0 |
 | Deployment | `deploy` | 16 | 0 | 0 |
 | Documents | `doc` | 18 | 0 | 7 |
@@ -77,7 +77,7 @@ release can be called today.
 | Syntax trees | `syntax` | 9 | 0 | 0 |
 | Terminal | `term` | 8 | 0 | 5 |
 | Toolchains | `tools` | 8 | 0 | 3 |
-| Version control | `vcs` | 83 | 0 | 18 |
+| Version control | `vcs` | 83 | 0 | 28 |
 | Web preview | `web` | 1 | 2 | 0 |
 | Window and menu | `window` | 0 | 35 | 0 |
 | Window drag | `window_drag` | 0 | 1 | 0 |
@@ -88,7 +88,7 @@ release can be called today.
 ## Served by `openidea-server --stdio`
 
 476 commands. `GoIDEA` marks the ones a non-test Go source invokes today
-(120 of 476).
+(134 of 476).
 
 | Command | Domain | Arguments | GoIDEA |
 | --- | --- | --- | --- |
@@ -177,9 +177,9 @@ release can be called today.
 | `debug_completions` | Debugger | `column`, `frameId`, `line`, `session`, `text` | — |
 | `debug_data_breakpoint_info` | Debugger | `container`, `frameId`, `name`, `session` | — |
 | `debug_evaluate` | Debugger | `expression`, `frameId`, `session` | yes |
-| `debug_evaluate_in` | Debugger | `context`, `expression`, `frameId`, `session` | — |
+| `debug_evaluate_in` | Debugger | `context`, `expression`, `frameId`, `session` | yes |
 | `debug_exception_filters` | Debugger | — | — |
-| `debug_force_step_over` | Debugger | `session`, `threadId` | — |
+| `debug_force_step_over` | Debugger | `session`, `threadId` | yes |
 | `debug_free_port` | Debugger | — | — |
 | `debug_heap_capture` | heap | `onProgress`, `request`, `session` | — |
 | `debug_heap_classes` | heap | `snapshot` | — |
@@ -189,7 +189,7 @@ release can be called today.
 | `debug_heap_open` | heap | `onProgress`, `path`, `request` | — |
 | `debug_heap_path` | heap | `object`, `snapshot` | — |
 | `debug_heap_save` | heap | `path`, `snapshot` | — |
-| `debug_jvm_memory_classes` | Debugger | `session` | — |
+| `debug_jvm_memory_classes` | Debugger | `session` | yes |
 | `debug_jvm_memory_fields` | Debugger | `object`, `session` | — |
 | `debug_jvm_memory_instances` | Debugger | `className`, `limit`, `session` | — |
 | `debug_jvm_memory_referrers` | Debugger | `limit`, `object`, `session` | — |
@@ -388,7 +388,7 @@ release can be called today.
 | `project_current` | Application and projects | — | yes |
 | `project_roots` | Application and projects | — | — |
 | `project_trust_list` | Application and projects | — | — |
-| `project_trust_remove_location` | Application and projects | — | — |
+| `project_trust_remove_location` | Application and projects | — | yes |
 | `project_trust_set` | Application and projects | `folder`, `trusted` | yes |
 | `project_trust_status` | Application and projects | — | yes |
 | `recent_files` | Navigation and index | — | yes |
@@ -502,9 +502,9 @@ release can be called today.
 | `vcs_conflict_versions` | Version control | `path` | — |
 | `vcs_create_branch` | Version control | `checkout`, `name`, `overwrite`, `repo`, `start` | yes |
 | `vcs_create_patch` | Version control | `repo`, `source` | — |
-| `vcs_create_tag` | Version control | `commit`, `force`, `message`, `name`, `repo` | — |
+| `vcs_create_tag` | Version control | `commit`, `force`, `message`, `name`, `repo` | yes |
 | `vcs_delete_branch` | Version control | `branch`, `repo` | yes |
-| `vcs_delete_tag` | Version control | `name`, `repo` | — |
+| `vcs_delete_tag` | Version control | `name`, `repo` | yes |
 | `vcs_detected_git` | Version control | — | — |
 | `vcs_diff_hunks` | Version control | `newText`, `oldText` | yes |
 | `vcs_diff_numstat` | Version control | `from`, `paths`, `repo`, `to` | — |
@@ -526,14 +526,14 @@ release can be called today.
 | `vcs_log_users` | Version control | `repo` | — |
 | `vcs_merge` | Version control | `branch`, `repo` | — |
 | `vcs_merge_base` | Version control | `a`, `b`, `repo` | — |
-| `vcs_merge_with` | Version control | `branches`, `options`, `repo` | — |
+| `vcs_merge_with` | Version control | `branches`, `options`, `repo` | yes |
 | `vcs_move_worktree` | Version control | `path`, `repo`, `to` | — |
 | `vcs_open_external_log` | Version control | `path` | — |
-| `vcs_operation` | Version control | `onOutput`, `op`, `repo`, `request` | — |
+| `vcs_operation` | Version control | `onOutput`, `op`, `repo`, `request` | yes |
 | `vcs_patch_preview` | Version control | `patch`, `repo` | — |
 | `vcs_rebase` | Version control | `onto`, `repo` | — |
-| `vcs_rebase_with` | Version control | `options`, `repo`, `upstream` | — |
-| `vcs_remote` | Version control | `onOutput`, `op`, `repo`, `request` | — |
+| `vcs_rebase_with` | Version control | `options`, `repo`, `upstream` | yes |
+| `vcs_remote` | Version control | `onOutput`, `op`, `repo`, `request` | yes |
 | `vcs_remotes` | Version control | `repo` | — |
 | `vcs_remove_worktree` | Version control | `force`, `path`, `repo` | — |
 | `vcs_rename_branch` | Version control | `from`, `repo`, `to`, `unset_upstream` | — |
@@ -554,12 +554,12 @@ release can be called today.
 | `vcs_stage` | Version control | `paths` | yes |
 | `vcs_stage_hunks` | Version control | `hunks`, `path` | — |
 | `vcs_stage_patch` | Version control | `patch` | — |
-| `vcs_stash_apply` | Version control | `branch`, `index`, `pop`, `reinstateIndex`, `repo` | — |
+| `vcs_stash_apply` | Version control | `branch`, `index`, `pop`, `reinstateIndex`, `repo` | yes |
 | `vcs_stash_drop` | Version control | `index`, `repo` | — |
-| `vcs_stash_push` | Version control | `includeUntracked`, `keepIndex`, `message`, `repo` | — |
-| `vcs_stashes` | Version control | `repo` | — |
+| `vcs_stash_push` | Version control | `includeUntracked`, `keepIndex`, `message`, `repo` | yes |
+| `vcs_stashes` | Version control | `repo` | yes |
 | `vcs_status` | Version control | — | yes |
-| `vcs_tags` | Version control | `repo` | — |
+| `vcs_tags` | Version control | `repo` | yes |
 | `vcs_undo_commit` | Version control | `commit`, `repo` | — |
 | `vcs_unshelve` | Version control | `id`, `path`, `remove` | — |
 | `vcs_unstage` | Version control | `paths` | yes |
@@ -782,7 +782,7 @@ GoIDEA needs to do for each:
 
 ## What this means for GoIDEA
 
-476 remote commands are available today; GoIDEA uses 120. The parity work is
+476 remote commands are available today; GoIDEA uses 134. The parity work is
 first to cover the remote surface OpenIDEA's own frontend uses, then to move
 `shared-op`/`host`/`crate` commands onto stdio through the OpenIDEA fork
 (a submodule bump and a server release), and to implement `desktop` commands

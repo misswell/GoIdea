@@ -106,6 +106,7 @@ type mavenPane struct {
 	syncing  bool
 	syncMsg  string
 	syncFrac *float32
+	request  uint32
 	channel  uint32
 
 	// profiles are the user's choices by profile key; a choice that differs
@@ -251,6 +252,7 @@ func (m *Model) SyncMaven() {
 	m.maven.syncing = true
 	m.maven.syncMsg = "Syncing Maven projects…"
 	m.maven.syncFrac = nil
+	m.maven.request = req
 	m.maven.channel = ch
 	m.maven.err = ""
 	m.invalidate()
@@ -282,6 +284,100 @@ func (m *Model) SyncMaven() {
 			m.loadBuildModel()
 		})
 	}()
+}
+
+// SyncGradle is the Gradle tool window's Reload All Gradle Projects. The
+// backend uses the same build_sync operation; each build directory is synced
+// with the tool's toolbar switches.
+func (m *Model) SyncGradle() {
+	if m.maven.syncing || m.mgr == nil || m.ctx == nil || m.Root() == "" {
+		return
+	}
+	var dirs []string
+	for _, build := range m.maven.model.Gradle {
+		if build.Dir != "" {
+			dirs = append(dirs, build.Dir)
+		}
+	}
+	if len(dirs) == 0 {
+		return
+	}
+	m.maven.gen++
+	req := m.nextRequest()
+	ch := m.nextChannel()
+	m.maven.syncing = true
+	m.maven.syncMsg = "Syncing Gradle projects…"
+	m.maven.syncFrac = nil
+	m.maven.request = req
+	m.maven.channel = ch
+	m.maven.err = ""
+	m.invalidate()
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, 10*time.Minute)
+		defer cancel()
+		var first error
+		for _, dir := range dirs {
+			_, err := m.mgr.Invoke(ctx, Window, "build_sync", map[string]any{
+				"tool":       "gradle",
+				"buildDir":   dir,
+				"offline":    m.maven.offline,
+				"profiles":   []string{},
+				"request":    req,
+				"onProgress": map[string]any{"$channel": ch},
+			})
+			if err != nil {
+				first = err
+				break
+			}
+		}
+		m.post(func() {
+			if m.maven.channel != ch {
+				return
+			}
+			m.maven.syncing = false
+			m.maven.syncMsg = ""
+			m.maven.syncFrac = nil
+			if first != nil {
+				m.maven.err = "Could not reload the Gradle projects: " + first.Error()
+				m.invalidate()
+				return
+			}
+			m.maven.loading = false
+			m.loadBuildModel()
+		})
+	}()
+}
+
+// CancelBuildToolReload stops the running Maven or Gradle sync, matching the
+// tool windows' Stop Reloading actions.
+func (m *Model) CancelBuildToolReload() {
+	if !m.maven.syncing || m.maven.request == 0 {
+		return
+	}
+	request := m.maven.request
+	m.maven.gen++
+	m.maven.syncing = false
+	m.maven.syncMsg = ""
+	m.maven.syncFrac = nil
+	m.maven.request = 0
+	m.maven.channel = 0
+	m.invalidate()
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, 10*time.Second)
+		defer cancel()
+		_, _ = m.mgr.Invoke(ctx, Window, "cancel_request", map[string]any{"id": request})
+	}()
+}
+
+// ReloadMaven and ReloadGradle are the two tool windows' Reload All actions.
+func (m *Model) ReloadMaven()  { m.SyncMaven() }
+func (m *Model) ReloadGradle() { m.SyncGradle() }
+
+// AnalyzeBuildDependencies opens the dependency tree the backend already
+// loaded and expands its build-tool roots.
+func (m *Model) AnalyzeBuildDependencies() {
+	m.ShowMaven()
+	m.ExpandMavenAll()
 }
 
 // acceptMavenEvent is one SyncProgress value of the sync channel.

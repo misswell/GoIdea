@@ -119,6 +119,36 @@ func TestTreeFollowsTheDisk(t *testing.T) {
 	q.drain(t, "the removed file", func() bool { return !hasRow(tr, old) })
 }
 
+// TestTreeScrollsSidewaysPastTheIsland: a row whose name runs past the Project
+// window keeps its whole name, and the tree scrolls sideways to show it, as
+// OpenIDEA's tree does.
+func TestTreeScrollsSidewaysPastTheIsland(t *testing.T) {
+	root := t.TempDir()
+	long := filepath.Join(root, "AnotherExtremelyLongClassNameThatRunsPastTheIsland.java")
+	m := &Model{}
+	m.setRoot(root)
+	m.tree = &Tree{open: map[string]bool{root: true}}
+	m.tree.root = &treeNode{path: root, name: filepath.Base(root), dir: true, expanded: true}
+	m.tree.rows = []*treeNode{
+		m.tree.root,
+		{path: long, name: filepath.Base(long), depth: 1},
+	}
+	defer m.tree.Close()
+	m.tree.Select(long)
+	tt := workbenchTester(t, m)
+	if m.treeScroll.MaxX <= 0 {
+		t.Fatalf("a row wider than the island left nothing to scroll sideways: %+v", m.treeScroll)
+	}
+	// The pointer over the tree scrolls it sideways, which brings the end of
+	// the name in.
+	tt.Move(100, 160)
+	tt.Scroll(100, 160, 60, 0)
+	tt.Frame()
+	if m.treeScroll.X <= 0 {
+		t.Fatalf("the tree did not scroll sideways: %+v", m.treeScroll)
+	}
+}
+
 // TestTreeCompactsMiddlePackages checks the way OpenIDEA shows an opened
 // package chain: com/example/app draws as one row, com.example.app, whose path
 // is the deepest package; a package with two children keeps its own row.

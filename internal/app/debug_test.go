@@ -97,6 +97,27 @@ func TestDebugStopCancelsJavaPreparation(t *testing.T) {
 	}
 }
 
+func TestJavaDebugProjectBusy(t *testing.T) {
+	server := func(status string, languages ...string) lspServerState {
+		return lspServerState{Status: status, Languages: languages}
+	}
+	if !javaDebugProjectBusy([]lspServerState{server("busy", "java")}) {
+		t.Fatal("a busy Java server must be waited for")
+	}
+	if !javaDebugProjectBusy([]lspServerState{server("starting", "java")}) {
+		t.Fatal("a starting Java server must be waited for")
+	}
+	if javaDebugProjectBusy([]lspServerState{server("ready", "java")}) {
+		t.Fatal("a ready Java server is not an import wait state")
+	}
+	if javaDebugProjectBusy([]lspServerState{server("crashed", "java")}) {
+		t.Fatal("a failed Java server must keep the backend's precise error")
+	}
+	if javaDebugProjectBusy([]lspServerState{server("busy", "yaml")}) {
+		t.Fatal("a non-Java server cannot hold Java Debug back")
+	}
+}
+
 func TestJavaTargetForMavenLayout(t *testing.T) {
 	root := "/p"
 	text := "package demo;\n\npublic class Hello {\n"

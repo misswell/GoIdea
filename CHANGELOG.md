@@ -3,6 +3,19 @@
 The GitHub release notes, which **Help › What's New** shows, come from the
 `## <version>` section here. Every release needs one, or its build fails.
 
+## 0.1.30
+
+- 底部工具窗口横跨工作区，调试期间可同时查看左右侧栏。
+- **Debug** 启动时显示配置标签和完整宽度的 **Console**，断点命中后显示 **Threads & Variables**。
+- **Debug › Memory** 可读取和筛选 JVM 类，**Console** 可搜索输出、换行和求值。
+- **Git** 菜单、项目树和标签页新增分支、标签、抓取、拉取、推送、合并、变基、暂存与重置。
+- **Git › VCS Operations…** (`Ctrl+V`) 提供可筛选的原生 Git 操作快捷列表。
+- 修复 Java 项目冷启动导入期间 **Debug** 将 `busy` 误报为失败，现会等待 JDT 完成后继续。
+- 项目树超出窗口宽度时可横向滚动，长文件名保留完整内容，不再用省略号截断。
+- 修复更新提示气泡关闭按钮，并在重启后保留通知记录和已读状态。
+- **Run › Run Context Configuration** 可按当前文件或测试生成运行配置。
+- Maven 和 Gradle 工具窗口补上刷新、取消、展开折叠、离线和跳过测试等操作。
+
 ## 0.1.29
 
 - **Run › Run with Coverage** 和 **Coverage** 工具窗口支持运行、导入和查看覆盖率。

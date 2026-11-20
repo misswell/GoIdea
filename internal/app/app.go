@@ -135,6 +135,9 @@ type Model struct {
 	tabs   []*Tab
 	active int
 	tree   *Tree
+	// treeScroll keeps how far the Project tree shows its rows from: a row
+	// wider than the window scrolls sideways, as OpenIDEA's tree does.
+	treeScroll ui.ScrollState
 
 	// split is the second editor window group, or nil while the editor is one
 	// group. The focused group stays in tabs and active; the other lives in
@@ -444,6 +447,8 @@ type Model struct {
 	// termShell is the New Terminal Tab shell list.
 	termShell *termShellPicker
 	vcs       VCSPane
+	vcsOps    VCSOperationPane
+	vcsQuick  vcsQuickList
 	branch    BranchPane
 	log       LogPane
 	problems  ProblemsPane
@@ -567,6 +572,7 @@ func New(cfg Config) *Model {
 	m.recents = sessionRecents(session)
 	m.recentGroups = session.RecentGroups
 	m.searchHistory = append([]string(nil), session.SearchHistory...)
+	m.restoreNotificationHistory(session.Notifications)
 	m.layouts = map[string]Layout{}
 	for root, l := range session.Layouts {
 		m.layouts[layoutKey(root)] = normalizeLayout(l)
@@ -938,6 +944,7 @@ func (m *Model) resetProjectState(dir string) (mavenVisible bool) {
 	m.resetBuild()
 	m.resetTerm()
 	m.resetVCS()
+	m.resetVCSOperations()
 	m.resetBranch()
 	m.rollback = nil
 	m.bookmarksView = nil
@@ -1801,7 +1808,7 @@ func (m *Model) sessionSnapshot() (Session, bool) {
 		}
 	}
 	if root == "" && fileTabs == 0 && len(m.recents) == 0 && len(m.recentGroups) == 0 &&
-		len(m.searchHistory) == 0 {
+		len(m.searchHistory) == 0 && len(m.notify.items) == 0 {
 		// Nothing to remember; keep the previous session rather than
 		// writing an empty one after a failed start.
 		return Session{}, false
@@ -1861,6 +1868,7 @@ func (m *Model) sessionSnapshot() (Session, bool) {
 		Recents:        append([]RecentProject(nil), m.recents...),
 		RecentGroups:   append([]RecentGroup(nil), m.recentGroups...),
 		SearchHistory:  append([]string(nil), m.searchHistory...),
+		Notifications:  m.notificationHistory(),
 		Layouts:        pruneLayouts(layouts, keep),
 		RunHistory:     pruneRunHistory(cloneRunHistory(m.runHistory), keep)}, true
 }
@@ -2355,6 +2363,12 @@ func (m *Model) shortcuts(c *ui.Context) {
 	}
 	if c.Shortcut(ui.Modifiers(0), ui.KeyF5) {
 		m.Run()
+	}
+	if c.Shortcut(ui.Ctrl|ui.Shift, ui.KeyR) && !m.overlayOpen() {
+		m.RunContextConfiguration()
+	}
+	if c.Shortcut(ui.Ctrl|ui.Shift, ui.KeyD) && !m.overlayOpen() {
+		m.DebugContext()
 	}
 	if c.Shortcut(ui.Shift, ui.KeyF5) {
 		m.StopRun()

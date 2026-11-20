@@ -375,12 +375,21 @@ func smoke(m *app.Model) {
 		}
 	}
 	if os.Getenv("GOIDEA_SMOKE_DEBUG_IMPORT") == "1" && root != "" {
-		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		di, diErr := m.SmokeDebugImport(ctx)
 		cancel()
 		fields["debugImport"] = di
 		if diErr != nil {
 			fields["debugImportError"] = diErr.Error()
+		}
+	}
+	if os.Getenv("GOIDEA_SMOKE_VCS_OPERATIONS") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
+		ops, opsErr := m.SmokeVCSOperations(ctx)
+		cancel()
+		fields["vcsOperations"] = ops
+		if opsErr != nil {
+			fields["vcsOperationsError"] = opsErr.Error()
 		}
 	}
 	if os.Getenv("GOIDEA_SMOKE_SEARCH") == "1" && root != "" {

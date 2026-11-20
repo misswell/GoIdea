@@ -164,6 +164,10 @@ type RunConfig struct {
 	Detected     bool              `json:"detected"`
 	IsTest       bool              `json:"isTest"`
 	DebugAdapter *string           `json:"debugAdapter"`
+	// Params carries the kind-specific run configuration fields, such as a Go
+	// module's scope. GoIDEA edits only the fields it draws, but a derived
+	// context configuration must preserve the fields OpenIDEA launches with.
+	Params map[string]any `json:"params,omitempty"`
 	// Module is the owning module, independent of the working directory; it
 	// also supplies a JVM application's classpath. nil keeps it unset; ""
 	// means the project root.
@@ -524,6 +528,30 @@ type Branch struct {
 	Behind       int     `json:"behind"`
 	LastCommitMs float64 `json:"lastCommitMs"`
 	Commit       *string `json:"commit"`
+}
+
+// Remote is one Git remote `vcs_remotes` lists.
+type Remote struct {
+	Name        string  `json:"name"`
+	URL         string  `json:"url"`
+	ResolvedURL *string `json:"resolvedUrl"`
+}
+
+// Stash is one entry of `vcs_stashes`.
+type Stash struct {
+	Index   uint32  `json:"index"`
+	Message string  `json:"message"`
+	TimeMs  float64 `json:"timeMs"`
+}
+
+// Worktree is one Git worktree `vcs_worktrees` lists.
+type Worktree struct {
+	Path     string  `json:"path"`
+	Head     *string `json:"head"`
+	Branch   *string `json:"branch"`
+	Main     bool    `json:"main"`
+	Locked   bool    `json:"locked"`
+	Prunable bool    `json:"prunable"`
 }
 
 // TerminalInfo is an integrated terminal the server started: its id, title

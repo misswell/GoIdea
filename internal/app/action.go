@@ -52,6 +52,52 @@ type actionRegistry struct {
 
 var actions = actionRegistry{byID: map[string]*Action{}}
 
+// actionAliases keeps the upstream action ids callable without adding duplicate
+// rows to the command palette. This matters for keymaps, plugin contributions
+// and automation written against OpenIDEA: the same visible action can be
+// invoked by its OpenIDEA id while GoIDEA keeps its historical id for state.
+var actionAliases = map[string]string{
+	"debug.startConfig":       "run.debug",
+	"debug.attachToProcess":   "debug.attach",
+	"debug.toggleBreakpoint":  "run.breakpoint",
+	"debug.resume":            "run.continue",
+	"debug.pause":             "run.pause",
+	"debug.stepOver":          "run.stepOver",
+	"debug.stepInto":          "run.stepInto",
+	"debug.stepOut":           "run.stepOut",
+	"debug.runToCursor":       "run.runToCursor",
+	"debug.forceRunToCursor":  "run.forceRunToCursor",
+	"debug.showToolWindow":    "view.debug",
+	"debug.hotReload":         "debug.reloadChangedClasses",
+	"run.stopProcess":         "run.stop",
+	"run.debugConfig":         "run.debug",
+	"run.run":                 "run.start",
+	"find.usages":             "code.usages",
+	"find.showUsages":         "code.showUsages",
+	"find.showUsageResults":   "code.showUsages",
+	"find.inFile":             "view.find",
+	"editor.closeAllTabs":     "editor.closeAll",
+	"editor.closeOtherTabs":   "editor.closeOthers",
+	"editor.closeTab":         "file.close",
+	"editor.formatDocument":   "code.format",
+	"editor.prevSplitter":     "editor.previousSplitter",
+	"file.closeProject":       "project.close",
+	"file.openProject":        "project.open",
+	"file.reloadFromDisk":     "project.reloadFromDisk",
+	"project.reformatCode":    "code.format",
+	"project.trust":           "run.trust",
+	"toolwindow.hideAll":      "view.hideAll",
+	"toolwindow.hideActive":   "view.hideActive",
+	"toolwindow.jumpToLast":   "view.jumpLast",
+	"toolwindow.maximize":     "view.maximize",
+	"terminal.clear":          "term.clear",
+	"terminal.find":           "term.find",
+	"terminal.new":            "term.new",
+	"diff.compareDirectories": "project.compareDirectories",
+	"services.show":           "view.services",
+	"build.maven":             "view.maven",
+}
+
 // registerAction adds an action. An empty or duplicate id is an error, as
 // upstream's registry treats it; a feature registers each action once.
 func registerAction(a *Action) error {
@@ -94,8 +140,24 @@ func (r *actionRegistry) unregister(id string) bool {
 }
 
 func actionGet(id string) (*Action, bool) {
+	id = canonicalActionID(id)
 	a, ok := actions.byID[id]
 	return a, ok
+}
+
+func canonicalActionID(id string) string {
+	seen := map[string]bool{}
+	for {
+		if seen[id] {
+			return id
+		}
+		seen[id] = true
+		next, ok := actionAliases[id]
+		if !ok || next == "" {
+			return id
+		}
+		id = next
+	}
 }
 
 // actionList is the registry in registration order.

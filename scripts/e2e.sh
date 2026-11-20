@@ -62,6 +62,8 @@ git -C "$PROJ" add -A
 git -C "$PROJ" -c user.name=e2e -c user.email=e2e@goidea.invalid commit -qm baseline
 printf '\n// e2e change\n' >> "$PROJ/src/main/java/com/example/Greeter.java"
 JAVA="$PROJ/src/main/java/com/example/App.java"
+BASE_PROJ="$PROJ"
+BASE_JAVA="$JAVA"
 # The TODO scan needs one marker in the open file; the base phase edits and
 # restores this copy, so the line survives to the scan.
 printf '\n// TODO: e2e marker\n' >> "$JAVA"
@@ -93,6 +95,21 @@ smoke "$BASE" \
     GOIDEA_SMOKE_DOCK=1 GOIDEA_SMOKE_COVERAGE="$COVERAGE" \
     GOIDEA_SMOKE_WATCH=1 GOIDEA_SMOKE_RUN=1 GOIDEA_SMOKE_RUNCFG=1 GOIDEA_SMOKE_BUILD=1 GOIDEA_SMOKE_STAGE=1 GOIDEA_SMOKE_BOOKMARK=1 GOIDEA_SMOKE_LOG=1 GOIDEA_SMOKE_COMMIT=1 GOIDEA_SMOKE_BRANCH=1 GOIDEA_SMOKE_TERM=1 GOIDEA_SMOKE_FILES=1
 python3 "$CHECKS" base "$BASE"
+
+say "阶段 1a：原生 Git 操作（真实本地远端）"
+VCSOPS="$WORK/java-vcs-operations"
+cp -R "$ROOT/testdata/java-maven" "$VCSOPS"
+rm -rf "$VCSOPS/target"
+git -C "$VCSOPS" init -q
+git -C "$VCSOPS" add -A
+git -C "$VCSOPS" -c user.name=e2e -c user.email=e2e@goidea.invalid commit -qm baseline
+VCSOPS_JSON="$WORK/vcs-operations.json"
+PROJ="$VCSOPS"
+JAVA=""
+smoke "$VCSOPS_JSON" GOIDEA_SMOKE_VCS_OPERATIONS=1
+python3 "$CHECKS" vcsoperations "$VCSOPS_JSON"
+PROJ="$BASE_PROJ"
+JAVA="$BASE_JAVA"
 
 say "阶段 1b：离屏视觉截图"
 SHOTS="$WORK/shots"
@@ -204,6 +221,21 @@ else
     TOOLS="$WORK/tools.json"
     smoke "$TOOLS" GOIDEA_SMOKE_TOOLS=install
     python3 "$CHECKS" tools "$TOOLS"
+
+    say "阶段 2a：全新项目在导入期间启动 Debug"
+    DEBUGIMPORT_PROJ="$WORK/java-maven-debug-import"
+    cp -R "$ROOT/testdata/java-maven" "$DEBUGIMPORT_PROJ"
+    rm -rf "$DEBUGIMPORT_PROJ/target"
+    git -C "$DEBUGIMPORT_PROJ" init -q
+    git -C "$DEBUGIMPORT_PROJ" add -A
+    git -C "$DEBUGIMPORT_PROJ" -c user.name=e2e -c user.email=e2e@goidea.invalid commit -qm baseline
+    DEBUGIMPORT_JSON="$WORK/debug-import.json"
+    PROJ="$DEBUGIMPORT_PROJ"
+    JAVA="$DEBUGIMPORT_PROJ/src/main/java/com/example/App.java"
+    smoke "$DEBUGIMPORT_JSON" GOIDEA_SMOKE_DEBUG_IMPORT=1
+    python3 "$CHECKS" debugimport "$DEBUGIMPORT_JSON"
+    PROJ="$BASE_PROJ"
+    JAVA="$BASE_JAVA"
 
     if [ -n "${GOIDEA_GOLDEN_DIR:-}" ]; then
         say "阶段 2b：OpenIDEA Golden 视觉差异"
