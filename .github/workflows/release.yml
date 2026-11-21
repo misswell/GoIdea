@@ -76,9 +76,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          version="${GITHUB_REF_NAME#v}"
+          scripts/release-notes.sh "$version" > "$RUNNER_TEMP/release-notes.md"
           dmg="$(find build -maxdepth 3 -name 'goidea-*.dmg' | head -1)"
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
-            --title "GoIDEA ${GITHUB_REF_NAME#v}" --generate-notes \
+            --title "GoIDEA $version" --notes-file "$RUNNER_TEMP/release-notes.md" \
             "$dmg" "$dmg.sha256"
       - name: Remove the keychain
         if: always()

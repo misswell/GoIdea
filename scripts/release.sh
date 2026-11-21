@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Builds, signs and notarizes GoIDEA, then verifies the artifacts. The
-# Developer ID comes from GOIDEA_SIGN_IDENTITY, and the notary credential from
-# GOIDEA_NOTARY_PROFILE (this machine's shared Apple-ID profile), or from
-# GOIDEA_APPLE_ID + GOIDEA_APPLE_PASSWORD + GOIDEA_TEAM_ID.
+# Developer ID comes from GOIDEA_SIGN_IDENTITY. Local releases use the
+# `agentspace-notary` asc profile through App Store Connect. CI sets
+# GOIDEA_NOTARY_PROFILE so the same script uses notarytool with its temporary
+# keychain instead.
 #
 # The notarization settings live in a temporary mygo.json: the committed file
 # stays ad-hoc friendly for anyone building locally. The original is restored
@@ -15,7 +16,25 @@ cd "$(dirname "$0")/.."
 
 platform="${1:-darwin/arm64}"
 identity="${GOIDEA_SIGN_IDENTITY:-Developer ID Application: Guofeng Liu (U8U443D7ZL)}"
-profile="${GOIDEA_NOTARY_PROFILE:-octoshrink-notary}"
+notary_mode="${GOIDEA_NOTARY_MODE:-}"
+notary_profile="${GOIDEA_NOTARY_PROFILE:-}"
+asc_profile="${GOIDEA_NOTARY_ASC_PROFILE:-agentspace-notary}"
+
+if [[ -z "$notary_mode" ]]; then
+  if [[ -n "$notary_profile" ]]; then
+    notary_mode=notarytool
+  else
+    notary_mode=asc
+  fi
+fi
+case "$notary_mode" in
+  asc|notarytool) ;;
+  *) echo "GOIDEA_NOTARY_MODE must be asc or notarytool" >&2; exit 1 ;;
+esac
+if [[ "$notary_mode" == "notarytool" && -z "$notary_profile" ]]; then
+  echo "GOIDEA_NOTARY_PROFILE is required in notarytool mode" >&2
+  exit 1
+fi
 
 [[ -f resources/icon.png ]] || { echo "resources/icon.png is missing" >&2; exit 1; }
 [[ -x resources/openidea-server ]] || scripts/fetch-server.sh
@@ -31,9 +50,13 @@ restore() {
 }
 trap restore EXIT
 
-jq --arg identity "$identity" --arg profile "$profile" \
+jq --arg identity "$identity" --arg profile "$notary_profile" \
+   --arg mode "$notary_mode" \
   '.macos.signingIdentity = $identity
-   | .macos.notarize = {keychainProfile: $profile}' \
+   | if $mode == "notarytool"
+     then .macos.notarize = {keychainProfile: $profile}
+     else del(.macos.notarize)
+     end' \
   mygo.json > mygo.json.release-new
 mv mygo.json.release-new mygo.json
 
@@ -94,8 +117,19 @@ build_mac_dmg() {
 # app, as mygo does: updates install the bare app.
 notarize_mac_dmg() {
   local dmg="$1" app="$2"
-  if ! xcrun notarytool submit "$dmg" --keychain-profile "$profile" --wait --output-format json >/dev/null; then
-    echo "notarization failed; run 'xcrun notarytool log <id> --keychain-profile $profile' for why" >&2
+  local result
+  if [[ "$notary_mode" == "asc" ]]; then
+    result="$(asc --profile "$asc_profile" notarization submit \
+      --file "$dmg" --wait --timeout 1h --poll-interval 15s --output json)"
+    if ! printf '%s\n' "$result" | jq -e \
+      '.. | objects | .status? // empty | select(. == "Accepted")' >/dev/null; then
+      printf '%s\n' "$result" >&2
+      echo "notarization was not accepted" >&2
+      exit 1
+    fi
+  elif ! xcrun notarytool submit "$dmg" \
+    --keychain-profile "$notary_profile" --wait --output-format json >/dev/null; then
+    echo "notarization failed; run 'xcrun notarytool log <id> --keychain-profile $notary_profile' for why" >&2
     exit 1
   fi
   xcrun stapler staple "$dmg" >/dev/null
