@@ -166,3 +166,72 @@ func TestVCSMorePromptRendersWorktreeFields(t *testing.T) {
 		}
 	}
 }
+
+func TestWorktreeMoveTargetMatchesOpenIDEAFolderChoice(t *testing.T) {
+	for _, tc := range []struct {
+		worktree string
+		folder   string
+		want     string
+	}{
+		{"/work/app-feature", "/work", "/work/app-feature"},
+		{"/work/app-feature", "/archive", "/archive/app-feature"},
+		{`C:\Work\app-feature`, `D:\archive`, `D:\archive\app-feature`},
+	} {
+		if got := worktreeMoveTarget(tc.worktree, tc.folder); got != tc.want {
+			t.Errorf("worktreeMoveTarget(%q, %q) = %q, want %q", tc.worktree, tc.folder, got, tc.want)
+		}
+	}
+}
+
+func TestWorktreeContainsProjectUsesPathBoundaries(t *testing.T) {
+	for _, tc := range []struct {
+		worktree, project string
+		want              bool
+	}{
+		{"/work/app", "/work/app/module", true},
+		{"/work/app/", "/work/app", true},
+		{"/work/app", "/work/application", false},
+		{`C:\Work\App`, `c:\work\app\module`, true},
+	} {
+		if got := worktreeContainsProject(tc.worktree, tc.project); got != tc.want {
+			t.Errorf("worktreeContainsProject(%q, %q) = %v, want %v", tc.worktree, tc.project, got, tc.want)
+		}
+	}
+}
+
+func TestVCSMoreWorktreeDialogOffersMoveAndProtectsProject(t *testing.T) {
+	m := &Model{}
+	m.setRoot("/work/app")
+	m.vcsMore = vcsMoreState{
+		open: true, kind: vcsMoreWorktrees, action: "worktrees", title: "Git Worktrees",
+		worktrees: []openidea.Worktree{
+			{Path: "/work/app", Main: true},
+			{Path: "/work/app-feature", Branch: strp("feature")},
+		},
+		choice: 1,
+	}
+	tester := ui.NewTester(func(c *ui.Context) {
+		m.vcsMoreDialog(c, c.Theme())
+	}, 1000, 760)
+	tester.Frame()
+	for _, text := range []string{"Git Worktrees", "Open", "New…", "Move…", "Remove", "app-feature"} {
+		if !tester.HasText(text) {
+			t.Errorf("worktree dialog does not contain %q", text)
+		}
+	}
+	m.setRoot("/work/app-feature/module")
+	tester.Frame()
+	if !worktreeContainsProject("/work/app-feature", m.Root()) {
+		t.Fatal("the linked worktree containing the open project was not protected")
+	}
+	m.vcsMore.kind = vcsMorePrompt
+	m.vcsMore.action = vcsMoreActionWorktreeMove
+	m.vcsMore.title = "Move Worktree"
+	m.vcsMore.input2, m.vcsMore.input3 = "/work/app-feature", "/work/archive/app-feature"
+	tester.Frame()
+	for _, text := range []string{"Move Worktree", "Worktree", "New directory", "Move", "Close"} {
+		if !tester.HasText(text) {
+			t.Errorf("worktree move dialog does not contain %q", text)
+		}
+	}
+}

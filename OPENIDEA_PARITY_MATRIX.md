@@ -28,7 +28,7 @@ command appears automatically.
 | Kind | Items | Integrated | Partial | Engine | Blocked | Missing |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Feature folders | 44 | 7 | 13 | 0 | 0 | 24 |
-| Actions | 888 | 225 | 391 | 0 | 0 | 272 |
+| Actions | 888 | 228 | 388 | 0 | 0 | 272 |
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
 | Tool windows | 30 | 11 | 10 | 0 | 1 | 8 |
 | Overlays | 56 | 11 | 5 | 0 | 0 | 40 |
@@ -89,7 +89,7 @@ directory registers.
 | `terminal` | 14 | 1 | 0 | 0 | 0 | partial - internal/app/term.go tab groups over backend PTYs, SplitTerm/UnsplitTerm, ShowTermFind scrollback search, per-tab channel routing and exit by id; base.term.output, base.term.tabs, base.term.split, base.term.find; UPSTREAM_FEATURE_MATRIX.md Terminal |
 | `todo` | 2 | 1 | 0 | 1 | 1 | missing |
 | `tools` | 4 | 0 | 0 | 0 | 0 | partial - tools.jdtls, tools.java-debug |
-| `vcs` | 161 | 3 | 2 | 2 | 1 | partial - base.vcs.changes, base.diff.rows, base.commit.id, base.log.*, base.branch.* and base.stage.*; internal/app/vcs_operations.go supplies branch/tag, fetch, pull, push, merge, rebase, stash/unstash, reset, cherry-pick/revert and continue/abort/skip through one native sheet and the OpenIDEA VCS Operations quick list; vcsoperations.* runs tag, branch, stash round trip, fetch, push, pull, rebase, merge and reset against a real local remote; remote management and worktrees remain |
+| `vcs` | 161 | 3 | 2 | 2 | 1 | partial - base.vcs.changes, base.diff.rows, base.commit.id, base.log.*, base.branch.* and base.stage.*; internal/app/vcs_operations.go supplies branch/tag, fetch, pull, push, merge, rebase, stash/unstash, reset, cherry-pick/revert and continue/abort/skip, while vcs_remotes.go and vcs_more.go supply remote, revision compare and worktree management; vcsoperations.* runs tag, branch, stash, remote add/edit/remove, worktree create/move/remove, fetch, push, pull, rebase, merge and reset against a real local remote. Editable multi-pane diffs and the complete multi-repository content tabs remain |
 | `viewers` | 3 | 0 | 0 | 1 | 0 | missing |
 | `vim` | 3 | 0 | 0 | 1 | 1 | missing |
 | `web` | 2 | 0 | 0 | 1 | 0 | missing |
@@ -883,12 +883,12 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `vcs.log.squashCommits` | Squash Commits… | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.log.squashCommits`; interaction-level acceptance is pending |
 | `vcs.log.squashInto` | Squash Into… | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.log.squashInto`; interaction-level acceptance is pending |
 | `vcs.log.undoCommit` | Undo Commit… | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.log.undoCommit`; interaction-level acceptance is pending |
-| `vcs.manageRemotes` | Manage Remotes… | `src/features/vcs/actions.tsx` | partial - internal/app registers the native action `vcs.manageRemotes`; interaction-level acceptance is pending |
+| `vcs.manageRemotes` | Manage Remotes… | `src/features/vcs/actions.tsx` | integrated - internal/app/vcs_remotes.go renders OpenIDEA's remotes list, Add, Edit and Remove forms over vcs_remotes and vcs_edit_remote; TestGitRemotesDialogShowsListAndEdit and TestIntegrationGitRemotes cover the native flow, and vcsoperations.remote plus vcsoperations.remoteEdit prove listing, add, rename and URL changes on the real server |
 | `vcs.merge` | Merge… | `src/features/vcs/actions.tsx` | partial - internal/app registers the native action `vcs.merge`; interaction-level acceptance is pending |
 | `vcs.merge.abort` | Abort Merge | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.merge.abort`; interaction-level acceptance is pending |
 | `vcs.newBranch` | New Branch… | `src/features/vcs/actions.tsx` | integrated - internal/app/vcs_operations.go OpenNewGitBranch and native revision/name sheet; Git menu, project tree, tab menu, palette and VCS Operations quick list; vcsoperations.branch proves a real branch create and checkout |
 | `vcs.newTag` | New Tag… | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.newTag`; interaction-level acceptance is pending |
-| `vcs.newWorktree` | New Worktree… | `src/features/vcs/actions.tsx` | partial - internal/app registers the native action `vcs.newWorktree`; interaction-level acceptance is pending |
+| `vcs.newWorktree` | New Worktree… | `src/features/vcs/actions.tsx` | integrated - internal/app/vcs_more.go OpenNewVCSWorktree and its native directory, starting revision and optional branch form call vcs_add_worktree; TestVCSMorePromptRendersWorktreeFields and vcsoperations.worktree cover the prompt and a real linked worktree |
 | `vcs.nextChange` | Next Change | `src/features/vcs/actions.tsx` | partial - internal/app registers the native action `vcs.nextChange`; interaction-level acceptance is pending |
 | `vcs.nextConflict` | Next Conflict Marker | `src/features/vcs/actions.tsx` | partial - internal/app registers the native action `vcs.nextConflict`; interaction-level acceptance is pending |
 | `vcs.openDiff` | Open Diff | `src/features/vcs/compare.tsx` | partial - internal/app registers the native action `vcs.openDiff`; interaction-level acceptance is pending |
@@ -932,7 +932,7 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `vcs.unshelve` | Unshelve… | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.unshelve`; interaction-level acceptance is pending |
 | `vcs.unstash` | Unstash Changes… | `src/features/vcs/actions.tsx` | partial - internal/app registers the native action `vcs.unstash`; interaction-level acceptance is pending |
 | `vcs.update` | Update Project… | `src/features/vcs/actions.tsx` | integrated - internal/app/vcs_operations.go OpenGitPull and OpenGitFetch; native remote and strategy choices stream vcs_remote output; vcsoperations.fetch and vcsoperations.pull prove fetch and pull against a real local remote |
-| `vcs.worktrees` | Worktrees… | `src/features/vcs/actions.tsx` | partial - internal/app registers the native action `vcs.worktrees`; interaction-level acceptance is pending |
+| `vcs.worktrees` | Worktrees… | `src/features/vcs/actions.tsx` | integrated - internal/app/vcs_more.go and vcs_more_dialog.go list, open, create, move and remove worktrees over vcs_worktrees, vcs_add_worktree, vcs_move_worktree and vcs_remove_worktree; the dialog protects the main worktree and any worktree containing the open project, with TestVCSMoreWorktreeDialogOffersMoveAndProtectsProject and real vcsoperations.worktree, vcsoperations.worktreeMove and vcsoperations.worktreeRemove checks |
 
 ### viewers
 
@@ -1232,7 +1232,7 @@ same bindings until a check records it.
 | `dotnet` | .NET | right | `src/features/dotnet/index.ts` | missing |
 | `duplicates` | Duplicates | bottom | `src/features/analysis/index.ts` | missing |
 | `find` | Find | bottom | `src/features/search/index.ts` | integrated - base.search.done, base.search.files, base.search.matches; internal/app/search.go searchPanel; bottom anchor in internal/app/anchor_test.go |
-| `git` | Git | bottom | `src/features/vcs/index.ts` | partial - base.vcs.changes, base.log.*, base.branch.* and base.stage.* cover the native changes, log, branch and staging views; internal/app/vcs_operations.go adds fetch, pull, push, merge, rebase, tag, branch, stash and reset and vcsoperations.* exercises the real backend; remote management, worktrees and compare views remain |
+| `git` | Git | bottom | `src/features/vcs/index.ts` | partial - base.vcs.changes, base.log.*, base.branch.* and base.stage.* cover the native changes, log, branch and staging views; internal/app/vcs_operations.go adds fetch, pull, push, merge, rebase, tag, branch, stash and reset, while vcs_remotes.go and vcs_more.go add remote, compare and worktree dialogs; vcsoperations.* exercises the real backend, including remote add/edit/remove and worktree create/move/remove. The Git tool window still lacks OpenIDEA's complete compare editor and multi-repository content tabs |
 | `gradle` | Gradle | right | `src/features/build-tools/index.ts` | partial - internal/app/maven.go uses build_model to list Gradle build directories and errors within the Maven window; separate Gradle window, project/task tree and real Gradle acceptance pending |
 | `hierarchy` | Hierarchy | right | `src/features/code-insight/index.ts` | integrated - internal/app/hierarchy.go hierarchyRightView: right-anchored window with Call/Type direction tabs, lazy children per node and recursion leaves; lsp_call_hierarchy, lsp_type_hierarchy; e2e hierarchy.rows, hierarchy.visible, hierarchyError; internal/app/hierarchy_test.go; internal/app/workbench_render_test.go TestWorkbenchHierarchyRightWindowRenders |
 | `inspection` | Inspection Results | bottom | `src/features/analysis/index.ts` | missing |
@@ -2637,7 +2637,7 @@ Local-only commands and the per-command argument lists are in
 | `vcs_merge` | vcs | yes |  | missing |
 | `vcs_merge_base` | vcs | yes |  | missing |
 | `vcs_merge_with` | vcs | yes | yes | integrated - internal/app/vcs_operations.go invokes the OpenIDEA RPC through the native Go adapter |
-| `vcs_move_worktree` | vcs | yes |  | missing |
+| `vcs_move_worktree` | vcs | yes | yes | integrated - internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter |
 | `vcs_open_external_log` | vcs | yes | yes | integrated - internal/app/agent_diff.go, internal/app/vcs_log_actions.go invokes the OpenIDEA RPC through the native Go adapter |
 | `vcs_operation` | vcs | yes | yes | integrated - internal/app/vcs_operations.go invokes the OpenIDEA RPC through the native Go adapter |
 | `vcs_patch_preview` | vcs | yes | yes | integrated - internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter |
@@ -2716,7 +2716,7 @@ Local-only commands and the per-command argument lists are in
 | `wsl_distros` | wsl | no |  | missing |
 | `wsl_resolve` | wsl | no |  | missing |
 
-481 commands are served over stdio and 268 are called by GoIDEA today. A command
+481 commands are served over stdio and 269 are called by GoIDEA today. A command
 that is registered only in the desktop shell needs an `ops` module before stdio
 can serve it; a GoIDEA check counts only when the UI path works end to end.
 

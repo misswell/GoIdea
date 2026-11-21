@@ -77,7 +77,7 @@ release can be called today.
 | Syntax trees | `syntax` | 9 | 0 | 3 |
 | Terminal | `term` | 8 | 0 | 5 |
 | Toolchains | `tools` | 8 | 0 | 8 |
-| Version control | `vcs` | 83 | 0 | 57 |
+| Version control | `vcs` | 83 | 0 | 58 |
 | Web preview | `web` | 1 | 2 | 0 |
 | Window and menu | `window` | 0 | 35 | 0 |
 | Window drag | `window_drag` | 0 | 1 | 0 |
@@ -88,7 +88,7 @@ release can be called today.
 ## Served by `openidea-server --stdio`
 
 481 commands. `GoIDEA` marks the ones a non-test Go source invokes today
-(268 of 481).
+(269 of 481).
 
 | Command | Domain | Arguments | GoIDEA |
 | --- | --- | --- | --- |
@@ -528,7 +528,7 @@ release can be called today.
 | `vcs_merge` | Version control | `branch`, `repo` | — |
 | `vcs_merge_base` | Version control | `a`, `b`, `repo` | — |
 | `vcs_merge_with` | Version control | `branches`, `options`, `repo` | yes |
-| `vcs_move_worktree` | Version control | `path`, `repo`, `to` | — |
+| `vcs_move_worktree` | Version control | `path`, `repo`, `to` | yes |
 | `vcs_open_external_log` | Version control | `path` | yes |
 | `vcs_operation` | Version control | `onOutput`, `op`, `repo`, `request` | yes |
 | `vcs_patch_preview` | Version control | `patch`, `repo` | yes |
@@ -782,7 +782,7 @@ GoIDEA needs to do for each:
 
 ## What this means for GoIDEA
 
-481 remote commands are available today; GoIDEA uses 268. The parity work is
+481 remote commands are available today; GoIDEA uses 269. The parity work is
 first to cover the remote surface OpenIDEA's own frontend uses, then to move
 `shared-op`/`host`/`crate` commands onto stdio through the OpenIDEA fork
 (a submodule bump and a server release), and to implement `desktop` commands

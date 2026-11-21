@@ -3,6 +3,11 @@
 The GitHub release notes, which **Help › What's New** shows, come from the
 `## <version>` section here. Every release needs one, or its build fails.
 
+## 0.1.33
+
+- **Git › Manage Remotes…** 可查看、添加、编辑和删除仓库远端。
+- **Git › Worktrees…** 可创建、打开、移动和删除工作树，并保护当前项目。
+
 ## 0.1.32
 
 - 快捷键录制现在正确保留 Ctrl 与 Command 的独立含义。

@@ -693,6 +693,18 @@
       "status": "integrated",
       "evidence": "internal/app/vcs_operations.go OpenGitPull and OpenGitFetch; native remote and strategy choices stream vcs_remote output; vcsoperations.fetch and vcsoperations.pull prove fetch and pull against a real local remote"
     },
+    "action:vcs.manageRemotes": {
+      "status": "integrated",
+      "evidence": "internal/app/vcs_remotes.go renders OpenIDEA's remotes list, Add, Edit and Remove forms over vcs_remotes and vcs_edit_remote; TestGitRemotesDialogShowsListAndEdit and TestIntegrationGitRemotes cover the native flow, and vcsoperations.remote plus vcsoperations.remoteEdit prove listing, add, rename and URL changes on the real server"
+    },
+    "action:vcs.newWorktree": {
+      "status": "integrated",
+      "evidence": "internal/app/vcs_more.go OpenNewVCSWorktree and its native directory, starting revision and optional branch form call vcs_add_worktree; TestVCSMorePromptRendersWorktreeFields and vcsoperations.worktree cover the prompt and a real linked worktree"
+    },
+    "action:vcs.worktrees": {
+      "status": "integrated",
+      "evidence": "internal/app/vcs_more.go and vcs_more_dialog.go list, open, create, move and remove worktrees over vcs_worktrees, vcs_add_worktree, vcs_move_worktree and vcs_remove_worktree; the dialog protects the main worktree and any worktree containing the open project, with TestVCSMoreWorktreeDialogOffersMoveAndProtectsProject and real vcsoperations.worktree, vcsoperations.worktreeMove and vcsoperations.worktreeRemove checks"
+    },
     "action:vcs.push": {
       "status": "integrated",
       "evidence": "internal/app/vcs_operations.go OpenGitPush and native remote, target, force-with-lease, set-upstream and no-verify choices; vcsoperations.push publishes to the real local remote"
@@ -703,7 +715,7 @@
     },
     "toolwindow:git": {
       "status": "partial",
-      "evidence": "base.vcs.changes, base.log.*, base.branch.* and base.stage.* cover the native changes, log, branch and staging views; internal/app/vcs_operations.go adds fetch, pull, push, merge, rebase, tag, branch, stash and reset and vcsoperations.* exercises the real backend; remote management, worktrees and compare views remain"
+      "evidence": "base.vcs.changes, base.log.*, base.branch.* and base.stage.* cover the native changes, log, branch and staging views; internal/app/vcs_operations.go adds fetch, pull, push, merge, rebase, tag, branch, stash and reset, while vcs_remotes.go and vcs_more.go add remote, compare and worktree dialogs; vcsoperations.* exercises the real backend, including remote add/edit/remove and worktree create/move/remove. The Git tool window still lacks OpenIDEA's complete compare editor and multi-repository content tabs"
     },
     "toolwindow:commit": {
       "status": "partial",
@@ -743,7 +755,7 @@
     },
     "feature:vcs": {
       "status": "partial",
-      "evidence": "base.vcs.changes, base.diff.rows, base.commit.id, base.log.*, base.branch.* and base.stage.*; internal/app/vcs_operations.go supplies branch/tag, fetch, pull, push, merge, rebase, stash/unstash, reset, cherry-pick/revert and continue/abort/skip through one native sheet and the OpenIDEA VCS Operations quick list; vcsoperations.* runs tag, branch, stash round trip, fetch, push, pull, rebase, merge and reset against a real local remote; remote management and worktrees remain"
+      "evidence": "base.vcs.changes, base.diff.rows, base.commit.id, base.log.*, base.branch.* and base.stage.*; internal/app/vcs_operations.go supplies branch/tag, fetch, pull, push, merge, rebase, stash/unstash, reset, cherry-pick/revert and continue/abort/skip, while vcs_remotes.go and vcs_more.go supply remote, revision compare and worktree management; vcsoperations.* runs tag, branch, stash, remote add/edit/remove, worktree create/move/remove, fetch, push, pull, rebase, merge and reset against a real local remote. Editable multi-pane diffs and the complete multi-repository content tabs remain"
     },
     "feature:run": {
       "status": "partial",
@@ -2008,6 +2020,7 @@
     "command:vcs_log": {"status": "integrated", "evidence": "internal/app/log.go, internal/app/vcs_more.go, internal/app/vcs_log_actions.go invokes the OpenIDEA RPC through the native Go adapter"},
     "command:vcs_log_details": {"status": "integrated", "evidence": "internal/app/log.go invokes the OpenIDEA RPC through the native Go adapter"},
     "command:vcs_merge_with": {"status": "integrated", "evidence": "internal/app/vcs_operations.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_move_worktree": {"status": "integrated", "evidence": "internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter"},
     "command:vcs_open_external_log": {"status": "integrated", "evidence": "internal/app/agent_diff.go, internal/app/vcs_log_actions.go invokes the OpenIDEA RPC through the native Go adapter"},
     "command:vcs_operation": {"status": "integrated", "evidence": "internal/app/vcs_operations.go invokes the OpenIDEA RPC through the native Go adapter"},
     "command:vcs_patch_preview": {"status": "integrated", "evidence": "internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter"},

@@ -54,6 +54,8 @@ func (m *Model) submitVCSMore() {
 		m.submitNewWorktree()
 	case "worktree.remove":
 		m.removeVCSWorktree(m.vcsMore.input)
+	case vcsMoreActionWorktreeMove:
+		m.moveVCSWorktree(m.vcsMore.input2, m.vcsMore.input3)
 	case vcsMoreActionChangelistNew:
 		m.submitNewChangelist()
 	case vcsMoreActionChangelistEdit:
@@ -268,6 +270,8 @@ func (m *Model) vcsMorePrimaryLabel() string {
 		return "Delete"
 	case vcsMoreActionWorktreeAdd:
 		return "Create"
+	case vcsMoreActionWorktreeMove:
+		return "Move"
 	case vcsMoreActionChangelistNew:
 		return "Create"
 	case vcsMoreActionChangelistEdit:
@@ -308,6 +312,14 @@ func (m *Model) drawVCSMorePrompt(c *ui.Context, p *ui.Theme) {
 		}
 		ui.Text(c, "New branch (optional)").FontSize(12).TextColor(p.TextMuted)
 		if in := ui.TextInput(c, &m.vcsMore.input3); in.Submitted() {
+			m.submitVCSMore()
+		}
+	case vcsMoreActionWorktreeMove:
+		ui.Text(c, "Worktree").FontSize(12).TextColor(p.TextMuted)
+		ui.Text(c, m.vcsMore.input2).FontSize(12).Font(oiFontMono).TextColor(p.Text).SingleLine().
+			Ellipsis("…")
+		ui.Text(c, "New directory").FontSize(12).TextColor(p.TextMuted)
+		if in := ui.TextInput(c, &m.vcsMore.input3).AutoFocus().Font(oiFontMono); in.Submitted() {
 			m.submitVCSMore()
 		}
 	case vcsMoreActionShelve:
@@ -416,12 +428,16 @@ func (m *Model) drawVCSMoreShelf(c *ui.Context, p *ui.Theme) {
 }
 
 func (m *Model) drawVCSMoreWorktrees(c *ui.Context, p *ui.Theme) {
+	selected, hasSelection := m.selectedVCSWorktree()
+	canChange := hasSelection && m.worktreeCanChange(selected)
 	ui.Row(c).Gap(6).Children(func() {
 		ui.Button(c, "Open").Disabled(m.vcsMore.loading || m.vcsMore.busy || len(m.vcsMore.worktrees) == 0).
 			OnClick(m.OpenSelectedVCSWorktree)
 		ui.Button(c, "New…").Disabled(m.vcsMore.loading || m.vcsMore.busy).
 			OnClick(m.OpenNewVCSWorktree)
-		ui.Button(c, "Remove").Disabled(m.vcsMore.loading || m.vcsMore.busy || len(m.vcsMore.worktrees) == 0).
+		ui.Button(c, "Move…").Disabled(m.vcsMore.loading || m.vcsMore.busy || !canChange).
+			OnClick(m.ChooseMoveVCSWorktree)
+		ui.Button(c, "Remove").Disabled(m.vcsMore.loading || m.vcsMore.busy || !canChange).
 			OnClick(m.AskRemoveSelectedVCSWorktree)
 		ui.Button(c, "Refresh").Disabled(m.vcsMore.loading || m.vcsMore.busy).
 			OnClick(m.loadVCSWorktrees)

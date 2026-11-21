@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -610,9 +611,51 @@ func (m *Model) OpenSelectedVCSWorktree() {
 	m.OpenProject(worktree.Path)
 }
 
+func worktreePathKey(value string) string {
+	value = strings.TrimSpace(strings.ReplaceAll(value, "\\", "/"))
+	value = strings.TrimRight(value, "/")
+	if len(value) >= 2 && value[1] == ':' {
+		value = strings.ToLower(value)
+	}
+	return value
+}
+
+func worktreePathEqual(left, right string) bool {
+	return worktreePathKey(left) == worktreePathKey(right)
+}
+
+func worktreeContainsProject(worktree, projectRoot string) bool {
+	worktree, projectRoot = worktreePathKey(worktree), worktreePathKey(projectRoot)
+	if worktree == "" || projectRoot == "" {
+		return false
+	}
+	return projectRoot == worktree || strings.HasPrefix(projectRoot, worktree+"/")
+}
+
+func worktreeMoveTarget(worktree, folder string) string {
+	key := worktreePathKey(worktree)
+	name := path.Base(key)
+	target := strings.TrimRight(folder, `/\`)
+	if target == "" {
+		target = folder
+	}
+	if path.Base(worktreePathKey(target)) == name {
+		return target
+	}
+	separator := "/"
+	if strings.Contains(target, `\`) && !strings.Contains(target, "/") {
+		separator = `\`
+	}
+	return strings.TrimRight(target, `/\`) + separator + name
+}
+
+func (m *Model) worktreeCanChange(worktree openidea.Worktree) bool {
+	return !worktree.Main && !worktreeContainsProject(worktree.Path, m.Root())
+}
+
 func (m *Model) AskRemoveSelectedVCSWorktree() {
 	worktree, ok := m.selectedVCSWorktree()
-	if !ok || worktree.Main {
+	if !ok || !m.worktreeCanChange(worktree) {
 		return
 	}
 	m.vcsMore.kind = vcsMoreConfirm
@@ -640,6 +683,69 @@ func (m *Model) removeVCSWorktree(path string) {
 				return
 			}
 			m.status = "Removed worktree " + path
+			m.OpenVCSWorktrees()
+		})
+	}()
+}
+
+func (m *Model) ChooseMoveVCSWorktree() {
+	worktree, ok := m.selectedVCSWorktree()
+	if !ok || !m.worktreeCanChange(worktree) {
+		return
+	}
+	parent := m.win
+	start := filepath.Dir(worktree.Path)
+	go func() {
+		picked, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
+			Parent:            parent,
+			Title:             "Move Worktree",
+			ButtonLabel:       "Choose",
+			DefaultPath:       start,
+			Directory:         true,
+			CreateDirectories: true,
+		})
+		if err != nil || len(picked) == 0 {
+			return
+		}
+		m.post(func() {
+			current, exists := m.selectedVCSWorktree()
+			if !m.vcsMore.open || !exists || !worktreePathEqual(current.Path, worktree.Path) ||
+				!m.worktreeCanChange(current) {
+				return
+			}
+			target := worktreeMoveTarget(current.Path, picked[0])
+			if worktreePathEqual(target, current.Path) {
+				return
+			}
+			m.vcsMore.kind = vcsMoreConfirm
+			m.vcsMore.action = vcsMoreActionWorktreeMove
+			m.vcsMore.title = "Move Worktree"
+			m.vcsMore.hint = "Move the worktree at " + current.Path + " to " + target + "?"
+			m.vcsMore.input2, m.vcsMore.input3 = current.Path, target
+			m.vcsMore.err = ""
+			m.invalidate()
+		})
+	}()
+}
+
+func (m *Model) moveVCSWorktree(from, to string) {
+	m.vcsMore.busy, m.vcsMore.err = true, ""
+	m.invalidate()
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, 2*time.Minute)
+		defer cancel()
+		_, err := m.mgr.Invoke(ctx, Window, "vcs_move_worktree", map[string]any{
+			"repo": nil, "path": from, "to": to,
+		})
+		m.post(func() {
+			m.vcsMore.busy = false
+			if err != nil {
+				m.vcsMore.kind = vcsMoreWorktrees
+				m.vcsMore.err = "Could not move the worktree: " + err.Error()
+				m.invalidate()
+				return
+			}
+			m.status = "Moved worktree to " + to
 			m.OpenVCSWorktrees()
 		})
 	}()

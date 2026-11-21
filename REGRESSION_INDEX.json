@@ -2085,6 +2085,46 @@
    "doc": "UPSTREAM_FEATURE_MATRIX.md"
   },
   {
+   "id": "vcsoperations.remote",
+   "label": "Manage Remotes listed the real configured remote",
+   "feature": "Git Manage Remotes",
+   "area": "vcs",
+   "gate": "main",
+   "doc": "UPSTREAM_FEATURE_MATRIX.md"
+  },
+  {
+   "id": "vcsoperations.remoteEdit",
+   "label": "Add and Edit Remote renamed and changed the real remote",
+   "feature": "Git Manage Remotes",
+   "area": "vcs",
+   "gate": "main",
+   "doc": "UPSTREAM_FEATURE_MATRIX.md"
+  },
+  {
+   "id": "vcsoperations.worktree",
+   "label": "New Worktree created and listed a linked worktree",
+   "feature": "Git Worktrees",
+   "area": "vcs",
+   "gate": "main",
+   "doc": "UPSTREAM_FEATURE_MATRIX.md"
+  },
+  {
+   "id": "vcsoperations.worktreeMove",
+   "label": "Move Worktree changed the real linked worktree path",
+   "feature": "Git Worktrees",
+   "area": "vcs",
+   "gate": "main",
+   "doc": "UPSTREAM_FEATURE_MATRIX.md"
+  },
+  {
+   "id": "vcsoperations.worktreeRemove",
+   "label": "Remove Worktree deleted the linked worktree and its list entry",
+   "feature": "Git Worktrees",
+   "area": "vcs",
+   "gate": "main",
+   "doc": "UPSTREAM_FEATURE_MATRIX.md"
+  },
+  {
    "id": "vcsoperations.fetch",
    "label": "Fetch reached the real local remote",
    "feature": "Git Fetch",

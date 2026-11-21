@@ -1008,6 +1008,136 @@ func (m *Model) SmokeVCSOperations(ctx context.Context) (map[string]any, error) 
 	if err := setupVCSRemote(ctx, root, remoteDir, remoteName, branch); err != nil {
 		return out, err
 	}
+	remoteListRaw, remoteListErr := m.invoke(ctx, "vcs_remotes", map[string]any{"repo": nil})
+	var remotes []openidea.Remote
+	if remoteListErr == nil {
+		remoteListErr = json.Unmarshal(remoteListRaw, &remotes)
+	}
+	if remoteListErr != nil {
+		return out, remoteListErr
+	}
+	out["remoteListed"] = false
+	for _, remote := range remotes {
+		if remote.Name == remoteName && remote.URL == remoteDir {
+			out["remoteListed"] = true
+			break
+		}
+	}
+	if out["remoteListed"] != true {
+		return out, fmt.Errorf("vcs_remotes did not list %s", remoteName)
+	}
+	secondaryRemote := remoteName + "-renamed"
+	if _, err := m.invoke(ctx, "vcs_edit_remote", map[string]any{
+		"repo": nil,
+		"edit": map[string]any{"op": "add", "name": secondaryRemote, "url": remoteDir + "-secondary"},
+	}); err != nil {
+		return out, err
+	}
+	finalRemote := remoteName + "-updated"
+	if _, err := m.invoke(ctx, "vcs_edit_remote", map[string]any{
+		"repo": nil,
+		"edit": map[string]any{
+			"op": "edit", "name": secondaryRemote, "new_name": finalRemote,
+			"url": remoteDir + "-updated",
+		},
+	}); err != nil {
+		return out, err
+	}
+	remoteListRaw, remoteListErr = m.invoke(ctx, "vcs_remotes", map[string]any{"repo": nil})
+	if remoteListErr == nil {
+		remoteListErr = json.Unmarshal(remoteListRaw, &remotes)
+	}
+	if remoteListErr != nil {
+		return out, remoteListErr
+	}
+	out["remoteEdited"] = false
+	for _, remote := range remotes {
+		if remote.Name == finalRemote && remote.URL == remoteDir+"-updated" {
+			out["remoteEdited"] = true
+			break
+		}
+	}
+	if out["remoteEdited"] != true {
+		return out, fmt.Errorf("vcs_edit_remote did not rename and update %s", secondaryRemote)
+	}
+	if _, err := m.invoke(ctx, "vcs_edit_remote", map[string]any{
+		"repo": nil,
+		"edit": map[string]any{"op": "remove", "name": finalRemote},
+	}); err != nil {
+		return out, err
+	}
+
+	suffix := fmt.Sprint(time.Now().UnixNano())
+	worktreePath := filepath.Join(filepath.Dir(root), "goidea-vcs-smoke-worktree-"+suffix)
+	worktreeBranch := "goidea-smoke-worktree-" + suffix
+	if _, err := m.invoke(ctx, "vcs_add_worktree", map[string]any{
+		"repo": nil, "path": worktreePath, "commitish": branch, "newBranch": worktreeBranch,
+	}); err != nil {
+		return out, err
+	}
+	worktreeRaw, worktreeErr := m.invoke(ctx, "vcs_worktrees", map[string]any{"repo": nil})
+	var worktrees []openidea.Worktree
+	if worktreeErr == nil {
+		worktreeErr = json.Unmarshal(worktreeRaw, &worktrees)
+	}
+	if worktreeErr != nil {
+		return out, worktreeErr
+	}
+	out["worktreeCreated"] = false
+	for _, worktree := range worktrees {
+		if worktreePathEqual(worktree.Path, worktreePath) {
+			out["worktreeCreated"] = true
+			break
+		}
+	}
+	if out["worktreeCreated"] != true {
+		return out, errors.New("vcs_worktrees did not list the newly created worktree")
+	}
+	movedWorktreePath := worktreePath + "-moved"
+	if _, err := m.invoke(ctx, "vcs_move_worktree", map[string]any{
+		"repo": nil, "path": worktreePath, "to": movedWorktreePath,
+	}); err != nil {
+		return out, err
+	}
+	worktreeRaw, worktreeErr = m.invoke(ctx, "vcs_worktrees", map[string]any{"repo": nil})
+	if worktreeErr == nil {
+		worktreeErr = json.Unmarshal(worktreeRaw, &worktrees)
+	}
+	if worktreeErr != nil {
+		return out, worktreeErr
+	}
+	out["worktreeMoved"] = false
+	for _, worktree := range worktrees {
+		if worktreePathEqual(worktree.Path, movedWorktreePath) {
+			out["worktreeMoved"] = true
+			break
+		}
+	}
+	if out["worktreeMoved"] != true {
+		return out, errors.New("vcs_move_worktree did not update the listed path")
+	}
+	if _, err := m.invoke(ctx, "vcs_remove_worktree", map[string]any{
+		"repo": nil, "path": movedWorktreePath, "force": false,
+	}); err != nil {
+		return out, err
+	}
+	worktreeRaw, worktreeErr = m.invoke(ctx, "vcs_worktrees", map[string]any{"repo": nil})
+	if worktreeErr == nil {
+		worktreeErr = json.Unmarshal(worktreeRaw, &worktrees)
+	}
+	if worktreeErr != nil {
+		return out, worktreeErr
+	}
+	out["worktreeRemoved"] = true
+	for _, worktree := range worktrees {
+		if worktreePathEqual(worktree.Path, movedWorktreePath) {
+			out["worktreeRemoved"] = false
+			break
+		}
+	}
+	if out["worktreeRemoved"] != true {
+		return out, errors.New("vcs_remove_worktree left the worktree in the list")
+	}
 	remoteCh := m.nextChannel()
 	remoteRequest := m.nextRequest()
 	if _, err := m.invoke(ctx, "vcs_remote", map[string]any{
