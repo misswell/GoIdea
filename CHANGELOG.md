@@ -3,6 +3,10 @@
 The GitHub release notes, which **Help › What's New** shows, come from the
 `## <version>` section here. Every release needs one, or its build fails.
 
+## 0.1.32
+
+- 快捷键录制现在正确保留 Ctrl 与 Command 的独立含义。
+
 ## 0.1.31
 
 - **File › New…** 提供可搜索的文件模板，并按语言生成包名和文件内容。
