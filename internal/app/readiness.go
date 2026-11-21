@@ -81,19 +81,44 @@ func (m *Model) readinessNow(ctx context.Context) Readiness {
 	}
 
 	// Java Ready is the language server's verdict; Project Importing is the
-	// in-between.
+	// in-between. Once jdtls has loaded a project, a later busy spell is
+	// background indexing or a build, matching OpenIDEA's busy semantics.
+	readyRoots := map[uint32]string{}
+	m.post(func() {
+		for id, root := range m.languageServerJavaReady {
+			readyRoots[id] = root
+		}
+	})
 	var servers []lspServerState
 	_ = m.smokeLSPCall(ctx, "lsp_servers", nil, &servers)
+	learned := map[uint32]string{}
 	for _, s := range servers {
 		if !hasLanguage(s.Languages, "java") {
 			continue
 		}
-		if s.Status == "ready" {
+		serverRoot := s.Root
+		if serverRoot == "" {
+			serverRoot = root
+		}
+		if javaServerStillReady(s.Status, serverRoot, readyRoots[s.ID], root) {
 			r.Java = true
 		} else {
 			r.JavaDetail = s.Status
 		}
+		if s.Status == "ready" {
+			if serverRoot != "" {
+				learned[s.ID] = serverRoot
+			}
+		}
 	}
+	m.post(func() {
+		if m.languageServerJavaReady == nil {
+			m.languageServerJavaReady = map[uint32]string{}
+		}
+		for id, readyRoot := range learned {
+			m.languageServerJavaReady[id] = readyRoot
+		}
+	})
 	if !r.Java {
 		r.Importing = r.JavaDetail == "" || r.JavaDetail == "starting" || r.JavaDetail == "busy"
 	}
@@ -121,6 +146,21 @@ func (m *Model) readinessNow(ctx context.Context) Readiness {
 	r.Run = trusted && loaded
 	_ = n
 	return r
+}
+
+// javaServerStillReady treats busy as progress only after that server already
+// loaded this project. A restart clears the latch and returns to Starting.
+func javaServerStillReady(status, serverRoot, readyRoot, projectRoot string) bool {
+	if status == "ready" {
+		return true
+	}
+	if status != "busy" || readyRoot == "" {
+		return false
+	}
+	if serverRoot == "" {
+		serverRoot = projectRoot
+	}
+	return serverRoot != "" && samePath(serverRoot, readyRoot)
 }
 
 // readinessReason names the first missing state, for operations that need it

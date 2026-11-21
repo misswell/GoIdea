@@ -79,11 +79,20 @@ func TestLanguageServerEventsAndSnapshotKeepTheNewestState(t *testing.T) {
 	}
 
 	label := "Eclipse JDTLS"
+	m.acceptLanguageServerStatus(openidea.LanguageServerEvent{
+		Server: 1, Name: "jdtls", Label: &label, Status: "ready",
+	})
+	if got := m.languageServerJavaReady[1]; got != "/project" {
+		t.Fatalf("Java ready root = %q, want /project", got)
+	}
 	wantsPrompt := m.acceptLanguageServerStatus(openidea.LanguageServerEvent{
 		Server: 1, Name: "jdtls", Label: &label, Status: "busy",
 	})
 	if wantsPrompt {
 		t.Fatal("busy event asked for a missing install prompt")
+	}
+	if got := m.languageServerJavaReady[1]; got != "/project" {
+		t.Fatalf("busy background work cleared Java ready at %q", got)
 	}
 	// jdtls was ready and busy is delayed by 500 ms in the renderer test's
 	// terms. A different lifecycle state is visible at once.
@@ -94,6 +103,9 @@ func TestLanguageServerEventsAndSnapshotKeepTheNewestState(t *testing.T) {
 	if got := m.languageServers[1]; got.Name != label || got.Status != "crashed" ||
 		got.Message != "the server exited" || len(got.Languages) != 1 {
 		t.Fatalf("updated server = %+v", got)
+	}
+	if _, ok := m.languageServerJavaReady[1]; ok {
+		t.Fatal("a crashed server stayed Java ready")
 	}
 
 	m.acceptLanguageServerRemoved(openidea.LanguageServerRemovedEvent{Server: 2})

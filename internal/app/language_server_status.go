@@ -47,6 +47,7 @@ func (m *Model) clearLanguageServers() {
 	m.languageServerLastEvent = nil
 	m.languageServerRemovedAt = nil
 	m.languageServerBusyGen = nil
+	m.languageServerJavaReady = nil
 	m.languageServerRefresh++
 }
 
@@ -130,11 +131,26 @@ func (m *Model) acceptLanguageServerStatus(e openidea.LanguageServerEvent) bool 
 	if m.languageServerBusyGen == nil {
 		m.languageServerBusyGen = map[uint32]uint64{}
 	}
+	if m.languageServerJavaReady == nil {
+		m.languageServerJavaReady = map[uint32]string{}
+	}
 	m.languageServerSeq++
 	seq := m.languageServerSeq
 	m.languageServerLastEvent[e.Server] = seq
 	delete(m.languageServerRemovedAt, e.Server)
 	previous, known := m.languageServers[e.Server]
+	if e.Status != "ready" && e.Status != "busy" {
+		delete(m.languageServerJavaReady, e.Server)
+	}
+	if e.Status == "ready" && hasLanguage(previous.Languages, "java") {
+		root := previous.Root
+		if root == "" {
+			root = m.Root()
+		}
+		if root != "" {
+			m.languageServerJavaReady[e.Server] = root
+		}
+	}
 	m.languageServerBusyGen[e.Server]++
 	generation := m.languageServerBusyGen[e.Server]
 	if e.Status == "busy" && known && previous.Status == "ready" {
@@ -185,6 +201,7 @@ func (m *Model) acceptLanguageServerRemoved(e openidea.LanguageServerRemovedEven
 	if m.languageServerBusyGen != nil {
 		m.languageServerBusyGen[e.Server]++
 	}
+	delete(m.languageServerJavaReady, e.Server)
 	delete(m.languageServers, e.Server)
 	m.invalidate()
 }

@@ -143,7 +143,7 @@ type Model struct {
 	postHook func(fn func())
 	reg      *docbridge.Registry
 	ctx      context.Context
-	off      context.CancelFunc
+	cancel   context.CancelFunc
 	remote   remoteDevelopmentState
 
 	rootMu             sync.RWMutex
@@ -444,6 +444,9 @@ type Model struct {
 	languageServerRemovedAt map[uint32]uint64
 	languageServerRefresh   uint64
 	languageServerBusyGen   map[uint32]uint64
+	// languageServerJavaReady remembers the project root each Java server last
+	// loaded. Background busy progress does not revoke readiness until restart.
+	languageServerJavaReady map[uint32]string
 	// jdkDialog is Download JDK, and jdkDownloadBusy / jdkDownloadChannel
 	// carry the one cancelling and streaming download it starts.
 	jdkDialog        jdkDialogState
@@ -695,6 +698,8 @@ type Model struct {
 	sessionWrote int
 	sessionMu    sync.Mutex
 	sessionWrite sync.Mutex
+	sessionWG    sync.WaitGroup
+	closing      bool
 
 	// The Welcome screen's per-folder and per-dialog state: the branch of
 	// each recent project once read, the gear popup, and the clone and
@@ -714,9 +719,9 @@ type Model struct {
 
 // New returns a model; Start opens the last session.
 func New(cfg Config) *Model {
-	ctx, off := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
 	m := &Model{
-		cfg: cfg, ctx: ctx, off: off, bottomHeight: bottomDefaultHeight,
+		cfg: cfg, ctx: ctx, cancel: cancel, bottomHeight: bottomDefaultHeight,
 		safeDeleteSearchText: true,
 	}
 	m.prefs = LoadPreferences(cfg.SettingsPath)
@@ -2350,11 +2355,19 @@ func (m *Model) saveSession() {
 		return
 	}
 	m.sessionMu.Lock()
+	if m.closing {
+		m.sessionMu.Unlock()
+		return
+	}
 	m.sessionSeq++
 	seq := m.sessionSeq
+	m.sessionWG.Add(1)
 	m.sessionMu.Unlock()
 	path := m.cfg.SessionPath
-	go m.writeSession(seq, path, s)
+	go func() {
+		defer m.sessionWG.Done()
+		m.writeSession(seq, path, s)
+	}()
 }
 
 // writeSession writes one snapshot unless a newer one already reached the
@@ -2393,6 +2406,18 @@ func (m *Model) saveSessionNow() {
 	seq := m.sessionSeq
 	m.sessionMu.Unlock()
 	m.writeSession(seq, m.cfg.SessionPath, s)
+}
+
+// off stops background work and waits for queued session writes, so closing
+// the model cannot race a temporary data directory or truncate the last save.
+func (m *Model) off() {
+	if m.cancel != nil {
+		m.cancel()
+	}
+	m.sessionMu.Lock()
+	m.closing = true
+	m.sessionMu.Unlock()
+	m.sessionWG.Wait()
 }
 
 // RequestQuit asks about unsaved tabs and then closes the backend.

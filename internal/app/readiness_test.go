@@ -26,3 +26,26 @@ func TestReadinessReason(t *testing.T) {
 		}
 	}
 }
+
+func TestJavaServerStillReadyAfterInitialLoad(t *testing.T) {
+	cases := []struct {
+		name        string
+		status      string
+		serverRoot  string
+		readyRoot   string
+		projectRoot string
+		want        bool
+	}{
+		{"ready", "ready", "/project", "", "/project", true},
+		{"busy after ready", "busy", "/project", "/project", "/project", true},
+		{"navigation busy after ready", "busy", "", "/project", "/project", true},
+		{"busy without ready", "busy", "/project", "", "/project", false},
+		{"busy from another project", "busy", "/other", "/project", "/other", false},
+		{"restart", "starting", "/project", "/project", "/project", false},
+	}
+	for _, c := range cases {
+		if got := javaServerStillReady(c.status, c.serverRoot, c.readyRoot, c.projectRoot); got != c.want {
+			t.Errorf("%s: got %v want %v", c.name, got, c.want)
+		}
+	}
+}

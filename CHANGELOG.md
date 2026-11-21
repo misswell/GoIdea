@@ -39,6 +39,8 @@ The GitHub release notes, which **Help › What's New** shows, come from the
 - **Annotate with Git Blame** 在编辑器中显示作者与日期栏，悬停可查看完整提交、邮箱和消息。
 - **Settings › Version Control › Issue Navigation** 可将提交消息里的问题编号链接到 JIRA、YouTrack 或 GitHub。
 - 修复 Java 导入结束附近停止 **Debug** 后会话状态残留的问题。
+- jdtls 完成导入后，后台索引或构建不再把 Java 就绪状态短暂改回导入中。
+- 退出 GoIDEA 时会等待工作区会话写入完成，避免最近状态丢失。
 - 退出 GoIDEA 时会取消工具下载并清理其进程组，不再遗留 `curl`。
 
 ## 0.1.30
