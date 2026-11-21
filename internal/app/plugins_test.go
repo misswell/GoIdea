@@ -154,6 +154,49 @@ func TestPluginHostServesTheWorkspace(t *testing.T) {
 	}
 }
 
+func TestPluginNotificationIsVerbatimAndMultiline(t *testing.T) {
+	m := &Model{postHook: func(fn func()) { fn() }}
+	h := &goideaPluginHost{m: m}
+	p := &plugin.Plugin{Manifest: plugin.Manifest{Name: "demo", DisplayName: "Demo Plugin"}}
+	body := json.RawMessage(`{"message":"first line\nsecond line","kind":"warning"}`)
+	v, err := h.Call(p, "window.notify", body)
+	if err != nil || v != false {
+		t.Fatalf("window.notify = %v, %v", v, err)
+	}
+	if len(m.notify.items) != 1 {
+		t.Fatalf("notifications = %+v", m.notify.items)
+	}
+	note := m.notify.items[0]
+	if note.title != "Demo Plugin" || note.body != "first line\nsecond line" ||
+		note.level != "warning" || note.group != "plugins" || !note.verbatim ||
+		!note.userInitiated {
+		t.Fatalf("plugin notification = %+v", note)
+	}
+}
+
+func TestPluginCommandBridgeForwardsItsArgument(t *testing.T) {
+	var got any
+	if err := registerAction(&Action{
+		ID: "test.pluginArg", Title: "Plugin Arg",
+		RunWithArg: func(_ *Model, arg any) { got = arg },
+	}); err != nil {
+		t.Fatal(err)
+	}
+	defer unregisterAction("test.pluginArg")
+
+	m := &Model{postHook: func(fn func()) { fn() }}
+	h := &goideaPluginHost{m: m}
+	if _, err := h.Call(nil, "commands.run", json.RawMessage(
+		`{"id":"test.pluginArg","arg":{"task":"open","turn":1}}`,
+	)); err != nil {
+		t.Fatal(err)
+	}
+	arg, ok := got.(map[string]any)
+	if !ok || arg["task"] != "open" || arg["turn"] != float64(1) {
+		t.Fatalf("commands.run argument = %#v", got)
+	}
+}
+
 func TestPluginStatusItemJoinsTheStatusBar(t *testing.T) {
 	m := &Model{}
 	h := &goideaPluginHost{m: m}
@@ -222,5 +265,30 @@ func TestPluginViewBecomesAToolWindow(t *testing.T) {
 	}
 	if m.dockWindowShown(full) {
 		t.Fatal("a disabled plugin's view is still open")
+	}
+}
+
+func TestPluginStatusItemIsANamedWidgetAndFollowsUpdates(t *testing.T) {
+	m := &Model{}
+	host := &goideaPluginHost{m: m, status: map[string]pluginStatusItem{}}
+	p := &plugin.Plugin{Manifest: plugin.Manifest{Name: "demo", DisplayName: "Demo Plugin"}}
+	full := "plugin.status:demo:build"
+	defer unregisterStatusItem(full)
+
+	host.setStatus(p, "build", &pluginStatusItem{text: "Building"})
+	rows := m.statusWidgetRows()
+	var found *StatusItem
+	for _, row := range rows {
+		if row.ID == full {
+			found = row
+			break
+		}
+	}
+	if found == nil || found.Title != "demo: Building" {
+		t.Fatalf("plugin status widget = %+v, rows %+v", found, rows)
+	}
+	host.setStatus(p, "build", &pluginStatusItem{text: "Ready", tooltip: "Build status"})
+	if found.Title != "demo: Build status" {
+		t.Fatalf("updated plugin status title = %q", found.Title)
 	}
 }

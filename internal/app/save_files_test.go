@@ -146,7 +146,8 @@ func TestSettingsSaveFilesStageAndApply(t *testing.T) {
 	m.applySettings()
 	want := SavePrefs{
 		TrimTrailing: true, TrimAllLines: true,
-		DropTrailingBlankLines: true, EnsureFinalNewline: true,
+		KeepTrailingOnCaretLine: true,
+		DropTrailingBlankLines:  true, EnsureFinalNewline: true,
 	}
 	if m.prefs.SaveFiles != want || LoadPreferences(path).SaveFiles != want {
 		t.Fatalf("stored Save Files = %+v / %+v", m.prefs.SaveFiles, LoadPreferences(path).SaveFiles)

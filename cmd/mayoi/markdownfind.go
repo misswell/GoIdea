@@ -53,7 +53,7 @@ func (m *markdownPreview) markdownFindTexts(i int) []string {
 	case markdownRule, markdownImageBlock, markdownAlertTitle:
 		return nil
 	case markdownCodeBlock:
-		if d := b.diagram; d != nil && d.err == "" && !m.sources[b.line] {
+		if d := b.diagram; d != nil && d.Err == "" && !m.sources[b.line] {
 			return nil
 		}
 	case markdownMathBlock:

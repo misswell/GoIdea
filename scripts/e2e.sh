@@ -92,11 +92,16 @@ printf 'TN:\nSF:%s\nDA:3,1\nDA:4,0\nBRDA:3,0,0,1\nBRDA:3,0,1,0\nend_of_record\n'
 smoke "$BASE" \
     GOIDEA_SMOKE_EDIT=1 GOIDEA_SMOKE_CODEINTEL=1 GOIDEA_SMOKE_SEARCH=1 GOIDEA_SMOKE_TODO=1 \
     GOIDEA_SMOKE_SCRATCH=1 GOIDEA_SMOKE_DIFF=1 GOIDEA_SMOKE_COMMANDS=1 GOIDEA_SMOKE_SETTINGS=1 GOIDEA_SMOKE_NOTIFY=1 GOIDEA_SMOKE_NEWPROJECT=1 \
-    GOIDEA_SMOKE_DOCK=1 GOIDEA_SMOKE_COVERAGE="$COVERAGE" \
+    GOIDEA_SMOKE_DOCK=1 GOIDEA_SMOKE_COVERAGE="$COVERAGE" GOIDEA_SMOKE_WORKSPACE=1 \
     GOIDEA_SMOKE_WATCH=1 GOIDEA_SMOKE_RUN=1 GOIDEA_SMOKE_RUNCFG=1 GOIDEA_SMOKE_BUILD=1 GOIDEA_SMOKE_STAGE=1 GOIDEA_SMOKE_BOOKMARK=1 GOIDEA_SMOKE_LOG=1 GOIDEA_SMOKE_COMMIT=1 GOIDEA_SMOKE_BRANCH=1 GOIDEA_SMOKE_TERM=1 GOIDEA_SMOKE_FILES=1
 python3 "$CHECKS" base "$BASE"
 
-say "阶段 1a：原生 Git 操作（真实本地远端）"
+say "阶段 1a：Agents 订阅、Provider 与外部会话（真实 openidea-server）"
+AGENTS_JSON="$WORK/agents.json"
+smoke "$AGENTS_JSON" GOIDEA_SMOKE_AGENTS=1
+python3 "$CHECKS" agents "$AGENTS_JSON"
+
+say "阶段 1b：原生 Git 操作（真实本地远端）"
 VCSOPS="$WORK/java-vcs-operations"
 cp -R "$ROOT/testdata/java-maven" "$VCSOPS"
 rm -rf "$VCSOPS/target"
@@ -111,7 +116,7 @@ python3 "$CHECKS" vcsoperations "$VCSOPS_JSON"
 PROJ="$BASE_PROJ"
 JAVA="$BASE_JAVA"
 
-say "阶段 1b：离屏视觉截图"
+say "阶段 1c：离屏视觉截图"
 SHOTS="$WORK/shots"
 mkdir -p "$SHOTS"
 SHOTS_JSON="$WORK/shots.json"
@@ -119,7 +124,7 @@ grep -q "TODO: visual shot" "$JAVA" || printf '\n// TODO: visual shot\n' >> "$JA
 smoke "$SHOTS_JSON" GOIDEA_SMOKE_SHOTS="$SHOTS"
 python3 "$CHECKS" shots "$SHOTS_JSON"
 
-say "阶段 1b2：测试结果管线与重新运行失败的测试（真实 surefire 输出）"
+say "阶段 1c2：测试结果管线与重新运行失败的测试（真实 surefire 输出）"
 REFAIL="$WORK/java-junit-failed"
 cp -R "$ROOT/testdata/java-junit-failed" "$REFAIL"
 rm -rf "$REFAIL/target"
@@ -177,44 +182,41 @@ smoke "$JSRUN_JSON" GOIDEA_SMOKE_JSRERUN=1
 python3 "$CHECKS" jsrerun "$JSRUN_JSON"
 PROJ="$PROJ_BASE"; JAVA="$JAVA_BASE"
 
-say "阶段 1b3：六态启动状态机（第八节）"
 READINESS_JSON="$WORK/readiness.json"
-smoke "$READINESS_JSON" GOIDEA_SMOKE_READINESS=1
-python3 "$CHECKS" readiness "$READINESS_JSON"
 
-say "阶段 1c：运行准备负向回归（任何准备失败都不得调用 run_start）"
-# A: a data directory without the Java toolchain — the application
-# configuration's preparation must fail with the real reason.
-NEGDATA="$WORK/neg-data"
-mkdir -p "$NEGDATA"
-NEGJDTLS="$WORK/negjdtls.json"
-export GOIDEA_SMOKE_DATA="$NEGDATA"
-smoke "$NEGJDTLS" GOIDEA_SMOKE_NEGJDTLS=1
-unset GOIDEA_SMOKE_DATA
-python3 "$CHECKS" negjdtls "$NEGJDTLS"
-# B: switch the project while a real Maven run is in flight.
-PROJB="$WORK/java-maven-b"
-cp -R "$ROOT/testdata/java-maven" "$PROJB"
-rm -rf "$PROJB/target"
-git -C "$PROJB" init -q
-git -C "$PROJB" add -A
-git -C "$PROJB" -c user.name=e2e -c user.email=e2e@goidea.invalid commit -qm baseline
-RUNSWITCH="$WORK/runswitch.json"
-smoke "$RUNSWITCH" GOIDEA_SMOKE_RUNSWITCH=1 GOIDEA_SMOKE_SWITCH_TO="$PROJB"
-python3 "$CHECKS" runswitch "$RUNSWITCH"
-# C: the server dies in the middle of the preparation.
-RUNKILL="$WORK/runkill.json"
-smoke "$RUNKILL" GOIDEA_SMOKE_RUNKILL=1
-python3 "$CHECKS" runkill "$RUNKILL"
-# D: run.debug debugs the detected application configuration itself; the
-# same instance then attaches to a real suspended JDWP JVM through Attach to
-# Process.
-DBGCFG="$WORK/dbgcfg.json"
-smoke "$DBGCFG" GOIDEA_SMOKE_DBGCFG=1 GOIDEA_SMOKE_ATTACH=1
-python3 "$CHECKS" dbgcfg "$DBGCFG"
-python3 "$CHECKS" attach "$DBGCFG"
+run_preparation_negatives() {
+    say "阶段 1c：运行准备负向回归（任何准备失败都不得调用 run_start）"
+    # A: a data directory without the Java toolchain — the application
+    # configuration's preparation must fail with the real reason.
+    NEGDATA="$WORK/neg-data"
+    mkdir -p "$NEGDATA"
+    NEGJDTLS="$WORK/negjdtls.json"
+    export GOIDEA_SMOKE_DATA="$NEGDATA"
+    smoke "$NEGJDTLS" GOIDEA_SMOKE_NEGJDTLS=1
+    unset GOIDEA_SMOKE_DATA
+    python3 "$CHECKS" negjdtls "$NEGJDTLS"
+    # B: switch the project while a real Maven run is in flight.
+    PROJB="$WORK/java-maven-b"
+    cp -R "$ROOT/testdata/java-maven" "$PROJB"
+    rm -rf "$PROJB/target"
+    git -C "$PROJB" init -q
+    git -C "$PROJB" add -A
+    git -C "$PROJB" -c user.name=e2e -c user.email=e2e@goidea.invalid commit -qm baseline
+    RUNSWITCH="$WORK/runswitch.json"
+    smoke "$RUNSWITCH" GOIDEA_SMOKE_RUNSWITCH=1 GOIDEA_SMOKE_SWITCH_TO="$PROJB"
+    python3 "$CHECKS" runswitch "$RUNSWITCH"
+    # C: the server dies in the middle of the preparation.
+    RUNKILL="$WORK/runkill.json"
+    smoke "$RUNKILL" GOIDEA_SMOKE_RUNKILL=1 GOIDEA_SMOKE_RUNKILL_OFFLINE="$OFFLINE"
+    python3 "$CHECKS" runkill "$RUNKILL"
+}
 
 if [ "$OFFLINE" = "1" ]; then
+    say "阶段 1b3：离线启动状态机（后端、项目、构建模型、运行）"
+    smoke "$READINESS_JSON" GOIDEA_SMOKE_READINESS=1 \
+        GOIDEA_SMOKE_READINESS_JAVA_OPTIONAL=1
+    python3 "$CHECKS" readiness "$READINESS_JSON"
+    run_preparation_negatives
     skip "Java 工具安装、JDT 语言服务与调试（GOIDEA_E2E_OFFLINE=1）"
 else
     say "阶段 2：安装 jdtls 与 java-debug"
@@ -222,7 +224,20 @@ else
     smoke "$TOOLS" GOIDEA_SMOKE_TOOLS=install
     python3 "$CHECKS" tools "$TOOLS"
 
-    say "阶段 2a：全新项目在导入期间启动 Debug"
+    say "阶段 2a：安装工具链后的六态启动状态机（第八节）"
+    smoke "$READINESS_JSON" GOIDEA_SMOKE_READINESS=1 \
+        GOIDEA_SMOKE_READINESS_JAVA_OPTIONAL=0
+    python3 "$CHECKS" readiness "$READINESS_JSON"
+
+    run_preparation_negatives
+
+    say "阶段 2b：Debug 所选配置并附加到真实 JDWP JVM"
+    DBGCFG="$WORK/dbgcfg.json"
+    smoke "$DBGCFG" GOIDEA_SMOKE_DBGCFG=1 GOIDEA_SMOKE_ATTACH=1
+    python3 "$CHECKS" dbgcfg "$DBGCFG"
+    python3 "$CHECKS" attach "$DBGCFG"
+
+    say "阶段 2c：全新项目在导入期间启动 Debug"
     DEBUGIMPORT_PROJ="$WORK/java-maven-debug-import"
     cp -R "$ROOT/testdata/java-maven" "$DEBUGIMPORT_PROJ"
     rm -rf "$DEBUGIMPORT_PROJ/target"
@@ -238,7 +253,7 @@ else
     JAVA="$BASE_JAVA"
 
     if [ -n "${GOIDEA_GOLDEN_DIR:-}" ]; then
-        say "阶段 2b：OpenIDEA Golden 视觉差异"
+        say "阶段 2d：OpenIDEA Golden 视觉差异"
         GOLD="$WORK/goldens.json"
         smoke "$GOLD" GOIDEA_SMOKE_GOLDENS=1 GOIDEA_SHOTS_DIR="$SHOTS" \
             GOIDEA_GOLDEN_DIR="$GOIDEA_GOLDEN_DIR" GOIDEA_GOLDEN_DIFF_DIR="$WORK/diffs"
@@ -247,7 +262,7 @@ else
         say "SKIP：OpenIDEA Golden 截图未提供（设置 GOIDEA_GOLDEN_DIR）"
     fi
 
-    say "阶段 2c：干净环境开箱即用（第八节全链路）"
+    say "阶段 2e：干净环境开箱即用（第八节全链路）"
     FRESH="$WORK/fresh-data"
     mkdir -p "$FRESH"
     FRESH_JSON="$WORK/fresh.json"

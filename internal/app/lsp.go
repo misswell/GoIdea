@@ -518,6 +518,17 @@ func (m *Model) SmokeLSP(ctx context.Context) (map[string]any, error) {
 		}
 	}
 
+	// The normal viewport pump issues inlay hints after the server is ready.
+	// Record that UI path here so the release smoke checks the real server.
+	if m.waitDebug(ctx, func(*DebugPane) bool { return t.inlay.loaded }, 30*time.Second) {
+		m.post(func() {
+			out["inlayLoaded"] = true
+			out["inlayCount"] = t.inlay.count
+		})
+	} else {
+		out["inlayError"] = "The editor did not receive inlay hints from the language server"
+	}
+
 	var hover *openidea.Hover
 	if err := m.smokeLSPCall(ctx, "lsp_hover", map[string]any{
 		"request": m.nextRequest(), "doc": t.doc.ID(), "pos": lspPos(symbol),
@@ -552,6 +563,15 @@ func (m *Model) SmokeLSP(ctx context.Context) (map[string]any, error) {
 	// Usages stream back while the server searches, and land in the sidebar.
 	out["references"] = m.smokeReferences(ctx, t)
 
+	// Show Usages is the same real JDT reference answer through the native
+	// speed-search popup, then transferred without a second backend search.
+	out["usagesPopup"] = m.smokeUsagesPopup(ctx, t)
+
+	// Safe Delete must use the same JDT declaration and reference model as the
+	// editor: usage review, forced deletion, comment/string preview and a
+	// concurrent-edit guard all run through the real server and buffer.
+	out["safeDelete"] = m.smokeSafeDelete(ctx, t)
+
 	// The symbol picker searches the whole project and opens what it finds.
 	out["symbols"] = m.smokeSymbols(ctx, t)
 
@@ -572,6 +592,32 @@ func (m *Model) SmokeLSP(ctx context.Context) (map[string]any, error) {
 	var structure map[string]any
 	mygo.RunOnMain(func() { structure = m.structureReport() })
 	out["structure"] = structure
+
+	// Code Vision reuses the outline and streams one bounded references query
+	// per visible declaration. Wait for the editor's own refresh path rather
+	// than calling the backend directly, so the smoke covers the rendered
+	// usages and author inlays.
+	if m.waitDebug(ctx, func(*DebugPane) bool { return t.inlay.visionLoaded }, 60*time.Second) {
+		m.post(func() {
+			usageInlays := 0
+			for _, inlay := range t.inlay.vision {
+				if strings.Contains(inlay.Text, "usage") {
+					usageInlays++
+				}
+			}
+			out["codeVision"] = map[string]any{
+				"loaded":       true,
+				"inlays":       t.inlay.visionCount,
+				"usageInlays":  usageInlays,
+				"usageTargets": len(t.inlay.visionCounts),
+				"blameLines":   len(t.inlay.visionBlame),
+				"blameLoaded":  t.inlay.visionBlameLoaded,
+				"maxTargets":   codeVisionMaxTargets,
+			}
+		})
+	} else {
+		out["codeVisionError"] = "The editor did not finish Code Vision for the visible Java declarations"
+	}
 
 	// Quick Open lists recent files for an empty query and the fuzzy match
 	// otherwise, and opening its choice activates that file.
@@ -803,6 +849,342 @@ func (m *Model) smokeReferences(ctx context.Context, t *Tab) any {
 		case <-time.After(200 * time.Millisecond):
 		}
 	}
+}
+
+// smokeUsagesPopup drives the editor's Show Usages entry point, waits for the
+// real streamed reference answer, and transfers the exact rows to Find Usages.
+func (m *Model) smokeUsagesPopup(ctx context.Context, t *Tab) any {
+	original := t.doc.Text()
+	const helper = `
+class SmokeUsagePopup {
+    static int smokePopupCall() { return 1; }
+    int run() { return smokePopupCall() + smokePopupCall(); }
+}
+`
+	if err := t.doc.ApplyEdits(ctx, editor.Edit{
+		Start: len(original), End: len(original), Text: helper,
+	}); err != nil {
+		return map[string]any{"error": err.Error()}
+	}
+	defer func() {
+		mygo.RunOnMain(func() { m.resetUsagePopup() })
+		if err := t.doc.ApplyEdits(context.Background(), editor.Edit{
+			Start: 0, End: len(t.doc.Text()), Text: original,
+		}); err != nil {
+			mygo.RunOnMain(func() {
+				m.status = "Show Usages smoke cleanup failed: " + err.Error()
+			})
+		}
+	}()
+
+	at := strings.Index(t.doc.Text(), "smokePopupCall")
+	if at < 0 {
+		return map[string]any{"error": "fixture did not contain smokePopupCall"}
+	}
+	start := time.Now()
+	mygo.RunOnMain(func() {
+		t.state.Select(at+2, at+2)
+		m.ShowUsagesPopup()
+	})
+
+	deadline := time.Now().Add(120 * time.Second)
+	var symbol, scope, stateErr, status string
+	var count int
+	var done, open, loading bool
+	for {
+		mygo.RunOnMain(func() {
+			status = m.status
+			if state := m.usagePopup; state != nil {
+				symbol, scope, stateErr = state.symbol, state.scope, state.err
+				count = len(state.rows)
+				done, open, loading = state.done, state.open, state.loading
+			}
+		})
+		if done && open {
+			break
+		}
+		if stateErr != "" || time.Now().After(deadline) {
+			return map[string]any{
+				"error": stateErr, "timeout": time.Now().After(deadline),
+				"silentTimeout": stateErr == "" && time.Now().After(deadline),
+				"symbol":        symbol, "count": count, "done": done, "open": open,
+				"loading": loading, "status": status,
+				"elapsedMillis": time.Since(start).Milliseconds(),
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return map[string]any{"error": ctx.Err().Error()}
+		case <-time.After(200 * time.Millisecond):
+		}
+	}
+
+	var findSymbol, findStatus string
+	var findCount int
+	var findDone, popupClosed bool
+	mygo.RunOnMain(func() {
+		m.OpenUsageResultsInFindWindow()
+		popupClosed = m.usagePopup == nil
+		findSymbol, findCount, findDone = m.usages.symbol, len(m.usages.locs), m.usages.done
+		findStatus = m.status
+	})
+	out := map[string]any{
+		"symbol": symbol, "count": count, "done": done, "open": open,
+		"loading": loading, "scope": scope, "status": status,
+		"popupClosed": popupClosed, "findSymbol": findSymbol,
+		"findCount": findCount, "findDone": findDone, "findStatus": findStatus,
+		"elapsedMillis": time.Since(start).Milliseconds(),
+	}
+	return out
+}
+
+// smokeSafeDelete drives the editor's real Safe Delete flow. The helpers live
+// in the unsaved buffer, so the smoke exercises JDT's document model while
+// leaving the fixture files on disk untouched.
+func (m *Model) smokeSafeDelete(ctx context.Context, t *Tab) any {
+	original := t.doc.Text()
+	out := map[string]any{}
+	defer func() {
+		if t.doc.Text() == original {
+			return
+		}
+		if err := t.doc.ApplyEdits(context.Background(), editor.Edit{
+			Start: 0, End: len(t.doc.Text()), Text: original,
+		}); err != nil {
+			out["cleanupError"] = err.Error()
+		}
+	}()
+
+	appendText := func(text string) error {
+		end := len(t.doc.Text())
+		return t.doc.ApplyEdits(ctx, editor.Edit{Start: end, End: end, Text: text})
+	}
+	waitPhase := func(timeout time.Duration, want editorSafeDeletePhase) bool {
+		deadline := time.Now().Add(timeout)
+		for {
+			var ready bool
+			mygo.RunOnMain(func() {
+				ready = m.safeDelete != nil && m.safeDelete.phase == want
+			})
+			if ready {
+				return true
+			}
+			if time.Now().After(deadline) {
+				return false
+			}
+			select {
+			case <-ctx.Done():
+				return false
+			case <-time.After(200 * time.Millisecond):
+			}
+		}
+	}
+	waitClosed := func(timeout time.Duration) bool {
+		deadline := time.Now().Add(timeout)
+		for {
+			var closed bool
+			mygo.RunOnMain(func() { closed = m.safeDelete == nil })
+			if closed {
+				return true
+			}
+			if time.Now().After(deadline) {
+				return false
+			}
+			select {
+			case <-ctx.Done():
+				return false
+			case <-time.After(200 * time.Millisecond):
+			}
+		}
+	}
+	stateReport := func() map[string]any {
+		var phase editorSafeDeletePhase = -1
+		var name, status, stateErr string
+		var usages, hits int
+		mygo.RunOnMain(func() {
+			status = m.status
+			if state := m.safeDelete; state != nil {
+				phase = state.phase
+				name = state.target.name
+				stateErr = state.err
+				usages = len(state.usages)
+				hits = len(state.textHits)
+			}
+		})
+		return map[string]any{
+			"phase": int(phase), "name": name, "usages": usages,
+			"textHits": hits, "status": status, "err": stateErr,
+		}
+	}
+	start := func(name string) bool {
+		text := t.doc.Text()
+		decl := "class " + name
+		at := strings.Index(text, decl)
+		if at < 0 {
+			return false
+		}
+		caret := at + len(decl) - len(name) + 1
+		mygo.RunOnMain(func() {
+			t.state.Select(caret, caret)
+			m.SafeDeleteActive()
+		})
+		return waitPhase(60*time.Second, editorSafeDeleteConfirm)
+	}
+	confirm := func(searchText bool) {
+		mygo.RunOnMain(func() {
+			if state := m.safeDelete; state != nil &&
+				state.phase == editorSafeDeleteConfirm {
+				state.searchText = searchText
+				m.confirmEditorSafeDelete()
+			}
+		})
+	}
+
+	const usageHelper = `
+class SmokeSafeDeleteUsage {
+    static int value() { return 1; }
+}
+
+class SmokeSafeDeleteUsageUser {
+    SmokeSafeDeleteUsage field = new SmokeSafeDeleteUsage();
+    int run() { return SmokeSafeDeleteUsage.value(); }
+}
+`
+	if err := appendText(usageHelper); err != nil {
+		out["usageError"] = err.Error()
+		return out
+	}
+	usageStart := time.Now()
+	if !start("SmokeSafeDeleteUsage") {
+		out["usage"] = map[string]any{
+			"error": "confirmation timeout", "state": stateReport(),
+		}
+		return out
+	}
+	confirm(true)
+	if !waitPhase(120*time.Second, editorSafeDeleteUsages) {
+		out["usage"] = map[string]any{
+			"error": "usage search timeout", "state": stateReport(),
+		}
+		return out
+	}
+	var usageCount int
+	var usageName string
+	mygo.RunOnMain(func() {
+		if state := m.safeDelete; state != nil {
+			usageCount = len(state.usages)
+			usageName = state.target.name
+			m.SafeDeleteViewUsages()
+		}
+	})
+	var viewedName string
+	var viewedCount int
+	var viewedDone bool
+	mygo.RunOnMain(func() {
+		viewedName, viewedCount, viewedDone =
+			m.usages.symbol, len(m.usages.locs), m.usages.done
+	})
+	out["usage"] = map[string]any{
+		"name": usageName, "count": usageCount,
+		"viewedName": viewedName, "viewedCount": viewedCount,
+		"viewedDone":    viewedDone,
+		"elapsedMillis": time.Since(usageStart).Milliseconds(),
+	}
+
+	deleteStart := time.Now()
+	if !start("SmokeSafeDeleteUsage") {
+		out["deleteAnyway"] = map[string]any{
+			"error": "confirmation timeout", "state": stateReport(),
+		}
+		return out
+	}
+	confirm(false)
+	if !waitPhase(120*time.Second, editorSafeDeleteUsages) {
+		out["deleteAnyway"] = map[string]any{
+			"error": "usage search timeout", "state": stateReport(),
+		}
+		return out
+	}
+	mygo.RunOnMain(func() { m.SafeDeleteDeleteAnyway() })
+	finished := waitClosed(90 * time.Second)
+	deleteStatus := m.smokeStatus()
+	out["deleteAnyway"] = map[string]any{
+		"finished":      finished,
+		"deleted":       !strings.Contains(t.doc.Text(), "class SmokeSafeDeleteUsage {"),
+		"status":        deleteStatus,
+		"elapsedMillis": time.Since(deleteStart).Milliseconds(),
+	}
+
+	const textHelper = `
+class SmokeSafeDeleteText {
+    int value;
+}
+
+// SmokeSafeDeleteText is mentioned in this comment.
+class SmokeSafeDeleteTextMention {
+    String label = "SmokeSafeDeleteText";
+}
+`
+	if err := appendText(textHelper); err != nil {
+		out["textPreview"] = map[string]any{"error": err.Error()}
+		return out
+	}
+	textStart := time.Now()
+	if !start("SmokeSafeDeleteText") {
+		out["textPreview"] = map[string]any{
+			"error": "confirmation timeout", "state": stateReport(),
+		}
+		return out
+	}
+	confirm(true)
+	if !waitPhase(120*time.Second, editorSafeDeleteTextPreview) {
+		out["textPreview"] = map[string]any{
+			"error": "preview timeout", "state": stateReport(),
+		}
+		return out
+	}
+	var textHits int
+	mygo.RunOnMain(func() {
+		if state := m.safeDelete; state != nil {
+			textHits = len(state.textHits)
+			m.SafeDeletePreviewDelete()
+		}
+	})
+	finished = waitClosed(90 * time.Second)
+	out["textPreview"] = map[string]any{
+		"hits": textHits, "finished": finished,
+		"deleted":       !strings.Contains(t.doc.Text(), "class SmokeSafeDeleteText {"),
+		"status":        m.smokeStatus(),
+		"elapsedMillis": time.Since(textStart).Milliseconds(),
+	}
+
+	const editHelper = "\nclass SmokeSafeDeleteEdit {}\n"
+	if err := appendText(editHelper); err != nil {
+		out["editCancel"] = map[string]any{"error": err.Error()}
+		return out
+	}
+	editStart := time.Now()
+	if !start("SmokeSafeDeleteEdit") {
+		out["editCancel"] = map[string]any{
+			"error": "confirmation timeout", "state": stateReport(),
+		}
+		return out
+	}
+	end := len(t.doc.Text())
+	if err := t.doc.ApplyEdits(ctx, editor.Edit{
+		Start: end, End: end, Text: "// changed while confirming\n",
+	}); err != nil {
+		out["editCancel"] = map[string]any{"error": err.Error()}
+		return out
+	}
+	mygo.RunOnMain(func() { m.confirmEditorSafeDelete() })
+	out["editCancel"] = map[string]any{
+		"cancelled":     waitClosed(5 * time.Second),
+		"preserved":     strings.Contains(t.doc.Text(), "class SmokeSafeDeleteEdit {}"),
+		"status":        m.smokeStatus(),
+		"elapsedMillis": time.Since(editStart).Milliseconds(),
+	}
+	return out
 }
 
 // smokeIntentions adds a class calling a method that does not exist, asks the
@@ -1226,11 +1608,12 @@ func (m *Model) smokeLSPCall(ctx context.Context, cmd string, args map[string]an
 
 // lspServerState is a configured language server as the smoke reports it.
 type lspServerState struct {
-	Name      string          `json:"name"`
-	Status    string          `json:"status"`
-	Languages []string        `json:"languages"`
-	Root      json.RawMessage `json:"root,omitempty"`
-	PID       *uint32         `json:"pid,omitempty"`
+	ID        uint32   `json:"id"`
+	Name      string   `json:"name"`
+	Status    string   `json:"status"`
+	Languages []string `json:"languages"`
+	Root      string   `json:"root,omitempty"`
+	PID       *uint32  `json:"pid,omitempty"`
 }
 
 func (m *Model) smokeLSPServers(ctx context.Context) []lspServerState {

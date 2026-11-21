@@ -8,7 +8,11 @@ package app
 import (
 	"fmt"
 	"math"
+	"path/filepath"
+	"slices"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -34,19 +38,257 @@ func (m *Model) settingsPageBody(c *ui.Context, p *ui.Theme, oi oiColors, node s
 		m.settingsEditorTabsBody(c, oi)
 	case "codeFolding":
 		m.settingsCodeFoldingBody(c)
+	case "inlayHints":
+		m.settingsInlayHintsBody(c, oi)
 	case "editorFont":
 		m.settingsFontBody(c, oi)
+	case "dateFormats":
+		m.settingsDateFormatsBody(c, oi)
+	case "system":
+		m.settingsSystemBody(c, oi)
 	case "keymap":
 		m.settingsKeymapBody(c, oi)
 	case "todo":
 		m.settingsTodoBody(c, oi)
 	case "notifications":
 		m.settingsNotificationsBody(c, oi)
+	case "agents":
+		m.settingsAgentsBody(c, oi)
+	case "agentPolicy":
+		m.settingsAgentPolicyBody(c, oi)
+	case "agentMCP":
+		m.settingsAgentMCPBody(c, oi)
+	case "agentRegistry":
+		m.settingsAgentRegistryBody(c, oi)
 	case "java":
-		m.javaToolsSection(c, p)
+		m.settingsJavaBody(c, p, oi)
+	case "languageServers":
+		m.settingsLanguageServersBody(c, p, oi)
+	case "issueNavigation":
+		m.settingsIssueNavigationBody(c, oi)
 	case "updates":
 		m.settingsUpdatesBody(c, oi)
+	case "projectTrust":
+		m.settingsProjectTrustBody(c, oi)
 	}
+}
+
+// settingsSystemBody is Settings › Appearance & Behavior › System Settings.
+func (m *Model) settingsSystemBody(c *ui.Context, oi oiColors) {
+	settingsSectionTitle(c, oi, "Project")
+	reopen := m.settingsDraft.reopenLast
+	if ui.Checkbox(c, &reopen, "Reopen projects on startup").Changed() {
+		m.settingsDraft.reopenLast = reopen
+		m.invalidate()
+	}
+
+	settingsSectionTitle(c, oi, "Caches")
+	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+		settingsFormLabel(c, oi, "Local data directory", 220)
+		path := filepath.Dir(m.cfg.Home)
+		ui.Text(c, path).FontSize(12).Font("monospace").TextColor(oi.text).
+			SingleLine().Ellipsis("…").Grow(1)
+		ui.Button(c, "Show in Finder").OnClick(func() {
+			if path != "" {
+				mygo.Shell.ShowItemInFolder(path)
+			}
+		})
+	})
+	ui.Text(c, "Tool downloads, language-server data, logs and settings are kept here.").
+		FontSize(11).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
+}
+
+// settingsDateFormatsBody is Settings › System Settings › Date Formats.
+func (m *Model) settingsDateFormatsBody(c *ui.Context, oi oiColors) {
+	f := &m.settingsDraft.dateFormat
+	if ui.Checkbox(c, &f.OverrideSystem, "Override system date and time format").Changed() {
+		m.invalidate()
+	}
+	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+		settingsFormLabel(c, oi, "Date format", 220)
+		input := ui.TextInput(c, &f.Pattern).Grow(1).MaxWidth(280)
+		if !f.OverrideSystem {
+			input.Disabled(true)
+		}
+		if input.Changed() && strings.TrimSpace(f.Pattern) != "" {
+			f.Pattern = strings.TrimSpace(f.Pattern)
+			m.invalidate()
+		}
+	})
+	ui.Text(c, "Placeholders: yyyy, yy, MMMM, MMM, MM, M, dd, d").
+		FontSize(11).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
+	use24 := f.Use24Hour
+	use24Element := ui.Checkbox(c, &use24, "Use 24-hour time format")
+	if !f.OverrideSystem {
+		use24Element.Disabled(true)
+	}
+	if use24Element.Changed() {
+		f.Use24Hour = use24
+		m.invalidate()
+	}
+	pretty := f.Pretty
+	if ui.Checkbox(c, &pretty, "Use pretty formatting").Changed() {
+		f.Pretty = pretty
+		m.invalidate()
+	}
+	ui.Text(c, `Show "Today", "Yesterday" and "N min ago" for recent dates`).
+		FontSize(11).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
+	now := time.Now()
+	region := c.Region()
+	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+		settingsFormLabel(c, oi, "Preview", 220)
+		ui.Text(c, formatAppTimestamp(*f, region, float64(now.Add(-2*time.Hour).UnixMilli()), now)+
+			" · "+formatAppTimestamp(*f, region, float64(now.Add(-3*24*time.Hour).UnixMilli()), now)).
+			FontSize(12).TextColor(oi.textStrong).SingleLine().Ellipsis("…")
+	})
+}
+
+// settingsAgentsBody is Settings › Agents › Chat. It mirrors tools.tsx's
+// sections and the keys the Composer, timeline and task header consume.
+func (m *Model) settingsAgentsBody(c *ui.Context, oi oiColors) {
+	a := &m.settingsDraft.agents
+
+	settingsSectionTitle(c, oi, "New Tasks")
+	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+		settingsFormLabel(c, oi, "New tasks start", 220)
+		choices := []string{
+			"Without asking for approval",
+			"Asking for approval",
+		}
+		shown := choices[0]
+		if a.newTaskApprovals() == "ask" {
+			shown = choices[1]
+		}
+		if ui.Select(c, &shown, choices).Width(280).Changed() {
+			if shown == choices[1] {
+				a.NewTaskApprovals = "ask"
+			} else {
+				a.NewTaskApprovals = "bypass"
+			}
+			m.invalidate()
+		}
+	})
+	ui.Text(c, "Without asking means the agent's bypass or full-access mode, where command permissions don't apply").
+		FontSize(11).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
+
+	settingsSectionTitle(c, oi, "Sending")
+	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+		settingsFormLabel(c, oi, "Send messages with", 220)
+		labels := []string{"Enter", "⌘Enter"}
+		shown := "Enter"
+		if a.sendWith() == "modEnter" {
+			shown = "⌘Enter"
+		}
+		if ui.Select(c, &shown, labels).Width(160).Changed() {
+			if shown == "⌘Enter" {
+				a.SendWith = "modEnter"
+			} else {
+				a.SendWith = "enter"
+			}
+			m.invalidate()
+		}
+	})
+	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+		settingsFormLabel(c, oi, "While the agent works, sending", 220)
+		labels := []string{
+			"Queues the message for after the turn",
+			"Sends it into the turn",
+		}
+		shown := labels[0]
+		if a.whileRunning() == "steer" {
+			shown = labels[1]
+		}
+		if ui.Select(c, &shown, labels).Width(280).Changed() {
+			if shown == labels[1] {
+				a.WhileRunning = "steer"
+			} else {
+				a.WhileRunning = "queue"
+			}
+			m.invalidate()
+		}
+	})
+	ui.Text(c, "The other way is a modifier away: ⌘↵ with Enter, ⌘⇧↵ with ⌘Enter").
+		FontSize(11).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
+
+	settingsSectionTitle(c, oi, "Conversation")
+	fold := !a.NoFoldTurns
+	if ui.Checkbox(c, &fold, "Fold a finished turn's work").Changed() {
+		a.NoFoldTurns = !fold
+		m.invalidate()
+	}
+	ui.Text(c, "Reasoning and tool calls before the reply fold into one line under its message").
+		FontSize(11).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
+	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+		settingsFormLabel(c, oi, "Tool calls", 220)
+		labels := []string{"Grouped by what they did", "One per line"}
+		shown := labels[0]
+		if a.toolCalls() == "each" {
+			shown = labels[1]
+		}
+		if ui.Select(c, &shown, labels).Width(250).Changed() {
+			if shown == labels[1] {
+				a.ToolCalls = "each"
+			} else {
+				a.ToolCalls = "grouped"
+			}
+			m.invalidate()
+		}
+	})
+	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+		settingsFormLabel(c, oi, "Reasoning", 220)
+		labels := []string{"Open while it streams", "Always open", "Folded"}
+		values := []string{"auto", "expanded", "collapsed"}
+		shown := labels[0]
+		for i, value := range values {
+			if a.thinking() == value {
+				shown = labels[i]
+				break
+			}
+		}
+		if ui.Select(c, &shown, labels).Width(220).Changed() {
+			for i, label := range labels {
+				if shown == label {
+					a.Thinking = values[i]
+					break
+				}
+			}
+			m.invalidate()
+		}
+	})
+	if ui.Checkbox(c, &a.ExpandToolOutput, "Show tool output without opening it").Changed() {
+		m.invalidate()
+	}
+	smooth := !a.NoSmoothText
+	if ui.Checkbox(c, &smooth, "Reveal streaming text smoothly").Changed() {
+		a.NoSmoothText = !smooth
+		m.invalidate()
+	}
+	ui.Text(c, "Text appears at a steady pace instead of in bursts.").
+		FontSize(11).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
+
+	settingsSectionTitle(c, oi, "Shown in the Task Header")
+	context := !a.NoContextUsage
+	if ui.Checkbox(c, &context, "Context window usage").Changed() {
+		a.NoContextUsage = !context
+		m.invalidate()
+	}
+	work := !a.NoWorkTime
+	if ui.Checkbox(c, &work, "Time spent on the task").Changed() {
+		a.NoWorkTime = !work
+		m.invalidate()
+	}
+	limits := !a.NoUsageLimits
+	if ui.Checkbox(c, &limits, "Usage limits").Changed() {
+		a.NoUsageLimits = !limits
+		m.invalidate()
+	}
+	ui.Text(c, "The account's 5-hour and weekly limits, when the agent reports them (Claude Code).").
+		FontSize(11).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
+	if ui.Checkbox(c, &a.ShowCost, "Session cost").Changed() {
+		m.invalidate()
+	}
+	ui.Text(c, "What the session has cost so far, as the agent reports it.").
+		FontSize(11).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
 }
 
 // settingsUpdatesBody is Settings › Updates, as upstream's updates.tsx: the
@@ -73,26 +315,55 @@ func (m *Model) settingsUpdatesBody(c *ui.Context, oi oiColors) {
 			OnClick(func() { m.CheckForUpdates() })
 	})
 	ui.Row(c).Height(10)
-	auto := m.autoCheckUpdates()
+	auto := m.settingsDraft.updateAutoCheck
 	if ui.Checkbox(c, &auto, "Check for updates automatically").Changed() {
-		m.SetAutoCheckUpdates(auto)
+		m.settingsDraft.updateAutoCheck = auto
+		m.invalidate()
 	}
 	ui.Text(c, "At startup and every 4 hours while GoIDEA runs. Each new version is announced once.").
 		FontSize(12).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
 	ui.Row(c).Height(10)
-	whats := m.showWhatsNewAfterUpdate()
+	whats := m.settingsDraft.updateWhatsNew
 	if ui.Checkbox(c, &whats, "Show What's New after an update").Changed() {
-		m.SetShowWhatsNewAfterUpdate(whats)
+		m.settingsDraft.updateWhatsNew = whats
+		m.invalidate()
 	}
 	ui.Text(c, "Opens a page with the release notes when a new version starts. Help › What's New opens it any time.").
 		FontSize(12).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
 	ui.Row(c).Height(10)
 	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Update source", 220)
-		ui.Text(c, "GitHub").FontSize(12).TextColor(oi.text).SingleLine()
+		shown := updateSourceLabel(m.settingsDraft.updateSource)
+		sel := ui.Select(c, &shown, []string{"Automatic", "GitHub", "CNB (China mirror)"}).Width(220)
+		if sel.Changed() {
+			m.settingsDraft.updateSource = updateSourceValue(shown)
+			m.invalidate()
+		}
 	})
-	ui.Text(c, "GoIDEA downloads its updates from its GitHub releases.").
+	ui.Text(c, "Automatic uses GitHub in this build; the CNB mirror is used when its GoIDEA feed is configured.").
 		FontSize(12).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
+}
+
+func updateSourceLabel(source string) string {
+	switch source {
+	case "github":
+		return "GitHub"
+	case "cnb":
+		return "CNB (China mirror)"
+	default:
+		return "Automatic"
+	}
+}
+
+func updateSourceValue(label string) string {
+	switch label {
+	case "GitHub":
+		return "github"
+	case "CNB (China mirror)":
+		return "cnb"
+	default:
+		return "auto"
+	}
 }
 
 // settingsGroupPage is a group folder: the description above the links to the
@@ -156,8 +427,29 @@ func (m *Model) settingsAppearanceBody(c *ui.Context, oi oiColors) {
 	})
 }
 
-// settingsFontBody is Editor › Font's Size row, in pixels.
+// settingsFontBody is Editor › Font: family, size and line height, ligatures,
+// main weight, fallback and an editable native preview.
 func (m *Model) settingsFontBody(c *ui.Context, oi oiColors) {
+	if m.settingsFontPreview == "" {
+		m.settingsFontPreview = "The quick brown fox jumps over the lazy dog.\n0O 1lI {} () [] -> =>"
+	}
+	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+		settingsFormLabel(c, oi, "Font", 220)
+		family := m.settingsDraft.font.Family
+		if family == "" {
+			family = oiFontMono
+		}
+		choices := settingsFontFamilyChoices(m.settingsFontMonoOnly, family)
+		shown := family
+		if ui.Select(c, &shown, choices).Grow(1).Changed() {
+			m.settingsSetFontFamily(shown)
+		}
+	})
+	monoOnly := m.settingsFontMonoOnly
+	if ui.Checkbox(c, &monoOnly, "Show only monospaced fonts").Changed() {
+		m.settingsFontMonoOnly = monoOnly
+		m.invalidate()
+	}
 	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Size:", 220)
 		size := float64(m.settingsDraft.fontSize)
@@ -166,7 +458,97 @@ func (m *Model) settingsFontBody(c *ui.Context, oi oiColors) {
 			m.settingsSetFont(float32(math.Round(size)))
 		}
 		ui.Text(c, "px").FontSize(12).TextColor(oi.textMuted).SingleLine()
+		lineHeight := float64(m.settingsDraft.font.lineHeightPixels(m.settingsDraft.fontSize))
+		lineHeightInput := ui.NumberInput(c, &lineHeight, minFontLineHeight, maxFontLineHeight, 1).Width(92)
+		if lineHeightInput.Changed() {
+			m.settingsSetFontLineHeight(float32(math.Round(lineHeight)))
+		}
+		ui.Text(c, "line height").FontSize(12).TextColor(oi.textMuted).SingleLine()
 	})
+	ligatures := m.settingsDraft.font.Ligatures
+	if ui.Checkbox(c, &ligatures, "Enable ligatures").Changed() {
+		m.settingsSetFontLigatures(ligatures)
+	}
+
+	ui.Row(c).Height(10)
+	settingsSectionTitle(c, oi, "Typography Settings")
+	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+		settingsFormLabel(c, oi, "Main font weight:", 220)
+		shown := fontWeightLabel(m.settingsDraft.font.weight())
+		if ui.Select(c, &shown, fontWeightLabels).Width(150).Changed() {
+			m.settingsSetFontWeight(fontWeightValue(shown))
+		}
+	})
+	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+		settingsFormLabel(c, oi, "Fallback font:", 220)
+		fallback := m.settingsDraft.font.Fallback
+		shown := fallback
+		if shown == "" {
+			shown = "(None)"
+		}
+		choices := append([]string{"(None)"}, settingsFontFamilyChoices(false, fallback)...)
+		if ui.Select(c, &shown, choices).Grow(1).Changed() {
+			if shown == "(None)" {
+				shown = ""
+			}
+			m.settingsSetFontFallback(shown)
+		}
+	})
+
+	ui.Row(c).Height(10)
+	settingsSectionTitle(c, oi, "Preview")
+	previewHeight := max(float32(116), m.settingsDraft.font.lineHeightPixels(m.settingsDraft.fontSize)*6)
+	ui.TextArea(c, &m.settingsFontPreview).Height(previewHeight).Grow(1).
+		Font(m.settingsDraft.font.fontFamily()).
+		FontSize(m.settingsDraft.fontSize).
+		FontWeight(m.settingsDraft.font.weight()).
+		FontFeatures(m.settingsDraft.font.features()).
+		LineHeight(m.settingsDraft.font.lineHeightPixels(m.settingsDraft.fontSize) / m.settingsDraft.fontSize)
+}
+
+// settingsFontFamilyChoices lists the registered and installed families the
+// Font page can use. The family already stored stays selectable even if the
+// current machine no longer has it.
+func settingsFontFamilyChoices(monoOnly bool, current string) []string {
+	seen := map[string]bool{oiFontMono: true}
+	if current = strings.TrimSpace(current); current != "" {
+		seen[current] = true
+	}
+	for _, family := range ui.FontFamilies() {
+		if monoOnly && !family.Monospaced {
+			continue
+		}
+		if name := strings.TrimSpace(family.Name); name != "" {
+			seen[name] = true
+		}
+	}
+	choices := make([]string, 0, len(seen))
+	for family := range seen {
+		choices = append(choices, family)
+	}
+	sort.Strings(choices)
+	return choices
+}
+
+var fontWeightLabels = []string{
+	"Thin", "ExtraLight", "Light", "Regular", "Medium",
+	"SemiBold", "Bold", "ExtraBold", "Black",
+}
+
+var fontWeightValues = []int{100, 200, 300, 400, 500, 600, 700, 800, 900}
+
+func fontWeightLabel(weight int) string {
+	weight = max(100, min((weight+25)/50*50, 900))
+	return fontWeightLabels[(weight-100)/100]
+}
+
+func fontWeightValue(label string) int {
+	for i, name := range fontWeightLabels {
+		if name == label {
+			return fontWeightValues[i]
+		}
+	}
+	return 400
 }
 
 // settingsGeneralBody is Editor › General: the Soft Wraps section with its
@@ -174,6 +556,38 @@ func (m *Model) settingsFontBody(c *ui.Context, oi oiColors) {
 // The Markdown Images, Mouse Control and Scrolling sections name features this
 // build does not carry, so they are not drawn.
 func (m *Model) settingsGeneralBody(c *ui.Context, oi oiColors) {
+	settingsSectionTitle(c, oi, "Markdown Images")
+	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+		settingsFormLabel(c, oi, "Image folder:", 220)
+		in := ui.TextInput(c, &m.settingsDraft.markdownImageFolder).Grow(1)
+		if in.Changed() {
+			m.settingsSetMarkdownImageFolder(m.settingsDraft.markdownImageFolder)
+		}
+	})
+	ui.Text(c, "Relative to the Markdown file.").
+		FontSize(12).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
+	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+		settingsFormLabel(c, oi, "Image name pattern:", 220)
+		in := ui.TextInput(c, &m.settingsDraft.markdownImageNamePattern).Grow(1)
+		if in.Changed() {
+			m.settingsSetMarkdownImageNamePattern(m.settingsDraft.markdownImageNamePattern)
+		}
+	})
+	ui.Text(c, "{timestamp} becomes YYYYMMDD-HHmmss for clipboard images.").
+		FontSize(12).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
+	ui.Row(c).Height(10)
+
+	settingsSectionTitle(c, oi, "Mouse Control")
+	wheel := m.settingsDraft.wheelZoom
+	if ui.Checkbox(c, &wheel, "Change font size with Ctrl/Command+Mouse Wheel").Changed() {
+		m.settingsSetWheelZoom(wheel)
+	}
+	drop := m.settingsDraft.dragAndDrop
+	if ui.Checkbox(c, &drop, "Enable drag-and-drop functionality in editor").Changed() {
+		m.settingsSetDragAndDrop(drop)
+	}
+	ui.Row(c).Height(10)
+
 	settingsSectionTitle(c, oi, "Soft Wraps")
 	wrap := m.settingsDraft.softWrap
 	if ui.Checkbox(c, &wrap, "Soft-wrap files").Changed() {
@@ -209,6 +623,12 @@ func (m *Model) settingsGeneralBody(c *ui.Context, oi oiColors) {
 			m.settingsSetTrimAllLines(shown == "All lines")
 		}
 	})
+	keep := m.settingsDraft.keepTrailingOnCaretLine
+	check := ui.Checkbox(c, &keep, "Keep trailing spaces on caret line").
+		PaddingStart(20).Disabled(!m.settingsDraft.trimTrailing)
+	if check.Changed() {
+		m.settingsSetKeepTrailingOnCaretLine(keep)
+	}
 	blank := m.settingsDraft.dropTrailingBlankLines
 	if ui.Checkbox(c, &blank, "Remove trailing blank lines at the end of saved files").Changed() {
 		m.settingsSetDropTrailingBlankLines(blank)
@@ -217,6 +637,12 @@ func (m *Model) settingsGeneralBody(c *ui.Context, oi oiColors) {
 	if ui.Checkbox(c, &final, "Ensure every saved file ends with a line break").Changed() {
 		m.settingsSetEnsureFinalNewline(final)
 	}
+	reformat := m.settingsDraft.reformatOnSave
+	if ui.Checkbox(c, &reformat, "Reformat code on save").Changed() {
+		m.settingsSetReformatOnSave(reformat)
+	}
+	ui.Text(c, "Runs the language server's formatter before an explicit save.").
+		FontSize(12).TextColor(oi.textMuted).PaddingStart(20).SingleLine().Ellipsis("…")
 }
 
 // saveTrimLabel names the Remove trailing spaces choice as its select shows
@@ -246,6 +672,18 @@ func (m *Model) settingsEditorAppearanceBody(c *ui.Context, oi oiColors) {
 	if ui.Checkbox(c, &lineNumbers, "Show line numbers").Changed() {
 		m.settingsSetLineNumbers(lineNumbers)
 	}
+	ui.Row(c).MinHeight(28).Gap(8).AlignItems(ui.Center).PaddingStart(20).Children(func() {
+		settingsFormLabel(c, oi, "Line numbers", 160)
+		shown := "Absolute"
+		if m.settingsDraft.lineNumberMode == "relative" {
+			shown = "Relative"
+		}
+		sel := ui.Select(c, &shown, []string{"Absolute", "Relative"}).
+			Disabled(!m.settingsDraft.lineNumbers)
+		if sel.Changed() {
+			m.settingsSetLineNumberMode(strings.ToLower(shown))
+		}
+	})
 	showWhitespace := m.settingsDraft.showWhitespace
 	if ui.Checkbox(c, &showWhitespace, "Show whitespaces").Changed() {
 		m.settingsSetShowWhitespace(showWhitespace)
@@ -282,6 +720,50 @@ func (m *Model) settingsBreadcrumbsBody(c *ui.Context, oi oiColors) {
 	if place != m.settingsDraft.breadcrumbPlacement {
 		m.settingsSetBreadcrumbPlacement(place)
 	}
+	ui.Row(c).MinHeight(28).Gap(8).AlignItems(ui.Center).PaddingStart(20).Children(func() {
+		settingsFormLabel(c, oi, "Show breadcrumbs for:", 180)
+	})
+	languages := m.settingsBreadcrumbLanguages()
+	if len(languages) == 0 {
+		ui.Text(c, "The project's languages appear here after a file is open.").
+			FontSize(12).TextColor(oi.textMuted).PaddingStart(20).SingleLine().Ellipsis("…")
+		return
+	}
+	ui.Row(c).Gap(14).PaddingStart(20).Children(func() {
+		for _, language := range languages {
+			language := language
+			on := !slices.Contains(m.settingsDraft.breadcrumbDisabled, language)
+			check := ui.Checkbox(c, &on, languageDisplayName(language)).
+				Disabled(!m.settingsDraft.showBreadcrumbs)
+			if check.Changed() {
+				m.settingsToggleBreadcrumbLanguage(language)
+			}
+		}
+	})
+}
+
+// settingsBreadcrumbLanguages lists the project's open languages plus any
+// stored choice, so a settings file loaded before the project opened remains
+// editable.
+func (m *Model) settingsBreadcrumbLanguages() []string {
+	var values []string
+	for _, t := range m.allTabs() {
+		if t == nil || t.doc == nil {
+			continue
+		}
+		if language := strings.ToLower(strings.TrimSpace(t.doc.Info().Language)); language != "" {
+			values = append(values, language)
+		}
+	}
+	values = append(values, m.settingsDraft.breadcrumbDisabled...)
+	return uniqueSortedStrings(values)
+}
+
+func languageDisplayName(language string) string {
+	if language == "" {
+		return ""
+	}
+	return strings.ToUpper(language[:1]) + language[1:]
 }
 
 // settingsEditorTabsBody is Editor › General › Editor Tabs: the strip's
@@ -376,6 +858,24 @@ func (m *Model) settingsEditorTabsBody(c *ui.Context, oi oiColors) {
 	ui.Row(c).Height(10)
 	settingsSectionTitle(c, oi, "Closing Policy")
 	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).PaddingStart(20).Children(func() {
+		settingsFormLabel(c, oi, "When the limit is reached", 220)
+		shown := "Close least recently used tabs"
+		if m.settingsDraft.tabClosingPolicy == "unchanged" {
+			shown = "Close unchanged tabs first"
+		}
+		sel := ui.Select(c, &shown, []string{
+			"Close unchanged tabs first",
+			"Close least recently used tabs",
+		})
+		if sel.Changed() {
+			if shown == "Close unchanged tabs first" {
+				m.settingsSetTabClosingPolicy("unchanged")
+			} else {
+				m.settingsSetTabClosingPolicy("lru")
+			}
+		}
+	})
+	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).PaddingStart(20).Children(func() {
 		settingsFormLabel(c, oi, "Tab limit", 220)
 		limit := float64(m.settingsDraft.tabLimit)
 		in := ui.NumberInput(c, &limit, 1, maxTabLimit, 1).Width(100)
@@ -461,18 +961,85 @@ func (m *Model) settingsCodeFoldingBody(c *ui.Context) {
 	}
 }
 
+// settingsInlayHintsBody is Editor › Inlay Hints › Code Vision. It mirrors
+// OpenIDEA's two metric switches, each metric's Top / Right position, and the
+// "no usages" choice. The global hint switches for types, parameters and other
+// hints are not drawn yet because the server returns them as one list.
+func (m *Model) settingsInlayHintsBody(c *ui.Context, oi oiColors) {
+	settingsSectionTitle(c, oi, "Code Vision")
+	usages := m.settingsDraft.codeVisionUsages
+	if ui.Checkbox(c, &usages, "Usages").Changed() {
+		m.settingsDraft.codeVisionUsages = usages
+		m.invalidate()
+	}
+	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).PaddingStart(20).Children(func() {
+		if m.settingsDraft.codeVisionUsages {
+			settingsFormLabel(c, oi, "Position", 180)
+		} else {
+			settingsFormLabelDim(c, oi, "Position", 180)
+		}
+		position := codeVisionPositionLabel(m.settingsDraft.codeVisionUsagesPosition)
+		sel := ui.Select(c, &position, []string{"Top", "Right"}).
+			Disabled(!m.settingsDraft.codeVisionUsages)
+		if sel.Changed() {
+			m.settingsDraft.codeVisionUsagesPosition = codeVisionPositionValue(position)
+			m.invalidate()
+		}
+	})
+	noUsages := m.settingsDraft.codeVisionNoUsages
+	check := ui.Checkbox(c, &noUsages, "Show “no usages”").
+		Disabled(!m.settingsDraft.codeVisionUsages)
+	if check.Changed() {
+		m.settingsDraft.codeVisionNoUsages = noUsages
+		m.invalidate()
+	}
+	author := m.settingsDraft.codeVisionAuthor
+	if ui.Checkbox(c, &author, "Code author").Changed() {
+		m.settingsDraft.codeVisionAuthor = author
+		m.invalidate()
+	}
+	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).PaddingStart(20).Children(func() {
+		if m.settingsDraft.codeVisionAuthor {
+			settingsFormLabel(c, oi, "Position", 180)
+		} else {
+			settingsFormLabelDim(c, oi, "Position", 180)
+		}
+		position := codeVisionPositionLabel(m.settingsDraft.codeVisionAuthorPosition)
+		sel := ui.Select(c, &position, []string{"Top", "Right"}).
+			Disabled(!m.settingsDraft.codeVisionAuthor)
+		if sel.Changed() {
+			m.settingsDraft.codeVisionAuthorPosition = codeVisionPositionValue(position)
+			m.invalidate()
+		}
+	})
+}
+
+func codeVisionPositionLabel(position string) string {
+	if position == "right" {
+		return "Right"
+	}
+	return "Top"
+}
+
+func codeVisionPositionValue(label string) string {
+	if label == "Right" {
+		return "right"
+	}
+	return "top"
+}
+
 // settingsKeymapBody is the Keymap page: the map in use and the actions this
-// build carries with their keys.
+// build carries with their staged keys.
 func (m *Model) settingsKeymapBody(c *ui.Context, oi oiColors) {
 	ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 		ui.Text(c, "Keymap:").FontSize(12).TextColor(oi.text).SingleLine()
 		ui.Text(c, keymapPresetTitle).FontSize(12).TextColor(oi.textStrong).SingleLine()
 	})
 	ui.Row(c).Padding(0, 0, 6, 0).Children(func() {
-		ui.Text(c, "The actions this build carries, with the keys of the IntelliJ macOS map.").
+		ui.Text(c, "Choose Edit on an action and press its new key combination.").
 			FontSize(12).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
 	})
-	conflicts := m.KeymapConflicts()
+	conflicts := keymapConflictsIn(m.settingsDraft.keymap)
 	conflicted := map[string]bool{}
 	for _, c := range conflicts {
 		for _, id := range c.Actions {
@@ -486,12 +1053,12 @@ func (m *Model) settingsKeymapBody(c *ui.Context, oi oiColors) {
 		})
 	}
 	reset := ui.Button(c, "Restore Default Keymap").OnClick(func() {
-		m.KeymapSetOverrides(nil)
-		m.saveKeymapPrefs()
+		m.settingsDraft.keymap = nil
+		m.invalidate()
 	})
 	_ = reset
 	for _, cmd := range commands() {
-		bindings := m.KeymapBindings(cmd.id)
+		bindings := keymapBindingsIn(m.settingsDraft.keymap, cmd.id)
 		if len(bindings) == 0 && cmd.shortcut == "" {
 			continue
 		}
@@ -508,7 +1075,7 @@ func (m *Model) settingsKeymapBody(c *ui.Context, oi oiColors) {
 				label = "Unbound"
 			}
 			ui.Text(c, label).FontSize(12).TextColor(oi.textMuted).SingleLine()
-			if _, custom := m.keymapUserBindings()[cmd.id]; custom {
+			if _, custom := m.settingsDraft.keymap[cmd.id]; custom {
 				x := ui.ButtonBase(c.Key("keymap:clear:"+cmd.id)).Size(18, 18).Radius(4).
 					Justify(ui.Center).AlignItems(ui.Center).Cursor(ui.CursorPointer)
 				if x.Hovered() {
@@ -519,27 +1086,18 @@ func (m *Model) settingsKeymapBody(c *ui.Context, oi oiColors) {
 					ui.Text(c, "×").FontSize(12).TextColor(oi.textMuted).SingleLine()
 				})
 				x.OnClick(func() {
-					overrides := map[string][]string{}
-					for id, b := range m.keymapUserBindings() {
-						overrides[id] = b
+					overrides := cloneKeymap(m.settingsDraft.keymap)
+					if overrides == nil {
+						overrides = map[string][]string{}
 					}
 					overrides[cmd.id] = []string{}
-					m.KeymapSetOverrides(overrides)
-					m.saveKeymapPrefs()
+					m.settingsDraft.keymap = overrides
+					m.invalidate()
 				})
 			}
+			ui.Button(c, "Edit").OnClick(func() { m.settingsRecordKeymap(cmd.id) })
 		})
 	}
-}
-
-// saveKeymapPrefs writes the keymap overrides, when there is a settings file.
-func (m *Model) saveKeymapPrefs() {
-	if path := m.settingsWritePath(); path != "" {
-		if err := m.prefs.Save(path); err != nil {
-			m.notifyError("keymap:save", "Couldn't save the keymap", notifySuffix(err.Error()))
-		}
-	}
-	m.invalidate()
 }
 
 // todoColorLabels are the colour names the TODO page's select offers, in the

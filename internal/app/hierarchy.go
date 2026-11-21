@@ -57,8 +57,10 @@ type hierarchyPane struct {
 	expanded map[string]bool
 	loading  map[string]bool
 	failed   map[string]string
+	notes    map[string]string
 	gen      uint64
 	err      string
+	selected string
 	// loadedRoot marks that a top level was asked for.
 	loadedRoot bool
 }
@@ -89,17 +91,26 @@ func (m *Model) openHierarchy(mode string) {
 	}
 	offset := t.state.Cursor()
 	pos := t.doc.UTF16Pos(offset)
+	direction := "incoming"
+	if mode == "type" {
+		direction = "outgoing"
+	}
+	if m.hierarchy.active() && m.hierarchy.mode == mode &&
+		(m.hierarchy.direction == "incoming" || m.hierarchy.direction == "outgoing") {
+		direction = m.hierarchy.direction
+	}
 	m.hierarchy = hierarchyPane{
 		mode:      mode,
-		direction: "incoming",
+		direction: direction,
 		rootName:  wordAtCaret(t.doc.Text(), offset),
 		rootPath:  realPath(t.doc.Path()),
 		rootLine:  int(pos.Line),
 		rootCol:   int(pos.Col),
 		children:  map[string][]hierarchyNode{},
-		expanded:  map[string]bool{},
+		expanded:  map[string]bool{hierarchyRoot: true},
 		loading:   map[string]bool{},
 		failed:    map[string]string{},
+		notes:     map[string]string{},
 		gen:       1,
 	}
 	m.DockShow("hierarchy")
@@ -134,6 +145,8 @@ func (m *Model) loadHierarchy(parent string, t *Tab, pos openidea.OutlinePos) {
 	gen := m.hierarchy.gen
 	mode := m.hierarchy.mode
 	direction := m.hierarchy.direction
+	delete(m.hierarchy.failed, parent)
+	delete(m.hierarchy.notes, parent)
 	m.hierarchy.loading[parent] = true
 	m.invalidate()
 	docID := t.doc.ID()
@@ -153,7 +166,14 @@ func (m *Model) loadHierarchy(parent string, t *Tab, pos openidea.OutlinePos) {
 				return
 			}
 			m.hierarchy.children[parent] = m.hierarchyNodes(parent, path, items)
+			if parent == hierarchyRoot {
+				m.hierarchy.loadedRoot = true
+			}
 			if incomplete != "" {
+				if m.hierarchy.notes == nil {
+					m.hierarchy.notes = map[string]string{}
+				}
+				m.hierarchy.notes[parent] = incomplete
 				m.status = incomplete
 			}
 			m.invalidate()
@@ -216,6 +236,8 @@ func (m *Model) hierarchyNodes(parent, path string, items []hierarchyItem) []hie
 	depth := 0
 	if parent != hierarchyRoot {
 		depth = m.hierarchyDepth(parent) + 1
+	} else {
+		depth = 1
 	}
 	seen := map[string]bool{}
 	out := make([]hierarchyNode, 0, len(items))
@@ -285,12 +307,27 @@ func (m *Model) ToggleHierarchyNode(id string) {
 		return
 	}
 	if node, ok := m.hierarchyNode(id); ok && !node.recursion {
-		t := m.tabForHierarchy(node.item.Path)
-		if t != nil {
-			m.loadHierarchy(id, t, node.item.SelectionRange.Start)
-		}
+		m.loadHierarchyNode(node)
 	}
 	m.invalidate()
+}
+
+func (m *Model) loadHierarchyNode(node hierarchyNode) {
+	if node.item.Path == "" {
+		return
+	}
+	gen := m.hierarchy.gen
+	if t := m.tabForHierarchy(node.item.Path); t != nil {
+		m.loadHierarchy(node.id, t, node.item.SelectionRange.Start)
+		return
+	}
+	m.openFileThen(node.item.Path, func(t *Tab) {
+		if t == nil || m.hierarchy.gen != gen ||
+			!m.hierarchy.expanded[node.id] {
+			return
+		}
+		m.loadHierarchy(node.id, t, node.item.SelectionRange.Start)
+	})
 }
 
 // hierarchyNode finds a row by id.
@@ -314,9 +351,6 @@ func (m *Model) tabForHierarchy(path string) *Tab {
 			return t
 		}
 	}
-	if m.reg != nil {
-		go m.post(func() { m.openFile(path) })
-	}
 	return nil
 }
 
@@ -335,25 +369,86 @@ func (m *Model) SetHierarchyDirection(direction string) {
 	m.hierarchy.expanded = map[string]bool{}
 	m.hierarchy.loading = map[string]bool{}
 	m.hierarchy.failed = map[string]string{}
+	m.hierarchy.notes = map[string]string{}
 	m.hierarchy.err = ""
-	t := m.tabForHierarchy(m.hierarchy.rootPath)
-	if t != nil {
-		m.loadHierarchy(hierarchyRoot, t, openidea.OutlinePos{Line: uint32(m.hierarchy.rootLine), Col: uint32(m.hierarchy.rootCol)})
-	}
+	m.hierarchy.expanded[hierarchyRoot] = true
+	m.hierarchy.selected = hierarchyRoot
+	m.loadHierarchyRoot()
 	m.invalidate()
+}
+
+// RefreshHierarchy reruns the current hierarchy from the same root and keeps
+// the selected direction, as OpenIDEA's Refresh button does.
+func (m *Model) RefreshHierarchy() {
+	if !m.hierarchy.active() {
+		return
+	}
+	m.hierarchy.gen++
+	m.hierarchy.children = map[string][]hierarchyNode{}
+	m.hierarchy.expanded = map[string]bool{hierarchyRoot: true}
+	m.hierarchy.loading = map[string]bool{}
+	m.hierarchy.failed = map[string]string{}
+	m.hierarchy.notes = map[string]string{}
+	m.hierarchy.err = ""
+	m.hierarchy.loadedRoot = false
+	m.hierarchy.selected = hierarchyRoot
+	m.loadHierarchyRoot()
+	m.invalidate()
+}
+
+func (m *Model) loadHierarchyRoot() {
+	if m.hierarchy.rootPath == "" {
+		return
+	}
+	pos := openidea.OutlinePos{
+		Line: uint32(m.hierarchy.rootLine), Col: uint32(m.hierarchy.rootCol),
+	}
+	if t := m.tabForHierarchy(m.hierarchy.rootPath); t != nil {
+		m.loadHierarchy(hierarchyRoot, t, pos)
+		return
+	}
+	m.openFileThen(m.hierarchy.rootPath, func(t *Tab) {
+		if t != nil && m.hierarchy.active() {
+			m.loadHierarchy(hierarchyRoot, t, pos)
+		}
+	})
 }
 
 // OpenHierarchyItem navigates to the row's declaration.
 func (m *Model) OpenHierarchyItem(id string) {
+	if id == hierarchyRoot {
+		if m.hierarchy.rootPath != "" {
+			m.revealAt(m.hierarchy.rootPath, m.hierarchy.rootLine, m.hierarchy.rootCol)
+		}
+		return
+	}
 	node, ok := m.hierarchyNode(id)
 	if !ok || node.item.Path == "" {
 		return
 	}
-	m.revealAt(node.item.Path, int(node.item.SelectionRange.Start.Line), int(node.item.SelectionRange.Start.Col))
+	line, col := m.hierarchyTarget(node.item)
+	m.revealAt(node.item.Path, line, col)
+}
+
+func (m *Model) hierarchyTarget(item hierarchyItem) (line, col int) {
+	position := item.SelectionRange.Start
+	if m.hierarchy.mode == "call" && m.hierarchy.direction == "incoming" &&
+		len(item.FromRanges) > 0 {
+		position = item.FromRanges[0].Start
+	}
+	return int(position.Line), int(position.Col)
 }
 
 // CloseHierarchyWindow hides the right window; its tree stays for the stripe.
 func (m *Model) CloseHierarchyWindow() { m.DockHide("hierarchy") }
+
+// CloseHierarchyContent closes the hierarchy tab and drops its tree, as
+// OpenIDEA's closable hierarchy content tab does.
+func (m *Model) CloseHierarchyContent() {
+	m.resetHierarchy()
+	m.CloseHierarchyWindow()
+	m.invalidate()
+}
 
 // ShowHierarchyWindow shows the right window again.
 func (m *Model) ShowHierarchyWindow() {
@@ -397,6 +492,23 @@ func (m *Model) hierarchyDirectionLabel(direction string) string {
 	return "Callers"
 }
 
+func (m *Model) hierarchyTitle() string {
+	name := m.hierarchy.rootName
+	if name == "" {
+		name = filepath.Base(m.hierarchy.rootPath)
+	}
+	prefix := "Callers"
+	switch {
+	case m.hierarchy.mode == "type" && m.hierarchy.direction == "incoming":
+		prefix = "Supertypes"
+	case m.hierarchy.mode == "type":
+		prefix = "Subtypes"
+	case m.hierarchy.direction == "outgoing":
+		prefix = "Callees"
+	}
+	return prefix + " of " + name
+}
+
 // hierarchyEmptyLabel is the tree's empty line for the current mode.
 func (m *Model) hierarchyEmptyLabel() string {
 	if m.hierarchy.mode == "type" {
@@ -413,6 +525,9 @@ func (m *Model) hierarchyEmptyLabel() string {
 
 // hierarchyRows flattens the expanded tree for drawing.
 func (m *Model) hierarchyRows() []hierarchyNode {
+	if !m.hierarchy.expanded[hierarchyRoot] {
+		return nil
+	}
 	var out []hierarchyNode
 	var walk func(parent string)
 	walk = func(parent string) {
@@ -427,11 +542,38 @@ func (m *Model) hierarchyRows() []hierarchyNode {
 	return out
 }
 
+// StepHierarchy walks every visible hierarchy occurrence, including the root,
+// and opens the target. Callers navigate to their call site, as IDEA does.
+func (m *Model) StepHierarchy(dir int) {
+	rows := m.hierarchyRows()
+	ids := make([]string, 0, len(rows)+1)
+	ids = append(ids, hierarchyRoot)
+	for _, row := range rows {
+		ids = append(ids, row.id)
+	}
+	if dir == 0 || len(ids) == 0 {
+		return
+	}
+	selected := -1
+	for i, id := range ids {
+		if id == m.hierarchy.selected {
+			selected = i
+			break
+		}
+	}
+	if dir < 0 && selected < 0 {
+		selected = 0
+	}
+	next := (selected + dir + len(ids)) % len(ids)
+	m.selectHierarchy(ids[next])
+	m.OpenHierarchyItem(ids[next])
+}
+
 // hierarchyRightView is the right area: the window's title, tabs and tree.
 func (m *Model) hierarchyRightView(c *ui.Context, p *ui.Theme, oi oiColors) {
 	ui.Column(c).Grow(1).MinHeight(0).Background(oi.island).
-		Radius(oiIslandRadius).Children(func() {
-		ui.Row(c).Height(oiHeaderHeight).Shrink(0).Padding(0, 6, 0, 8).
+		Radius(oiIslandRadius).Focusable().AutoFocus().Children(func() {
+		ui.Row(c).Height(oiTokensFor(m, p).HeaderHeight).Shrink(0).Padding(0, 6, 0, 8).
 			Gap(6).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, "Hierarchy").FontSize(13).TextColor(oi.textStrong).
 				SingleLine().Ellipsis("…")
@@ -439,28 +581,25 @@ func (m *Model) hierarchyRightView(c *ui.Context, p *ui.Theme, oi oiColors) {
 			m.headerIcon(c, p, oi, "hierarchy-close", "Hide", "general/remove", m.CloseHierarchyWindow)
 		})
 		m.hierarchyTabs(c, p, oi)
+		m.hierarchyToolbar(c, p, oi)
+		if note := m.hierarchy.notes[hierarchyRoot]; note != "" {
+			ui.Row(c).Shrink(0).Padding(4, 10).Children(func() {
+				ui.Text(c, note).FontSize(12).TextColor(oi.warning).SingleLine().Ellipsis("…")
+			})
+		}
 		ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
 			if m.hierarchy.err != "" {
 				ui.Text(c, m.hierarchy.err).FontSize(12).TextColor(p.Danger).
 					Padding(8, 10).Ellipsis("…")
 				return
 			}
-			if len(m.hierarchy.loading) > 0 && len(m.hierarchy.children) == 0 {
-				ui.Text(c, "Loading…").FontSize(12).TextColor(oi.textMuted).
-					Padding(8, 10).SingleLine()
-				return
-			}
 			if !m.hierarchy.active() {
-				ui.Text(c, "Ctrl+Alt+H runs a Call Hierarchy here.").FontSize(12).
+				ui.Text(c, "Use Call Hierarchy (Ctrl+Alt+H) or Type Hierarchy (Ctrl+H) on a symbol.").FontSize(12).
 					TextColor(oi.textMuted).Padding(8, 10).Ellipsis("…")
 				return
 			}
+			m.hierarchyRootRow(c, p, oi)
 			rows := m.hierarchyRows()
-			if len(rows) == 0 {
-				ui.Text(c, m.hierarchyEmptyLabel()).FontSize(12).
-					TextColor(oi.textMuted).Padding(8, 10).SingleLine()
-				return
-			}
 			for _, node := range rows {
 				m.hierarchyRow(c, p, oi, node)
 			}
@@ -468,35 +607,116 @@ func (m *Model) hierarchyRightView(c *ui.Context, p *ui.Theme, oi oiColors) {
 	})
 }
 
-// hierarchyTabs draws the direction tabs the header carries, as
-// HierarchyTabs does.
+// hierarchyTabs draws the hierarchy's closable content tab.
 func (m *Model) hierarchyTabs(c *ui.Context, p *ui.Theme, oi oiColors) {
-	ui.Row(c).Height(28).Shrink(0).Gap(2).Padding(0, 6, 0, 8).
-		AlignItems(ui.Center).Children(func() {
-		for _, dir := range []string{"incoming", "outgoing"} {
-			dir := dir
-			active := m.hierarchy.direction == dir
-			tab := ui.Row(c.Key("hierarchy:tab:"+dir)).Height(24).Padding(0, 10).
-				Radius(4).AlignItems(ui.Center).Cursor(ui.CursorPointer)
-			text := m.hierarchyDirectionLabel(dir)
-			switch {
-			case active:
-				tab = tab.Background(oi.hoverTint)
-			default:
-				tab = tab.Cursor(ui.CursorPointer)
+	ui.Row(c).Height(27).Shrink(0).Padding(0, 4).Gap(2).AlignItems(ui.Stretch).
+		BorderWidth(0, 0, 1, 0).BorderColor(oi.border).Children(func() {
+		tab := ui.ButtonBase(c.Key("hierarchy:content-tab")).Height(27).
+			Padding(0, 8).Radius(4).AlignItems(ui.Center).Background(oi.selected)
+		tab.Children(func() {
+			ui.Text(c, m.hierarchyTitle()).FontSize(12).TextColor(oi.textStrong).
+				SingleLine().Ellipsis("…")
+			if ui.Button(c, "×").Clicked() {
+				m.CloseHierarchyContent()
 			}
-			tab.Children(func() {
-				tone := oi.textMuted
-				if active {
-					tone = oi.textStrong
-				}
-				ui.Text(c, text).FontSize(13).TextColor(tone).SingleLine()
-			})
-			if tab.Clicked() {
-				m.SetHierarchyDirection(dir)
+		})
+	})
+}
+
+// hierarchyToolbar matches OpenIDEA's direction, refresh, occurrence and
+// autoscroll controls.
+func (m *Model) hierarchyToolbar(c *ui.Context, p *ui.Theme, oi oiColors) {
+	ui.Row(c).Height(28).Shrink(0).Padding(0, 7).Gap(6).AlignItems(ui.Center).
+		BorderWidth(0, 0, 1, 0).BorderColor(oi.border).Children(func() {
+		for _, direction := range []string{"incoming", "outgoing"} {
+			direction := direction
+			label := "↑"
+			if direction == "outgoing" {
+				label = "↓"
+			}
+			button := ui.Button(c, label)
+			if m.hierarchy.direction == direction {
+				button.Background(oi.hoverTint).TextColor(oi.textStrong)
+			}
+			button.Tooltip(m.hierarchyDirectionLabel(direction) + " Hierarchy")
+			button.OnClick(func() { m.SetHierarchyDirection(direction) })
+		}
+		ui.Button(c, "Refresh").Disabled(!m.hierarchy.active()).OnClick(m.RefreshHierarchy)
+		previous := ui.Button(c, "Prev").Disabled(!m.hierarchy.active())
+		previous.Tooltip("Previous Hierarchy Occurrence")
+		previous.OnClick(func() { m.StepHierarchy(-1) })
+		next := ui.Button(c, "Next").Disabled(!m.hierarchy.active())
+		next.Tooltip("Next Hierarchy Occurrence")
+		next.OnClick(func() { m.StepHierarchy(1) })
+		autoscroll := ui.Button(c, "AutoScroll")
+		if m.prefs.Hierarchy.Autoscroll {
+			autoscroll.Background(oi.hoverTint).TextColor(oi.textStrong)
+		}
+		autoscroll.Tooltip("Autoscroll to Source")
+		autoscroll.OnClick(func() {
+			m.prefs.Hierarchy.Autoscroll = !m.prefs.Hierarchy.Autoscroll
+			m.savePreferences()
+			m.invalidate()
+		})
+	})
+}
+
+func (m *Model) hierarchyRootRow(c *ui.Context, p *ui.Theme, oi oiColors) {
+	rootName := m.hierarchy.rootName
+	if rootName == "" {
+		rootName = filepath.Base(m.hierarchy.rootPath)
+	}
+	row := ui.Row(c.Key("hierarchy:root")).Height(24).Gap(4).
+		PaddingStart(4).PaddingEnd(8).Radius(5).AlignItems(ui.Center).
+		Cursor(ui.CursorPointer)
+	if m.hierarchy.selected == hierarchyRoot {
+		row.Background(oi.selected)
+	} else if row.Hovered() {
+		row.Background(oi.hoverTint)
+	}
+	row.Children(func() {
+		chevron := ui.Row(c.Key("hierarchy:caret:root")).Size(16, 16).
+			Shrink(0).Justify(ui.Center).AlignItems(ui.Center).Cursor(ui.CursorPointer)
+		glyph := "general/chevronRight"
+		if m.hierarchy.expanded[hierarchyRoot] {
+			glyph = "general/chevronDown"
+		}
+		chevron.Children(func() { oiIconEl(c, glyph, 16, oi, oi.textMuted) })
+		if chevron.Clicked() {
+			m.hierarchy.expanded[hierarchyRoot] = !m.hierarchy.expanded[hierarchyRoot]
+			m.invalidate()
+		}
+		kind := "method"
+		if m.hierarchy.mode == "type" {
+			kind = "class"
+		}
+		if asset := symbolIcon(kind); asset != "" {
+			oiIconEl(c, asset, 16, oi, oi.textSubtle).MarginEnd(2)
+		}
+		ui.Text(c, rootName).FontSize(13).TextColor(oi.textStrong).
+			SingleLine().Ellipsis("…")
+		ui.Spacer(c)
+		if m.hierarchy.rootPath != "" {
+			ui.Text(c, fmt.Sprintf("%s:%d", filepath.Base(m.hierarchy.rootPath), m.hierarchy.rootLine+1)).
+				FontSize(13).TextColor(oi.textSubtle).SingleLine().Ellipsis("…")
+		}
+		switch {
+		case m.hierarchy.loading[hierarchyRoot]:
+			ui.Text(c, "Loading…").FontSize(12).TextColor(oi.textMuted).SingleLine()
+		case m.hierarchy.failed[hierarchyRoot] != "":
+			ui.Text(c, "failed to load").FontSize(12).TextColor(oi.danger).SingleLine()
+		case m.hierarchy.loadedRoot || len(m.hierarchy.children[hierarchyRoot]) > 0:
+			if len(m.hierarchy.children[hierarchyRoot]) == 0 {
+				ui.Text(c, m.hierarchyEmptyLabel()).FontSize(12).TextColor(oi.textMuted).SingleLine()
 			}
 		}
 	})
+	if row.Clicked() {
+		m.selectHierarchy(hierarchyRoot)
+	}
+	if row.DoubleClicked() {
+		m.OpenHierarchyItem(hierarchyRoot)
+	}
 }
 
 // hierarchyRow draws one row: the expand caret, the symbol badge, the name,
@@ -505,7 +725,18 @@ func (m *Model) hierarchyRow(c *ui.Context, p *ui.Theme, oi oiColors, node hiera
 	row := ui.Row(c.Key("hierarchy:" + node.id)).Height(24).Gap(4).
 		PaddingStart(4 + float32(node.depth)*20).PaddingEnd(8).Radius(5).
 		AlignItems(ui.Center).Cursor(ui.CursorPointer)
-	if row.Hovered() {
+	if node.item.Path != "" {
+		path := node.item.Path
+		if root := m.Root(); root != "" {
+			if rel, err := filepath.Rel(root, path); err == nil {
+				path = rel
+			}
+		}
+		row.Tooltip(path)
+	}
+	if m.hierarchy.selected == node.id {
+		row.Background(oi.selected)
+	} else if row.Hovered() {
 		row.Background(oi.hoverTint)
 	}
 	row.Children(func() {
@@ -550,10 +781,40 @@ func (m *Model) hierarchyRow(c *ui.Context, p *ui.Theme, oi oiColors, node hiera
 			ui.Text(c, fmt.Sprintf("(%d calls)", n)).FontSize(13).
 				TextColor(oi.textSubtle).SingleLine()
 		}
+		if note := m.hierarchy.notes[node.id]; note != "" {
+			ui.Text(c, note).FontSize(12).TextColor(oi.textMuted).
+				SingleLine().Ellipsis("…")
+		}
+		if m.hierarchy.failed[node.id] != "" {
+			ui.Text(c, "failed to load").FontSize(12).TextColor(oi.danger).SingleLine()
+		}
 	})
 	if row.Clicked() {
+		m.selectHierarchy(node.id)
+	}
+	if row.DoubleClicked() {
 		m.OpenHierarchyItem(node.id)
 	}
+}
+
+func (m *Model) selectHierarchy(id string) {
+	m.hierarchy.selected = id
+	if !m.prefs.Hierarchy.Autoscroll {
+		m.invalidate()
+		return
+	}
+	if id == hierarchyRoot {
+		if m.hierarchy.rootPath != "" {
+			m.previewAt(m.hierarchy.rootPath, m.hierarchy.rootLine, m.hierarchy.rootCol)
+		}
+		m.invalidate()
+		return
+	}
+	if node, ok := m.hierarchyNode(id); ok && node.item.Path != "" {
+		line, col := m.hierarchyTarget(node.item)
+		m.previewAt(node.item.Path, line, col)
+	}
+	m.invalidate()
 }
 
 // SmokeHierarchy opens the call hierarchy at the caret and reports the levels

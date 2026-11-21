@@ -281,15 +281,15 @@ func (a *app) followMermaid(v *viewer) {
 					return
 				}
 				v.version, v.style, v.loaded = ver, st, true
-				if dg.err != "" {
-					v.err = dg.err
+				if dg.Err != "" {
+					v.err = dg.Err
 					return
 				}
 				v.err = ""
-				if v.src != nil && (v.w != dg.w || v.h != dg.h) {
+				if v.src != nil && (v.w != dg.W || v.h != dg.H) {
 					v.zoom, v.panX, v.panY = 0, 0, 0
 				}
-				v.diagram, v.src, v.w, v.h = dg, dg.svg, dg.w, dg.h
+				v.diagram, v.src, v.w, v.h = dg, dg.SVG, dg.W, dg.H
 			})
 		})
 	}
@@ -332,8 +332,8 @@ func (v *viewer) fitScale(w, h float32) float32 {
 func (v *viewer) maxScale() float32 {
 	if v.diagram != nil {
 		side := float32(0)
-		for _, t := range v.diagram.tiles {
-			side = max(side, t.w, t.h)
+		for _, t := range v.diagram.Tiles {
+			side = max(side, t.W, t.H)
 		}
 		return max(maxSVGSide/max(side, 1), 1)
 	}
@@ -511,8 +511,8 @@ func (a *app) viewerView(c *ui.Context, v *viewer, name string) {
 		pt.Clip(shown, 0, func() {
 			if v.diagram != nil {
 				// A diagram is drawn on the color its labels are for.
-				pt.Fill(at, v.style.bg, 0)
-				v.diagram.draw(pt, at)
+				pt.Fill(at, v.style.BG, 0)
+				v.diagram.Draw(pt, at)
 				return
 			}
 			// The checks start at the picture's corner, as it moves.

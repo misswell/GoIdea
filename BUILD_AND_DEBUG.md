@@ -177,11 +177,6 @@ counted in the console but reach the editors and Problems view as the backend's
 passes the previous build's message files as `clear`. Compiler messages are
 those of the engine; GoIDEA does not run `mvn` or `gradle` itself.
 
-**编译文件** (`build.compileFile`) is not ported: the pinned v0.1.44 server
-does not serve `build_compile_file` (it exists only in the pinned source), so
-the action is recorded `blocked` in `OPENIDEA_PARITY_MATRIX.md` until a server
-release or submodule bump ships it.
-
 The e2e base phase runs `GOIDEA_SMOKE_BUILD=1`: `build_run` on
 `testdata/java-maven` must succeed, stream at least two console lines and show
 `BUILD SUCCESS` (or the engine's up-to-date line when the prior run already
@@ -314,10 +309,14 @@ Model Ready** (the Maven window's model loaded without error) and **Run
 Ready** (the project trusted and its configurations loaded). The snapshot
 refreshes when the project opens, after the run configs and the build model
 land; the Run pane's header names the first missing state, and Debug
-requires Java Ready. The e2e phase 1b3 (`GOIDEA_SMOKE_READINESS=1`) records
-when each state was first reached on the real backend and asserts the
-ordering (backend ≤ project ≤ buildModel ≤ run) and that all of them are
-reached (`readiness.*` checks).
+requires Java Ready. The states stay independent, so a missing optional
+language server does not hide a ready Maven model or run configuration. The
+e2e phase 1b3 (`GOIDEA_SMOKE_READINESS=1`) records when each state was first
+reached on the real backend. The offline main gate verifies Backend,
+Project, Build Model and Run while recording Java as explicitly optional;
+the release gate installs jdtls and then requires all six states. Both
+variants assert the ordering (backend ≤ project ≤ buildModel ≤ run) through
+the `readiness.*` checks.
 
 ## Jest pipeline
 

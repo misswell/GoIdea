@@ -3,6 +3,44 @@
 The GitHub release notes, which **Help › What's New** shows, come from the
 `## <version>` section here. Every release needs one, or its build fails.
 
+## 0.1.31
+
+- **File › New…** 提供可搜索的文件模板，并按语言生成包名和文件内容。
+- **Project View** 的 **New File** 现在打开 OpenIDEA 同款锚定搜索弹层，并列出文件、目录和模板。
+- **Project View** 的移动、重命名和复制使用原生对话框，引用修改会在 **Refactoring Preview** 中预览。
+- **View › Appearance** 新增 **Compact Mode** 和 **Navigation Bar** 的三种位置。
+- **Navigate › Jump to Navigation Bar** 可用键盘打开项目、目录、文件和符号路径。
+- 状态栏右键菜单和 **View › Appearance** 可切换每个已命名 Widget。
+- **View › Background Tasks** 无任务时也可打开，并可停止全部后台进程。
+- 工具窗口内按 `Cmd+W` 优先关闭当前内容标签页，关闭后隐藏空窗口。
+- **Window › Tool Window Layouts** 可保存、恢复、重命名和删除命名的工具窗口布局，`Shift+F12` 恢复默认布局。
+- **File › Open File…** 可在无项目时用 LightEdit 打开文件并保存。
+- **Tools** 菜单可安装或卸载 `goidea` 终端命令，并用它打开文件或项目。
+- **File › Workspace** 可创建、管理和打开多项目工作区，并附加或解除项目。
+- 窗口标题和项目菜单显示 OpenIDEA 工作区的组合名称。
+- **File › Remote Development** 提供原生远程连接入口，并明确显示当前后端限制。
+- **Reload Environment** 刷新新终端和新进程使用的登录 shell 环境变量。
+- **View › Tool Windows › Remote Development** 显示远程主机状态和端口转发状态。
+- **Code › Show Usages** 新增原生浮窗，可搜索、预览并转存到 **Find Usages**。
+- **Refactor › Safe Delete…** 可检查 JDT 引用、预览注释和字符串，并删除声明。
+- **Settings › Languages & Frameworks › Language Servers** 可搜索、安装、重装、卸载并配置工具。
+- 语言服务器可按项目或全局保存命令、参数、环境变量、初始化选项和语言设置。
+- 自定义语言服务器可从 **New Language Server** 添加，并可恢复默认配置。
+- 删除期间发生编辑时，**Safe Delete** 会取消并保留原声明。
+- 启动预检会校验解压后的 `openidea-server`，不再把正确下载误报为已替换。
+- **Branches** 弹窗支持创建、更新、推送、合并、变基、比较和重命名分支。
+- 删除本地分支后可恢复并查看未合并提交，删除远程分支前会确认。
+- **Local History** 可比较历史版本与当前文件，也可比较同一文件的两个历史版本。
+- **Switcher** 与 OpenIDEA 一致地省略搜索框，并保留 `Ctrl+Tab` 的文件与工具窗口切换。
+- **Reopen Closed Tab** 会恢复关闭时的选区、滚动位置和撤销历史。
+- **Switcher** 可从侧边打开 **What's New**、Agent 会话和 Agent 新任务页面。
+- **Settings › System Settings › Date Formats** 支持覆盖日期格式、12/24 小时制和相对日期。
+- Git Log、Local History、Code Vision 和 Git Blame 现在统一遵循 **Date Formats**。
+- **Annotate with Git Blame** 在编辑器中显示作者与日期栏，悬停可查看完整提交、邮箱和消息。
+- **Settings › Version Control › Issue Navigation** 可将提交消息里的问题编号链接到 JIRA、YouTrack 或 GitHub。
+- 修复 Java 导入结束附近停止 **Debug** 后会话状态残留的问题。
+- 退出 GoIDEA 时会取消工具下载并清理其进程组，不再遗留 `curl`。
+
 ## 0.1.30
 
 - 底部工具窗口横跨工作区，调试期间可同时查看左右侧栏。

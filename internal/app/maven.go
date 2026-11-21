@@ -758,7 +758,7 @@ func (m *Model) mavenPanel(c *ui.Context, p *ui.Theme) {
 func (m *Model) mavenToolbar(c *ui.Context, p *ui.Theme) {
 	ui.Row(c).Height(32).Padding(0, 6).Gap(2).AlignItems(ui.Center).Children(func() {
 		if m.maven.loading || m.maven.syncing {
-			m.mavenAction(c, p, "maven:reload", "run/stop", "Stop", func() {})
+			m.mavenAction(c, p, "maven:reload", "run/stop", "Stop", func() { m.CancelBuildToolReload() })
 		} else {
 			m.mavenAction(c, p, "maven:reload", "general/refresh", "Reload Maven Projects", func() { m.loadBuildModel() })
 		}
@@ -767,7 +767,7 @@ func (m *Model) mavenToolbar(c *ui.Context, p *ui.Theme) {
 				m.runMavenGoal(proj, []string{"generate-sources"})
 			}
 		})
-		m.mavenActionDisabled(c, p, "maven:add", "general/add", "Add Maven Projects", true)
+		m.mavenAction(c, p, "maven:add", "general/add", "Add Maven Projects", func() { m.AddMavenProjects() })
 		m.mavenSeparator(c, p)
 		runnable := m.maven.sel.kind == "phase" || m.maven.sel.kind == "goal" || m.maven.sel.kind == "runConfig"
 		if runnable {
@@ -776,21 +776,21 @@ func (m *Model) mavenToolbar(c *ui.Context, p *ui.Theme) {
 			m.mavenActionDisabled(c, p, "maven:run", "run/run", "Run Maven Build", false)
 		}
 		m.mavenAction(c, p, "maven:goal", "general/runAnything", "Execute Maven Goal", func() {
-			m.OpenRunAnything()
-			if m.runAnything != nil {
-				m.runAnything.query = "mvn "
-			}
-			m.invalidate()
+			m.OpenBuildToolExecute("maven")
 		})
 		m.mavenToggle(c, p, "maven:offline", "build/toggleOfflineMode", "Work Offline", m.maven.offline,
 			func() { m.ToggleMavenOffline() })
-		m.mavenActionDisabled(c, p, "maven:analyze", "build/dependencyAnalyzer", "Analyze Dependencies", true)
+		m.mavenAction(c, p, "maven:analyze", "build/dependencyAnalyzer", "Analyze Dependencies", func() {
+			m.AnalyzeBuildDependencies()
+		})
 		m.mavenToggle(c, p, "maven:skipTests", "run/showIgnored", "Skip Tests", m.maven.skipTests,
 			func() { m.ToggleMavenSkipTests() })
 		m.mavenSeparator(c, p)
 		m.mavenAction(c, p, "maven:expand", "general/expandAll", "Expand All", func() { m.ExpandMavenAll() })
 		m.mavenAction(c, p, "maven:collapse", "general/collapseAll", "Collapse All", func() { m.CollapseMavenAll() })
-		m.mavenActionDisabled(c, p, "maven:settings", "general/settings", "Maven Settings…", true)
+		m.mavenAction(c, p, "maven:settings", "general/settings", "Maven Settings…", func() {
+			m.OpenSettingsPage("languages.java")
+		})
 	})
 }
 

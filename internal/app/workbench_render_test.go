@@ -268,11 +268,11 @@ func TestWorkbenchHierarchyRightWindowRenders(t *testing.T) {
 			hierarchyRoot: {{id: hierarchyRoot + "/a", parent: hierarchyRoot,
 				item: hierarchyItem{Name: "callerA", Path: "/p/App.java"}}},
 		},
-		expanded: map[string]bool{}, loading: map[string]bool{}, failed: map[string]string{},
+		expanded: map[string]bool{hierarchyRoot: true}, loading: map[string]bool{}, failed: map[string]string{},
 	}
 	m.rightTool = "hierarchy"
 	tt := workbenchTester(t, m)
-	for _, text := range []string{"Hierarchy", "Callers", "Callees", "callerA"} {
+	for _, text := range []string{"Hierarchy", "Callers of main", "↑", "↓", "callerA"} {
 		if !tt.HasText(text) {
 			t.Fatalf("%q is not in the right window: %q", text, tt.Texts())
 		}

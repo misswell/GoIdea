@@ -86,8 +86,10 @@ func (m *Model) submitGotoLine() {
 		return
 	}
 	line, col = v.tab.doc.BytePos(line, col)
+	m.recordNavigation(true)
 	v.tab.state.GoTo(editor.Pos{Line: line, Col: col})
 	v.tab.state.ScrollTo(line)
+	m.recordNavigation(true)
 	m.closeGotoLine()
 }
 

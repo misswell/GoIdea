@@ -117,13 +117,32 @@ func saveUpdatePrefs(path string, p updatePrefs) {
 // UpdatePrefs are Settings › Updates: the automatic check and the What's New
 // page stay on unless turned off, and LastChecked is when the feed was asked.
 type UpdatePrefs struct {
-	NoAutoCheck bool  `json:"noAutoCheck,omitempty"`
-	NoWhatsNew  bool  `json:"noWhatsNew,omitempty"`
-	LastChecked int64 `json:"lastChecked,omitempty"`
+	NoAutoCheck bool   `json:"noAutoCheck,omitempty"`
+	NoWhatsNew  bool   `json:"noWhatsNew,omitempty"`
+	Source      string `json:"source,omitempty"`
+	LastChecked int64  `json:"lastChecked,omitempty"`
 }
 
 func (m *Model) autoCheckUpdates() bool {
 	return m.prefs.Updates == nil || !m.prefs.Updates.NoAutoCheck
+}
+
+// updateFeedForSource resolves Settings › Updates' source. Automatic and
+// GitHub use the published GoIDEA GitHub feed. No CNB feed exists for GoIDEA,
+// so CNB reports a clear error instead of fetching another repository.
+func (m *Model) updateFeedForSource() (string, error) {
+	source := "auto"
+	if m.prefs.Updates != nil && strings.TrimSpace(m.prefs.Updates.Source) != "" {
+		source = strings.TrimSpace(m.prefs.Updates.Source)
+	}
+	switch source {
+	case "auto", "github":
+		return updateFeedURL, nil
+	case "cnb":
+		return "", fmt.Errorf("the CNB update source is not configured for GoIDEA; choose Automatic or GitHub")
+	default:
+		return updateFeedURL, nil
+	}
 }
 
 func (m *Model) showWhatsNewAfterUpdate() bool {
@@ -224,7 +243,12 @@ func (m *Model) checkForUpdates(manual bool) {
 			})
 		}})
 	go func() {
-		rel, err := fetchLatestRelease(updateFeedURL)
+		feed, feedErr := m.updateFeedForSource()
+		var rel updateRelease
+		err := feedErr
+		if err == nil {
+			rel, err = fetchLatestRelease(feed)
+		}
 		m.post(func() {
 			if m.update.gen != gen {
 				return
@@ -354,7 +378,11 @@ func (m *Model) installWorker(ctx context.Context, want updateRelease) {
 			notifyUpdateFailure(m, cancelled, err)
 		})
 	}
-	rel, err := fetchLatestRelease(updateFeedURL)
+	feed, err := m.updateFeedForSource()
+	var rel updateRelease
+	if err == nil {
+		rel, err = fetchLatestRelease(feed)
+	}
 	if err == nil && (rel.Version != want.Version || rel.DMG == "" || rel.SHA == "") {
 		err = fmt.Errorf("the release assets of %s are not available yet", want.Version)
 	}

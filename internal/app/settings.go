@@ -22,6 +22,13 @@ type Session struct {
 	// Pinned are the open files whose tabs were pinned, which OpenIDEA keeps
 	// at the left of the strip across starts.
 	Pinned []string `json:"pinned,omitempty"`
+	// AgentTasks and AgentHome restore the virtual Agent pages that OpenIDEA
+	// keeps as ordinary editor tabs. Missing tasks are removed after the
+	// backend reports the project's task list.
+	AgentTasks    []string `json:"agentTasks,omitempty"`
+	AgentHome     bool     `json:"agentHome,omitempty"`
+	FocusAgent    string   `json:"focusAgent,omitempty"`
+	FocusAgentNew bool     `json:"focusAgentNew,omitempty"`
 	// SplitFiles, SplitActive, SplitDown and SplitFirst are the second editor
 	// window group: its open files, the one it showed, whether it was stacked
 	// under the first group and whether it sat left of or above it.
@@ -48,12 +55,23 @@ type Session struct {
 	// project comes back the way it was left, as OpenIDEA stores a tool
 	// window layout per project root.
 	Layouts map[string]Layout `json:"layouts,omitempty"`
+	// NamedLayouts are Window › Tool Window Layouts. OpenIDEA keeps these
+	// snapshots in local storage, shared by every project, and remembers the
+	// last saved or restored one with a check mark.
+	NamedLayouts      []SavedToolWindowLayout `json:"namedLayouts,omitempty"`
+	ActiveNamedLayout string                  `json:"activeNamedLayout,omitempty"`
+	// ProjectViews are each project's expanded Project View folders. The
+	// options and pane mode are global, as OpenIDEA stores them, while the
+	// folders a project had open belong to that project.
+	ProjectViews map[string][]string `json:"projectViews,omitempty"`
 	// RunHistory is each project's Run Anything history, by project folder,
 	// most recent first, as OpenIDEA keeps it per project root.
 	RunHistory map[string][]string `json:"runHistory,omitempty"`
 	// SearchHistory is Search Everywhere's recent queries, most recent first,
 	// as OpenIDEA keeps the search history across starts.
 	SearchHistory []string `json:"searchHistory,omitempty"`
+	// SearchScopes are the named file-pattern scopes Find in Files offers.
+	SearchScopes []SearchScope `json:"searchScopes,omitempty"`
 	// Notifications is the notification center's logged history. Runtime
 	// timers and action callbacks stay in memory.
 	Notifications []StoredNotification `json:"notifications,omitempty"`
@@ -61,14 +79,15 @@ type Session struct {
 
 // StoredNotification is one notification-center history row.
 type StoredNotification struct {
-	Key    string `json:"key,omitempty"`
-	Level  string `json:"level"`
-	Title  string `json:"title"`
-	Body   string `json:"body,omitempty"`
-	At     int64  `json:"at"`
-	Read   bool   `json:"read,omitempty"`
-	Group  string `json:"group,omitempty"`
-	Logged bool   `json:"logged,omitempty"`
+	Key      string `json:"key,omitempty"`
+	Level    string `json:"level"`
+	Title    string `json:"title"`
+	Body     string `json:"body,omitempty"`
+	At       int64  `json:"at"`
+	Read     bool   `json:"read,omitempty"`
+	Group    string `json:"group,omitempty"`
+	Logged   bool   `json:"logged,omitempty"`
+	Verbatim bool   `json:"verbatim,omitempty"`
 }
 
 // RecentProject is one project of the Welcome screen.
@@ -86,6 +105,12 @@ type RecentProject struct {
 type RecentGroup struct {
 	Name      string `json:"name"`
 	Collapsed bool   `json:"collapsed,omitempty"`
+}
+
+// SearchScope is a named custom scope for Find in Files.
+type SearchScope struct {
+	Name    string `json:"name"`
+	Pattern string `json:"pattern"`
 }
 
 // normalizeRecentProjects drops missing, duplicate and unnamed projects,
@@ -151,6 +176,13 @@ type Layout struct {
 	// Dock is the versioned six-slot record; sessions written before it have
 	// only the fields above and are migrated when read.
 	Dock *DockLayout `json:"dock,omitempty"`
+}
+
+// SavedToolWindowLayout is one named, project-independent tool window
+// snapshot in Window › Tool Window Layouts.
+type SavedToolWindowLayout struct {
+	Name   string `json:"name"`
+	Layout Layout `json:"layout"`
 }
 
 // clone copies a layout, so a saved snapshot never shares maps with the one
@@ -435,6 +467,17 @@ func (s Session) Save(path string) error {
 type Preferences struct {
 	Theme    string  `json:"theme,omitempty"`
 	FontSize float32 `json:"fontSize,omitempty"`
+	// DateFormat is Settings › System Settings › Date Formats. Nil keeps
+	// OpenIDEA's system-format, pretty-formatting defaults.
+	DateFormat *DateFormatPrefs `json:"dateFormat,omitempty"`
+	// Font carries Settings › Editor › Font: the installed family, explicit
+	// line height in pixels, OpenType ligatures, main weight and fallback.
+	// Zero values keep the bundled JetBrains Mono at the size-derived height.
+	Font FontPrefs `json:"font,omitempty"`
+	// Appearance carries the runtime View toggles and IDE zoom introduced by
+	// OpenIDEA's appearanceRuntime.ts. The inverse hide flags keep the zero
+	// value equal to OpenIDEA's visible defaults.
+	Appearance AppearancePrefs `json:"appearance,omitempty"`
 	// Zen is Distraction Free Mode, which survives a restart as IDEA's does,
 	// and ZenWidth is its text column in columns; zero is the default.
 	Zen      bool `json:"distractionFree,omitempty"`
@@ -442,12 +485,32 @@ type Preferences struct {
 	// Editor are Settings › Editor › Appearance, whose toggles are on by
 	// default; the inverse names keep the zero value meaning that.
 	Editor EditorAppearance `json:"editor,omitempty"`
+	// Inlay are Settings › Editor › Inlay Hints: Code Vision's usages,
+	// author and "no usages" choices. OpenIDEA shows all three by default.
+	Inlay InlayPrefs `json:"inlay,omitempty"`
+	// Usages are Find Usages' local view choices. Both read and write access
+	// filters start on, the popup preview starts off and the tool-window
+	// source preview starts on, as OpenIDEA stores them.
+	Usages UsagesPrefs `json:"usages,omitempty"`
+	// Problems are the Problems tool window's local view choices. The zero
+	// value matches OpenIDEA: severity order on, source preview and
+	// autoscroll off.
+	Problems ProblemsPrefs `json:"problems,omitempty"`
+	// Hierarchy is the Hierarchy tool window's AutoScroll to Source choice.
+	Hierarchy HierarchyPrefs `json:"hierarchy,omitempty"`
 	// Breadcrumbs are Settings › Editor › Breadcrumbs: shown above the editor
 	// unless hidden, as editor.breadcrumbs.show and .placement store.
 	Breadcrumbs BreadcrumbPrefs `json:"breadcrumbs,omitempty"`
+	// General are Settings › Editor › General behavior choices that the native
+	// editor can honor.
+	General GeneralPrefs `json:"general,omitempty"`
 	// Tabs are Settings › Editor › Editor Tabs: how the strip shows, orders
 	// and limits tabs, as editor.tabs.* stores them.
 	Tabs TabPrefs `json:"tabs,omitempty"`
+	// ProjectTree are the Project View pane, appearance and behavior
+	// choices. Pointer-valued defaults keep old settings files and a zero
+	// Preferences at OpenIDEA's defaults.
+	ProjectTree ProjectTreePrefs `json:"projectTree,omitempty"`
 	// SaveFiles are Settings › Editor › General › Save Files, applied to the
 	// document on every save; off by default, as OpenIDEA has them.
 	SaveFiles SavePrefs `json:"saveFiles,omitempty"`
@@ -459,6 +522,15 @@ type Preferences struct {
 	Notify *NotifyPrefs `json:"notifications,omitempty"`
 	// Run are the run flow's stored choices; nil keeps OpenIDEA's defaults.
 	Run *RunPrefs `json:"run,omitempty"`
+	// Agents are Settings › Agents › Chat, shared by the New Agent Task page
+	// and agent conversations.
+	Agents *AgentPrefs `json:"agents,omitempty"`
+	// AgentWorkspace is where conversations open and how each project's task
+	// list is pinned or grouped. It is local window state, as OpenIDEA keeps
+	// these choices outside the backend's Agents settings.
+	AgentWorkspace AgentWorkspacePrefs `json:"agentWorkspace,omitempty"`
+	// AgentSecurity is Settings › Agents › Command Permissions.
+	AgentSecurity *AgentSecurityPrefs `json:"agentSecurity,omitempty"`
 	// Updates are Help › Check for Updates' settings, nil until changed: the
 	// automatic check and the What's New page stay on, as app.update.* does.
 	Updates *UpdatePrefs `json:"updates,omitempty"`
@@ -480,6 +552,298 @@ type Preferences struct {
 	// Plugins are each plugin's settings, by name, under the same "plugins"
 	// key Mayoi uses; a plugin's "enabled" lives there.
 	Plugins map[string]json.RawMessage `json:"plugins,omitempty"`
+	// VCS keeps the Git tool windows' local display choices and the user's
+	// branch/commit bookmarks. Repository-scoped map keys contain the root and
+	// the branch or commit id.
+	VCS VCSPrefs `json:"vcs,omitempty"`
+}
+
+// UsagesPrefs mirrors OpenIDEA's persistent usage-preview and access-filter
+// switches. The inverse names keep the zero value at both access filters on
+// and the popup preview off while the tool-window preview stays on.
+type UsagesPrefs struct {
+	PopupPreview  bool `json:"popupPreview,omitempty"`
+	NoFindPreview bool `json:"noFindPreview,omitempty"`
+	HideRead      bool `json:"hideReadAccess,omitempty"`
+	HideWrite     bool `json:"hideWriteAccess,omitempty"`
+}
+
+// ShowReadAccess reports whether read and unknown access rows are shown.
+func (p UsagesPrefs) ShowReadAccess() bool { return !p.HideRead }
+
+// ShowWriteAccess reports whether write and unknown access rows are shown.
+func (p UsagesPrefs) ShowWriteAccess() bool { return !p.HideWrite }
+
+// ShowFindPreview reports whether the Find Usages tool window has its source
+// preview pane. Its zero value is on.
+func (p UsagesPrefs) ShowFindPreview() bool { return !p.NoFindPreview }
+
+// ProblemsPrefs mirrors OpenIDEA's persistent Problems view options.
+type ProblemsPrefs struct {
+	NoSeveritySort bool `json:"noSeveritySort,omitempty"`
+	SortByName     bool `json:"sortByName,omitempty"`
+	ShowPreview    bool `json:"showPreview,omitempty"`
+	Autoscroll     bool `json:"autoscroll,omitempty"`
+}
+
+// SortBySeverity reports whether errors precede warnings and information.
+func (p ProblemsPrefs) SortBySeverity() bool { return !p.NoSeveritySort }
+
+// HierarchyPrefs mirrors OpenIDEA's persistent hierarchy options.
+type HierarchyPrefs struct {
+	Autoscroll bool `json:"autoscroll,omitempty"`
+}
+
+// AppearancePrefs is the part of Settings › Appearance that View actions
+// change without opening the dialog.
+type AppearancePrefs struct {
+	IDEZoom            int  `json:"ideZoom,omitempty"`
+	CompactMode        bool `json:"compactMode,omitempty"`
+	HideMainToolbar    bool `json:"hideMainToolbar,omitempty"`
+	HideToolWindowBars bool `json:"hideToolWindowBars,omitempty"`
+	HideStatusBar      bool `json:"hideStatusBar,omitempty"`
+	// RenderDocComments draws documentation comments as rendered prose. A
+	// tab's View › Active Editor override replaces this setting.
+	RenderDocComments bool `json:"renderDocComments,omitempty"`
+	// NavigationBar is "statusBar" by default, or "top"/"hidden" from View ›
+	// Appearance › Navigation Bar.
+	NavigationBar string `json:"navigationBar,omitempty"`
+	// StatusBarWidgets keeps per-widget choices as one map because widget ids
+	// contain dots, matching OpenIDEA's appearance.statusBarWidgets object.
+	StatusBarWidgets map[string]bool `json:"statusBarWidgets,omitempty"`
+}
+
+// VCSPrefs is state that OpenIDEA keeps in its VCS stores and client settings.
+type VCSPrefs struct {
+	Diff             DiffPrefs         `json:"diff,omitempty"`
+	Merge            MergePrefs        `json:"merge,omitempty"`
+	FavoriteBranches map[string]bool   `json:"favoriteBranches,omitempty"`
+	CommitBookmarks  map[string]string `json:"commitBookmarks,omitempty"`
+	Log              LogPrefs          `json:"log,omitempty"`
+	// IssueNavigation turns issue ids in commit messages into links in Git
+	// Log, commit details and the blame popup.
+	IssueNavigation []IssueLinkPrefs `json:"issueNavigation,omitempty"`
+}
+
+// IssueLinkPrefs is one Settings › Version Control › Issue Navigation row.
+// Pattern is a Go regular expression and Link may use $0…$9 substitutions.
+type IssueLinkPrefs struct {
+	Pattern string `json:"pattern"`
+	Link    string `json:"link"`
+}
+
+// MergePrefs mirrors the merge editor's local choices. Automatically applying
+// non-conflicting changes is off by default, as IntelliJ and OpenIDEA have it.
+type MergePrefs struct {
+	AutoApply bool `json:"autoApply,omitempty"`
+}
+
+// DiffPrefs mirrors OpenIDEA's Diff Settings: the toolbar choices are shared by
+// every diff viewer and survive a restart.
+type DiffPrefs struct {
+	Mode         string `json:"mode,omitempty"`
+	Ignore       string `json:"ignore,omitempty"`
+	Highlight    string `json:"highlight,omitempty"`
+	Collapse     *bool  `json:"collapse,omitempty"`
+	SyncScroll   *bool  `json:"syncScroll,omitempty"`
+	AlignChanges bool   `json:"alignChanges,omitempty"`
+	SoftWrap     string `json:"softWrap,omitempty"`
+}
+
+// LogPrefs persists OpenIDEA's Git Log presentation options. Pointer booleans
+// distinguish an explicit off choice from a settings file written before that
+// option existed, because several OpenIDEA defaults are on.
+type LogPrefs struct {
+	Sort               string             `json:"sort,omitempty"`
+	FirstParent        *bool              `json:"firstParent,omitempty"`
+	NoMerges           *bool              `json:"noMerges,omitempty"`
+	CollapseLinear     *bool              `json:"collapseLinear,omitempty"`
+	CompactRefs        *bool              `json:"compactRefs,omitempty"`
+	TagNames           *bool              `json:"tagNames,omitempty"`
+	LongEdges          *bool              `json:"longEdges,omitempty"`
+	CommitTimestamp    *bool              `json:"commitTimestamp,omitempty"`
+	RefsOnLeft         *bool              `json:"refsOnLeft,omitempty"`
+	ShowAuthor         *bool              `json:"showAuthor,omitempty"`
+	ShowDate           *bool              `json:"showDate,omitempty"`
+	ShowHash           *bool              `json:"showHash,omitempty"`
+	ShowSignature      *bool              `json:"showSignature,omitempty"`
+	ShowGitHubChecks   *bool              `json:"showGitHubChecks,omitempty"`
+	ShowColumnHeaders  *bool              `json:"showColumnHeaders,omitempty"`
+	HighlightMine      *bool              `json:"highlightMine,omitempty"`
+	HighlightMerges    *bool              `json:"highlightMerges,omitempty"`
+	HighlightCurrent   *bool              `json:"highlightCurrentBranch,omitempty"`
+	ShowBranches       *bool              `json:"showBranches,omitempty"`
+	GroupByDirectory   *bool              `json:"groupByDirectory,omitempty"`
+	DiffPreview        *bool              `json:"diffPreview,omitempty"`
+	ShowLineStats      *bool              `json:"showLineStats,omitempty"`
+	ShowDetails        *bool              `json:"showDetails,omitempty"`
+	ShowRepository     *bool              `json:"showRepository,omitempty"`
+	ShowOnlyAffected   *bool              `json:"showOnlyAffected,omitempty"`
+	ChangesFromParents *bool              `json:"changesFromParents,omitempty"`
+	DiffLocation       string             `json:"diffLocation,omitempty"`
+	ColumnOrder        []string           `json:"columnOrder,omitempty"`
+	ColumnWidths       map[string]float64 `json:"columnWidths,omitempty"`
+	LinearizeMerges    *bool              `json:"linearizeMerges,omitempty"`
+}
+
+func (p LogPrefs) showBranches() bool {
+	return prefBool(p.ShowBranches, true)
+}
+
+func (p LogPrefs) collapseLinear() bool {
+	return prefBool(p.CollapseLinear, false)
+}
+
+func (p LogPrefs) groupByDirectory() bool {
+	return prefBool(p.GroupByDirectory, true)
+}
+
+func (p LogPrefs) diffPreview() bool {
+	return prefBool(p.DiffPreview, true)
+}
+
+func (p LogPrefs) normalizedSort() string {
+	switch p.Sort {
+	case "topo", "standard":
+		return p.Sort
+	default:
+		return "date"
+	}
+}
+
+func (p LogPrefs) normalizedDiffLocation() string {
+	switch p.DiffLocation {
+	case "right", "bottom":
+		return p.DiffLocation
+	default:
+		return "editor"
+	}
+}
+
+func prefBool(value *bool, fallback bool) bool {
+	if value == nil {
+		return fallback
+	}
+	return *value
+}
+
+func boolPref(value bool) *bool {
+	return &value
+}
+
+// normalized fills the defaults OpenIDEA uses when a settings file is absent
+// or predates a field.
+func (p DiffPrefs) normalized() DiffPrefs {
+	switch p.Mode {
+	case "split", "unified":
+	default:
+		p.Mode = "split"
+	}
+	switch p.Ignore {
+	case "none", "trim", "whitespace", "whitespaceAndLines":
+	default:
+		p.Ignore = "none"
+	}
+	switch p.Highlight {
+	case "words", "lines", "none":
+	default:
+		p.Highlight = "words"
+	}
+	switch p.SoftWrap {
+	case "follow", "on", "off":
+	default:
+		p.SoftWrap = "follow"
+	}
+	return p
+}
+
+// ProjectTreePrefs is Project View's global pane, appearance and behavior
+// state. A nil switch keeps the OpenIDEA default, so adding a default-on
+// option does not change settings files written before it existed.
+type ProjectTreePrefs struct {
+	Mode   string `json:"mode,omitempty"`
+	SortBy string `json:"sortBy,omitempty"`
+
+	MoveRefactor   FileRefactorPrefs `json:"moveRefactor,omitempty"`
+	RenameRefactor FileRefactorPrefs `json:"renameRefactor,omitempty"`
+	CopyOpenEditor bool              `json:"copyOpenInEditor,omitempty"`
+	SafeDelete     *bool             `json:"safeDelete,omitempty"`
+
+	ShowHidden           bool  `json:"showHidden,omitempty"`
+	ShowExcluded         *bool `json:"showExcluded,omitempty"`
+	ShowMembers          bool  `json:"showMembers,omitempty"`
+	ShowRootPaths        *bool `json:"showRootPaths,omitempty"`
+	Compact              *bool `json:"compact,omitempty"`
+	FoldersFirst         *bool `json:"foldersFirst,omitempty"`
+	AutoscrollFromSource bool  `json:"autoscrollFromSource,omitempty"`
+	AutoscrollToSource   bool  `json:"autoscrollToSource,omitempty"`
+	SingleClickOpen      bool  `json:"singleClickOpen,omitempty"`
+	SingleClickExpand    bool  `json:"singleClickExpand,omitempty"`
+	PreviewTab           bool  `json:"previewTab,omitempty"`
+	ShowUnityMeta        bool  `json:"showUnityMeta,omitempty"`
+	ShowUnityGenerated   bool  `json:"showUnityGenerated,omitempty"`
+}
+
+// FileRefactorPrefs remembers the choices of a project Move or Rename
+// dialog. Nil booleans keep OpenIDEA's defaults: search references and text
+// occurrences are on, while moved files are not opened without an existing
+// editor.
+type FileRefactorPrefs struct {
+	References      *bool `json:"references,omitempty"`
+	TextOccurrences *bool `json:"textOccurrences,omitempty"`
+	OpenInEditor    *bool `json:"openInEditor,omitempty"`
+}
+
+func (p FileRefactorPrefs) referenceSearch() bool {
+	return boolPreference(p.References, true)
+}
+
+func (p FileRefactorPrefs) textSearch() bool {
+	return boolPreference(p.TextOccurrences, true)
+}
+
+func (p FileRefactorPrefs) opensInEditor() bool {
+	return boolPreference(p.OpenInEditor, false)
+}
+
+func boolPreference(value *bool, fallback bool) bool {
+	if value == nil {
+		return fallback
+	}
+	return *value
+}
+
+func boolPointer(value bool) *bool { return &value }
+
+// normalizedMode returns an OpenIDEA project pane id, or Project for an old
+// or unknown value.
+func (p ProjectTreePrefs) normalizedMode() string {
+	switch p.Mode {
+	case "", "project":
+		return "project"
+	case "projectFiles", "openFiles", "changedFiles", "scratches", "unity":
+		return p.Mode
+	default:
+		return "project"
+	}
+}
+
+// normalizedSort returns one of the three Project View orderings.
+func (p ProjectTreePrefs) normalizedSort() string {
+	switch p.SortBy {
+	case "type", "modified":
+		return p.SortBy
+	default:
+		return "name"
+	}
+}
+
+func (p ProjectTreePrefs) showsExcluded() bool  { return boolPreference(p.ShowExcluded, true) }
+func (p ProjectTreePrefs) compacts() bool       { return boolPreference(p.Compact, true) }
+func (p ProjectTreePrefs) foldersFirst() bool   { return boolPreference(p.FoldersFirst, true) }
+func (p ProjectTreePrefs) showsRootPaths() bool { return boolPreference(p.ShowRootPaths, true) }
+func (p ProjectTreePrefs) searchesUsagesOnDelete() bool {
+	return boolPreference(p.SafeDelete, true)
 }
 
 // RunPrefs carry the choices OpenIDEA keeps under run.*. ConfirmRerun is nil
@@ -487,6 +851,131 @@ type Preferences struct {
 // records the confirm dialog's "Do not ask again".
 type RunPrefs struct {
 	ConfirmRerun *bool `json:"confirmRerun,omitempty"`
+}
+
+// AgentPrefs is Settings › Agents › Chat. The inverted switches keep the zero
+// value at OpenIDEA's defaults, where finished work folds, streaming text is
+// revealed smoothly, and the header shows context, time and usage limits.
+type AgentPrefs struct {
+	NewTaskApprovals string `json:"newTaskApprovals,omitempty"`
+	SendWith         string `json:"sendWith,omitempty"`
+	WhileRunning     string `json:"whileRunning,omitempty"`
+	ToolCalls        string `json:"toolCalls,omitempty"`
+	Thinking         string `json:"thinking,omitempty"`
+	NoFoldTurns      bool   `json:"noFoldTurns,omitempty"`
+	NoSmoothText     bool   `json:"noSmoothText,omitempty"`
+	ExpandToolOutput bool   `json:"expandToolOutput,omitempty"`
+	NoContextUsage   bool   `json:"noContextUsage,omitempty"`
+	NoWorkTime       bool   `json:"noWorkTime,omitempty"`
+	NoUsageLimits    bool   `json:"noUsageLimits,omitempty"`
+	ShowCost         bool   `json:"showCost,omitempty"`
+	// BackendDefaults and BackendMCPServers preserve the two maps the same
+	// upstream setting carries outside the Chat page. They remain JSON text so
+	// a Chat edit cannot erase the Registry's defaults or MCP configurations.
+	BackendDefaults   string `json:"backendDefaults,omitempty"`
+	BackendMCPServers string `json:"backendMCPServers,omitempty"`
+}
+
+func (p AgentPrefs) normalized() AgentPrefs {
+	p.NewTaskApprovals = p.newTaskApprovals()
+	p.SendWith = p.sendWith()
+	p.WhileRunning = p.whileRunning()
+	p.ToolCalls = p.toolCalls()
+	p.Thinking = p.thinking()
+	return p
+}
+
+// agentPrefs returns OpenIDEA's defaults when the page was never applied.
+func (m *Model) agentPrefs() AgentPrefs {
+	if m.prefs.Agents == nil {
+		return (AgentPrefs{}).normalized()
+	}
+	return m.prefs.Agents.normalized()
+}
+
+// AgentSecurityPrefs are Settings › Agents › Command Permissions. Allowed
+// commands run without a prompt and blocked commands are always rejected.
+type AgentSecurityPrefs struct {
+	AllowedCommands []string `json:"allowedCommands,omitempty"`
+	BlockedCommands []string `json:"blockedCommands,omitempty"`
+}
+
+var defaultBlockedAgentCommands = []string{
+	"rm -rf *",
+	"rm -rf /",
+	"mkfs*",
+	"dd *",
+	":(){ :|:& };:",
+	"shutdown*",
+	"reboot*",
+}
+
+func (p AgentSecurityPrefs) normalized() AgentSecurityPrefs {
+	p.AllowedCommands = uniqueAgentCommandPatterns(p.AllowedCommands)
+	if p.BlockedCommands == nil {
+		p.BlockedCommands = append([]string(nil), defaultBlockedAgentCommands...)
+	} else {
+		p.BlockedCommands = uniqueAgentCommandPatterns(p.BlockedCommands)
+	}
+	return p
+}
+
+func uniqueAgentCommandPatterns(values []string) []string {
+	seen := make(map[string]bool, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	return out
+}
+
+func (m *Model) agentSecurityPrefs() AgentSecurityPrefs {
+	if m.prefs.AgentSecurity == nil {
+		return (AgentSecurityPrefs{}).normalized()
+	}
+	return m.prefs.AgentSecurity.normalized()
+}
+
+func (p AgentPrefs) newTaskApprovals() string {
+	if p.NewTaskApprovals == "ask" {
+		return "ask"
+	}
+	return "bypass"
+}
+
+func (p AgentPrefs) sendWith() string {
+	if p.SendWith == "modEnter" {
+		return "modEnter"
+	}
+	return "enter"
+}
+
+func (p AgentPrefs) whileRunning() string {
+	if p.WhileRunning == "steer" {
+		return "steer"
+	}
+	return "queue"
+}
+
+func (p AgentPrefs) toolCalls() string {
+	if p.ToolCalls == "each" {
+		return "each"
+	}
+	return "grouped"
+}
+
+func (p AgentPrefs) thinking() string {
+	switch p.Thinking {
+	case "expanded", "collapsed":
+		return p.Thinking
+	default:
+		return "auto"
+	}
 }
 
 // confirmRerunEnabled reports whether starting a configuration that already
@@ -503,10 +992,12 @@ func (m *Model) confirmRerunEnabled() bool {
 // editor.general.scrollPastEnd are stored. The fields are the off switches,
 // so the zero value is IDEA's default look.
 type EditorAppearance struct {
-	NoLineNumbers  bool `json:"noLineNumbers,omitempty"`
-	ShowWhitespace bool `json:"showWhitespace,omitempty"`
-	NoIndentGuides bool `json:"noIndentGuides,omitempty"`
-	NoFolding      bool `json:"noFolding,omitempty"`
+	NoLineNumbers bool `json:"noLineNumbers,omitempty"`
+	// LineNumberMode is "absolute" or "relative"; empty is absolute.
+	LineNumberMode string `json:"lineNumberMode,omitempty"`
+	ShowWhitespace bool   `json:"showWhitespace,omitempty"`
+	NoIndentGuides bool   `json:"noIndentGuides,omitempty"`
+	NoFolding      bool   `json:"noFolding,omitempty"`
 	// BlockCaret draws the carets as blocks over the next character rather
 	// than bars before it, as editor.appearance.blockCaret does.
 	BlockCaret bool `json:"blockCaret,omitempty"`
@@ -516,6 +1007,125 @@ type EditorAppearance struct {
 	SoftWrapFiles string `json:"softWrapFiles,omitempty"`
 	ScrollPastEnd bool   `json:"scrollPastEnd,omitempty"`
 }
+
+// FontPrefs is Settings › Editor › Font. Family empty is the bundled
+// JetBrains Mono, LineHeight zero uses the size-derived default, and Weight
+// zero is regular.
+type FontPrefs struct {
+	Family     string  `json:"family,omitempty"`
+	LineHeight float32 `json:"lineHeight,omitempty"`
+	Ligatures  bool    `json:"ligatures,omitempty"`
+	Weight     int     `json:"weight,omitempty"`
+	Fallback   string  `json:"fallback,omitempty"`
+}
+
+const (
+	defaultFontLineHeight = 22
+	minFontLineHeight     = 14
+	maxFontLineHeight     = 40
+)
+
+// fontFamily is the primary family, the bundled JetBrains Mono when unset,
+// followed by the fallback.
+func (p FontPrefs) fontFamily() string {
+	family := strings.TrimSpace(p.Family)
+	if family == "" {
+		family = oiFontMono
+	}
+	fallback := strings.TrimSpace(p.Fallback)
+	if fallback != "" && fallback != family {
+		family += ", " + fallback
+	}
+	return family
+}
+
+// weight is the main font's CSS weight.
+func (p FontPrefs) weight() int {
+	if p.Weight == 0 {
+		return 400
+	}
+	return max(100, min((p.Weight+25)/50*50, 900))
+}
+
+// features turn ligatures on or off for the shaped editor text.
+func (p FontPrefs) features() string {
+	if p.Ligatures {
+		return ""
+	}
+	return "liga=0,clig=0"
+}
+
+// lineHeightPixels is the configured line height, or OpenIDEA's
+// size-dependent default when none is stored.
+func (p FontPrefs) lineHeightPixels(size float32) float32 {
+	if p.LineHeight >= minFontLineHeight && p.LineHeight <= maxFontLineHeight {
+		return p.LineHeight
+	}
+	if size <= 0 {
+		size = defaultFontSize
+	}
+	return defaultFontLineHeight + (size-defaultFontSize)*1.6
+}
+
+// GeneralPrefs is Settings › Editor › General. Inverse names keep the zero
+// value at OpenIDEA's defaults where an option starts enabled.
+type GeneralPrefs struct {
+	WheelZoom                 bool   `json:"wheelZoom,omitempty"`
+	NoDragAndDrop             bool   `json:"noDragAndDrop,omitempty"`
+	CaretScroll               string `json:"caretScroll,omitempty"`
+	NoSoftWrapIndent          bool   `json:"noSoftWrapIndent,omitempty"`
+	NoKeepTrailingOnCaretLine bool   `json:"noKeepTrailingOnCaretLine,omitempty"`
+	ReformatOnSave            bool   `json:"reformatOnSave,omitempty"`
+	MarkdownImageFolder       string `json:"markdownImageFolder,omitempty"`
+	MarkdownImageNamePattern  string `json:"markdownImageNamePattern,omitempty"`
+}
+
+func (p GeneralPrefs) dragAndDrop() bool    { return !p.NoDragAndDrop }
+func (p GeneralPrefs) softWrapIndent() bool { return !p.NoSoftWrapIndent }
+func (p GeneralPrefs) keepTrailingOnCaretLine() bool {
+	return !p.NoKeepTrailingOnCaretLine
+}
+
+func (p GeneralPrefs) markdownImageFolder() string {
+	if strings.TrimSpace(p.MarkdownImageFolder) == "" {
+		return "assets"
+	}
+	return strings.TrimSpace(p.MarkdownImageFolder)
+}
+
+func (p GeneralPrefs) markdownImageNamePattern() string {
+	if strings.TrimSpace(p.MarkdownImageNamePattern) == "" {
+		return "image-{timestamp}"
+	}
+	return strings.TrimSpace(p.MarkdownImageNamePattern)
+}
+
+// InlayPrefs is Settings › Editor › Inlay Hints. The inverse names keep the
+// zero value at OpenIDEA's defaults: usage counts, their "no usages" result
+// and the code author are shown, and each metric sits at the declaration.
+type InlayPrefs struct {
+	NoCodeVisionUsages   bool   `json:"noCodeVisionUsages,omitempty"`
+	NoCodeVisionAuthor   bool   `json:"noCodeVisionAuthor,omitempty"`
+	HideCodeVisionNoUses bool   `json:"hideCodeVisionNoUsages,omitempty"`
+	UsagesPosition       string `json:"codeVisionUsagesPosition,omitempty"`
+	AuthorPosition       string `json:"codeVisionAuthorPosition,omitempty"`
+}
+
+// CodeVisionUsages reports whether usage counts are drawn.
+func (p InlayPrefs) CodeVisionUsages() bool { return !p.NoCodeVisionUsages }
+
+// CodeVisionAuthor reports whether the latest author is drawn.
+func (p InlayPrefs) CodeVisionAuthor() bool { return !p.NoCodeVisionAuthor }
+
+// CodeVisionNoUsages reports whether a declaration with no uses says so.
+func (p InlayPrefs) CodeVisionNoUsages() bool { return !p.HideCodeVisionNoUses }
+
+// UsagesAtRight reports whether usage counts sit at the end of the line
+// rather than at the declaration; "top" is the default in OpenIDEA.
+func (p InlayPrefs) UsagesAtRight() bool { return p.UsagesPosition == "right" }
+
+// AuthorAtRight reports whether the author sits at the end of the line.
+func (p InlayPrefs) AuthorAtRight() bool { return p.AuthorPosition == "right" }
 
 // defaultSoftWrapFiles is what editor.general.softWrapFiles defaults to.
 const defaultSoftWrapFiles = "*.md; *.txt; *.rst; *.adoc"
@@ -530,6 +1140,9 @@ type SavePrefs struct {
 	// cleans every line rather than only the ones changed since the last save.
 	TrimTrailing bool `json:"trimTrailing,omitempty"`
 	TrimAllLines bool `json:"trimAllLines,omitempty"`
+	// KeepTrailingOnCaretLine preserves the caret's line while the other
+	// modified lines are trimmed, as editor.general does.
+	KeepTrailingOnCaretLine bool `json:"keepTrailingOnCaretLine,omitempty"`
 	// DropTrailingBlankLines drops the empty lines at the end of the file.
 	DropTrailingBlankLines bool `json:"dropTrailingBlankLines,omitempty"`
 	// EnsureFinalNewline ends the file with a line break.
@@ -575,8 +1188,9 @@ func (a EditorAppearance) softWrapFiles() string {
 // chain at the top, as "top" is the placement editor.breadcrumbs.placement
 // defaults to.
 type BreadcrumbPrefs struct {
-	Hidden    bool   `json:"hidden,omitempty"`
-	Placement string `json:"placement,omitempty"`
+	Hidden            bool     `json:"hidden,omitempty"`
+	Placement         string   `json:"placement,omitempty"`
+	DisabledLanguages []string `json:"disabledLanguages,omitempty"`
 }
 
 // TabPrefs is Settings › Editor › Editor Tabs, as editor.tabs.* stores it. The
@@ -602,6 +1216,8 @@ type TabPrefs struct {
 	TabLimit int `json:"tabLimit,omitempty"`
 	// ActivateOnClose is "left", "right" or "mru"; empty is OpenIDEA's left.
 	ActivateOnClose string `json:"activateOnClose,omitempty"`
+	// ClosingPolicy is "unchanged" or "lru"; empty is least recently used.
+	ClosingPolicy string `json:"closingPolicy,omitempty"`
 	// NoPreviewTab turns off OpenIDEA's preview tab, where a click in a results
 	// list reuses one italic tab instead of adding a tab.
 	NoPreviewTab bool `json:"noPreviewTab,omitempty"`
@@ -641,6 +1257,16 @@ func (t TabPrefs) activation() string {
 		return t.ActivateOnClose
 	}
 	return "left"
+}
+
+// closingPolicy is how a tab beyond the limit is chosen. GoIDEA never closes
+// unsaved text automatically, so unchanged prefers an untouched file and lru
+// takes the oldest closeable tab.
+func (t TabPrefs) closingPolicy() string {
+	if t.ClosingPolicy == "unchanged" {
+		return "unchanged"
+	}
+	return "lru"
 }
 
 // previews reports whether a navigation open lands in the preview tab.

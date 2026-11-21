@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bundles Pele, which draws Mermaid diagrams, into cmd/mayoi/pele.js.gz:
+# Bundles Pele, which draws Mermaid diagrams, into internal/mermaid/pele.js.gz:
 # one ES2017 script, which moejs runs, that sets the global Pele, with
 # Pele's license at its top. Needs Node's npx.
 # Usage: scripts/pele.sh [version, 1.9.0 by default]
@@ -20,5 +20,5 @@ npm install --silent --no-audit --no-fund "pele@$VERSION"
 } >banner.js
 npx --yes esbuild@0.25.0 node_modules/pele/dist/pele.js --bundle --format=iife --global-name=Pele \
 	--target=es2017 --minify --legal-comments=none --outfile=pele.js
-cat banner.js pele.js | gzip -9n >"$ROOT/cmd/mayoi/pele.js.gz"
-echo "Pele $VERSION in cmd/mayoi/pele.js.gz ($(wc -c <"$ROOT/cmd/mayoi/pele.js.gz" | tr -d ' ') bytes)"
+cat banner.js pele.js | gzip -9n >"$ROOT/internal/mermaid/pele.js.gz"
+echo "Pele $VERSION in internal/mermaid/pele.js.gz ($(wc -c <"$ROOT/internal/mermaid/pele.js.gz" | tr -d ' ') bytes)"

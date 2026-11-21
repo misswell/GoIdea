@@ -27,21 +27,31 @@ field() { # <key> in the openidea.server block
     s && $1 == key":" { print $2; exit }
   ' UPSTREAMS.yml
 }
+repository() {
+  awk '
+    /^  openidea:/ { s=1; next }
+    s && /^    fork:/ { print $2; exit }
+    s && /^  [a-zA-Z0-9_-]+:/ { exit }
+  ' UPSTREAMS.yml | sed -e 's#^https://github.com/##' -e 's#/$##'
+}
 release="$(field release)"
 asset="$(field asset)"
+repo="$(repository)"
 if [[ $# -ge 1 ]]; then
   asset="openidea-server-${platform}.gz"
 fi
-test -n "$release" && test -n "$asset" || { echo "UPSTREAMS.yml has no openidea.server pin" >&2; exit 1; }
+test -n "$release" && test -n "$asset" && test -n "$repo" ||
+  { echo "UPSTREAMS.yml has no openidea server release pin" >&2; exit 1; }
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
-gh release download "$release" -R l0ng-ai/openidea -p "$asset*" -D "$tmp" --clobber
+gh release download "$release" -R "$repo" -p "$asset*" -D "$tmp" --clobber
 want="$(awk '{print $1}' "$tmp/$asset.sha256")"
 got="$(shasum -a 256 "$tmp/$asset" | awk '{print $1}')"
 test "$want" = "$got" || { echo "$asset: sha256 $got, release says $want" >&2; exit 1; }
 gunzip -c "$tmp/$asset" > "$out.tmp"
+binary_sha="$(shasum -a 256 "$out.tmp" | awk '{print $1}')"
 chmod 755 "$out.tmp"
 mv "$out.tmp" "$out"
-printf '%s  %s\n' "$got" "$(basename "$out")" > "$out.sha256"
-echo "$out: $release $asset (sha256 $got)"
+printf '%s  %s\n' "$binary_sha" "$(basename "$out")" > "$out.sha256"
+echo "$out: $release $asset (asset sha256 $got, binary sha256 $binary_sha)"

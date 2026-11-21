@@ -1,10 +1,17 @@
 package app
 
 import (
+	"context"
 	"fmt"
+	"path/filepath"
+	"reflect"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui"
+
+	"mayoi/internal/docbridge"
+	"mayoi/internal/openidea"
 )
 
 func strip(tabs ...*Tab) []*Tab { return tabs }
@@ -66,6 +73,26 @@ func TestPinActiveTabKeepsTheTabSelected(t *testing.T) {
 		t.Fatalf("unpin: active %d pinned %v", m.active, b.pinned)
 	}
 	wantOrder(t, m.tabs, b, a, c)
+}
+
+func TestCycleTabIndexWrapsInBothDirections(t *testing.T) {
+	cases := []struct {
+		active, count, delta, want int
+	}{
+		{0, 3, 1, 1},
+		{2, 3, 1, 0},
+		{0, 3, -1, 2},
+		{1, 3, -1, 0},
+		{1, 3, 5, 0},
+		{1, 1, 1, 1},
+		{-1, 3, 1, -1},
+	}
+	for _, c := range cases {
+		if got := cycleTabIndex(c.active, c.count, c.delta); got != c.want {
+			t.Errorf("cycleTabIndex(%d, %d, %d) = %d, want %d",
+				c.active, c.count, c.delta, got, c.want)
+		}
+	}
 }
 
 func TestCloseOtherTabsLeavesPinnedOnes(t *testing.T) {
@@ -254,6 +281,57 @@ func TestClosedTabsKeepTheNewestAndReopenNewestFirst(t *testing.T) {
 	m.ReopenClosedTab()
 }
 
+func TestReopenClosedTabRestoresSelectionsAndUndoHistory(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "Main.java")
+	const initial = "class Main {}"
+	backend := &fileActionBackend{info: openidea.DocInfo{
+		ID: 91, Path: path, Text: initial, Version: 1,
+		Encoding: "UTF-8", LineEnding: "LF", URI: "file://" + path,
+	}}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	reg := docbridge.NewRegistry(backend, Window)
+	doc, err := reg.Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	opened := make(chan struct{}, 1)
+	m := &Model{ctx: ctx, reg: reg, postHook: func(fn func()) {
+		fn()
+		opened <- struct{}{}
+	}}
+	tab := m.newTab(doc)
+	m.tabs = []*Tab{tab}
+	m.active = 0
+	tab.state.Insert(" // edited")
+	tab.state.Select(2, 7)
+	wantSelection := tab.state.Selection()
+	m.removeTab(tab)
+
+	if len(m.tabs) != 0 || doc.Buffer() == nil {
+		t.Fatalf("closed tab = tabs:%d doc:%v", len(m.tabs), doc.Buffer())
+	}
+	m.ReopenClosedTab()
+	select {
+	case <-opened:
+	case <-time.After(time.Second):
+		t.Fatal("Reopen Closed Tab did not return the document")
+	}
+
+	if len(m.tabs) != 1 || m.tab().doc != doc || m.tab().state.Buffer != doc.Buffer() {
+		t.Fatalf("reopened tab = %+v", m.tab())
+	}
+	if got := m.tab().state.Selection(); !reflect.DeepEqual(got, wantSelection) {
+		t.Fatalf("selection = %+v, want %+v", got, wantSelection)
+	}
+	if !doc.Buffer().CanUndo() {
+		t.Fatal("undo history did not survive close and reopen")
+	}
+	if !doc.Buffer().Undo() || doc.Buffer().String() != initial {
+		t.Fatalf("undo after reopen = %q", doc.Buffer().String())
+	}
+}
+
 func TestInsertTabAtFollowsThePinnedGroup(t *testing.T) {
 	pinned, a, b := &Tab{pinned: true}, &Tab{}, &Tab{}
 	m := &Model{tabs: strip(pinned, a, b)}
@@ -373,5 +451,61 @@ func TestTabDropIndexTakesTheRowAndTheSlotMidpoint(t *testing.T) {
 		if got := tabDropIndex(c.x, c.y, rects); got != c.want {
 			t.Fatalf("tabDropIndex(%v, %v) = %d, want %d", c.x, c.y, got, c.want)
 		}
+	}
+}
+
+func TestEditorDropEdgeChoosesTheNearestEdgeAndKeepsTheCentreForTabs(t *testing.T) {
+	rect := ui.Rect{X: 100, Y: 100, W: 400, H: 300}
+	cases := []struct {
+		point ui.Point
+		want  string
+		ok    bool
+	}{
+		{ui.Point{X: 110, Y: 250}, "left", true},
+		{ui.Point{X: 490, Y: 250}, "right", true},
+		{ui.Point{X: 300, Y: 110}, "top", true},
+		{ui.Point{X: 300, Y: 390}, "bottom", true},
+		{ui.Point{X: 300, Y: 250}, "", false},
+		{ui.Point{X: 20, Y: 20}, "", false},
+	}
+	for _, test := range cases {
+		got, ok := editorDropEdge(rect, test.point)
+		if got != test.want || ok != test.ok {
+			t.Fatalf("editorDropEdge(%v) = %q, %v, want %q, %v",
+				test.point, got, ok, test.want, test.ok)
+		}
+	}
+}
+
+func TestEditorDropMovesATabIntoTheChosenEdge(t *testing.T) {
+	a, b := &Tab{}, &Tab{}
+	m := toolModel()
+	m.tabs = strip(a, b)
+	m.active = 0
+	if !m.moveTabToEditorEdge(b, "left") {
+		t.Fatal("the tab was not moved to the editor edge")
+	}
+	if len(m.tabs) != 1 || m.tabs[0] != b || m.active != 0 {
+		t.Fatalf("focused group = %d tabs, active %d", len(m.tabs), m.active)
+	}
+	if m.split == nil || len(m.split.tabs) != 1 || m.split.tabs[0] != a {
+		t.Fatalf("destination group = %+v", m.split)
+	}
+	if m.splitDown || !m.splitFirst || m.tab() != b {
+		t.Fatalf("destination placement: down=%v first=%v active=%v",
+			m.splitDown, m.splitFirst, m.tab())
+	}
+}
+
+func TestEditorDropKeepsALoneTabInItsGroup(t *testing.T) {
+	tb := &Tab{}
+	m := toolModel()
+	m.tabs = []*Tab{tb}
+	m.active = 0
+	if m.moveTabToEditorEdge(tb, "right") {
+		t.Fatal("a lone tab was split away")
+	}
+	if m.split != nil || len(m.tabs) != 1 || m.tabs[0] != tb {
+		t.Fatalf("the group changed: split=%v tabs=%d", m.split, len(m.tabs))
 	}
 }

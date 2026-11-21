@@ -212,8 +212,31 @@ func (m *Model) dirCompareDialog(c *ui.Context, p *ui.Theme) {
 						})
 						if row.Clicked() && e.LeftKind != "dir" && e.RightKind != "dir" {
 							rel := filepath.FromSlash(e.Path)
+							var chain []diffFileTarget
+							for _, entry := range d.entries {
+								if entry.LeftKind == "dir" || entry.RightKind == "dir" {
+									continue
+								}
+								entryRel := filepath.FromSlash(entry.Path)
+								chain = append(chain, diffFileTarget{
+									left:  filepath.Join(d.left, entryRel),
+									right: filepath.Join(d.other, entryRel),
+									label: entry.Path,
+								})
+							}
+							index := 0
+							for j := range chain {
+								if filepath.ToSlash(filepath.Join(d.left, rel)) == filepath.ToSlash(chain[j].left) {
+									index = j
+									break
+								}
+							}
 							m.closeDirCompare()
-							m.ShowFileDiff(filepath.Join(d.left, rel), filepath.Join(d.other, rel))
+							if len(chain) > 1 {
+								m.loadDiffFile(chain, index)
+							} else {
+								m.ShowFileDiff(filepath.Join(d.left, rel), filepath.Join(d.other, rel))
+							}
 						}
 					}
 					if shown == 0 {

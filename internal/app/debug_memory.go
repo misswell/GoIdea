@@ -8,15 +8,19 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+
+	"mayoi/internal/openidea"
 )
 
 type debugMemoryView struct {
-	loaded   bool
-	loading  bool
-	err      string
-	snapshot debugMemorySnapshot
-	filter   string
-	list     ui.ListState
+	loaded     bool
+	loading    bool
+	err        string
+	snapshot   debugMemorySnapshot
+	filter     string
+	selected   string
+	list       ui.ListState
+	inspection *debugMemoryInspection
 }
 
 type debugMemorySnapshot struct {
@@ -86,6 +90,153 @@ func (m *Model) refreshDebugMemory() {
 	}()
 }
 
+// DebugShowMemoryInstances opens the instances pane for the selected memory
+// class, or the first class when nothing is selected.
+func (m *Model) DebugShowMemoryInstances() {
+	v := &m.debug.memory
+	name := v.selected
+	if name == "" && len(v.snapshot.Rows) > 0 {
+		name = v.snapshot.Rows[0].Name
+	}
+	if name == "" {
+		m.debug.err = "Select a JVM class first"
+		m.invalidate()
+		return
+	}
+	m.showDebugMemoryInstances(name)
+}
+
+// DebugShowMemoryReferrers opens the incoming-reference tree for the lead
+// object in the instances pane.
+func (m *Model) DebugShowMemoryReferrers() {
+	inspection := m.debug.memory.inspection
+	if inspection == nil || len(inspection.instances) == 0 || !m.debug.paused {
+		return
+	}
+	ref := inspection.lead
+	if ref.ID == 0 {
+		ref, _ = debugMemoryValueRef(inspection.generation, inspection.instances[0])
+	}
+	node := inspection.nodes[ref]
+	if node == nil {
+		node = &debugMemoryNode{ref: ref}
+		inspection.nodes[ref] = node
+	}
+	node.expanded = true
+	node.showReferrers = true
+	if !node.fieldsLoaded {
+		m.debugMemoryLoadNode(inspection, node, false)
+	}
+	m.debugMemoryLoadNode(inspection, node, true)
+	m.invalidate()
+}
+
+func (m *Model) DebugCloseMemoryInstances() {
+	m.debug.memory.inspection = nil
+	m.invalidate()
+}
+
+// DebugMemoryJumpToSource opens the declaration of the selected JVM class.
+// It mirrors OpenIDEA's jumpToClass: query the outer class name, require the
+// package-qualified container, and reveal the declaration's exact position.
+func (m *Model) DebugMemoryJumpToSource(className string) {
+	if className == "" {
+		className = m.debug.memory.selected
+	}
+	if className == "" && m.debug.memory.inspection != nil {
+		className = m.debug.memory.inspection.className
+	}
+	if className == "" {
+		return
+	}
+	outer := debugMemoryOuterClassName(className)
+	if outer == "" {
+		return
+	}
+	dot := strings.LastIndexByte(outer, '.')
+	simple, pkg := outer, ""
+	if dot >= 0 {
+		simple, pkg = outer[dot+1:], outer[:dot]
+	}
+	ctx := m.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	go func() {
+		defer cancel()
+		raw, err := m.invoke(ctx, "lsp_workspace_symbols", map[string]any{
+			"request": m.nextRequest(), "query": simple,
+		})
+		var symbols []openidea.WorkspaceSymbol
+		if err == nil {
+			err = json.Unmarshal(raw, &symbols)
+		}
+		m.post(func() {
+			if err != nil {
+				m.status = "Could not find the source of " + className + "."
+				m.invalidate()
+				return
+			}
+			for _, symbol := range symbols {
+				if symbol.Name != simple || !debugMemoryTypeSymbol(symbol.Kind) ||
+					!debugMemoryInPackage(symbol.Container, pkg) {
+					continue
+				}
+				m.revealAt(symbol.Location.Path,
+					int(symbol.Location.Range.Start.Line),
+					int(symbol.Location.Range.Start.Col))
+				m.invalidate()
+				return
+			}
+			m.status = "Could not find the source of " + className + "."
+			m.invalidate()
+		})
+	}()
+}
+
+func debugMemoryOuterClassName(className string) string {
+	className = strings.TrimSpace(className)
+	for strings.HasSuffix(className, "[]") {
+		className = strings.TrimSuffix(className, "[]")
+	}
+	if i := strings.IndexByte(className, '$'); i >= 0 {
+		className = className[:i]
+	}
+	return className
+}
+
+func debugMemoryTypeSymbol(kind string) bool {
+	switch strings.ToLower(kind) {
+	case "class", "interface", "enum", "struct":
+		return true
+	default:
+		return false
+	}
+}
+
+func debugMemoryInPackage(container *string, pkg string) bool {
+	if container == nil {
+		return pkg == ""
+	}
+	value := *container
+	if value == pkg {
+		return true
+	}
+	if pkg == "" || !strings.HasSuffix(value, pkg) {
+		return false
+	}
+	suffix := strings.TrimSuffix(value, pkg)
+	if suffix == "" {
+		return true
+	}
+	last := suffix[len(suffix)-1]
+	return !(last == '_' || last == '$' || last == '.' ||
+		last >= '0' && last <= '9' ||
+		last >= 'A' && last <= 'Z' ||
+		last >= 'a' && last <= 'z')
+}
+
 func (m *Model) debugMemory(c *ui.Context, p *ui.Theme, oi oiColors) {
 	d, v := &m.debug, &m.debug.memory
 	ui.Column(c).Grow(1).MinHeight(0).MinWidth(0).Children(func() {
@@ -130,18 +281,50 @@ func (m *Model) debugMemory(c *ui.Context, p *ui.Theme, oi oiColors) {
 				}
 			})
 		}
-		memoryRow("Class", "Instances", "Δ Instances", "Bytes", p.TextMuted)
-		ui.List(c.Key("debug-memory-classes"), &v.list, len(rows), func(i int) {
-			row := rows[i]
-			name := row.Name
-			if row.Module != "" {
-				name += "  ·  " + row.Module
+		ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
+			ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Children(func() {
+				memoryRow("Class", "Instances", "Δ Instances", "Bytes", p.TextMuted)
+				ui.List(c.Key("debug-memory-classes"), &v.list, len(rows), func(i int) {
+					row := rows[i]
+					name := row.Name
+					if row.Module != "" {
+						name += "  ·  " + row.Module
+					}
+					delta := ""
+					if row.DeltaInstances != nil {
+						delta = fmt.Sprintf("%+d", *row.DeltaInstances)
+					}
+					item := ui.Row(c.Key("memory-class:" + row.Name)).Height(24).AlignItems(ui.Center)
+					if d.paused {
+						item.Cursor(ui.CursorPointer)
+					}
+					item.Children(func() {
+						ui.Row(c).Grow(1).MinWidth(0).Children(func() {
+							memoryRow(name, fmt.Sprint(row.Instances), delta, fmt.Sprint(row.Bytes), p.Text)
+						})
+						debugIcon(c, oi, "memory-instances:"+row.Name, "toolwindows/hierarchy",
+							"Show Instances", d.paused && !d.ended, false,
+							func() { m.showDebugMemoryInstances(row.Name) }).Label("Show Instances")
+					})
+					if item.RowDoubleClicked() && d.paused {
+						m.showDebugMemoryInstances(row.Name)
+					}
+					if item.Clicked() {
+						v.selected = row.Name
+					}
+					item.Menu(func(menu *ui.Menu) {
+						if menu.Item("Show Instances").Disabled(!d.paused).Chosen() {
+							m.showDebugMemoryInstances(row.Name)
+						}
+						if menu.Item("Jump to Source").Chosen() {
+							m.DebugMemoryJumpToSource(row.Name)
+						}
+					})
+				}).Grow(1).MinWidth(0).MinHeight(0)
+			})
+			if v.inspection != nil {
+				m.debugMemoryInstances(c, p, oi)
 			}
-			delta := ""
-			if row.DeltaInstances != nil {
-				delta = fmt.Sprintf("%+d", *row.DeltaInstances)
-			}
-			memoryRow(name, fmt.Sprint(row.Instances), delta, fmt.Sprint(row.Bytes), p.Text)
-		}).Grow(1).MinHeight(0)
+		})
 	})
 }

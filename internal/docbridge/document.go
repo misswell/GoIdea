@@ -33,6 +33,9 @@ var (
 	ErrClosed = errors.New("docbridge: document is closed")
 	// ErrReadOnly is returned for edits of a read-only document.
 	ErrReadOnly = errors.New("docbridge: document is read-only")
+	// ErrChanged is returned by ApplyEditsIfVersion when the buffer changed
+	// after the caller computed byte offsets for it.
+	ErrChanged = errors.New("docbridge: document changed")
 	// ErrResync gives up when the backend keeps changing under a resync.
 	ErrResync = errors.New("docbridge: backend versions keep moving during resync")
 )
@@ -183,6 +186,14 @@ func (d *Document) ReadOnly() bool {
 	return d.info.ReadOnly
 }
 
+// SetReadOnly records the backend's Toggle Read-only Attribute result on the
+// shared document, so every tab edits the same state without reopening it.
+func (d *Document) SetReadOnly(readOnly bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.info.ReadOnly = readOnly
+}
+
 // Buffer returns the shared editor buffer, for editors and views to read.
 func (d *Document) Buffer() *editor.Buffer { return d.buf }
 
@@ -285,6 +296,29 @@ func (d *Document) Text() string { return d.buf.String() }
 func (d *Document) ApplyEdits(ctx context.Context, edits ...editor.Edit) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	return d.applyEditsLocked(ctx, edits...)
+}
+
+// ApplyEditsIfVersion applies byte edits only when the buffer still has the
+// version they were computed against. It keeps operations such as Safe Delete
+// from replacing unrelated text when the user edits while a search is running.
+func (d *Document) ApplyEditsIfVersion(
+	ctx context.Context,
+	expected uint64,
+	edits ...editor.Edit,
+) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.closed {
+		return ErrClosed
+	}
+	if d.buf.Snapshot().Version() != expected {
+		return ErrChanged
+	}
+	return d.applyEditsLocked(ctx, edits...)
+}
+
+func (d *Document) applyEditsLocked(ctx context.Context, edits ...editor.Edit) error {
 	if d.closed {
 		return ErrClosed
 	}

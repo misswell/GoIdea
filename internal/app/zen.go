@@ -108,10 +108,11 @@ func (m *Model) zenWorkbench(c *ui.Context, p *ui.Theme) {
 // zenHeader is OpenIDEA's compact header: the open file's name, centred, on a
 // 30px bar and no widgets at all.
 func (m *Model) zenHeader(c *ui.Context, oi oiColors) {
-	title := "GoIDEA"
+	name := ""
 	if t := m.tab(); t != nil {
-		title = filepath.Base(t.doc.Path())
+		name = filepath.Base(t.doc.Path())
 	}
+	title := m.windowTitle(name)
 	ui.Row(c).Height(oiCompactHeader).Shrink(0).Padding(0, 10).
 		AlignItems(ui.Center).Children(func() {
 		ui.Row(c).Grow(1).Justify(ui.Center).Children(func() {
@@ -141,7 +142,12 @@ func (m *Model) zenEditor(c *ui.Context, p *ui.Theme, oi oiColors) {
 		// surface takes its height from the row, not from its text.
 		ui.Row(c).Grow(1).MinHeight(0).MinWidth(0).Justify(ui.Center).
 			AlignItems(ui.Stretch).Children(func() {
-			editor.View(c, t.state).Width(m.zenColumnWidth()).MinWidth(0).MinHeight(0)
+			view := editor.View(c, t.state).Width(m.zenColumnWidth()).MinWidth(0).MinHeight(0)
+			m.applyDeferredCaretCenter(t)
+			if dropped := m.takeEditorDroppedFiles(view); len(dropped) > 0 {
+				m.openPaths(dropped)
+			}
+			m.coverageGutterTooltip(c, view, t)
 		})
 	})
 }

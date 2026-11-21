@@ -676,6 +676,20 @@ func (p *Plugin) ensure() (*instance, error) {
 // what it did, which counts toward disabling it.
 func (p *Plugin) follow(in *instance) {
 	<-in.done
+	p.finalize(in)
+}
+
+// finalize publishes the end of an instance before a caller observes the
+// stopped plugin, then releases its runtime. Request and follow may both call
+// it, so publishing and cleanup are idempotent.
+func (p *Plugin) finalize(in *instance) {
+	p.publishStopped(in)
+	in.stop()
+}
+
+// publishStopped changes the plugin's visible state after its instance ends.
+// The identity check makes the first caller own crash accounting and logging.
+func (p *Plugin) publishStopped(in *instance) {
 	p.mu.Lock()
 	ours := p.in == in
 	if ours {
@@ -689,7 +703,6 @@ func (p *Plugin) follow(in *instance) {
 	if !ours {
 		return
 	}
-	in.stop()
 	if crashes >= maxCrashes {
 		p.logf("error", "stopped: %s; off until reloaded, after %d stops", in.describe(in.err), crashes)
 	} else {

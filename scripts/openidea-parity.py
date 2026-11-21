@@ -63,15 +63,121 @@ def sources(subdir="src", suffix=(".ts", ".tsx")):
         yield rel, read(path)
 
 
+def code_mask(text):
+    """Blank strings and comments while preserving indices and line breaks."""
+    out = list(text)
+    i = 0
+    state = "code"
+    quote = ""
+    while i < len(text):
+        ch = text[i]
+        nxt = text[i + 1] if i + 1 < len(text) else ""
+        if state == "code":
+            if ch == "/" and nxt == "/":
+                out[i] = out[i + 1] = " "
+                state, i = "line", i + 2
+                continue
+            if ch == "/" and nxt == "*":
+                out[i] = out[i + 1] = " "
+                state, i = "block", i + 2
+                continue
+            if ch == "/" and regex_can_start(text, i):
+                out[i] = " "
+                state, i = "regex", i + 1
+                continue
+            if ch in ("'", '"', "`"):
+                quote = ch
+                out[i] = " "
+                state, i = "string", i + 1
+                continue
+        elif state == "line":
+            if ch == "\n":
+                state = "code"
+            else:
+                out[i] = " "
+            i += 1
+            continue
+        elif state == "regex":
+            if ch == "\\" and i + 1 < len(text):
+                out[i] = " "
+                if text[i + 1] != "\n":
+                    out[i + 1] = " "
+                i += 2
+                continue
+            if ch == "/":
+                out[i] = " "
+                state = "code"
+            elif ch != "\n":
+                out[i] = " "
+            i += 1
+            continue
+        elif state == "block":
+            if ch == "*" and nxt == "/":
+                out[i] = out[i + 1] = " "
+                state, i = "code", i + 2
+                continue
+            if ch != "\n":
+                out[i] = " "
+            i += 1
+            continue
+        elif state == "string":
+            if ch == "\\" and i + 1 < len(text):
+                out[i] = " "
+                if text[i + 1] != "\n":
+                    out[i + 1] = " "
+                i += 2
+                continue
+            if ch == quote:
+                out[i] = " "
+                state = "code"
+            elif ch != "\n":
+                out[i] = " "
+            i += 1
+            continue
+        i += 1
+    return "".join(out)
+
+
+def regex_can_start(text, slash):
+    """Heuristic for a JavaScript regular-expression literal."""
+    i = slash - 1
+    while i >= 0 and text[i].isspace():
+        i -= 1
+    if i < 0:
+        return True
+    # `</Tag>` in TSX is a closing tag, not a regular-expression literal.
+    # Treating `<` as an expression-start token masks the rest of the file
+    # whenever a JSX node appears before an action or settings-page table.
+    if text[i] in "([{=,:;!?&|+-*%^~>":
+        return True
+    word = re.search(r"([A-Za-z_]\w*)$", text[max(0, i - 16) : i + 1])
+    return bool(
+        word
+        and word.group(1)
+        in {
+            "return",
+            "case",
+            "throw",
+            "typeof",
+            "instanceof",
+            "in",
+            "of",
+            "yield",
+            "await",
+        }
+    )
+
+
 def call_blocks(text, name):
     """The argument text of every top-level `name(...)` call."""
     out = []
-    for m in re.finditer(r"\b" + re.escape(name) + r"\s*\(", text):
+    mask = code_mask(text)
+    for m in re.finditer(r"\b" + re.escape(name) + r"\s*\(", mask):
         start = m.end() - 1
         depth = 0
         i = start
         while i < len(text):
-            ch = text[i]
+            ch = mask[i]
             if ch == "(":
                 depth += 1
             elif ch == ")":
@@ -89,17 +195,50 @@ def objects_in(block):
     out = []
     depth = 0
     start = None
+    mask = code_mask(block)
     for i, ch in enumerate(block):
-        if ch == "{":
+        token = mask[i]
+        if token == "{":
             if depth == 0:
                 start = i
             depth += 1
-        elif ch == "}":
+        elif token == "}":
             depth -= 1
             if depth == 0 and start is not None:
                 out.append(block[start : i + 1])
                 start = None
     return out
+
+
+def object_bodies(text):
+    """Every balanced brace body, including objects nested in function bodies."""
+    out = []
+    stack = []
+    mask = code_mask(text)
+    for i, ch in enumerate(mask):
+        if ch == "{":
+            stack.append(i)
+        elif ch == "}" and stack:
+            start = stack.pop()
+            out.append(text[start + 1 : i])
+    return out
+
+
+def top_level_match(pattern, body):
+    """The first match at an object's own field depth, not inside a callback."""
+    mask = code_mask(body)
+    depth_at = [0] * len(body)
+    depth = 0
+    for i, ch in enumerate(mask):
+        depth_at[i] = depth
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+    for match in pattern.finditer(body):
+        if depth_at[match.start()] == 0:
+            return match
+    return None
 
 
 ID_RE = re.compile(r"\bid\s*:\s*(?:\"([^\"]+)\"|'([^']+)'|`([^`]+)`)")
@@ -144,12 +283,21 @@ def ident_value(raw, rel):
     return next(iter(values)) if len(values) == 1 else ""
 
 
-def id_of(obj, rel):
-    literal = val(ID_RE.search(obj))
+def string_field(obj, field, rel):
+    literal = re.search(
+        r"\b"
+        + re.escape(field)
+        + r"\s*:\s*(?:\"([^\"]*)\"|'([^']*)'|`([^`]*)`)",
+        obj,
+    )
     if literal:
-        return literal
-    ref = re.search(r"\bid\s*:\s*([A-Za-z_]\w*)\s*[,}]", obj)
+        return val(literal)
+    ref = re.search(r"\b" + re.escape(field) + r"\s*:\s*([A-Za-z_]\w*)\s*[,}]", obj)
     return ident_value(ref.group(1), rel) if ref else ""
+
+
+def id_of(obj, rel):
+    return string_field(obj, "id", rel)
 
 
 def registrations(call, fields=("id",)):
@@ -165,13 +313,13 @@ def registrations(call, fields=("id",)):
                         if field == "id":
                             item["id"] = id_of(obj, rel)
                         elif field == "title":
-                            item["title"] = val(TITLE_RE.search(obj))
+                            item["title"] = string_field(obj, "title", rel)
                         elif field == "kind":
                             item["kind"] = val(KIND_RE.search(obj))
                         elif field == "anchor":
                             item["anchor"] = val(ANCHOR_RE.search(obj))
                         elif field == "group":
-                            item["group"] = val(GROUP_RE.search(obj))
+                            item["group"] = string_field(obj, "group", rel)
                     key = item.get(fields[0], "")
                     if key:
                         found.append(item)
@@ -192,19 +340,336 @@ def feature_of(rel):
     return None
 
 
+def labeled_tuples(path, declaration):
+    """`[key, label]` tuples from a typed tuple-array constant."""
+    text = read(path)
+    match = re.search(
+        r"(?:export\s+)?const\s+" + re.escape(declaration) + r"[^=]*=\s*\[",
+        text,
+        re.S,
+    )
+    if not match:
+        return []
+    array = delimited(text, match.end() - 1, "[", "]")
+    return re.findall(
+        r'\[\s*"([^"]+)"\s*,\s*"([^"]+)"\s*\]',
+        array,
+    )
+
+
+def expand_dynamic_action(item):
+    """Concrete OpenIDEA ids for template actions whose domains are constants."""
+    aid = item["id"]
+    feature = OPENIDEA / "src" / "features"
+    if aid == "project.option.${key}":
+        values = labeled_tuples(
+            feature / "project-tree" / "HeaderActions.tsx", "OPTION_LABELS"
+        )
+        return [
+            {
+                **item,
+                "id": "project.option." + key,
+                "title": "Project View: " + label,
+            }
+            for key, label in values
+        ]
+    if aid == "project.viewMode.${mode}":
+        values = labeled_tuples(
+            feature / "project-tree" / "store.ts", "VIEW_MODES"
+        )
+        return [
+            {
+                **item,
+                "id": "project.viewMode." + mode,
+                "title": "Project View: Show " + label,
+            }
+            for mode, label in values
+        ]
+    if aid == "project.sortBy.${sortBy}":
+        values = labeled_tuples(
+            feature / "project-tree" / "HeaderActions.tsx", "SORT_LABELS"
+        )
+        return [
+            {
+                **item,
+                "id": "project.sortBy." + sort,
+                "title": "Project View: " + label,
+            }
+            for sort, label in values
+        ]
+    if aid == "merge.${command}":
+        text = read(feature / "vcs" / "mergeActions.ts")
+        match = re.search(
+            r"(?:export\s+)?const\s+COMMANDS\s*=\s*\[(.*?)\]\s*as\s+const",
+            text,
+            re.S,
+        )
+        if not match:
+            return [item]
+        commands = re.findall(
+            r'\[\s*"([^"]+)"\s*,\s*"([^"]+)"(?:\s*,\s*"[^"]+")?\s*\]',
+            match.group(1),
+        )
+        return [
+            {
+                **item,
+                "id": "merge." + command,
+                "title": title,
+            }
+            for command, title in commands
+        ]
+    if aid in ("navigate.toggleBookmark${d}", "navigate.gotoBookmark${d}"):
+        return [
+            {
+                **item,
+                "id": aid.replace("${d}", str(digit)),
+                "title": item["title"].replace("${d}", str(digit)),
+            }
+            for digit in range(10)
+        ]
+    return [item]
+
+
 def actions():
     items = []
     for rel, text in sources():
+        # Read the action object that owns each id independently of the rest of
+        # the file. This remains reliable in large TSX modules where JSX text,
+        # regular-expression literals and nested callbacks can otherwise throw
+        # off whole-file delimiter matching.
+        for match in ID_RE.finditer(text):
+            if obvious_comment(text, match.start()):
+                continue
+            obj = enclosing_braces(text, match.start())
+            if not obj:
+                continue
+            if not re.search(r"\btitle\s*:", obj):
+                continue
+            if not re.search(r"\b(?:run|toggled)\s*:", obj):
+                continue
+            aid = val(match)
+            if not action_id(aid):
+                continue
+            items.append(
+                {
+                    "id": aid,
+                    "title": val(TITLE_RE.search(obj)),
+                    "source": rel,
+                }
+            )
+        for match in re.finditer(
+            r"\bid\s*:\s*([A-Za-z_]\w*)\s*(?:,|})", text
+        ):
+            if obvious_comment(text, match.start()):
+                continue
+            obj = enclosing_braces(text, match.start())
+            if not obj:
+                continue
+            if not re.search(r"\btitle\s*:", obj):
+                continue
+            if not re.search(r"\b(?:run|toggled)\s*:", obj):
+                continue
+            aid = ident_value(match.group(1), rel)
+            if not action_id(aid):
+                continue
+            items.append(
+                {
+                    "id": aid,
+                    "title": val(TITLE_RE.search(obj)),
+                    "source": rel,
+                }
+            )
+
         for name in ("registerAction", "registerActions"):
             for block in call_blocks(text, name):
                 for obj in objects_in(block) or [block]:
                     aid = id_of(obj, rel)
-                    if not aid:
+                    if not action_id(aid):
                         continue
                     items.append(
                         {"id": aid, "title": val(TITLE_RE.search(obj)), "source": rel}
                     )
-    return dedupe(items, "id")
+        # Several features declare their action array first and pass the
+        # variable to registerActions later. Treat the declaration as part of
+        # the registration so task/reply menus and other dynamic actions stay
+        # in the parity inventory.
+        for m in re.finditer(
+            r"(?:export\s+)?const\s+\w+\s*:\s*Action\[\]\s*=\s*\[", text
+        ):
+            array = delimited(text, m.end() - 1, "[", "]")
+            for obj in objects_in(array):
+                aid = id_of(obj, rel)
+                if not action_id(aid):
+                    continue
+                items.append(
+                    {"id": aid, "title": val(TITLE_RE.search(obj)), "source": rel}
+                )
+
+        # Actions commonly live in typed factory return values rather than in a
+        # registerAction call's inline argument. Scan every object body that has
+        # the required Action fields. The run/toggled test keeps settings and UI
+        # descriptors with an unrelated id out of the action inventory.
+        for obj in object_bodies(text):
+            action_field = top_level_match(
+                re.compile(r"\b(?:run|toggled)\s*:"), obj
+            )
+            if not action_field:
+                continue
+            title_field = top_level_match(re.compile(r"\btitle\s*:"), obj)
+            if not title_field:
+                continue
+            id_match = top_level_match(ID_RE, obj)
+            aid = val(id_match)
+            if not aid:
+                ref = top_level_match(
+                    re.compile(r"\bid\s*:\s*([A-Za-z_]\w*)\s*[,}]"), obj
+                )
+                aid = ident_value(ref.group(1), rel) if ref else ""
+            if not action_id(aid):
+                continue
+            items.append(
+                {
+                    "id": aid,
+                    "title": val(top_level_match(TITLE_RE, obj)),
+                    "source": rel,
+                }
+            )
+
+        # Some modules define a local `edit`, `editorAction` or similar factory
+        # whose Action object uses an id parameter. Recover the literal id
+        # argument from its call sites.
+        for factory, params, decl in factory_declarations(text):
+            if "Action[]" in decl or "Action" not in decl:
+                continue
+            param_names = [param_name(p) for p in split_top_level(params, ",")]
+            param_names = [name for name in param_names if name]
+            id_param = factory_id_param(text, decl, params)
+            if id_param not in param_names:
+                continue
+            id_index = param_names.index(id_param)
+            for block in call_blocks(text, factory):
+                args = split_top_level(block, ",")
+                aid = literal_value(args[id_index]) if id_index < len(args) else ""
+                if action_id(aid):
+                    items.append({"id": aid, "title": "", "source": rel})
+    expanded = []
+    for item in items:
+        expanded.extend(expand_dynamic_action(item))
+    return dedupe(expanded, "id")
+
+
+def action_id(value):
+    """Global action ids are dotted. Templates are kept only after a namespace."""
+    if not value or value.startswith("${"):
+        return False
+    return "." in value
+
+
+def obvious_comment(text, pos):
+    start = text.rfind("\n", 0, pos) + 1
+    line = text[start:pos].lstrip()
+    return line.startswith(("*", "//", "/*"))
+
+
+def enclosing_braces(text, pos):
+    """The nearest balanced `{...}` around pos, returned without its outer braces."""
+    depth = 0
+    open_at = -1
+    for i in range(pos - 1, -1, -1):
+        ch = text[i]
+        if ch == "}":
+            depth += 1
+        elif ch == "{":
+            if depth == 0:
+                open_at = i
+                break
+            depth -= 1
+    if open_at < 0:
+        return ""
+    depth = 0
+    for i in range(open_at, len(text)):
+        ch = text[i]
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return text[open_at + 1 : i]
+    return ""
+
+
+def factory_declarations(text):
+    """(name, params, declaration prefix) for local functions returning Action."""
+    out = []
+    patterns = (
+        r"(?:export\s+)?(?:const|let)\s+(\w+)\s*=\s*(?:async\s*)?\(([^)]*)\)\s*:\s*Action\s*=>",
+        r"(?:export\s+)?function\s+(\w+)\s*\(([^)]*)\)\s*:\s*Action\s*\{",
+    )
+    for pattern in patterns:
+        for m in re.finditer(pattern, text, re.S):
+            out.append((m.group(1), m.group(2), m.group(0)))
+    return out
+
+
+def function_body_after(text, start):
+    """A small bounded window after a declaration, enough to inspect its body."""
+    return text[start : start + 1800]
+
+
+def factory_id_param(text, decl, params):
+    """The parameter used for the Action object's id field."""
+    body = function_body_after(text, text.find(decl) + len(decl))
+    for obj in object_bodies(body):
+        if not top_level_match(re.compile(r"\b(?:run|toggled)\s*:"), obj):
+            continue
+        ref = top_level_match(
+            re.compile(r"\bid\s*:\s*([A-Za-z_]\w*)\s*(?:,|$)"), obj
+        )
+        if ref and ref.group(1) in params:
+            return ref.group(1)
+        if re.search(r"(?:^|[,\n])\s*id\s*,", obj):
+            for candidate in split_top_level(params, ","):
+                if param_name(candidate) == "id":
+                    return "id"
+    return ""
+
+
+def param_name(param):
+    param = param.strip()
+    if not param:
+        return ""
+    param = param.split("=", 1)[0].strip()
+    return param.split(":", 1)[0].strip().split()[-1]
+
+
+def split_top_level(text, separator):
+    """Split source text on a one-character separator outside brackets."""
+    parts = []
+    start = 0
+    depth = 0
+    mask = code_mask(text)
+    pairs = {"(": ")", "[": "]", "{": "}", "<": ">"}
+    closes = set(pairs.values())
+    for i, ch in enumerate(mask):
+        if ch in pairs:
+            depth += 1
+        elif ch in closes and depth:
+            depth -= 1
+        elif ch == separator and depth == 0:
+            parts.append(text[start:i])
+            start = i + 1
+    parts.append(text[start:])
+    return parts
+
+
+def literal_value(text):
+    """A plain quoted string, rejecting templates with interpolation."""
+    text = text.strip()
+    match = re.fullmatch(r"\"([^\"]*)\"|'([^']*)'|`([^`]*)`", text, re.S)
+    if not match:
+        return ""
+    value = val(match)
+    return "" if "${" in value else value
 
 
 def keymap_presets():
@@ -235,10 +700,11 @@ def settings_keys():
 def delimited(text, start, opener, closer):
     """Text inside the bracket pair that starts at `start`."""
     depth = 0
+    mask = code_mask(text)
     for i in range(start, len(text)):
-        if text[i] == opener:
+        if mask[i] == opener:
             depth += 1
-        elif text[i] == closer:
+        elif mask[i] == closer:
             depth -= 1
             if depth == 0:
                 return text[start + 1 : i]
@@ -332,13 +798,13 @@ def page_from(obj, rel):
     keys = []
     keys += re.findall(r"\bkey\s*:\s*\"([^\"]+)\"", obj)
     keys += re.findall(r"\buseSetting\s*(?:<[^>]*>)?\s*\(\s*\"([^\"]+)\"", obj)
-    pid = val(ID_RE.search(obj))
+    pid = id_of(obj, rel)
     if "${" in pid:
         pid = ""
     return {
         "id": pid,
-        "title": val(TITLE_RE.search(obj)),
-        "group": val(GROUP_RE.search(obj)),
+        "title": string_field(obj, "title", rel),
+        "group": string_field(obj, "group", rel),
         "source": rel,
         "keys": sorted(set(keys)),
     }
@@ -444,6 +910,114 @@ def load_status():
     return data.get("items", {})
 
 
+def goidea_action_aliases():
+    """OpenIDEA action ids redirected by GoIDEA's action registry."""
+    text = read(ROOT / "internal" / "app" / "action.go")
+    match = re.search(r"var actionAliases = map\[string\]string\{(.*?)\n\}", text, re.S)
+    if not match:
+        return {}
+    return dict(re.findall(r'"([^"]+)"\s*:\s*"([^"]+)"', match.group(1)))
+
+
+def goidea_registered_actions():
+    """Ids registered by the native action/command tables, including aliases."""
+    found = set()
+    app_dir = ROOT / "internal" / "app"
+    for path in app_dir.glob("*.go"):
+        if path.name.endswith("_test.go"):
+            continue
+        text = read(path)
+        found.update(
+            match.group(1)
+            for match in re.finditer(
+                r'\{\s*"([A-Za-z][A-Za-z0-9_]*'
+                r'(?:\.[A-Za-z][A-Za-z0-9_]*)+)"\s*,',
+                text,
+            )
+        )
+        found.update(
+            match.group(1)
+            for match in re.finditer(
+                r'\baction\(\s*"([A-Za-z][A-Za-z0-9_]*'
+                r'(?:\.[A-Za-z][A-Za-z0-9_]*)+)"\s*,',
+                text,
+            )
+        )
+        found.update(
+            match.group(1)
+            for match in re.finditer(
+                r'\bID\s*:\s*"([A-Za-z][A-Za-z0-9_]*'
+                r'(?:\.[A-Za-z][A-Za-z0-9_]*)+)"\s*,',
+                text,
+            )
+        )
+        # Several tables use a file-local constructor which takes the action id
+        # as its first string. The literal itself is not in an ID: field, so
+        # track those constructor names and their calls as real registrations.
+        helpers = set()
+        for match in re.finditer(r"(\w+)\s*:=\s*func\b", text):
+            brace = text.find("{", match.end())
+            if brace < 0:
+                continue
+            depth = 0
+            end = -1
+            for index in range(brace, len(text)):
+                if text[index] == "{":
+                    depth += 1
+                elif text[index] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        end = index + 1
+                        break
+            if end < 0:
+                continue
+            body = text[brace:end]
+            if "ID: id" in body.replace("\t", " ").replace("\n", " ") or re.search(
+                r"ID\s*:\s*id\s*,", body
+            ):
+                helpers.add(match.group(1))
+        for helper_name in helpers:
+            helper_name = re.escape(helper_name)
+            found.update(
+                match.group(1)
+                for match in re.finditer(
+                    r"\b" + helper_name + r'\(\s*"([A-Za-z][A-Za-z0-9_]*'
+                    r'(?:\.[A-Za-z][A-Za-z0-9_]*)+)"\s*,',
+                    text,
+                )
+            )
+    return found
+
+
+def action_status(items, aid, aliases, registered):
+    """An upstream id has the state of its canonical GoIDEA action."""
+    status, evidence = status_doc(items, "action:" + aid, items)
+    if status != "missing":
+        return status, evidence
+    target = aid
+    seen = set()
+    while target not in seen:
+        seen.add(target)
+        next_id = aliases.get(target, "")
+        if not next_id:
+            break
+        target = next_id
+    if target != aid:
+        status, evidence = status_doc(items, "action:" + target, items)
+        if status != "missing":
+            return status, "OpenIDEA id `{}` aliases GoIDEA action `{}`; {}".format(
+                aid, target, evidence
+            )
+    if aid in registered or target in registered:
+        native_id = aid if aid in registered else target
+        return (
+            "partial",
+            "internal/app registers the native action `{}`; interaction-level "
+            "acceptance is pending".format(native_id),
+        )
+    return status, evidence
+
+
 def status_doc(items, key, status):
     entry = items.get(key)
     if not entry:
@@ -485,6 +1059,8 @@ def render():
     tauri = ipc.tauri_commands()
     pin = ipc.upstream_pin()
     status = load_status()
+    aliases = goidea_action_aliases()
+    registered_actions = goidea_registered_actions()
 
     acts = actions()
     presets = keymap_presets()
@@ -529,9 +1105,19 @@ def render():
     for fd in feature_dirs:
         rows.append(("feature:" + fd, status_doc(status, "feature:" + fd, status)))
     for a in acts:
-        rows.append(("action:" + a["id"], status_doc(status, "action:" + a["id"], status)))
+        rows.append(
+            (
+                "action:" + a["id"],
+                action_status(status, a["id"], aliases, registered_actions),
+            )
+        )
     for k in keymap_only:
-        rows.append(("action:" + k, status_doc(status, "action:" + k, status)))
+        rows.append(
+            (
+                "action:" + k,
+                action_status(status, k, aliases, registered_actions),
+            )
+        )
     for name in presets:
         rows.append(("keymap-preset:" + name, status_doc(status, "keymap-preset:" + name, status)))
     for t in tools:
@@ -610,11 +1196,12 @@ def render():
     add("")
     add(
         "`missing` is the default and is not a claim that no code exists anywhere: it means\n"
-        "no evidence has been recorded. The only place a status is raised is\n"
-        "`scripts/openidea-parity-status.json`, and every raised status must name its\n"
-        "evidence (a regression check id, a doc or a source path). Nothing is hand-picked\n"
-        "out of the inventory: the item lists below are generated from the source, and a\n"
-        "new action, tool window, page or command appears automatically."
+        "no evidence has been recorded. A registered action with an otherwise undeclared\n"
+        "status appears as `partial`; other raised statuses come from\n"
+        "`scripts/openidea-parity-status.json`, where evidence names a regression check id,\n"
+        "a doc or a source path. Nothing is hand-picked out of the inventory: the item\n"
+        "lists below are generated from the source, and a new action, tool window, page or\n"
+        "command appears automatically."
     )
     add("")
     add("## Inventory")
@@ -711,7 +1298,9 @@ def render():
         add("| Action | Title | Source | Status |")
         add("| --- | --- | --- | --- |")
         for a in group:
-            st, ev = status_doc(status, "action:" + a["id"], status)
+            st, ev = action_status(
+                status, a["id"], aliases, registered_actions
+            )
             add(
                 "| `{}` | {} | `{}` | {} |".format(
                     a["id"], cell(a["title"]), a["source"], status_cell(st, ev)
@@ -730,7 +1319,7 @@ def render():
     add("| --- | --- | --- |")
     for k in keymap_only:
         bound = ", ".join(name for name, bs in presets.items() if k in bs)
-        st, ev = status_doc(status, "action:" + k, status)
+        st, ev = action_status(status, k, aliases, registered_actions)
         add("| `{}` | {} | {} |".format(k, bound, status_cell(st, ev)))
     add("")
 

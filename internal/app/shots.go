@@ -195,6 +195,13 @@ func (m *Model) SmokeShots(ctx context.Context, dir string) (map[string]any, err
 		m.post(func() { m.closeSettings() })
 		wait(func() bool { return !m.settingsOpen }, 30*time.Second)
 	}
+	m.post(func() { m.OpenSettingsPage(settingsPageProjectTrust) })
+	wait(func() bool {
+		return m.settingsOpen && m.projectTrust.loaded && !m.projectTrust.loading
+	}, 30*time.Second)
+	shot("settings-project-trust")
+	m.post(func() { m.closeSettings() })
+	wait(func() bool { return !m.settingsOpen }, 30*time.Second)
 
 	// Command palette and the quick-file popup.
 	m.post(func() { m.OpenCommands() })
@@ -430,6 +437,25 @@ func (m *Model) SmokeShots(ctx context.Context, dir string) (map[string]any, err
 	m.post(func() {
 		m.CloseNotifications()
 		m.ClearNotifications()
+	})
+
+	// File › Open Recent: the current project is hidden, as upstream hides it.
+	var shotRecents []RecentProject
+	m.post(func() {
+		shotRecents = m.recents
+		if len(m.filteredRecentsFor("", m.Root())) == 0 {
+			parent := filepath.Dir(m.Root())
+			m.recents = []RecentProject{{
+				Path: parent, Name: filepath.Base(parent), OpenedAt: time.Now().UnixMilli(),
+			}}
+		}
+		m.showRecentProjectsPopup()
+	})
+	wait(func() bool { return m.recentProjectsPopup != nil }, 30*time.Second)
+	shot("recent-projects")
+	m.post(func() {
+		m.closeRecentProjectsPopup()
+		m.recents = shotRecents
 	})
 
 	// Welcome: empty, then with recents, Customize and Plugins.

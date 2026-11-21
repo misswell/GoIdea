@@ -12,20 +12,21 @@ into the app (`Contents/Resources/licenses`).
 ### openidea-server — Apache-2.0
 
 - Project: OpenIDEA, https://github.com/l0ng-ai/openidea
-- Version: 0.1.44, release `v0.1.44` (commit `bf36cc0`)
+- Version: 0.1.52, release `v0.1.52` (commit `203871f`)
 - Component: `openidea-server-macos-aarch64.gz`, the official prebuilt release
   asset for Apple silicon, verified against the release's SHA-256
-- Modification: none; the binary is redistributed unmodified
+- Modification: GoIDEA's fork cancels active RPC work before server exit; the
+  release binary itself is redistributed unmodified
 - Attribution: `third_party/openidea-server/LICENSE`, `third_party/openidea-server/NOTICE`
 
 ### OpenIDEA source — Apache-2.0
 
 - Project: https://github.com/l0ng-ai/openidea
 - Fork: https://github.com/misswell/openidea
-- Pin: submodule `third_party/openidea` at commit `5514282` (the source the RPC
-  client is tested against; the shipped server is the v0.1.44 release build below, or a release build
-  of that same commit when the release asset host is unreachable)
-- Modification: none; the submodule is the fork's untouched commit
+- Pin: submodule `third_party/openidea` at commit `203871f1` (the source the RPC
+  client is tested against and the commit used for the shipped server build)
+- Modification: the fork cancels active requests during host shutdown so tool
+  downloads terminate with the server instead of becoming orphan processes
 - Attribution: the submodule's own `LICENSE` and `NOTICE`
 
 GoIDEA starts this server as a child process (`openidea-server --stdio`) and

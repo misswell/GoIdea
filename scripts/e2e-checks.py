@@ -3,7 +3,7 @@
 
 Usage: e2e-checks.py <phase> <smoke.json> [<smoke.json> ...]
        e2e-checks.py --list
-Phases: base | vcsoperations | tools | debugimport | fresh | lsp | debug | hotswap | spring | rerunfail | gorerun | cargorun | pyrerun | jsrerun | readiness | negjdtls | runswitch | runkill | dbgcfg | attach
+Phases: agents | base | vcsoperations | tools | debugimport | fresh | lsp | debug | hotswap | spring | rerunfail | gorerun | cargorun | pyrerun | jsrerun | readiness | negjdtls | runswitch | runkill | dbgcfg | attach
 Every check has an id. REGRESSION_INDEX.json names the same ids, and --list
 lets scripts/check-regression-index.py prove the two never drift apart, so a
 check cannot be deleted without the index noticing. Every failed assertion is
@@ -34,6 +34,7 @@ SHOT_STATES = {
     "settings-keymap", "settings-editor", "settings-editor-appearance",
     "settings-breadcrumbs", "settings-tabs", "settings-folding", "settings-font",
     "settings-todo", "settings-notifications", "settings-java",
+    "settings-project-trust", "recent-projects",
 }
 
 
@@ -42,6 +43,12 @@ def absent(key, where=""):
 
 
 CHECKS = {
+    "agents": [
+        ("agentsError", *absent("agentsError")),
+        ("subscribed", "agent_subscribe returned an initial task array", lambda d: (get(d, "agents.subscribed") is True and isinstance(get(d, "agents.tasks"), int), get(d, "agents"))),
+        ("providers", "agent_providers returned the provider catalog", lambda d: ((get(d, "agents.providers") or 0) > 0 and get(d, "agents.providerIDs") != [], get(d, "agents"))),
+        ("external", "agent_external_sessions returned a decoded session array", lambda d: (get(d, "agents.externalParsed") is True and isinstance(get(d, "agents.external"), int), get(d, "agents"))),
+    ],
     "shots": [
         ("count", "every visual-regression state was rendered in both themes", lambda d: (len(get(d, "shots") or {}) >= 2 * len(SHOT_STATES), len(get(d, "shots") or {}))),
         ("bytes", "each PNG is a real capture", lambda d: (all(v >= 15000 for v in (get(d, "shots") or {}).values()), {k: v for k, v in (get(d, "shots") or {}).items() if v < 15000})),
@@ -138,7 +145,12 @@ CHECKS = {
         ("term.split", "split right opened a second shell and unsplit merged it back", lambda d: (get(d, "term.split") == "right" and get(d, "term.splitGroups") == 2 and get(d, "term.splitReady") is True and get(d, "term.unsplitAxis") == "" and get(d, "term.unsplitGroups") == 1 and (get(d, "term.unsplitTabs") or 0) >= 2, {"split": get(d, "term.split"), "groups": get(d, "term.splitGroups"), "ready": get(d, "term.splitReady"), "unsplit": get(d, "term.unsplitGroups"), "tabs": get(d, "term.unsplitTabs")})),
         ("term.find", "find in the terminal marked the line with the query", lambda d: ((get(d, "term.findHits") or 0) >= 1 and get(d, "term.findAt") is not None and get(d, "term.findAt") >= 0 and bool(get(d, "term.findLabel")), {"hits": get(d, "term.findHits"), "at": get(d, "term.findAt"), "label": get(d, "term.findLabel")})),
         ("termError", *absent("termError")),
-        ("files.menu", "the project view menu names New, Rename, Delete and Clipboard actions", lambda d: (any(s.startswith("New/File…/Directory…") for s in (get(d, "files.menu") or [])) and any(s.startswith("Rename…") for s in (get(d, "files.menu") or [])), get(d, "files.menu"))),
+        ("files.menu", "the project view menu names New, Refactor Rename, Delete and Clipboard actions", lambda d: (
+            any(s.startswith("New/File…/Directory…") for s in (get(d, "files.menu") or []))
+            and any(s.startswith("Refactor/Rename…") for s in (get(d, "files.menu") or []))
+            and all(label in (get(d, "files.menu") or []) for label in ("Cut", "Copy", "Paste"))
+            and "Delete…" in (get(d, "files.menu") or []),
+            get(d, "files.menu"))),
         ("files.new", "fs_create_dir and fs_create_file made a folder and a file", lambda d: (get(d, "files.newDir") is True and get(d, "files.newFile") is True, {"dir": get(d, "files.newDir"), "file": get(d, "files.newFile")})),
         ("files.rename", "fs_rename renamed the file", lambda d: (get(d, "files.renamed") is True, get(d, "files.renamed"))),
         ("files.copy", "fs_copy pasted the file into another folder", lambda d: (get(d, "files.copied") is True, get(d, "files.copied"))),
@@ -174,6 +186,13 @@ CHECKS = {
         ("runcfg.policy", "the build policy rewrote the Maven command line before launch", lambda d: (get(d, "runcfg.policyApplied") is True and (get(d, "runcfg.policyArgs") or [""])[0] == "clean", get(d, "runcfg.policyArgs"))),
         ("runcfg.run", "the edited configuration ran through the real run path", lambda d: (get(d, "runcfg.exitCode") == 0, get(d, "runcfg.exitCode"))),
         ("runcfg.removed", "the user copy was deleted and is gone from run_configs", lambda d: (get(d, "runcfg.removed") is True, get(d, "runcfg.removed"))),
+        ("workspace.attached", "Attach Project linked the real project and revealed it in Project View", lambda d: (get(d, "workspace.attached") is True and get(d, "workspace.revealed") is True, get(d, "workspace"))),
+        ("workspace.detached", "Detach Project removed the attachment without reopening the editor", lambda d: (get(d, "workspace.detached") is True, get(d, "workspace.detached"))),
+        ("workspace.discovered", "Choose Projects found the nested build roots", lambda d: ((get(d, "workspace.discovered") or 0) >= 2, get(d, "workspace.discovered"))),
+        ("workspace.created", "New Workspace created and opened the container with both projects", lambda d: (get(d, "workspace.created") is True and get(d, "workspace.createdLabel") == "Smoke Workspace", get(d, "workspace"))),
+        ("workspace.managed", "Manage Workspace renamed the container and linked a third project", lambda d: (get(d, "workspace.managed") is True and get(d, "workspace.renamed") == "Smoke Workspace Managed", get(d, "workspace"))),
+        ("workspace.removed", "Remove from Workspace kept the container and unlinked one project", lambda d: (get(d, "workspace.removed") is True, get(d, "workspace.removed"))),
+        ("workspaceError", *absent("workspaceError")),
     ],
     "vcsoperations": [
         ("vcsOperationsError", *absent("vcsOperationsError")),
@@ -203,7 +222,11 @@ CHECKS = {
         ("runkillError", *absent("runkillError")),
         ("refused", "a server killed mid-preparation refuses the launch with the real error", lambda d: (get(d, "runkill.error") not in (None, "") and get(d, "runkill.runStarted") is False, {"error": get(d, "runkill.error"), "started": get(d, "runkill.runStarted")})),
         ("recovered", "the backend restarted and restored the project", lambda d: (get(d, "runkill.recovered") is True, get(d, "runkill.recovered"))),
-        ("rerun", "the same configuration runs to its exit after the recovery", lambda d: (get(d, "runkill.rerunExit") == 0, get(d, "runkill.rerunExit"))),
+        ("rerun", "a real configuration runs to its exit after the recovery", lambda d: (
+            get(d, "runkill.rerunExit") == 0
+            and get(d, "runkill.rerunMode") in ("same", "maven")
+            and bool(get(d, "runkill.rerunConfig")),
+            {"exit": get(d, "runkill.rerunExit"), "mode": get(d, "runkill.rerunMode"), "config": get(d, "runkill.rerunConfig")})),
     ],
     "rerunfail": [
         ("rerunfailError", *absent("rerunfailError")),
@@ -224,7 +247,14 @@ CHECKS = {
     "readiness": [
         ("readinessError", *absent("readinessError")),
         ("ordered", "the six states arrive in order (backend ≤ project ≤ buildModel ≤ run)", lambda d: (get(d, "readiness.ordered") is True, get(d, "readiness"))),
-        ("final", "every readiness state is reached", lambda d: (all(v is True for v in (get(d, "readiness.final") or {}).values()), get(d, "readiness.final"))),
+        ("final", "every readiness state required by this gate is reached", lambda d: (
+            all(get(d, f"readiness.final.{state}") is True for state in ("backend", "project", "buildModel", "run"))
+            and (get(d, "readiness.final.java") is True or get(d, "readiness.javaRequired") is False),
+            get(d, "readiness.final"))),
+        ("java", "Java readiness is required in the full gate and explicitly optional offline", lambda d: (
+            (get(d, "readiness.javaRequired") is True and get(d, "readiness.final.java") is True)
+            or (get(d, "readiness.javaRequired") is False and get(d, "readiness.final.java") is False),
+            {"required": get(d, "readiness.javaRequired"), "java": get(d, "readiness.final.java")})),
     ],
     "attach": [
         ("attachError", *absent("attachError")),
@@ -299,6 +329,11 @@ CHECKS = {
         ("jdtls.ready", "jdtls is ready", lambda d: (any(s.get("name") == "jdtls" and s.get("status") == "ready" for s in (get(d, "lsp.servers") or [])), get(d, "lsp.servers"))),
         ("completion.items", "completion returned items", lambda d: ((get(d, "lsp.completionItems") or 0) > 0, get(d, "lsp.completionItems"))),
         ("completion.first", "completion has a first label", lambda d: (bool(get(d, "lsp.completionFirst")), get(d, "lsp.completionFirst"))),
+        ("inlays.loaded", "the editor completed its real inlay-hints request", lambda d: (get(d, "lsp.inlayLoaded") is True and get(d, "lsp.inlayError") is None, {"loaded": get(d, "lsp.inlayLoaded"), "error": get(d, "lsp.inlayError")})),
+        ("codeVision.loaded", "Code Vision completed through the editor viewport path", lambda d: (get(d, "lsp.codeVision.loaded") is True and get(d, "lsp.codeVisionError") is None, {"loaded": get(d, "lsp.codeVision.loaded"), "error": get(d, "lsp.codeVisionError")})),
+        ("codeVision.usage", "Code Vision rendered real declaration usage counts", lambda d: ((get(d, "lsp.codeVision.usageTargets") or 0) > 0 and (get(d, "lsp.codeVision.usageInlays") or 0) > 0, {"targets": get(d, "lsp.codeVision.usageTargets"), "inlays": get(d, "lsp.codeVision.usageInlays")})),
+        ("codeVision.author", "Code Vision rendered authors from real VCS blame", lambda d: (get(d, "lsp.codeVision.blameLoaded") is True and (get(d, "lsp.codeVision.blameLines") or 0) > 0, {"loaded": get(d, "lsp.codeVision.blameLoaded"), "lines": get(d, "lsp.codeVision.blameLines")})),
+        ("codeVision.limit", "Code Vision is bounded to OpenIDEA's 40 visible declarations", lambda d: (get(d, "lsp.codeVision.maxTargets") == 40, get(d, "lsp.codeVision.maxTargets"))),
         ("hover", "hover returned documentation", lambda d: (bool(get(d, "lsp.hoverText")), get(d, "lsp.hoverText"))),
         ("documentation", "Quick Documentation docks real Java hover content", lambda d: (
             (get(d, "lsp.documentation.blocks") or 0) > 0 and get(d, "lsp.documentation.docked") is True,
@@ -308,6 +343,13 @@ CHECKS = {
         ("format", "format changed the buffer", lambda d: (get(d, "lsp.format.changed") is True, get(d, "lsp.format.changed"))),
         ("references.count", "find usages returned references", lambda d: ((get(d, "lsp.references.count") or 0) > 0, get(d, "lsp.references.count"))),
         ("references.done", "find usages finished", lambda d: (get(d, "lsp.references.done") is True, get(d, "lsp.references.done"))),
+        ("usagesPopup.open", "Show Usages opened the native speed-search popup with real references", lambda d: (get(d, "lsp.usagesPopup.open") is True and get(d, "lsp.usagesPopup.done") is True and get(d, "lsp.usagesPopup.loading") is False and (get(d, "lsp.usagesPopup.count") or 0) > 0, get(d, "lsp.usagesPopup"))),
+        ("usagesPopup.transfer", "Open in Find Window transferred the popup rows to Find Usages", lambda d: (get(d, "lsp.usagesPopup.popupClosed") is True and get(d, "lsp.usagesPopup.findDone") is True and get(d, "lsp.usagesPopup.findCount") == get(d, "lsp.usagesPopup.count"), get(d, "lsp.usagesPopup"))),
+        ("safeDelete.usages", "Safe Delete found real JDT references", lambda d: ((get(d, "lsp.safeDelete.usage.count") or 0) > 0, get(d, "lsp.safeDelete.usage"))),
+        ("safeDelete.view", "Safe Delete sent the references to Find Usages", lambda d: (get(d, "lsp.safeDelete.usage.viewedName") == "SmokeSafeDeleteUsage" and (get(d, "lsp.safeDelete.usage.viewedCount") or 0) > 0 and get(d, "lsp.safeDelete.usage.viewedDone") is True, get(d, "lsp.safeDelete.usage"))),
+        ("safeDelete.anyway", "Delete Anyway removed the declaration", lambda d: (get(d, "lsp.safeDelete.deleteAnyway.finished") is True and get(d, "lsp.safeDelete.deleteAnyway.deleted") is True, get(d, "lsp.safeDelete.deleteAnyway"))),
+        ("safeDelete.text", "Safe Delete previewed and deleted a declaration mentioned only in comments or strings", lambda d: ((get(d, "lsp.safeDelete.textPreview.hits") or 0) > 0 and get(d, "lsp.safeDelete.textPreview.finished") is True and get(d, "lsp.safeDelete.textPreview.deleted") is True, get(d, "lsp.safeDelete.textPreview"))),
+        ("safeDelete.editCancel", "an edit during confirmation cancels Safe Delete without deleting the declaration", lambda d: (get(d, "lsp.safeDelete.editCancel.cancelled") is True and get(d, "lsp.safeDelete.editCancel.preserved") is True, get(d, "lsp.safeDelete.editCancel"))),
         ("rename", "rename was applied and undone", lambda d: (get(d, "lsp.rename.undone") is True, get(d, "lsp.rename.undone"))),
         ("symbols", "go to symbol found the class", lambda d: ((get(d, "lsp.symbols.count") or 0) > 0, get(d, "lsp.symbols.count"))),
         ("diagnostics", "JDT published diagnostics", lambda d: (bool(get(d, "lsp.diagnostics")), get(d, "lsp.diagnostics"))),

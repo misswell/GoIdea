@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updated": "2026-11-15",
+ "updated": "2026-11-21",
  "about": "Every end-to-end regression check GoIDEA runs, the feature it protects, the doc that describes it, and the gate that must pass before code lands. scripts/check-regression-index.py keeps the ids in sync with scripts/e2e-checks.py, so a check cannot be dropped or renamed silently.",
  "gates": {
   "pr": {
@@ -9,7 +9,7 @@
    "steps": [
     "gofmt -l . is empty",
     "CGO_ENABLED=0 go vet ./...",
-    "CGO_ENABLED=0 go test ./... -skip TestTerminalMovesToLockedRightColumn",
+    "CGO_ENABLED=0 go test ./...",
     "CGO_ENABLED=0 go build ./cmd/goidea",
     "scripts/check-licenses.sh",
     "scripts/check-regression-index.py"
@@ -36,6 +36,38 @@
   }
  },
  "checks": [
+  {
+   "id": "agents.agentsError",
+   "label": "agentsError is absent",
+   "feature": "Agents real host RPC smoke",
+   "area": "agents",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "agents.subscribed",
+   "label": "agent_subscribe returned an initial task array",
+   "feature": "Agents initial subscription",
+   "area": "agents",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "agents.providers",
+   "label": "agent_providers returned the provider catalog",
+   "feature": "Agents provider catalog",
+   "area": "agents",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "agents.external",
+   "label": "agent_external_sessions returned a decoded session array",
+   "feature": "Agents external session discovery",
+   "area": "agents",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
   {
    "id": "base.backend",
    "label": "backend is up",
@@ -175,7 +207,7 @@
   {
    "id": "shots.states",
    "label": "the baseline names every expected state in Dark and Light",
-   "feature": "Visual baseline covers Welcome empty and recents, Customize, Plugins, the workbench, tool windows and overlays",
+   "feature": "Visual baseline covers Welcome, Project Trust, Open Recent, the workbench, tool windows and overlays",
    "area": "visual",
    "gate": "main",
    "doc": "README.md"
@@ -758,7 +790,7 @@
   },
   {
    "id": "base.files.menu",
-   "label": "the project view menu names New, Rename, Delete and Clipboard actions",
+   "label": "the project view menu names New, Refactor Rename, Delete and Clipboard actions",
    "feature": "Project view context menu",
    "area": "workspace",
    "gate": "main",
@@ -973,6 +1005,62 @@
    "doc": "BUILD_AND_DEBUG.md"
   },
   {
+   "id": "base.workspace.attached",
+   "label": "Attach Project linked the real project and revealed it in Project View",
+   "feature": "Workspace attach and Project View reveal",
+   "area": "workspace",
+   "gate": "main",
+   "doc": "UPSTREAM_FEATURE_MATRIX.md"
+  },
+  {
+   "id": "base.workspace.detached",
+   "label": "Detach Project removed the attachment without reopening the editor",
+   "feature": "Workspace detach keeps the editor session",
+   "area": "workspace",
+   "gate": "main",
+   "doc": "UPSTREAM_FEATURE_MATRIX.md"
+  },
+  {
+   "id": "base.workspace.discovered",
+   "label": "Choose Projects found the nested build roots",
+   "feature": "Workspace project discovery",
+   "area": "workspace",
+   "gate": "main",
+   "doc": "UPSTREAM_FEATURE_MATRIX.md"
+  },
+  {
+   "id": "base.workspace.created",
+   "label": "New Workspace created and opened the container with both projects",
+   "feature": "New Workspace container creation",
+   "area": "workspace",
+   "gate": "main",
+   "doc": "UPSTREAM_FEATURE_MATRIX.md"
+  },
+  {
+   "id": "base.workspace.managed",
+   "label": "Manage Workspace renamed the container and linked a third project",
+   "feature": "Manage Workspace rename and attach",
+   "area": "workspace",
+   "gate": "main",
+   "doc": "UPSTREAM_FEATURE_MATRIX.md"
+  },
+  {
+   "id": "base.workspace.removed",
+   "label": "Remove from Workspace kept the container and unlinked one project",
+   "feature": "Remove a project from a workspace container",
+   "area": "workspace",
+   "gate": "main",
+   "doc": "UPSTREAM_FEATURE_MATRIX.md"
+  },
+  {
+   "id": "base.workspaceError",
+   "label": "workspaceError is absent",
+   "feature": "Workspace lifecycle reports no unexpected error",
+   "area": "workspace",
+   "gate": "main",
+   "doc": "UPSTREAM_FEATURE_MATRIX.md"
+  },
+  {
    "id": "rerunfail.rerunfailError",
    "label": "rerunfailError is absent",
    "feature": "Test results pipeline reports no unexpected error",
@@ -1030,11 +1118,19 @@
   },
   {
    "id": "readiness.final",
-   "label": "every readiness state is reached",
-   "feature": "8: Backend/Project/Java/BuildModel/Run all ready",
+   "label": "every readiness state required by this gate is reached",
+   "feature": "8: Backend/Project/BuildModel/Run ready, Java required online",
    "area": "startup",
    "gate": "main",
    "doc": "README.md"
+  },
+  {
+   "id": "readiness.java",
+   "label": "Java readiness is required in the full gate and explicitly optional offline",
+   "feature": "8: JDT Java readiness enforced by the release gate",
+   "area": "startup",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
   },
   {
    "id": "attach.attachError",
@@ -1350,8 +1446,8 @@
   },
   {
    "id": "runkill.rerun",
-   "label": "the same configuration runs to its exit after the recovery",
-   "feature": "The retry works after recovery",
+   "label": "a real configuration runs to its exit after the recovery",
+   "feature": "The retry works after recovery, using Maven when JDT is offline",
    "area": "build-run",
    "gate": "main",
    "doc": "BUILD_AND_DEBUG.md"
@@ -1501,6 +1597,46 @@
    "doc": "JAVA_SUPPORT.md"
   },
   {
+   "id": "lsp.inlays.loaded",
+   "label": "the editor completed its real inlay-hints request",
+   "feature": "Language-server inlay hints render in the native editor",
+   "area": "java-lsp",
+   "gate": "release",
+   "doc": "JAVA_SUPPORT.md"
+  },
+  {
+   "id": "lsp.codeVision.loaded",
+   "label": "Code Vision completed through the editor viewport path",
+   "feature": "OpenIDEA Code Vision renders through MyGo",
+   "area": "java-lsp",
+   "gate": "release",
+   "doc": "JAVA_SUPPORT.md"
+  },
+  {
+   "id": "lsp.codeVision.usage",
+   "label": "Code Vision rendered real declaration usage counts",
+   "feature": "Code Vision usages use real JDT references",
+   "area": "java-lsp",
+   "gate": "release",
+   "doc": "JAVA_SUPPORT.md"
+  },
+  {
+   "id": "lsp.codeVision.author",
+   "label": "Code Vision rendered authors from real VCS blame",
+   "feature": "Code Vision author data uses the OpenIDEA VCS backend",
+   "area": "java-lsp",
+   "gate": "release",
+   "doc": "JAVA_SUPPORT.md"
+  },
+  {
+   "id": "lsp.codeVision.limit",
+   "label": "Code Vision is bounded to OpenIDEA's 40 visible declarations",
+   "feature": "Code Vision viewport request budget matches OpenIDEA",
+   "area": "java-lsp",
+   "gate": "release",
+   "doc": "JAVA_SUPPORT.md"
+  },
+  {
    "id": "lsp.hover",
    "label": "hover returned documentation",
    "feature": "Hover documentation",
@@ -1547,6 +1683,62 @@
    "area": "java-lsp",
    "gate": "release",
    "doc": "JAVA_SUPPORT.md"
+  },
+  {
+   "id": "lsp.usagesPopup.open",
+   "label": "Show Usages opened the native speed-search popup with real references",
+   "feature": "Show Usages renders JDT references in the native speed-search popup",
+   "area": "java-lsp",
+   "gate": "release",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "lsp.usagesPopup.transfer",
+   "label": "Open in Find Window transferred the popup rows to Find Usages",
+   "feature": "Show Usages transfers exact rows to the Find Usages tool window",
+   "area": "java-lsp",
+   "gate": "release",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "lsp.safeDelete.usages",
+   "label": "Safe Delete found real JDT references",
+   "feature": "Editor Safe Delete resolves declarations and references through JDT",
+   "area": "java-lsp",
+   "gate": "release",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "lsp.safeDelete.view",
+   "label": "Safe Delete sent the references to Find Usages",
+   "feature": "Editor Safe Delete opens its usage review in the Find Usages tool window",
+   "area": "java-lsp",
+   "gate": "release",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "lsp.safeDelete.anyway",
+   "label": "Delete Anyway removed the declaration",
+   "feature": "Editor Safe Delete can remove a declaration that still has references",
+   "area": "java-lsp",
+   "gate": "release",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "lsp.safeDelete.text",
+   "label": "Safe Delete previewed and deleted a declaration mentioned only in comments or strings",
+   "feature": "Editor Safe Delete previews comment and string mentions before deletion",
+   "area": "java-lsp",
+   "gate": "release",
+   "doc": "EDITOR.md"
+  },
+  {
+   "id": "lsp.safeDelete.editCancel",
+   "label": "an edit during confirmation cancels Safe Delete without deleting the declaration",
+   "feature": "Editor Safe Delete never applies stale byte offsets",
+   "area": "java-lsp",
+   "gate": "release",
+   "doc": "EDITOR.md"
   },
   {
    "id": "lsp.rename",

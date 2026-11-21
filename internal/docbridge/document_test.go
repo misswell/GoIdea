@@ -2,6 +2,7 @@ package docbridge
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -280,6 +281,27 @@ func TestApplyEditsSyncsCJKAndEmoji(t *testing.T) {
 		t.Fatalf("change from %d, want %d (UTF-16)", got, wantFrom)
 	}
 	requireMapper(t, doc)
+}
+
+func TestApplyEditsIfVersionRefusesStaleOffsets(t *testing.T) {
+	b, doc, id := openSample(t)
+	ctx := context.Background()
+	version := doc.Buffer().Version()
+	if err := doc.ApplyEdits(ctx, editorEdit(0, 0, "// changed\n")); err != nil {
+		t.Fatal(err)
+	}
+	before := doc.Text()
+	backendBefore := b.text(id)
+	err := doc.ApplyEditsIfVersion(ctx, version, editorEdit(0, 0, "// stale\n"))
+	if !errors.Is(err, ErrChanged) {
+		t.Fatalf("stale conditional edit = %v", err)
+	}
+	if got := doc.Text(); got != before {
+		t.Fatalf("buffer changed after refusal:\n%q\nwant\n%q", got, before)
+	}
+	if got := b.text(id); got != backendBefore {
+		t.Fatalf("backend text differs after refusal: %q", got)
+	}
 }
 
 func TestMultiEditOneUndoStep(t *testing.T) {
@@ -803,18 +825,21 @@ func TestCoordinatesCatchUpAfterWidgetEdit(t *testing.T) {
 }
 
 func TestVirtualDocumentReachesNoBackend(t *testing.T) {
+	for name, run := range map[string]func(context.Context) error{
+		"Sync":   func(ctx context.Context) error { return Virtual("What's New", "").Sync(ctx) },
+		"Save":   func(ctx context.Context) error { return Virtual("What's New", "").Save(ctx) },
+		"Resync": func(ctx context.Context) error { return Virtual("What's New", "").Resync(ctx) },
+		"Close":  func(ctx context.Context) error { return Virtual("What's New", "").Close(ctx) },
+	} {
+		if err := run(context.Background()); err != nil {
+			t.Fatalf("%s on a virtual document: %v", name, err)
+		}
+	}
 	doc := Virtual("What's New", "")
 	if doc.Path() != "What's New" || !doc.Info().ReadOnly {
 		t.Fatalf("virtual doc = %q readOnly %v", doc.Path(), doc.Info().ReadOnly)
 	}
 	if doc.ModifiedFromSaved() {
 		t.Fatal("a new virtual document reports unsaved text")
-	}
-	for name, run := range map[string]func(context.Context) error{
-		"Sync": doc.Sync, "Save": doc.Save, "Resync": doc.Resync, "Close": doc.Close,
-	} {
-		if err := run(context.Background()); err != nil {
-			t.Fatalf("%s on a virtual document: %v", name, err)
-		}
 	}
 }

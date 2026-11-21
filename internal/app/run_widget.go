@@ -121,7 +121,8 @@ func (m *Model) runConfigChooser(c *ui.Context, p *ui.Theme, oi oiColors) {
 // its state while a session is live and transparent otherwise. icon is the
 // drawing under expui/run and size its DIP size, as the React widget sets.
 func (m *Model) runWidgetButton(c *ui.Context, p *ui.Theme, oi oiColors, key, tip, icon string, size float32, fill ui.Color, onClick func()) {
-	b := ui.ButtonBase(c.Key("title:run-"+key)).Size(oiStripeButton, oiStripeButton).
+	tk := oiTokensFor(m, p)
+	b := ui.ButtonBase(c.Key("title:run-"+key)).Size(tk.StripeButton, tk.StripeButton).
 		Radius(6).Justify(ui.Center).AlignItems(ui.Center).Cursor(ui.CursorPointer)
 	if fill != ui.Transparent {
 		b.Background(fill)
@@ -139,7 +140,8 @@ func (m *Model) runWidgetButton(c *ui.Context, p *ui.Theme, oi oiColors, key, ti
 
 // runMoreButton is the widget's More Actions menu.
 func (m *Model) runMoreButton(c *ui.Context, p *ui.Theme, oi oiColors) {
-	b := ui.ButtonBase(c.Key("title:run-more")).Size(oiStripeButton, oiStripeButton).
+	tk := oiTokensFor(m, p)
+	b := ui.ButtonBase(c.Key("title:run-more")).Size(tk.StripeButton, tk.StripeButton).
 		Radius(6).Justify(ui.Center).AlignItems(ui.Center).Cursor(ui.CursorPointer)
 	if b.Hovered() {
 		b.Background(oi.toolbarHover)

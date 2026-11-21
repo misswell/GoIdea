@@ -62,10 +62,68 @@ func (m *Model) keymapUserBindings() map[string][]string {
 	return m.prefs.Keymap
 }
 
+// cloneKeymap copies the override map and every binding slice so editing the
+// Settings draft cannot mutate the preferences behind the dialog.
+func cloneKeymap(source map[string][]string) map[string][]string {
+	if len(source) == 0 {
+		return nil
+	}
+	out := make(map[string][]string, len(source))
+	for id, bindings := range source {
+		out[id] = append([]string(nil), bindings...)
+	}
+	return out
+}
+
+// sameKeymaps compares two override maps after key normalization. A missing
+// entry, a nil binding slice and an empty binding slice all mean unbound.
+func sameKeymaps(a, b map[string][]string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for id, left := range a {
+		right, ok := b[id]
+		if !ok || !sameKeyBindings(left, right) {
+			return false
+		}
+	}
+	return true
+}
+
+func sameKeyBindings(a, b []string) bool {
+	left := make([]string, 0, len(a))
+	for _, binding := range a {
+		if normalized := keymapNormalize(binding); normalized != "" {
+			left = append(left, normalized)
+		}
+	}
+	right := make([]string, 0, len(b))
+	for _, binding := range b {
+		if normalized := keymapNormalize(binding); normalized != "" {
+			right = append(right, normalized)
+		}
+	}
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		if left[i] != right[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // KeymapBindings resolves an action's bindings: a user override when it has
 // an entry (an empty list removes the binding), the default otherwise.
 func (m *Model) KeymapBindings(id string) []string {
-	if custom, ok := m.keymapUserBindings()[id]; ok {
+	return keymapBindingsIn(m.keymapUserBindings(), id)
+}
+
+// keymapBindingsIn resolves bindings against an override map, including the
+// staged map shown in Settings before Apply.
+func keymapBindingsIn(overrides map[string][]string, id string) []string {
+	if custom, ok := overrides[id]; ok {
 		out := make([]string, 0, len(custom))
 		for _, b := range custom {
 			if n := keymapNormalize(b); n != "" {
@@ -75,7 +133,7 @@ func (m *Model) KeymapBindings(id string) []string {
 		return out
 	}
 	id = canonicalActionID(id)
-	if custom, ok := m.keymapUserBindings()[id]; ok {
+	if custom, ok := overrides[id]; ok {
 		out := make([]string, 0, len(custom))
 		for _, b := range custom {
 			if n := keymapNormalize(b); n != "" {
@@ -133,9 +191,15 @@ type keymapConflict struct {
 // Keymap settings warns. Actions whose KeyWhen never overlaps are not
 // separated yet; the check errs on the side of warning.
 func (m *Model) KeymapConflicts() []keymapConflict {
+	return keymapConflictsIn(m.keymapUserBindings())
+}
+
+// keymapConflictsIn is KeymapConflicts over an explicit override map so the
+// dialog can warn about a staged binding before Apply.
+func keymapConflictsIn(overrides map[string][]string) []keymapConflict {
 	byBinding := map[string][]string{}
 	for _, a := range actionList() {
-		for _, b := range m.KeymapBindings(a.ID) {
+		for _, b := range keymapBindingsIn(overrides, a.ID) {
 			byBinding[b] = append(byBinding[b], a.ID)
 		}
 	}
@@ -163,5 +227,15 @@ func init() {
 				keymapDefaults[id] = append(keymapDefaults[id], n)
 			}
 		}
+	}
+	keymapDefaults["find.inPath"] = []string{"Cmd+Shift+F"}
+	keymapDefaults["find.replaceInPath"] = []string{"Cmd+Shift+R"}
+	keymapDefaults["find.rerun"] = []string{"Cmd+R"}
+	keymapDefaults["navigate.switcher"] = []string{"Ctrl+Tab"}
+	keymapDefaults["navigate.switcherBack"] = []string{"Ctrl+Shift+Tab"}
+	keymapDefaults["navigate.fileStructure"] = []string{"Cmd+F12"}
+	for _, digit := range []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"} {
+		keymapDefaults["navigate.toggleBookmark"+digit] = []string{"Ctrl+Shift+" + digit}
+		keymapDefaults["navigate.gotoBookmark"+digit] = []string{"Ctrl+" + digit}
 	}
 }

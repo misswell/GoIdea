@@ -105,6 +105,14 @@ func TestTreeFollowsTheDisk(t *testing.T) {
 	defer tr.Close()
 
 	old := filepath.Join(root, "Old.java")
+	removedPath := ""
+	tr.SetRemovedHandler(func(paths []string) {
+		for _, path := range paths {
+			if path == old {
+				removedPath = path
+			}
+		}
+	})
 	q.drain(t, "the first file", func() bool { return hasRow(tr, old) })
 
 	made := filepath.Join(root, "Made.java")
@@ -117,6 +125,9 @@ func TestTreeFollowsTheDisk(t *testing.T) {
 		t.Fatal(err)
 	}
 	q.drain(t, "the removed file", func() bool { return !hasRow(tr, old) })
+	if removedPath != old {
+		t.Fatalf("removed handler received %q, want %q", removedPath, old)
+	}
 }
 
 // TestTreeScrollsSidewaysPastTheIsland: a row whose name runs past the Project
@@ -194,5 +205,39 @@ func TestTreeCompactsMiddlePackages(t *testing.T) {
 	java := filepath.Join(root, "src/main/java")
 	if !hasRow(tr, filepath.Join(java, "org")) {
 		t.Fatalf("org has no row: %v", tr.Rows())
+	}
+}
+
+func TestTreeSelectionMatchesOpenIDEAModifierClicks(t *testing.T) {
+	rows := []*treeNode{
+		{path: "/p/a", depth: 1},
+		{path: "/p/b", depth: 1},
+		{path: "/p/c", depth: 1},
+		{path: "/p/d", depth: 1},
+		{path: "/p/e", depth: 1},
+	}
+	tr := &Tree{rows: rows, sels: map[string]bool{}}
+	tr.Select(rows[0].path)
+	tr.clickSelection(rows[1].path, false, true)
+	if got := tr.SelectedPaths(); !equalStrings(got, []string{"/p/a", "/p/b"}) {
+		t.Fatalf("toggle selection = %v", got)
+	}
+	tr.clickSelection(rows[3].path, false, false)
+	if got := tr.SelectedPaths(); !equalStrings(got, []string{"/p/d"}) {
+		t.Fatalf("plain click selection = %v", got)
+	}
+	tr.clickSelection(rows[0].path, false, false)
+	tr.clickSelection(rows[2].path, true, false)
+	if got := tr.SelectedPaths(); !equalStrings(got, []string{"/p/a", "/p/b", "/p/c"}) {
+		t.Fatalf("range selection = %v", got)
+	}
+	tr.clickSelection(rows[1].path, false, true)
+	if got := tr.SelectedPaths(); !equalStrings(got, []string{"/p/a", "/p/c"}) {
+		t.Fatalf("toggle off selection = %v", got)
+	}
+	tr.clickSelection(rows[0].path, false, true)
+	tr.clickSelection(rows[2].path, false, true)
+	if got := tr.SelectedPaths(); len(got) != 0 {
+		t.Fatalf("empty selection = %v", got)
 	}
 }

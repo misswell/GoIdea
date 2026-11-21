@@ -18,6 +18,7 @@ import (
 // Both survive a close, as the tool window keeps its state.
 type StructurePane struct {
 	visible   bool
+	popup     bool
 	filter    string
 	collapsed map[string]bool
 }
@@ -50,6 +51,38 @@ func (m *Model) ToggleStructure() { m.DockToggle("structure") }
 // CloseStructure hides the window; the filter and collapsed symbols stay for
 // the next open.
 func (m *Model) CloseStructure() { m.DockHide("structure") }
+
+// OpenFileStructure opens the popup form of File Structure. It uses the same
+// live outline as the tool window and keeps both entry points in sync.
+func (m *Model) OpenFileStructure() {
+	m.refreshStructure()
+	m.structure.popup = true
+	m.invalidate()
+}
+
+func (m *Model) fileStructureDialog(c *ui.Context, p *ui.Theme) {
+	open := m.structure.popup
+	dialog := ui.Modal(c.Key("file-structure"), &open, func() {
+		ui.Column(c).Width(620).Children(func() {
+			ui.Row(c).Padding(8, 12).Children(func() {
+				ui.Text(c, "File Structure").FontSize(13).Bold().TextColor(p.Text).SingleLine()
+			})
+			if t := m.tab(); t != nil && t.outlineLoading && len(t.outline) == 0 {
+				ui.Row(c).Padding(8, 12).Children(func() {
+					ui.Text(c, "Reading the structure…").FontSize(12).TextColor(p.TextMuted)
+				})
+			}
+			ui.Scroll(c).Height(420).Children(func() {
+				m.structureRowsUI(c, p)
+			})
+		})
+	})
+	dialog.Padding(0)
+	if dialog.Dismissed() || !open {
+		m.structure.popup = false
+		m.invalidate()
+	}
+}
 
 // toggleStructure collapses or expands one symbol.
 func (m *Model) toggleStructure(path string) {

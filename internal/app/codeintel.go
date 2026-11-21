@@ -29,6 +29,10 @@ func (m *Model) kickCodeIntel(t *Tab, now time.Time) {
 	if t != m.tab() {
 		return
 	}
+	m.refreshInlays(t, now)
+	if other := m.splitView().tab(); other != nil && other != t {
+		m.refreshInlays(other, now)
+	}
 	idle := now.Sub(t.edited)
 	v := t.doc.Buffer().Version()
 	if idle >= 220*time.Millisecond && (t.gitPath != t.doc.Path() || t.gitVersion != v) {
@@ -155,6 +159,9 @@ func (m *Model) kickOutline(t *Tab, v uint64) {
 				t.outline = nil
 			} else {
 				t.outline = items
+			}
+			if m.tree != nil {
+				m.tree.SetOutline(t.doc.Path(), t.outline)
 			}
 			m.invalidate()
 		})

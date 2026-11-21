@@ -235,7 +235,7 @@ func (m *Model) AttachToProcess(p openidea.AttachableProcess) {
 			Env:       map[string]string{},
 			ExtraJSON: &s,
 		}
-		rawSession, err := m.mgr.Invoke(ctx, Window, "debug_start", map[string]any{"config": launch})
+		rawSession, err := m.invoke(ctx, "debug_start", map[string]any{"config": launch})
 		if err != nil {
 			fail("Attach failed", err)
 			return
@@ -251,7 +251,7 @@ func (m *Model) AttachToProcess(p openidea.AttachableProcess) {
 				go func(id uint32) {
 					ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
 					defer cancel()
-					_, _ = m.mgr.Invoke(ctx, Window, "debug_stop", map[string]any{"session": id})
+					_, _ = m.invoke(ctx, "debug_stop", map[string]any{"session": id})
 				}(session)
 				return
 			}

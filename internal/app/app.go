@@ -47,6 +47,7 @@ type Config struct {
 type Tab struct {
 	doc    *docbridge.Document
 	state  *editor.State
+	caret  *caretClickState
 	synced uint64 // buffer version the backend was last given
 	seen   uint64 // buffer version last looked at, for the sync debounce
 	// todoSeen and todoDark are the buffer version and appearance the editor's
@@ -60,6 +61,12 @@ type Tab struct {
 	// formatting marks a reformat request in flight, so a second one does not
 	// apply the first one's edits twice.
 	formatting bool
+	// centerCaret asks the next frame to center the caret after a keyboard
+	// move, when Editor › General prefers that scroll behavior.
+	centerCaret bool
+	// renderedDocsOverride is View › Active Editor › Render Documentation
+	// Comments for this tab. Nil follows the global editor setting.
+	renderedDocsOverride *bool
 
 	// pinned keeps the tab at the left of the strip, as OpenIDEA pins it; the
 	// bulk closes leave it, except Close All Tabs.
@@ -87,6 +94,9 @@ type Tab struct {
 	gitPath    string
 	gitLoading bool
 	gitOff     bool
+	// blame is the live Git annotation gutter for this tab. It is separate
+	// from Model.annotate, the static sheet a merge pane uses for one side.
+	blame *tabBlameState
 
 	// outline is the document's symbols for breadcrumbs; outlineGen drops
 	// replies that a newer request has superseded.
@@ -104,6 +114,10 @@ type Tab struct {
 	compOff  time.Time
 	hoverGen uint64
 	defGen   uint64
+	inlay    inlayState
+	// coverageMap moves report lines through edits until another coverage
+	// run replaces the active suite.
+	coverageMap *tabCoverageMap
 
 	// kind marks a built-in page tab ("whatsNew") whose body the page draws
 	// instead of the document's text; pageVersion and pageNotes are What's
@@ -112,6 +126,8 @@ type Tab struct {
 	pageVersion string
 	pageNotes   string
 	pageLoading bool
+	pageTitle   string
+	agentTask   string
 }
 
 // Model is the app's state.
@@ -128,16 +144,30 @@ type Model struct {
 	reg      *docbridge.Registry
 	ctx      context.Context
 	off      context.CancelFunc
+	remote   remoteDevelopmentState
 
-	rootMu sync.RWMutex
-	root   string
+	rootMu             sync.RWMutex
+	root               string
+	projectName        string
+	projectDisplayName string
+	// workspace is project_current's manifest for this folder. Nil means the
+	// folder is an ordinary single project.
+	workspace *openidea.Workspace
+	// workspaceDialog is New Workspace or Manage Workspace while it is open.
+	workspaceDialog *workspaceDialogState
 
 	tabs   []*Tab
 	active int
 	tree   *Tree
+	// openQueue holds files requested while another document is opening. Each
+	// entry keeps its openSpec so a batch can continue after a completed open.
+	openQueue []queuedOpen
 	// treeScroll keeps how far the Project tree shows its rows from: a row
 	// wider than the window scrolls sideways, as OpenIDEA's tree does.
 	treeScroll ui.ScrollState
+	// projectTreeAnchor is the selected Project View row's last drawn bounds.
+	// The New popup opens under it, as OpenIDEA anchors the popup to the lead row.
+	projectTreeAnchor ui.Rect
 
 	// split is the second editor window group, or nil while the editor is one
 	// group. The focused group stays in tabs and active; the other lives in
@@ -160,6 +190,10 @@ type Model struct {
 	// counts activations for the tab limit's least-recently-used order.
 	tabPrefs TabPrefs
 	tabUse   uint64
+	// editorFontZoom is the shared temporary zoom of every code editor in
+	// points, as OpenIDEA's Increase/Decrease Font Size actions change. It sits
+	// on top of Preferences.FontSize and is reset without changing that setting.
+	editorFontZoom int
 
 	// tabsScroll keeps how far the strip scrolls sideways, tabsPinnedScroll the
 	// pinned row of a two-row strip, tabsSideScroll how far a strip on the
@@ -184,6 +218,11 @@ type Model struct {
 
 	// rename is the open rename prompt, or nil.
 	rename *renameState
+	// safeDelete is Refactor › Safe Delete's confirmation, search or preview.
+	// safeDeleteSearchText remembers IDEA's comments/strings checkbox across
+	// invocations for this app session.
+	safeDelete           *editorSafeDeleteState
+	safeDeleteSearchText bool
 
 	// symbols is the open Go to Symbol picker, or nil.
 	symbols *symbolPicker
@@ -194,7 +233,11 @@ type Model struct {
 	gotoLine      *gotoLineState
 	stackTrace    *stackTraceState
 	documentation documentationState
-	coverage      coverageState
+	// quickDefinition is OpenIDEA's Quick Definition / Quick Type Definition
+	// popup: declaration source from one of the language server's targets.
+	quickDefinition    *quickDefinitionState
+	quickDefinitionGen uint64
+	coverage           coverageState
 
 	// palette is the open command palette, or nil.
 	palette *commandPicker
@@ -203,6 +246,9 @@ type Model struct {
 	// it lists on an empty query, newest first.
 	se            *sePane
 	recentActions []string
+	// doubleShift recognizes Shift released and pressed again within
+	// OpenIDEA's 300 ms window.
+	doubleShift doubleShiftState
 
 	// searchHistory is Search Everywhere's recent queries, most recent first.
 	searchHistory []string
@@ -249,6 +295,8 @@ type Model struct {
 
 	// diff is the open compare-with-HEAD view, or nil.
 	diff *diffView
+	// merge is OpenIDEA's native three-way merge editor, or nil.
+	merge *mergeEditorState
 
 	// db is the open database sheet, or nil.
 	db *dbView
@@ -263,9 +311,16 @@ type Model struct {
 
 	// prefs are the user's stored settings, and theme is the theme they pick,
 	// nil to follow the system; settingsOpen shows the settings sheet.
-	prefs        Preferences
+	prefs Preferences
+	// systemRegion is the regional formatting snapshot captured at the start
+	// of the frame. Main-thread helpers use it after the view, and Code Vision
+	// captures a copy before starting background work.
+	systemRegion dateRegion
 	theme        *ui.Theme
 	settingsOpen bool
+	// aboutOpen and keymapReference are the Help menu's app-level sheets.
+	aboutOpen       bool
+	keymapReference keymapReferenceState
 	// settingsPage is the page the settings sheet shows, by its OpenIDEA id,
 	// or "group:<name>" while a group folder is selected.
 	settingsPage string
@@ -276,10 +331,17 @@ type Model struct {
 	settingsQuery     string
 	settingsHistory   []string
 	settingsHistoryAt int
+	// settingsFontMonoOnly filters Editor › Font to monospaced families, and
+	// settingsFontPreview is the editable sample shown under that page.
+	settingsFontMonoOnly bool
+	settingsFontPreview  string
 	// settingsCollapsed are the tree nodes closed with their caret, and
 	// settingsSide is the page tree's width after a drag of the split handle.
 	settingsCollapsed map[string]bool
 	settingsSide      float32
+	// keymapRecorder stages a shortcut captured for one Keymap action; Apply
+	// writes it through the Settings draft rather than the live preferences.
+	keymapRecorder keymapRecorderState
 	// settingsErr is a failed write of the staged settings, shown in the
 	// dialog's footer as OpenIDEA shows its save error.
 	settingsErr string
@@ -293,6 +355,11 @@ type Model struct {
 	// whether the chain shows and whether it sits below the text, so the
 	// dialog can preview a staged choice.
 	crumbs BreadcrumbPrefs
+	// navigationOpen is Navigate › Jump to Navigation Bar's floating chooser.
+	navigationOpen bool
+	// navigation keeps that chooser's snapshot while it is open: the
+	// segments, the highlighted one, and the child list opened below it.
+	navigation navigationBarState
 
 	// toolbarCustomize is the open Customize Main Toolbar dialog, and update
 	// the Check for Updates dialog.
@@ -307,8 +374,9 @@ type Model struct {
 	update          updateState
 	// tasks are the background tasks the status bar shows, and tasksOpen
 	// tells whether its Background Tasks popup is up.
-	tasks     []BackgroundTask
-	tasksOpen bool
+	tasks         []BackgroundTask
+	tasksOpen     bool
+	tasksStopMode bool
 
 	// invalidateDlg is File › Invalidate Caches… while it is open, and
 	// restartPending relaunches the app once the quit flow finishes.
@@ -344,6 +412,49 @@ type Model struct {
 	toolsLog      []string
 	toolsErr      string
 	toolsAbort    atomic.Bool
+	// javaSettings is Settings › Languages & Frameworks › Java. Its draft is
+	// loaded with the project or global settings scope and saved field by
+	// field through settings_set.
+	javaSettings javaSettingsState
+	// languageTools is the complete backend registry behind Settings ›
+	// Languages & Frameworks › Language Servers. javaTools is its Java subset,
+	// retained for the Java page and the debugger prompt.
+	languageTools      []javaTool
+	languageToolPick   string
+	languageToolFind   string
+	languageToolFilter string
+	// languageToolSettings is the staged languageServers/tools configuration
+	// for the Language Servers page. It loads from settings_get and applies
+	// field diffs through settings_set.
+	languageToolSettings languageToolSettingsState
+	// These sets keep language-server install prompts quiet after their first
+	// offer and suppress a fallback whose preferred alternative was already
+	// offered, as OpenIDEA's install missing server prompts do.
+	languageToolPrompted map[string]bool
+	languageToolOffered  map[string]bool
+	languageToolWarned   map[string]bool
+	languageToolLoading  map[string]bool
+	// languageServers is the live snapshot behind the Language Services
+	// status item. Event sequence numbers keep an older lsp_servers reply from
+	// overwriting a newer lifecycle event or resurrection after removal.
+	languageServers         map[uint32]languageServerInfo
+	languageServerOpen      bool
+	languageServerSeq       uint64
+	languageServerLastEvent map[uint32]uint64
+	languageServerRemovedAt map[uint32]uint64
+	languageServerRefresh   uint64
+	languageServerBusyGen   map[uint32]uint64
+	// jdkDialog is Download JDK, and jdkDownloadBusy / jdkDownloadChannel
+	// carry the one cancelling and streaming download it starts.
+	jdkDialog        jdkDialogState
+	jdkDownloadBusy  bool
+	jdkDownloadCh    uint32
+	jdkDownloadReq   uint32
+	jdkDownloadVer   uint32
+	jdkDownloadAbort atomic.Bool
+	// jdkPrompted prevents the same language-server binary from raising the
+	// same JDK download prompt again during this app session.
+	jdkPrompted map[string]bool
 
 	// refactor is the newest backend workspace edit, which UndoRefactor rolls
 	// back; redoRefactor is what the last undo can reapply.
@@ -396,6 +507,9 @@ type Model struct {
 	// showingWelcome puts the Welcome screen up while a project stays loaded,
 	// as OpenIDEA's project menu leaves it.
 	showingWelcome bool
+	// recentProjectsPopup is File › Open Recent's compact chooser over the
+	// Welcome screen's recent projects, or nil while closed.
+	recentProjectsPopup *recentProjectsPopup
 
 	// plugins is Welcome › Plugins, made on first use, nil before.
 	plugins *pluginPage
@@ -423,10 +537,26 @@ type Model struct {
 	move          *movePane
 	editDesc      *descPane
 
-	// treeClip is what the project view's Copy or Cut holds, and treeOp its
-	// open New, Rename or Delete prompt, or nil.
-	treeClip *treeClipState
-	treeOp   *treeOpState
+	// treeClip is what the project view's Copy or Cut holds. projectNew is
+	// the searchable New file template chooser, and treeOp is its name prompt
+	// or an open Rename, Copy or Delete prompt.
+	treeClip     *treeClipState
+	projectNew   *projectNewState
+	treeOp       *treeOpState
+	treeLastMove *treeMoveRecord
+	// treeDrag is the pointer gesture moving project-view files inside the
+	// tree; treeDragFrame lets whichever row is under the pointer claim it
+	// as the drop target for this frame.
+	treeDrag      *treeDragState
+	treeDragFrame uint64
+	// projectTreeFocus says Cmd+C, Cmd+Z and the other context-sensitive
+	// editor/project shortcuts belong to the Project view.
+	projectTreeFocus bool
+	// fileRefactor is OpenIDEA's Move / Rename dialog, and
+	// fileRefactorPreview the confirmation shown when references change in
+	// files other than the moved ones.
+	fileRefactor        *fileRefactorDialogState
+	fileRefactorPreview *fileRefactorPreviewState
 	// history is the open Local History sheet, or nil.
 	history *historyState
 	// dirCompare is the open Compare Directories sheet, or nil.
@@ -436,7 +566,11 @@ type Model struct {
 
 	// trustAsk is the Trust Project prompt a project opens with until the
 	// user allows building and running it.
-	trustAsk bool
+	trustAsk    bool
+	trustFolder bool
+	// projectTrust is Settings › Security › Project Trust's live decision
+	// list and the RPCs that revoke one.
+	projectTrust projectTrustSettingsState
 	// startMu guards startPhase, the startup state machine the window shows.
 	startMu    sync.RWMutex
 	startPhase string
@@ -445,17 +579,22 @@ type Model struct {
 	build      BuildPane
 	term       TermPane
 	// termShell is the New Terminal Tab shell list.
-	termShell *termShellPicker
-	vcs       VCSPane
-	vcsOps    VCSOperationPane
-	vcsQuick  vcsQuickList
-	branch    BranchPane
-	log       LogPane
-	problems  ProblemsPane
-	search    SearchPane
-	usages    UsagesPane
-	todo      TodoPane
-	structure StructurePane
+	termShell     *termShellPicker
+	vcs           VCSPane
+	vcsOps        VCSOperationPane
+	vcsQuick      vcsQuickList
+	vcsMore       vcsMoreState
+	branch        BranchPane
+	log           LogPane
+	problems      ProblemsPane
+	search        SearchPane
+	searchScopes  []SearchScope
+	usages        UsagesPane
+	usagePopup    *usagePopupState
+	copyPathPopup *copyPathPopupState
+	todo          TodoPane
+	structure     StructurePane
+	agents        AgentsPane
 
 	// tool is the bottom tool window the shortcuts last opened, "" once it
 	// closed; toolStash is what Hide All hid, restored by the next press.
@@ -476,6 +615,12 @@ type Model struct {
 	// which caps a drag of the bottom area below it.
 	editorWidth  float32
 	editorHeight float32
+	// editorBodyRects are the two groups' editor surfaces as last drawn. A
+	// lifted tab released near one of these edges moves into a split there.
+	editorBodyRects [2]ui.Rect
+	// usagePopupAnchor is the caret's last drawn position, so Show Usages
+	// opens beside the editor where OpenIDEA anchors it.
+	usagePopupAnchor ui.Rect
 	// bottomDragging, bottomDragSize and bottomDragMax carry a drag of the gap
 	// above the bottom area: the height the pointer asks for, and the tallest
 	// it may go with the editor's minimum height kept. bottomDragCollapse
@@ -533,8 +678,16 @@ type Model struct {
 	// layouts are each project's saved workbench layout, by folder, as
 	// OpenIDEA keeps one per project root; sessionSeq orders the session
 	// writes so a slow one never overwrites a newer snapshot.
-	layouts    map[string]Layout
-	layoutHold bool
+	layouts           map[string]Layout
+	namedLayouts      []SavedToolWindowLayout
+	activeNamedLayout string
+	layoutDlg         *toolWindowLayoutDialog
+	layoutHold        bool
+	// projectViews is each project's expanded Project View folders, which
+	// belongs to the project rather than the global pane and options.
+	projectViews              map[string][]string
+	projectUnityVersion       string
+	projectTreeMembersLoading map[string]bool
 	// runHistory is each project's Run Anything history, by folder, as
 	// OpenIDEA keeps it per project root.
 	runHistory   map[string][]string
@@ -562,7 +715,10 @@ type Model struct {
 // New returns a model; Start opens the last session.
 func New(cfg Config) *Model {
 	ctx, off := context.WithCancel(context.Background())
-	m := &Model{cfg: cfg, ctx: ctx, off: off, bottomHeight: bottomDefaultHeight}
+	m := &Model{
+		cfg: cfg, ctx: ctx, off: off, bottomHeight: bottomDefaultHeight,
+		safeDeleteSearchText: true,
+	}
 	m.prefs = LoadPreferences(cfg.SettingsPath)
 	if m.prefs.SearchFilters != nil {
 		m.seFilters = *m.prefs.SearchFilters
@@ -572,10 +728,19 @@ func New(cfg Config) *Model {
 	m.recents = sessionRecents(session)
 	m.recentGroups = session.RecentGroups
 	m.searchHistory = append([]string(nil), session.SearchHistory...)
+	m.searchScopes = append([]SearchScope(nil), session.SearchScopes...)
 	m.restoreNotificationHistory(session.Notifications)
 	m.layouts = map[string]Layout{}
 	for root, l := range session.Layouts {
 		m.layouts[layoutKey(root)] = normalizeLayout(l)
+	}
+	m.namedLayouts = normalizeSavedToolWindowLayouts(session.NamedLayouts)
+	m.activeNamedLayout = normalizeActiveNamedLayout(
+		session.ActiveNamedLayout, m.namedLayouts,
+	)
+	m.projectViews = map[string][]string{}
+	for root, expanded := range session.ProjectViews {
+		m.projectViews[layoutKey(root)] = append([]string(nil), expanded...)
 	}
 	m.runHistory = normalizeRunHistory(session.RunHistory)
 	m.mgr = openidea.NewManager(openidea.LaunchConfig{
@@ -585,7 +750,10 @@ func New(cfg Config) *Model {
 		MinVersion:     cfg.ServerMinVersion,
 		ExpectedSHA256: cfg.ServerSHA256,
 	})
-	m.reg = docbridge.NewRegistry(openidea.Docs{M: m.mgr, Window: Window}, Window)
+	m.reg = docbridge.NewRegistry(newHybridDocs(
+		openidea.Docs{M: m.mgr, Window: Window},
+		m.Root,
+	), Window)
 	m.reg.SetErrorHandler(func(path string, err error) {
 		m.post(func() { m.fail(path, err) })
 	})
@@ -650,6 +818,7 @@ func New(cfg Config) *Model {
 			if m.run.trusted {
 				m.loadRunConfigs()
 			}
+			m.connectAgents(true)
 			m.setStartPhase("ready")
 			m.invalidate()
 		})
@@ -758,7 +927,15 @@ func (m *Model) start() {
 	}
 	if root == "" {
 		m.setStartPhase("ready")
-		m.post(func() { m.busy = false; m.status = "Open a Java project" })
+		m.post(func() {
+			m.busy = false
+			if len(m.startupFiles) > 0 {
+				m.status = "Opening standalone files…"
+				m.openPaths(m.startupFiles)
+			} else {
+				m.status = "Open a Java project"
+			}
+		})
 		return
 	}
 	m.setStartPhase("opening")
@@ -805,8 +982,12 @@ func (m *Model) Root() string {
 
 func (m *Model) setRoot(root string) {
 	m.rootMu.Lock()
+	changed := m.root != root
 	m.root = root
 	m.rootMu.Unlock()
+	if changed {
+		m.clearLanguageServers()
+	}
 }
 
 // post runs fn on the main thread and waits for it.
@@ -876,14 +1057,25 @@ func (m *Model) Notify(msg string) {
 
 // confirmSwitch asks about unsaved changes before replacing the project.
 func (m *Model) confirmSwitch(dir string) {
+	m.confirmSwitchWithFiles(dir, nil)
+}
+
+// confirmSwitchWithFiles is confirmSwitch with files to reopen after the
+// project switch. LightEdit uses it to turn the current standalone file's
+// directory into a project without losing the file from the editor.
+func (m *Model) confirmSwitchWithFiles(dir string, files []string) {
 	if m.busy {
 		return
 	}
-	if dir == m.Root() {
+	if dir == m.Root() && len(files) == 0 {
 		return
 	}
 	if !m.hasDirty() {
-		m.openProject(dir, nil)
+		if dir == m.Root() {
+			m.openBatch(files, nil)
+			return
+		}
+		m.openProject(dir, files)
 		return
 	}
 	detail := strings.Join(m.dirtyPaths(), "\n")
@@ -899,9 +1091,9 @@ func (m *Model) confirmSwitch(dir string) {
 		m.post(func() {
 			switch res.Button {
 			case 0:
-				m.openProjectSaving(dir)
+				m.openProjectSavingWithFiles(dir, files)
 			case 1:
-				m.openProject(dir, nil)
+				m.openProject(dir, files)
 			}
 		})
 	}()
@@ -911,17 +1103,20 @@ func (m *Model) confirmSwitch(dir string) {
 func (m *Model) OpenProject(dir string) { m.confirmSwitch(dir) }
 
 func (m *Model) openProjectSaving(dir string) {
+	m.openProjectSavingWithFiles(dir, nil)
+}
+
+func (m *Model) openProjectSavingWithFiles(dir string, files []string) {
 	tabs := append([]*Tab(nil), m.tabs...)
 	m.busy = true
 	m.status = "Saving…"
 	m.invalidate()
-	p := m.prefs.SaveFiles
 	go func() {
-		if err := saveAll(m.ctx, tabs, p); err != nil {
+		if err := m.saveOpenTabs(m.ctx, tabs); err != nil {
 			m.post(func() { m.fail("", err); m.busy = false })
 			return
 		}
-		m.post(func() { m.openProject(dir, nil) })
+		m.post(func() { m.openProject(dir, files) })
 	}()
 }
 
@@ -936,6 +1131,7 @@ func (m *Model) resetProjectState(dir string) (mavenVisible bool) {
 	m.stackTrace = nil
 	m.reveal = nil
 	m.tabs, m.active = nil, 0
+	m.openQueue = nil
 	m.split, m.splitDown, m.splitFirst, m.focusQueued = nil, false, false, false
 	m.banner, m.bannerPath = "", ""
 	m.showingWelcome = false
@@ -972,10 +1168,13 @@ func (m *Model) resetProjectState(dir string) (mavenVisible bool) {
 	m.resetUsages()
 	m.resetTodo()
 	m.resetHierarchy()
+	m.resetAgents()
 	m.closeSymbols()
 	m.closeIntents()
 	m.closeQuickFiles()
 	m.closeCommands()
+	m.projectUnityVersion = ""
+	m.projectTreeMembersLoading = nil
 	m.diff = nil
 	m.db = nil
 	m.dbTable = nil
@@ -1028,9 +1227,8 @@ func (m *Model) closeProjectSaving() {
 	m.busy = true
 	m.status = "Saving…"
 	m.invalidate()
-	p := m.prefs.SaveFiles
 	go func() {
-		if err := saveAll(m.ctx, tabs, p); err != nil {
+		if err := m.saveOpenTabs(m.ctx, tabs); err != nil {
 			m.post(func() { m.fail("", err); m.busy = false })
 			return
 		}
@@ -1166,7 +1364,8 @@ func (m *Model) openProject(dir string, files []string) {
 		for _, id := range oldTerms {
 			_, _ = m.mgr.Invoke(ctx, Window, "term_kill", map[string]any{"id": id})
 		}
-		if err := m.openBackendProjectAt(ctx, dir, prevRoot); err != nil {
+		projectInfo, err := m.openBackendProjectAt(ctx, dir, prevRoot)
+		if err != nil {
 			m.post(func() {
 				// The backend and the UI stay on the project that was open:
 				// documents were not closed yet, so the tabs come back as they
@@ -1222,6 +1421,14 @@ func (m *Model) openProject(dir string, files []string) {
 			for _, doc := range docs {
 				m.tabs = append(m.tabs, m.newTab(doc))
 			}
+			for _, taskID := range uniqueAgentIDs(sess.AgentTasks) {
+				m.tabs = append(m.tabs, m.newAgentPageTab(
+					tabKindAgentSession, agentSessionPath(taskID), "Agent Task", taskID))
+			}
+			if sess.AgentHome {
+				m.tabs = append(m.tabs, m.newAgentPageTab(
+					tabKindAgentHome, "agent:new", "New Agent Task", ""))
+			}
 			// Pinned tabs come back left of the strip, as the saved order and
 			// OpenIDEA's pinned group put them.
 			if len(pinned) > 0 {
@@ -1242,6 +1449,16 @@ func (m *Model) openProject(dir string, files []string) {
 			for i, t := range m.tabs {
 				if t.doc.Path() == focus {
 					m.active = i
+				}
+			}
+			for i, t := range m.tabs {
+				if t.kind == tabKindAgentSession && t.agentTask == sess.FocusAgent {
+					m.active = i
+					break
+				}
+				if t.kind == tabKindAgentHome && sess.FocusAgentNew {
+					m.active = i
+					break
 				}
 			}
 			// The second window group comes back with its tabs, side and
@@ -1268,6 +1485,13 @@ func (m *Model) openProject(dir string, files []string) {
 				m.tree.Close()
 			}
 			m.tree = NewTree(dir, m.post, m.invalidate)
+			m.tree.SetRemovedHandler(func(paths []string) {
+				for _, path := range paths {
+					m.removeNavigationTree(path)
+				}
+			})
+			m.setProjectInfo(projectInfo)
+			m.configureProjectTreeView()
 			m.busy = false
 			m.status = fmt.Sprintf("%s · %d files opened", filepath.Base(dir), len(m.tabs))
 			if len(failed) > 0 {
@@ -1279,8 +1503,10 @@ func (m *Model) openProject(dir string, files []string) {
 			m.saveSession()
 			m.checkTrust(dir)
 			m.refreshReadiness()
+			m.RefreshLanguageServers()
 			m.RefreshVCS()
 			m.RefreshBranch()
+			m.connectAgents(false)
 			m.setStartPhase("ready")
 			m.invalidate()
 		})
@@ -1288,33 +1514,40 @@ func (m *Model) openProject(dir string, files []string) {
 }
 
 func (m *Model) openBackendProject(ctx context.Context, dir string) error {
-	return m.openBackendProjectAt(ctx, dir, "")
+	info, err := m.openBackendProjectAt(ctx, dir, "")
+	if err == nil {
+		m.post(func() { m.setProjectInfo(info) })
+	}
+	return err
 }
 
 // openBackendProjectAt opens dir and waits until the backend's project_current
 // reports that exact root, so a project that fails to open cannot leave the UI
 // on a project the backend does not have. On failure restoreTo, the project
 // that was open, is opened again.
-func (m *Model) openBackendProjectAt(ctx context.Context, dir, restoreTo string) error {
+func (m *Model) openBackendProjectAt(ctx context.Context, dir, restoreTo string) (openidea.ProjectInfo, error) {
 	if _, err := m.mgr.Invoke(ctx, Window, "open_project", map[string]any{"path": dir}); err != nil {
 		m.restoreBackendProject(ctx, restoreTo, dir)
-		return err
+		return openidea.ProjectInfo{}, err
 	}
 	deadline := time.Now().Add(60 * time.Second)
 	for {
 		raw, err := m.mgr.Invoke(ctx, Window, "project_current", nil)
 		if err == nil {
-			if got, ok := projectRootOf(raw); ok && layoutKey(got) == layoutKey(dir) {
-				return nil
+			if info, decodeErr := openidea.DecodeProjectInfo(raw); decodeErr == nil &&
+				info.Root != "" && layoutKey(info.Root) == layoutKey(dir) {
+				return info, nil
 			}
 		}
 		if time.Now().After(deadline) {
 			m.restoreBackendProject(ctx, restoreTo, dir)
-			return fmt.Errorf("The GoIDEA backend did not make %s the current project within 60 seconds", filepath.Base(dir))
+			return openidea.ProjectInfo{}, fmt.Errorf(
+				"The GoIDEA backend did not make %s the current project within 60 seconds",
+				filepath.Base(dir))
 		}
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return openidea.ProjectInfo{}, ctx.Err()
 		case <-time.After(60 * time.Millisecond):
 		}
 	}
@@ -1358,18 +1591,26 @@ func (m *Model) restoreBackendProject(ctx context.Context, root, failed string) 
 func (m *Model) newTab(doc *docbridge.Document) *Tab {
 	v := doc.Buffer().Version()
 	path := doc.Path()
+	fontSize := m.editorFontSize()
+	font := m.prefs.Font
 	t := &Tab{
 		doc: doc,
 		state: &editor.State{
 			Buffer:     doc.Buffer(),
-			LineHeight: editorLineHeight(m.prefs.fontSize()),
+			LineHeight: font.lineHeightPixels(fontSize) / fontSize,
 			Bindings:   intellijEditorBindings(),
+			ReadOnly:   doc.Info().ReadOnly,
 		},
 		synced: v,
 		seen:   v,
 	}
-	t.state.Font = ui.Font{Family: oiFontMono, Size: m.prefs.fontSize()}
-	t.state.GutterMarks = m.coverageGutterMarks(path)
+	t.state.Font = ui.Font{
+		Family:   font.fontFamily(),
+		Size:     fontSize,
+		Weight:   font.weight(),
+		Features: font.features(),
+	}
+	t.state.GutterMarks = m.coverageGutterMarksForTab(t)
 	m.applyTabZenGutter(t)
 	m.noteTabUse(t)
 	t.state.OnGutterClick = func(line int) { m.toggleBreakpointAt(path, line) }
@@ -1377,6 +1618,7 @@ func (m *Model) newTab(doc *docbridge.Document) *Tab {
 	t.state.OnHover = func(req editor.HoverRequest) { m.requestHover(t, req) }
 	t.state.OnDefinition = func(off int) { m.gotoDefinition(t, off) }
 	t.state.ContextMenu = func(menu *ui.Menu) { m.editorMenu(menu, t) }
+	t.state.OnInput = func(ev ui.InputEvent) bool { return m.editorCaretInput(t, ev) }
 	m.showDiagnostics(t)
 	t.noteDisk()
 	m.markRecent(path)
@@ -1385,6 +1627,13 @@ func (m *Model) newTab(doc *docbridge.Document) *Tab {
 
 // openFile opens path in a regular tab, or shows the tab that has it.
 func (m *Model) openFile(path string) { m.openFileWith(path, false) }
+
+// openFileThen opens path and invokes done after its tab is active. Project
+// actions use this so "open first" variants never act on the previously active
+// document while the requested file is still loading.
+func (m *Model) openFileThen(path string, done func(*Tab)) {
+	m.openWith(path, openSpec{at: -1, done: done})
+}
 
 // openPreview opens path in the preview tab, or shows the tab that has it:
 // the preview turns regular, as an explicit open promotes it.
@@ -1404,40 +1653,67 @@ type openSpec struct {
 	preview bool
 	at      int
 	pinned  bool
+	done    func(*Tab)
+	failed  func(string, error)
+}
+
+type queuedOpen struct {
+	path string
+	spec openSpec
 }
 
 // openWith is openFileWith with the place the document goes in the strip. A
 // regular open closes the preview tab, as openTab does, and an open that
 // replaces it keeps the preview slot.
 func (m *Model) openWith(path string, spec openSpec) {
+	m.recordNavigation(true)
 	m.observeRecentLocation(time.Now(), true)
 	preview := spec.preview && m.tabPrefs.previews()
 	path = realPath(path)
 	if i := m.tabForPath(path); i >= 0 {
+		m.showingWelcome = false
 		if !preview {
 			m.promoteTab(m.tabs[i])
 		}
 		m.activate(i)
+		m.finishOpen(spec, m.tabs[i])
+		m.pumpOpenQueue()
 		return
 	}
 	if m.split != nil {
 		for i, t := range m.split.tabs {
 			if t.doc.Path() == path {
+				m.showingWelcome = false
 				if !preview {
 					m.promoteTab(t)
 				}
 				m.focusGroup(groupSplit)
 				m.activateIn(groupFocused, i)
+				m.finishOpen(spec, t)
+				m.pumpOpenQueue()
 				return
 			}
 		}
 	}
-	if m.busy || m.Root() == "" {
+	if m.busy {
+		m.openQueue = append(m.openQueue, queuedOpen{path: path, spec: spec})
+		m.status = fmt.Sprintf("Opening %d files…", len(m.openQueue)+1)
+		m.invalidate()
 		return
 	}
 	m.busy = true
 	m.status = "Opening " + filepath.Base(path) + "…"
 	m.invalidate()
+	if m.reg == nil {
+		m.busy = false
+		err := fmt.Errorf("goidea: document registry is unavailable")
+		m.fail(path, err)
+		if spec.failed != nil {
+			spec.failed(path, err)
+		}
+		m.pumpOpenQueue()
+		return
+	}
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
@@ -1446,8 +1722,13 @@ func (m *Model) openWith(path string, spec openSpec) {
 			m.busy = false
 			if err != nil {
 				m.fail(path, err)
+				if spec.failed != nil {
+					spec.failed(path, err)
+				}
+				m.pumpOpenQueue()
 				return
 			}
+			m.showingWelcome = false
 			tab := m.newTab(doc)
 			tab.preview = preview
 			tab.pinned = spec.pinned
@@ -1469,11 +1750,12 @@ func (m *Model) openWith(path string, spec openSpec) {
 			m.enforceTabLimit()
 			m.active = m.tabIndex(tab)
 			m.revealEditor()
-			if m.tree != nil {
-				m.tree.reveal(path)
-			}
 			m.applyActive()
 			m.applyReveal(m.tabs[m.active])
+			m.syncProjectTreeState()
+			if m.prefs.ProjectTree.AutoscrollFromSource {
+				m.followActiveInProjectView(true)
+			}
 			// A jump requested before the document was ready (a test tree's
 			// failing node) lands once its tab exists.
 			if line, ok := m.pendingJump[path]; ok {
@@ -1484,8 +1766,26 @@ func (m *Model) openWith(path string, spec openSpec) {
 			m.applyActive()
 			m.saveSession()
 			m.invalidate()
+			m.finishOpen(spec, tab)
+			m.pumpOpenQueue()
 		})
 	}()
+}
+
+func (m *Model) pumpOpenQueue() {
+	if m.busy || len(m.openQueue) == 0 {
+		return
+	}
+	next := m.openQueue[0]
+	copy(m.openQueue, m.openQueue[1:])
+	m.openQueue = m.openQueue[:len(m.openQueue)-1]
+	m.openWith(next.path, next.spec)
+}
+
+func (m *Model) finishOpen(spec openSpec, tab *Tab) {
+	if spec.done != nil && tab != nil && m.tabOpen(tab) {
+		spec.done(tab)
+	}
 }
 
 func (m *Model) tab() *Tab {
@@ -1502,6 +1802,7 @@ func (m *Model) activate(i int) {
 // activateIn shows the tab at i in the window group g; g is the focused group
 // by the time the replacement tab is applied.
 func (m *Model) activateIn(g groupRef, i int) {
+	m.recordNavigation(true)
 	m.observeRecentLocation(time.Now(), true)
 	if g == groupSplit {
 		m.focusGroup(groupSplit)
@@ -1509,11 +1810,23 @@ func (m *Model) activateIn(g groupRef, i int) {
 	if i < 0 || i >= len(m.tabs) || i == m.active {
 		return
 	}
+	next := m.tabs[i]
+	if next.kind == tabKindAgentSession {
+		if _, ok := m.agents.tasks[next.agentTask]; ok {
+			m.switchAgentComposer(next.agentTask)
+			m.agents.conversation = true
+			m.agents.selectedSubagents = nil
+			delete(m.agents.unread, next.agentTask)
+			m.loadAgentEntries(next.agentTask, false)
+		}
+	}
 	m.revealEditor()
 	m.active = i
 	m.noteTabUse(m.tabs[i])
 	m.applyActive()
 	m.applyReveal(m.tabs[i])
+	m.recordNavigation(true)
+	m.syncProjectTreeState()
 	m.markRecent(m.tabs[i].doc.Path())
 	m.saveSession()
 	m.invalidate()
@@ -1527,20 +1840,40 @@ func (m *Model) applyActive() {
 	if t := m.tab(); t != nil {
 		name := filepath.Base(t.doc.Path())
 		if t.kind != "" {
-			name = t.doc.Path()
-			m.win.SetTitle(name + " — GoIDEA")
+			name = m.agentEditorTitle(t)
+			if name == "" {
+				name = t.doc.Path()
+			}
+			m.win.SetTitle(m.windowTitle(name))
 			m.win.SetRepresentedFile("")
 			m.win.SetDocumentEdited(false)
 			return
 		}
-		m.win.SetTitle(name + " — GoIDEA")
+		m.win.SetTitle(m.windowTitle(name))
 		m.win.SetRepresentedFile(t.doc.Path())
 		m.win.SetDocumentEdited(t.dirty())
 		return
 	}
-	m.win.SetTitle("GoIDEA")
+	m.win.SetTitle(m.windowTitle(""))
 	m.win.SetRepresentedFile("")
 	m.win.SetDocumentEdited(false)
+}
+
+// windowTitle follows OpenIDEA's `<project> – <file>` document title. Branding
+// is only used when there is neither a project nor a document.
+func (m *Model) windowTitle(fileName string) string {
+	file := strings.TrimSpace(fileName)
+	project := m.projectLabel()
+	if m.Root() == "" {
+		if file != "" {
+			return file
+		}
+		return project
+	}
+	if file != "" {
+		return project + " – " + file
+	}
+	return project
 }
 
 func (m *Model) dropTab(i int) { m.removeTab(m.tabs[i]) }
@@ -1548,7 +1881,17 @@ func (m *Model) dropTab(i int) { m.removeTab(m.tabs[i]) }
 // removeTab closes t and puts it in the closed history Reopen Closed Tab pops.
 func (m *Model) removeTab(t *Tab) {
 	if g, ok := m.groupOf(t); ok && t.doc != nil && t.kind == "" {
-		m.rememberClosed(closedTab{path: t.doc.Path(), index: tabIndexIn(m.groupTabsAt(g), t), pinned: t.pinned})
+		entry := closedTab{
+			path: t.doc.Path(), index: tabIndexIn(m.groupTabsAt(g), t),
+			pinned: t.pinned, doc: t.doc,
+		}
+		if t.state != nil {
+			entry.selections = t.state.Selections()
+			entry.scrollY = t.state.ScrollY()
+		}
+		m.rememberClosed(entry)
+		m.removeTabFromWindow(t, false)
+		return
 	}
 	m.removeTabNow(t)
 }
@@ -1556,6 +1899,13 @@ func (m *Model) removeTab(t *Tab) {
 // removeTabNow takes t out of its window group without the closed history, as
 // the preview trim and the preview slot's reuse do.
 func (m *Model) removeTabNow(t *Tab) {
+	m.removeTabFromWindow(t, true)
+}
+
+// removeTabFromWindow removes t from its strip. A file tab kept for Reopen
+// Closed Tab keeps its registry reference, and with it the shared buffer's
+// undo history, until the closed entry is reopened or evicted.
+func (m *Model) removeTabFromWindow(t *Tab, closeDoc bool) {
 	g, ok := m.groupOf(t)
 	if !ok {
 		return
@@ -1565,7 +1915,7 @@ func (m *Model) removeTabNow(t *Tab) {
 		m.rename = nil
 	}
 	m.settleGroups()
-	if t.doc != nil && t.kind == "" {
+	if closeDoc && t.doc != nil && t.kind == "" {
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
@@ -1575,14 +1925,19 @@ func (m *Model) removeTabNow(t *Tab) {
 	if len(m.tabs) == 0 {
 		m.active = 0
 	}
+	if m.Root() == "" && len(m.allTabs()) == 0 {
+		m.showingWelcome = true
+		m.status = "Open a file"
+	}
 	m.applyActive()
+	m.syncProjectTreeState()
 	m.saveSession()
 	m.invalidate()
 }
 
 // SaveActive saves the active document.
 func (m *Model) SaveActive() {
-	if t := m.tab(); t != nil {
+	if t := m.tab(); t != nil && t.kind == "" {
 		m.saveTabAsync(t, nil)
 	}
 }
@@ -1631,7 +1986,7 @@ func (m *Model) saveTabAsync(t *Tab, done func()) {
 func saveAll(ctx context.Context, tabs []*Tab, p SavePrefs) error {
 	var first error
 	for _, t := range tabs {
-		if !t.unsaved() {
+		if t == nil || t.kind != "" || t.doc == nil || !t.unsaved() {
 			continue
 		}
 		if err := cleanForSave(ctx, t.doc, p); err != nil {
@@ -1653,11 +2008,74 @@ func saveAll(ctx context.Context, tabs []*Tab, p SavePrefs) error {
 	return first
 }
 
+// saveOpenTabs is the user-facing save pipeline: Format on Save runs first,
+// then Save Files cleans the document while keeping the caret line when asked,
+// and only then is the result synced and written.
+func (m *Model) saveOpenTabs(ctx context.Context, tabs []*Tab) error {
+	var first error
+	for _, t := range tabs {
+		if t == nil || t.kind != "" || t.doc == nil || !t.unsaved() {
+			continue
+		}
+		if err := m.prepareTabForSave(ctx, t); err != nil {
+			if first == nil {
+				first = err
+			}
+			continue
+		}
+		if err := t.doc.Sync(ctx); err != nil {
+			if first == nil {
+				first = err
+			}
+			continue
+		}
+		if err := t.doc.Save(ctx); err != nil && first == nil {
+			first = err
+		}
+	}
+	return first
+}
+
+// prepareTabForSave runs formatting before cleanup and computes the caret
+// line after formatting, which is the line the Keep trailing spaces option
+// protects.
+func (m *Model) prepareTabForSave(ctx context.Context, t *Tab) error {
+	if m.prefs.General.ReformatOnSave &&
+		(m.mgr != nil || m.invokeHook != nil) {
+		if t.formatting {
+			return fmt.Errorf("Cannot save %s while it is already being reformatted", filepath.Base(t.doc.Path()))
+		}
+		version := t.doc.Buffer().Version()
+		_, stale, err := m.applyLanguageFormat(ctx, t, t.doc.ID(), version, true)
+		switch {
+		case err != nil:
+			return fmt.Errorf("Formatting %s failed: %w", filepath.Base(t.doc.Path()), err)
+		case stale:
+			return fmt.Errorf("%s changed while it was being formatted; save it again",
+				filepath.Base(t.doc.Path()))
+		}
+	}
+	p := m.prefs.SaveFiles
+	caretLine := -1
+	keepCaretLine := p.KeepTrailingOnCaretLine
+	if keepCaretLine && t.state != nil {
+		caretLine = t.state.CursorPos().Line
+	}
+	return cleanForSaveAtCaret(
+		ctx,
+		t.doc,
+		p,
+		caretLine,
+		keepCaretLine,
+	)
+}
+
 // syncPump pushes editor buffer changes to the backend a moment after typing
 // stops. It runs once per frame; the backend calls go to other goroutines.
 func (m *Model) syncPump(now time.Time) {
 	m.watchFiles(now)
 	m.observeRecentLocation(now, false)
+	m.recordNavigation(false)
 	const idle = 220 * time.Millisecond
 	for _, t := range m.tabs {
 		v := t.doc.Buffer().Version()
@@ -1666,6 +2084,7 @@ func (m *Model) syncPump(now time.Time) {
 			t.edited = now
 			// An edit promotes the preview tab, as the controller does.
 			m.promoteTab(t)
+			m.refreshTabDecorations(t)
 		}
 		m.kickCodeIntel(t, now)
 		if t.syncing || t.saving || v == t.synced {
@@ -1808,16 +2227,25 @@ func (m *Model) sessionSnapshot() (Session, bool) {
 		}
 	}
 	if root == "" && fileTabs == 0 && len(m.recents) == 0 && len(m.recentGroups) == 0 &&
-		len(m.searchHistory) == 0 && len(m.notify.items) == 0 {
+		len(m.searchHistory) == 0 && len(m.notify.items) == 0 &&
+		len(m.namedLayouts) == 0 && m.activeNamedLayout == "" {
 		// Nothing to remember; keep the previous session rather than
 		// writing an empty one after a failed start.
 		return Session{}, false
 	}
-	var files, pinned []string
+	var files, pinned, agentTasks []string
 	focus := ""
+	agentHome := false
+	focusAgent := ""
+	focusAgentNew := false
 	for _, t := range m.tabs {
 		if t.kind != "" {
-			// A page like What's New is not restorable, as upstream's tab says.
+			switch t.kind {
+			case tabKindAgentSession:
+				agentTasks = append(agentTasks, t.agentTask)
+			case tabKindAgentHome:
+				agentHome = true
+			}
 			continue
 		}
 		files = append(files, t.doc.Path())
@@ -1827,6 +2255,12 @@ func (m *Model) sessionSnapshot() (Session, bool) {
 	}
 	if t := m.tab(); t != nil && t.kind == "" {
 		focus = t.doc.Path()
+	} else if t := m.tab(); t != nil {
+		if t.kind == tabKindAgentSession {
+			focusAgent = t.agentTask
+		} else if t.kind == tabKindAgentHome {
+			focusAgentNew = true
+		}
 	}
 	var splitFiles []string
 	splitActive := 0
@@ -1855,22 +2289,44 @@ func (m *Model) sessionSnapshot() (Session, bool) {
 	}
 	keep := keepPaths
 	return Session{Root: root, Files: normalizeFiles(files), Focus: focus,
-		Pinned:         pinned,
-		SplitFiles:     normalizeFiles(splitFiles),
-		SplitActive:    splitActive,
-		SplitDown:      m.splitDown,
-		SplitFirst:     m.splitFirst,
-		Bookmarks:      append([]Bookmark(nil), m.bookmarks...),
-		PathBookmarks:  append([]PathBookmark(nil), m.pathBookmarks...),
-		BookmarkLists:  append([]BookmarkList(nil), m.bookmarkLists...),
-		DefaultList:    m.defaultList,
-		RecentProjects: recentPaths(m.recents),
-		Recents:        append([]RecentProject(nil), m.recents...),
-		RecentGroups:   append([]RecentGroup(nil), m.recentGroups...),
-		SearchHistory:  append([]string(nil), m.searchHistory...),
-		Notifications:  m.notificationHistory(),
-		Layouts:        pruneLayouts(layouts, keep),
-		RunHistory:     pruneRunHistory(cloneRunHistory(m.runHistory), keep)}, true
+		Pinned:            pinned,
+		AgentTasks:        uniqueAgentIDs(agentTasks),
+		AgentHome:         agentHome,
+		FocusAgent:        focusAgent,
+		FocusAgentNew:     focusAgentNew,
+		SplitFiles:        normalizeFiles(splitFiles),
+		SplitActive:       splitActive,
+		SplitDown:         m.splitDown,
+		SplitFirst:        m.splitFirst,
+		Bookmarks:         append([]Bookmark(nil), m.bookmarks...),
+		PathBookmarks:     append([]PathBookmark(nil), m.pathBookmarks...),
+		BookmarkLists:     append([]BookmarkList(nil), m.bookmarkLists...),
+		DefaultList:       m.defaultList,
+		RecentProjects:    recentPaths(m.recents),
+		Recents:           append([]RecentProject(nil), m.recents...),
+		RecentGroups:      append([]RecentGroup(nil), m.recentGroups...),
+		SearchHistory:     append([]string(nil), m.searchHistory...),
+		SearchScopes:      append([]SearchScope(nil), m.searchScopes...),
+		Notifications:     m.notificationHistory(),
+		Layouts:           pruneLayouts(layouts, keep),
+		NamedLayouts:      cloneSavedToolWindowLayouts(m.namedLayouts),
+		ActiveNamedLayout: m.activeNamedLayout,
+		ProjectViews:      cloneProjectViews(m.projectViews),
+		RunHistory:        pruneRunHistory(cloneRunHistory(m.runHistory), keep)}, true
+}
+
+func cloneProjectViews(views map[string][]string) map[string][]string {
+	if len(views) == 0 {
+		return nil
+	}
+	out := make(map[string][]string, len(views))
+	for root, expanded := range views {
+		if len(expanded) > maxProjectTreeExpanded {
+			expanded = expanded[:maxProjectTreeExpanded]
+		}
+		out[root] = append([]string(nil), expanded...)
+	}
+	return out
 }
 
 // cloneRunHistory copies the histories, so a snapshot being written never
@@ -1990,11 +2446,10 @@ func (m *Model) finishQuit(save bool) {
 		m.tree = nil
 	}
 	tabs := append([]*Tab(nil), m.tabs...)
-	p := m.prefs.SaveFiles
 	m.forceQuit = true
 	go func() {
 		if save {
-			_ = saveAll(m.ctx, tabs, p)
+			_ = m.saveOpenTabs(m.ctx, tabs)
 		}
 		m.off()
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -2032,11 +2487,19 @@ func (m *Model) ShowProject() {
 // for the offscreen smoke run. Call it on the main thread.
 func (m *Model) QuitImmediately() { m.finishQuit(false) }
 
-// BackendState reports the server for the status bar.
-func (m *Model) BackendState() openidea.State { return m.mgr.State() }
+// BackendState reports the server for the status bar. A standalone editor has
+// no project backend until it becomes part of a project.
+func (m *Model) BackendState() openidea.State {
+	if m.mgr == nil {
+		return openidea.State{Phase: "unavailable"}
+	}
+	return m.mgr.State()
+}
 
 // View draws the window.
 func (m *Model) View(c *ui.Context) {
+	m.systemRegion = c.Region()
+	m.applyIDEOZoom(c)
 	// OpenIDEA's own palette, day or night, whatever the appearance: the
 	// stored choice picks one, the system's appearance the shade.
 	if m.theme != nil {
@@ -2060,7 +2523,7 @@ func (m *Model) View(c *ui.Context) {
 	p := c.Theme()
 	m.refreshTodoHighlights(time.Now(), p)
 	ui.Column(c).Fill().Background(p.Background).Children(func() {
-		if m.Root() == "" || m.showingWelcome {
+		if m.welcomeVisible() {
 			// With no project open the Welcome screen owns the window, as
 			// OpenIDEA's does; What's New is standalone, so while it is on
 			// show it takes the window instead.
@@ -2082,7 +2545,21 @@ func (m *Model) View(c *ui.Context) {
 	m.renderOverlays(c, p)
 }
 
+// welcomeVisible reports whether the Welcome screen owns the frame. A loaded
+// project can temporarily return to Welcome, while a standalone document
+// keeps the normal workbench visible even though no project is open.
+func (m *Model) welcomeVisible() bool {
+	if m.showingWelcome {
+		return true
+	}
+	return m.Root() == "" && len(m.allTabs()) == 0
+}
+
 func (m *Model) shortcuts(c *ui.Context) {
+	if m.doubleShift.observeDoubleShift(c.Modifiers(), time.Now()) && !m.overlayOpen() {
+		m.OpenSearchEverywhere()
+		return
+	}
 	if (!m.overlayOpen() || m.documentation.popup != nil) &&
 		(c.Shortcut(0, ui.KeyF1) || c.Shortcut(ui.Ctrl, ui.KeyJ)) {
 		m.RunCommand("code.quickDocumentation")
@@ -2143,6 +2620,58 @@ func (m *Model) shortcuts(c *ui.Context) {
 		}
 		return
 	}
+	// A focused diff owns F7 / Shift+F7, the apply-side shortcuts, file
+	// navigation and Jump to Source, matching OpenIDEA's diff keymap.
+	if m.diff != nil {
+		switch {
+		case c.Shortcut(ui.Modifiers(0), ui.KeyF7):
+			m.StepDiffChange(1)
+			return
+		case c.Shortcut(ui.Shift, ui.KeyF7):
+			m.StepDiffChange(-1)
+			return
+		case c.Shortcut(ui.Modifiers(0), ui.KeyF4), c.Shortcut(ui.Cmd, ui.KeyDown):
+			m.JumpDiffToSource()
+			return
+		case c.Shortcut(ui.Ctrl|ui.Cmd, ui.KeyRight):
+			m.ApplyDiffSide(true)
+			return
+		case c.Shortcut(ui.Ctrl|ui.Cmd, ui.KeyLeft):
+			m.ApplyDiffSide(false)
+			return
+		case c.Shortcut(ui.Ctrl|ui.Shift, ui.KeyRight):
+			m.StepDiffFile(1)
+			return
+		case c.Shortcut(ui.Ctrl|ui.Shift, ui.KeyLeft):
+			m.StepDiffFile(-1)
+			return
+		case c.Shortcut(ui.Cmd|ui.Shift, ui.KeyD):
+			m.ToggleDiffSettings()
+			return
+		}
+	}
+	// The native merge editor uses the diff navigator too: F7 and Shift+F7
+	// move between unresolved changes, while the apply-side shortcuts match
+	// OpenIDEA's merge keymap.
+	if m.merge != nil && m.merge.open && m.diff == nil {
+		switch {
+		case c.Shortcut(ui.Modifiers(0), ui.KeyF7):
+			m.StepMergeChange(1)
+			return
+		case c.Shortcut(ui.Shift, ui.KeyF7):
+			m.StepMergeChange(-1)
+			return
+		case c.Shortcut(ui.Ctrl|ui.Cmd, ui.KeyRight):
+			m.ApplyMergeNonConflicting(mergeSide("left"))
+			return
+		case c.Shortcut(ui.Ctrl|ui.Cmd, ui.KeyLeft):
+			m.ApplyMergeNonConflicting(mergeSide("right"))
+			return
+		case c.Shortcut(ui.Cmd|ui.Shift, ui.KeyD):
+			m.ToggleMergeSettingsMenu()
+			return
+		}
+	}
 	// A modal sheet owns the keyboard; only its own dismiss keys apply.
 	if m.modalOverlayOpen() {
 		return
@@ -2168,6 +2697,38 @@ func (m *Model) shortcuts(c *ui.Context) {
 		}
 	}
 	if !m.overlayOpen() {
+		if c.Shortcut(ui.Alt, ui.KeyF7) && m.activeEditorAvailable() {
+			m.FindUsages()
+			return
+		}
+		if c.Shortcut(ui.Cmd|ui.Alt, ui.KeyF7) && m.activeEditorAvailable() {
+			m.ShowUsagesPopup()
+			return
+		}
+		if c.Shortcut(ui.Cmd, ui.KeyDelete) && m.activeEditorAvailable() {
+			m.SafeDeleteActive()
+			return
+		}
+		if c.Shortcut(ui.Cmd, ui.KeyBracketLeft) || c.Shortcut(ui.Cmd|ui.Alt, ui.KeyLeft) {
+			m.RunCommand("navigate.back")
+			return
+		}
+		if c.Shortcut(ui.Cmd, ui.KeyBracketRight) || c.Shortcut(ui.Cmd|ui.Alt, ui.KeyRight) {
+			m.RunCommand("navigate.forward")
+			return
+		}
+		if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyBackspace) {
+			m.RunCommand("navigate.lastEditLocation")
+			return
+		}
+		if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyC) && m.activeEditorAvailable() {
+			m.RunCommand("editor.copyPathReference")
+			return
+		}
+		if c.Shortcut(ui.Cmd|ui.Alt|ui.Shift, ui.KeyC) && m.activeEditorAvailable() {
+			m.RunCommand("editor.copyReference")
+			return
+		}
 		if c.Shortcut(ui.Cmd, ui.KeyL) {
 			m.RunCommand("navigate.gotoLine")
 		}
@@ -2314,6 +2875,9 @@ func (m *Model) shortcuts(c *ui.Context) {
 	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyF12) {
 		m.HideAllToolWindows()
 	}
+	if c.Shortcut(ui.Shift, ui.KeyF12) && !m.overlayOpen() {
+		m.RunCommand("layout.restoreDefault")
+	}
 	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyQuote) && !m.overlayOpen() {
 		m.ToggleMaximizeToolWindow()
 	}
@@ -2332,6 +2896,9 @@ func (m *Model) shortcuts(c *ui.Context) {
 	if c.Shortcut(ui.Shift, ui.KeyEscape) && !m.overlayOpen() {
 		m.HideActiveToolWindow()
 	}
+	if c.Shortcut(ui.Modifiers(0), ui.KeyEscape) && !m.overlayOpen() && m.visibleTool() != "" {
+		m.FocusEditor()
+	}
 	if c.Shortcut(ui.Modifiers(0), ui.KeyF12) {
 		m.JumpToLastToolWindow()
 	}
@@ -2341,13 +2908,23 @@ func (m *Model) shortcuts(c *ui.Context) {
 	if c.Shortcut(ui.Cmd|ui.Alt, ui.KeyUp) {
 		m.StepProblem(-1)
 	}
-	if n := len(m.tabs); n > 0 {
-		if c.Shortcut(ui.Ctrl, ui.KeyRight) || c.Shortcut(ui.Cmd|ui.Shift, ui.KeyBracketRight) {
-			m.activate((m.active + 1) % n)
-		}
-		if c.Shortcut(ui.Ctrl, ui.KeyLeft) || c.Shortcut(ui.Cmd|ui.Shift, ui.KeyBracketLeft) {
-			m.activate((m.active - 1 + n) % n)
-		}
+	if c.Shortcut(ui.Ctrl, ui.KeyRight) || c.Shortcut(ui.Cmd|ui.Shift, ui.KeyBracketRight) {
+		m.cycleEditorTab(1)
+	}
+	if c.Shortcut(ui.Ctrl, ui.KeyLeft) || c.Shortcut(ui.Cmd|ui.Shift, ui.KeyBracketLeft) {
+		m.cycleEditorTab(-1)
+	}
+	if c.Shortcut(ui.Ctrl|ui.Alt, ui.KeyPageDown) || c.Shortcut(ui.Cmd|ui.Alt, ui.KeyPageDown) {
+		m.cycleEditorTab(1)
+	}
+	if c.Shortcut(ui.Ctrl|ui.Alt, ui.KeyPageUp) || c.Shortcut(ui.Cmd|ui.Alt, ui.KeyPageUp) {
+		m.cycleEditorTab(-1)
+	}
+	if c.Shortcut(ui.Alt|ui.Shift, ui.KeyPeriod) && !m.overlayOpen() {
+		m.stepEditorFontZoom(1)
+	}
+	if c.Shortcut(ui.Alt|ui.Shift, ui.KeyComma) && !m.overlayOpen() {
+		m.stepEditorFontZoom(-1)
 	}
 	// OpenIDEA's keymap splits the editor right with Cmd+\ and moves between
 	// the window groups with Alt+Tab / Alt+Shift+Tab (editor.splitRight,
@@ -2361,7 +2938,7 @@ func (m *Model) shortcuts(c *ui.Context) {
 	if c.Shortcut(ui.Alt|ui.Shift, ui.KeyTab) && !m.overlayOpen() {
 		m.GoToPreviousSplitter()
 	}
-	if c.Shortcut(ui.Modifiers(0), ui.KeyF5) {
+	if c.Shortcut(ui.Modifiers(0), ui.KeyF5) && !m.projectTreeFocus {
 		m.Run()
 	}
 	if c.Shortcut(ui.Ctrl|ui.Shift, ui.KeyR) && !m.overlayOpen() {

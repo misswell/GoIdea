@@ -191,7 +191,14 @@ func (m *Model) rememberLayout() {
 // shell and a run window still its output, exactly as a shortcut press would
 // leave them.
 func (m *Model) applyLayout(root string) {
-	l := m.layoutFor(root)
+	m.applyLayoutSnapshot(m.layoutFor(root))
+}
+
+// applyLayoutSnapshot applies a saved tool window snapshot. Named layouts use
+// the same path as a project's automatic layout, so both restore every dock,
+// split, size, placement and view mode through the ordinary window openers.
+func (m *Model) applyLayoutSnapshot(l Layout) {
+	l = normalizeLayout(l)
 	release := m.holdLayout()
 	defer release()
 
@@ -203,6 +210,9 @@ func (m *Model) applyLayout(root string) {
 	m.services.visible = false
 	m.hierarchy = hierarchyPane{}
 	m.dock = dockState{}
+	for _, name := range toolWindows {
+		m.hideTool(name)
+	}
 	m.rightTool, m.rightSplitTool = "", ""
 	m.rightHidden = true
 	m.leftRatio = float32(l.LeftRatio)
@@ -350,34 +360,16 @@ func (m *Model) applyLayout(root string) {
 	m.invalidate()
 }
 
-// ResetToolWindowLayout is OpenIDEA's Restore Default Layout: every bottom
-// window comes back to the primary area. A window that was in the split area
-// hides, because the primary area keeps the window it showed, and sizes and
-// other windows stay as they are.
+// ResetToolWindowLayout is OpenIDEA's Restore Default Layout. It applies the
+// fresh-project snapshot rather than merely moving the current windows: the
+// Project window returns on the left, all other areas close, sizes and split
+// ratios return to their defaults, and dock placements and view modes clear.
 func (m *Model) ResetToolWindowLayout() {
-	primary := m.primaryTool()
-	release := m.holdLayout()
-	for _, name := range toolWindows {
-		if dockSpec(name) != nil {
-			if s, ok := m.dockSlotOf(name); ok {
-				if s == dockBottomSplit {
-					m.DockHide(name)
-				} else if s != dockSpec(name).anchor {
-					m.DockMove(name, dockSpec(name).anchor)
-				}
-			}
-			continue
-		}
-		if m.splitNames[name] {
-			m.hideTool(name)
-		}
-	}
-	release()
-	m.splitNames = nil
-	if primary != "" && m.toolVisible(primary) {
-		m.tool = primary
-	}
+	m.exitDistractionFree()
+	m.applyLayoutSnapshot(Layout{})
+	m.activeNamedLayout = ""
 	m.rememberLayout()
+	m.status = "Restored the default tool window layout"
 	m.invalidate()
 }
 
@@ -470,6 +462,37 @@ func (m *Model) visibleTool() string {
 		}
 	}
 	return ""
+}
+
+// activeToolWindow is the visible tool window a focused-window action targets:
+// the last activated one, falling back to the first visible window restored
+// from a stored layout.
+func (m *Model) activeToolWindow() string {
+	if m.tool != "" && m.toolVisible(m.tool) {
+		return m.tool
+	}
+	return m.visibleTool()
+}
+
+// CloseToolWindowContent is Cmd+W in a tool window. A selected content tab
+// closes first; when the window has no closable tab, the window hides.
+func (m *Model) CloseToolWindowContent() {
+	name := m.activeToolWindow()
+	if name == "" {
+		return
+	}
+	if name == "term" {
+		if group := m.term.activeGroup(); group != nil && len(group.tabs) > 0 {
+			m.CloseActiveTermTab()
+			return
+		}
+	}
+	if dockSpec(name) != nil {
+		m.DockHide(name)
+		return
+	}
+	m.hideTool(name)
+	m.invalidate()
 }
 
 // activateTool opens the named bottom tool window and remembers it as the one

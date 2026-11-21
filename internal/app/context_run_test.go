@@ -1,8 +1,14 @@
 package app
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
 	"path/filepath"
 	"testing"
+	"time"
+
+	"github.com/egoist/mygo/ui/editor"
 
 	"mayoi/internal/openidea"
 )
@@ -37,7 +43,7 @@ func TestContextRunProducesScriptConfigurations(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if cfg.Kind != test.kind || cfg.Command != test.command || !sameStrings(cfg.Args, test.args) {
+			if cfg.Kind != test.kind || cfg.Command != test.command || !sameStringSlice(cfg.Args, test.args) {
 				t.Fatalf("config = %s %s %q, want %s %s %q", cfg.Kind, cfg.Command, cfg.Args, test.kind, test.command, test.args)
 			}
 		})
@@ -86,7 +92,7 @@ func TestContextRunNarrowsEachTestRunner(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !sameStrings(cfg.Args, test.want) {
+			if !sameStringSlice(cfg.Args, test.want) {
 				t.Fatalf("args = %q, want %q", cfg.Args, test.want)
 			}
 			if !cfg.IsTest || !cfg.Detected {
@@ -108,7 +114,7 @@ func TestContextRunReusesMainTargets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Kind != "go" || !sameStrings(cfg.Args, []string{"run", "./cmd/tool"}) || cfg.IsTest {
+	if cfg.Kind != "go" || !sameStringSlice(cfg.Args, []string{"run", "./cmd/tool"}) || cfg.IsTest {
 		t.Fatalf("go main config = %+v", cfg)
 	}
 
@@ -118,7 +124,7 @@ func TestContextRunReusesMainTargets(t *testing.T) {
 		t.Fatal(err)
 	}
 	if java.Kind != "application" || java.ID != "application:app:demo.App" ||
-		!sameStrings(java.Args, []string{"-cp", "${classpath}", "demo.App"}) {
+		!sameStringSlice(java.Args, []string{"-cp", "${classpath}", "demo.App"}) {
 		t.Fatalf("java main config = %+v", java)
 	}
 }
@@ -130,19 +136,100 @@ func TestContextRunFallsBackToImplicitPytest(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{"-m", "pytest", "tests/test_math.py"}
-	if cfg.Kind != "pytest" || !cfg.IsTest || !sameStrings(cfg.Args, want) {
+	if cfg.Kind != "pytest" || !cfg.IsTest || !sameStringSlice(cfg.Args, want) {
 		t.Fatalf("pytest config = %+v", cfg)
 	}
 }
 
-func sameStrings(got, want []string) bool {
-	if len(got) != len(want) {
-		return false
+func TestContextRunWithCoveragePreparesLaunchesAndCollects(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	root := t.TempDir()
+	path := filepath.Join(root, "internal/calc/calc_test.go")
+	doc := writableSourceDocument(path, "package calc\n")
+	posts := make(chan func(), 16)
+	m := &Model{
+		ctx:    ctx,
+		tabs:   []*Tab{{doc: doc, state: &editor.State{Buffer: doc.Buffer()}}},
+		active: 0,
+		postHook: func(fn func()) {
+			posts <- fn
+		},
 	}
-	for i := range got {
-		if got[i] != want[i] {
-			return false
+	m.setRoot(root)
+	m.run.trusted, m.run.loaded = true, true
+	m.run.configs = []openidea.RunConfig{{
+		ID: "go:root", Name: "Go Tests", Kind: "go", Command: "go",
+		Args: []string{"test", "./..."}, IsTest: true,
+	}}
+
+	const report = `{"kind":"goProfile","path":"/tmp/context-cover.out","module":"example.com/context","moduleDir":"/tmp"}`
+	var prepared openidea.RunConfig
+	var launched openidea.RunConfig
+	m.invokeHook = func(_ context.Context, command string, input any) (json.RawMessage, error) {
+		args := input.(map[string]any)
+		switch command {
+		case "coverage_prepare":
+			config, ok := args["config"].(json.RawMessage)
+			if !ok {
+				return nil, fmt.Errorf("coverage config payload is %T", args["config"])
+			}
+			if err := json.Unmarshal(config, &prepared); err != nil {
+				return nil, err
+			}
+			launch, err := json.Marshal(prepared)
+			if err != nil {
+				return nil, err
+			}
+			return json.RawMessage(fmt.Sprintf(
+				`{"status":"ready","runner":"go test -cover","launch":%s,"report":%s}`,
+				launch, report,
+			)), nil
+		case "run_start":
+			config, ok := args["config"].(json.RawMessage)
+			if !ok {
+				return nil, fmt.Errorf("run config payload is %T", args["config"])
+			}
+			if err := json.Unmarshal(config, &launched); err != nil {
+				return nil, err
+			}
+			return json.RawMessage(`{"id":42,"running":true,"name":"go test ./internal/calc"}`), nil
+		case "coverage_collect":
+			if raw := args["report"].(json.RawMessage); string(raw) != report {
+				return nil, fmt.Errorf("coverage report payload changed: %s", raw)
+			}
+			return json.RawMessage(`{"runner":"go test -cover","hasBranches":false,"files":[{"path":"internal/calc/calc.go","linesTotal":5,"linesCovered":4}]}`), nil
+		default:
+			return nil, fmt.Errorf("unexpected RPC %q", command)
 		}
 	}
-	return true
+
+	m.RunContextConfigurationWithCoverage()
+	exitSent := false
+	for m.coverage.activeSuite() == nil {
+		select {
+		case fn := <-posts:
+			fn()
+			if !exitSent && m.run.runID == 42 && m.run.awaiting {
+				code := int32(0)
+				m.acceptExit(openidea.RunExitedEvent{Run: 42, Code: &code})
+				exitSent = true
+			}
+		case <-ctx.Done():
+			t.Fatalf("context coverage did not finish: run=%s coverage=%s", m.run.err, m.coverage.err)
+		}
+	}
+
+	if prepared.Kind != "go" || prepared.Name != "calc_test.go" ||
+		!prepared.IsTest || !sameStringSlice(prepared.Args, []string{"test", "-json", "./internal/calc"}) {
+		t.Fatalf("prepared context config = %+v", prepared)
+	}
+	if launched.ID != prepared.ID || !sameStringSlice(launched.Args, prepared.Args) {
+		t.Fatalf("coverage launch = %+v, want prepared %+v", launched, prepared)
+	}
+	suite := m.coverage.activeSuite()
+	if suite.name != "calc_test.go" || suite.totals.LinesCovered != 4 ||
+		suite.totals.LinesTotal != 5 || m.run.running {
+		t.Fatalf("context coverage suite = %+v, running = %v", suite, m.run.running)
+	}
 }

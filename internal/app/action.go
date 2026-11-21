@@ -28,6 +28,9 @@ type Action struct {
 	Toggled func(m *Model) bool
 	Running func(m *Model) bool
 	Run     func(m *Model)
+	// RunWithArg is OpenIDEA's Action.run({arg}) path. Actions that ignore
+	// their argument keep Run and are still callable with one.
+	RunWithArg func(m *Model, arg any)
 	// Builtin marks an action registered from the shipped command list; the
 	// keymap's defaults are only known for those.
 	Builtin bool
@@ -57,45 +60,52 @@ var actions = actionRegistry{byID: map[string]*Action{}}
 // and automation written against OpenIDEA: the same visible action can be
 // invoked by its OpenIDEA id while GoIDEA keeps its historical id for state.
 var actionAliases = map[string]string{
-	"debug.startConfig":       "run.debug",
-	"debug.attachToProcess":   "debug.attach",
-	"debug.toggleBreakpoint":  "run.breakpoint",
-	"debug.resume":            "run.continue",
-	"debug.pause":             "run.pause",
-	"debug.stepOver":          "run.stepOver",
-	"debug.stepInto":          "run.stepInto",
-	"debug.stepOut":           "run.stepOut",
-	"debug.runToCursor":       "run.runToCursor",
-	"debug.forceRunToCursor":  "run.forceRunToCursor",
-	"debug.showToolWindow":    "view.debug",
-	"debug.hotReload":         "debug.reloadChangedClasses",
-	"run.stopProcess":         "run.stop",
-	"run.debugConfig":         "run.debug",
-	"run.run":                 "run.start",
-	"find.usages":             "code.usages",
-	"find.showUsages":         "code.showUsages",
-	"find.showUsageResults":   "code.showUsages",
-	"find.inFile":             "view.find",
-	"editor.closeAllTabs":     "editor.closeAll",
-	"editor.closeOtherTabs":   "editor.closeOthers",
-	"editor.closeTab":         "file.close",
-	"editor.formatDocument":   "code.format",
-	"editor.prevSplitter":     "editor.previousSplitter",
-	"file.closeProject":       "project.close",
-	"file.openProject":        "project.open",
-	"file.reloadFromDisk":     "project.reloadFromDisk",
-	"project.reformatCode":    "code.format",
-	"project.trust":           "run.trust",
-	"toolwindow.hideAll":      "view.hideAll",
-	"toolwindow.hideActive":   "view.hideActive",
-	"toolwindow.jumpToLast":   "view.jumpLast",
-	"toolwindow.maximize":     "view.maximize",
-	"terminal.clear":          "term.clear",
-	"terminal.find":           "term.find",
-	"terminal.new":            "term.new",
-	"diff.compareDirectories": "project.compareDirectories",
-	"services.show":           "view.services",
-	"build.maven":             "view.maven",
+	"debug.startConfig":                   "run.debug",
+	"debug.attachToProcess":               "debug.attach",
+	"debug.toggleBreakpoint":              "run.breakpoint",
+	"debug.resume":                        "run.continue",
+	"debug.pause":                         "run.pause",
+	"debug.stepOver":                      "run.stepOver",
+	"debug.stepInto":                      "run.stepInto",
+	"debug.stepOut":                       "run.stepOut",
+	"debug.runToCursor":                   "run.runToCursor",
+	"debug.forceRunToCursor":              "run.forceRunToCursor",
+	"debug.showToolWindow":                "view.debug",
+	"debug.hotReload":                     "debug.reloadChangedClasses",
+	"run.stopProcess":                     "run.stop",
+	"run.debugConfig":                     "run.debug",
+	"run.run":                             "run.start",
+	"navigate.selectIn":                   "navigate.selectInProjectView",
+	"navigate.toggleBookmark":             "bookmarks.toggle",
+	"navigate.showBookmarks":              "bookmarks.show",
+	"navigate.nextBookmark":               "bookmarks.next",
+	"navigate.prevBookmark":               "bookmarks.prev",
+	"navigate.toggleBookmarkWithMnemonic": "bookmarks.mnemonic",
+	"bookmarks.toggleFileBookmark":        "bookmarks.file",
+	"find.usages":                         "code.usages",
+	"find.showUsages":                     "code.showUsages",
+	"find.showUsageResults":               "code.showUsageResults",
+	"editor.closeAllTabs":                 "editor.closeAll",
+	"editor.closeOtherTabs":               "editor.closeOthers",
+	"editor.closeTab":                     "file.close",
+	"editor.formatDocument":               "code.format",
+	"editor.prevSplitter":                 "editor.previousSplitter",
+	"file.closeProject":                   "project.close",
+	"project.new":                         "file.newProject",
+	"file.reloadFromDisk":                 "project.reloadFromDisk",
+	"run.trust":                           "project.trust",
+	"toolwindow.hideAll":                  "view.hideAll",
+	"toolwindow.hideActive":               "view.hideActive",
+	"toolwindow.jumpToLast":               "view.jumpLast",
+	"toolwindow.maximize":                 "view.maximize",
+	"view.resetLayout":                    "layout.restoreDefault",
+	"terminal.clear":                      "term.clear",
+	"terminal.closeSession":               "term.close",
+	"terminal.find":                       "term.find",
+	"terminal.new":                        "term.new",
+	"terminal.unsplit":                    "term.unsplit",
+	"services.show":                       "view.services",
+	"build.maven":                         "view.maven",
 }
 
 // registerAction adds an action. An empty or duplicate id is an error, as
@@ -108,7 +118,7 @@ func (r *actionRegistry) register(a *Action) error {
 	if a == nil || a.ID == "" {
 		return fmt.Errorf("action needs an id")
 	}
-	if a.Run == nil {
+	if a.Run == nil && a.RunWithArg == nil {
 		return fmt.Errorf("action %q needs a run function", a.ID)
 	}
 	if _, ok := r.byID[a.ID]; ok {
@@ -167,11 +177,23 @@ func actionList() []*Action {
 
 // RunAction runs an action when it is available in this context.
 func (m *Model) RunAction(id string) bool {
+	return m.RunActionWithArg(id, nil)
+}
+
+// RunActionWithArg runs an action with the argument supplied by a menu,
+// plugin or automation. It is equivalent to OpenIDEA's executeAction(id, arg).
+func (m *Model) RunActionWithArg(id string, arg any) bool {
 	a, ok := actionGet(id)
-	if !ok || !a.usable(m) || a.Run == nil {
+	if !ok || !a.usable(m) {
 		return false
 	}
-	a.Run(m)
+	if a.RunWithArg != nil {
+		a.RunWithArg(m, arg)
+	} else if a.Run != nil {
+		a.Run(m)
+	} else {
+		return false
+	}
 	return true
 }
 

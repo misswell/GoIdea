@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
 )
 
@@ -24,7 +25,13 @@ func TestLoadPreferencesDefaults(t *testing.T) {
 
 func TestPreferencesRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "nested", "settings.json")
-	want := Preferences{Theme: "dark", FontSize: 17}
+	want := Preferences{
+		Theme: "dark", FontSize: 17,
+		Problems: ProblemsPrefs{
+			NoSeveritySort: true, SortByName: true, ShowPreview: true, Autoscroll: true,
+		},
+		Hierarchy: HierarchyPrefs{Autoscroll: true},
+	}
 	if err := want.Save(path); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
@@ -93,6 +100,94 @@ func TestStepFontClamps(t *testing.T) {
 	}
 }
 
+func TestCodeVisionSettingsDefaultsAndApply(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	m := &Model{cfg: Config{SettingsPath: path}, ctx: nil}
+	staged := m.settingsDraftFromPrefs()
+	if !staged.codeVisionUsages || !staged.codeVisionAuthor || !staged.codeVisionNoUsages ||
+		staged.codeVisionUsagesPosition != "top" || staged.codeVisionAuthorPosition != "top" {
+		t.Fatalf("Code Vision defaults = %+v", staged)
+	}
+	staged.codeVisionUsages = false
+	staged.codeVisionAuthor = false
+	staged.codeVisionNoUsages = false
+	staged.codeVisionUsagesPosition = "right"
+	staged.codeVisionAuthorPosition = "right"
+	m.settingsDraft = staged
+	m.settingsPage = settingsPageInlayHints
+	if !m.settingsDirtyPage(settingsPageInlayHints) || !m.settingsPending() {
+		t.Fatal("Code Vision changes were not staged")
+	}
+	m.applySettings()
+	want := InlayPrefs{
+		NoCodeVisionUsages:   true,
+		NoCodeVisionAuthor:   true,
+		HideCodeVisionNoUses: true,
+		UsagesPosition:       "right",
+		AuthorPosition:       "right",
+	}
+	if m.prefs.Inlay != want || LoadPreferences(path).Inlay != want {
+		t.Fatalf("stored Code Vision = %+v / %+v, want %+v", m.prefs.Inlay, LoadPreferences(path).Inlay, want)
+	}
+	if m.settingsDraftFromPrefs().codeVisionUsages {
+		t.Fatal("stored Code Vision did not reload into the settings draft")
+	}
+}
+
+func TestAgentChatSettingsDefaultsAndApply(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	m := &Model{cfg: Config{SettingsPath: path}}
+	staged := m.settingsDraftFromPrefs()
+	if staged.agents.newTaskApprovals() != "bypass" ||
+		staged.agents.sendWith() != "enter" ||
+		staged.agents.whileRunning() != "queue" ||
+		staged.agents.toolCalls() != "grouped" ||
+		staged.agents.thinking() != "auto" ||
+		staged.agents.NoFoldTurns || staged.agents.NoSmoothText {
+		t.Fatalf("Agents defaults = %+v", staged.agents)
+	}
+	staged.agents.NewTaskApprovals = "ask"
+	staged.agents.SendWith = "modEnter"
+	staged.agents.WhileRunning = "steer"
+	staged.agents.ToolCalls = "each"
+	staged.agents.Thinking = "expanded"
+	staged.agents.NoFoldTurns = true
+	staged.agents.ExpandToolOutput = true
+	staged.agents.ShowCost = true
+	m.settingsDraft = staged
+	if !m.settingsDirtyPage(settingsPageAgents) || !m.settingsPending() {
+		t.Fatal("Agents changes were not staged")
+	}
+	m.applySettings()
+	stored := LoadPreferences(path).Agents
+	if stored == nil || stored.NewTaskApprovals != "ask" ||
+		stored.SendWith != "modEnter" || stored.WhileRunning != "steer" ||
+		stored.ToolCalls != "each" || stored.Thinking != "expanded" ||
+		!stored.NoFoldTurns || !stored.ExpandToolOutput || !stored.ShowCost {
+		t.Fatalf("stored Agents settings = %+v", stored)
+	}
+	if got := m.agentPrefs(); got.SendWith != "modEnter" || got.WhileRunning != "steer" {
+		t.Fatalf("active Agents settings = %+v", got)
+	}
+}
+
+func TestCodeVisionSettingsPageRendersOpenIDEAControls(t *testing.T) {
+	m := &Model{}
+	m.settingsDraft = m.settingsDraftFromPrefs()
+	tester := ui.NewTester(func(c *ui.Context) {
+		m.settingsInlayHintsBody(c, oiPaletteOf(c.Theme()))
+	}, 720, 420)
+	tester.Frame()
+	for _, text := range []string{
+		"Code Vision", "Usages", "Position", "Top",
+		"Show “no usages”", "Code author",
+	} {
+		if !tester.HasText(text) {
+			t.Fatalf("Inlay Hints page lacks %q: %q", text, tester.Texts())
+		}
+	}
+}
+
 func TestApplyPreferencesPicksTheme(t *testing.T) {
 	m := &Model{prefs: Preferences{Theme: "dark"}}
 	m.applyPreferences()
@@ -112,18 +207,22 @@ func TestSettingsTreeNestsAndGroups(t *testing.T) {
 	for _, n := range tree {
 		roots = append(roots, n.title)
 	}
-	want := []string{"Appearance & Behavior", "Keymap", "Editor", "Languages & Frameworks"}
+	want := []string{
+		"Appearance & Behavior", "Version Control", "Keymap", "Editor",
+		"Languages & Frameworks", "Agents", "Security",
+	}
 	if !reflect.DeepEqual(roots, want) {
 		t.Fatalf("roots = %v, want %v", roots, want)
 	}
 	editor, ok := settingsFindNode(tree, settingsGroupKey("Editor"))
-	if !ok || len(editor.children) != 3 {
-		t.Fatalf("Editor folder = %+v, want General, Font and TODO", editor)
+	if !ok || len(editor.children) != 4 {
+		t.Fatalf("Editor folder = %+v, want General, Font, Inlay Hints and TODO", editor)
 	}
 	general := editor.children[0]
 	if general.key != settingsPageGeneral || editor.children[1].key != settingsPageEditorFont ||
-		editor.children[2].key != settingsPageTodo {
-		t.Fatalf("Editor children = %q, %q, %q", general.key, editor.children[1].key, editor.children[2].key)
+		editor.children[2].key != settingsPageInlayHints || editor.children[3].key != settingsPageTodo {
+		t.Fatalf("Editor children = %q, %q, %q, %q", general.key, editor.children[1].key,
+			editor.children[2].key, editor.children[3].key)
 	}
 	if len(general.children) != 4 ||
 		general.children[0].key != settingsPageEditorAppearance ||
@@ -145,6 +244,14 @@ func TestSettingsTreeNestsAndGroups(t *testing.T) {
 	}
 	if got := settingsBreadcrumb(tree, settingsPageKeymap); !reflect.DeepEqual(got, []string{"Keymap"}) {
 		t.Fatalf("Keymap breadcrumb = %v", got)
+	}
+	if got := settingsBreadcrumb(tree, settingsPageDateFormats); !reflect.DeepEqual(got,
+		[]string{"Appearance & Behavior", "System Settings", "Date Formats"}) {
+		t.Fatalf("Date Formats breadcrumb = %v", got)
+	}
+	if got := settingsBreadcrumb(tree, settingsPageIssueNavigation); !reflect.DeepEqual(got,
+		[]string{"Version Control", "Issue Navigation"}) {
+		t.Fatalf("Issue Navigation breadcrumb = %v", got)
 	}
 }
 
@@ -201,8 +308,8 @@ func TestSettingsCollapseHidesChildren(t *testing.T) {
 	open := len(m.settingsVisibleRows())
 	m.settingsToggleNode(settingsGroupKey("Editor"))
 	closed := len(m.settingsVisibleRows())
-	if closed != open-7 {
-		t.Fatalf("rows open %d, closed %d, want seven fewer", open, closed)
+	if closed != open-8 {
+		t.Fatalf("rows open %d, closed %d, want eight fewer", open, closed)
 	}
 	if m.settingsNormalizeKey("no.such.page") != "" {
 		t.Fatalf("unknown key normalized to a row")
@@ -255,6 +362,80 @@ func TestSettingsStagesUntilApplyOrCancel(t *testing.T) {
 	m.settingsResetPage()
 	if m.settingsDraft.zenWidth != defaultZenWidth {
 		t.Fatalf("reset width = %d, want %d", m.settingsDraft.zenWidth, defaultZenWidth)
+	}
+}
+
+func TestSettingsFontStagesPreviewAndPersistsEveryTypographyChoice(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	tab := &Tab{state: &editor.State{}}
+	m := &Model{cfg: Config{SettingsPath: path}, tabs: []*Tab{tab}}
+	m.applyPreferences()
+	m.OpenSettingsPage(settingsPageEditorFont)
+
+	m.settingsSetFontFamily("Menlo")
+	m.settingsSetFont(18)
+	m.settingsSetFontLineHeight(27)
+	m.settingsSetFontLigatures(true)
+	m.settingsSetFontWeight(600)
+	m.settingsSetFontFallback("Arial")
+
+	if m.prefs.Font != (FontPrefs{}) || m.prefs.FontSize != 0 {
+		t.Fatalf("font staging wrote preferences: %+v size=%v", m.prefs.Font, m.prefs.FontSize)
+	}
+	if tab.state.Font.Family != "Menlo, Arial" || tab.state.Font.Size != 18 ||
+		tab.state.Font.Weight != 600 || tab.state.Font.Features != "" {
+		t.Fatalf("font preview = %+v", tab.state.Font)
+	}
+	if !m.settingsPending() {
+		t.Fatal("a staged font did not enable Apply")
+	}
+
+	m.applySettings()
+	want := FontPrefs{Family: "Menlo", LineHeight: 27, Ligatures: true, Weight: 600, Fallback: "Arial"}
+	if m.prefs.Font != want || m.prefs.FontSize != 18 {
+		t.Fatalf("applied font = %+v size=%v", m.prefs.Font, m.prefs.FontSize)
+	}
+	if stored := LoadPreferences(path); stored.Font != want || stored.FontSize != 18 {
+		t.Fatalf("stored font = %+v size=%v", stored.Font, stored.FontSize)
+	}
+}
+
+func TestSettingsKeymapRecorderStagesAndPersistsABinding(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	m := &Model{cfg: Config{SettingsPath: path}}
+	m.applyPreferences()
+	m.OpenSettingsPage(settingsPageKeymap)
+
+	const actionID = "app.commandPalette"
+	before := m.KeymapBindings(actionID)
+	m.settingsRecordKeymap(actionID)
+	if !m.keymapRecorder.open {
+		t.Fatal("the shortcut recorder did not open")
+	}
+	if !m.settingsRecordKeymapInput(ui.InputEvent{
+		Kind: ui.InputKeyDown,
+		Key:  ui.KeyP,
+		Mods: ui.Ctrl | ui.Alt,
+	}) {
+		t.Fatal("the shortcut recorder did not consume the chord")
+	}
+	if m.keymapRecorder.binding != "Ctrl+Alt+P" {
+		t.Fatalf("captured binding = %q", m.keymapRecorder.binding)
+	}
+	m.settingsCommitRecordedKeymap()
+
+	if got := m.KeymapBindings(actionID); !reflect.DeepEqual(got, before) {
+		t.Fatalf("default bindings changed before Apply: %v", got)
+	}
+	if !m.settingsPending() {
+		t.Fatal("a staged keymap did not enable Apply")
+	}
+	m.applySettings()
+	if got := m.KeymapBindings(actionID); !reflect.DeepEqual(got, []string{"Ctrl+Alt+P"}) {
+		t.Fatalf("applied binding = %v", got)
+	}
+	if got := LoadPreferences(path).Keymap[actionID]; !reflect.DeepEqual(got, []string{"Ctrl+Alt+P"}) {
+		t.Fatalf("stored binding = %v", got)
 	}
 }
 
@@ -414,7 +595,7 @@ func TestSettingsBreadcrumbsStagePlacement(t *testing.T) {
 
 	m.OpenSettingsPage(settingsPageBreadcrumbs)
 	m.settingsSetBreadcrumbPlacement("bottom")
-	if m.prefs.Breadcrumbs != (BreadcrumbPrefs{}) {
+	if !sameBreadcrumbPrefs(m.prefs.Breadcrumbs, BreadcrumbPrefs{}) {
 		t.Fatalf("staging wrote the prefs: %+v", m.prefs.Breadcrumbs)
 	}
 	if m.crumbs.Hidden || !m.crumbs.AtBottom() {
@@ -433,8 +614,9 @@ func TestSettingsBreadcrumbsStagePlacement(t *testing.T) {
 	m.settingsSetBreadcrumbPlacement("bottom")
 	m.applySettings()
 	want := BreadcrumbPrefs{Hidden: true, Placement: "bottom"}
-	if m.prefs.Breadcrumbs != want || LoadPreferences(path).Breadcrumbs != want {
-		t.Fatalf("stored breadcrumbs = %+v / %+v", m.prefs.Breadcrumbs, LoadPreferences(path).Breadcrumbs)
+	stored := LoadPreferences(path).Breadcrumbs
+	if !sameBreadcrumbPrefs(m.prefs.Breadcrumbs, want) || !sameBreadcrumbPrefs(stored, want) {
+		t.Fatalf("stored breadcrumbs = %+v / %+v", m.prefs.Breadcrumbs, stored)
 	}
 	if !m.crumbs.Hidden || !m.crumbs.AtBottom() {
 		t.Fatalf("applied breadcrumbs not on the window: %+v", m.crumbs)
@@ -638,5 +820,121 @@ func TestSettingsGeneralWrapsAndVirtualSpace(t *testing.T) {
 	d := m.settingsDraft
 	if d.softWrap || d.scrollPastEnd || d.softWrapFiles != defaultSoftWrapFiles {
 		t.Fatalf("reset general = %+v", d)
+	}
+}
+
+func TestSettingsDateFormatsStageApplyAndReset(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	m := &Model{cfg: Config{SettingsPath: path}}
+	m.OpenSettingsPage(settingsPageDateFormats)
+	if m.settingsDraft.dateFormat != defaultDateFormatPrefs() {
+		t.Fatalf("Date Formats defaults = %+v", m.settingsDraft.dateFormat)
+	}
+
+	m.settingsDraft.dateFormat = DateFormatPrefs{
+		OverrideSystem: true,
+		Pattern:        "yyyy/MM/dd",
+		Use24Hour:      false,
+		Pretty:         false,
+	}
+	if !m.settingsDirtyPage(settingsPageDateFormats) || !m.settingsPending() {
+		t.Fatal("Date Formats change was not staged")
+	}
+	m.applySettings()
+	got := LoadPreferences(path).dateFormatPrefs()
+	if !got.OverrideSystem || got.Pattern != "yyyy/MM/dd" || got.Use24Hour || got.Pretty {
+		t.Fatalf("stored Date Formats = %+v", got)
+	}
+	if m.prefs.DateFormat == nil || !sameDateFormatPrefs(*m.prefs.DateFormat, got) {
+		t.Fatalf("applied Date Formats = %+v", m.prefs.DateFormat)
+	}
+
+	m.settingsSelectPage(settingsPageDateFormats)
+	m.settingsResetPage()
+	if m.settingsDraft.dateFormat != defaultDateFormatPrefs() {
+		t.Fatalf("reset Date Formats = %+v", m.settingsDraft.dateFormat)
+	}
+}
+
+func TestSettingsSystemReopenProjectStagesAndApplies(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	m := &Model{cfg: Config{SettingsPath: path}}
+	m.OpenSettingsPage(settingsPageSystem)
+	m.settingsDraft.reopenLast = true
+	if !m.settingsDirtyPage(settingsPageSystem) || !m.settingsPending() {
+		t.Fatal("System Settings reopen choice was not staged")
+	}
+	m.applySettings()
+	if got := LoadPreferences(path).Startup; got != "reopen" {
+		t.Fatalf("stored startup = %q", got)
+	}
+	m.settingsSelectPage(settingsPageSystem)
+	m.settingsResetPage()
+	if m.settingsDraft.reopenLast {
+		t.Fatal("reset System Settings still reopens the last project")
+	}
+}
+
+func TestSettingsIssueNavigationStagesAppliesAndEdits(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	m := &Model{cfg: Config{SettingsPath: path}}
+	m.OpenSettingsPage(settingsPageIssueNavigation)
+	m.settingsAddIssuePreset(IssueLinkPrefs{
+		Pattern: `[A-Z]+-\d+`, Link: "https://tracker.example/$0",
+	})
+	if !m.settingsDirtyPage(settingsPageIssueNavigation) || !m.settingsPending() {
+		t.Fatal("Issue Navigation row was not staged")
+	}
+	m.settingsEditIssueLink(0)
+	m.settingsDraft.issueLinkDraft.Link = "https://tracker.example/browse/$0"
+	m.settingsCommitIssueLink()
+	m.applySettings()
+	stored := LoadPreferences(path).VCS.IssueNavigation
+	if len(stored) != 1 || stored[0].Pattern != `[A-Z]+-\d+` ||
+		stored[0].Link != "https://tracker.example/browse/$0" {
+		t.Fatalf("stored Issue Navigation = %+v", stored)
+	}
+
+	m.settingsSelectPage(settingsPageIssueNavigation)
+	m.settingsRemoveIssueLink(0)
+	if len(m.settingsDraft.issueLinks) != 0 {
+		t.Fatalf("removed Issue Navigation row remains: %+v", m.settingsDraft.issueLinks)
+	}
+	m.settingsResetPage()
+	m.applySettings()
+	if got := LoadPreferences(path).VCS.IssueNavigation; got != nil {
+		t.Fatalf("reset Issue Navigation = %+v", got)
+	}
+}
+
+func TestIssueNavigationEditorCommitsWithEnterAndCancelsWithEscape(t *testing.T) {
+	m := &Model{}
+	m.settingsDraft = m.settingsDraftFromPrefs()
+	m.settingsAddIssuePreset(IssueLinkPrefs{
+		Pattern: `[A-Z]+-\d+`,
+		Link:    "https://tracker.example/$0",
+	})
+	m.settingsEditIssueLink(0)
+	tester := ui.NewTester(func(c *ui.Context) {
+		m.settingsIssueNavigationBody(c, oiPaletteOf(c.Theme()))
+	}, 900, 500)
+	tester.Frame()
+
+	tester.Type("x")
+	tester.Key(0, ui.KeyEnter)
+	if m.settingsDraft.issueEditing != -1 ||
+		m.settingsDraft.issueLinks[0].Pattern != `[A-Z]+-\d+x` {
+		t.Fatalf("Enter result: editing=%d links=%+v",
+			m.settingsDraft.issueEditing, m.settingsDraft.issueLinks)
+	}
+
+	m.settingsEditIssueLink(0)
+	tester.Frame()
+	tester.Type("y")
+	tester.Key(0, ui.KeyEscape)
+	if m.settingsDraft.issueEditing != -1 ||
+		m.settingsDraft.issueLinks[0].Pattern != `[A-Z]+-\d+x` {
+		t.Fatalf("Escape result: editing=%d links=%+v",
+			m.settingsDraft.issueEditing, m.settingsDraft.issueLinks)
 	}
 }

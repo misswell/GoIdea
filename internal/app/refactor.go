@@ -13,16 +13,19 @@ import (
 type refactorEdit struct {
 	id    uint32
 	paths []string
+	root  string
 }
 
 // acceptWorkspaceEdit remembers the backend's newest workspace edit, which is
-// what UndoRefactor undoes; a new edit invalidates the redo it replaced.
+// what UndoRefactor undoes; a new edit invalidates the redo it replaced and
+// replaces OpenIDEA's refactoring notification.
 func (m *Model) acceptWorkspaceEdit(e openidea.WorkspaceEditAppliedEvent) {
 	if e.ID == 0 {
 		return
 	}
-	m.refactor = &refactorEdit{id: e.ID, paths: e.Paths}
+	m.refactor = &refactorEdit{id: e.ID, paths: e.Paths, root: m.Root()}
 	m.redoRefactor = nil
+	m.showRefactorHistoryNotification(m.refactor, false)
 }
 
 // UndoRefactor rolls back the last refactor as one operation.
@@ -58,10 +61,16 @@ func (m *Model) refactorHistory(cmd string, r *refactorEdit, undo bool) {
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, renameTimeout)
 		defer cancel()
-		_, err := m.mgr.Invoke(ctx, Window, cmd, map[string]any{"id": r.id})
+		_, err := m.invoke(ctx, cmd, map[string]any{"id": r.id})
 		m.post(func() {
 			if err != nil {
-				m.status = refactorErrorText(err, action)
+				text := refactorErrorText(err, action)
+				m.status = text
+				m.notifyError(
+					"refactor.workspaceEdit",
+					"Cannot "+action+" refactoring",
+					text,
+				)
 				m.invalidate()
 				return
 			}
@@ -71,9 +80,43 @@ func (m *Model) refactorHistory(cmd string, r *refactorEdit, undo bool) {
 				m.refactor, m.redoRefactor = r, nil
 			}
 			m.status = fmt.Sprintf("%s the refactoring: %d files", done, len(r.paths))
+			m.showRefactorHistoryNotification(r, undo)
 			m.invalidate()
 		})
 	}()
+}
+
+// showRefactorHistoryNotification mirrors OpenIDEA's workspace history
+// notification. The action replaces itself as Undo and Redo alternate.
+func (m *Model) showRefactorHistoryNotification(r *refactorEdit, undone bool) {
+	title, action := "Refactoring applied", "Undo"
+	if undone {
+		title, action = "Refactoring undone", "Redo"
+	}
+	m.notifyInfo("refactor.workspaceEdit", title, "", notifyAction{
+		label: action,
+		run: func(model *Model) {
+			if model.Root() != r.root {
+				model.notifyError(
+					"refactor.workspaceEdit",
+					"Cannot "+strings.ToLower(action)+" refactoring",
+					"The project for this refactoring is no longer open",
+				)
+				return
+			}
+			if undone {
+				if model.redoRefactor != r {
+					return
+				}
+				model.RedoRefactor()
+				return
+			}
+			if model.refactor != r {
+				return
+			}
+			model.UndoRefactor()
+		},
+	})
 }
 
 // refactorErrorText turns the errors undo and redo can hit into what the status

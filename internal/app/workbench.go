@@ -25,23 +25,29 @@ const (
 	oiLeftWidth       float32 = 240
 	// rightWidthDefault and its stored range are the right area's width, as
 	// OpenIDEA's sizes.right.
-	rightWidthDefault   float32 = 300
-	rightWidthStoredMin         = 200
-	rightWidthStoredMax         = 600
-	oiHeaderHeight      float32 = 40
-	oiTabBarHeight      float32 = 40
-	oiTabHeight         float32 = 28
-	oiTabColumnMin      float32 = 140 // OpenIDEA's vertical strip is 140..260 wide
-	oiTabColumnMax      float32 = 260
-	oiTabColumnTab      float32 = 24
+	rightWidthDefault     float32 = 300
+	rightWidthStoredMin           = 200
+	rightWidthStoredMax           = 600
+	oiHeaderHeight        float32 = 40
+	oiNavigationBarHeight float32 = 26
+	oiTabBarHeight        float32 = 40
+	oiTabHeight           float32 = 28
+	oiTabColumnMin        float32 = 140 // OpenIDEA's vertical strip is 140..260 wide
+	oiTabColumnMax        float32 = 260
+	oiTabColumnTab        float32 = 24
 )
 
 // titleBar is OpenIDEA's compact header: the project widget, the VCS widget,
 // then the run widget, the search and terminal controls and the gear.
 func (m *Model) titleBar(c *ui.Context, p *ui.Theme) {
+	if m.prefs.Appearance.HideMainToolbar {
+		m.compactTitleBar(c, p)
+		return
+	}
 	oi := oiPaletteOf(p)
+	tk := oiTokensFor(m, p)
 	left, right := resolveToolbar(m.prefs.MainToolbar)
-	bar := ui.Row(c).Height(oiTitleBarHeight).Shrink(0).Gap(4).AlignItems(ui.Center).
+	bar := ui.Row(c).Height(tk.TitleBarHeight).Shrink(0).Gap(4).AlignItems(ui.Center).
 		Padding(0, 8, 0, 10)
 	bar.ContextMenu(func(menu *ui.Menu) { m.toolbarCustomizeItems(menu) })
 	bar.Children(func() {
@@ -53,6 +59,25 @@ func (m *Model) titleBar(c *ui.Context, p *ui.Theme) {
 			m.toolbarEntry(c, p, oi, id)
 		}
 		m.gearButton(c, p, oi)
+	})
+}
+
+// compactTitleBar is IDEA's 30px compact header used when View › Appearance ›
+// Toolbar is off. It keeps the active document title and the way back to the
+// toolbar, instead of removing the title bar entirely.
+func (m *Model) compactTitleBar(c *ui.Context, p *ui.Theme) {
+	title := m.projectLabel()
+	if t := m.tab(); t != nil && t.kind == "" && t.doc != nil && t.doc.Path() != "" {
+		title = filepath.Base(t.doc.Path())
+		if project := m.projectLabel(); project != "" {
+			title += " – " + project
+		}
+	}
+	bar := ui.Row(c).Height(30).Shrink(0).AlignItems(ui.Center).Justify(ui.Center).
+		Padding(0, 72)
+	bar.ContextMenu(func(menu *ui.Menu) { m.toolbarCustomizeItems(menu) })
+	bar.Children(func() {
+		ui.Text(c, title).FontSize(13).TextColor(p.Text).SingleLine().Ellipsis("…")
 	})
 }
 
@@ -81,7 +106,7 @@ func (m *Model) actionTitleTool(c *ui.Context, p *ui.Theme, oi oiColors, id stri
 	if title == "" || !m.ActionEnabled(id) {
 		return
 	}
-	tk := oiTokensOf(p)
+	tk := oiTokensFor(m, p)
 	b := ui.ButtonBase(c.Key("title:"+id)).Height(tk.ButtonHeight).Padding(0, tk.SpaceL).
 		Radius(tk.RadiusM).Justify(ui.Center).AlignItems(ui.Center).Cursor(ui.CursorPointer)
 	if b.Hovered() {
@@ -99,11 +124,9 @@ func (m *Model) actionTitleTool(c *ui.Context, p *ui.Theme, oi oiColors, id stri
 // projectWidget is the avatar, the project name and the chevron, with
 // OpenIDEA's project menu.
 func (m *Model) projectWidget(c *ui.Context, p *ui.Theme, oi oiColors) {
-	name := "GoIDEA"
-	if root := m.Root(); root != "" {
-		name = filepath.Base(root)
-	}
-	w := ui.ButtonBase(c.Key("title:project")).Height(30).Padding(0, 8).Gap(6).
+	name := m.projectLabel()
+	tk := oiTokensFor(m, p)
+	w := ui.ButtonBase(c.Key("title:project")).Height(tk.StripeButton).Padding(0, tk.SpaceL).Gap(tk.SpaceM).
 		Radius(8).AlignItems(ui.Center).Cursor(ui.CursorPointer)
 	if w.Hovered() {
 		w.Background(oi.toolbarHover)
@@ -113,7 +136,8 @@ func (m *Model) projectWidget(c *ui.Context, p *ui.Theme, oi oiColors) {
 	}
 	w.Children(func() {
 		start, end := projectColors(name)
-		ui.Row(c).Size(20, 20).Shrink(0).Radius(4).
+		size := tk.StripeButton - tk.SpaceM
+		ui.Row(c).Size(size, size).Shrink(0).Radius(4).
 			LinearGradient(ui.LinearGradient{From: start, To: end, Angle: 135}).
 			Justify(ui.Center).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, projectInitials(name)).FontSize(11).Bold().
@@ -124,10 +148,10 @@ func (m *Model) projectWidget(c *ui.Context, p *ui.Theme, oi oiColors) {
 	})
 	w.Menu(func(menu *ui.Menu) {
 		if menu.Item("New Project…").Chosen() {
-			m.RunCommand("project.new")
+			m.RunCommand("file.newProject")
 		}
 		if menu.Item("Open…").Chosen() {
-			m.RunCommand("project.open")
+			m.RunCommand("file.openProject")
 		}
 		if menu.Item("Manage Projects…").Chosen() {
 			m.RunCommand("welcome.manageProjects")
@@ -180,7 +204,8 @@ func (m *Model) vcsFallbackWidget(c *ui.Context, p *ui.Theme, oi oiColors) {
 
 // titleTool is one 30px icon control on the right of the title bar.
 func (m *Model) titleTool(c *ui.Context, p *ui.Theme, oi oiColors, key, tip, icon string, onClick func()) {
-	b := ui.ButtonBase(c.Key("title:"+key)).Size(oiStripeButton, oiStripeButton).
+	tk := oiTokensFor(m, p)
+	b := ui.ButtonBase(c.Key("title:"+key)).Size(tk.StripeButton, tk.StripeButton).
 		Radius(8).Justify(ui.Center).AlignItems(ui.Center).Cursor(ui.CursorPointer)
 	if b.Hovered() {
 		b.Background(oi.toolbarHover)
@@ -194,7 +219,8 @@ func (m *Model) titleTool(c *ui.Context, p *ui.Theme, oi oiColors, key, tip, ico
 
 // gearButton is IDEA's toolbar gear: the quick switches and settings.
 func (m *Model) gearButton(c *ui.Context, p *ui.Theme, oi oiColors) {
-	b := ui.ButtonBase(c.Key("title:gear")).Size(oiStripeButton, oiStripeButton).
+	tk := oiTokensFor(m, p)
+	b := ui.ButtonBase(c.Key("title:gear")).Size(tk.StripeButton, tk.StripeButton).
 		Radius(8).Justify(ui.Center).AlignItems(ui.Center).Cursor(ui.CursorPointer)
 	if b.Hovered() {
 		b.Background(oi.toolbarHover)
@@ -241,6 +267,7 @@ func (m *Model) workbench(c *ui.Context, p *ui.Theme) {
 	bottom := m.bottomTool()
 	ui.Column(c).Fill().Background(oi.frame).Children(func() {
 		m.titleBar(c, p)
+		m.renderTopNavigationBar(c, p, oi)
 		if m.maximized && bottom != "" {
 			// A maximized tool window takes the workbench, as OpenIDEA
 			// hides the editor island over it.
@@ -248,7 +275,9 @@ func (m *Model) workbench(c *ui.Context, p *ui.Theme) {
 		} else {
 			ui.Row(c).Grow(1).MinHeight(0).MinWidth(0).
 				AlignItems(ui.Stretch).Padding(0, 6, 0, 6).Children(func() {
-				m.toolStripe(c, p, oi)
+				if !m.prefs.Appearance.HideToolWindowBars {
+					m.toolStripe(c, p, oi)
+				}
 				ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Children(func() {
 					ui.Row(c).Grow(1).MinWidth(0).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
 						m.leftSide(c, p, oi)
@@ -268,11 +297,15 @@ func (m *Model) workbench(c *ui.Context, p *ui.Theme) {
 						m.bottomSlot(c, p)
 					}
 				})
-				m.rightStripe(c, p, oi)
+				if !m.prefs.Appearance.HideToolWindowBars {
+					m.rightStripe(c, p, oi)
+				}
 			})
 		}
 		m.balloons(c, p)
-		m.statusBar(c, p)
+		if !m.prefs.Appearance.HideStatusBar {
+			m.statusBar(c, p)
+		}
 	})
 }
 
@@ -289,8 +322,9 @@ func (m *Model) showWelcome() {
 // Bookmarks belong to the side's split area, as OpenIDEA registers them
 // below the Project window.
 func (m *Model) toolStripe(c *ui.Context, p *ui.Theme, oi oiColors) {
-	ui.Column(c).Width(oiStripeWidth).Shrink(0).Padding(5, oiIslandGap, 6, 4).
-		Gap(oiStripeGap).Children(func() {
+	tk := oiTokensFor(m, p)
+	ui.Column(c).Width(tk.StripeWidth).Shrink(0).Padding(5, oiIslandGap, 6, 4).
+		Gap(tk.StripeGap).Children(func() {
 		m.stripeButton(c, p, oi, "project", "toolwindows/project", "Project", m.sideMode == "" && !m.leftHidden, func() {
 			m.modeClick("")
 		})
@@ -368,7 +402,8 @@ func (m *Model) splitClick(mode string) {
 }
 
 func (m *Model) stripeButton(c *ui.Context, p *ui.Theme, oi oiColors, key, icon, tip string, active bool, onClick func()) {
-	b := ui.ButtonBase(c.Key("stripe:"+key)).Size(oiStripeButton, oiStripeButton).
+	tk := oiTokensFor(m, p)
+	b := ui.ButtonBase(c.Key("stripe:"+key)).Size(tk.StripeButton, tk.StripeButton).
 		Radius(6).Justify(ui.Center).AlignItems(ui.Center).Cursor(ui.CursorPointer)
 	switch {
 	case active && !m.leftHidden:
@@ -644,8 +679,9 @@ func (m *Model) rightSplitHandle(c *ui.Context, oi oiColors, room float32) {
 // stripe: "onUse"; its button stays while the window has a tree. The bell is
 // OpenIDEA's Notifications window and carries the unread count.
 func (m *Model) rightStripe(c *ui.Context, p *ui.Theme, oi oiColors) {
-	ui.Column(c).Width(oiStripeWidth).Shrink(0).Padding(5, oiIslandGap, 6, 4).
-		Gap(oiStripeGap).Children(func() {
+	tk := oiTokensFor(m, p)
+	ui.Column(c).Width(tk.StripeWidth).Shrink(0).Padding(5, oiIslandGap, 6, 4).
+		Gap(tk.StripeGap).Children(func() {
 		ui.Spacer(c)
 		if m.hierarchy.active() || m.rightTool == "hierarchy" {
 			m.stripeButton(c, p, oi, "hierarchy", "toolwindows/hierarchy", "Hierarchy",
@@ -678,7 +714,8 @@ func pluginWindowIcon(spec *toolWindowSpec) string {
 // stripeBell is the Notifications stripe button with its unread badge.
 func (m *Model) stripeBell(c *ui.Context, p *ui.Theme, oi oiColors) {
 	active := m.rightShown() && m.rightTool == "notifications"
-	b := ui.ButtonBase(c.Key("stripe:notifications")).Size(oiStripeButton, oiStripeButton).
+	tk := oiTokensFor(m, p)
+	b := ui.ButtonBase(c.Key("stripe:notifications")).Size(tk.StripeButton, tk.StripeButton).
 		Radius(6).Justify(ui.Center).AlignItems(ui.Center).Cursor(ui.CursorPointer)
 	switch {
 	case active && !m.leftHidden:
@@ -871,6 +908,7 @@ func (m *Model) leftSplitHandle(c *ui.Context, oi oiColors, room float32) {
 // with the actions of the window, then its body. grow is its share of the
 // side, which the drag of the gap between the islands moves.
 func (m *Model) leftIsland(c *ui.Context, p *ui.Theme, oi oiColors, grow float32) {
+	tk := oiTokensFor(m, p)
 	title := "Project"
 	if m.sideMode == "vcs" {
 		title = "Commit"
@@ -878,11 +916,18 @@ func (m *Model) leftIsland(c *ui.Context, p *ui.Theme, oi oiColors, grow float32
 			title = fmt.Sprintf("Commit · %d", n)
 		}
 	}
+	if m.sideMode != "vcs" {
+		m.syncProjectTreeState()
+	}
 	ui.Column(c).Grow(grow).MinHeight(0).Background(oi.island).
 		Radius(oiIslandRadius).Children(func() {
-		ui.Row(c).Height(oiHeaderHeight).Shrink(0).Padding(0, 6, 0, 8).
+		ui.Row(c).Height(tk.HeaderHeight).Shrink(0).Padding(0, 6, 0, 8).
 			Gap(6).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, title).FontSize(13).TextColor(oi.textStrong).SingleLine().Ellipsis("…")
+			if m.sideMode == "vcs" {
+				ui.Text(c, title).FontSize(13).TextColor(oi.textStrong).SingleLine().Ellipsis("…")
+			} else {
+				m.projectTreeTitle(c, p, oi)
+			}
 			ui.Spacer(c)
 			if m.sideMode == "vcs" {
 				label := "Refresh"
@@ -891,14 +936,19 @@ func (m *Model) leftIsland(c *ui.Context, p *ui.Theme, oi oiColors, grow float32
 				}
 				ui.Button(c, label).OnClick(func() { m.RefreshVCS() })
 			} else if m.tree != nil {
+				if !m.prefs.ProjectTree.AutoscrollFromSource {
+					m.headerIcon(c, p, oi, "tree-locate", "Select Opened File", "general/locate", func() {
+						m.followActiveInProjectView(true)
+						m.invalidate()
+					})
+				}
 				m.headerIcon(c, p, oi, "tree-expand", "Expand All", "general/expandAll", func() {
-					m.tree.ExpandAll(m.Root())
-					m.invalidate()
+					m.ExpandProjectAll()
 				})
 				m.headerIcon(c, p, oi, "tree-collapse", "Collapse All", "general/collapseAll", func() {
-					m.tree.CollapseAll()
-					m.invalidate()
+					m.CollapseProjectAll()
 				})
+				m.projectViewOptionsButton(c, p, oi)
 			}
 		})
 		// The rows scroll both ways, as OpenIDEA's tree does: a name that runs
@@ -919,9 +969,11 @@ func (m *Model) leftIsland(c *ui.Context, p *ui.Theme, oi oiColors, grow float32
 				// its selection and hover across the whole window.
 				MinWidth(m.leftSideWidth())
 			rows.Children(func() {
+				m.beginTreeDragFrame()
 				for _, row := range m.tree.Rows() {
 					m.treeRow(c, p, row)
 				}
+				m.endTreeDragFrame()
 			})
 		})
 	})
@@ -931,13 +983,14 @@ func (m *Model) leftIsland(c *ui.Context, p *ui.Theme, oi oiColors, grow float32
 // one: Structure or Bookmarks, with a hide action in its header. grow is its
 // share of the side, which the drag of the gap between the islands moves.
 func (m *Model) leftSplitIsland(c *ui.Context, p *ui.Theme, oi oiColors, grow float32) {
+	tk := oiTokensFor(m, p)
 	title := "Structure"
 	if m.leftSplit == "bookmarks" {
 		title = "Bookmarks"
 	}
 	ui.Column(c).Grow(grow).MinHeight(0).Background(oi.island).
 		Radius(oiIslandRadius).Children(func() {
-		ui.Row(c).Height(oiHeaderHeight).Shrink(0).Padding(0, 6, 0, 8).
+		ui.Row(c).Height(tk.HeaderHeight).Shrink(0).Padding(0, 6, 0, 8).
 			Gap(6).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, title).FontSize(13).TextColor(oi.textStrong).SingleLine().Ellipsis("…")
 			ui.Spacer(c)
@@ -960,14 +1013,19 @@ func (m *Model) leftSplitIsland(c *ui.Context, p *ui.Theme, oi oiColors, grow fl
 // headerIcon is a 24px header action, which OpenIDEA shows faded until the
 // window is under the pointer.
 func (m *Model) headerIcon(c *ui.Context, p *ui.Theme, oi oiColors, key, tip, icon string, onClick func()) {
+	m.headerIconDisabled(c, p, oi, key, tip, icon, onClick)
+}
+
+func (m *Model) headerIconDisabled(c *ui.Context, p *ui.Theme, oi oiColors, key, tip, icon string, onClick func()) {
 	b := ui.ButtonBase(c.Key("panel:"+key)).Size(20, 20).Radius(4).
 		Justify(ui.Center).AlignItems(ui.Center).Cursor(ui.CursorPointer)
+	b.Disabled(onClick == nil)
 	if b.Hovered() {
 		b.Background(oi.toolbarHover)
 	}
 	b.Tooltip(tip)
 	b.Children(func() { oiIconEl(c, icon, 16, oi, oi.icon) })
-	if b.Clicked() {
+	if onClick != nil && b.Clicked() {
 		onClick()
 	}
 }
@@ -1077,14 +1135,15 @@ func (m *Model) editorTabs(c *ui.Context, p *ui.Theme, oi oiColors, g groupView)
 // in decides how tabs that don't fit go: one row scrolls sideways or squeezes
 // them, multiple rows wrap.
 func (m *Model) tabStrip(c *ui.Context, p *ui.Theme, oi oiColors, g groupView, tabs []*Tab, offset int, scroll *ui.ScrollState) {
+	tk := oiTokensFor(m, p)
 	reveal := *g.shown != g.active
 	*g.shown = g.active
 	strip := ui.Row(c).Shrink(0).Padding(0, 4).
 		BorderWidth(0, 0, 1, 0).BorderColor(oi.border)
 	if m.tabPrefs.MultipleRows {
-		strip.MinHeight(oiTabBarHeight)
+		strip.MinHeight(tk.TabBarHeight)
 	} else {
-		strip.Height(oiTabBarHeight)
+		strip.Height(tk.TabBarHeight)
 	}
 	strip.Children(func() {
 		switch {
@@ -1235,6 +1294,7 @@ func (m *Model) verticalTabs(c *ui.Context, p *ui.Theme, oi oiColors, g groupVie
 // along its row, as OpenIDEA's Tabs drags it, leaves its slot where it would
 // drop while the others make room, and a ghost of it hangs from the pointer.
 func (m *Model) tabButtons(c *ui.Context, p *ui.Theme, oi oiColors, g groupView, tabs []*Tab, offset int, reveal, vertical bool) {
+	tk := oiTokensFor(m, p)
 	squeeze := m.tabPrefs.SqueezeTabs || vertical
 	from := -1
 	if g.focused && !vertical && m.tabDrag.Held {
@@ -1246,7 +1306,7 @@ func (m *Model) tabButtons(c *ui.Context, p *ui.Theme, oi oiColors, g groupView,
 	var others []int
 	for _, j := range order {
 		i, t := offset+j, tabs[j]
-		height := oiTabHeight
+		height := tk.TabHeight
 		if vertical {
 			height = oiTabColumnTab
 		}
@@ -1301,7 +1361,11 @@ func (m *Model) tabButtons(c *ui.Context, p *ui.Theme, oi oiColors, g groupView,
 					closeButton()
 				}
 				if !m.tabPrefs.HideFileIcon {
-					fileIconEl(c, oi, name, 14, oi.textMuted)
+					if t.kind == tabKindAgentSession || t.kind == tabKindAgentHome {
+						oiIconEl(c, "toolwindows/agents", 14, oi, oi.textMuted)
+					} else {
+						fileIconEl(c, oi, name, 14, oi.textMuted)
+					}
 				}
 				if t.dirty() {
 					ui.Text(c, "●").FontSize(9).TextColor(oi.accent)
@@ -1312,6 +1376,12 @@ func (m *Model) tabButtons(c *ui.Context, p *ui.Theme, oi oiColors, g groupView,
 				}
 				if t.preview {
 					label = label.Italic()
+				}
+				if t.kind == tabKindAgentSession {
+					if task, ok := m.agents.tasks[t.agentTask]; ok {
+						ui.Text(c, "●").FontSize(8).
+							TextColor(agentStatusColor(p, task.Status))
+					}
 				}
 				if dir != "" {
 					dirText := ui.Text(c, dir).FontSize(13).TextColor(oi.textFaint).
@@ -1413,8 +1483,64 @@ func (m *Model) applyTabDrop() {
 	}
 	m.tabDrag = tabDragState{}
 	if d.From >= 0 && d.From < len(m.tabs) {
+		if edge, ok := editorDropEdge(m.editorBodyRects[int(groupFocused)], d.At); ok {
+			m.moveTabToEditorEdge(m.tabs[d.From], edge)
+			return
+		}
 		m.tabs, m.active = reorderTabs(m.tabs, m.active, d.From, d.To)
 	}
+}
+
+// editorDropEdge maps a lifted tab's release point to the edge of an editor
+// group. Releasing in the middle leaves the tab in its strip.
+func editorDropEdge(rect ui.Rect, point ui.Point) (string, bool) {
+	if rect.W <= 0 || rect.H <= 0 ||
+		point.X < rect.X || point.X >= rect.X+rect.W ||
+		point.Y < rect.Y || point.Y >= rect.Y+rect.H {
+		return "", false
+	}
+	dx := min(point.X-rect.X, rect.X+rect.W-point.X)
+	dy := min(point.Y-rect.Y, rect.Y+rect.H-point.Y)
+	band := min(rect.W, rect.H) * 0.22
+	if min(dx, dy) > band {
+		return "", false
+	}
+	switch {
+	case dx < dy && point.X < rect.X+rect.W/2:
+		return "left", true
+	case dx < dy:
+		return "right", true
+	case point.Y < rect.Y+rect.H/2:
+		return "top", true
+	default:
+		return "bottom", true
+	}
+}
+
+// moveTabToEditorEdge moves a tab into the other group and places that group
+// at the edge the pointer chose. A group must keep at least one tab behind.
+func (m *Model) moveTabToEditorEdge(t *Tab, edge string) bool {
+	from, ok := m.groupOf(t)
+	if !ok || from != groupFocused || len(m.tabs) < 2 {
+		return false
+	}
+	switch edge {
+	case "left", "right", "top", "bottom":
+	default:
+		return false
+	}
+	if m.split == nil {
+		m.split = &splitGroup{}
+	}
+	m.splitDown = edge == "top" || edge == "bottom"
+	m.moveToGroup(t, groupSplit)
+	// moveToGroup focuses the destination. Keep that focused pane at the edge
+	// where the user dropped it, even when the other pane already existed.
+	m.splitFirst = edge == "left" || edge == "top"
+	m.status = "Moved tab to the " + edge + " editor group"
+	m.saveSession()
+	m.invalidate()
+	return true
 }
 
 // tabOrder returns the local places 0..n-1 that draw in order, with the tab
@@ -1481,6 +1607,12 @@ func tabDropIndex(x, y float32, rects []ui.Rect) int {
 func (m *Model) tabGhost(c *ui.Context, oi oiColors, t *Tab) {
 	d := m.tabDrag
 	ui.Overlay(c, func() {
+		if edge, ok := editorDropEdge(m.editorBodyRects[int(groupFocused)], d.At); ok {
+			r := tabDropPreviewRect(m.editorBodyRects[int(groupFocused)], edge)
+			ui.Row(c.Key("tabSplitDrop")).Absolute().Left(r.X).Top(r.Y).
+				Width(r.W).Height(r.H).Radius(6).Background(oi.accent.Alpha(0.16)).
+				Border(1, oi.accent.Alpha(0.7))
+		}
 		g := ui.Row(c.Key("tabGhost")).Absolute().
 			Left(d.At.X-d.Grab.X).Top(d.At.Y-d.Grab.Y).
 			Width(d.W).Height(d.H).
@@ -1513,6 +1645,23 @@ func (m *Model) tabGhost(c *ui.Context, oi oiColors, t *Tab) {
 			}
 		})
 	})
+}
+
+// tabDropPreviewRect is the half of an editor group that a tab dropped on the
+// given edge will occupy.
+func tabDropPreviewRect(rect ui.Rect, edge string) ui.Rect {
+	const gap = float32(4)
+	switch edge {
+	case "left":
+		return ui.Rect{X: rect.X + gap, Y: rect.Y + gap, W: max(0, rect.W/2-gap*1.5), H: max(0, rect.H-gap*2)}
+	case "right":
+		return ui.Rect{X: rect.X + rect.W/2 + gap/2, Y: rect.Y + gap, W: max(0, rect.W/2-gap*1.5), H: max(0, rect.H-gap*2)}
+	case "top":
+		return ui.Rect{X: rect.X + gap, Y: rect.Y + gap, W: max(0, rect.W-gap*2), H: max(0, rect.H/2-gap*1.5)}
+	case "bottom":
+		return ui.Rect{X: rect.X + gap, Y: rect.Y + rect.H/2 + gap/2, W: max(0, rect.W-gap*2), H: max(0, rect.H/2-gap*1.5)}
+	}
+	return ui.Rect{}
 }
 
 // emptyEditor is IDEA's empty editor: navigation hints on the left of their
@@ -1580,8 +1729,11 @@ func (m *Model) bottomIsland(c *ui.Context, p *ui.Theme, oi oiColors, tool strin
 // caret and encoding on the right.
 func (m *Model) statusBar(c *ui.Context, p *ui.Theme) {
 	oi := oiPaletteOf(p)
-	ui.Row(c).Height(oiStatusBarHeight).Shrink(0).Padding(0, 10, 0, 12).
-		Gap(4).AlignItems(ui.Center).Children(func() {
+	tk := oiTokensFor(m, p)
+	bar := ui.Row(c).Height(tk.StatusBarHeight).Shrink(0).Padding(0, 10, 0, 12).
+		Gap(4).AlignItems(ui.Center)
+	bar.ContextMenu(func(menu *ui.Menu) { m.statusBarMenu(menu) })
+	bar.Children(func() {
 		for _, it := range m.statusSide("left") {
 			it.Render(m, c, p, oi)
 		}
@@ -1591,6 +1743,17 @@ func (m *Model) statusBar(c *ui.Context, p *ui.Theme) {
 			it.Render(m, c, p, oi)
 		}
 	})
+}
+
+// statusBarMenu is OpenIDEA's status bar context menu: every titled widget in
+// bar order, including one currently hidden by its own choice.
+func (m *Model) statusBarMenu(menu *ui.Menu) {
+	for _, it := range m.statusWidgetRows() {
+		id := it.ID
+		if menu.Item(it.Title).Checked(m.statusItemEnabled(it)).Chosen() {
+			m.SetStatusBarWidgetVisible(id, !m.statusItemEnabled(it))
+		}
+	}
 }
 
 // tabMenu is OpenIDEA's tab context menu: the close family, whose bulk closes
@@ -1604,7 +1767,9 @@ func (m *Model) tabMenu(menu *ui.Menu, t *Tab) {
 	tabs := m.groupTabsAt(g)
 	at := tabIndexIn(tabs, t)
 	path := tabPath(t)
-	m.compileFileMenu(menu, path)
+	if t.kind == "" {
+		m.compileFileMenu(menu, path)
+	}
 	if menu.Item("Close").Shortcut(ui.Cmd, ui.KeyW).Chosen() {
 		m.closeTabThen(t, nil)
 	}
@@ -1640,6 +1805,15 @@ func (m *Model) tabMenu(menu *ui.Menu, t *Tab) {
 	}
 	if menu.Item(label).Chosen() {
 		m.setTabPinned(t, !t.pinned)
+	}
+	if t.kind == tabKindAgentSession {
+		if menu.Item("Open Agent Task in Tool Window").Chosen() {
+			m.dockAgentTask(t.agentTask)
+		}
+	} else if t.kind == tabKindAgentHome {
+		if menu.Item("Open in Tool Window").Chosen() {
+			m.useAgentToolWindow()
+		}
 	}
 	if t.preview {
 		if menu.Item("Keep Tab Open").Chosen() {
@@ -1692,7 +1866,7 @@ func (m *Model) tabMenu(menu *ui.Menu, t *Tab) {
 		}
 	}
 	menu.Separator()
-	if path != "" {
+	if path != "" && t.kind == "" {
 		m.tabOpenInMenu(menu, path)
 		menu.Separator()
 		menu.Submenu("Local History", func(menu *ui.Menu) {
@@ -1724,7 +1898,7 @@ func (m *Model) tabMenu(menu *ui.Menu, t *Tab) {
 			}
 		})
 		if menu.Item("Rename File…").Chosen() {
-			m.OpenTreeRename(path)
+			m.OpenFileRenameDialog(path)
 		}
 		menu.Separator()
 	}
@@ -1760,7 +1934,11 @@ func (m *Model) tabGitMenu(menu *ui.Menu, path string) {
 		m.StageChange(f)
 	}
 	menu.Separator()
-	if menu.Item("Annotate").Chosen() {
+	annotate := "Annotate with Git Blame"
+	if m.annotationsShown(path) {
+		annotate = "Close Annotations"
+	}
+	if menu.Item(annotate).Chosen() {
 		m.ShowAnnotate(path)
 	}
 	if menu.Item("Show Diff").Chosen() {

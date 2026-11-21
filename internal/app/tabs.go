@@ -8,6 +8,9 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/ui/editor"
+
+	"mayoi/internal/docbridge"
 )
 
 // tabPath is the file a tab edits; a tab under construction has none.
@@ -29,8 +32,13 @@ func (m *Model) tabLabel(t *Tab) (name, dir string) {
 // tabLabelIn is tabLabel over a window group: each strip decides its folder
 // suffixes from its own tabs, as OpenIDEA's strips label independently.
 func (m *Model) tabLabelIn(tabs []*Tab, t *Tab) (name, dir string) {
-	if t != nil && t.kind == tabKindWhatsNew {
-		return "What's New", ""
+	if t != nil {
+		switch t.kind {
+		case tabKindWhatsNew:
+			return "What's New", ""
+		case tabKindAgentSession, tabKindAgentHome:
+			return m.agentEditorTitle(t), ""
+		}
 	}
 	paths := make([]string, len(tabs))
 	for i, x := range tabs {
@@ -70,6 +78,12 @@ func tabLabelFor(path string, prefs TabPrefs, dirty bool, siblings []string) (na
 // tabSortKey is the title Sort tabs alphabetically compares, folded to lower
 // case as sortTabs avoids case deciding the order.
 func tabSortKey(t *Tab) string {
+	if t != nil && (t.kind == tabKindAgentSession || t.kind == tabKindAgentHome) {
+		if t.pageTitle != "" {
+			return strings.ToLower(t.pageTitle)
+		}
+		return strings.ToLower(t.kind)
+	}
 	return strings.ToLower(filepath.Base(tabPath(t)))
 }
 
@@ -184,10 +198,22 @@ func (m *Model) promoteTab(t *Tab) {
 	m.invalidate()
 }
 
-// tabLimitCandidates are the tabs the limit may close, least recently used
-// first: pinned tabs, the active one and tabs with unsaved text stay, so the
-// limit can not drop an edit or the tab in front.
+// tabLimitCandidates are the default least-recently-used candidates the limit
+// may close. The policy-aware form below keeps the same safety rules.
 func tabLimitCandidates(tabs []*Tab, active int, unsaved func(*Tab) bool) []*Tab {
+	return tabLimitCandidatesWithPolicy(tabs, active, unsaved, "lru")
+}
+
+// tabLimitCandidatesWithPolicy chooses tabs the limit may close. Pinned tabs,
+// the active tab and tabs with unsaved text always stay, so neither policy can
+// discard an edit. "unchanged" prefers an untouched tab before falling back to
+// the least recently used closeable one, as OpenIDEA's tab-limit policy does.
+func tabLimitCandidatesWithPolicy(
+	tabs []*Tab,
+	active int,
+	unsaved func(*Tab) bool,
+	policy string,
+) []*Tab {
 	var out []*Tab
 	for i, t := range tabs {
 		if t.pinned || i == active || unsaved(t) {
@@ -196,6 +222,19 @@ func tabLimitCandidates(tabs []*Tab, active int, unsaved func(*Tab) bool) []*Tab
 		out = append(out, t)
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].used < out[j].used })
+	if policy == "unchanged" {
+		sort.SliceStable(out, func(i, j int) bool {
+			// Every automatic candidate is unchanged because unsaved text is
+			// excluded above. The explicit predicate documents the intended
+			// priority and keeps the fallback LRU if that safety rule changes.
+			iUnchanged := !unsaved(out[i])
+			jUnchanged := !unsaved(out[j])
+			if iUnchanged != jUnchanged {
+				return iUnchanged
+			}
+			return out[i].used < out[j].used
+		})
+	}
 	return out
 }
 
@@ -221,7 +260,8 @@ func (m *Model) enforceTabLimit() {
 			if g == groupSplit && m.split != nil {
 				active = m.split.active
 			}
-			candidates = append(candidates, tabLimitCandidates(tabs, active, (*Tab).unsaved)...)
+			candidates = append(candidates,
+				tabLimitCandidatesWithPolicy(tabs, active, (*Tab).unsaved, m.tabPrefs.closingPolicy())...)
 		}
 		if len(candidates) == 0 {
 			return
@@ -355,6 +395,24 @@ func (m *Model) activateTab(t *Tab) {
 	}
 	m.focusGroup(g)
 	m.activateIn(groupFocused, m.tabIndex(t))
+}
+
+// cycleTabIndex wraps a delta around the focused group's strip, as
+// OpenIDEA's editor.nextTab and editor.prevTab do.
+func cycleTabIndex(active, count, delta int) int {
+	if count < 2 || active < 0 || active >= count {
+		return active
+	}
+	return (active + delta%count + count) % count
+}
+
+// cycleEditorTab selects the next or previous tab in the focused editor group.
+func (m *Model) cycleEditorTab(delta int) {
+	next := cycleTabIndex(m.active, len(m.tabs), delta)
+	if next == m.active {
+		return
+	}
+	m.activateIn(groupFocused, next)
 }
 
 // closeTab closes a tab, asking about unsaved text first.
@@ -581,9 +639,12 @@ func (m *Model) CloseReadOnlyTabs() {
 // closedTab is a tab Reopen Closed Tab can bring back: its file, the place it
 // had in the strip and whether it was pinned.
 type closedTab struct {
-	path   string
-	index  int
-	pinned bool
+	path       string
+	index      int
+	pinned     bool
+	doc        *docbridge.Document
+	selections []editor.Selection
+	scrollY    float64
 }
 
 // maxClosedTabs is how many closed tabs the history keeps, as the tabs store's
@@ -595,8 +656,23 @@ const maxClosedTabs = 50
 func (m *Model) rememberClosed(t closedTab) {
 	m.closedTabs = append(m.closedTabs, t)
 	if len(m.closedTabs) > maxClosedTabs {
+		for _, evicted := range m.closedTabs[:len(m.closedTabs)-maxClosedTabs] {
+			m.releaseClosedTab(evicted)
+		}
 		m.closedTabs = m.closedTabs[len(m.closedTabs)-maxClosedTabs:]
 	}
+}
+
+// releaseClosedTab drops the registry reference retained for a closed entry.
+func (m *Model) releaseClosedTab(entry closedTab) {
+	if entry.doc == nil || m.reg == nil {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		_ = m.reg.Close(ctx, entry.path)
+	}()
 }
 
 // insertTabAt puts tab at at, clamped to the strip: a pinned tab goes to the
@@ -649,6 +725,7 @@ func (m *Model) nextClosed() (closedTab, bool) {
 		if !m.tabOpenInAnyGroup(e.path) {
 			return e, true
 		}
+		m.releaseClosedTab(e)
 	}
 	return closedTab{}, false
 }
@@ -657,6 +734,20 @@ func (m *Model) nextClosed() (closedTab, bool) {
 // editor.reopenClosedTab does.
 func (m *Model) ReopenClosedTab() {
 	if e, ok := m.nextClosed(); ok {
-		m.openWith(e.path, openSpec{at: e.index, pinned: e.pinned})
+		m.openWith(e.path, openSpec{
+			at: e.index, pinned: e.pinned,
+			done: func(tab *Tab) {
+				if tab != nil && tab.state != nil {
+					if len(e.selections) > 0 {
+						tab.state.SetSelections(e.selections...)
+						tab.state.SetScrollY(e.scrollY)
+					}
+				}
+				m.releaseClosedTab(e)
+			},
+			failed: func(string, error) {
+				m.rememberClosed(e)
+			},
+		})
 	}
 }

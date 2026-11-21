@@ -97,6 +97,67 @@ func TestDebugStopCancelsJavaPreparation(t *testing.T) {
 	}
 }
 
+func TestDebugStopRetiresAnActiveSession(t *testing.T) {
+	ctx := context.Background()
+	stopped := make(chan uint32, 1)
+	cleared := make(chan struct{}, 1)
+	m := &Model{ctx: ctx}
+	m.postHook = func(fn func()) {
+		fn()
+		if !m.debug.stopping && m.debug.session == 0 {
+			select {
+			case cleared <- struct{}{}:
+			default:
+			}
+		}
+	}
+	m.invokeHook = func(_ context.Context, cmd string, args any) (json.RawMessage, error) {
+		if cmd != "debug_stop" {
+			return nil, fmt.Errorf("unexpected debug request %s", cmd)
+		}
+		stopped <- args.(map[string]any)["session"].(uint32)
+		return nil, nil
+	}
+	m.debug.starting = true
+	m.debug.session = 11
+
+	m.StopDebug()
+	if m.debug.starting || !m.debug.stopping {
+		t.Fatalf("Stop state = starting %v, stopping %v", m.debug.starting, m.debug.stopping)
+	}
+	select {
+	case session := <-stopped:
+		if session != 11 {
+			t.Fatalf("debug_stop session = %d, want 11", session)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Stop did not call debug_stop")
+	}
+	select {
+	case <-cleared:
+	case <-time.After(time.Second):
+		t.Fatal("Stop did not clear the active session")
+	}
+
+	m.acceptDebugEvent(11, json.RawMessage(`{"kind":"started"}`))
+	if m.debug.session != 0 || !m.debug.ended {
+		t.Fatalf("a retired event revived the session: %+v", m.debug)
+	}
+}
+
+func TestDebugTerminationClearsStartingState(t *testing.T) {
+	for _, kind := range []string{"terminated", "exited"} {
+		t.Run(kind, func(t *testing.T) {
+			m := &Model{ctx: context.Background()}
+			m.debug.starting = true
+			m.acceptDebugEvent(17, json.RawMessage(fmt.Sprintf(`{"kind":%q}`, kind)))
+			if m.debug.starting || m.debug.session != 0 || !m.debug.ended || m.debug.retiredSession != 17 {
+				t.Fatalf("early %s left launch state active: %+v", kind, m.debug)
+			}
+		})
+	}
+}
+
 func TestJavaDebugProjectBusy(t *testing.T) {
 	server := func(status string, languages ...string) lspServerState {
 		return lspServerState{Status: status, Languages: languages}

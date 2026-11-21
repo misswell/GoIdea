@@ -123,6 +123,7 @@ func (m *Model) checkTrust(dir string) {
 			} else {
 				m.status += " · untrusted (allow it before running)"
 				m.trustAsk = true
+				m.trustFolder = false
 			}
 			m.invalidate()
 		})
@@ -136,6 +137,9 @@ func (m *Model) TrustProject() {
 	if root == "" || m.run.busy {
 		return
 	}
+	folder := m.trustFolder
+	m.trustAsk = false
+	m.trustFolder = false
 	m.run.busy = true
 	m.run.trustErr = ""
 	wasTrusted := m.run.trusted
@@ -144,7 +148,7 @@ func (m *Model) TrustProject() {
 		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 		defer cancel()
 		_, err := m.mgr.Invoke(ctx, Window, "project_trust_set", map[string]any{
-			"path": root, "trusted": true, "folder": true,
+			"path": root, "trusted": true, "folder": folder,
 		})
 		var status openidea.TrustStatus
 		if err == nil {
@@ -254,6 +258,31 @@ func (m *Model) RemoveTrustedLocation() {
 			m.invalidate()
 		})
 	}()
+}
+
+// PreviewProjectRestricted dismisses the trust prompt and keeps the project
+// open with builds, runs, debuggers and language services disabled.
+func (m *Model) PreviewProjectRestricted() {
+	m.clearTrustPrompt()
+	m.status = "This project is open in Restricted Mode"
+	m.invalidate()
+}
+
+// DontOpenProject rejects an untrusted project and returns to the Welcome
+// screen, matching OpenIDEA's third trust-dialog choice.
+func (m *Model) DontOpenProject() {
+	m.clearTrustPrompt()
+	m.CloseProject()
+}
+
+func (m *Model) clearTrustPrompt() {
+	m.trustAsk = false
+	m.trustFolder = false
+	m.run.pendingTrust = false
+	m.run.pendingCoverage = false
+	m.run.pendingContext = false
+	m.run.pendingContextCoverage = false
+	m.run.pendingDebugContext = false
 }
 
 // loadRunConfigs asks the backend for the project's configurations. Detection
@@ -374,6 +403,7 @@ func (m *Model) Run() {
 	if !m.run.trusted {
 		m.run.pendingTrust = true
 		m.trustAsk = true
+		m.trustFolder = false
 		m.status = "The project is not trusted: accept the prompt before running"
 		m.invalidate()
 		return
@@ -529,7 +559,6 @@ func (m *Model) startRunWithCoverage(raw json.RawMessage, name string, coverage 
 		"onOutput": map[string]any{"$channel": ch},
 		"request":  nil,
 	}
-	p := m.prefs.SaveFiles
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 5*time.Minute)
 		defer cancel()
@@ -549,7 +578,7 @@ func (m *Model) startRunWithCoverage(raw json.RawMessage, name string, coverage 
 			})
 		}
 		// The backend builds from disk, so unsaved text must be written first.
-		if err := saveAll(ctx, tabs, p); err != nil {
+		if err := m.saveOpenTabs(ctx, tabs); err != nil {
 			fail("Saving before running failed: ", nil, err)
 			return
 		}
@@ -731,6 +760,24 @@ func (m *Model) watchBackend(ctx context.Context) {
 						continue
 					}
 					m.post(func() { m.acceptWorkspaceEdit(e) })
+				case "languageServer":
+					var e openidea.LanguageServerEvent
+					if json.Unmarshal(env.Event, &e) != nil {
+						continue
+					}
+					m.post(func() { m.acceptLanguageServerEvent(e) })
+				case "languageServerWarning":
+					var e openidea.LanguageServerWarningEvent
+					if json.Unmarshal(env.Event, &e) != nil {
+						continue
+					}
+					m.post(func() { m.acceptLanguageServerWarning(e) })
+				case "languageServerRemoved":
+					var e openidea.LanguageServerRemovedEvent
+					if json.Unmarshal(env.Event, &e) != nil {
+						continue
+					}
+					m.post(func() { m.acceptLanguageServerRemoved(e) })
 				}
 			}
 		}
@@ -738,11 +785,19 @@ func (m *Model) watchBackend(ctx context.Context) {
 }
 
 func (m *Model) acceptChunk(id uint32, data json.RawMessage) {
+	if m.acceptJDKEvent(id, data) {
+		return
+	}
 	if m.acceptToolEvent(id, data) {
 		return
 	}
 	switch {
 	case m.acceptVCSOperationOutput(id, data):
+	case m.acceptVCSMoreOutput(id, data):
+	case id != 0 && id == m.agents.registry.InstallChannel:
+		m.acceptRegistryInstallChunk(id, data)
+	case id != 0 && id == m.agents.channel:
+		m.acceptAgentChunk(id, data)
 	case id != 0 && id == m.run.channel:
 		var chunk openidea.OutputChunk
 		if json.Unmarshal(data, &chunk) != nil {
@@ -753,6 +808,8 @@ func (m *Model) acceptChunk(id uint32, data json.RawMessage) {
 		}
 		m.run.append(chunk)
 		m.invalidate()
+	case id != 0 && id == m.debug.heap.channel:
+		m.acceptDebugHeapProgress(id, data)
 	case id != 0 && id == m.build.channel:
 		m.acceptBuildEvent(data)
 	case id != 0 && id == m.maven.channel && m.maven.syncing:
@@ -763,10 +820,14 @@ func (m *Model) acceptChunk(id uint32, data json.RawMessage) {
 		m.acceptSearchEverywhereEvent(data)
 	case id != 0 && id == m.search.channel:
 		m.acceptSearchEvent(data)
+	case id != 0 && id == m.search.replaceChannel:
+		m.acceptReplaceEvent(data)
 	case id != 0 && id == m.impl.request:
 		m.acceptImplementationChunk(data)
 	case id != 0 && id == m.usages.channel:
 		m.acceptUsages(id, data)
+	case id != 0 && m.usagePopup != nil && id == m.usagePopup.channel:
+		m.acceptUsagePopup(id, data)
 	case id != 0 && id == m.todo.channel:
 		m.acceptTodoEvent(data)
 	case id != 0 && id == m.newProject.channel:
@@ -1575,46 +1636,57 @@ func (m *Model) runByName(ctx context.Context, cfg *openidea.RunConfig) (*int32,
 	}
 }
 
-// trustDialog asks whether a project may build and run. It opens when an
-// untrusted project is opened and when Run, Build or Debug is asked for
-// before the grant.
+// trustDialog asks whether a project may build and run. It mirrors
+// OpenIDEA's 560 DIP Trust and Open Project dialog: the project path, the
+// Restricted Mode explanation, an optional trusted-parent-location switch,
+// and Preview, Don't Open and Trust buttons in the upstream order.
 func (m *Model) trustDialog(c *ui.Context, p *ui.Theme) {
 	open := m.trustAsk
 	oi := oiPaletteOf(p)
-	ui.Modal(c, &open, func() {
-		ui.Column(c).Width(460).Gap(10).Children(func() {
-			ui.Text(c, "Trust Project").FontSize(13).Bold().TextColor(oi.text).SingleLine()
-			ui.Text(c, "This project comes from an external source. Building, running, debugging and language services execute its code.").
+	path := m.Root()
+	if path == "" {
+		path = "No project selected"
+	}
+	dialog := ui.Modal(c.Key("trust-dialog"), &open, func() {
+		ui.Column(c).Width(560).Gap(12).Children(func() {
+			ui.Row(c).Gap(10).AlignItems(ui.Start).Children(func() {
+				if logo := welcomeLogoImage(); logo != nil {
+					ui.Image(c, logo).Size(32, 32)
+				}
+				ui.Column(c).Grow(1).MinWidth(0).Children(func() {
+					ui.Text(c, "Trust and Open Project?").FontSize(13).Bold().
+						TextColor(oi.text).SingleLine()
+					ui.Text(c, shortenHome(path)).FontSize(12).TextColor(oi.textSubtle).
+						SingleLine().Ellipsis("…")
+				})
+			})
+			ui.Text(c, "If you don't trust the source, preview the project in Restricted Mode, where project commands and tools can't run.").
+				FontSize(12).TextColor(oi.textMuted)
+			ui.Text(c, "Loading, running or building a project may execute potentially malicious code from its build scripts.").
 				FontSize(12).TextColor(oi.textMuted)
 			if m.run.trustErr != "" {
 				ui.Text(c, m.run.trustErr).FontSize(12).TextColor(oi.danger)
 			}
+			ui.Checkbox(c, &m.trustFolder, "Trust projects in "+shortenHome(filepath.Dir(path)))
 			ui.Row(c).Gap(8).Children(func() {
 				ui.Spacer(c)
-				ui.Button(c, "Cancel").OnClick(func() {
-					m.trustAsk = false
-					m.run.pendingTrust = false
-					m.run.pendingCoverage = false
-					m.run.pendingContext = false
-					m.run.pendingContextCoverage = false
-					m.run.pendingDebugContext = false
-					m.invalidate()
+				ui.Button(c, "Preview in Restricted Mode").OnClick(func() {
+					m.PreviewProjectRestricted()
+				})
+				ui.Button(c, "Don't Open").OnClick(func() {
+					m.DontOpenProject()
 				})
 				ui.Button(c, "Trust Project").OnClick(func() {
-					m.trustAsk = false
 					m.TrustProject()
 					m.invalidate()
 				})
 			})
 		})
 	})
+	dialog.Padding(0)
 	if !open {
-		m.trustAsk = false
-		m.run.pendingTrust = false
-		m.run.pendingCoverage = false
-		m.run.pendingContext = false
-		m.run.pendingContextCoverage = false
-		m.run.pendingDebugContext = false
-		m.invalidate()
+		if m.trustAsk {
+			m.DontOpenProject()
+		}
 	}
 }

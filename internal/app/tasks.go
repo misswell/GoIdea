@@ -148,7 +148,8 @@ func (m *Model) taskStatus(c *ui.Context, p *ui.Theme, oi oiColors) {
 	if cur.ID == "" {
 		return
 	}
-	b := ui.ButtonBase(c.Key("status:tasks")).Height(oiStatusBarHeight-8).
+	tk := oiTokensFor(m, p)
+	b := ui.ButtonBase(c.Key("status:tasks")).Height(tk.StatusBarHeight-tk.SpaceL).
 		Padding(0, 6).Radius(4).Gap(6).AlignItems(ui.Center).Cursor(ui.CursorPointer)
 	if b.Hovered() {
 		b.Background(oi.toolbarHover)
@@ -165,25 +166,137 @@ func (m *Model) taskStatus(c *ui.Context, p *ui.Theme, oi oiColors) {
 			ui.Text(c, fmt.Sprintf("+%d", behind)).FontSize(12).TextColor(oi.textFaint).SingleLine()
 		}
 	})
-	open := m.tasksOpen
-	ui.PopoverBase(c, b, &open, func(panel ui.Element) {
-		panel.Width(320).Padding(8).Background(oi.popup).
+	if b.Clicked() {
+		m.tasksStopMode = false
+		m.tasksOpen = !m.tasksOpen
+		m.invalidate()
+	}
+}
+
+// ShowBackgroundTasks opens View › Background Tasks even with no work queued
+// and when the status bar button is not on screen.
+func (m *Model) ShowBackgroundTasks() {
+	m.tasksStopMode = false
+	m.tasksOpen = true
+	m.invalidate()
+}
+
+func (m *Model) closeBackgroundTasks() {
+	m.tasksOpen = false
+	m.tasksStopMode = false
+	m.invalidate()
+}
+
+// StopBackgroundProcesses is OpenIDEA's Stop Background Processes: one
+// cancellable task stops directly, several open a chooser with Stop All, and
+// none shows status feedback.
+func (m *Model) StopBackgroundProcesses() {
+	running := m.cancellableTasks()
+	switch len(running) {
+	case 0:
+		m.status = "No background processes to stop"
+		m.tasksOpen = false
+		m.invalidate()
+	case 1:
+		m.cancelTask(running[0].ID)
+	default:
+		m.tasksStopMode = true
+		m.tasksOpen = true
+		m.invalidate()
+	}
+}
+
+func (m *Model) cancellableTasks() []BackgroundTask {
+	var out []BackgroundTask
+	for _, task := range m.tasks {
+		if task.Done || task.Cancelling || task.Cancel == nil {
+			continue
+		}
+		out = append(out, task)
+	}
+	return out
+}
+
+func (m *Model) stopAllBackgroundProcesses() {
+	running := m.cancellableTasks()
+	for _, task := range running {
+		m.cancelTask(task.ID)
+	}
+	m.invalidate()
+}
+
+// backgroundTasksPopup is registered with the overlay manager. It intentionally
+// does not depend on the status button, matching OpenIDEA's standalone
+// BackgroundTasksHost.
+func (m *Model) backgroundTasksPopup(c *ui.Context, p *ui.Theme) {
+	oi := oiPaletteOf(p)
+	const width float32 = 340
+	tasks := m.tasks
+	if m.tasksStopMode {
+		tasks = m.cancellableTasks()
+	}
+	height := float32(54)
+	if len(tasks) == 0 {
+		height += 32
+	} else {
+		height += float32(len(tasks)) * 74
+	}
+	w, h := c.Size()
+	statusHeight := oiStatusBarHeight
+	if !m.prefs.Appearance.HideStatusBar {
+		statusHeight = oiTokensFor(m, p).StatusBarHeight
+	}
+	x := max(float32(10), w-width-12)
+	y := max(float32(10), h-statusHeight-height-10)
+	ui.Overlay(c, func() {
+		panel := ui.Column(c.Key("workbench:background-tasks")).Absolute().
+			Left(x).Top(y).Width(width).Height(min(height, max(float32(160), h-20))).
+			Padding(10).Gap(6).Background(oi.popup).
 			BorderWidth(1).BorderColor(oi.borderStrong).Radius(8)
 		panel.Children(func() {
-			ui.Text(c, "Background Tasks").FontSize(13).Bold().
-				TextColor(oi.text).SingleLine().Padding(0, 2, 6, 2)
-			if len(m.tasks) == 0 {
-				ui.Text(c, "No background tasks").FontSize(12).
-					TextColor(oi.textMuted).SingleLine()
+			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+				title := "Background Tasks"
+				if m.tasksStopMode {
+					title = "Stop Background Processes"
+				}
+				ui.Text(c, title).FontSize(13).Bold().TextColor(oi.text).
+					SingleLine().Grow(1)
+				if m.tasksStopMode && len(tasks) > 1 {
+					ui.Button(c, "Stop All").OnClick(m.stopAllBackgroundProcesses)
+				}
+				close := ui.ButtonBase(c.Key("tasks:close")).Size(22, 22).
+					Radius(4).Justify(ui.Center).AlignItems(ui.Center).
+					Cursor(ui.CursorPointer)
+				if close.Hovered() {
+					close.Background(oi.toolbarHover)
+				}
+				close.Tooltip("Close")
+				close.Children(func() {
+					oiIconEl(c, "general/close", 14, oi, oi.textMuted)
+				})
+				if close.Clicked() {
+					m.closeBackgroundTasks()
+				}
+			})
+			if len(tasks) == 0 {
+				message := "No background tasks"
+				if m.tasksStopMode {
+					message = "No background processes to stop"
+				}
+				ui.Text(c, message).FontSize(12).TextColor(oi.textMuted).SingleLine()
+				return
 			}
-			for i := range m.tasks {
-				m.taskRow(c, p, oi, &m.tasks[i])
-			}
+			ui.Scroll(c).Grow(1).Children(func() {
+				ui.Column(c).Gap(4).Children(func() {
+					for i := range tasks {
+						m.taskRow(c, p, oi, &tasks[i])
+					}
+				})
+			})
 		})
 	})
-	if open != m.tasksOpen {
-		m.tasksOpen = open
-		m.invalidate()
+	if c.Shortcut(ui.Modifiers(0), ui.KeyEscape) {
+		m.closeBackgroundTasks()
 	}
 }
 

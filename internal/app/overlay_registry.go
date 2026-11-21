@@ -19,12 +19,36 @@ func init() {
 	reg("documentation.popup", overlayLayerPopup, 35, false,
 		func(m *Model) bool { return m.documentation.popup != nil },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.documentationPopup(c, p) })
+	reg("workbench.backgroundTasks", overlayLayerPopup, 42, false,
+		func(m *Model) bool { return m.tasksOpen },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.backgroundTasksPopup(c, p) })
+	reg("editor.navigationBar", overlayLayerPopup, 43, false,
+		func(m *Model) bool { return m.navigationOpen },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.navigationBarPopup(c, p) })
+	reg("editor.quickDefinition", overlayLayerPopup, 44, false,
+		func(m *Model) bool { return m.quickDefinition != nil },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.quickDefinitionPopup(c, p) })
+	reg("code.usagesPopup", overlayLayerPopup, 45, false,
+		func(m *Model) bool { return m.usagePopup != nil && m.usagePopup.open },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.usagesPopup(c, p) })
+	reg("editor.copyPathReference", overlayLayerPopup, 46, false,
+		func(m *Model) bool { return m.copyPathPopup != nil },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.copyPathReferencePopup(c, p) })
+	reg("welcome.recentProjects", overlayLayerDialog, 36, false,
+		func(m *Model) bool { return m.recentProjectsPopup != nil },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.recentProjectsDialog(c, p) })
 	reg("coverage.manageReports", overlayLayerDialog, 258, true,
 		func(m *Model) bool { return m.coverage.manage },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.coverageManageDialog(c, p) })
 	reg("rename", overlayLayerPopup, 10, false,
 		func(m *Model) bool { return m.rename != nil },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.renameDialog(c, p) })
+	reg("editor.safeDelete", overlayLayerDialog, 15, true,
+		func(m *Model) bool {
+			return m.safeDelete != nil &&
+				m.safeDelete.phase != editorSafeDeleteResolving
+		},
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.safeDeleteDialog(c, p) })
 	reg("symbols", overlayLayerPopup, 20, false,
 		func(m *Model) bool { return m.symbols != nil },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.symbolsDialog(c, p) })
@@ -42,9 +66,33 @@ func init() {
 	reg("dbPlan", overlayLayerDialog, 217, true,
 		func(m *Model) bool { return m.dbPlan != nil && m.dbPlan.open },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.dbPlanDialog(c, p) })
+	reg("database.source", overlayLayerDialog, 218, true,
+		func(m *Model) bool { return m.db != nil && m.db.sourceForm != nil && m.db.sourceForm.open },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.dbSourceFormDialog(c, p) })
+	reg("database.actionPrompt", overlayLayerDialog, 219, true,
+		func(m *Model) bool { return m.db != nil && m.db.actionPrompt != nil },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.dbActionPromptDialog(c, p) })
+	reg("database.valueEditor", overlayLayerDialog, 220, true,
+		func(m *Model) bool { return m.dbTable != nil && m.dbTable.valueOpen },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.dbValueEditorDialog(c, p) })
+	reg("database.tableEditor", overlayLayerDialog, 221, true,
+		func(m *Model) bool { return m.db != nil && m.db.tableForm != nil && m.db.tableForm.open },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.dbTableFormDialog(c, p) })
+	reg("database.importData", overlayLayerDialog, 222, true,
+		func(m *Model) bool { return m.db != nil && m.db.importForm != nil && m.db.importForm.open },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.dbImportFormDialog(c, p) })
+	reg("database.connectRemedy", overlayLayerDialog, 223, true,
+		func(m *Model) bool { return m.db != nil && m.db.connectRemedy != nil && m.db.connectRemedy.open },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.dbConnectRemedyDialog(c, p) })
+	reg("database.new", overlayLayerPopup, 224, true,
+		func(m *Model) bool { return m.db != nil && m.db.newMenu != nil && m.db.newMenu.open },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.dbNewMenuPopup(c, p) })
 	reg("termShell", overlayLayerPopup, 58, true,
 		func(m *Model) bool { return m.termShell != nil && m.termShell.open },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.termShellDialog(c, p) })
+	reg("term.rename", overlayLayerPopup, 59, false,
+		func(m *Model) bool { return m.term.rename != nil },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.termRenameDialog(c, p) })
 	reg("intentions", overlayLayerPopup, 30, false,
 		func(m *Model) bool { return m.intents != nil },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.intentionsDialog(c, p) })
@@ -57,6 +105,12 @@ func init() {
 	reg("search.recent", overlayLayerDialog, 172, true,
 		func(m *Model) bool { return m.recentNav.popup != nil },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.recentNavigationDialog(c, p) })
+	reg("find.scopes", overlayLayerDialog, 173, true,
+		func(m *Model) bool { return m.search.scopesOpen },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.searchScopesDialog(c, p) })
+	reg("navigate.fileStructure", overlayLayerPopup, 174, false,
+		func(m *Model) bool { return m.structure.popup },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.fileStructureDialog(c, p) })
 	reg("run.stackTraceDialog", overlayLayerDialog, 190, true,
 		func(m *Model) bool { return m.stackTrace != nil && m.stackTrace.open },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.stackTraceDialog(c, p) })
@@ -69,6 +123,9 @@ func init() {
 	reg("vcs.quickList", overlayLayerDialog, 56, true,
 		func(m *Model) bool { return m.vcsQuick.open },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.vcsQuickListDialog(c, p) })
+	reg("vcs.more", overlayLayerDialog, 57, true,
+		func(m *Model) bool { return m.vcsMore.open },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.vcsMoreDialog(c, p) })
 	reg("rollback", overlayLayerDialog, 60, false,
 		func(m *Model) bool { return m.rollback != nil },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.rollbackDialog(c, p) })
@@ -90,9 +147,23 @@ func init() {
 	reg("bookmarkDescription", overlayLayerDialog, 120, false,
 		func(m *Model) bool { return m.editDesc != nil },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.bookmarkDescriptionDialog(c, p) })
-	reg("treeOp", overlayLayerDialog, 130, false,
-		func(m *Model) bool { return m.treeOp != nil },
+	reg("project.newPopup", overlayLayerPopup, 128, false,
+		func(m *Model) bool { return m.projectNew != nil && m.projectNew.open },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.projectNewDialog(c, p) })
+	reg("templates.newFile", overlayLayerDialog, 129, true,
+		func(m *Model) bool { return m.treeOp != nil && m.treeOp.projectTemplate != nil },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.treeOpDialog(c, p) })
+	reg("treeOp", overlayLayerDialog, 130, false,
+		func(m *Model) bool {
+			return m.treeOp != nil && m.treeOp.projectTemplate == nil
+		},
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.treeOpDialog(c, p) })
+	reg("project.fileRefactor", overlayLayerDialog, 131, true,
+		func(m *Model) bool { return m.fileRefactor != nil },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.fileRefactorDialog(c, p) })
+	reg("project.refactoringPreview", overlayLayerDialog, 132, true,
+		func(m *Model) bool { return m.fileRefactorPreview != nil },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.fileRefactorPreviewDialog(c, p) })
 	reg("history", overlayLayerDialog, 140, false,
 		func(m *Model) bool { return m.history != nil },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.historyDialog(c, p) })
@@ -108,6 +179,42 @@ func init() {
 	reg("runAnything", overlayLayerDialog, 180, false,
 		func(m *Model) bool { return m.runAnything != nil },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.runAnythingDialog(c, p) })
+	reg("toolwindow.layouts", overlayLayerDialog, 181, true,
+		func(m *Model) bool { return m.layoutDlg != nil && m.layoutDlg.open },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.toolWindowLayoutDialog(c, p) })
+	reg("agents.newTask", overlayLayerDialog, 185, true,
+		func(m *Model) bool { return m.agents.newOpen },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.agentsNewTaskDialog(c, p) })
+	reg("agents.rename", overlayLayerDialog, 186, true,
+		func(m *Model) bool { return m.agents.renameOpen },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.agentsRenameDialog(c, p) })
+	reg("agents.group", overlayLayerDialog, 187, true,
+		func(m *Model) bool { return m.agents.groupOpen },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.agentsGroupDialog(c, p) })
+	reg("agents.removeGroup", overlayLayerDialog, 188, true,
+		func(m *Model) bool { return m.agents.removeGroupOpen },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.agentsRemoveGroupDialog(c, p) })
+	reg("agents.delete", overlayLayerDialog, 188, true,
+		func(m *Model) bool { return m.agents.deleteOpen },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.agentsDeleteDialog(c, p) })
+	reg("agents.changes", overlayLayerDialog, 189, true,
+		func(m *Model) bool { return m.agents.changesOpen },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.agentsChangesDialog(c, p) })
+	reg("agents.externalSessions", overlayLayerDialog, 190, true,
+		func(m *Model) bool { return m.agents.externalOpen },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.agentsExternalSessionsDialog(c, p) })
+	reg("agents.registryInstallConfirm", overlayLayerDialog, 191, true,
+		func(m *Model) bool { return m.agents.registry.InstallConfirmID != "" },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.agentRegistryInstallConfirmDialog(c, p) })
+	reg("agents.registryRemoveConfirm", overlayLayerDialog, 192, true,
+		func(m *Model) bool { return m.agents.registry.RemoveOpen },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.agentRegistryRemoveConfirmDialog(c, p) })
+	reg("agents.custom", overlayLayerDialog, 193, true,
+		func(m *Model) bool { return m.agents.registry.CustomOpen },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.agentCustomDialog(c, p) })
+	reg("merge", overlayLayerDialog, 185, true,
+		func(m *Model) bool { return m.merge != nil && m.merge.open },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.mergeDialog(c, p) })
 	reg("diff", overlayLayerDialog, 190, false,
 		func(m *Model) bool { return m.diff != nil },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.diffDialog(c, p) })
@@ -123,6 +230,18 @@ func init() {
 	reg("settings", overlayLayerDialog, 230, true,
 		func(m *Model) bool { return m.settingsOpen },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.settingsDialog(c, p) })
+	reg("jdk.download", overlayLayerDialog, 233, true,
+		func(m *Model) bool { return m.jdkDialog.open },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.jdkDownloadDialog(c, p) })
+	reg("app.about", overlayLayerDialog, 231, true,
+		func(m *Model) bool { return m.aboutOpen },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.aboutDialog(c, p) })
+	reg("help.keymapReference", overlayLayerDialog, 232, true,
+		func(m *Model) bool { return m.keymapReference.open },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.keymapReferenceDialog(c, p) })
+	reg("app.workspace", overlayLayerDialog, 234, true,
+		func(m *Model) bool { return m.workspaceDialog != nil && m.workspaceDialog.open },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.drawWorkspaceDialog(c, p) })
 	// File › New Project… and the Welcome screen's button: a full sheet over
 	// the workbench, above Settings so it cannot be hidden underneath it.
 	reg("newProject", overlayLayerDialog, 235, true,
@@ -146,12 +265,33 @@ func init() {
 	reg("rerunConfirm", overlayLayerDialog, 255, true,
 		func(m *Model) bool { return m.rerunAsk != nil },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.rerunConfirmDialog(c, p) })
+	reg("debug.setValue", overlayLayerDialog, 256, true,
+		func(m *Model) bool { return m.debug.setValue.open },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.debugSetValueDialog(c, p) })
+	reg("debug.smartStep", overlayLayerDialog, 257, true,
+		func(m *Model) bool { return m.debug.smartStep.open },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.debugSmartStepDialog(c, p) })
+	reg("debug.consoleHistory", overlayLayerDialog, 258, true,
+		func(m *Model) bool { return m.debug.console.historyOpen },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.debugConsoleHistoryDialog(c, p) })
+	reg("debug.breakpoints", overlayLayerDialog, 259, true,
+		func(m *Model) bool { return m.debug.breakpointsOpen },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.debugBreakpointsDialog(c, p) })
 	reg("scratchChooser", overlayLayerDialog, 270, false,
 		func(m *Model) bool { return m.scratch != nil },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.scratchChooserDialog(c, p) })
 	// The Trust Project question, shown for a project the user has not
 	// allowed to build and run.
-	reg("trust", overlayLayerDialog, 265, true,
+	reg("project.trustDialog", overlayLayerDialog, 265, true,
 		func(m *Model) bool { return m.trustAsk },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.trustDialog(c, p) })
+	reg("remote.connect", overlayLayerDialog, 266, true,
+		func(m *Model) bool { return m.remote.connectOpen },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.remoteConnectDialog(c, p) })
+	reg("remote.disconnect", overlayLayerDialog, 267, true,
+		func(m *Model) bool { return m.remote.disconnectOpen },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.remoteDisconnectDialog(c, p) })
+	reg("remote.notice", overlayLayerDialog, 268, true,
+		func(m *Model) bool { return m.remote.noticeOpen },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.remoteNoticeDialog(c, p) })
 }

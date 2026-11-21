@@ -16,6 +16,53 @@ type ServerInfo struct {
 	Home     string `json:"home"`
 }
 
+// Workspace is the project grouping stored in .openidea/workspace.json.
+// Projects uses the first entry as the primary attachment when it names the
+// folder containing the manifest.
+type Workspace struct {
+	Version  uint32   `json:"version"`
+	Name     string   `json:"name"`
+	Projects []string `json:"projects"`
+}
+
+// DiscoveredProject is one build-root found by workspace_discover_projects.
+// RelativePath is relative to the folder the user selected.
+type DiscoveredProject struct {
+	Path         string `json:"path"`
+	Root         string `json:"root"`
+	RelativePath string `json:"relativePath"`
+}
+
+// ProjectDiscovery is the reply to workspace_discover_projects. Direct keeps
+// selected folders that are already projects or contain no discovered project.
+type ProjectDiscovery struct {
+	Direct    []string            `json:"direct"`
+	Projects  []DiscoveredProject `json:"projects"`
+	Truncated bool                `json:"truncated"`
+}
+
+// ProjectInfo is the part of project_current the native frontend consumes.
+// Settings retain their raw JSON so future fields do not require a protocol
+// change here.
+type ProjectInfo struct {
+	Trusted     bool            `json:"trusted"`
+	Root        string          `json:"root"`
+	Name        string          `json:"name"`
+	DisplayName string          `json:"displayName"`
+	IsGit       bool            `json:"isGit"`
+	Workspace   *Workspace      `json:"workspace,omitempty"`
+	Settings    json.RawMessage `json:"settings,omitempty"`
+}
+
+// DecodeProjectInfo reads project_current's reply.
+func DecodeProjectInfo(raw json.RawMessage) (ProjectInfo, error) {
+	var info ProjectInfo
+	if err := json.Unmarshal(raw, &info); err != nil {
+		return ProjectInfo{}, err
+	}
+	return info, nil
+}
+
 // DocInfo is the reply to doc_open and doc_snapshot.
 type DocInfo struct {
 	ID         uint32 `json:"id"`
@@ -120,6 +167,28 @@ type IndexStateEvent struct {
 	Symbols  uint32 `json:"symbols"`
 }
 
+// LanguageServerEvent reports one language server's lifecycle state.
+type LanguageServerEvent struct {
+	Server  uint32  `json:"server"`
+	Name    string  `json:"name"`
+	Label   *string `json:"label"`
+	Status  string  `json:"status"`
+	Message *string `json:"message"`
+}
+
+// LanguageServerWarningEvent reports a running server that lacks a capability
+// the managed tool can supply.
+type LanguageServerWarningEvent struct {
+	Name        string `json:"name"`
+	Message     string `json:"message"`
+	InstallTool string `json:"installTool"`
+}
+
+// LanguageServerRemovedEvent reports a server leaving the project's list.
+type LanguageServerRemovedEvent struct {
+	Server uint32 `json:"server"`
+}
+
 // WindowEvent is the params of an event notification.
 type WindowEvent struct {
 	Window *string         `json:"window"`
@@ -220,6 +289,37 @@ func DecodeRunConfig(raw json.RawMessage) (*RunConfig, error) {
 	return &cfg, nil
 }
 
+// RunImportSource is another IDE's project file that run configurations can be
+// imported from.
+type RunImportSource string
+
+const (
+	RunImportVSCode    RunImportSource = "vscode"
+	RunImportJetBrains RunImportSource = "jetbrains"
+)
+
+// ImportedRunConfig is one configuration read from another IDE's project file.
+type ImportedRunConfig struct {
+	Config  json.RawMessage `json:"config"`
+	Ignored []string        `json:"ignored"`
+}
+
+// SkippedRunConfig is one source entry the backend could not translate.
+type SkippedRunConfig struct {
+	Name   string         `json:"name"`
+	Reason map[string]any `json:"reason"`
+}
+
+// RunImport is the backend's translation of an external run configuration
+// file; imported configurations remain a draft until Run/Debug Configurations
+// saves them.
+type RunImport struct {
+	Source   RunImportSource     `json:"source"`
+	File     string              `json:"file"`
+	Imported []ImportedRunConfig `json:"imported"`
+	Skipped  []SkippedRunConfig  `json:"skipped"`
+}
+
 // RunInfo is the reply to run_start.
 type RunInfo struct {
 	ID       uint32 `json:"id"`
@@ -267,6 +367,23 @@ type BreakpointState struct {
 	Message  *string `json:"message"`
 }
 
+// FunctionBreakpoint is one method breakpoint sent to the adapter.
+type FunctionBreakpoint struct {
+	Name         string  `json:"name"`
+	Condition    *string `json:"condition"`
+	HitCondition *string `json:"hitCondition"`
+	Enabled      bool    `json:"enabled"`
+}
+
+// DataBreakpoint is one field watchpoint sent to the adapter.
+type DataBreakpoint struct {
+	DataID       string  `json:"dataId"`
+	AccessType   *string `json:"accessType"`
+	Condition    *string `json:"condition"`
+	HitCondition *string `json:"hitCondition"`
+	Enabled      bool    `json:"enabled"`
+}
+
 // JavaCompileError is one compile error the launch build found.
 type JavaCompileError struct {
 	Path    string `json:"path"`
@@ -305,6 +422,15 @@ type StackFrame struct {
 	Line             int     `json:"line"`
 	Column           int     `json:"column"`
 	PresentationHint *string `json:"presentationHint"`
+}
+
+// StepInTarget is one call on the current line that Smart Step Into can enter.
+type StepInTarget struct {
+	ID        int64  `json:"id"`
+	Label     string `json:"label"`
+	Line      *int   `json:"line"`
+	Column    *int   `json:"column"`
+	EndColumn *int   `json:"endColumn"`
 }
 
 // Scope is one variable scope of a frame, as Locals or "this".
@@ -402,6 +528,40 @@ type SearchEvent struct {
 	Type    string         `json:"type"`
 	File    *FileMatches   `json:"file"`
 	Summary *SearchSummary `json:"summary"`
+}
+
+// SearchPosition is one 0-based line and UTF-16 column used as a replace
+// target.
+type SearchPosition struct {
+	Line uint32 `json:"line"`
+	Col  uint32 `json:"col"`
+}
+
+// ReplaceTarget asks replace_in_files to change one file. A nil Only list
+// replaces every remaining match in the file.
+type ReplaceTarget struct {
+	Path string           `json:"path"`
+	Only []SearchPosition `json:"only,omitempty"`
+}
+
+// ReplaceSummary is the final result of replace_in_files.
+type ReplaceSummary struct {
+	Files        uint32  `json:"files"`
+	Replacements uint32  `json:"replacements"`
+	Failed       uint32  `json:"failed"`
+	Cancelled    bool    `json:"cancelled"`
+	ElapsedMs    float64 `json:"elapsedMs"`
+}
+
+// ReplaceEvent is one streamed message from replace_in_files.
+type ReplaceEvent struct {
+	Type         string          `json:"type"`
+	Path         string          `json:"path"`
+	Replacements uint32          `json:"replacements"`
+	Done         uint32          `json:"done"`
+	Total        uint32          `json:"total"`
+	Message      string          `json:"message"`
+	Summary      *ReplaceSummary `json:"summary"`
 }
 
 // OutlinePos is a 0-based line and UTF-16 column of an outline range.
@@ -530,6 +690,16 @@ type Branch struct {
 	Commit       *string `json:"commit"`
 }
 
+// DeletedBranch is the restorable branch payload vcs_delete_branch returns.
+// OpenIDEA's branch-deleted notification uses it to recreate the exact tip and
+// upstream after an unmerged branch was removed.
+type DeletedBranch struct {
+	Name     string  `json:"name"`
+	Tip      string  `json:"tip"`
+	Upstream *string `json:"upstream"`
+	Unmerged bool    `json:"unmerged"`
+}
+
 // Remote is one Git remote `vcs_remotes` lists.
 type Remote struct {
 	Name        string  `json:"name"`
@@ -655,9 +825,20 @@ type WorkspaceEditAppliedEvent struct {
 // reply replaces Locations as the search moves on, and Incomplete names what
 // the query may have missed.
 type References struct {
-	Locations        []Location `json:"locations"`
-	Incomplete       *string    `json:"incomplete"`
-	LibrariesSkipped bool       `json:"librariesSkipped"`
+	Locations        []Location            `json:"locations"`
+	Classified       []ClassifiedReference `json:"classified"`
+	Incomplete       *string               `json:"incomplete"`
+	LibrariesSkipped bool                  `json:"librariesSkipped"`
+}
+
+// ClassifiedReference is the semantic metadata a Java extension attaches to
+// one References location. Older servers omit it, and unknown locations stay
+// visible under either access filter.
+type ClassifiedReference struct {
+	Location Location `json:"location"`
+	Kind     string   `json:"kind"`
+	Access   string   `json:"access"`
+	Text     *string  `json:"text"`
 }
 
 // WorkspaceEditInfo is the part of a workspace edit the UI previews: which

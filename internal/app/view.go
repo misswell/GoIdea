@@ -124,11 +124,18 @@ func (m *Model) rowChip(c *ui.Context, p *ui.Theme, key, label string) bool {
 func (m *Model) searchRows(c *ui.Context, p *ui.Theme) {
 	s := &m.search
 	ui.Row(c).Padding(6, 8).Children(func() {
-		in := ui.TextInput(c, &s.query).Grow(1)
+		in := ui.TextInput(c, &s.query).Grow(1).
+			Placeholder("Search text or pattern")
 		if in.Submitted() {
 			m.RunSearch()
 		}
 	})
+	if s.replaceMode {
+		ui.Row(c).Padding(0, 8).Children(func() {
+			ui.TextInput(c, &s.replacement).Grow(1).
+				Placeholder("Replace with")
+		})
+	}
 	ui.Row(c).Padding(0, 8).Gap(6).AlignItems(ui.Center).Children(func() {
 		if s.running {
 			ui.Button(c, "Stop").OnClick(func() {
@@ -138,11 +145,27 @@ func (m *Model) searchRows(c *ui.Context, p *ui.Theme) {
 		} else {
 			ui.Button(c, "Search").OnClick(func() { m.RunSearch() })
 		}
-		if s.scopePath != "" {
-			if rel, err := filepath.Rel(m.Root(), s.scopePath); err == nil {
-				ui.Text(c, "Scope: "+filepath.ToSlash(rel)).FontSize(12).TextColor(p.TextMuted).SingleLine()
+		if s.replaceMode {
+			label := "Stop Replace"
+			if !s.replaceRunning {
+				label = "Replace All"
+			}
+			button := ui.Button(c, label).Disabled(!s.replaceRunning && len(s.files) == 0)
+			button.OnClick(func() {
+				if s.replaceRunning {
+					m.CancelReplace()
+				} else {
+					m.ReplaceSearchAll()
+				}
+			})
+			if len(s.files) > 0 {
+				ui.Button(c, "Replace Selected").OnClick(m.ReplaceSearchSelected)
 			}
 		}
+		ui.Button(c, "Options").OnClick(func() {
+			s.options = !s.options
+			m.invalidate()
+		})
 		ui.Spacer(c)
 		text := s.summary
 		if s.running {
@@ -155,9 +178,71 @@ func (m *Model) searchRows(c *ui.Context, p *ui.Theme) {
 			ui.Text(c, text).FontSize(12).TextColor(p.TextMuted).SingleLine().Ellipsis("…")
 		}
 	})
+	ui.Row(c).Padding(0, 8).Gap(12).AlignItems(ui.Center).Children(func() {
+		ui.Checkbox(c, &s.isRegex, "Regex")
+		ui.Checkbox(c, &s.caseSensitive, "Match case")
+		ui.Checkbox(c, &s.wholeWord, "Whole words")
+		if s.replaceMode {
+			ui.Checkbox(c, &s.preserveCase, "Preserve case")
+		}
+	})
+	if s.options {
+		ui.Row(c).Padding(0, 8).Gap(8).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, "Include").Width(52).FontSize(12).TextColor(p.TextMuted)
+			ui.TextInput(c, &s.include).Grow(1).Placeholder("*.java, *.ts")
+			ui.Text(c, "Exclude").Width(52).FontSize(12).TextColor(p.TextMuted)
+			ui.TextInput(c, &s.exclude).Grow(1).Placeholder("build/*, node_modules/*")
+		})
+		choices := []string{"Project"}
+		for _, scope := range m.searchScopes {
+			choices = append(choices, scope.Name)
+		}
+		if s.scopeName == "" {
+			s.scopeName = "Project"
+		}
+		found := false
+		for _, choice := range choices {
+			if choice == s.scopeName {
+				found = true
+				break
+			}
+		}
+		if !found {
+			s.scopeName = "Project"
+		}
+		ui.Row(c).Padding(0, 8).Gap(8).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, "Scope").Width(52).FontSize(12).TextColor(p.TextMuted)
+			ui.Select(c, &s.scopeName, choices).Width(220)
+			ui.Button(c, "Edit Scopes…").OnClick(m.OpenSearchScopes)
+			if s.scopePath != "" {
+				if rel, err := filepath.Rel(m.Root(), s.scopePath); err == nil {
+					ui.Text(c, "Directory: "+filepath.ToSlash(rel)).FontSize(12).
+						TextColor(p.TextMuted).SingleLine().Ellipsis("…")
+				}
+				ui.Button(c, "Clear Directory").OnClick(func() {
+					s.scopePath = ""
+					m.invalidate()
+				})
+			}
+		})
+	}
 	if s.err != "" {
 		ui.Row(c).Padding(4, 8).Children(func() {
 			ui.Text(c, s.err).FontSize(12).TextColor(p.Warning)
+		})
+	}
+	if s.replaceErr != "" {
+		ui.Row(c).Padding(4, 8).Children(func() {
+			ui.Text(c, s.replaceErr).FontSize(12).TextColor(p.Warning)
+		})
+	}
+	if s.replaceProgress != "" || s.replaceSummary != "" {
+		ui.Row(c).Padding(4, 8).Children(func() {
+			text := s.replaceProgress
+			if s.replaceSummary != "" {
+				text = s.replaceSummary
+			}
+			ui.Text(c, text).FontSize(12).TextColor(p.TextMuted).SingleLine().Ellipsis("…")
 		})
 	}
 	if s.truncated {
@@ -199,7 +284,9 @@ func (m *Model) searchRows(c *ui.Context, p *ui.Theme) {
 			shown++
 			r := ui.Row(c.Key(fmt.Sprintf("hit:%d:%d", fi, mi))).Height(24).PaddingStart(26).
 				PaddingEnd(8).Gap(6).AlignItems(ui.Center)
-			if r.Hovered() {
+			if fi == s.selectedFile && mi == s.selectedMatch {
+				r.Background(p.Selection)
+			} else if r.Hovered() {
 				r.Background(oi.hoverTint)
 			}
 			r.Children(func() {
@@ -214,6 +301,7 @@ func (m *Model) searchRows(c *ui.Context, p *ui.Theme) {
 				col = int(mm.Ranges[0][0])
 			}
 			if r.Clicked() {
+				s.selectedFile, s.selectedMatch = fi, mi
 				m.previewAt(f.Path, int(mm.Line), col)
 			}
 			if r.DoubleClicked() {
@@ -224,10 +312,64 @@ func (m *Model) searchRows(c *ui.Context, p *ui.Theme) {
 }
 
 func (m *Model) treeRow(c *ui.Context, p *ui.Theme, row *treeNode) {
-	r := ui.Row(c.Key("tree:" + row.path)).Height(24).
+	key := "tree:" + row.path
+	if row.member {
+		key = fmt.Sprintf("tree-member:%s:%d:%d:%s", row.path, row.line, row.col, row.name)
+	}
+	r := ui.Row(c.Key(key)).Height(24).
 		PaddingStart(4 + float32(row.depth)*20).PaddingEnd(8).Gap(5).Radius(5).AlignItems(ui.Center)
+	if r.FocusWithin() {
+		m.projectTreeFocus = true
+	}
+	r.OnShortcut(ui.Cmd, ui.KeyC, m.CopySelectedTreeEntry)
+	r.OnShortcut(ui.Ctrl, ui.KeyC, m.CopySelectedTreeEntry)
+	r.OnShortcut(ui.Cmd, ui.KeyX, m.CutSelectedTreeEntry)
+	r.OnShortcut(ui.Ctrl, ui.KeyX, m.CutSelectedTreeEntry)
+	r.OnShortcut(ui.Cmd, ui.KeyV, m.PasteIntoTreeSelection)
+	r.OnShortcut(ui.Ctrl, ui.KeyV, m.PasteIntoTreeSelection)
+	r.OnShortcut(ui.Cmd, ui.KeyA, m.tree.SelectAll)
+	r.OnShortcut(ui.Ctrl, ui.KeyA, m.tree.SelectAll)
+	r.OnShortcut(0, ui.KeyEscape, func() {
+		m.projectTreeFocus = false
+		m.FocusEditor()
+	})
+	r.OnShortcut(ui.Cmd, ui.KeyZ, m.UndoLastProjectFileOperation)
+	r.OnShortcut(0, ui.KeyDelete, m.DeleteSelectedTreeEntry)
+	r.OnShortcut(0, ui.KeyBackspace, m.DeleteSelectedTreeEntry)
+	r.OnShortcut(ui.Cmd, ui.KeyBackspace, m.DeleteSelectedTreeEntry)
+	r.OnShortcut(0, ui.KeyF4, m.OpenSelectedTreeEntry)
+	r.OnShortcut(0, ui.KeyF5, m.CopySelectedTreeElement)
+	r.OnShortcut(0, ui.KeyF6, m.MoveSelectedTreeEntry)
+	r.OnShortcut(ui.Shift, ui.KeyF6, m.RenameSelectedTreeEntry)
+	r.OnShortcut(ui.Ctrl, ui.KeyEnter, m.NewFileAtProjectSelection)
+	r.OnShortcut(0, ui.KeyUp, func() { m.tree.StepSelection(-1, false) })
+	r.OnShortcut(ui.Shift, ui.KeyUp, func() { m.tree.StepSelection(-1, true) })
+	r.OnShortcut(0, ui.KeyDown, func() { m.tree.StepSelection(1, false) })
+	r.OnShortcut(ui.Shift, ui.KeyDown, func() { m.tree.StepSelection(1, true) })
+	r.OnShortcut(0, ui.KeyLeft, func() { m.tree.CollapseSelection() })
+	r.OnShortcut(0, ui.KeyRight, func() { m.tree.ExpandSelection() })
+	r.OnShortcut(0, ui.KeyEnter, m.OpenSelectedTreeEntry)
+	r.OnShortcut(ui.Cmd, ui.KeyDown, m.OpenSelectedTreeEntry)
+	m.updateTreeDragTarget(row, r)
+	m.handleTreeDrag(c, row, r)
+	if !row.member && !row.readOnly {
+		if paths := r.DroppedFiles(); len(paths) > 0 {
+			target := row.path
+			if !row.dir {
+				target = filepath.Dir(row.path)
+			}
+			m.pasteExternalTreeFiles(paths, target)
+		}
+	}
 	oi := oiPaletteOf(p)
-	if row.path == m.tree.Selected() {
+	selected := !row.member && m.tree.sels[row.path]
+	dropTarget := m.treeDrag != nil && m.treeDrag.active && row.dir &&
+		sameTreePath(m.treeDrag.targetPath, row.path)
+	if dropTarget {
+		r.Background(p.Accent.Alpha(0.16))
+	} else if r.FileDragOver() {
+		r.Background(p.Accent.Alpha(0.16))
+	} else if selected {
 		r.Background(p.Selection)
 	} else if row.excluded {
 		r.Background(p.Background.Mix(oi.ignored, 0.14))
@@ -248,9 +390,21 @@ func (m *Model) treeRow(c *ui.Context, p *ui.Theme, row *treeNode) {
 		label := row.name
 		// The chevron slot is reserved on every row, as OpenIDEA's tree does,
 		// so files and folders line up at the same depth.
-		chevron := ui.Row(c).Size(16, 16).Shrink(0).
-			Justify(ui.Center).AlignItems(ui.Center)
-		if row.dir {
+		chevron := ui.ButtonBase(c.Key("tree-chevron:"+key)).Size(16, 16).Shrink(0).
+			Justify(ui.Center).AlignItems(ui.Center).Cursor(ui.CursorPointer)
+		_, membersLoaded := m.tree.Outline(row.path)
+		members, _ := m.tree.Outline(row.path)
+		hasMembers := !row.dir && !row.member && m.prefs.ProjectTree.ShowMembers &&
+			(!membersLoaded || len(members) > 0)
+		if row.dir || row.hasChildren {
+			glyph := "general/chevronRight"
+			if row.expanded {
+				glyph = "general/chevronDown"
+			}
+			chevron.Children(func() {
+				oiIconEl(c, glyph, 16, oi, oi.textMuted)
+			})
+		} else if hasMembers {
 			glyph := "general/chevronRight"
 			if row.expanded {
 				glyph = "general/chevronDown"
@@ -259,11 +413,28 @@ func (m *Model) treeRow(c *ui.Context, p *ui.Theme, row *treeNode) {
 				oiIconEl(c, glyph, 16, oi, oi.textMuted)
 			})
 		}
+		if chevron.Clicked() {
+			if row.member {
+				m.tree.ToggleMember(row.path, row.line, row.col, row.name)
+			} else {
+				m.tree.Toggle(row.path)
+				if !row.dir && m.prefs.ProjectTree.ShowMembers {
+					m.ensureProjectTreeMembers(row.path)
+				}
+			}
+			m.invalidate()
+		}
 		// OpenIDEA's tree: a module icon on the root and on modules, the
 		// package icon on a compacted package, a source folder on a source
 		// root, a grey folder on any other directory, and the file type's
 		// own icon — labels in the normal text colour.
 		switch {
+		case row.member:
+			if asset := symbolIcon(strings.ToLower(row.kind)); asset != "" {
+				oiIconEl(c, asset, 16, oi, oi.textMuted)
+			} else {
+				oiIconEl(c, "nodes/method", 16, oi, oi.textMuted)
+			}
 		case row.path == m.Root() || row.module:
 			folderIconEl(c, oi, "module", 16, oi.textSubtle)
 		case row.packageDir:
@@ -285,10 +456,14 @@ func (m *Model) treeRow(c *ui.Context, p *ui.Theme, row *treeNode) {
 		if row.module || row.path == m.Root() {
 			text.Bold()
 		}
+		if row.detail != "" {
+			ui.Text(c, row.detail).FontSize(12).TextColor(oi.textFaint).
+				SingleLine().Ellipsis("…")
+		}
 		if badge := m.coverageBadge(row.path); badge != "" {
 			ui.Text(c, badge).FontSize(12).TextColor(oi.textMuted).SingleLine()
 		}
-		if bookmarked || r.Hovered() {
+		if !row.member && (bookmarked || r.Hovered()) {
 			ui.Spacer(c)
 			chip := ui.Row(c.Key("treeBookmark:"+row.path)).Height(16).Padding(0, 5).
 				AlignItems(ui.Center)
@@ -308,25 +483,75 @@ func (m *Model) treeRow(c *ui.Context, p *ui.Theme, row *treeNode) {
 		}
 	})
 	if r.Clicked() {
-		m.tree.Select(row.path)
+		r.Focus()
+		m.projectTreeFocus = true
+		mods := c.Modifiers()
+		extend := mods&ui.Shift != 0
+		toggle := mods&(ui.Cmd|ui.Ctrl) != 0
+		if row.member {
+			m.tree.Select(row.path)
+			m.revealAt(row.path, row.line, row.col)
+			m.invalidate()
+			return
+		}
+		m.tree.clickSelection(row.path, extend, toggle)
+		if extend || toggle {
+			m.invalidate()
+			return
+		}
 		if row.dir {
-			m.tree.Toggle(row.path)
+			if m.prefs.ProjectTree.SingleClickExpand {
+				m.tree.Toggle(row.path)
+			}
+		} else if m.prefs.ProjectTree.SingleClickOpen {
+			m.openFile(row.path)
+		} else if m.prefs.ProjectTree.PreviewTab {
+			m.openPreview(row.path)
+		} else if m.prefs.ProjectTree.AutoscrollToSource {
+			if m.prefs.ProjectTree.PreviewTab {
+				m.openPreview(row.path)
+			} else {
+				m.openFile(row.path)
+			}
+		}
+		m.invalidate()
+	}
+	if r.DoubleClicked() {
+		if row.member {
+			m.revealAt(row.path, row.line, row.col)
+		} else if row.dir {
+			if !m.prefs.ProjectTree.SingleClickExpand {
+				m.tree.Toggle(row.path)
+			}
 		} else {
 			m.openFile(row.path)
 		}
 		m.invalidate()
 	}
-	target := treeTarget{
-		path: row.path, dir: row.dir, root: row.path == m.Root(),
-		git: m.vcs.loaded && m.vcs.err == "",
-	}
-	r.ContextMenu(func(menu *ui.Menu) {
-		if f, ok := m.statusFor(row.path); ok {
-			target.kind = effectiveVCSKind(f)
-			target.rollback = f.Unstaged != nil
+	if !row.member {
+		target := treeTarget{
+			path: row.path, dir: row.dir,
+			root:                 row.path == m.Root() || m.workspaceContains(row.path),
+			git:                  m.vcs.loaded && m.vcs.err == "",
+			workspaceMember:      m.workspaceContains(row.path),
+			workspaceCurrentRoot: workspacePathEqual(row.path, m.Root()),
+			workspaceAttachment:  m.workspaceIsAttachment(),
 		}
-		m.treeMenu(c, menu, target)
-	})
+		r.ContextMenu(func(menu *ui.Menu) {
+			m.projectTreeFocus = true
+			if !m.tree.sels[row.path] {
+				m.tree.Select(row.path)
+			}
+			if f, ok := m.statusFor(row.path); ok {
+				target.kind = effectiveVCSKind(f)
+				target.rollback = f.Unstaged != nil
+			}
+			m.treeMenu(c, menu, target)
+		})
+	}
+	if !row.member && m.tree != nil && m.tree.Selected() == row.path {
+		m.projectTreeAnchor = r.Bounds()
+	}
 }
 
 func (m *Model) bannerRow(c *ui.Context, p *ui.Theme) {
@@ -357,35 +582,79 @@ func (m *Model) editorArea(c *ui.Context, p *ui.Theme, g groupView) {
 		m.whatsNewPage(c, p, t)
 		return
 	}
+	if t.kind == tabKindAgentSession {
+		m.agentSessionPage(c, p, oiPaletteOf(p), t)
+		return
+	}
+	if t.kind == tabKindAgentHome {
+		m.agentHomePage(c, p, oiPaletteOf(p))
+		return
+	}
 	key := "editor:" + t.doc.Path()
 	if g.ref == groupSplit {
 		key += ":split"
 	}
-	ui.Column(c.Key(key)).Grow(1).MinHeight(0).MinWidth(0).
-		Background(p.Background).Children(func() {
+	area := ui.Column(c.Key(key)).Grow(1).MinHeight(0).MinWidth(0).
+		Background(p.Background)
+	m.editorBodyRects[int(g.ref)] = area.Bounds()
+	area.Children(func() {
 		// Breadcrumbs sit above the text unless Settings › Editor ›
 		// Breadcrumbs puts them below it, and they are hidden when the page
-		// says so.
-		top := !m.crumbs.Hidden && !m.crumbs.AtBottom()
+		// says so or this file's language is disabled.
+		showBreadcrumbs := m.showsBreadcrumbs(t)
+		top := showBreadcrumbs && !m.crumbs.AtBottom()
 		if top {
 			m.breadcrumbs(c, p, t, g)
 		}
-		view := editor.View(c, t.state).Grow(1).MinHeight(0)
-		m.positionDocumentation(t, view)
-		// A click in the unfocused pane takes the keyboard back to the main
-		// group, whose commands act on m.tabs; applyTab always runs before the
-		// next frame, so the queued swap lands between frames.
-		switch {
-		case g.focused && m.focusApply:
-			m.focusApply = false
-			view.Focus()
-		case !g.focused && view.Focused():
-			m.focusQueued = true
+		if t.blame != nil {
+			m.refreshTabBlame(t)
 		}
-		if !top && !m.crumbs.Hidden {
+		ui.Row(c).Grow(1).MinHeight(0).MinWidth(0).AlignItems(ui.Stretch).Children(func() {
+			if t.blame != nil {
+				m.blameGutter(c, p, t)
+			}
+			view := editor.View(c, t.state).Grow(1).MinHeight(0)
+			m.applyDeferredCaretCenter(t)
+			if dropped := m.takeEditorDroppedFiles(view); len(dropped) > 0 {
+				m.openPaths(dropped)
+			}
+			m.coverageGutterTooltip(c, view, t)
+			m.usagePopupAnchor = editorCaretAnchor(view.Bounds(), t.state, m.editorFontSize())
+			if view.Focused() || view.FocusWithin() {
+				m.projectTreeFocus = false
+			}
+			m.positionDocumentation(t, view)
+			// A click in the unfocused pane takes the keyboard back to the main
+			// group, whose commands act on m.tabs; applyTab always runs before the
+			// next frame, so the queued swap lands between frames.
+			switch {
+			case g.focused && m.focusApply:
+				m.focusApply = false
+				view.Focus()
+			case !g.focused && view.Focused():
+				m.focusQueued = true
+			}
+		})
+		if showBreadcrumbs && !top {
 			m.breadcrumbs(c, p, t, g)
 		}
 	})
+}
+
+// showsBreadcrumbs reports whether the current file's language allows the
+// breadcrumb chain. The stored list is normalized so a hand-edited settings
+// file with different case behaves like the checkbox in Settings.
+func (m *Model) showsBreadcrumbs(t *Tab) bool {
+	if m.crumbs.Hidden || t == nil || t.doc == nil {
+		return false
+	}
+	language := strings.ToLower(strings.TrimSpace(t.doc.Info().Language))
+	for _, disabled := range m.crumbs.DisabledLanguages {
+		if strings.ToLower(strings.TrimSpace(disabled)) == language {
+			return false
+		}
+	}
+	return true
 }
 
 // breadcrumbs is the file and symbol chain the caret sits in; a symbol jumps
@@ -681,11 +950,11 @@ func (m *Model) termPanel(c *ui.Context, p *ui.Theme) {
 				})
 			})
 		}
-		if t.finding {
+		if s := t.current(); s != nil && s.finding {
 			ui.Row(c).Height(30).Shrink(0).Padding(3, 8).Gap(6).AlignItems(ui.Center).
 				BorderWidth(0, 0, 1, 0).BorderColor(p.Border).Children(func() {
 				ui.Text(c, "Find").FontSize(12).TextColor(p.TextMuted)
-				in := ui.TextInput(c, &t.find).Grow(1)
+				in := ui.TextInput(c, &s.find).Grow(1)
 				if in.Submitted() {
 					m.FindTermStep(1)
 				}
@@ -731,16 +1000,7 @@ func (m *Model) termPaneBody(c *ui.Context, p *ui.Theme, g int) {
 			BorderWidth(0, 0, 1, 0).BorderColor(p.Border).Children(func() {
 			for i := range gr.tabs {
 				s := &gr.tabs[i]
-				label := s.shell
-				if label == "" {
-					label = fmt.Sprintf("Terminal %d", i+1)
-				}
-				switch {
-				case s.starting:
-					label = "Starting…"
-				case s.id == 0 && s.ended:
-					label += " (ended)"
-				}
+				label := termTabTitle(s, i)
 				selected := t.active == g && gr.active == i
 				tabColor := p.TextMuted
 				if selected {
@@ -756,12 +1016,11 @@ func (m *Model) termPaneBody(c *ui.Context, p *ui.Theme, g int) {
 						SingleLine().Ellipsis("…")
 					ui.Button(c, "×").OnClick(func() { m.CloseTermTab(g, i) })
 				})
+				tab.ContextMenu(func(menu *ui.Menu) {
+					m.termTabMenu(menu, g, i, tab.Bounds())
+				})
 				if tab.Clicked() {
-					t.active = g
-					if i != gr.active {
-						gr.active = i
-					}
-					m.invalidate()
+					m.ActivateTermTab(g, i)
 				}
 			}
 			if len(gr.tabs) == 0 {
@@ -794,9 +1053,9 @@ func (m *Model) termPaneBody(c *ui.Context, p *ui.Theme, g int) {
 						FontSize(12).TextColor(p.TextMuted)
 				}
 				var hits map[int]bool
-				if t.finding && t.find != "" && t.active == g {
+				if s.finding && s.find != "" && t.active == g {
 					hits = map[int]bool{}
-					for _, line := range termHits(s.lines, t.find) {
+					for _, line := range termHits(s.lines, s.find) {
 						hits[line] = true
 					}
 				}
@@ -868,6 +1127,16 @@ func (m *Model) debugFrames(c *ui.Context, p *ui.Theme) {
 				if row.Clicked() {
 					m.SelectFrame(i)
 				}
+				row.Menu(func(menu *ui.Menu) {
+					if menu.Item("Jump to Source").Chosen() {
+						m.SelectFrame(i)
+						m.DebugJumpToSource()
+					}
+					if menu.Item("Reset Frame").Chosen() {
+						d.selFrame = i
+						m.DebugResetFrame()
+					}
+				})
 			}
 		})
 	})
@@ -921,15 +1190,40 @@ func (m *Model) debugVars(c *ui.Context, p *ui.Theme) {
 				})
 				return
 			}
-			for _, v := range d.vars {
-				ui.Row(c).Height(24).Padding(0, 8).Gap(6).AlignItems(ui.Center).
-					Children(func() {
-						ui.Text(c, v.Name).FontSize(13).TextColor(p.TextMuted).
-							SingleLine().Ellipsis("…")
-						ui.Text(c, "=").FontSize(13).TextColor(p.TextMuted)
-						ui.Text(c, v.Value).FontSize(13).TextColor(p.Text).
-							SingleLine().Ellipsis("…").Grow(1)
-					})
+			for i, v := range d.vars {
+				i, v := i, v
+				row := ui.Row(c.Key(fmt.Sprintf("dvar:%d", i))).Height(24).Padding(0, 8).
+					Gap(6).AlignItems(ui.Center)
+				if i == d.selVar {
+					row.Background(p.SurfaceHover)
+				}
+				row.Children(func() {
+					ui.Text(c, v.Name).FontSize(13).TextColor(p.TextMuted).
+						SingleLine().Ellipsis("…")
+					ui.Text(c, "=").FontSize(13).TextColor(p.TextMuted)
+					ui.Text(c, v.Value).FontSize(13).TextColor(p.Text).
+						SingleLine().Ellipsis("…").Grow(1)
+				})
+				if row.Clicked() {
+					d.selVar = i
+					m.invalidate()
+				}
+				if row.RowDoubleClicked() {
+					d.selVar = i
+					m.OpenDebugSetValue()
+				}
+				row.Menu(func(menu *ui.Menu) {
+					if menu.Item("Set Value…").Chosen() {
+						d.selVar = i
+						m.OpenDebugSetValue()
+					}
+					if menu.Item("Add to Watches").Disabled(v.EvaluateName == nil).Chosen() {
+						m.addWatch(*v.EvaluateName)
+					}
+					if menu.Item("Jump to Source").Chosen() {
+						m.DebugJumpToSource()
+					}
+				})
 			}
 		})
 		ui.Row(c).Height(32).Shrink(0).Padding(0, 8).Gap(6).AlignItems(ui.Center).
@@ -1015,7 +1309,8 @@ func (m *Model) searchPanel(c *ui.Context, p *ui.Theme) {
 
 func (m *Model) usagesPanel(c *ui.Context, p *ui.Theme) {
 	col := ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Background(p.Surface).
-		BorderWidth(1, 0, 0, 0).BorderColor(p.Border)
+		BorderWidth(1, 0, 0, 0).BorderColor(p.Border).
+		Focusable().AutoFocus().HandleInput(m.handleUsagesInput)
 	col.Children(func() {
 		ui.Scroll(c).Grow(1).Children(func() { m.usagesRows(c, p) })
 	})

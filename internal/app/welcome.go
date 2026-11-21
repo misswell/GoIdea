@@ -19,10 +19,10 @@ import (
 	"mayoi/internal/git"
 )
 
-// welcomeLogoSrc is OpenIDEA's own 128px app icon, shown in the Welcome
-// screen's brand block as WelcomeView.tsx shows it.
+// welcomeLogoSrc is GoIDEA's 128px app icon, shown in the Welcome screen's
+// brand block where WelcomeView.tsx shows OpenIDEA's icon.
 //
-//go:embed assets/openidea.png
+//go:embed assets/goidea.png
 var welcomeLogoSrc []byte
 
 var (
@@ -319,7 +319,7 @@ func (m *Model) welcomeHeader(c *ui.Context, oi oiColors) {
 				m.welcomeButton(c, oi, "New Project", true, m.NewProject)
 				m.welcomeButton(c, oi, "Open", true, m.chooseProject)
 				m.welcomeButton(c, oi, "Clone Repository", true, m.openCloneDialog)
-				m.welcomeButton(c, oi, "Remote Development", false, nil)
+				m.welcomeButton(c, oi, "Remote Development", true, m.OpenRemoteConnectDialog)
 			})
 		})
 }
@@ -361,7 +361,7 @@ func (m *Model) welcomeLanding(c *ui.Context, oi oiColors) {
 			m.welcomeLandingAction(c, oi, "New Project", "general/add", true, m.NewProject)
 			m.welcomeLandingAction(c, oi, "Open", "nodes/folder", true, m.chooseProject)
 			m.welcomeLandingAction(c, oi, "Clone Repository", "general/vcs", true, m.openCloneDialog)
-			m.welcomeLandingAction(c, oi, "Remote Development", "toolwindows/terminal", false, nil)
+			m.welcomeLandingAction(c, oi, "Remote Development", "toolwindows/terminal", true, m.OpenRemoteConnectDialog)
 		})
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Margin(8, 0, 0, 0).Children(func() {
 			ui.Text(c, "Open a folder").FontSize(13).TextColor(oi.textFaint)
@@ -424,13 +424,7 @@ func (m *Model) welcomeRecentRow(c *ui.Context, oi oiColors, mt recentMatch, sel
 	}
 	moreClicked := false
 	r.Children(func() {
-		start, end := projectColors(name)
-		ui.Row(c).Size(20, 20).Shrink(0).Radius(4).Margin(1, 0, 0, 0).
-			LinearGradient(ui.LinearGradient{From: start, To: end, Angle: 135}).
-			Justify(ui.Center).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, projectInitials(name)).FontSize(11).Bold().
-				TextColor(ui.Hex("#ffffff")).LetterSpacing(0.02).SingleLine()
-		})
+		recentProjectTile(c, name)
 		ui.Column(c).Grow(1).MinWidth(0).Children(func() {
 			m.welcomeName(c, oi, name, mt.nameIdx)
 			ui.Text(c, shortenHome(dir)).FontSize(12).TextColor(oi.textSubtle).
@@ -461,6 +455,18 @@ func (m *Model) welcomeRecentRow(c *ui.Context, oi oiColors, mt recentMatch, sel
 	if r.Clicked() && !moreClicked {
 		m.confirmSwitch(dir)
 	}
+}
+
+// recentProjectTile is the rounded-square project avatar shared by Welcome
+// and File › Open Recent.
+func recentProjectTile(c *ui.Context, name string) {
+	start, end := projectColors(name)
+	ui.Row(c).Size(20, 20).Shrink(0).Radius(4).Margin(1, 0, 0, 0).
+		LinearGradient(ui.LinearGradient{From: start, To: end, Angle: 135}).
+		Justify(ui.Center).AlignItems(ui.Center).Children(func() {
+		ui.Text(c, projectInitials(name)).FontSize(11).Bold().
+			TextColor(ui.Hex("#ffffff")).LetterSpacing(0.02).SingleLine()
+	})
 }
 
 // welcomeName draws the project name, with the search's matched letters in

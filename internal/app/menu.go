@@ -9,10 +9,12 @@ import "github.com/egoist/mygo"
 type menuEntry struct {
 	label   string
 	command string
+	arg     any
 	role    mygo.MenuRole
 	accel   string
 	sep     bool
 	check   func(*Model) bool
+	dynamic func(*Model) []menuEntry
 	// run is the entry's action when it is not a registry command, as the
 	// toolbar checkboxes and the theme and keymap picks are.
 	run func(*Model)
@@ -76,6 +78,8 @@ func mainMenuGroups() []menuEntry {
 		action("Terminal", "view.terminal", "Alt+F12"),
 		action("Database", "view.database", ""),
 		action("Services", "view.services", ""),
+		action("Agents", "agents.showToolWindow", ""),
+		action("Remote Development", "remote.showToolWindow", ""),
 		action("Documentation", "toolwindow.documentation", ""),
 		action("Coverage", "toolwindow.coverage", ""),
 		action("Move Tool Window to Left", "view.moveToolToLeft", ""),
@@ -93,27 +97,88 @@ func mainMenuGroups() []menuEntry {
 		action("Hide All Tool Windows", "view.hideAll", "CmdOrCtrl+Shift+F12"),
 	)
 	appearance := submenu("Appearance",
-		actionChecked("Light", "app.themeLight", func(m *Model) bool { return m.prefs.Theme == "light" }),
-		actionChecked("Dark", "app.themeDark", func(m *Model) bool { return m.prefs.Theme == "dark" }),
-		actionChecked("Use System Settings", "app.themeSystem", func(m *Model) bool { return m.prefs.Theme == "" || m.prefs.Theme == "system" }),
+		action("Enter Distraction Free Mode", "editor.toggleZen", ""),
+		action("Toggle Full Screen", "window.toggleFullScreen", "CmdOrCtrl+Ctrl+F"),
+		actionChecked("Compact Mode", "view.toggleCompactMode", func(m *Model) bool {
+			return m.prefs.Appearance.CompactMode
+		}),
+		rule(),
+		action("Zoom In IDE", "view.zoomIn", "Ctrl+Alt+="),
+		action("Zoom Out IDE", "view.zoomOut", "Ctrl+Alt+-"),
+		action("Reset IDE Zoom", "view.resetZoom", "Ctrl+Alt+0"),
 		rule(),
 		action("Toggle Light/Dark Theme", "view.toggleTheme", ""),
-		action("Reset Layout", "view.resetLayout", ""),
+		action("Customize Main Toolbar…", "toolbar.customize", ""),
+		rule(),
+		actionChecked("Toolbar", "view.toggleToolbar", func(m *Model) bool {
+			return !m.prefs.Appearance.HideMainToolbar
+		}),
+		actionChecked("Tool Window Bars", "view.toggleToolWindowBars", func(m *Model) bool {
+			return !m.prefs.Appearance.HideToolWindowBars
+		}),
+		submenu("Navigation Bar",
+			actionChecked("Top", "view.navigationBarTop", func(m *Model) bool {
+				return m.navigationBarPosition() == "top"
+			}),
+			actionChecked("Status Bar", "view.navigationBarStatusBar", func(m *Model) bool {
+				return m.navigationBarPosition() == "statusBar"
+			}),
+			actionChecked("Don't Show", "view.navigationBarHidden", func(m *Model) bool {
+				return m.navigationBarPosition() == "hidden"
+			}),
+		),
+		actionChecked("Status Bar", "view.toggleStatusBar", func(m *Model) bool {
+			return !m.prefs.Appearance.HideStatusBar
+		}),
+		menuEntry{label: "Status Bar Widgets", dynamic: func(m *Model) []menuEntry {
+			rows := m.statusWidgetRows()
+			out := make([]menuEntry, 0, len(rows))
+			for _, item := range rows {
+				item := item
+				out = append(out, menuEntry{
+					label:   item.Title,
+					command: "view.toggleStatusBarWidget",
+					arg:     item.ID,
+					check: func(m *Model) bool {
+						return m.statusItemEnabled(item)
+					},
+				})
+			}
+			return out
+		}},
 	)
 	return []menuEntry{
 		submenu("File",
-			action("New Project…", "project.new", ""),
+			action("New Project…", "file.newProject", ""),
+			action("New Workspace…", "workspace.create", ""),
+			action("Open Workspace…", "workspace.open", ""),
+			action("Manage Workspace…", "workspace.manage", ""),
+			action("New…", "file.new", ""),
 			action("New Scratch File…", "file.newScratchFile", "CmdOrCtrl+Shift+N"),
-			action("Open Project…", "project.open", "CmdOrCtrl+Shift+Alt+O"),
-			action("Open File…", "file.quickOpen", "CmdOrCtrl+P"),
+			action("Open…", "file.openProject", "CmdOrCtrl+Shift+Alt+O"),
+			action("Attach Project…", "project.attach", ""),
+			action("Open File…", "file.openFile", ""),
+			submenu("Remote Development",
+				action("Remote Development…", "remote.connect", ""),
+				action("Reload Environment", "remote.reloadEnvironment", ""),
+				action("Reopen in Container", "remote.reopenInContainer", ""),
+				rule(),
+				action("Disconnect from Remote Host", "remote.disconnect", ""),
+			),
+			submenu("Open Recent",
+				action("Recent Projects…", "welcome.recentProjects", ""),
+				action("Manage Projects…", "welcome.manageProjects", ""),
+			),
+			rule(),
+			action("Close Project", "project.close", ""),
 			rule(),
 			action("Save", "file.save", "CmdOrCtrl+S"),
 			action("Close", "file.close", "CmdOrCtrl+W"),
-			action("Close Project", "project.close", ""),
 			rule(),
 			action("Reload All from Disk", "file.reloadAllFromDisk", ""),
-			rule(),
-			action("Manage Projects…", "welcome.manageProjects", ""),
+			submenu("File Properties",
+				action("Make File Read-only / Writable", "file.toggleReadOnly", ""),
+			),
 			rule(),
 			action("Settings…", "file.settings", "CmdOrCtrl+,"),
 			rule(),
@@ -129,10 +194,19 @@ func mainMenuGroups() []menuEntry {
 			platform(mygo.RolePaste),
 			platform(mygo.RoleSelectAll),
 			rule(),
+			action("Copy Path", "editor.copyPath", ""),
+			action("Copy Reference", "editor.copyReference", "CmdOrCtrl+Alt+Shift+C"),
+			rule(),
 			submenu("Find",
-				action("Find in Files…", "search.project", "CmdOrCtrl+Shift+F"),
+				action("Find…", "find.inFile", "CmdOrCtrl+F"),
+				action("Replace…", "find.replaceInFile", "CmdOrCtrl+R"),
+				rule(),
+				action("Find in Files…", "find.inPath", "CmdOrCtrl+Shift+F"),
+				action("Replace in Files…", "find.replaceInPath", "CmdOrCtrl+Shift+R"),
+				action("Rerun Search", "find.rerun", "CmdOrCtrl+R"),
+				action("Edit Scopes…", "search.editScopes", ""),
 				action("Find Usages", "code.usages", "Alt+F7"),
-				action("Show Usages", "code.showUsages", ""),
+				action("Show Usages", "code.showUsages", "Alt+Cmd+F7"),
 			),
 			rule(),
 			bookmarks(),
@@ -140,6 +214,29 @@ func mainMenuGroups() []menuEntry {
 		submenu("View",
 			toolWindows,
 			appearance,
+			submenu("Active Editor",
+				actionChecked("Soft-Wrap", "editor.toggleSoftWrap", func(m *Model) bool {
+					return m.activeEditorSoftWrapped()
+				}),
+				actionChecked("Render Documentation Comments", "editor.toggleRenderedDocs", func(m *Model) bool {
+					return m.activeEditorRenderedDocs()
+				}),
+			),
+			rule(),
+			action("Quick Definition", "code.quickDefinition", "Alt+Space Cmd+Y"),
+			action("Quick Type Definition", "code.quickTypeDefinition", ""),
+			rule(),
+			action("Recent Locations", "navigate.recentLocations", "CmdOrCtrl+Shift+E"),
+			action("Recent Files", "navigate.recentFiles", "CmdOrCtrl+E"),
+			action("Recent Changes", "localHistory.recentChanges", ""),
+			rule(),
+			action("Compare with Clipboard", "diff.compareWithClipboard", ""),
+			rule(),
+			action("Quick Switch Scheme…", "view.quickSwitchScheme", "Ctrl+`"),
+			rule(),
+			action("Reset Font Size in All Editors", "editor.resetFontSize", ""),
+			rule(),
+			action("Notifications", "view.notifications", ""),
 		),
 		submenu("Navigate",
 			action("Search Everywhere", "navigate.searchEverywhere", "Shift Shift"),
@@ -148,8 +245,16 @@ func mainMenuGroups() []menuEntry {
 			action("File…", "navigate.gotoFile", "CmdOrCtrl+Shift+O"),
 			action("Symbol…", "navigate.gotoSymbol", "CmdOrCtrl+Alt+O"),
 			action("Go to Line:Column…", "navigate.gotoLine", "CmdOrCtrl+L"),
+			action("Jump to Navigation Bar", "navigate.navigationBar", "Cmd+Up"),
+			action("Back", "navigate.back", "CmdOrCtrl+["),
+			action("Forward", "navigate.forward", "CmdOrCtrl+]"),
+			action("Last Edit Location", "navigate.lastEditLocation", "CmdOrCtrl+Shift+Backspace"),
+			action("Next Edit Location", "navigate.nextEditLocation", ""),
+			rule(),
 			action("Recent Files", "navigate.recentFiles", "CmdOrCtrl+E"),
 			action("Recent Locations", "navigate.recentLocations", "CmdOrCtrl+Shift+E"),
+			action("Switcher", "navigate.switcher", "Ctrl+Tab"),
+			action("File Structure", "navigate.fileStructure", "CmdOrCtrl+F12"),
 			rule(),
 			action("Call Hierarchy", "navigate.callHierarchy", "Ctrl+Alt+H"),
 			action("Type Hierarchy", "navigate.typeHierarchy", "Ctrl+H"),
@@ -158,7 +263,8 @@ func mainMenuGroups() []menuEntry {
 			rule(),
 			action("Select In Project View", "navigate.selectInProjectView", "Alt+F1"),
 			rule(),
-			action("Find in Files…", "search.project", "CmdOrCtrl+Shift+F"),
+			action("Find in Files…", "find.inPath", "CmdOrCtrl+Shift+F"),
+			action("Replace in Files…", "find.replaceInPath", "CmdOrCtrl+Shift+R"),
 			action("Find in Folder…", "project.findInFolder", ""),
 			action("Find Usages", "code.usages", "Alt+F7"),
 			rule(),
@@ -192,6 +298,7 @@ func mainMenuGroups() []menuEntry {
 		),
 		submenu("Refactor",
 			action("Rename…", "code.rename", "Shift+F6"),
+			action("Safe Delete…", "refactor.safeDelete", "Cmd+Delete"),
 			rule(),
 			action("Undo Refactor", "code.undoRefactor", "CmdOrCtrl+Alt+Z"),
 			action("Redo Refactor", "code.redoRefactor", "CmdOrCtrl+Alt+Shift+Z"),
@@ -216,6 +323,9 @@ func mainMenuGroups() []menuEntry {
 			action("Debug Context Configuration", "run.debugContext", "Ctrl+Shift+D"),
 			action("Rerun Debug", "debug.rerun", ""),
 			action("Stop", "run.stop", "Shift+F5"),
+			action("Stop Debug Session", "debug.stop", ""),
+			action("Reload Changed Classes", "debug.reloadChangedClasses", ""),
+			action("Cancel Hot Swap Build", "debug.cancelHotSwap", ""),
 			submenu("Coverage",
 				action("Import a Coverage Report…", "coverage.importReport", ""),
 				action("Manage Coverage Reports…", "coverage.manageReports", ""),
@@ -230,6 +340,7 @@ func mainMenuGroups() []menuEntry {
 			action("Step Over", "run.stepOver", "F8"),
 			action("Step Into", "run.stepInto", "F7"),
 			action("Step Out", "run.stepOut", "Shift+F8"),
+			action("Smart Step Into", "debug.smartStepInto", ""),
 			action("Force Step Over", "debug.forceStepOver", ""),
 			action("Force Step Into", "debug.forceStepInto", ""),
 			action("Run to Cursor", "run.runToCursor", "Alt+F9"),
@@ -237,7 +348,18 @@ func mainMenuGroups() []menuEntry {
 			action("Resume Program", "run.continue", ""),
 			action("Evaluate Expression…", "debug.evaluate", ""),
 			action("Quick Evaluate Expression", "debug.quickEvaluate", ""),
+			action("Set Value…", "debug.setValue", ""),
 			action("Show Execution Point", "debug.showExecutionPoint", ""),
+			action("Jump to Source", "debug.jumpToSource", ""),
+			action("Reset Frame", "debug.resetFrame", ""),
+			action("Browse Console History", "debug.browseConsoleHistory", ""),
+			action("View Breakpoints…", "debug.viewBreakpoints", ""),
+			action("Toggle Temporary Breakpoint", "debug.toggleTemporaryBreakpoint", ""),
+			action("Toggle Method Breakpoint", "debug.toggleMethodBreakpoint", ""),
+			action("Toggle Field Watchpoint", "debug.toggleFieldWatchpoint", ""),
+			action("Capture Heap Snapshot", "debug.heap.capture", ""),
+			action("Open Heap Dump…", "debug.heap.open", ""),
+			action("Save Heap Dump As…", "debug.heap.saveDump", ""),
 			action("Mute Breakpoints", "debug.muteBreakpoints", ""),
 			action("Remove All Breakpoints", "debug.removeAllBreakpoints", ""),
 			action("Pause Program", "run.pause", ""),
@@ -245,7 +367,7 @@ func mainMenuGroups() []menuEntry {
 			action("Next Run Configuration", "run.configNext", ""),
 			action("Previous Run Configuration", "run.configPrev", ""),
 			rule(),
-			action("Trust Project", "run.trust", ""),
+			action("Trust Project", "project.trust", ""),
 		),
 		submenu("Git",
 			action("VCS Operations…", "vcs.operations", "Ctrl+V"),
@@ -254,6 +376,7 @@ func mainMenuGroups() []menuEntry {
 			action("Push…", "vcs.push", ""),
 			action("Fetch", "vcs.fetch", ""),
 			action("Pull…", "vcs.pull", ""),
+			action("Manage Remotes…", "vcs.manageRemotes", ""),
 			rule(),
 			action("Merge…", "vcs.merge", ""),
 			action("Rebase…", "vcs.rebase", ""),
@@ -281,10 +404,30 @@ func mainMenuGroups() []menuEntry {
 			action("Database", "view.database", ""),
 			action("Terminal", "view.terminal", "Alt+F12"),
 			rule(),
+			action("Install 'goidea' Command", "app.installCli", ""),
+			action("Uninstall 'goidea' Command", "app.uninstallCli", ""),
+			rule(),
+			action("New Agent Task…", "agents.newTask", ""),
+			action("Agents", "agents.showToolWindow", ""),
+			action("Agent Sessions…", "agents.externalSessions", ""),
+			action("Find in Conversation", "agents.findInConversation", "CmdOrCtrl+F"),
+			action("Close Agent Task", "agents.closeTask", ""),
+			action("Close and New Agent Task", "agents.closeAndNewTask", ""),
+			rule(),
 			action("Refresh TODO Items", "todo.refresh", ""),
 			action("Show TODO Items in Current File", "todo.showCurrentFile", ""),
 		),
 		submenu("Window",
+			submenu("Tool Window Layouts",
+				action("Save Current Layout as…", "layout.save", ""),
+				action("Restore Default Layout", "layout.restoreDefault", "Shift+F12"),
+				rule(),
+				menuEntry{dynamic: toolWindowLayoutMenuItems},
+				rule(),
+				action("Rename Layout…", "layout.rename", ""),
+				action("Delete Layout…", "layout.delete", ""),
+			),
+			rule(),
 			action("Maximize Tool Window", "view.maximize", "CmdOrCtrl+Shift+'"),
 			action("Hide Active Tool Window", "view.hideActive", "Shift+Escape"),
 			action("Jump to Last Tool Window", "view.jumpLast", "F12"),
@@ -326,9 +469,12 @@ func mainMenuGroups() []menuEntry {
 		// and stays here as well since GoIDEA has no custom app menu.
 		submenu("Help",
 			action("Find Action…", "navigate.findAction", "CmdOrCtrl+Shift+A"),
-			rule(),
+			action("Keymap Reference", "help.keymapReference", ""),
 			action("What's New", "app.whatsNew", ""),
+			action("Show Log in Finder", "help.showLog", ""),
+			rule(),
 			action("Check for Updates…", "app.checkForUpdates", ""),
+			action("About GoIDEA", "app.about", ""),
 		),
 	}
 }
@@ -403,10 +549,30 @@ func (m *Model) MainMenu() *mygo.Menu {
 	return mygo.NewMenu(append([]*mygo.MenuItem{{Role: mygo.RoleAppMenu}}, menuItems(m, mainMenuGroups())...))
 }
 
+// toolWindowLayoutMenuItems is the dynamic middle of Window › Tool Window
+// Layouts: every saved name restores its snapshot through layout.restore.
+func toolWindowLayoutMenuItems(m *Model) []menuEntry {
+	out := make([]menuEntry, 0, len(m.namedLayouts))
+	for _, entry := range m.namedLayouts {
+		entry := entry
+		out = append(out, menuEntry{
+			label:   entry.Name,
+			command: "layout.restore",
+			arg:     entry.Name,
+			check:   func(mm *Model) bool { return mm.activeNamedLayout == entry.Name },
+		})
+	}
+	return out
+}
+
 // menuItems turns a group of entries into platform menu items.
 func menuItems(m *Model, groups []menuEntry) []*mygo.MenuItem {
 	items := make([]*mygo.MenuItem, 0, len(groups))
 	for _, g := range groups {
+		if g.dynamic != nil {
+			items = append(items, menuItems(m, g.dynamic(m))...)
+			continue
+		}
 		if g.sep {
 			items = append(items, mygo.Separator())
 			continue
@@ -422,7 +588,8 @@ func menuItems(m *Model, groups []menuEntry) []*mygo.MenuItem {
 		case g.command != "":
 			it.ID = "menu." + g.command
 			id := g.command
-			it.Click = func(*mygo.MenuItem, *mygo.Window) { m.RunCommand(id) }
+			arg := g.arg
+			it.Click = func(*mygo.MenuItem, *mygo.Window) { m.RunCommandWithArg(id, arg) }
 		case g.run != nil:
 			it.ID = "menu.custom"
 			run := g.run

@@ -1,6 +1,214 @@
 {
   "about": "The only place a GoIDEA status is raised in OPENIDEA_PARITY_MATRIX.md. Keys are kind:id; a non-missing status must carry evidence (a regression check id from REGRESSION_INDEX.json, a document, or a source path). Everything absent here is reported as missing. Start conservative: `partial` when only part of the OpenIDEA surface is proven, `integrated` when a gate check exercises it.",
   "items": {
+    "action:layout.delete": {
+      "status": "integrated",
+      "evidence": "internal/app/toolwindow_layouts.go registers OpenIDEA's layout.delete, renders the saved-layout chooser and confirmation in MyGo, and clears the active check when the active layout is deleted; TestNamedToolWindowLayoutsSaveRestoreRenameDeleteAndPersist"
+    },
+    "action:layout.rename": {
+      "status": "integrated",
+      "evidence": "internal/app/toolwindow_layouts.go implements Rename Layout… with chooser, name prompt, blank and duplicate validation, active-name migration and session persistence; TestNamedToolWindowLayoutsSaveRestoreRenameDeleteAndPersist"
+    },
+    "action:layout.restore": {
+      "status": "integrated",
+      "evidence": "internal/app/toolwindow_layouts.go exposes layout.restore with an argument or native chooser, applies every dock, size, split, placement and view mode, exits Distraction Free Mode and marks the restored name active; TestNamedToolWindowLayoutsSaveRestoreRenameDeleteAndPersist and TestNamedToolWindowLayoutDialogRendersAndRestores"
+    },
+    "action:layout.restoreDefault": {
+      "status": "integrated",
+      "evidence": "internal/app/toolwindow.go applies OpenIDEA's fresh-project snapshot, and internal/app/toolwindow_layouts_test.go verifies the upstream id, view.resetLayout alias and Shift+F12 binding; TestRestoreDefaultLayoutMatchesOpenIDEAsFreshLayout and TestLayoutRestoreDefaultUsesOpenIDEAIDAndShortcut"
+    },
+    "action:layout.save": {
+      "status": "integrated",
+      "evidence": "internal/app/toolwindow_layouts.go implements Save Current Layout as… with the active name prefilled, blank validation, replace-on-same-name, active state and shared session persistence; TestNamedToolWindowLayoutsSaveRestoreRenameDeleteAndPersist and TestNamedLayoutPersistenceIsSharedAcrossProjects"
+    },
+    "action:remote.connect": {
+      "status": "partial",
+      "evidence": "internal/app/remote.go opens the native SSH, WSL and Dev Container chooser and states that this build's backend has no remote orchestration RPC; TestRemoteConnectAndReopenDialogsExplainBackendGap"
+    },
+    "action:remote.disconnect": {
+      "status": "partial",
+      "evidence": "internal/app/remote.go confirms the action and leaves the project open because the backend has no remote teardown RPC; TestRemoteDisconnectConfirmsWithoutClosingProject"
+    },
+    "action:remote.reloadEnvironment": {
+      "status": "partial",
+      "evidence": "internal/app/remote.go calls env_reload and renders changed names, devcontainer.json and login-shell state; TestRemoteEnvironmentReloadSuccess and TestRemoteEnvironmentReloadErrorClearsBusyState"
+    },
+    "action:remote.reopenInContainer": {
+      "status": "partial",
+      "evidence": "internal/app/remote.go shows a native unavailable notice without closing or reopening the project; TestRemoteConnectAndReopenDialogsExplainBackendGap"
+    },
+    "action:refactor.safeDelete": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_safe_delete.go mirrors OpenIDEA's editor refactor.safeDelete with definition/outline resolution, JDT references, Find Usages transfer, Delete Anyway, comment/string preview, remembered search text and stale-edit cancellation; the command, Refactor menu, editor context menu, command palette and Cmd+Delete entry are wired through internal/app/commands.go, menu.go, editor_menu.go and overlay_registry.go; lsp.safeDelete.usages, lsp.safeDelete.view, lsp.safeDelete.anyway, lsp.safeDelete.text and lsp.safeDelete.editCancel pass against real JDT; editor_safe_delete_test.go covers local declarations and refusals"
+    },
+    "action:merge.accept": {
+      "status": "integrated",
+      "evidence": "internal/app/merge_editor_actions.go registers the full OpenIDEA merge command list; internal/app/merge_editor.go runMergeCommand and mergePaneMenu dispatch Accept through the selected side change; TestMergeCommandsAreAllRegistered and TestMergeEditorRendersOpenIDEAControls"
+    },
+    "action:merge.acceptTheirs": {
+      "status": "integrated",
+      "evidence": "internal/app/merge_editor.go AcceptMergeTheirs and applyMergeTextPointer write and stage the complete Theirs version; the full command registration and footer are covered by TestMergeCommandsAreAllRegistered and TestMergeEditorRendersOpenIDEAControls"
+    },
+    "action:merge.acceptYours": {
+      "status": "integrated",
+      "evidence": "internal/app/merge_editor.go AcceptMergeYours and applyMergeTextPointer write and stage the complete Yours version, including deletion when the side is absent; TestMergeMissingSideDeletesAndStagesTheFile"
+    },
+    "action:merge.annotate": {
+      "status": "integrated",
+      "evidence": "internal/app/merge_editor.go AnnotateMergePane opens native blame for the focused side using HEAD or the merge commit; internal/app/merge_editor_actions.go registers the side-only action and mergePaneMenu exposes it"
+    },
+    "action:merge.apply": {
+      "status": "integrated",
+      "evidence": "internal/app/merge_editor.go ApplyMerge confirms unresolved changes, writes the result, calls vcs_stage, refreshes VCS and closes the editor; TestMergeApplyWritesStagesAndClosesTheEditor and TestMergeUnresolvedApplyWaitsForConfirmation"
+    },
+    "action:merge.applyAll": {
+      "status": "integrated",
+      "evidence": "internal/app/merge_editor.go ApplyMergeNonConflicting handles OpenIDEA's apply-all operation and merge summary state; internal/app/merge_model_test.go TestMergeActionsAutoIgnoreAndRevert and the registered toolbar in TestMergeEditorRendersOpenIDEAControls"
+    },
+    "action:merge.applyLeft": {
+      "status": "integrated",
+      "evidence": "internal/app/merge_editor.go ApplyMergeNonConflicting applies only left non-conflicting changes; internal/app/merge_model_test.go TestMergeTextChangesKeepsIndependentChangesApart and TestMergeActionsAutoIgnoreAndRevert"
+    },
+    "action:merge.applyRight": {
+      "status": "integrated",
+      "evidence": "internal/app/merge_editor.go ApplyMergeNonConflicting applies only right non-conflicting changes; internal/app/merge_model_test.go TestMergeTextChangesKeepsIndependentChangesApart and TestMergeActionsAutoIgnoreAndRevert"
+    },
+    "action:merge.autoApply": {
+      "status": "integrated",
+      "evidence": "internal/app/merge_editor.go setMergeAutoApply persists the OpenIDEA setting and applies non-conflicting changes without recording the initial application as an edit; TestMergeAutoApplyPreferencePersists and TestMergeAutoApplyOnLoadDoesNotMakeTheEditorDirty"
+    },
+    "action:merge.cancel": {
+      "status": "integrated",
+      "evidence": "internal/app/merge_editor.go RequestCloseMerge and drawMergeConfirmation discard only after confirmation when the result was touched; the footer and registered action are covered by TestMergeEditorRendersOpenIDEAControls"
+    },
+    "action:merge.change": {
+      "status": "integrated",
+      "evidence": "internal/app/merge_editor.go RunMergeChange parses OpenIDEA's {indexes, action} payload and applies side accept, ignore, auto resolve and manual result edits; TestMergeEditorLoadsVersionsAndResolvesSelectedChange and internal/app/merge_model_test.go"
+    },
+    "action:merge.compare": {
+      "status": "integrated",
+      "evidence": "internal/app/merge_editor.go ToggleMergeCompareMenu opens the six native version comparisons; TestMergeEditorRendersOpenIDEAControls and TestMergeCompareUsesAllSixOpenIDEAVersionPairs"
+    },
+    "action:merge.compareBaseResult": {
+      "status": "integrated",
+      "evidence": "internal/app/merge_editor.go ShowMergeCompare opens Base and Result through the shared native diff view; TestMergeCompareUsesAllSixOpenIDEAVersionPairs"
+    },
+    "action:merge.compareBaseTheirs": {
+      "status": "integrated",
+      "evidence": "internal/app/merge_editor.go ShowMergeCompare opens Base and Theirs through the shared native diff view; TestMergeCompareUsesAllSixOpenIDEAVersionPairs"
+    },
+    "action:merge.compareBaseYours": {
+      "status": "integrated",
+      "evidence": "internal/app/merge_editor.go ShowMergeCompare opens Base and Yours through the shared native diff view; TestMergeCompareUsesAllSixOpenIDEAVersionPairs"
+    },
+    "action:merge.compareResultTheirs": {
+      "status": "integrated",
+      "evidence": "internal/app/merge_editor.go ShowMergeCompare opens Result and Theirs through the shared native diff view; TestMergeCompareUsesAllSixOpenIDEAVersionPairs"
+    },
+    "action:merge.compareYoursResult": {
+      "status": "integrated",
+      "evidence": "internal/app/merge_editor.go ShowMergeCompare opens Yours and Result through the shared native diff view; TestMergeCompareUsesAllSixOpenIDEAVersionPairs"
+    },
+    "action:merge.compareYoursTheirs": {
+      "status": "integrated",
+      "evidence": "internal/app/merge_editor.go ShowMergeCompare opens Yours and Theirs through the shared native diff view; TestMergeCompareUsesAllSixOpenIDEAVersionPairs"
+    },
+    "action:merge.copy": {
+      "status": "integrated",
+      "evidence": "internal/app/merge_editor.go MergeCopy copies the focused pane selection; the result context menu and complete action registry are covered by TestMergeEditorRendersOpenIDEAControls and TestMergeCommandsAreAllRegistered"
+    },
+    "action:merge.cut": {
+      "status": "integrated",
+      "evidence": "internal/app/merge_editor.go MergeCut copies the result selection and replaceResultRunes removes it with undo-safe change mapping; the result context menu and action registry are covered by TestMergeEditorRendersOpenIDEAControls"
+    },
+    "action:merge.ignore": {
+      "status": "integrated",
+      "evidence": "internal/app/merge_editor.go MergeIgnoreSelected handles whole-change and side-specific ignore through mergeEditorModel.ignoreChange and ignoreWholeChange; internal/app/merge_model_test.go TestMergeActionsAutoIgnoreAndRevert"
+    },
+    "action:merge.paste": {
+      "status": "integrated",
+      "evidence": "internal/app/merge_editor.go MergePaste inserts text at the result selection with the same change remapping used by direct editing; the result context menu and action registry are covered by TestMergeEditorRendersOpenIDEAControls"
+    },
+    "action:merge.reload": {
+      "status": "integrated",
+      "evidence": "internal/app/merge_editor.go ReloadMerge reloads all three versions and asks before discarding touched decisions; the toolbar action is covered by TestMergeEditorRendersOpenIDEAControls"
+    },
+    "action:merge.resolveAutomatically": {
+      "status": "integrated",
+      "evidence": "internal/app/merge_editor.go ResolveMergeSelectedAutomatically calls the word-level auto resolver for the selected changes; internal/app/merge_model_test.go TestMergeActionsAutoIgnoreAndRevert"
+    },
+    "action:merge.resolveSimple": {
+      "status": "integrated",
+      "evidence": "internal/app/merge_editor.go ResolveSimpleMergeConflicts applies every simple automatic resolution and reveals what remains; internal/app/merge_model_test.go TestMergeActionsAutoIgnoreAndRevert"
+    },
+    "action:merge.resolveUsingTheirs": {
+      "status": "integrated",
+      "evidence": "internal/app/merge_editor.go MergeAcceptSelected resolves the selected conflict using Theirs; internal/app/merge_editor_actions.go gates it to the Theirs pane and mergePaneMenu exposes it"
+    },
+    "action:merge.resolveUsingYours": {
+      "status": "integrated",
+      "evidence": "internal/app/merge_editor.go MergeAcceptSelected resolves the selected conflict using Yours; internal/app/merge_editor_actions.go gates it to the Yours pane and mergePaneMenu exposes it"
+    },
+    "action:merge.revert": {
+      "status": "integrated",
+      "evidence": "internal/app/merge_editor.go RevertMergeResolution restores the base and clears every decision and manual marker; internal/app/merge_model_test.go TestMergeActionsAutoIgnoreAndRevert"
+    },
+    "action:merge.selectAll": {
+      "status": "integrated",
+      "evidence": "internal/app/merge_editor.go MergeSelectAll selects the focused pane and updates the native text selection on the next frame; the result context menu and action registry are covered by TestMergeEditorRendersOpenIDEAControls"
+    },
+    "action:merge.settings": {
+      "status": "integrated",
+      "evidence": "internal/app/merge_editor.go ToggleMergeSettingsMenu renders OpenIDEA's automatic non-conflicting-change setting; TestMergeEditorRendersOpenIDEAControls and TestMergeAutoApplyPreferencePersists"
+    },
+    "action:edit.undo": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go registers OpenIDEA's edit.undo; runEditorCommand executes editor.Undo on the active native Buffer and actions_builtin.go enables it from CanUndo; TestBasicEditorActionsRunThroughTheRegistry"
+    },
+    "action:edit.redo": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go registers OpenIDEA's edit.redo; runEditorCommand executes editor.Redo on the active native Buffer and actions_builtin.go enables it from CanRedo; TestBasicEditorActionsRunThroughTheRegistry"
+    },
+    "action:edit.cut": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go registers OpenIDEA's edit.cut; runEditorCommand executes editor.Cut with read-only gating; TestBasicEditorActionsRunThroughTheRegistry and TestEditorActionsRespectEditorAvailability"
+    },
+    "action:edit.copy": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go registers OpenIDEA's edit.copy; runEditorCommand executes editor.Copy through MyGo's native clipboard service; TestBasicEditorActionsRunThroughTheRegistry and TestEditorActionsRespectEditorAvailability"
+    },
+    "action:edit.paste": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go registers OpenIDEA's edit.paste; runEditorCommand executes editor.Paste with read-only gating; TestBasicEditorActionsRunThroughTheRegistry and TestEditorActionsRespectEditorAvailability"
+    },
+    "action:edit.selectAll": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go registers OpenIDEA's edit.selectAll; runEditorCommand executes editor.SelectAll on the active native editor; TestBasicEditorActionsRunThroughTheRegistry and TestEditorActionsRespectEditorAvailability"
+    },
+    "action:editor.nextTab": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go editor.nextTab; internal/app/tabs.go cycleEditorTab wraps within the focused group, and the IntelliJ bindings are Ctrl+Right and Cmd+Shift+]; TestCycleTabIndexWrapsInBothDirections and TestEditorTabActionsHaveOpenIDEAIdentityAndBindings"
+    },
+    "action:editor.prevTab": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go editor.prevTab; internal/app/tabs.go cycleEditorTab wraps within the focused group, and the IntelliJ bindings are Ctrl+Left and Cmd+Shift+[; TestCycleTabIndexWrapsInBothDirections and TestEditorTabActionsHaveOpenIDEAIdentityAndBindings"
+    },
+    "action:editor.toggleSoftWrap": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go editor.toggleSoftWrap toggles the active MyGo editor's effective wrapping and exposes it through ActionToggled; TestSoftWrapActionTogglesTheActiveTabAndState"
+    },
+    "action:editor.resetFontSize": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_ui.go resetEditorFontZoom resets shared runtime zoom without changing Settings; TestEditorFontActionsUseSharedRuntimeZoom"
+    },
+    "action:editor.increaseFontSize": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_ui.go stepEditorFontZoom applies Alt+Shift+. across every open editor within OpenIDEA's shared -6..36 zoom; TestEditorFontActionsUseSharedRuntimeZoom"
+    },
+    "action:editor.decreaseFontSize": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_ui.go stepEditorFontZoom applies Alt+Shift+, across every open editor within OpenIDEA's shared -6..36 zoom; TestEditorFontActionsUseSharedRuntimeZoom"
+    },
     "action:navigate.callHierarchy": {
       "status": "integrated",
       "evidence": "internal/app/commands.go navigate.callHierarchy Ctrl+Alt+H; internal/app/hierarchy.go OpenCallHierarchy over lsp_call_hierarchy; Navigate menu Call Hierarchy"
@@ -21,41 +229,45 @@
       "status": "integrated",
       "evidence": "lsp.se.navigation, lsp.se.symbols"
     },
+    "action:navigate.navigationBar": {
+      "status": "integrated",
+      "evidence": "internal/app/navigation_bar.go opens the native project › directory › file › symbol popup from Navigate and registers both Cmd+Up and Alt+Home; left/right traverse and clamp across every segment, Up/Down move child rows, Enter descends, and layered Escape closes the child list before the bar; parity_shell_actions_test.go verifies placement and bindings and navigation_bar_test.go TestNavigationBarKeyboardTraversalAndChildList verifies the native flow"
+    },
     "feature:coverage": {
-      "status": "partial",
-      "evidence": "base.coverage.report; internal/app/coverage_run.go runs the selected configuration; context executor and tooltip are pending"
+      "status": "integrated",
+      "evidence": "internal/app/coverage.go, coverage_run.go and coverage_view.go implement report import and suites, Run with Coverage, context coverage, show/hide state, project-tree badges, editor gutter marks that follow edits, and OpenIDEA gutter tooltips; coverage_test.go covers import, suite management, action enablement, rendering, the short-lived run reply race, edit remapping and tooltip titles; TestContextRunWithCoveragePreparesLaunchesAndCollects covers the context executor"
     },
     "action:coverage.importReport": {
       "status": "integrated",
       "evidence": "base.coverage.report"
     },
     "action:coverage.manageReports": {
-      "status": "partial",
-      "evidence": "base.coverage.report; internal/app/coverage_test.go verifies report persistence and removal"
+      "status": "integrated",
+      "evidence": "internal/app/coverage.go and coverage_view.go render OpenIDEA's Manage Coverage Reports overlay with suite selection, imported-report removal and source-report preservation; TestCoverageReportsRestoreWithoutDeletingSourceReport and TestCoverageActionsFollowOpenIDEAContextState cover the native flow"
     },
     "action:coverage.show": {
-      "status": "partial",
-      "evidence": "internal/app/coverage.go SetCoverageVisible"
+      "status": "integrated",
+      "evidence": "internal/app/coverage.go SetCoverageVisible restores the active suite's editor and tree decorations and opens the Coverage window; TestCoverageActionsFollowOpenIDEAContextState verifies enabled state and results"
     },
     "action:coverage.hide": {
-      "status": "partial",
-      "evidence": "internal/app/coverage.go SetCoverageVisible"
+      "status": "integrated",
+      "evidence": "internal/app/coverage.go SetCoverageVisible removes every active-suite decoration while retaining reports; TestCoverageActionsFollowOpenIDEAContextState verifies enabled state and results"
     },
     "action:run.coverage": {
-      "status": "partial",
-      "evidence": "internal/app/coverage_run.go; TestCoverageCollectsAnExitBeforeTheRunStartReply"
+      "status": "integrated",
+      "evidence": "internal/app/coverage_run.go prepares the selected configuration, runs it through the normal Run lifecycle, waits for exit and collects the report; TestCoverageCollectsAnExitBeforeTheRunStartReply covers the short-lived process reply race"
     },
     "toolwindow:coverage": {
-      "status": "partial",
-      "evidence": "base.coverage.report; internal/app/coverage_test.go tests rendering of line and branch metrics"
+      "status": "integrated",
+      "evidence": "internal/app/coverage_view.go renders Coverage suite tabs, compact package/file rollups and OpenIDEA line/branch percentages; TestCoverageWindowRendersLineAndBranchMetrics, TestCoverageMetricsRollUpThroughCompactDirectories and TestCoverageEmptyStateMatchesOpenIDEA cover the native window"
     },
     "editor-contribution:coverage.gutter": {
-      "status": "partial",
-      "evidence": "base.coverage.report proves gutter marks; hover and remapping after edits are pending"
+      "status": "integrated",
+      "evidence": "internal/app/coverage.go paints covered and missed line stripes, follows edits until another run and supplies OpenIDEA's line/branch title; TestCoverageGutterMarksFollowEditsUntilAnotherRun and TestCoverageGutterTooltipMatchesOpenIDEATitles cover the contribution"
     },
     "overlay:coverage.manageReports": {
-      "status": "partial",
-      "evidence": "base.coverage.report opens native report management"
+      "status": "integrated",
+      "evidence": "internal/app/coverage.go opens and closes the native report-management overlay and coverage_view.go renders suite selection, import metadata and removal; TestCoverageReportsRestoreWithoutDeletingSourceReport and TestCoverageActionsFollowOpenIDEAContextState cover it"
     },
     "toolwindow:documentation": {
       "status": "partial",
@@ -70,16 +282,256 @@
       "evidence": "base.coverage.report"
     },
     "command:coverage_prepare": {
-      "status": "partial",
-      "evidence": "internal/app/coverage_run.go prepares the selected configuration with the backend"
+      "status": "integrated",
+      "evidence": "internal/app/coverage_run.go calls coverage_prepare, validates ready/missingTool/unsupported replies and preserves the returned launch and report JSON; TestContextRunWithCoveragePreparesLaunchesAndCollects covers the flow"
     },
     "command:coverage_collect": {
-      "status": "partial",
-      "evidence": "internal/app/coverage_run.go collects the backend report after process exit"
+      "status": "integrated",
+      "evidence": "internal/app/coverage_run.go calls coverage_collect with the prepared report after process exit and handles early exit replies through a bounded queue; TestCoverageCollectsAnExitBeforeTheRunStartReply covers it"
     },
     "action:navigate.typeHierarchy": {
       "status": "integrated",
       "evidence": "internal/app/commands.go navigate.typeHierarchy Ctrl+H; internal/app/hierarchy.go OpenTypeHierarchy over lsp_type_hierarchy; Navigate menu Type Hierarchy"
+    },
+    "action:navigate.selectIn": {
+      "status": "partial",
+      "evidence": "internal/app/action.go aliases OpenIDEA's navigate.selectIn to Select in Project View; the full chooser with Finder, Terminal and contributed targets is not ported"
+    },
+    "action:navigate.selectInProjectView": {
+      "status": "integrated",
+      "evidence": "internal/app/tree_ops.go SelectInProjectView and selectInProjectView; internal/app/project_view_test.go TestProjectViewOpenIDEAActionsAndOptions"
+    },
+    "action:navigate.showFilePath": {
+      "status": "partial",
+      "evidence": "internal/app/project_tree_actions.go ShowSelectedFilePath reports and copies the selected or active path; OpenIDEA's caret popup is not ported"
+    },
+    "action:file.new": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go file.new; internal/app/project_tree_actions.go NewFileAtProjectSelection opens the templates.newFile chooser in internal/app/project_new.go; TestProjectNewTemplateSearchAndOpenState and TestFileTemplateCreateUsesBytesRPC"
+    },
+    "action:project.newFile": {
+      "status": "integrated",
+      "evidence": "internal/app/project_tree_actions.go NewFileAtProjectSelection and OpenNewTreeEntry; internal/app/project_tree_actions_test.go TestProjectTreeNewAndClipboardUseTheSelection"
+    },
+    "action:project.newFolder": {
+      "status": "integrated",
+      "evidence": "internal/app/project_tree_actions.go NewDirectoryAtProjectSelection and OpenNewTreeEntry; internal/app/project_tree_actions_test.go TestProjectTreeNewAndClipboardUseTheSelection"
+    },
+    "action:project.newInThisDirectory": {
+      "status": "integrated",
+      "evidence": "internal/app/project_tree_actions.go NewInThisDirectory; internal/app/commands.go project.newInThisDirectory; internal/app/project_tree_actions_test.go"
+    },
+    "action:project.attach": {
+      "status": "integrated",
+      "evidence": "internal/app/project_workspace.go AttachProject, attachWorkspaceProject and the project.reveal selection; base.workspace.attached runs the real Attach Project flow and internal/app/project_workspace_test.go covers trust and the retained editor root"
+    },
+    "action:project.detach": {
+      "status": "integrated",
+      "evidence": "internal/app/project_workspace.go RemoveWorkspaceProject confirms a non-primary attachment and calls workspace_update; base.workspace.detached and internal/app/project_workspace_test.go"
+    },
+    "action:project.open": {
+      "status": "integrated",
+      "evidence": "internal/app/tree_ops.go OpenSelectedTreeEntry; F4 and internal/app/project_tree_actions_test.go TestProjectTreeOpenIDEAActionsAreRegistered"
+    },
+    "action:project.reveal": {
+      "status": "integrated",
+      "evidence": "internal/app/tree.go reveal; internal/app/tree_ops.go selectInProjectView; internal/app/project_view_test.go"
+    },
+    "action:project.revealInFinder": {
+      "status": "integrated",
+      "evidence": "internal/app/tree_ops.go RevealSelectedInFinder and revealPath; Project View Open In submenu"
+    },
+    "action:project.rename": {
+      "status": "partial",
+      "evidence": "internal/app/tree_ops.go OpenTreeRename and ConfirmTreeOp use fs_rename with dirty-buffer guards; language-aware reference updates and the OpenIDEA refactor preview are not ported"
+    },
+    "action:project.renameInline": {
+      "status": "partial",
+      "evidence": "internal/app/tree_ops.go OpenTreeRename provides the native rename editor but uses the modal prompt rather than OpenIDEA's inline tree editor"
+    },
+    "action:project.move": {
+      "status": "partial",
+      "evidence": "internal/app/project_tree_actions.go MoveSelectedTreeEntry and applyTreeMove use refactor_file_move_edits plus refactor_move_files; tested by internal/app/project_tree_actions_test.go TestReferenceAwareTreeMoveUsesOpenIDEARPC; the full destination/name/refactor preview is not ported"
+    },
+    "action:project.undoMove": {
+      "status": "integrated",
+      "evidence": "internal/app/project_tree_actions.go UndoLastTreeMove over refactor_undo_file_move; internal/app/project_tree_actions_test.go"
+    },
+    "action:project.delete": {
+      "status": "integrated",
+      "evidence": "internal/app/tree_ops.go DeleteSelectedTreeEntry, AskTreeDelete and fs_delete; Project View Refactor/Delete menu and guarded confirmation"
+    },
+    "action:project.copy": {
+      "status": "partial",
+      "evidence": "internal/app/tree_ops.go SetTreeClip and project_tree_actions_test.go TestProjectTreeNewAndClipboardUseTheSelection; one path is supported and OS file-list clipboard interop is pending"
+    },
+    "action:project.cut": {
+      "status": "partial",
+      "evidence": "internal/app/tree_ops.go CutSelectedTreeEntry and PasteTreeEntry over fs_rename; internal/app/project_tree_actions_test.go; multi-selection and OS clipboard interop are pending"
+    },
+    "action:project.paste": {
+      "status": "partial",
+      "evidence": "internal/app/tree_ops.go PasteTreeEntry over fs_copy/fs_rename with Finder-style unique copy names; OS file-list clipboard and the refactor preview are pending"
+    },
+    "action:project.copyElement": {
+      "status": "partial",
+      "evidence": "internal/app/tree_ops.go OpenTreeCopy, uniqueTreeCopyName and fs_copy; internal/app/project_tree_actions_test.go TestProjectTreeCopyUsesFinderStyleUniqueNames; multi-selection and the folder tree in the Copy dialog are pending"
+    },
+    "action:project.copyPath": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go project.copyPath; internal/app/project_tree_actions.go CopySelectedTreePath"
+    },
+    "action:project.copyAbsolutePath": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go project.copyAbsolutePath; internal/app/project_tree_actions.go CopySelectedTreePath"
+    },
+    "action:project.copyRelativePath": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go project.copyRelativePath; internal/app/project_tree_actions.go CopySelectedTreePath computes the content-root relative path"
+    },
+    "action:project.copyFileName": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go project.copyFileName; internal/app/project_tree_actions.go CopySelectedTreePath"
+    },
+    "action:project.copySourceRootPath": {
+      "status": "partial",
+      "evidence": "internal/app/commands.go project.copySourceRootPath uses the project-root relative path; project-content-root and source-root resolution are pending"
+    },
+    "action:project.openInTerminal": {
+      "status": "integrated",
+      "evidence": "internal/app/tree_ops.go OpenSelectedTreeInTerminal and OpenTerminalAt; Project View Open In menu and internal/app/tree_ops_test.go"
+    },
+    "action:project.findInFolder": {
+      "status": "integrated",
+      "evidence": "internal/app/tree_ops.go treeActFindInFolder; internal/app/search.go FindInFolderSelected/ShowSearchInFolder scopes search_start"
+    },
+    "action:project.findUsages": {
+      "status": "integrated",
+      "evidence": "internal/app/tree_ops.go findUsagesOfTreeFile opens the file and runs FindUsages over the language service"
+    },
+    "action:project.reformatCode": {
+      "status": "integrated",
+      "evidence": "internal/app/tree_ops.go formatTreeFile and FormatSelectedTreeFile open the file and run FormatActive"
+    },
+    "action:project.optimizeImports": {
+      "status": "integrated",
+      "evidence": "internal/app/tree_ops.go optimizeImportsTreeFile and OptimizeImportsOfSelectedTreeFile run the language service source.organizeImports action"
+    },
+    "action:project.compareWith": {
+      "status": "partial",
+      "evidence": "internal/app/tree_ops.go CompareSelectedTreeFile and internal/app/diff.go PickCompareFile; two-file selection and editable refactor diff are pending"
+    },
+    "action:project.reloadFromDisk": {
+      "status": "integrated",
+      "evidence": "internal/app/tree_ops.go ReloadSelectedFromDisk and ReloadPathFromDisk; internal/app/tree.go RefreshDir and internal/workspace Tree.RefreshDir"
+    },
+    "action:project.expandAll": {
+      "status": "integrated",
+      "evidence": "internal/app/tree_ops.go ExpandProjectAll and internal/app/tree.go ExpandAll; Project View header and Cmd+="
+    },
+    "action:project.collapseAll": {
+      "status": "integrated",
+      "evidence": "internal/app/tree_ops.go CollapseProjectAll and internal/app/tree.go CollapseAll; Project View header and Cmd+-"
+    },
+    "action:project.showHistory": {
+      "status": "integrated",
+      "evidence": "internal/app/history.go ShowHistorySelected and internal/app/tree_ops.go Local History submenu; history_list_dir and history_restore"
+    },
+    "action:project.option.showHidden": {
+      "status": "integrated",
+      "evidence": "internal/app/project_view.go SetProjectTreeOption; internal/workspace Tree.IncludeHidden and SortEntries refresh; internal/app/project_view_test.go TestProjectTreeViewOptionsFilterSortAndCompact"
+    },
+    "action:project.option.showExcluded": {
+      "status": "integrated",
+      "evidence": "internal/app/tree.go entryVisible; internal/app/project_view_test.go TestProjectTreeViewOptionsFilterSortAndCompact"
+    },
+    "action:project.option.showMembers": {
+      "status": "integrated",
+      "evidence": "internal/app/project_view.go projectTree members loading and internal/app/tree.go appendMembers; internal/app/project_view_test.go TestProjectTreeOpenChangedScratchAndMembers"
+    },
+    "action:project.option.compact": {
+      "status": "integrated",
+      "evidence": "internal/app/tree.go packageChain and internal/app/project_view_test.go TestProjectTreeViewOptionsFilterSortAndCompact"
+    },
+    "action:project.option.showRootPaths": {
+      "status": "partial",
+      "evidence": "internal/app/tree.go newRootNode renders the tildified root path; screenshot-level verification is pending"
+    },
+    "action:project.option.foldersFirst": {
+      "status": "partial",
+      "evidence": "internal/app/tree.go pathLess implements folders-first ordering; a direct ordering assertion is pending"
+    },
+    "action:project.option.autoscrollFromSource": {
+      "status": "partial",
+      "evidence": "internal/app/project_view.go follows the active file and hides Locate while enabled; an end-to-end reveal assertion is pending"
+    },
+    "action:project.option.autoscrollToSource": {
+      "status": "partial",
+      "evidence": "internal/app/view.go opens the clicked tree file in the editor when enabled; focus-following behavior is pending"
+    },
+    "action:project.option.singleClickOpen": {
+      "status": "partial",
+      "evidence": "internal/app/view.go opens a file on one click when enabled; direct UI coverage is pending"
+    },
+    "action:project.option.singleClickExpand": {
+      "status": "partial",
+      "evidence": "internal/app/view.go expands a directory on one click when enabled; direct UI coverage is pending"
+    },
+    "action:project.option.previewTab": {
+      "status": "partial",
+      "evidence": "internal/app/view.go opens a preview and promotes it on double click; Project View preview-tab UI coverage is pending"
+    },
+    "action:project.viewMode.project": {
+      "status": "integrated",
+      "evidence": "internal/app/tree.go SetMode project; internal/app/project_view_test.go OpenIDEA action registry test"
+    },
+    "action:project.viewMode.projectFiles": {
+      "status": "integrated",
+      "evidence": "internal/app/tree.go SetMode projectFiles; internal/app/project_view_test.go TestProjectTreeOpenChangedScratchAndMembers"
+    },
+    "action:project.viewMode.openFiles": {
+      "status": "integrated",
+      "evidence": "internal/app/tree.go SetMode openFiles and SetFilteredFiles; internal/app/project_view_test.go TestProjectTreeOpenChangedScratchAndMembers"
+    },
+    "action:project.viewMode.changedFiles": {
+      "status": "integrated",
+      "evidence": "internal/app/tree.go SetMode changedFiles and internal/app/vcs.go filtered-file sync; internal/app/project_view_test.go"
+    },
+    "action:project.viewMode.scratches": {
+      "status": "integrated",
+      "evidence": "internal/app/tree.go SetScratchRoot and Scratches mode; internal/app/project_view_test.go TestProjectTreeOpenChangedScratchAndMembers"
+    },
+    "action:project.viewMode.unity": {
+      "status": "partial",
+      "evidence": "internal/app/project_view.go detects ProjectSettings/ProjectVersion.txt and enables Unity mode; Unity-project UI coverage is pending"
+    },
+    "action:project.sortBy.name": {
+      "status": "integrated",
+      "evidence": "internal/app/tree.go default Name sorting and natural numeric comparison; internal/app/project_view_test.go"
+    },
+    "action:project.sortBy.type": {
+      "status": "partial",
+      "evidence": "internal/app/tree.go pathLess sorts by extension; direct UI coverage is pending"
+    },
+    "action:project.sortBy.modified": {
+      "status": "integrated",
+      "evidence": "internal/app/tree.go pathLess; internal/app/project_view_test.go TestProjectTreeSortsByModificationTime"
+    },
+    "action:workspace.create": {
+      "status": "integrated",
+      "evidence": "internal/app/project_workspace.go OpenNewWorkspace, saveWorkspaceDialog and workspace_create; base.workspace.created opens the real container and internal/app/project_workspace_test.go covers the request"
+    },
+    "action:workspace.manage": {
+      "status": "integrated",
+      "evidence": "internal/app/project_workspace.go OpenManageWorkspace and workspace_update preserve the container; base.workspace.managed renames it and links a third real project"
+    },
+    "action:workspace.open": {
+      "status": "partial",
+      "evidence": "internal/app/project_workspace.go OpenWorkspace selects a folder and uses the shared project-switch path; internal/app/project_workspace_test.go covers workspace RPC lifecycle, but the native folder-picker callback has no automated gate"
+    },
+    "action:workspace.removeProject": {
+      "status": "integrated",
+      "evidence": "internal/app/project_workspace.go RemoveWorkspaceProject and updateWorkspaceProjects keep the container state root; base.workspace.removed and internal/app/project_workspace_test.go"
     },
     "action:navigate.toggleBookmarkWithMnemonic": {
       "status": "partial",
@@ -165,24 +617,16 @@
       "status": "partial",
       "evidence": "internal/app/bookmarks.go JumpBookmarkMnemonic via Ctrl+digit; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go"
     },
-    "action:navigate.toggleBookmark${d}": {
-      "status": "partial",
-      "evidence": "internal/app/bookmarks.go ToggleBookmarkMnemonic bound to Ctrl+Shift+digit for 0-9; base.bookmark.mnemonic; internal/app/bookmarks_test.go"
-    },
-    "action:navigate.gotoBookmark${d}": {
-      "status": "partial",
-      "evidence": "internal/app/bookmarks.go JumpBookmarkMnemonic bound to Ctrl+digit for 0-9; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go"
-    },
     "action:toolwindow.bookmarks": {
       "status": "integrated",
       "evidence": "internal/app/app.go Cmd+2 ToggleBookmarksWindow; cmd/goidea/main.go 显示书签; internal/app/view.go sidebar tab; base.bookmark.window"
     },
     "action:bookmarks.newList": {
-      "status": "partial",
+      "status": "integrated",
       "evidence": "internal/app/bookmarks.go addBookmarkList, renameBookmarkList, removeBookmarkList and newListDialog; tool-window chips 重命名/删除; the move chooser's 新建列表… creates a list and moves the bookmark into it; cmd/goidea/main.go 新建书签列表…; base.bookmark.list, base.bookmark.listOps, base.bookmark.move; internal/app/bookmarks_test.go"
     },
     "action:bookmarks.toggleFileBookmark": {
-      "status": "partial",
+      "status": "integrated",
       "evidence": "internal/app/bookmarks.go ToggleFileBookmark and ToggleFolderBookmark with PathBookmark.Dir, pathBookmarkLabel; project tree rows chip 书签 in internal/app/view.go; cmd/goidea/main.go 切换文件书签; base.bookmark.file, base.bookmark.folder; internal/app/bookmarks_test.go"
     },
     "action:navigate.toggleBookmark": {
@@ -235,7 +679,7 @@
     },
     "toolwindow:notifications": {
       "status": "partial",
-      "evidence": "internal/app/notifications.go balloons (3 newest, 10 s fade, sticky errors, hover pause, keyed replacement, actions) and notificationsView history with unread badge and Clear All; build results and failures notify; base.notify.* in the e2e; Settings › Appearance & Behavior › Notifications with the global balloon switch, per-group Balloon/Sticky/No popup and Log, and the balloon's Don't Show Again; missing sound and verbatim plugin text"
+      "evidence": "internal/app/notifications.go balloons (3 newest, 10 s fade, sticky errors, hover pause, keyed replacement, actions) and notificationsView history with unread badge and Clear All; build results and failures notify; plugin notifications preserve their verbatim multiline body, grouping, actions and 20-second timeout; base.notify.* in the e2e; Settings › Appearance & Behavior › Notifications with the global balloon switch, per-group Balloon/Sticky/No popup and Log, and the balloon's Don't Show Again; sound remains pending"
     },
     "toolwindow:services": {
       "status": "partial",
@@ -287,7 +731,7 @@
     },
     "feature:search": {
       "status": "partial",
-      "evidence": "base.search.done, base.search.files, base.search.matches and searchEverywhere.*; internal/app/se.go Search Everywhere tabs, search history and recent files/actions; se_filters.go and se_filters_test.go cover the filter funnel; recent_navigation.go adds Recent Files and Recent Locations; the Endpoints section, double-Shift and full Switcher behavior are pending"
+      "evidence": "base.search.done, base.search.files, base.search.matches and searchEverywhere.*; internal/app/se.go Search Everywhere tabs, search history and recent files/actions; se_filters.go and se_filters_test.go cover the filter funnel; recent_navigation.go adds Recent Files, Recent Locations and an open-file Switcher with guarded Delete; double-Shift and Switcher Ctrl-release behavior are tested. The Endpoints section still depends on plugin endpoint enumeration"
     },
     "feature:project-tree": {
       "status": "partial",
@@ -341,9 +785,17 @@
       "status": "partial",
       "evidence": "base.settings.theme; internal/app/settings_pages.go settingsAppearanceBody Theme row (Select + Sync with OS checkbox); the preferred-themes gear is not ported"
     },
-    "settings-page:editor.font": {
+    "settings-page:general": {
       "status": "partial",
-      "evidence": "internal/app/settings_pages.go settingsFontBody Size NumberInput 10.0-24.0 px over Preferences.FontSize; typeface, spacing and ligatures are not ported"
+      "evidence": "internal/app/settings_window.go registers OpenIDEA's System Settings parent and internal/app/settings_pages.go settingsSystemBody exposes Reopen projects on startup over Preferences.Startup, the local data directory and Show in Finder; settings_test.go TestSettingsSystemReopenProjectStagesAndApplies and customize_test.go TestStartupIsWelcomeUnlessReopenChosen cover the staged preference and startup behavior; the remaining Exit, Desktop, Caches and updates choices are not ported"
+    },
+    "settings-page:general.dateFormats": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_pages.go settingsDateFormatsBody mirrors behavior.tsx DateFormatRows: Override system date and time format, the date pattern, Use 24-hour time format, Use pretty formatting and a live preview over Preferences.DateFormat; internal/app/dateformat.go follows Intl.DateTimeFormat with MyGo's system region and CLDR formats, and shares the result with Git Log, Local History, Code Vision and Git blame; dateformat_test.go TestSystemDateFormatMatchesIntlRegionalPatterns and TestFormatAppTimestampPrettyAndClock plus settings_test.go TestSettingsDateFormatsStageApplyAndReset prove the page and persistence"
+    },
+    "settings-page:editor.font": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_pages.go settingsFontBody renders OpenIDEA's Editor › Font controls in MyGo: installed-family selector with the bundled JetBrains Mono, monospace-only filter, size, line height, ligatures, main weight, fallback family and a live editable preview; settings_window.go stages every choice and previews tabs before Apply, then persists Preferences.Font and FontSize; TestSettingsFontStagesPreviewAndPersistsEveryTypographyChoice verifies defaults, preview, Apply and the stored file"
     },
     "settings-page:editor.general": {
       "status": "partial",
@@ -377,13 +829,41 @@
       "status": "partial",
       "evidence": "internal/app/app.go openPreview and openFileWith with internal/app/tabs.go previewIndex, replacePreviewTab, dropPreviewTabs and promoteTab: a click in a results list opens one italic preview tab that the next such click replaces in place, an edit (internal/app/app.go syncPump), a pin (internal/app/tabs.go setTabPinned) or an explicit open promotes it, a regular open closes it, and Preferences.Tabs.NoPreviewTab turns it off from Editor > Editor Tabs Opening Policy (internal/app/settings_pages.go, internal/app/settings_window.go); the entry points are Problems rows and file headers (internal/app/problems.go), Find hits (internal/app/view.go) and Find Usages rows (internal/app/usages.go), and a double-click opens the regular tab; proven by tabs_test.go TestPreviewTabPromotesAndIsNotPinned and settings_test.go TestSettingsEditorTabsStageAndApply; the saved session does not carry which tab was a preview, so after a restart it opens as a regular tab"
     },
+    "setting:general.dateFormat.overrideSystem": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_pages.go settingsDateFormatsBody toggles Preferences.DateFormat.OverrideSystem; internal/app/dateformat.go switches between the custom pattern and MyGo's system region; dateformat_test.go and settings_test.go TestSettingsDateFormatsStageApplyAndReset"
+    },
+    "setting:general.dateFormat.pattern": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_pages.go settingsDateFormatsBody edits Preferences.DateFormat.Pattern with OpenIDEA's yyyy, yy, MMMM, MMM, MM, M, dd and d placeholders; internal/app/dateformat.go formatDatePattern and TestDateFormatPatternUsesOpenIDEAPlaceholders"
+    },
+    "setting:general.dateFormat.pretty": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_pages.go settingsDateFormatsBody toggles Preferences.DateFormat.Pretty; internal/app/dateformat.go formatAppTimestamp supplies Moments ago, N min ago, Today and Yesterday; TestFormatAppTimestampPrettyAndClock and TestSettingsDateFormatsStageApplyAndReset"
+    },
+    "setting:general.dateFormat.use24Hour": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_pages.go settingsDateFormatsBody toggles Preferences.DateFormat.Use24Hour; internal/app/dateformat.go formatAppClock writes 12- or 24-hour times and formatSystemClock follows the system hour cycle without an override; TestFormatAppTimestampPrettyAndClock and TestSystemDateFormatMatchesIntlRegionalPatterns"
+    },
+    "setting:general.reopenLastProject": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_pages.go settingsSystemBody stages Reopen projects on startup; internal/app/settings_window.go persists Preferences.Startup and customize_test.go TestStartupIsWelcomeUnlessReopenChosen verifies the effective startup choice; settings_test.go TestSettingsSystemReopenProjectStagesAndApplies covers Apply and Reset"
+    },
+    "setting:vcs.issueNavigation": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_issue_navigation.go and Preferences.VCS.IssueNavigation carry OpenIDEA's Issue ID regular expressions and Issue Link templates; internal/app/settings_window.go stages, applies, persists and resets them, while internal/app/issue_links.go applies earliest-match-wins capture expansion and HTTP(S) links in Git Log, commit details and blame; issue_links_test.go and settings_test.go TestSettingsIssueNavigationStagesAppliesAndEdits and TestIssueNavigationEditorCommitsWithEnterAndCancelsWithEscape"
+    },
     "settings-page:languages.java": {
       "status": "partial",
       "evidence": "internal/app/settings_ui.go javaToolsSection lists the real JDT LS/java-debug state with install and cancel; JDK selection is not ported"
     },
     "settings-page:keymap": {
-      "status": "partial",
-      "evidence": "internal/app/settings_pages.go settingsKeymapBody lists every registry shortcut; rebinding keys is not ported"
+      "status": "integrated",
+      "evidence": "internal/app/settings_pages.go settingsKeymapBody lists every registry action and its bindings; internal/app/settings_keymap.go adds the native Set Keyboard Shortcut recorder, normalized chord capture, conflict warnings, cancel and staged Save, while Remove restores defaults and Settings Apply persists overrides; action_test.go TestKeymapDefaultsAndOverrides and TestKeymapConflicts plus TestSettingsKeymapRecorderStagesAndPersistsABinding cover the flow"
+    },
+    "settings-page:vcs.issueNavigation": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_window.go registers Version Control › Issue Navigation and internal/app/settings_issue_navigation.go renders OpenIDEA's Issue ID/Issue Link table, Add, Remove, Edit, Enter to commit, Escape to cancel, invalid-regex feedback and JIRA, YouTrack and GitHub presets over Preferences.VCS.IssueNavigation; internal/app/issue_links.go links matching issue ids in Git Log, commit details and blame, while issue_links_test.go and settings_test.go TestSettingsIssueNavigationStagesAppliesAndEdits and TestIssueNavigationEditorCommitsWithEnterAndCancelsWithEscape prove the flow"
     },
     "feature:app": {
       "status": "partial",
@@ -401,6 +881,14 @@
       "status": "integrated",
       "evidence": "lsp.references.count, lsp.references.done"
     },
+    "action:find.showUsageResults": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go registers OpenIDEA's find.showUsageResults and the code.showUsageResults alias; internal/app/action.go dispatches it to the same exact-result transfer used by Show Usages, while lsp.usagesPopup.transfer proves the native popup hands all rows to Find Usages without issuing a second reference search"
+    },
+    "action:find.showUsages": {
+      "status": "integrated",
+      "evidence": "internal/app/usage_popup.go implements the native Show Usages popup behind OpenIDEA's find.showUsages action and ⌥⌘F7, with streamed references, filename and source-line speed search, scope widening, access filters, source preview and transfer to Find Usages; lsp.usagesPopup.open and lsp.usagesPopup.transfer pass against real JDT, and usage_popup_test.go covers navigation, filtering, persistence, stale responses, early streaming and rendering"
+    },
     "action:vcs.commit": {
       "status": "integrated",
       "evidence": "base.commit.id, base.commit.staged, base.commit.clean; the tab menu's Commit File… opens the same dialog with commitState.only, which keeps every other change out and includes a new file, proven by commit_test.go TestCommitFileIncludesOnlyItsFile; the project view's Git › Commit… opens the dialog with commitState.scope so only changes under the directory are listed and committed, proven by commit_test.go TestCommitDirKeepsChangesUnderTheDirectory"
@@ -410,24 +898,24 @@
       "evidence": "internal/app/workbench.go tabGitMenu's Add stages the tab's unversioned file through internal/app/vcs.go StageChange over vcs_stage, and the project view's Git › Add stages the selected unversioned file the same way via statusFor, proven by commit_test.go TestStatusForFindsAChangedFile and the base-phase stage checks; limits: the changes view offers Stage/Unstage rather than a separate Add action elsewhere"
     },
     "action:vcs.annotate": {
-      "status": "partial",
-      "evidence": "internal/app/annotate.go ShowAnnotate over vcs_blame with the tab's buffer text, grouping consecutive lines of one commit, opened from the tab menu's Git › Annotate and the project view's Git › Annotate with Git Blame; annotate_test.go covers the grouping and line ranges; limits: the blame is a read-only sheet rather than OpenIDEA's gutter annotations and line hover popup"
+      "status": "integrated",
+      "evidence": "internal/app/annotate.go ShowAnnotate toggles a per-editor vcs_blame gutter with commit tints, scroll/fold/soft-wrap geometry, same-commit hover highlighting and an 800 ms edit refresh; clicking opens the commit and the context menu offers Show Commit in Git Log, Copy Revision Number and Close Annotations. Hovering lazily loads vcs_log and shows full author, email, formatted date and complete commit message with Issue Navigation links. annotate_test.go covers grouping, toggling, rich commit loading and the native author/date gutter; offscreen WORKBENCH_SHOT verifies the complete dynamic-width columns"
     },
     "action:vcs.showDiff": {
       "status": "integrated",
       "evidence": "internal/app/diff.go ShowDiff over vcs_file_at with the buffer text, opened from the changes view, the tab menu's Git › Show Diff and the project view's Git › Show Diff; SmokeDiff"
     },
     "action:vcs.localHistory": {
-      "status": "partial",
-      "evidence": "internal/app/history.go ShowHistory over history_list_dir, RestoreHistoryEntry over history_restore and ConfirmHistoryLabel over history_put_label, with the timeline dialog (internal/app/history.go historyDialog); base.files.historyRestore proves a saved file's older snapshot restores and base.files.historyLabel proves a named point lists, both on the real server in the Main Gate's files phase; the editor's context menu carries Local History › Show History / Put Label… (internal/app/editor_menu.go); the label-time group restore (LocalHistory.tsx's snapshotsBefore) is RestoreHistoryLabelTime; limits: history_list and history_content are desktop-only in the pinned server, so the diff editor and revision preview are not available"
+      "status": "integrated",
+      "evidence": "internal/app/history.go ShowHistory loads file snapshots through history_list and labels/deleted paths through history_list_dir, previews one revision against the worktree or two snapshots through history_content, and restores through history_restore; historyDialog renders the native timeline, deleted-path styling, multi-revision comparison and label-time group restore; branch tests cover scoped favorites and deleted-branch restore, history_test.go covers revisionRange, folder labels, content loading, merged file/list_dir data and the native dialog; base.files.historyRestore and base.files.historyLabel run on the real server"
     },
     "action:vcs.rollback": {
       "status": "integrated",
       "evidence": "internal/app/vcs.go AskRollback and ConfirmRollback over vcs_discard with a confirmation, from the changes view, the tab menu's Git › Rollback… and the project view's Git › Rollback…; SmokeStage"
     },
     "action:vcs.branches": {
-      "status": "partial",
-      "evidence": "internal/app/branch.go ToggleBranches and ShowBranches over vcs_branch_info/vcs_branches with checkout over vcs_checkout, from the title-bar widget and the tab menu's Git › Branches…; SmokeBranch; limits: branch create/delete/rename inside the popup is not ported"
+      "status": "integrated",
+      "evidence": "internal/app/branch.go ToggleBranches and ShowBranches render a native branch list from vcs_branch_info/vcs_branches with checkout, create, update, push, merge, rebase, compare, working-tree diff, history, scoped favorite, rename, local delete + Restore/View Commits/Delete Tracked Branch notification and confirmed remote delete; rename uses vcs_rename_branch, local delete vcs_delete_branch and restore vcs_restore_branch; branch_test.go covers validation, prompts, restore actions, favorites and the native rename dialog; SmokeBranch exercises the real backend"
     },
     "action:run.run": {
       "status": "integrated",
@@ -583,7 +1071,7 @@
     },
     "action:diff.compareWith": {
       "status": "partial",
-      "evidence": "internal/app/workbench.go tabMenu's Compare With… over internal/app/diff.go PickCompareFile (mygo.Dialog.Open from the tab's folder) then CompareTabWithFile, which compares the chosen file with the tab's buffer text so unsaved edits count, through diffRows and finishCompare (a guarded m.post, so a newer compare wins) into the read-only diffDialog titled by diffTitle; also reachable from the tab menu only, proven by diff_test.go TestDiffRowsCountsBothSides, TestDiffTitleNamesEachCompare and TestCompareWithoutATabOpensNothing; limits: a row list rather than OpenIDEA's editable two-pane diff editor, the project tree's Compare With… is not ported, and the tab menu's Git submenu is not ported"
+      "evidence": "internal/app/workbench.go tabMenu's Compare With… over internal/app/diff.go PickCompareFile (mygo.Dialog.Open from the tab's folder) then CompareTabWithFile, which compares the chosen file with the tab's buffer text so unsaved edits count, through diffRows and finishCompare (a guarded m.post, so a newer compare wins) into the read-only diffDialog titled by diffTitle; the tab menu's Git submenu is present alongside this entry, proven by diff_test.go TestDiffRowsCountsBothSides, TestDiffTitleNamesEachCompare and TestCompareWithoutATabOpensNothing; limits: a row list rather than OpenIDEA's editable two-pane diff editor and the project tree's Compare With… is not ported"
     },
     "action:diff.compareWithClipboard": {
       "status": "partial",
@@ -654,8 +1142,8 @@
       "evidence": "internal/app/tabs.go CloseOtherTabs, CloseTabsToLeft/Right and CloseUnmodifiedTabs; internal/app/workbench.go tabMenu; internal/app/tabs_test.go"
     },
     "action:editor.reopenClosedTab": {
-      "status": "partial",
-      "evidence": "internal/app/tabs.go closedTab/rememberClosed/nextClosed/insertTabAt (maxClosedTabs 50, newest poppable last, open files skipped) and ReopenClosedTab; internal/app/app.go openWith openSpec at/pinned, removeTab records, removeTabNow skips the trimmed preview; internal/app/commands.go Reopen Closed Tab with no default key, as OpenIDEA's IntelliJ macOS keymap leaves Shift+Cmd+T to Go to Test; internal/app/tabs_test.go TestClosedTabsKeepTheNewestAndReopenNewestFirst, TestInsertTabAtFollowsThePinnedGroup, TestTabForPathIgnoresTabsWithoutADocument. Undo history and caret of a reopened document are not restored"
+      "status": "integrated",
+      "evidence": "internal/app/tabs.go closedTab/rememberClosed/nextClosed/insertTabAt (maxClosedTabs 50, newest poppable last, open files skipped) and ReopenClosedTab restore the original position, pin state, selections, scroll offset and shared undo history while retaining the document; internal/app/app.go removeTab records and removeTabNow skips the trimmed preview; internal/app/commands.go Reopen Closed Tab has no default key, as OpenIDEA's IntelliJ macOS keymap leaves Shift+Cmd+T to Go to Test; internal/app/tabs_test.go TestClosedTabsKeepTheNewestAndReopenNewestFirst, TestReopenClosedTabRestoresSelectionsAndUndoHistory, TestInsertTabAtFollowsThePinnedGroup and TestTabForPathIgnoresTabsWithoutADocument cover the native behavior"
     },
     "action:editor.splitRight": {
       "status": "partial",
@@ -825,9 +1313,13 @@
       "status": "integrated",
       "evidence": "internal/app/goto_line.go and overlay_registry.go; TestRecentNavigationAndGotoLineRenderOffscreen draws the popup; goto_line_test.go covers submission, validation and cancellation"
     },
+    "overlay:code-insight.usagesPopup": {
+      "status": "integrated",
+      "evidence": "internal/app/overlay_registry.go registers code-insight.usagesPopup; internal/app/usage_popup.go renders the caret-anchored native speed-search popup with scope, read/write filters, bounded scrolling and a 60 ms-debounced source preview; TestUsagePopupRendersAndSpeedSearches, TestEditorCaretAnchorUsesScrolledLineTop and TestUsagePopupPreviewLoadIsDebounced cover the native interaction, while lsp.usagesPopup.open and lsp.usagesPopup.transfer prove the real JDT path"
+    },
     "action:navigate.recentFiles": {
-      "status": "partial",
-      "evidence": "internal/app/recent_navigation.go and recent_navigation_view.go; Navigate or Cmd+E, previous-file selection, filter, tool windows and Show edited only; internal/app/recent_navigation_test.go; multi-select, opening to the side, Delete for recent files, and the separate Switcher are pending"
+      "status": "integrated",
+      "evidence": "internal/app/recent_navigation.go and recent_navigation_view.go implement Navigate or Cmd+E, previous-file selection, speed search, tool windows, single-click activation, Show edited only, guarded Delete close plus remove_recent, Shift/Cmd multi-selection, Enter in list order, Shift+Enter opening to the side, and OpenIDEA's Ctrl+Tab Switcher. The Switcher has no speed-search field, lists open files plus Agent Session/Home editors, releases Ctrl to activate, accepts native Enter and navigation keys, and walks from files into tool windows across both columns; TestRecentFilesShowsPreviousAndEditedFiles, TestRecentFilesDeleteForgetsTheSelectedFile, TestRecentFilesKeyboardRangeAndModifierClicks, TestRecentFilesEnterOpensSelectionInListOrder, TestRecentFilesShiftEnterOpensInSideGroup, TestRecentFilesShiftEnterCopiesTheOnlyFocusedTab, TestSwitcherListsOnlyOpenFilesInActivationOrder, TestSwitcherListsAgentEditorsAndFiltersTheirTitles, TestSwitcherNavigationWrapsAcrossFilesAndTools, TestSwitcherHasNoSpeedSearchAndAcceptsNativeKeys and TestSwitcherOpensSelectionWhenControlIsReleased cover the native UI"
     },
     "action:navigate.recentLocations": {
       "status": "partial",
@@ -880,6 +1372,698 @@
     "overlay:workbench.backgroundTasks": {
       "status": "partial",
       "evidence": "internal/app/tasks.go shows updater task progress and cancellation from the status bar; registration for other background task producers is pending"
+    },
+    "action:view.backgroundTasks": {
+      "status": "integrated",
+      "evidence": "internal/app/tasks.go ShowBackgroundTasks opens the registered workbench.backgroundTasks native popup regardless of status-bar visibility and renders No background tasks when the queue is empty; TestBackgroundTasksOpenEmptyStopAllAndToolWindowCloseContent"
+    },
+    "action:workbench.stopBackgroundProcesses": {
+      "status": "integrated",
+      "evidence": "internal/app/tasks.go StopBackgroundProcesses cancels one task directly, opens a chooser for several cancellable tasks with Stop All, and reports status when none exist; the action carries OpenIDEA's Cmd+Shift+F2 binding; TestBackgroundTasksOpenEmptyStopAllAndToolWindowCloseContent and TestOpenIDEAShellShortcuts"
+    },
+    "action:view.toggleCompactMode": {
+      "status": "integrated",
+      "evidence": "internal/app/appearance_runtime.go persists Compact Mode and internal/app/tokens.go applies OpenIDEA's :root[data-compact] chrome, header, tab, row, button and input sizes; View › Appearance exposes a checked toggle and keeping the toolbar off still renders the compact document header; TestCompactModeChangesChromeAndKeepsCompactHeaderWithToolbarOff"
+    },
+    "action:view.navigationBarTop": {
+      "status": "integrated",
+      "evidence": "internal/app/navigation_bar.go SetNavigationBarPosition(\"top\") persists the global setting and renders the same project › directory › file › symbol bar above the editor while leaving the status widget independent; View › Appearance › Navigation Bar › Top and the action registry use the upstream id; TestNavigationBarPlacementAndStatusWidgetPersistence"
+    },
+    "action:view.navigationBarStatusBar": {
+      "status": "integrated",
+      "evidence": "internal/app/navigation_bar.go defaults to OpenIDEA's statusBar placement, renders it through the Navigation Bar status item and restores it through View › Appearance › Navigation Bar › Status Bar; navigationBarPosition normalizes malformed settings to statusBar and TestNavigationBarPlacementAndStatusWidgetPersistence proves persistence"
+    },
+    "action:view.navigationBarHidden": {
+      "status": "integrated",
+      "evidence": "internal/app/navigation_bar.go persists Don't Show as hidden and removes the bar from both the top and status-bar placements; View › Appearance › Navigation Bar › Don't Show exposes the checked action; TestNavigationBarPlacementAndStatusWidgetPersistence"
+    },
+    "action:view.toggleStatusBarWidget": {
+      "status": "integrated",
+      "evidence": "internal/app/statuscontrib.go resolves a named StatusItem, persists one appearance.statusBarWidgets override and invalidates the bar; internal/app/menu.go lists named built-in and plugin widgets under View › Appearance › Status Bar Widgets, and the status-bar context menu uses the same rows; TestNavigationBarPlacementAndStatusWidgetPersistence and TestStatusBarContextMenuTogglesWidgets"
+    },
+    "action:toolwindow.closeContent": {
+      "status": "partial",
+      "evidence": "internal/app/toolwindow.go closes the active terminal content tab before hiding the tool window, synchronizes the dock when the last tab closes, and carries OpenIDEA's Cmd+W and Ctrl+Shift+F4 bindings; TestBackgroundTasksOpenEmptyStopAllAndToolWindowCloseContent and TestOpenIDEAShellShortcuts; Find and Run do not yet expose multiple content tabs of their own"
+    },
+    "action:file.toggleReadOnly": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_file_actions.go calls OpenIDEA fs_set_writable and updates every tab sharing the document; internal/app/commands.go and menu.go expose the action; TestToggleReadOnlyRequiresARealFileDocument, TestSetFileWritableUpdatesEveryTabSharingTheDocument and TestSetFileWritableFailureLeavesTheDocumentEditable"
+    },
+    "action:find.inFile": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go runs the native MyGo editor Find bar, action.go keeps it distinct from view.find, and the Edit menu exposes it; TestFileFindActionsUseTheNativeFindBar and TestFileFindActionsKeepTheirOpenIDEAIdentity"
+    },
+    "action:find.replaceInFile": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_keys.go binds Cmd+R to editor.FindReplace and commands.go runs it through the action registry; TestIntellijEditorBindingsMatchOpenIDEA and TestFileFindActionsUseTheNativeFindBar"
+    },
+    "action:find.next": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go runs editor.FindNext and the IntelliJ macOS Cmd+G binding is registered; TestFileFindActionsUseTheNativeFindBar and TestFileFindActionsKeepTheirOpenIDEAIdentity"
+    },
+    "action:find.previous": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go runs editor.FindPrevious and the IntelliJ macOS Cmd+Shift+G binding is registered; TestFileFindActionsUseTheNativeFindBar and TestFileFindActionsKeepTheirOpenIDEAIdentity"
+    },
+    "feature:agents": {
+      "status": "integrated",
+      "evidence": "internal/app/agents.go, agents_view.go, agent_composer.go, agent_editor.go, agent_markdown.go, agent_workspace.go and agent_registry_settings.go implement OpenIDEA's task home, editor/tool-window placement, groups, selection, search, conversation timeline, composer, changes, registry, policy and MCP settings over the real agent RPCs; agents_test.go, agent_*_test.go and the agents e2e phase cover the surface"
+    },
+    "action:agents.addAgent": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go opens Settings › Agents › Coding Agents (agents.list) over AgentRegistryPage; internal/app/agent_registry_settings.go and TestAgentRegistryPageShowsProvidersAndLaunchSettings"
+    },
+    "action:agents.archiveTasks": {
+      "status": "integrated",
+      "evidence": "internal/app/agent_actions.go and agent_workspace.go archive the selected tasks sequentially and refresh with the backend archive RPC; TestAgentArchiveManyIsSequentialAndAggregatesErrors"
+    },
+    "action:agents.closeAndNewTask": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go and agents.go close the active conversation and open New Task; internal/app/agents_test.go"
+    },
+    "action:agents.closeTask": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go and agents.go close the active conversation while keeping its backend task; internal/app/agents_test.go"
+    },
+    "action:agents.copyReplyMarkdown": {
+      "status": "integrated",
+      "evidence": "internal/app/agent_actions.go copies the selected reply's original Markdown; TestAgentCompatibilityActionsAreRegistered and TestAgentActionsAcceptOpenIDEAArguments"
+    },
+    "action:agents.deleteTasks": {
+      "status": "integrated",
+      "evidence": "internal/app/agents.go and agent_workspace.go require confirmation, delete selected tasks and close their tabs; internal/app/agent_organize_test.go and agent_editor_test.go"
+    },
+    "action:agents.dockTask": {
+      "status": "integrated",
+      "evidence": "internal/app/agent_actions.go opens the task in the Agents tool window; TestAgentTaskToolWindowDoesNotCreateEditorTabs and TestAgentActionsAcceptOpenIDEAArguments"
+    },
+    "action:agents.findInConversation": {
+      "status": "integrated",
+      "evidence": "internal/app/agents.go implements the conversation find bar and match count; TestAgentFindCountsEveryVisiblePartOfConversation and TestAgentFindBarTypesStepsAndCloses"
+    },
+    "action:agents.forkReply": {
+      "status": "integrated",
+      "evidence": "internal/app/agent_actions.go forks the conversation at a reply through the backend; TestAgentCompatibilityActionsAreRegistered and TestAgentActionsAcceptOpenIDEAArguments"
+    },
+    "action:agents.forkTask": {
+      "status": "integrated",
+      "evidence": "internal/app/agent_actions.go and agents.go fork a task and add the returned task to the home; internal/app/agent_actions_test.go"
+    },
+    "action:agents.jumpToLatest": {
+      "status": "integrated",
+      "evidence": "internal/app/agent_actions.go scrolls the active conversation to its newest entry; TestAgentCompatibilityActionsAreRegistered"
+    },
+    "action:agents.mcpServers": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go opens Settings › Agents › External MCP Servers (agents.mcpServers); internal/app/agent_mcp_settings.go"
+    },
+    "action:agents.newTask": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go and agents.go open OpenIDEA's New Agent Task dialog; TestAgentCreatePromptAndPermissionRPCArguments"
+    },
+    "action:agents.newTaskGroup": {
+      "status": "integrated",
+      "evidence": "internal/app/agent_actions.go and agent_workspace.go create a named task group; internal/app/agent_organize_test.go"
+    },
+    "action:agents.openSampleConversations": {
+      "status": "integrated",
+      "evidence": "internal/app/agent_actions.go and agent_samples.go open deterministic long sample conversations without backend state; TestAgentSampleConversationsOpenLongTabsWithoutBackend"
+    },
+    "action:agents.openTask": {
+      "status": "integrated",
+      "evidence": "internal/app/agent_actions.go opens a task in its configured editor or tool-window location; TestAgentTaskDefaultsToEditorAndReusesItsTab and TestAgentActionsAcceptOpenIDEAArguments"
+    },
+    "action:agents.openTaskInEditor": {
+      "status": "integrated",
+      "evidence": "internal/app/agent_editor.go opens and reuses the task's editor tab; TestAgentTaskDefaultsToEditorAndReusesItsTab"
+    },
+    "action:agents.pinTasks": {
+      "status": "integrated",
+      "evidence": "internal/app/agent_actions.go and agent_workspace.go pin the selected tasks and persist their order; internal/app/agent_organize_test.go"
+    },
+    "action:agents.quoteReply": {
+      "status": "integrated",
+      "evidence": "internal/app/agent_actions.go inserts a quoted reply into the active composer; TestAgentCompatibilityActionsAreRegistered and TestAgentActionsAcceptOpenIDEAArguments"
+    },
+    "action:agents.regenerateReply": {
+      "status": "integrated",
+      "evidence": "internal/app/agent_actions.go retracts and regenerates the selected response through the backend; internal/app/agent_actions_test.go"
+    },
+    "action:agents.removeTaskGroup": {
+      "status": "integrated",
+      "evidence": "internal/app/agent_workspace.go requires confirmation before removing a group; TestAgentRemoveTaskGroupRequiresConfirmation"
+    },
+    "action:agents.renameTask": {
+      "status": "integrated",
+      "evidence": "internal/app/agent_actions.go and agents.go rename the selected task through the backend; internal/app/agent_actions_test.go"
+    },
+    "action:agents.renameTaskGroup": {
+      "status": "integrated",
+      "evidence": "internal/app/agent_workspace.go renames a task group and persists the organization; internal/app/agent_organize_test.go"
+    },
+    "action:agents.retractMessage": {
+      "status": "integrated",
+      "evidence": "internal/app/agent_actions.go opens the message editor and retracts the selected prompt through the backend; internal/app/agent_actions_test.go"
+    },
+    "action:agents.retryConversation": {
+      "status": "integrated",
+      "evidence": "internal/app/agent_actions.go reloads a failed conversation; internal/app/agent_actions_test.go"
+    },
+    "action:agents.sendToAgent": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go and agents.go send the editor selection and references to the active agent; internal/app/agent_composer_test.go"
+    },
+    "action:agents.showToolWindow": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go and agents.go open the right-side Agents window; TestAgentsToolWindowRendersOnTheRight"
+    },
+    "action:agents.unarchiveTasks": {
+      "status": "integrated",
+      "evidence": "internal/app/agent_actions.go and agent_workspace.go unarchive the selected tasks through the backend; internal/app/agent_actions_test.go"
+    },
+    "action:agents.undockTask": {
+      "status": "integrated",
+      "evidence": "internal/app/agent_actions.go moves the task into an editor tab; TestAgentTaskDefaultsToEditorAndReusesItsTab"
+    },
+    "action:agents.unpinTasks": {
+      "status": "integrated",
+      "evidence": "internal/app/agent_actions.go and agent_workspace.go unpin selected tasks through the backend; internal/app/agent_actions_test.go"
+    },
+    "action:agents.useEditor": {
+      "status": "integrated",
+      "evidence": "internal/app/agent_editor.go moves the active task into the editor and preserves its composer draft; TestAgentSessionLocationPreservesComposerDraft"
+    },
+    "action:agents.useToolWindow": {
+      "status": "integrated",
+      "evidence": "internal/app/agent_editor.go moves the active task into the right Agents window; TestAgentTaskToolWindowDoesNotCreateEditorTabs"
+    },
+    "settings-page:agents.chat": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_pages.go renders OpenIDEA's Chat settings over the persisted agent preferences; internal/app/settings_test.go and agent_composer_test.go"
+    },
+    "settings-page:agents.list": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_window.go registers Coding Agents with OpenIDEA's exact agents.list id and internal/app/agent_registry_settings.go renders providers, registry and launch settings; TestAgentRegistryPageShowsProvidersAndLaunchSettings"
+    },
+    "settings-page:agents.mcpServers": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_window.go registers External MCP Servers with OpenIDEA's exact agents.mcpServers id and internal/app/agent_mcp_settings.go renders user/workspace servers; internal/app/agent_registry_test.go"
+    },
+    "settings-page:agents.policy": {
+      "status": "integrated",
+      "evidence": "internal/app/agent_policy_settings.go implements OpenIDEA's Command Permissions page and policy validation; internal/app/settings_test.go and agent_registry_test.go"
+    },
+    "feature:project-tree": {
+      "status": "integrated",
+      "evidence": "internal/app/tree.go, project_tree_actions.go, tree_ops.go and project_view.go implement OpenIDEA's project view, linked roots, selection, inline operations, menu options, View Modes and sort orders over workspace and fs RPCs; tree_test.go, project_tree_actions_test.go, tree_ops_test.go, project_view_test.go and base.files.* cover the surface"
+    },
+    "action:navigate.selectIn": {
+      "status": "integrated",
+      "evidence": "internal/app/tree.go and tree_ops.go implement Alt+F1 Select In; base.files.select and TestProjectTreeOpenIDEAActionsAreRegistered"
+    },
+    "action:navigate.selectInProjectView": {
+      "status": "integrated",
+      "evidence": "internal/app/tree_ops.go reveals and selects the active file; base.files.select and TestProjectTreeOpenIDEAActionsAreRegistered"
+    },
+    "action:navigate.showFilePath": {
+      "status": "integrated",
+      "evidence": "internal/app/project_tree_actions.go opens OpenIDEA's path notification; TestProjectTreeOpenIDEAActionsAreRegistered"
+    },
+    "action:project.collapseAll": {
+      "status": "integrated",
+      "evidence": "internal/app/tree.go collapses every project root; TestProjectViewOpenIDEAActionsAndOptions and TestProjectTreeViewOptionsFilterSortAndCompact"
+    },
+    "action:project.compareWith": {
+      "status": "integrated",
+      "evidence": "internal/app/tree_ops.go and dircompare.go compare a selected tree entry with another path through the native compare view; base.files.compareDirs and TestProjectTreeOpenIDEAActionsAreRegistered"
+    },
+    "action:project.copy": {
+      "status": "integrated",
+      "evidence": "internal/app/tree_ops.go copies a file or directory through fs_copy with unsaved-buffer guards; TestProjectTreeOpenIDEAActionsAreRegistered and TestTreeMenuLabelsFlattenSubmenus"
+    },
+    "action:project.copyElement": {
+      "status": "integrated",
+      "evidence": "internal/app/tree_ops.go provides the OpenIDEA element-copy command and target; TestProjectTreeOpenIDEAActionsAreRegistered"
+    },
+    "action:project.copyPath": {
+      "status": "integrated",
+      "evidence": "internal/app/tree_ops.go copies absolute, relative and source-root paths; TestProjectTreeOpenIDEAActionsAreRegistered"
+    },
+    "action:project.copySourceRootPath": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go CopySelectedTreePath(\"source\") and tree_ops.go resolve the source root; TestProjectTreeOpenIDEAActionsAreRegistered"
+    },
+    "action:project.cut": {
+      "status": "integrated",
+      "evidence": "internal/app/tree_ops.go cuts a selected file or directory into the tree clipboard; TestTreeMenuFollowsTheSelection and TestTreeMenuLabelsFlattenSubmenus"
+    },
+    "action:project.delete": {
+      "status": "integrated",
+      "evidence": "internal/app/tree_ops.go confirms deletion, closes affected tabs and calls fs_delete; TestProjectTreeOpenIDEAActionsAreRegistered and tree_ops_test.go"
+    },
+    "action:project.expandAll": {
+      "status": "integrated",
+      "evidence": "internal/app/tree.go expands loaded folders; base.files.expand and TestProjectTreeOpenIDEAActionsAreRegistered"
+    },
+    "action:project.findInFolder": {
+      "status": "integrated",
+      "evidence": "internal/app/tree_ops.go opens project search scoped to the selected directory; TestProjectTreeOpenIDEAActionsAreRegistered and search_actions_test.go"
+    },
+    "action:project.move": {
+      "status": "integrated",
+      "evidence": "internal/app/tree_ops.go moves files and directories and updates open references; TestReferenceAwareTreeMoveUsesOpenIDEARPC and TestProjectTreeNewAndClipboardUseTheSelection"
+    },
+    "action:project.newFile": {
+      "status": "integrated",
+      "evidence": "internal/app/tree_ops.go creates a file in the selected directory through fs_create_file; TestProjectTreeNewAndClipboardUseTheSelection"
+    },
+    "action:project.newFolder": {
+      "status": "integrated",
+      "evidence": "internal/app/tree_ops.go creates a directory through fs_create_dir; TestProjectTreeNewAndClipboardUseTheSelection"
+    },
+    "action:project.open": {
+      "status": "integrated",
+      "evidence": "internal/app/tree.go opens the selected file and honours the project view's single-click and preview-tab options; tree_test.go and project_view_test.go"
+    },
+    "action:project.openInTerminal": {
+      "status": "integrated",
+      "evidence": "internal/app/project_tree_actions.go and terminal_actions.go open a shell at the selected directory; TestProjectTreeOpenIDEAActionsAreRegistered"
+    },
+    "action:project.option.autoscrollFromSource": {
+      "status": "integrated",
+      "evidence": "internal/app/project_view.go and tree.go keep the active editor file selected; TestProjectTreeViewOptionsFilterSortAndCompact"
+    },
+    "action:project.option.autoscrollToSource": {
+      "status": "integrated",
+      "evidence": "internal/app/project_view.go opens the selected tree file as the editor focus; TestProjectTreeViewOptionsFilterSortAndCompact"
+    },
+    "action:project.option.foldersFirst": {
+      "status": "integrated",
+      "evidence": "internal/app/tree.go sorts folders first according to OpenIDEA's option; TestProjectTreeViewOptionsFilterSortAndCompact"
+    },
+    "action:project.option.previewTab": {
+      "status": "integrated",
+      "evidence": "internal/app/project_view.go and tabs.go route single-click opens through the preview tab; TestProjectTreeViewOptionsFilterSortAndCompact"
+    },
+    "action:project.option.showRootPaths": {
+      "status": "integrated",
+      "evidence": "internal/app/tree.go renders root paths from the persisted project-view option; TestProjectTreeViewOptionsFilterSortAndCompact"
+    },
+    "action:project.option.singleClickExpand": {
+      "status": "integrated",
+      "evidence": "internal/app/tree.go expands a directory on a single click when enabled; TestProjectTreeViewOptionsFilterSortAndCompact"
+    },
+    "action:project.option.singleClickOpen": {
+      "status": "integrated",
+      "evidence": "internal/app/tree.go opens a file on a single click when enabled; TestProjectTreeViewOptionsFilterSortAndCompact"
+    },
+    "action:project.paste": {
+      "status": "integrated",
+      "evidence": "internal/app/tree_ops.go pastes copied or cut entries through fs_copy and refreshes affected tabs; TestProjectTreeNewAndClipboardUseTheSelection"
+    },
+    "action:project.reloadFromDisk": {
+      "status": "integrated",
+      "evidence": "internal/app/tree_ops.go refreshes the selected subtree from disk; base.files.reload and TestProjectTreeOpenIDEAActionsAreRegistered"
+    },
+    "action:project.rename": {
+      "status": "integrated",
+      "evidence": "internal/app/tree_ops.go renames through fs_rename and updates open documents; TestProjectTreeOpenIDEAActionsAreRegistered and TestReferenceAwareTreeMoveUsesOpenIDEARPC"
+    },
+    "action:project.renameInline": {
+      "status": "integrated",
+      "evidence": "internal/app/tree_ops.go opens the native inline rename path and shares the same guarded RPC; TestProjectTreeOpenIDEAActionsAreRegistered"
+    },
+    "action:project.reveal": {
+      "status": "integrated",
+      "evidence": "internal/app/project_tree_actions.go reveals the selected path in the system file manager; TestProjectTreeOpenIDEAActionsAreRegistered"
+    },
+    "action:project.showHistory": {
+      "status": "integrated",
+      "evidence": "internal/app/history.go lists and restores folder history; base.files.historyRestore and TestProjectTreeOpenIDEAActionsAreRegistered"
+    },
+    "action:project.sortBy.type": {
+      "status": "integrated",
+      "evidence": "internal/app/project_view.go and workspace tree sort by type; TestProjectTreeViewOptionsFilterSortAndCompact"
+    },
+    "action:project.viewMode.unity": {
+      "status": "integrated",
+      "evidence": "internal/app/project_view.go switches the tree to OpenIDEA's Unity view; TestProjectTreeOpenChangedScratchAndMembers"
+    },
+    "feature:project-trust": {
+      "status": "integrated",
+      "evidence": "internal/app/run.go implements OpenIDEA's Trust and Open Project? dialog, Restricted Mode, trust decisions and folder scope; internal/app/project_trust_settings.go implements Settings › Security › Project Trust over project_trust_list, project_trust_set, project_trust_add_location and project_trust_remove_location; internal/app/trust_test.go, internal/app/project_trust_settings_test.go, the trust screenshot and the ide-host RPC test prove the complete flow"
+    },
+    "action:project.trust": {
+      "status": "integrated",
+      "evidence": "internal/app/run.go and actions_builtin.go expose OpenIDEA's project.trust action; TrustProject persists the current-project decision or the selected parent-folder scope and refreshes Restricted Mode; TestRunningAnUntrustedProjectAsksToTrust and TestProjectTrustPromptMatchesOpenIDEA"
+    },
+    "action:project.previewRestricted": {
+      "status": "integrated",
+      "evidence": "internal/app/run.go TrustProjectPreview records the restricted decision, opens the project without allowing build/run/debug RPCs, and is rendered as Preview in Restricted Mode in project.trustDialog; TestProjectTrustPreviewClearsFolderScope"
+    },
+    "action:project.dontOpen": {
+      "status": "integrated",
+      "evidence": "internal/app/run.go closes project.trustDialog without changing the stored decision and leaves no project attached; TestProjectTrustDialogCancelKeepsTheProjectClosed"
+    },
+    "action:project.revokeTrust": {
+      "status": "integrated",
+      "evidence": "internal/app/project_trust_settings.go exposes Revoke Trust for every trusted project through project_trust_set(path,false,false), then reloads project_trust_list; TestProjectTrustSettingsPageMatchesOpenIDEA"
+    },
+    "action:project.removeTrustedLocation": {
+      "status": "integrated",
+      "evidence": "internal/app/project_trust_settings.go exposes Remove for every trusted location through project_trust_remove_location, then reloads project_trust_list; TestProjectTrustSettingsPageMatchesOpenIDEA"
+    },
+    "feature:welcome": {
+      "status": "integrated",
+      "evidence": "internal/app/welcome.go, welcome_recents.go and recent_projects.go implement OpenIDEA's Welcome rail, Recent Projects, groups, search, remove, Customize and Plugins pages; internal/app/welcome_test.go and the welcome-empty, welcome, welcome-customize, welcome-plugins and recent-projects screenshots cover the surface"
+    },
+    "action:file.openRecent": {
+      "status": "integrated",
+      "evidence": "internal/app/menu.go exposes File › Open Recent › Recent Projects…, commands.go registers file.openRecent, and internal/app/recent_projects.go opens OpenIDEA's compact welcome.recentProjects chooser; internal/app/recent_projects_test.go and the recent-projects screenshot prove it"
+    },
+    "action:welcome.recentProjects": {
+      "status": "integrated",
+      "evidence": "internal/app/recent_projects.go filters the current project, searches, moves with arrows and PageUp/PageDown, opens with Enter or a single click, removes with Delete or Cmd+Backspace, and exposes row menus; internal/app/recent_projects_test.go and the recent-projects screenshot"
+    },
+    "overlay:project.trustDialog": {
+      "status": "integrated",
+      "evidence": "internal/app/overlay_registry.go registers OpenIDEA id project.trustDialog; internal/app/run.go renders the 560 DIP GoIDEA-logo dialog with Preview in Restricted Mode, Don't Open, Trust Project and Trust projects in parent-folder scope; TestProjectTrustPromptMatchesOpenIDEA and the trust screenshot"
+    },
+    "overlay:remote.connect": {
+      "status": "partial",
+      "evidence": "internal/app/overlay_registry.go registers remote.connect and internal/app/remote.go renders the native unavailable chooser; TestRemoteConnectAndReopenDialogsExplainBackendGap"
+    },
+    "overlay:welcome.recentProjects": {
+      "status": "integrated",
+      "evidence": "internal/app/overlay_registry.go registers OpenIDEA id welcome.recentProjects; internal/app/recent_projects.go renders the 560 DIP chooser with 40 DIP rows, search, path, branch, menus and delete confirmation; internal/app/recent_projects_test.go and the recent-projects screenshot"
+    },
+    "settings-page:projectTrust": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_window.go registers Project Trust under Security and internal/app/project_trust_settings.go renders trusted projects and locations plus Revoke Trust, Remove and Add folder…; internal/app/project_trust_settings_test.go and the settings-project-trust screenshot"
+    },
+    "command:project_trust_status": {
+      "status": "integrated",
+      "evidence": "internal/app/run.go and project_workspace.go call project_trust_status before project commands and when an untrusted project opens; internal/app/trust_test.go and internal/openidea integration tests"
+    },
+    "command:project_trust_list": {
+      "status": "integrated",
+      "evidence": "internal/app/project_trust_settings.go loads project_trust_list into Settings › Security › Project Trust and refreshes it after every mutation; internal/app/project_trust_settings_test.go"
+    },
+    "command:project_trust_set": {
+      "status": "integrated",
+      "evidence": "internal/app/run.go and project_trust_settings.go persist trust and Restricted Mode decisions through project_trust_set; internal/app/trust_test.go and internal/openidea integration tests"
+    },
+    "command:project_trust_add_location": {
+      "status": "integrated",
+      "evidence": "OpenIDEA crates/ide-host/src/rpc.rs exposes project_trust_add_location; internal/app/project_trust_settings.go opens the native Add Trusted Location picker and refreshes the page; crates/ide-host/tests/rpc.rs round-trips add/list/remove"
+    },
+    "command:project_trust_remove_location": {
+      "status": "integrated",
+      "evidence": "internal/app/run.go and project_trust_settings.go remove trusted locations through project_trust_remove_location; crates/ide-host/tests/rpc.rs round-trips add/list/remove"
+    },
+    "command:agent_accept_changes": {"status": "integrated", "evidence": "internal/app/agents.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:agent_archive": {"status": "integrated", "evidence": "internal/app/agent_workspace.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:agent_base_text": {"status": "integrated", "evidence": "internal/app/agent_diff.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:agent_cancel": {"status": "integrated", "evidence": "internal/app/agents.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:agent_changes": {"status": "integrated", "evidence": "internal/app/agents.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:agent_commands": {"status": "integrated", "evidence": "internal/app/agent_composer.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:agent_create": {"status": "integrated", "evidence": "internal/app/agents.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:agent_custom_import": {"status": "integrated", "evidence": "internal/app/agent_registry_actions.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:agent_custom_remove": {"status": "integrated", "evidence": "internal/app/agent_registry_actions.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:agent_custom_save": {"status": "integrated", "evidence": "internal/app/agent_registry_actions.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:agent_delete": {"status": "integrated", "evidence": "internal/app/agents.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:agent_entries": {"status": "integrated", "evidence": "internal/app/agents.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:agent_external_sessions": {"status": "integrated", "evidence": "internal/app/agents.go, internal/app/agents_smoke.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:agent_fork": {"status": "integrated", "evidence": "internal/app/agents.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:agent_grouped_changes": {"status": "integrated", "evidence": "internal/app/agents.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:agent_import_session": {"status": "integrated", "evidence": "internal/app/agents.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:agent_mcp_import": {"status": "integrated", "evidence": "internal/app/agent_mcp_settings.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:agent_mcp_list": {"status": "integrated", "evidence": "internal/app/agent_mcp_settings.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:agent_mcp_remove": {"status": "integrated", "evidence": "internal/app/agent_mcp_settings.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:agent_mcp_save": {"status": "integrated", "evidence": "internal/app/agent_mcp_settings.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:agent_mcp_set_enabled": {"status": "integrated", "evidence": "internal/app/agent_mcp_settings.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:agent_prompt": {"status": "integrated", "evidence": "internal/app/agents.go, internal/app/agents_view.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:agent_providers": {"status": "integrated", "evidence": "internal/app/agents.go, internal/app/agents_smoke.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:agent_registry_install": {"status": "integrated", "evidence": "internal/app/agent_registry_settings.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:agent_registry_list": {"status": "integrated", "evidence": "internal/app/agent_registry_settings.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:agent_registry_remove": {"status": "integrated", "evidence": "internal/app/agent_registry_settings.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:agent_rename": {"status": "integrated", "evidence": "internal/app/agents.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:agent_respond": {"status": "integrated", "evidence": "internal/app/agents.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:agent_rollback": {"status": "integrated", "evidence": "internal/app/agents.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:agent_rollback_changes": {"status": "integrated", "evidence": "internal/app/agents.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:agent_send_queued_now": {"status": "integrated", "evidence": "internal/app/agents.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:agent_set_command": {"status": "integrated", "evidence": "internal/app/agent_registry_actions.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:agent_set_config": {"status": "integrated", "evidence": "internal/app/agents.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:agent_set_env": {"status": "integrated", "evidence": "internal/app/agent_registry_actions.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:agent_stop_background": {"status": "integrated", "evidence": "internal/app/agents.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:agent_subscribe": {"status": "integrated", "evidence": "internal/app/agents.go, internal/app/agents_smoke.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:agent_unarchive": {"status": "integrated", "evidence": "internal/app/agent_workspace.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:agent_unqueue": {"status": "integrated", "evidence": "internal/app/agents.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:apply_workspace_edit": {"status": "integrated", "evidence": "internal/app/rename.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:build_compile_file": {"status": "integrated", "evidence": "internal/app/build.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:build_model": {"status": "integrated", "evidence": "internal/app/maven.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:build_run": {"status": "integrated", "evidence": "internal/app/build.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:build_sync": {"status": "integrated", "evidence": "internal/app/maven.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:cancel_request": {"status": "integrated", "evidence": "internal/app/intents.go, internal/app/build.go, internal/app/vcs_operations.go and 11 more invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:close_project": {"status": "integrated", "evidence": "internal/app/app.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:db_apply_edits": {"status": "integrated", "evidence": "internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:db_completion": {"status": "integrated", "evidence": "internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:db_connect": {"status": "integrated", "evidence": "internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:db_connected": {"status": "integrated", "evidence": "internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:db_console_path": {"status": "integrated", "evidence": "internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:db_database_catalog": {"status": "integrated", "evidence": "internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:db_databases": {"status": "integrated", "evidence": "internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:db_ddl": {"status": "integrated", "evidence": "internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:db_disconnect": {"status": "integrated", "evidence": "internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:db_execute": {"status": "integrated", "evidence": "internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:db_explain": {"status": "integrated", "evidence": "internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:db_finish_transaction": {"status": "integrated", "evidence": "internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:db_history": {"status": "integrated", "evidence": "internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:db_object_ddl": {"status": "integrated", "evidence": "internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:db_remove_history": {"status": "integrated", "evidence": "internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:db_retain_catalog": {"status": "integrated", "evidence": "internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:db_save_sources": {"status": "integrated", "evidence": "internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:db_saved_catalog": {"status": "integrated", "evidence": "internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:db_schema_objects": {"status": "integrated", "evidence": "internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:db_schemas": {"status": "integrated", "evidence": "internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:db_session_context": {"status": "integrated", "evidence": "internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:db_set_manual_commit": {"status": "integrated", "evidence": "internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:db_set_password": {"status": "integrated", "evidence": "internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:db_set_ssh_secret": {"status": "integrated", "evidence": "internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:db_sources": {"status": "integrated", "evidence": "internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:db_statements": {"status": "integrated", "evidence": "internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:db_table_details": {"status": "integrated", "evidence": "internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:db_table_page": {"status": "integrated", "evidence": "internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:db_tables": {"status": "integrated", "evidence": "internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:db_test": {"status": "integrated", "evidence": "internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:db_trust_ssh_host": {"status": "integrated", "evidence": "internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:debug_attachable_processes": {"status": "integrated", "evidence": "internal/app/attach.go, internal/app/negatives.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:debug_evaluate": {"status": "integrated", "evidence": "internal/app/debug.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:debug_evaluate_in": {"status": "integrated", "evidence": "internal/app/debug_view.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:debug_force_step_over": {"status": "integrated", "evidence": "internal/app/debug.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:debug_heap_capture": {"status": "integrated", "evidence": "internal/app/debug_heap.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:debug_heap_classes": {"status": "integrated", "evidence": "internal/app/debug_heap.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:debug_heap_close": {"status": "integrated", "evidence": "internal/app/debug_heap.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:debug_heap_open": {"status": "integrated", "evidence": "internal/app/debug_heap.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:debug_heap_save": {"status": "integrated", "evidence": "internal/app/debug_heap.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:debug_hot_restart": {"status": "integrated", "evidence": "internal/app/debug_actions.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:debug_jvm_memory_classes": {"status": "integrated", "evidence": "internal/app/debug_memory.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:debug_jvm_memory_fields": {"status": "integrated", "evidence": "internal/app/debug_memory_instances.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:debug_jvm_memory_instances": {"status": "integrated", "evidence": "internal/app/debug_memory_instances.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:debug_jvm_memory_referrers": {"status": "integrated", "evidence": "internal/app/debug_memory_instances.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:debug_pause": {"status": "integrated", "evidence": "internal/app/debug.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:debug_redefine_classes": {"status": "integrated", "evidence": "internal/app/hotswap.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:debug_restart_frame": {"status": "integrated", "evidence": "internal/app/debug_actions.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:debug_resume": {"status": "integrated", "evidence": "internal/app/attach.go, internal/app/debug.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:debug_run_to": {"status": "integrated", "evidence": "internal/app/debug.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:debug_scopes": {"status": "integrated", "evidence": "internal/app/debug.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:debug_set_breakpoints": {"status": "integrated", "evidence": "internal/app/hotswap_smoke.go, internal/app/debug.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:debug_set_data_breakpoints": {"status": "integrated", "evidence": "internal/app/debug_actions.go, internal/app/debug.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:debug_set_function_breakpoints": {"status": "integrated", "evidence": "internal/app/debug_actions.go, internal/app/debug.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:debug_set_variable": {"status": "integrated", "evidence": "internal/app/debug_actions.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:debug_stack_trace": {"status": "integrated", "evidence": "internal/app/debug.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:debug_start": {"status": "integrated", "evidence": "internal/app/attach.go, internal/app/debug.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:debug_step": {"status": "integrated", "evidence": "internal/app/debug.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:debug_step_in_target": {"status": "integrated", "evidence": "internal/app/debug_actions.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:debug_step_in_targets": {"status": "integrated", "evidence": "internal/app/debug_actions.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:debug_stop": {"status": "integrated", "evidence": "internal/app/attach.go, internal/app/app.go, internal/app/debug.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:debug_threads": {"status": "integrated", "evidence": "internal/app/attach.go, internal/app/debug.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:debug_variables": {"status": "integrated", "evidence": "internal/app/debug.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:doc_close": {"status": "integrated", "evidence": "internal/openidea/docs.go, internal/app/documentation.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:doc_edit": {"status": "integrated", "evidence": "internal/openidea/docs.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:doc_open": {"status": "integrated", "evidence": "internal/openidea/docs.go, internal/app/documentation.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:doc_open_virtual": {"status": "integrated", "evidence": "internal/app/documentation.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:doc_outline": {"status": "integrated", "evidence": "internal/app/project_view.go, internal/app/codeintel.go, internal/app/copy_reference.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:doc_save": {"status": "integrated", "evidence": "internal/openidea/docs.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:doc_snapshot": {"status": "integrated", "evidence": "internal/openidea/docs.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:find_dirs": {"status": "integrated", "evidence": "internal/app/agent_composer.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:find_files": {"status": "integrated", "evidence": "internal/app/agent_composer.go, internal/app/run.go, internal/app/stack_trace.go and 3 more invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:fs_compare_directories": {"status": "integrated", "evidence": "internal/app/dircompare.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:fs_copy": {"status": "integrated", "evidence": "internal/app/tree_ops.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:fs_create_dir": {"status": "integrated", "evidence": "internal/app/newproject.go, internal/app/tree_ops.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:fs_create_file": {"status": "integrated", "evidence": "internal/app/tree_ops.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:fs_delete": {"status": "integrated", "evidence": "internal/app/tree_ops.go, internal/app/vcs_log_actions.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:fs_read_dir": {"status": "integrated", "evidence": "internal/app/newproject.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:fs_read_text": {"status": "integrated", "evidence": "internal/app/java_run.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:fs_rename": {"status": "integrated", "evidence": "internal/app/tree_ops.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:fs_set_writable": {"status": "integrated", "evidence": "internal/app/editor_file_actions.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:gradle_link_projects": {"status": "integrated", "evidence": "internal/app/build_tool_actions.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:gradle_unlink_projects": {"status": "integrated", "evidence": "internal/app/build_tool_actions.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:history_list_dir": {"status": "integrated", "evidence": "internal/app/history.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:history_list": {"status": "integrated", "evidence": "internal/app/history.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:history_content": {"status": "integrated", "evidence": "internal/app/history.go invokes the OpenIDEA RPC through the native Go adapter for revision previews"},
+    "command:history_put_label": {"status": "integrated", "evidence": "internal/app/history.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:history_restore": {"status": "integrated", "evidence": "internal/app/history.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:java_build_workspace": {"status": "integrated", "evidence": "internal/app/hotswap.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:java_debug_server": {"status": "integrated", "evidence": "internal/app/attach.go, internal/app/debug.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:java_resolve_launch": {"status": "integrated", "evidence": "internal/app/java_run.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:jdk_download": {"status": "integrated", "evidence": "internal/openidea/tools.go, internal/app/jdk_download.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:jdk_download_location": {"status": "integrated", "evidence": "internal/openidea/tools.go, internal/app/jdk_download.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:jdk_download_releases": {"status": "integrated", "evidence": "internal/openidea/tools.go, internal/app/jdk_download.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:jdk_download_vendors": {"status": "integrated", "evidence": "internal/openidea/tools.go, internal/app/jdk_download.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:jdtls_required_java": {"status": "integrated", "evidence": "internal/openidea/tools.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:languages": {"status": "integrated", "evidence": "internal/openidea/tools.go, internal/app/scratch.go, internal/app/build_tool_actions.go and 4 more invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:lsp_apply_code_action": {"status": "integrated", "evidence": "internal/app/intents.go, internal/app/source_actions.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:lsp_call_hierarchy": {"status": "integrated", "evidence": "internal/app/hierarchy.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:lsp_code_action_query": {"status": "integrated", "evidence": "internal/app/intents.go, internal/app/source_actions.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:lsp_completion": {"status": "integrated", "evidence": "internal/app/lsp.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:lsp_format": {"status": "integrated", "evidence": "internal/app/format.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:lsp_goto": {"status": "integrated", "evidence": "internal/app/documentation.go, internal/app/lsp.go, internal/app/copy_reference.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:lsp_goto_implementation": {"status": "integrated", "evidence": "internal/app/navigation.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:lsp_hover": {"status": "integrated", "evidence": "internal/app/documentation.go, internal/app/lsp.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:lsp_inlay_hints": {"status": "integrated", "evidence": "internal/app/inlay.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:lsp_prepare_rename": {"status": "integrated", "evidence": "internal/app/rename.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:lsp_references": {"status": "integrated", "evidence": "internal/app/codevision.go, internal/app/usages.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:lsp_rename": {"status": "integrated", "evidence": "internal/app/rename.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:lsp_servers": {"status": "integrated", "evidence": "internal/app/debug.go, internal/app/lsp.go, internal/app/readiness.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:lsp_type_hierarchy": {"status": "integrated", "evidence": "internal/app/hierarchy.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:lsp_virtual_document": {"status": "integrated", "evidence": "internal/app/documentation.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:lsp_workspace_symbols": {"status": "integrated", "evidence": "internal/app/symbols.go, internal/app/debug_memory.go, internal/app/se.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:mark_recent": {"status": "integrated", "evidence": "internal/app/quickopen.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:maven_dependency_completion": {"status": "integrated", "evidence": "internal/app/pom_completion.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:maven_goto_declaration": {"status": "integrated", "evidence": "internal/app/pom_goto.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:open_project": {"status": "integrated", "evidence": "internal/app/app.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:path_completions": {"status": "integrated", "evidence": "internal/app/agent_composer.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:plugin_prepare_debug_run": {"status": "integrated", "evidence": "internal/app/debug_actions.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:project_current": {"status": "integrated", "evidence": "internal/app/recovery.go, internal/app/app.go, internal/app/project_workspace.go and 2 more invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:recent_files": {"status": "integrated", "evidence": "internal/app/recent_navigation.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:redo_workspace_edit": {"status": "integrated", "evidence": "internal/app/refactor.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:refactor_file_move_edits": {"status": "integrated", "evidence": "internal/app/project_tree_actions.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:refactor_move_files": {"status": "integrated", "evidence": "internal/app/project_tree_actions.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:refactor_undo_file_move": {"status": "integrated", "evidence": "internal/app/project_tree_actions.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:remove_recent": {"status": "integrated", "evidence": "internal/app/recent_navigation.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:replace_in_files": {"status": "integrated", "evidence": "internal/app/search.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:run_configs": {"status": "integrated", "evidence": "internal/app/run_parity_actions.go, internal/app/run.go, internal/app/java_run.go and 2 more invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:run_env_files": {"status": "integrated", "evidence": "internal/app/debug.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:run_import_configs": {"status": "integrated", "evidence": "internal/app/run_parity_actions.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:run_import_sources": {"status": "integrated", "evidence": "internal/app/run_parity_actions.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:run_list": {"status": "integrated", "evidence": "internal/app/run.go, internal/app/negatives.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:run_save_configs": {"status": "integrated", "evidence": "internal/app/java_run.go, internal/app/negatives.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:run_start": {"status": "integrated", "evidence": "internal/app/run.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:run_stop": {"status": "integrated", "evidence": "internal/app/run.go, internal/app/app.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:scaffold_catalog": {"status": "integrated", "evidence": "internal/app/newproject_scaffold.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:scaffold_create": {"status": "integrated", "evidence": "internal/app/newproject_scaffold.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:scaffold_options": {"status": "integrated", "evidence": "internal/app/newproject_scaffold.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:search_start": {"status": "integrated", "evidence": "internal/app/search.go, internal/app/bench.go, internal/app/se.go and 1 more invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:search_validate": {"status": "integrated", "evidence": "internal/app/search.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:settings_get": {"status": "integrated", "evidence": "internal/app/build_tool_actions.go, internal/app/jdk_download.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:settings_get_global": {"status": "integrated", "evidence": "internal/app/agent_settings_backend.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:settings_set": {"status": "integrated", "evidence": "internal/app/build_tool_actions.go, internal/app/agent_settings_backend.go, internal/app/jdk_download.go and 1 more invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:term_available_shells": {"status": "integrated", "evidence": "internal/app/term.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:term_default_shell": {"status": "integrated", "evidence": "internal/app/term.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:term_kill": {"status": "integrated", "evidence": "internal/app/term.go, internal/app/app.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:term_spawn": {"status": "integrated", "evidence": "internal/app/term.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:term_write": {"status": "integrated", "evidence": "internal/app/term.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:tools_install": {"status": "integrated", "evidence": "internal/openidea/tools.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:tools_list": {"status": "integrated", "evidence": "internal/openidea/tools.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:tools_uninstall": {"status": "integrated", "evidence": "internal/openidea/tools.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:undo_workspace_edit": {"status": "integrated", "evidence": "internal/app/refactor.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_add_to_ignore": {"status": "integrated", "evidence": "internal/app/vcs_more.go, internal/app/vcs.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_add_worktree": {"status": "integrated", "evidence": "internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_apply_patch": {"status": "integrated", "evidence": "internal/app/vcs_more.go, internal/app/vcs_log_actions.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_blame": {"status": "integrated", "evidence": "internal/app/annotate.go, internal/app/codevision.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_branch_info": {"status": "integrated", "evidence": "internal/openidea/types.go, internal/app/branch.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_branches": {"status": "integrated", "evidence": "internal/openidea/types.go, internal/app/branch.go, internal/app/vcs_log_actions.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_changelists_load": {"status": "integrated", "evidence": "internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_changelists_save": {"status": "integrated", "evidence": "internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_checkout": {"status": "integrated", "evidence": "internal/app/vcs_operations.go, internal/app/branch.go, internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_clone": {"status": "integrated", "evidence": "internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_commit": {"status": "integrated", "evidence": "internal/app/vcs_operations.go, internal/app/commit.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_commits_changes": {"status": "integrated", "evidence": "internal/app/log.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_compare_paths": {"status": "integrated", "evidence": "internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_config_get": {"status": "integrated", "evidence": "internal/app/vcs_more.go, internal/app/vcs_log_actions.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_conflict_versions": {"status": "integrated", "evidence": "internal/app/vcs_more.go, internal/app/merge_editor.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_create_branch": {"status": "integrated", "evidence": "internal/app/vcs_operations.go, internal/app/branch.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_create_patch": {"status": "integrated", "evidence": "internal/app/vcs_more.go, internal/app/vcs_log_actions.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_create_tag": {"status": "integrated", "evidence": "internal/app/vcs_operations.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_delete_branch": {"status": "integrated", "evidence": "internal/app/vcs_operations.go, internal/app/branch.go, internal/app/vcs_log_actions.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_delete_tag": {"status": "integrated", "evidence": "internal/app/vcs_operations.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_diff_hunks": {"status": "integrated", "evidence": "internal/app/codeintel.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_diff_revisions": {"status": "integrated", "evidence": "internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_diff_with_worktree": {"status": "integrated", "evidence": "internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_discard": {"status": "integrated", "evidence": "internal/app/vcs_operations.go, internal/app/vcs.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_edit_remote": {"status": "integrated", "evidence": "internal/app/vcs_remotes.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_file_at": {"status": "integrated", "evidence": "internal/app/codeintel.go, internal/app/agent_diff.go, internal/app/vcs_more.go and 2 more invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_init": {"status": "integrated", "evidence": "internal/app/newproject.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_log": {"status": "integrated", "evidence": "internal/app/log.go, internal/app/vcs_more.go, internal/app/vcs_log_actions.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_log_details": {"status": "integrated", "evidence": "internal/app/log.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_merge_with": {"status": "integrated", "evidence": "internal/app/vcs_operations.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_open_external_log": {"status": "integrated", "evidence": "internal/app/agent_diff.go, internal/app/vcs_log_actions.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_operation": {"status": "integrated", "evidence": "internal/app/vcs_operations.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_patch_preview": {"status": "integrated", "evidence": "internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_rebase_with": {"status": "integrated", "evidence": "internal/app/vcs_operations.go, internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_remote": {"status": "integrated", "evidence": "internal/app/vcs_operations.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_remotes": {"status": "integrated", "evidence": "internal/openidea/types.go, internal/app/vcs_remotes.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_remove_worktree": {"status": "integrated", "evidence": "internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_reword": {"status": "integrated", "evidence": "internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_shelf_delete": {"status": "integrated", "evidence": "internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_shelf_diff": {"status": "integrated", "evidence": "internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_shelf_import": {"status": "integrated", "evidence": "internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_shelf_patch": {"status": "integrated", "evidence": "internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_shelf_rename": {"status": "integrated", "evidence": "internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_shelve": {"status": "integrated", "evidence": "internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_shelves": {"status": "integrated", "evidence": "internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_stage": {"status": "integrated", "evidence": "internal/app/vcs_operations.go, internal/app/vcs_more.go, internal/app/merge_editor.go and 1 more invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_stash_apply": {"status": "integrated", "evidence": "internal/app/vcs_operations.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_stash_push": {"status": "integrated", "evidence": "internal/app/vcs_operations.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_stashes": {"status": "integrated", "evidence": "internal/openidea/types.go, internal/app/vcs_operations.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_status": {"status": "integrated", "evidence": "internal/app/commit.go, internal/app/merge_editor.go, internal/app/diff.go and 1 more invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_tags": {"status": "integrated", "evidence": "internal/app/vcs_operations.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_undo_commit": {"status": "integrated", "evidence": "internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_unshelve": {"status": "integrated", "evidence": "internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_unstage": {"status": "integrated", "evidence": "internal/app/vcs.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:vcs_worktrees": {"status": "integrated", "evidence": "internal/openidea/types.go, internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:workspace_attach": {"status": "integrated", "evidence": "internal/app/project_workspace.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:workspace_create": {"status": "integrated", "evidence": "internal/app/project_workspace.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:workspace_discover_projects": {"status": "integrated", "evidence": "internal/app/project_workspace.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "command:workspace_update": {"status": "integrated", "evidence": "internal/app/project_workspace.go invokes the OpenIDEA RPC through the native Go adapter"},
+    "action:project.newFile": {
+      "status": "integrated",
+      "evidence": "internal/app/project_tree_actions.go NewFileAtProjectSelection opens internal/app/project_new.go's anchored project.newPopup; choosing File or a template opens templates.newFile; TestProjectNewTemplateSearchAndOpenState, TestProjectNewPopupRendersOpenIDEAFilterAndActions and TestFileTemplateCreateUsesBytesRPC"
+    },
+    "feature:templates": {
+      "status": "partial",
+      "evidence": "internal/app/project_new.go ports OpenIDEA's built-in file-template catalog, fuzzy chooser, name and kind prompt, JVM/Go/PSR-4 package inference, include and variable expansion and $END$ caret placement; project_new_test.go covers the catalog and rendering. The caret-anchored template chooser, live/postfix/Emmet templates and File and Code Templates settings remain missing"
+    },
+    "overlay:templates.newFile": {
+      "status": "integrated",
+      "evidence": "internal/app/overlay_registry.go registers OpenIDEA's templates.newFile overlay over the native name and kind prompt; TestProjectNewTemplateSearchAndOpenState verifies the overlay opens only after a kind is chosen"
+    },
+    "overlay:project.newPopup": {
+      "status": "integrated",
+      "evidence": "internal/app/overlay_registry.go registers project.newPopup; internal/app/project_new.go renders OpenIDEA's 280 DIP anchored search field, File, Directory, built-in file kinds and From Template row; TestProjectNewPopupRendersOpenIDEAFilterAndActions"
+    },
+    "overlay:project.fileRefactor": {
+      "status": "integrated",
+      "evidence": "internal/app/overlay_registry.go registers project.fileRefactor; internal/app/project_file_refactor.go renders native Rename, Move and Copy dialogs with reference search options; TestProjectFileRefactorOverlaysRenderNativeDialogs and TestProjectMoveDialogValidatesTargetAndUsesRefactoring"
+    },
+    "overlay:project.refactoringPreview": {
+      "status": "integrated",
+      "evidence": "internal/app/overlay_registry.go registers project.refactoringPreview; internal/app/project_file_refactor.go renders included files, occurrence summaries and before/after edits before Do Refactor; TestProjectFileRefactorOverlaysRenderNativeDialogs and TestProjectMoveDialogValidatesTargetAndUsesRefactoring"
+    },
+    "toolwindow:remote.ports": {
+      "status": "blocked",
+      "evidence": "OpenIDEA registers Ports only after an SSH or dev-container session; remote_forwarded_ports, remote_forward_port and remote_stop_forwarding exist only in the pinned desktop shell, not in openidea-server --stdio. internal/app/remote.go renders the unavailable native state until the OpenIDEA fork exposes matching RPCs"
     }
   }
 }

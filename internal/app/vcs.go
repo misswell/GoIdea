@@ -54,9 +54,9 @@ func (m *Model) RefreshVCS() {
 	m.vcs.loading = true
 	m.invalidate()
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
+		ctx, cancel := context.WithTimeout(m.mergeContext(), 30*time.Second)
 		defer cancel()
-		raw, err := m.mgr.Invoke(ctx, Window, "vcs_status", nil)
+		raw, err := m.invoke(ctx, "vcs_status", nil)
 		var files []openidea.FileStatus
 		if err == nil {
 			err = json.Unmarshal(raw, &files)
@@ -75,6 +75,7 @@ func (m *Model) RefreshVCS() {
 				sort.SliceStable(files, func(i, j int) bool { return files[i].RelPath < files[j].RelPath })
 				m.vcs.files = files
 			}
+			m.syncProjectTreeState()
 			m.invalidate()
 			if m.vcs.stale {
 				m.vcs.stale = false

@@ -74,13 +74,14 @@ type instance struct {
 	dispatch moejs.Value
 	release  func(func(*moejs.Runtime)) // the hold that keeps the loop alive
 
-	mu      sync.Mutex
-	seq     int
-	waiting map[int]chan reply
-	busy    time.Time // when the JavaScript started running, zero while idle
-	cpu     time.Duration
-	done    chan struct{} // closed as the loop ends
-	err     error         // what ended it
+	mu       sync.Mutex
+	seq      int
+	waiting  map[int]chan reply
+	busy     time.Time // when the JavaScript started running, zero while idle
+	cpu      time.Duration
+	done     chan struct{} // closed as the loop ends
+	err      error         // what ended it
+	stopOnce sync.Once
 }
 
 type reply struct {
@@ -223,6 +224,9 @@ func start(p *Plugin, host Host, httpClient *http.Client) (*instance, error) {
 		})
 		in.mu.Lock()
 		in.err = err
+		in.mu.Unlock()
+		in.p.publishStopped(in)
+		in.mu.Lock()
 		for id, ch := range in.waiting {
 			ch <- reply{false, "the plugin stopped"}
 			delete(in.waiting, id)
@@ -316,13 +320,15 @@ var errBusy = errors.New("ran too long")
 
 // stop ends the loop for good.
 func (in *instance) stop() {
-	select {
-	case <-in.done:
-	default:
-		in.loop.Terminate()
-	}
-	<-in.done
-	in.api.Close()
+	in.stopOnce.Do(func() {
+		select {
+		case <-in.done:
+		default:
+			in.loop.Terminate()
+		}
+		<-in.done
+		in.api.Close()
+	})
 }
 
 // stats are what the plugin used: its JavaScript's time running, and the
@@ -374,6 +380,7 @@ func (in *instance) request(ctx context.Context, kind string, payload any) (json
 		return nil, ctx.Err()
 	case <-in.done:
 		forget()
+		in.p.finalize(in)
 		return nil, fmt.Errorf("the plugin stopped: %s", in.describe(in.err))
 	}
 }

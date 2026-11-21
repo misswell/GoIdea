@@ -3,7 +3,7 @@
 OpenIDEA is the product specification, Mayoi/MyGo is the frontend base and the
 OpenIDEA Rust core is the engine. This document enumerates everything the pinned
 OpenIDEA source registers and maps each item to GoIDEA. It is generated from
-`bf36cc08019a1be78c151245c67dcd872a9c37b5`; `scripts/openidea-parity.py --check` fails when it is stale.
+`203871f1250ba5054bf976de2ce3267963c6011e`; `scripts/openidea-parity.py --check` fails when it is stale.
 
 ## How to read the status
 
@@ -16,26 +16,27 @@ OpenIDEA source registers and maps each item to GoIDEA. It is generated from
 | `missing` | No GoIDEA implementation is recorded. |
 
 `missing` is the default and is not a claim that no code exists anywhere: it means
-no evidence has been recorded. The only place a status is raised is
-`scripts/openidea-parity-status.json`, and every raised status must name its
-evidence (a regression check id, a doc or a source path). Nothing is hand-picked
-out of the inventory: the item lists below are generated from the source, and a
-new action, tool window, page or command appears automatically.
+no evidence has been recorded. A registered action with an otherwise undeclared
+status appears as `partial`; other raised statuses come from
+`scripts/openidea-parity-status.json`, where evidence names a regression check id,
+a doc or a source path. Nothing is hand-picked out of the inventory: the item
+lists below are generated from the source, and a new action, tool window, page or
+command appears automatically.
 
 ## Inventory
 
 | Kind | Items | Integrated | Partial | Engine | Blocked | Missing |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Feature folders | 44 | 2 | 14 | 0 | 0 | 28 |
-| Actions | 673 | 52 | 105 | 0 | 0 | 516 |
+| Feature folders | 44 | 7 | 13 | 0 | 0 | 24 |
+| Actions | 888 | 225 | 391 | 0 | 0 | 272 |
 | Keymap presets | 6 | 0 | 0 | 0 | 0 | 6 |
-| Tool windows | 30 | 10 | 11 | 0 | 0 | 9 |
-| Overlays | 56 | 3 | 5 | 0 | 0 | 48 |
-| Editor contributions | 37 | 0 | 2 | 0 | 0 | 35 |
+| Tool windows | 30 | 11 | 10 | 0 | 1 | 8 |
+| Overlays | 56 | 11 | 5 | 0 | 0 | 40 |
+| Editor contributions | 35 | 1 | 1 | 0 | 0 | 33 |
 | Editor kinds | 4 | 0 | 0 | 0 | 0 | 4 |
 | File editor providers | 4 | 0 | 0 | 0 | 0 | 4 |
-| Settings pages | 84 | 1 | 10 | 0 | 0 | 73 |
-| Settings keys | 470 | 0 | 1 | 0 | 0 | 469 |
+| Settings pages | 88 | 10 | 9 | 0 | 0 | 69 |
+| Settings keys | 470 | 6 | 1 | 0 | 0 | 463 |
 | Languages | 82 | 1 | 0 | 0 | 0 | 81 |
 | Backend crates | 43 | 0 | 0 | 35 | 0 | 8 |
 | Events | 31 | 0 | 0 | 0 | 0 | 31 |
@@ -50,20 +51,20 @@ directory registers.
 
 | Feature | Actions | Tool windows | Overlays | Editor | Settings pages | Status |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
-| `agents` | 9 | 0 | 0 | 0 | 0 | missing |
+| `agents` | 32 | 0 | 0 | 0 | 3 | integrated - internal/app/agents.go, agents_view.go, agent_composer.go, agent_editor.go, agent_markdown.go, agent_workspace.go and agent_registry_settings.go implement OpenIDEA's task home, editor/tool-window placement, groups, selection, search, conversation timeline, composer, changes, registry, policy and MCP settings over the real agent RPCs; agents_test.go, agent_*_test.go and the agents e2e phase cover the surface |
 | `analysis` | 6 | 2 | 1 | 0 | 0 | missing |
-| `app` | 2 | 0 | 6 | 0 | 0 | partial - internal/app/update.go, tasks.go and notifications.go cover update checks, background download, cancellation and install/restart; update_flow_test.go; internal/app/invalidate.go covers cache invalidation and restart; other app overlays still have pending scope |
+| `app` | 47 | 0 | 6 | 0 | 0 | partial - internal/app/update.go, tasks.go and notifications.go cover update checks, background download, cancellation and install/restart; update_flow_test.go; internal/app/invalidate.go covers cache invalidation and restart; other app overlays still have pending scope |
 | `build` | 6 | 1 | 0 | 0 | 0 | missing |
 | `build-tools` | 23 | 2 | 1 | 3 | 0 | partial - internal/app/maven.go, pom_completion.go and pom_goto.go; Maven window and POM completion/navigation; internal/app/maven_test.go; see separate Maven and Gradle rows |
 | `code-insight` | 6 | 3 | 1 | 0 | 0 | partial - lsp.references.count, lsp.symbols |
 | `color-preview` | 0 | 0 | 0 | 1 | 0 | missing |
-| `coverage` | 6 | 1 | 1 | 1 | 0 | partial - base.coverage.report; internal/app/coverage_run.go runs the selected configuration; context executor and tooltip are pending |
+| `coverage` | 6 | 1 | 1 | 1 | 0 | integrated - internal/app/coverage.go, coverage_run.go and coverage_view.go implement report import and suites, Run with Coverage, context coverage, show/hide state, project-tree badges, editor gutter marks that follow edits, and OpenIDEA gutter tooltips; coverage_test.go covers import, suite management, action enablement, rendering, the short-lived run reply race, edit remapping and tooltip titles; TestContextRunWithCoveragePreparesLaunchesAndCollects covers the context executor |
 | `database` | 46 | 1 | 1 | 1 | 0 | partial - UPSTREAM_FEATURE_MATRIX.md database console; db_* commands |
-| `debugger` | 40 | 1 | 1 | 1 | 0 | partial - debug.paused, debug.step.paused, debug.vars; internal/app/debug.go builds the file's application config and calls adapter.PrepareJavaLaunch before java_debug_server + debug_start; waitForJavaDebugReady holds launch through jdtls starting/busy and Stop cancels it, proven by debugimport.*; debug_view.go renders the session tab, toolbar and Console and debug.consoleEval exercises REPL evaluation; debug_memory.go reads live JVM class counts, tested by debug.memoryRows; instances, heap and concurrent sessions remain; java-debug missing offers one-click install; HotSwap uses java_build_workspace and debug_redefine_classes, proven by hotswap.* |
+| `debugger` | 43 | 1 | 1 | 1 | 0 | partial - debug.paused, debug.step.paused, debug.vars; internal/app/debug.go builds the file's application config and calls adapter.PrepareJavaLaunch before java_debug_server + debug_start; waitForJavaDebugReady holds launch through jdtls starting/busy and Stop cancels it, proven by debugimport.*; debug_view.go renders the session tab, toolbar and Console and debug.consoleEval exercises REPL evaluation; debug_memory.go reads live JVM class counts, tested by debug.memoryRows; instances, heap and concurrent sessions remain; java-debug missing offers one-click install; HotSwap uses java_build_workspace and debug_redefine_classes, proven by hotswap.* |
 | `dependencies` | 0 | 0 | 0 | 1 | 0 | missing |
 | `deployment` | 12 | 1 | 1 | 0 | 0 | missing |
 | `dotnet` | 11 | 1 | 0 | 0 | 0 | missing |
-| `github` | 6 | 1 | 1 | 1 | 1 | missing |
+| `github` | 9 | 1 | 1 | 1 | 1 | missing |
 | `graphql` | 6 | 0 | 1 | 1 | 0 | missing |
 | `http-client` | 10 | 0 | 0 | 3 | 0 | missing |
 | `libraries` | 1 | 0 | 0 | 0 | 0 | missing |
@@ -71,28 +72,28 @@ directory registers.
 | `macros` | 5 | 0 | 1 | 1 | 0 | missing |
 | `mcp` | 0 | 0 | 1 | 0 | 0 | missing |
 | `notebook` | 0 | 0 | 0 | 0 | 0 | missing |
-| `perf` | 0 | 0 | 1 | 0 | 0 | missing |
-| `plugins` | 10 | 0 | 2 | 5 | 0 | missing |
+| `perf` | 4 | 0 | 1 | 0 | 0 | missing |
+| `plugins` | 11 | 0 | 2 | 5 | 0 | missing |
 | `profiler` | 4 | 1 | 0 | 0 | 0 | missing |
-| `project-tree` | 31 | 1 | 3 | 0 | 0 | partial - internal/workspace tree tests; base.tabs; internal/app/tree_ops.go treeGitMenu has Commit, Add, Ignore, Annotate, Diff, History, Rollback, branch/tag creation, fetch, pull, push, merge, rebase, stash/unstash and reset; tree_ops_test.go TestTreeGitSubmenuFollowsTheSelection; vcsoperations.* runs the underlying operations; branch/revision compare remains |
-| `project-trust` | 5 | 0 | 1 | 0 | 1 | missing |
+| `project-tree` | 55 | 1 | 3 | 0 | 0 | integrated - internal/app/tree.go, project_tree_actions.go, tree_ops.go and project_view.go implement OpenIDEA's project view, linked roots, selection, inline operations, menu options, View Modes and sort orders over workspace and fs RPCs; tree_test.go, project_tree_actions_test.go, tree_ops_test.go, project_view_test.go and base.files.* cover the surface |
+| `project-trust` | 5 | 0 | 1 | 0 | 1 | integrated - internal/app/run.go implements OpenIDEA's Trust and Open Project? dialog, Restricted Mode, trust decisions and folder scope; internal/app/project_trust_settings.go implements Settings › Security › Project Trust over project_trust_list, project_trust_set, project_trust_add_location and project_trust_remove_location; internal/app/trust_test.go, internal/app/project_trust_settings_test.go, the trust screenshot and the ide-host RPC test prove the complete flow |
 | `remote-dev` | 4 | 1 | 1 | 0 | 0 | missing |
-| `run` | 28 | 1 | 5 | 2 | 0 | partial - base.run.config, base.run.exit, base.run.build; internal/adapter/java_launch.go and java_module.go port OpenIDEA's platform/javaLaunch.ts and Run and Debug share it; spring.* release-gate checks run the detected Spring Boot configuration of testdata/java-spring-multimodule; internal/adapter/run_config.go ports configs.ts (upsert/merge/validate/unique), buildCommand.ts (applyBuildPolicyToCommand) and store.ts saveUserConfigs, and internal/app/run_config_dialog.go carries Edit Configurations (action:run.editConfigs) and Rerun with the confirm dialog (action:run.rerun); base.runcfg.* proves the save/policy/run/remove round trip; Build Before Launch is buildCommand.ts's applyBuildPolicyToCommand (internal/adapter/run_config.go), applied at launch for build-tool configs and through BuildPolicyOf for JVM ones, proven by base.runcfg.policy; the testing pipeline port (internal/adapter/testing_*.go) folds surefire/Gradle output into the results tree and run.rerunFailed derives the -Dtest=/--tests filter (rerunfail.* main-gate checks); go test is parsed too (testing_go.go, gorerun.* main-gate checks); the cargo test pipeline (internal/adapter/testing_cargo.go ports cargo.ts: libtest/nextest parsing, panic locations) folds cargo test output into the tree and cargorun.* main-gate checks prove the --exact derivation reruns only the failed test; pytest is parsed too (testing_pytest.go, pyrerun.* main-gate checks); the js/phpunit/ruby/dotnet parsers are not ported yet (node/php/ruby toolchains exist but jest/phpunit/rspec need framework installs; dotnet is absent) |
+| `run` | 29 | 1 | 5 | 2 | 0 | partial - base.run.config, base.run.exit, base.run.build; internal/adapter/java_launch.go and java_module.go port OpenIDEA's platform/javaLaunch.ts and Run and Debug share it; spring.* release-gate checks run the detected Spring Boot configuration of testdata/java-spring-multimodule; internal/adapter/run_config.go ports configs.ts (upsert/merge/validate/unique), buildCommand.ts (applyBuildPolicyToCommand) and store.ts saveUserConfigs, and internal/app/run_config_dialog.go carries Edit Configurations (action:run.editConfigs) and Rerun with the confirm dialog (action:run.rerun); base.runcfg.* proves the save/policy/run/remove round trip; Build Before Launch is buildCommand.ts's applyBuildPolicyToCommand (internal/adapter/run_config.go), applied at launch for build-tool configs and through BuildPolicyOf for JVM ones, proven by base.runcfg.policy; the testing pipeline port (internal/adapter/testing_*.go) folds surefire/Gradle output into the results tree and run.rerunFailed derives the -Dtest=/--tests filter (rerunfail.* main-gate checks); go test is parsed too (testing_go.go, gorerun.* main-gate checks); the cargo test pipeline (internal/adapter/testing_cargo.go ports cargo.ts: libtest/nextest parsing, panic locations) folds cargo test output into the tree and cargorun.* main-gate checks prove the --exact derivation reruns only the failed test; pytest is parsed too (testing_pytest.go, pyrerun.* main-gate checks); the js/phpunit/ruby/dotnet parsers are not ported yet (node/php/ruby toolchains exist but jest/phpunit/rspec need framework installs; dotnet is absent) |
 | `run-anything` | 1 | 0 | 1 | 0 | 0 | partial - internal/app/run_anything.go Run Anything popup with Recent and Run Configurations sections, Clear History, per-project history and shell command lines; gear menu action:runAnything.show; Ctrl Ctrl keymap deferred, MyGo has no KeyControl constant; internal/app/run_anything_test.go |
 | `scratch` | 1 | 0 | 1 | 0 | 0 | integrated - internal/app/commands.go and scratch.go; File menu and Cmd+Shift+N open the language chooser and create a scratch tab; internal/app/scratch_test.go and base.scratch checks |
-| `search` | 24 | 3 | 6 | 2 | 0 | partial - base.search.done, base.search.files, base.search.matches and searchEverywhere.*; internal/app/se.go Search Everywhere tabs, search history and recent files/actions; se_filters.go and se_filters_test.go cover the filter funnel; recent_navigation.go adds Recent Files and Recent Locations; the Endpoints section, double-Shift and full Switcher behavior are pending |
+| `search` | 42 | 3 | 6 | 2 | 0 | partial - base.search.done, base.search.files, base.search.matches and searchEverywhere.*; internal/app/se.go Search Everywhere tabs, search history and recent files/actions; se_filters.go and se_filters_test.go cover the filter funnel; recent_navigation.go adds Recent Files, Recent Locations and an open-file Switcher with guarded Delete; double-Shift and Switcher Ctrl-release behavior are tested. The Endpoints section still depends on plugin endpoint enumeration |
 | `services` | 20 | 1 | 1 | 2 | 0 | missing |
-| `settings` | 11 | 0 | 3 | 0 | 77 | partial - internal/app/settings_window.go; OpenIDEA's 980 DIP sheet: page tree built like model/pages.ts with group folders, search filtering with ancestors, breadcrumbs, Back/Forward history, Reset and Cancel/Apply/OK staging; internal/app/settings_test.go |
+| `settings` | 26 | 0 | 3 | 0 | 77 | partial - internal/app/settings_window.go; OpenIDEA's 980 DIP sheet: page tree built like model/pages.ts with group folders, search filtering with ancestors, breadcrumbs, Back/Forward history, Reset and Cancel/Apply/OK staging; internal/app/settings_test.go |
 | `ssh` | 2 | 0 | 1 | 0 | 0 | missing |
-| `templates` | 5 | 0 | 3 | 1 | 3 | missing |
+| `templates` | 6 | 0 | 3 | 1 | 3 | partial - internal/app/project_new.go ports OpenIDEA's built-in file-template catalog, fuzzy chooser, name and kind prompt, JVM/Go/PSR-4 package inference, include and variable expansion and $END$ caret placement; project_new_test.go covers the catalog and rendering. The caret-anchored template chooser, live/postfix/Emmet templates and File and Code Templates settings remain missing |
 | `terminal` | 14 | 1 | 0 | 0 | 0 | partial - internal/app/term.go tab groups over backend PTYs, SplitTerm/UnsplitTerm, ShowTermFind scrollback search, per-tab channel routing and exit by id; base.term.output, base.term.tabs, base.term.split, base.term.find; UPSTREAM_FEATURE_MATRIX.md Terminal |
 | `todo` | 2 | 1 | 0 | 1 | 1 | missing |
 | `tools` | 4 | 0 | 0 | 0 | 0 | partial - tools.jdtls, tools.java-debug |
-| `vcs` | 33 | 3 | 2 | 2 | 1 | partial - base.vcs.changes, base.diff.rows, base.commit.id, base.log.*, base.branch.* and base.stage.*; internal/app/vcs_operations.go supplies branch/tag, fetch, pull, push, merge, rebase, stash/unstash, reset, cherry-pick/revert and continue/abort/skip through one native sheet and the OpenIDEA VCS Operations quick list; vcsoperations.* runs tag, branch, stash round trip, fetch, push, pull, rebase, merge and reset against a real local remote; remote management and worktrees remain |
-| `viewers` | 0 | 0 | 0 | 1 | 0 | missing |
-| `vim` | 3 | 0 | 0 | 1 | 0 | missing |
+| `vcs` | 161 | 3 | 2 | 2 | 1 | partial - base.vcs.changes, base.diff.rows, base.commit.id, base.log.*, base.branch.* and base.stage.*; internal/app/vcs_operations.go supplies branch/tag, fetch, pull, push, merge, rebase, stash/unstash, reset, cherry-pick/revert and continue/abort/skip through one native sheet and the OpenIDEA VCS Operations quick list; vcsoperations.* runs tag, branch, stash round trip, fetch, push, pull, rebase, merge and reset against a real local remote; remote management and worktrees remain |
+| `viewers` | 3 | 0 | 0 | 1 | 0 | missing |
+| `vim` | 3 | 0 | 0 | 1 | 1 | missing |
 | `web` | 2 | 0 | 0 | 1 | 0 | missing |
-| `welcome` | 2 | 0 | 1 | 0 | 0 | missing |
+| `welcome` | 2 | 0 | 1 | 0 | 0 | integrated - internal/app/welcome.go, welcome_recents.go and recent_projects.go implement OpenIDEA's Welcome rail, Recent Projects, groups, search, remove, Customize and Plugins pages; internal/app/welcome_test.go and the welcome-empty, welcome, welcome-customize, welcome-plugins and recent-projects screenshots cover the surface |
 | `whats-new` | 1 | 0 | 0 | 0 | 0 | integrated - internal/app/whatsnew.go; Help menu and app.whatsNew open release notes with the update preference; TestWhatsNewIsAStandalonePage |
 
 Infrastructure folders (`src/editor`, `src/workbench`, `src/platform`, `src/ui`)
@@ -100,22 +101,45 @@ are not product features; the contributions they host are listed below.
 
 ## Actions
 
-480 registered action ids, plus 193 ids that only presets bind (376 in total).
+756 registered action ids, plus 132 ids that only presets bind (376 in total).
 Registered ids are listed by feature folder; keymap-only ids follow.
 
 ### agents
 
 | Action | Title | Source | Status |
 | --- | --- | --- | --- |
-| `agents.addAgent` | More Agents… | `src/features/agents/index.ts` | missing |
-| `agents.closeAndNewTask` | Close and New Agent Task | `src/features/agents/index.ts` | missing |
-| `agents.closeTask` | Close Agent Task | `src/features/agents/index.ts` | missing |
-| `agents.findInConversation` | Find in Conversation | `src/features/agents/index.ts` | missing |
-| `agents.mcpServers` | External MCP Servers… | `src/features/agents/index.ts` | missing |
-| `agents.newTask` | New Agent Task | `src/features/agents/index.ts` | missing |
-| `agents.openSampleConversations` | Open Sample Conversations | `src/features/agents/index.ts` | missing |
-| `agents.sendToAgent` | Send to Agent | `src/features/agents/index.ts` | missing |
-| `agents.showToolWindow` | Agents | `src/features/agents/index.ts` | missing |
+| `agents.addAgent` | More Agents… | `src/features/agents/index.ts` | integrated - internal/app/commands.go opens Settings › Agents › Coding Agents (agents.list) over AgentRegistryPage; internal/app/agent_registry_settings.go and TestAgentRegistryPageShowsProvidersAndLaunchSettings |
+| `agents.archiveTasks` | Archive Agent Tasks | `src/features/agents/taskActions.ts` | integrated - internal/app/agent_actions.go and agent_workspace.go archive the selected tasks sequentially and refresh with the backend archive RPC; TestAgentArchiveManyIsSequentialAndAggregatesErrors |
+| `agents.closeAndNewTask` | Close and New Agent Task | `src/features/agents/index.ts` | integrated - internal/app/commands.go and agents.go close the active conversation and open New Task; internal/app/agents_test.go |
+| `agents.closeTask` | Close Agent Task | `src/features/agents/index.ts` | integrated - internal/app/commands.go and agents.go close the active conversation while keeping its backend task; internal/app/agents_test.go |
+| `agents.copyReplyMarkdown` | Copy Markdown | `src/features/agents/replyActions.ts` | integrated - internal/app/agent_actions.go copies the selected reply's original Markdown; TestAgentCompatibilityActionsAreRegistered and TestAgentActionsAcceptOpenIDEAArguments |
+| `agents.deleteTasks` | Delete Agent Tasks | `src/features/agents/taskActions.ts` | integrated - internal/app/agents.go and agent_workspace.go require confirmation, delete selected tasks and close their tabs; internal/app/agent_organize_test.go and agent_editor_test.go |
+| `agents.dockTask` | Open Agent Task in Tool Window | `src/features/agents/taskActions.ts` | integrated - internal/app/agent_actions.go opens the task in the Agents tool window; TestAgentTaskToolWindowDoesNotCreateEditorTabs and TestAgentActionsAcceptOpenIDEAArguments |
+| `agents.findInConversation` | Find in Conversation | `src/features/agents/index.ts` | integrated - internal/app/agents.go implements the conversation find bar and match count; TestAgentFindCountsEveryVisiblePartOfConversation and TestAgentFindBarTypesStepsAndCloses |
+| `agents.forkReply` | Fork Conversation from Here | `src/features/agents/replyActions.ts` | integrated - internal/app/agent_actions.go forks the conversation at a reply through the backend; TestAgentCompatibilityActionsAreRegistered and TestAgentActionsAcceptOpenIDEAArguments |
+| `agents.forkTask` | Fork Agent Task | `src/features/agents/taskActions.ts` | integrated - internal/app/agent_actions.go and agents.go fork a task and add the returned task to the home; internal/app/agent_actions_test.go |
+| `agents.jumpToLatest` | Jump to Latest | `src/features/agents/replyActions.ts` | integrated - internal/app/agent_actions.go scrolls the active conversation to its newest entry; TestAgentCompatibilityActionsAreRegistered |
+| `agents.mcpServers` | External MCP Servers… | `src/features/agents/index.ts` | integrated - internal/app/commands.go opens Settings › Agents › External MCP Servers (agents.mcpServers); internal/app/agent_mcp_settings.go |
+| `agents.newTask` | New Agent Task | `src/features/agents/index.ts` | integrated - internal/app/commands.go and agents.go open OpenIDEA's New Agent Task dialog; TestAgentCreatePromptAndPermissionRPCArguments |
+| `agents.newTaskGroup` | New Agent Task Group | `src/features/agents/taskActions.ts` | integrated - internal/app/agent_actions.go and agent_workspace.go create a named task group; internal/app/agent_organize_test.go |
+| `agents.openSampleConversations` | Open Sample Conversations | `src/features/agents/index.ts` | integrated - internal/app/agent_actions.go and agent_samples.go open deterministic long sample conversations without backend state; TestAgentSampleConversationsOpenLongTabsWithoutBackend |
+| `agents.openTask` | Open Agent Task | `src/features/agents/taskActions.ts` | integrated - internal/app/agent_actions.go opens a task in its configured editor or tool-window location; TestAgentTaskDefaultsToEditorAndReusesItsTab and TestAgentActionsAcceptOpenIDEAArguments |
+| `agents.openTaskInEditor` | Open Agent Task in Editor | `src/features/agents/taskActions.ts` | integrated - internal/app/agent_editor.go opens and reuses the task's editor tab; TestAgentTaskDefaultsToEditorAndReusesItsTab |
+| `agents.pinTasks` | Pin Agent Tasks | `src/features/agents/taskActions.ts` | integrated - internal/app/agent_actions.go and agent_workspace.go pin the selected tasks and persist their order; internal/app/agent_organize_test.go |
+| `agents.quoteReply` | Quote Reply | `src/features/agents/replyActions.ts` | integrated - internal/app/agent_actions.go inserts a quoted reply into the active composer; TestAgentCompatibilityActionsAreRegistered and TestAgentActionsAcceptOpenIDEAArguments |
+| `agents.regenerateReply` | Regenerate Response | `src/features/agents/replyActions.ts` | integrated - internal/app/agent_actions.go retracts and regenerates the selected response through the backend; internal/app/agent_actions_test.go |
+| `agents.removeTaskGroup` | Remove Agent Task Group | `src/features/agents/taskActions.ts` | integrated - internal/app/agent_workspace.go requires confirmation before removing a group; TestAgentRemoveTaskGroupRequiresConfirmation |
+| `agents.renameTask` | Rename Agent Task | `src/features/agents/taskActions.ts` | integrated - internal/app/agent_actions.go and agents.go rename the selected task through the backend; internal/app/agent_actions_test.go |
+| `agents.renameTaskGroup` | Rename Agent Task Group | `src/features/agents/taskActions.ts` | integrated - internal/app/agent_workspace.go renames a task group and persists the organization; internal/app/agent_organize_test.go |
+| `agents.retractMessage` | Retract Message | `src/features/agents/replyActions.ts` | integrated - internal/app/agent_actions.go opens the message editor and retracts the selected prompt through the backend; internal/app/agent_actions_test.go |
+| `agents.retryConversation` | Retry Loading Conversation | `src/features/agents/taskActions.ts` | integrated - internal/app/agent_actions.go reloads a failed conversation; internal/app/agent_actions_test.go |
+| `agents.sendToAgent` | Send to Agent | `src/features/agents/index.ts` | integrated - internal/app/commands.go and agents.go send the editor selection and references to the active agent; internal/app/agent_composer_test.go |
+| `agents.showToolWindow` | Agents | `src/features/agents/index.ts` | integrated - internal/app/commands.go and agents.go open the right-side Agents window; TestAgentsToolWindowRendersOnTheRight |
+| `agents.unarchiveTasks` | Unarchive Agent Tasks | `src/features/agents/taskActions.ts` | integrated - internal/app/agent_actions.go and agent_workspace.go unarchive the selected tasks through the backend; internal/app/agent_actions_test.go |
+| `agents.undockTask` | Open Agent Task in Editor | `src/features/agents/taskActions.ts` | integrated - internal/app/agent_actions.go moves the task into an editor tab; TestAgentTaskDefaultsToEditorAndReusesItsTab |
+| `agents.unpinTasks` | Unpin Agent Tasks | `src/features/agents/taskActions.ts` | integrated - internal/app/agent_actions.go and agent_workspace.go unpin selected tasks through the backend; internal/app/agent_actions_test.go |
+| `agents.useEditor` | Chat in Editor | `src/features/agents/taskActions.ts` | integrated - internal/app/agent_editor.go moves the active task into the editor and preserves its composer draft; TestAgentSessionLocationPreservesComposerDraft |
+| `agents.useToolWindow` | Chat in Tool Window | `src/features/agents/taskActions.ts` | integrated - internal/app/agent_editor.go moves the active task into the right Agents window; TestAgentTaskToolWindowDoesNotCreateEditorTabs |
 
 ### analysis
 
@@ -132,8 +156,53 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 
 | Action | Title | Source | Status |
 | --- | --- | --- | --- |
+| `app.about` |  | `src/features/app/appActions.ts` | partial - internal/app registers the native action `app.about`; interaction-level acceptance is pending |
+| `app.checkForUpdates` |  | `src/features/app/appActions.ts` | partial - internal/app registers the native action `app.checkForUpdates`; interaction-level acceptance is pending |
+| `app.installCli` |  | `src/features/app/cliCommand.ts` | partial - internal/app registers the native action `app.installCli`; interaction-level acceptance is pending |
+| `app.quit` |  | `src/features/app/appActions.ts` | partial - internal/app registers the native action `app.quit`; interaction-level acceptance is pending |
 | `app.restart` | Restart IDE | `src/features/app/InvalidateCaches.tsx` | integrated - internal/app/commands.go app.restart -> internal/app/invalidate.go RestartIDE, which writes an empty invalidation marker and restarts through the quit flow, so unsaved buffers still prompt; ApplyPendingInvalidation deletes nothing for it; File menu Restart IDE; internal/app/invalidate_test.go TestRestartScheduleDeletesNothing |
+| `app.uninstallCli` |  | `src/features/app/cliCommand.ts` | partial - internal/app registers the native action `app.uninstallCli`; interaction-level acceptance is pending |
+| `edit.copy` |  | `src/features/app/appActions.ts` | integrated - internal/app/commands.go registers OpenIDEA's edit.copy; runEditorCommand executes editor.Copy through MyGo's native clipboard service; TestBasicEditorActionsRunThroughTheRegistry and TestEditorActionsRespectEditorAvailability |
+| `edit.cut` |  | `src/features/app/appActions.ts` | integrated - internal/app/commands.go registers OpenIDEA's edit.cut; runEditorCommand executes editor.Cut with read-only gating; TestBasicEditorActionsRunThroughTheRegistry and TestEditorActionsRespectEditorAvailability |
+| `edit.paste` |  | `src/features/app/appActions.ts` | integrated - internal/app/commands.go registers OpenIDEA's edit.paste; runEditorCommand executes editor.Paste with read-only gating; TestBasicEditorActionsRunThroughTheRegistry and TestEditorActionsRespectEditorAvailability |
+| `edit.redo` |  | `src/features/app/appActions.ts` | integrated - internal/app/commands.go registers OpenIDEA's edit.redo; runEditorCommand executes editor.Redo on the active native Buffer and actions_builtin.go enables it from CanRedo; TestBasicEditorActionsRunThroughTheRegistry |
+| `edit.selectAll` |  | `src/features/app/appActions.ts` | integrated - internal/app/commands.go registers OpenIDEA's edit.selectAll; runEditorCommand executes editor.SelectAll on the active native editor; TestBasicEditorActionsRunThroughTheRegistry and TestEditorActionsRespectEditorAvailability |
+| `edit.undo` |  | `src/features/app/appActions.ts` | integrated - internal/app/commands.go registers OpenIDEA's edit.undo; runEditorCommand executes editor.Undo on the active native Buffer and actions_builtin.go enables it from CanUndo; TestBasicEditorActionsRunThroughTheRegistry |
+| `file.exportSettings` | Export Settings… | `src/features/app/projectActions.ts` | missing |
+| `file.importJetBrainsSettings` | Import Settings from JetBrains IDE… | `src/features/app/projectActions.ts` | missing |
+| `file.importSettings` | Import Settings… | `src/features/app/projectActions.ts` | missing |
 | `file.invalidateCaches` | Invalidate Caches… | `src/features/app/InvalidateCaches.tsx` | integrated - internal/app/commands.go file.invalidateCaches -> internal/app/invalidate.go OpenInvalidateCaches, the dialog with the three optional caches (Local History, language server workspaces, build tool caches) and Invalidate and Restart / Just Restart / Cancel; it writes <data>/invalidate.json and restarts through the quit flow (mygo App.Relaunch), and ApplyPendingInvalidation deletes the chosen openidea-server caches (data/history, data/lsp/jdtls, data/cache) before the next server start, logging a failed deletion; internal/app/invalidate_test.go TestInvalidationScheduleAppliesAtStart, TestRestartScheduleDeletesNothing; base.commands.invalidate |
+| `file.newProject` | New Project… | `src/features/app/projectActions.ts` | partial - internal/app registers the native action `file.newProject`; interaction-level acceptance is pending |
+| `file.openFile` |  | `src/features/app/windows.ts` | partial - internal/app registers the native action `file.openFile`; interaction-level acceptance is pending |
+| `file.openInNewWindow` |  | `src/features/app/windows.ts` | missing |
+| `file.openPaths` | Open Paths | `src/features/app/windows.ts` | partial - internal/app registers the native action `file.openPaths`; interaction-level acceptance is pending |
+| `file.openProjectPath` | Open Project Path | `src/features/app/windows.ts` | partial - internal/app registers the native action `file.openProjectPath`; interaction-level acceptance is pending |
+| `file.openRecentProject` |  | `src/features/app/windows.ts` | partial - internal/app registers the native action `file.openRecentProject`; interaction-level acceptance is pending |
+| `file.renameProject` | Rename Project… | `src/features/app/projectActions.ts` | missing |
+| `file.togglePowerSave` | Power Save Mode | `src/features/app/projectActions.ts` | missing |
+| `help.keymapReference` |  | `src/features/app/appActions.ts` | partial - internal/app registers the native action `help.keymapReference`; interaction-level acceptance is pending |
+| `help.showLog` |  | `src/features/app/appActions.ts` | partial - internal/app registers the native action `help.showLog`; interaction-level acceptance is pending |
+| `lightEdit.openProject` |  | `src/features/app/windows.ts` | partial - internal/app registers the native action `lightEdit.openProject`; interaction-level acceptance is pending |
+| `project.attach` |  | `src/features/app/windows.ts` | integrated - internal/app/project_workspace.go AttachProject, attachWorkspaceProject and the project.reveal selection; base.workspace.attached runs the real Attach Project flow and internal/app/project_workspace_test.go covers trust and the retained editor root |
+| `project.detach` | Detach Project | `src/features/app/windows.ts` | integrated - internal/app/project_workspace.go RemoveWorkspaceProject confirms a non-primary attachment and calls workspace_update; base.workspace.detached and internal/app/project_workspace_test.go |
+| `window.closeOtherTabs` | Close Other Project Tabs | `src/features/app/windows.ts` | partial - internal/app registers the native action `window.closeOtherTabs`; interaction-level acceptance is pending |
+| `window.closeTab` | Close Project Tab | `src/features/app/windows.ts` | partial - internal/app registers the native action `window.closeTab`; interaction-level acceptance is pending |
+| `window.closeTabsToLeft` | Close Project Tabs to the Left | `src/features/app/windows.ts` | partial - internal/app registers the native action `window.closeTabsToLeft`; interaction-level acceptance is pending |
+| `window.closeTabsToRight` | Close Project Tabs to the Right | `src/features/app/windows.ts` | partial - internal/app registers the native action `window.closeTabsToRight`; interaction-level acceptance is pending |
+| `window.detachTab` | Move Tab to New Window | `src/features/app/windows.ts` | missing |
+| `window.mergeAllWindows` | Merge All Project Windows | `src/features/app/windows.ts` | missing |
+| `window.new` |  | `src/features/app/windows.ts` | missing |
+| `window.next` |  | `src/features/app/windows.ts` | missing |
+| `window.nextTab` | Next Project Tab | `src/features/app/windows.ts` | partial - internal/app registers the native action `window.nextTab`; interaction-level acceptance is pending |
+| `window.previous` |  | `src/features/app/windows.ts` | missing |
+| `window.previousTab` | Previous Project Tab | `src/features/app/windows.ts` | partial - internal/app registers the native action `window.previousTab`; interaction-level acceptance is pending |
+| `window.reorderTabs` | Reorder Project Tabs | `src/features/app/windows.ts` | partial - internal/app registers the native action `window.reorderTabs`; interaction-level acceptance is pending |
+| `window.selectTab` | Select Project Tab | `src/features/app/windows.ts` | partial - internal/app registers the native action `window.selectTab`; interaction-level acceptance is pending |
+| `window.toggleFullScreen` |  | `src/features/app/windows.ts` | partial - internal/app/zen.go ToggleFullScreen through mygo Window.ToggleFullScreen; the native full-screen transition is not exercised headless |
+| `workspace.create` | New Workspace… | `src/features/app/windows.ts` | integrated - internal/app/project_workspace.go OpenNewWorkspace, saveWorkspaceDialog and workspace_create; base.workspace.created opens the real container and internal/app/project_workspace_test.go covers the request |
+| `workspace.manage` | Manage Workspace… | `src/features/app/windows.ts` | integrated - internal/app/project_workspace.go OpenManageWorkspace and workspace_update preserve the container; base.workspace.managed renames it and links a third real project |
+| `workspace.open` | Open Workspace… | `src/features/app/windows.ts` | partial - internal/app/project_workspace.go OpenWorkspace selects a folder and uses the shared project-switch path; internal/app/project_workspace_test.go covers workspace RPC lifecycle, but the native folder-picker callback has no automated gate |
+| `workspace.removeProject` | Remove from Workspace | `src/features/app/windows.ts` | integrated - internal/app/project_workspace.go RemoveWorkspaceProject and updateWorkspaceProjects keep the container state root; base.workspace.removed and internal/app/project_workspace_test.go |
 
 ### build
 
@@ -150,147 +219,150 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 
 | Action | Title | Source | Status |
 | --- | --- | --- | --- |
-| `gradle.analyzeDependencies` | Analyze Dependencies… | `src/features/build-tools/index.ts` | missing |
-| `gradle.cancelReload` | Stop Reloading Gradle Projects | `src/features/build-tools/index.ts` | missing |
-| `gradle.collapseAll` | Collapse All | `src/features/build-tools/index.ts` | missing |
-| `gradle.executeTask` | Execute Gradle Task… | `src/features/build-tools/index.ts` | missing |
-| `gradle.expandAll` | Expand All | `src/features/build-tools/index.ts` | missing |
-| `gradle.linkProjects` | Link Gradle Projects | `src/features/build-tools/index.ts` | missing |
-| `gradle.reload` | Reload All Gradle Projects | `src/features/build-tools/index.ts` | missing |
-| `gradle.toggleOffline` | Toggle Offline Mode | `src/features/build-tools/index.ts` | missing |
-| `gradle.toggleSkipTests` | Toggle 'Skip Tests' Mode | `src/features/build-tools/index.ts` | missing |
-| `gradle.unlinkProjects` | Unlink Gradle Project | `src/features/build-tools/index.ts` | missing |
-| `maven.addProjects` | Add Maven Projects | `src/features/build-tools/index.ts` | missing |
-| `maven.analyzeDependencies` | Analyze Dependencies… | `src/features/build-tools/index.ts` | missing |
-| `maven.cancelReload` | Stop Reloading Maven Projects | `src/features/build-tools/index.ts` | missing |
-| `maven.collapseAll` | Collapse All | `src/features/build-tools/index.ts` | missing |
-| `maven.executeGoal` | Execute Maven Goal… | `src/features/build-tools/index.ts` | missing |
-| `maven.expandAll` | Expand All | `src/features/build-tools/index.ts` | missing |
-| `maven.generateSources` | Generate Sources and Update Folders For All Projects | `src/features/build-tools/index.ts` | missing |
-| `maven.importExternal` | Import Module from Existing Sources | `src/features/build-tools/index.ts` | missing |
-| `maven.reload` | Reload All Maven Projects | `src/features/build-tools/index.ts` | missing |
-| `maven.settings` | Maven Settings… | `src/features/build-tools/index.ts` | missing |
-| `maven.toggleOffline` | Toggle Offline Mode | `src/features/build-tools/index.ts` | missing |
-| `maven.toggleSkipTests` | Toggle 'Skip Tests' Mode | `src/features/build-tools/index.ts` | missing |
-| `maven.unlinkProjects` | Unlink Maven Projects | `src/features/build-tools/index.ts` | missing |
+| `gradle.analyzeDependencies` | Analyze Dependencies… | `src/features/build-tools/index.ts` | partial - internal/app registers the native action `gradle.analyzeDependencies`; interaction-level acceptance is pending |
+| `gradle.cancelReload` | Stop Reloading Gradle Projects | `src/features/build-tools/index.ts` | partial - internal/app registers the native action `gradle.cancelReload`; interaction-level acceptance is pending |
+| `gradle.collapseAll` | Collapse All | `src/features/build-tools/index.ts` | partial - internal/app registers the native action `gradle.collapseAll`; interaction-level acceptance is pending |
+| `gradle.executeTask` | Execute Gradle Task… | `src/features/build-tools/index.ts` | partial - internal/app registers the native action `gradle.executeTask`; interaction-level acceptance is pending |
+| `gradle.expandAll` | Expand All | `src/features/build-tools/index.ts` | partial - internal/app registers the native action `gradle.expandAll`; interaction-level acceptance is pending |
+| `gradle.linkProjects` | Link Gradle Projects | `src/features/build-tools/index.ts` | partial - internal/app registers the native action `gradle.linkProjects`; interaction-level acceptance is pending |
+| `gradle.reload` | Reload All Gradle Projects | `src/features/build-tools/index.ts` | partial - internal/app registers the native action `gradle.reload`; interaction-level acceptance is pending |
+| `gradle.toggleOffline` | Toggle Offline Mode | `src/features/build-tools/index.ts` | partial - internal/app registers the native action `gradle.toggleOffline`; interaction-level acceptance is pending |
+| `gradle.toggleSkipTests` | Toggle 'Skip Tests' Mode | `src/features/build-tools/index.ts` | partial - internal/app registers the native action `gradle.toggleSkipTests`; interaction-level acceptance is pending |
+| `gradle.unlinkProjects` | Unlink Gradle Project | `src/features/build-tools/index.ts` | partial - internal/app registers the native action `gradle.unlinkProjects`; interaction-level acceptance is pending |
+| `maven.addProjects` | Add Maven Projects | `src/features/build-tools/index.ts` | partial - internal/app registers the native action `maven.addProjects`; interaction-level acceptance is pending |
+| `maven.analyzeDependencies` | Analyze Dependencies… | `src/features/build-tools/index.ts` | partial - internal/app registers the native action `maven.analyzeDependencies`; interaction-level acceptance is pending |
+| `maven.cancelReload` | Stop Reloading Maven Projects | `src/features/build-tools/index.ts` | partial - internal/app registers the native action `maven.cancelReload`; interaction-level acceptance is pending |
+| `maven.collapseAll` | Collapse All | `src/features/build-tools/index.ts` | partial - internal/app registers the native action `maven.collapseAll`; interaction-level acceptance is pending |
+| `maven.executeGoal` | Execute Maven Goal… | `src/features/build-tools/index.ts` | partial - internal/app registers the native action `maven.executeGoal`; interaction-level acceptance is pending |
+| `maven.expandAll` | Expand All | `src/features/build-tools/index.ts` | partial - internal/app registers the native action `maven.expandAll`; interaction-level acceptance is pending |
+| `maven.generateSources` | Generate Sources and Update Folders For All Projects | `src/features/build-tools/index.ts` | partial - internal/app registers the native action `maven.generateSources`; interaction-level acceptance is pending |
+| `maven.importExternal` | Import Module from Existing Sources | `src/features/build-tools/index.ts` | partial - internal/app registers the native action `maven.importExternal`; interaction-level acceptance is pending |
+| `maven.reload` | Reload All Maven Projects | `src/features/build-tools/index.ts` | partial - internal/app registers the native action `maven.reload`; interaction-level acceptance is pending |
+| `maven.settings` | Maven Settings… | `src/features/build-tools/index.ts` | partial - internal/app registers the native action `maven.settings`; interaction-level acceptance is pending |
+| `maven.toggleOffline` | Toggle Offline Mode | `src/features/build-tools/index.ts` | partial - internal/app registers the native action `maven.toggleOffline`; interaction-level acceptance is pending |
+| `maven.toggleSkipTests` | Toggle 'Skip Tests' Mode | `src/features/build-tools/index.ts` | partial - internal/app registers the native action `maven.toggleSkipTests`; interaction-level acceptance is pending |
+| `maven.unlinkProjects` | Unlink Maven Projects | `src/features/build-tools/index.ts` | partial - internal/app registers the native action `maven.unlinkProjects`; interaction-level acceptance is pending |
 
 ### code-insight
 
 | Action | Title | Source | Status |
 | --- | --- | --- | --- |
-| `find.showUsageResults` | Show Usage Results | `src/features/code-insight/index.ts` | missing |
-| `find.showUsages` | Show Usages | `src/features/code-insight/index.ts` | missing |
+| `find.showUsageResults` | Show Usage Results | `src/features/code-insight/index.ts` | integrated - internal/app/commands.go registers OpenIDEA's find.showUsageResults and the code.showUsageResults alias; internal/app/action.go dispatches it to the same exact-result transfer used by Show Usages, while lsp.usagesPopup.transfer proves the native popup hands all rows to Find Usages without issuing a second reference search |
+| `find.showUsages` | Show Usages | `src/features/code-insight/index.ts` | integrated - internal/app/usage_popup.go implements the native Show Usages popup behind OpenIDEA's find.showUsages action and ⌥⌘F7, with streamed references, filename and source-line speed search, scope widening, access filters, source preview and transfer to Find Usages; lsp.usagesPopup.open and lsp.usagesPopup.transfer pass against real JDT, and usage_popup_test.go covers navigation, filtering, persistence, stale responses, early streaming and rendering |
 | `find.usages` | Find Usages | `src/features/code-insight/index.ts` | integrated - lsp.references.count, lsp.references.done |
 | `navigate.callHierarchy` | Call Hierarchy | `src/features/code-insight/index.ts` | integrated - internal/app/commands.go navigate.callHierarchy Ctrl+Alt+H; internal/app/hierarchy.go OpenCallHierarchy over lsp_call_hierarchy; Navigate menu Call Hierarchy |
 | `navigate.typeHierarchy` | Type Hierarchy | `src/features/code-insight/index.ts` | integrated - internal/app/commands.go navigate.typeHierarchy Ctrl+H; internal/app/hierarchy.go OpenTypeHierarchy over lsp_type_hierarchy; Navigate menu Type Hierarchy |
-| `usages.rerun` | Rerun Find Usages | `src/features/code-insight/index.ts` | missing |
+| `usages.rerun` | Rerun Find Usages | `src/features/code-insight/index.ts` | partial - internal/app registers the native action `usages.rerun`; interaction-level acceptance is pending |
 
 ### coverage
 
 | Action | Title | Source | Status |
 | --- | --- | --- | --- |
-| `coverage.hide` | Hide Coverage | `src/features/coverage/index.ts` | partial - internal/app/coverage.go SetCoverageVisible |
+| `coverage.hide` | Hide Coverage | `src/features/coverage/index.ts` | integrated - internal/app/coverage.go SetCoverageVisible removes every active-suite decoration while retaining reports; TestCoverageActionsFollowOpenIDEAContextState verifies enabled state and results |
 | `coverage.importReport` | Import a Coverage Report… | `src/features/coverage/index.ts` | integrated - base.coverage.report |
-| `coverage.manageReports` | Manage Coverage Reports… | `src/features/coverage/index.ts` | partial - base.coverage.report; internal/app/coverage_test.go verifies report persistence and removal |
-| `coverage.show` | Show Coverage | `src/features/coverage/index.ts` | partial - internal/app/coverage.go SetCoverageVisible |
-| `run.coverage` | Run with Coverage | `src/features/coverage/index.ts` | partial - internal/app/coverage_run.go; TestCoverageCollectsAnExitBeforeTheRunStartReply |
-| `run.coverageContext` | Run Context Configuration with Coverage | `src/features/coverage/index.ts` | missing |
+| `coverage.manageReports` | Manage Coverage Reports… | `src/features/coverage/index.ts` | integrated - internal/app/coverage.go and coverage_view.go render OpenIDEA's Manage Coverage Reports overlay with suite selection, imported-report removal and source-report preservation; TestCoverageReportsRestoreWithoutDeletingSourceReport and TestCoverageActionsFollowOpenIDEAContextState cover the native flow |
+| `coverage.show` | Show Coverage | `src/features/coverage/index.ts` | integrated - internal/app/coverage.go SetCoverageVisible restores the active suite's editor and tree decorations and opens the Coverage window; TestCoverageActionsFollowOpenIDEAContextState verifies enabled state and results |
+| `run.coverage` | Run with Coverage | `src/features/coverage/index.ts` | integrated - internal/app/coverage_run.go prepares the selected configuration, runs it through the normal Run lifecycle, waits for exit and collects the report; TestCoverageCollectsAnExitBeforeTheRunStartReply covers the short-lived process reply race |
+| `run.coverageContext` | Run Context Configuration with Coverage | `src/features/coverage/index.ts` | partial - internal/app registers the native action `run.coverageContext`; interaction-level acceptance is pending |
 
 ### database
 
 | Action | Title | Source | Status |
 | --- | --- | --- | --- |
-| `db.closeAllResultTabs` | Close All | `src/features/database/resultTabActions.ts` | missing |
-| `db.closeOtherResultTabs` | Close Others | `src/features/database/resultTabActions.ts` | missing |
-| `db.closeResultTab` | Close | `src/features/database/resultTabActions.ts` | missing |
-| `db.collapseAll` | Collapse All | `src/features/database/treeActions.ts` | missing |
-| `db.copyReference` | Copy Reference | `src/features/database/treeActions.ts` | missing |
-| `db.ddlToClipboard` | Generate DDL to Clipboard | `src/features/database/treeActions.ts` | missing |
-| `db.ddlToConsole` | Generate DDL to Query Console | `src/features/database/treeActions.ts` | missing |
-| `db.disconnect` | Deactivate | `src/features/database/treeActions.ts` | missing |
-| `db.drop` | Drop… | `src/features/database/treeActions.ts` | missing |
-| `db.duplicateSource` | Duplicate | `src/features/database/treeActions.ts` | missing |
-| `db.editData` | Edit Data | `src/features/database/treeActions.ts` | missing |
-| `db.execute` | Execute SQL Statement | `src/features/database/index.ts` | missing |
-| `db.executeScript` | Execute SQL Script | `src/features/database/index.ts` | missing |
-| `db.explainPlan` | Explain Plan | `src/features/database/index.ts` | missing |
-| `db.findInValue` | Find | `src/features/database/valueEditorActions.ts` | missing |
-| `db.goToColumn` | Go to Column | `src/features/database/index.ts` | missing |
-| `db.goToDdl` | Go to DDL | `src/features/database/treeActions.ts` | missing |
-| `db.goToReferencedTable` | Go to Referenced Table | `src/features/database/treeActions.ts` | missing |
-| `db.importData` | Import Data from File… | `src/features/database/treeActions.ts` | missing |
-| `db.introspect` | Introspect All Databases | `src/features/database/treeActions.ts` | missing |
-| `db.jumpToConsole` | Jump to Query Console… | `src/features/database/treeActions.ts` | missing |
-| `db.modifyTable` | Modify Table… | `src/features/database/treeActions.ts` | missing |
-| `db.new` | New… | `src/features/database/treeActions.ts` | missing |
-| `db.newColumn` | Column | `src/features/database/treeActions.ts` | missing |
-| `db.newDataSource` | New Data Source… | `src/features/database/index.ts` | missing |
-| `db.newTable` | Table | `src/features/database/treeActions.ts` | missing |
-| `db.openConsole` | Query Console | `src/features/database/index.ts` | missing |
-| `db.openValueWindow` | Open in Window | `src/features/database/valueEditorActions.ts` | missing |
-| `db.pluginConnect` | Connect Plugin Data Source | `src/features/database/index.ts` | missing |
-| `db.properties` | Data Source Properties… | `src/features/database/treeActions.ts` | missing |
-| `db.queryHistory` | Browse Query History | `src/features/database/index.ts` | missing |
-| `db.quickDoc` | Quick Documentation | `src/features/database/treeActions.ts` | missing |
-| `db.reformatValue` | Reformat | `src/features/database/valueEditorActions.ts` | missing |
-| `db.refresh` | Refresh | `src/features/database/treeActions.ts` | missing |
-| `db.rename` | Rename… | `src/features/database/treeActions.ts` | missing |
-| `db.renameResultTab` | Rename Tab | `src/features/database/resultTabActions.ts` | missing |
-| `db.revertChanges` | Revert | `src/features/database/index.ts` | missing |
-| `db.runSqlScript` | Run SQL Script… | `src/features/database/treeActions.ts` | missing |
-| `db.separateProceduresAndFunctions` | Separate Procedures and Functions | `src/features/database/treeActions.ts` | missing |
-| `db.setCellDefault` | Set DEFAULT | `src/features/database/cellActions.ts` | missing |
-| `db.setCellNull` | Set NULL | `src/features/database/cellActions.ts` | missing |
-| `db.showToolWindow` | Database | `src/features/database/index.ts` | missing |
-| `db.sqlScript` | SQL Script Template | `src/features/database/treeActions.ts` | missing |
-| `db.submitChanges` | Submit | `src/features/database/index.ts` | missing |
-| `db.toggleBooleanCell` | Toggle Boolean Cell | `src/features/database/cellActions.ts` | missing |
-| `db.truncate` | Truncate… | `src/features/database/treeActions.ts` | missing |
+| `db.closeAllResultTabs` | Close All | `src/features/database/resultTabActions.ts` | partial - internal/app registers the native action `db.closeAllResultTabs`; interaction-level acceptance is pending |
+| `db.closeOtherResultTabs` | Close Others | `src/features/database/resultTabActions.ts` | partial - internal/app registers the native action `db.closeOtherResultTabs`; interaction-level acceptance is pending |
+| `db.closeResultTab` | Close | `src/features/database/resultTabActions.ts` | partial - internal/app registers the native action `db.closeResultTab`; interaction-level acceptance is pending |
+| `db.collapseAll` | Collapse All | `src/features/database/treeActions.ts` | partial - internal/app registers the native action `db.collapseAll`; interaction-level acceptance is pending |
+| `db.copyReference` | Copy Reference | `src/features/database/treeActions.ts` | partial - internal/app registers the native action `db.copyReference`; interaction-level acceptance is pending |
+| `db.ddlToClipboard` | Generate DDL to Clipboard | `src/features/database/treeActions.ts` | partial - internal/app registers the native action `db.ddlToClipboard`; interaction-level acceptance is pending |
+| `db.ddlToConsole` | Generate DDL to Query Console | `src/features/database/treeActions.ts` | partial - internal/app registers the native action `db.ddlToConsole`; interaction-level acceptance is pending |
+| `db.disconnect` | Deactivate | `src/features/database/treeActions.ts` | partial - internal/app registers the native action `db.disconnect`; interaction-level acceptance is pending |
+| `db.drop` | Drop… | `src/features/database/treeActions.ts` | partial - internal/app registers the native action `db.drop`; interaction-level acceptance is pending |
+| `db.duplicateSource` | Duplicate | `src/features/database/treeActions.ts` | partial - internal/app registers the native action `db.duplicateSource`; interaction-level acceptance is pending |
+| `db.editData` | Edit Data | `src/features/database/treeActions.ts` | partial - internal/app registers the native action `db.editData`; interaction-level acceptance is pending |
+| `db.execute` | Execute SQL Statement | `src/features/database/index.ts` | partial - internal/app registers the native action `db.execute`; interaction-level acceptance is pending |
+| `db.executeScript` | Execute SQL Script | `src/features/database/index.ts` | partial - internal/app registers the native action `db.executeScript`; interaction-level acceptance is pending |
+| `db.explainPlan` | Explain Plan | `src/features/database/index.ts` | partial - internal/app registers the native action `db.explainPlan`; interaction-level acceptance is pending |
+| `db.findInValue` | Find | `src/features/database/valueEditorActions.ts` | partial - internal/app registers the native action `db.findInValue`; interaction-level acceptance is pending |
+| `db.goToColumn` | Go to Column | `src/features/database/index.ts` | partial - internal/app registers the native action `db.goToColumn`; interaction-level acceptance is pending |
+| `db.goToDdl` | Go to DDL | `src/features/database/treeActions.ts` | partial - internal/app registers the native action `db.goToDdl`; interaction-level acceptance is pending |
+| `db.goToReferencedTable` | Go to Referenced Table | `src/features/database/treeActions.ts` | partial - internal/app registers the native action `db.goToReferencedTable`; interaction-level acceptance is pending |
+| `db.importData` | Import Data from File… | `src/features/database/treeActions.ts` | partial - internal/app registers the native action `db.importData`; interaction-level acceptance is pending |
+| `db.introspect` | Introspect All Databases | `src/features/database/treeActions.ts` | partial - internal/app registers the native action `db.introspect`; interaction-level acceptance is pending |
+| `db.jumpToConsole` | Jump to Query Console… | `src/features/database/treeActions.ts` | partial - internal/app registers the native action `db.jumpToConsole`; interaction-level acceptance is pending |
+| `db.modifyTable` | Modify Table… | `src/features/database/treeActions.ts` | partial - internal/app registers the native action `db.modifyTable`; interaction-level acceptance is pending |
+| `db.new` | New… | `src/features/database/treeActions.ts` | partial - internal/app registers the native action `db.new`; interaction-level acceptance is pending |
+| `db.newColumn` | Column | `src/features/database/treeActions.ts` | partial - internal/app registers the native action `db.newColumn`; interaction-level acceptance is pending |
+| `db.newDataSource` | New Data Source… | `src/features/database/index.ts` | partial - internal/app registers the native action `db.newDataSource`; interaction-level acceptance is pending |
+| `db.newTable` | Table | `src/features/database/treeActions.ts` | partial - internal/app registers the native action `db.newTable`; interaction-level acceptance is pending |
+| `db.openConsole` | Query Console | `src/features/database/index.ts` | partial - internal/app registers the native action `db.openConsole`; interaction-level acceptance is pending |
+| `db.openValueWindow` | Open in Window | `src/features/database/valueEditorActions.ts` | partial - internal/app registers the native action `db.openValueWindow`; interaction-level acceptance is pending |
+| `db.pluginConnect` | Connect Plugin Data Source | `src/features/database/index.ts` | partial - internal/app registers the native action `db.pluginConnect`; interaction-level acceptance is pending |
+| `db.properties` | Data Source Properties… | `src/features/database/treeActions.ts` | partial - internal/app registers the native action `db.properties`; interaction-level acceptance is pending |
+| `db.queryHistory` | Browse Query History | `src/features/database/index.ts` | partial - internal/app registers the native action `db.queryHistory`; interaction-level acceptance is pending |
+| `db.quickDoc` | Quick Documentation | `src/features/database/treeActions.ts` | partial - internal/app registers the native action `db.quickDoc`; interaction-level acceptance is pending |
+| `db.reformatValue` | Reformat | `src/features/database/valueEditorActions.ts` | partial - internal/app registers the native action `db.reformatValue`; interaction-level acceptance is pending |
+| `db.refresh` | Refresh | `src/features/database/treeActions.ts` | partial - internal/app registers the native action `db.refresh`; interaction-level acceptance is pending |
+| `db.rename` | Rename… | `src/features/database/treeActions.ts` | partial - internal/app registers the native action `db.rename`; interaction-level acceptance is pending |
+| `db.renameResultTab` | Rename Tab | `src/features/database/resultTabActions.ts` | partial - internal/app registers the native action `db.renameResultTab`; interaction-level acceptance is pending |
+| `db.revertChanges` | Revert | `src/features/database/index.ts` | partial - internal/app registers the native action `db.revertChanges`; interaction-level acceptance is pending |
+| `db.runSqlScript` | Run SQL Script… | `src/features/database/treeActions.ts` | partial - internal/app registers the native action `db.runSqlScript`; interaction-level acceptance is pending |
+| `db.separateProceduresAndFunctions` | Separate Procedures and Functions | `src/features/database/treeActions.ts` | partial - internal/app registers the native action `db.separateProceduresAndFunctions`; interaction-level acceptance is pending |
+| `db.setCellDefault` | Set DEFAULT | `src/features/database/cellActions.ts` | partial - internal/app registers the native action `db.setCellDefault`; interaction-level acceptance is pending |
+| `db.setCellNull` | Set NULL | `src/features/database/cellActions.ts` | partial - internal/app registers the native action `db.setCellNull`; interaction-level acceptance is pending |
+| `db.showToolWindow` | Database | `src/features/database/index.ts` | partial - internal/app registers the native action `db.showToolWindow`; interaction-level acceptance is pending |
+| `db.sqlScript` | SQL Script Template | `src/features/database/treeActions.ts` | partial - internal/app registers the native action `db.sqlScript`; interaction-level acceptance is pending |
+| `db.submitChanges` | Submit | `src/features/database/index.ts` | partial - internal/app registers the native action `db.submitChanges`; interaction-level acceptance is pending |
+| `db.toggleBooleanCell` | Toggle Boolean Cell | `src/features/database/cellActions.ts` | partial - internal/app registers the native action `db.toggleBooleanCell`; interaction-level acceptance is pending |
+| `db.truncate` | Truncate… | `src/features/database/treeActions.ts` | partial - internal/app registers the native action `db.truncate`; interaction-level acceptance is pending |
 
 ### debugger
 
 | Action | Title | Source | Status |
 | --- | --- | --- | --- |
 | `debug.attach` | Attach Debugger | `src/features/debugger/actions.ts` | partial - internal/app/attach.go ports attach.ts and java.ts's javaAttachConfig: debug_attachable_processes enumeration, the Java (JDWP) group with the word filter, and the attach request (cwd, javaProjectName, hostName, port, 30 s timeout) with the suspend=y auto-resume; attach.* release-gate checks attach to a real suspended JDWP JVM and require the program's output in the run pane; limits: GoIDEA ships java-debug only, so the popup lists the Java group, and there is no listen-mode remote debug |
-| `debug.attachToProcess` | Attach to Process… | `src/features/debugger/actions.ts` | missing |
-| `debug.browseConsoleHistory` | Browse Console History | `src/features/debugger/actions.ts` | missing |
-| `debug.cancelHotSwap` | Cancel Hot Swap Build | `src/features/debugger/actions.ts` | missing |
-| `debug.evaluate` | Evaluate Expression… | `src/features/debugger/actions.ts` | missing |
-| `debug.forceRunToCursor` | Force Run to Cursor | `src/features/debugger/actions.ts` | missing |
-| `debug.forceStepInto` | Force Step Into | `src/features/debugger/actions.ts` | missing |
-| `debug.forceStepOver` | Force Step Over | `src/features/debugger/actions.ts` | missing |
-| `debug.heap.capture` | Capture Heap Snapshot | `src/features/debugger/actions.ts` | missing |
-| `debug.heap.open` | Open Heap Dump… | `src/features/debugger/actions.ts` | missing |
-| `debug.heap.saveDump` | Save Heap Dump As… | `src/features/debugger/actions.ts` | missing |
-| `debug.hotReload` | Hot Reload | `src/features/debugger/actions.ts` | missing |
-| `debug.hotRestart` | Hot Restart | `src/features/debugger/actions.ts` | missing |
-| `debug.jumpToSource` | Jump to Source | `src/features/debugger/actions.ts` | missing |
-| `debug.memory.closeInstances` | Close Instances | `src/features/debugger/actions.ts` | missing |
-| `debug.memory.jumpToSource` | Jump to Source | `src/features/debugger/actions.ts` | missing |
-| `debug.memory.refresh` | Refresh Memory View | `src/features/debugger/actions.ts` | missing |
-| `debug.memory.showInstances` | Show Instances | `src/features/debugger/actions.ts` | missing |
-| `debug.memory.showReferrers` | Show Referrers | `src/features/debugger/actions.ts` | missing |
-| `debug.muteBreakpoints` | Mute Breakpoints | `src/features/debugger/actions.ts` | missing |
-| `debug.pause` | Pause Program | `src/features/debugger/actions.ts` | missing |
-| `debug.pluginStart` | Debug Plugin Configuration | `src/features/debugger/actions.ts` | missing |
-| `debug.quickEvaluate` | Quick Evaluate Expression | `src/features/debugger/actions.ts` | missing |
+| `debug.attachToProcess` | Attach to Process… | `src/features/debugger/actions.ts` | partial - OpenIDEA id `debug.attachToProcess` aliases GoIDEA action `debug.attach`; internal/app/attach.go ports attach.ts and java.ts's javaAttachConfig: debug_attachable_processes enumeration, the Java (JDWP) group with the word filter, and the attach request (cwd, javaProjectName, hostName, port, 30 s timeout) with the suspend=y auto-resume; attach.* release-gate checks attach to a real suspended JDWP JVM and require the program's output in the run pane; limits: GoIDEA ships java-debug only, so the popup lists the Java group, and there is no listen-mode remote debug |
+| `debug.browseConsoleHistory` | Browse Console History | `src/features/debugger/actions.ts` | partial - internal/app registers the native action `debug.browseConsoleHistory`; interaction-level acceptance is pending |
+| `debug.cancelHotSwap` | Cancel Hot Swap Build | `src/features/debugger/actions.ts` | partial - internal/app registers the native action `debug.cancelHotSwap`; interaction-level acceptance is pending |
+| `debug.evaluate` | Evaluate Expression… | `src/features/debugger/actions.ts` | partial - internal/app registers the native action `debug.evaluate`; interaction-level acceptance is pending |
+| `debug.forceRunToCursor` | Force Run to Cursor | `src/features/debugger/actions.ts` | partial - internal/app registers the native action `run.forceRunToCursor`; interaction-level acceptance is pending |
+| `debug.forceStepInto` | Force Step Into | `src/features/debugger/actions.ts` | partial - internal/app registers the native action `debug.forceStepInto`; interaction-level acceptance is pending |
+| `debug.forceStepOver` | Force Step Over | `src/features/debugger/actions.ts` | partial - internal/app registers the native action `debug.forceStepOver`; interaction-level acceptance is pending |
+| `debug.heap.capture` | Capture Heap Snapshot | `src/features/debugger/actions.ts` | partial - internal/app registers the native action `debug.heap.capture`; interaction-level acceptance is pending |
+| `debug.heap.open` | Open Heap Dump… | `src/features/debugger/actions.ts` | partial - internal/app registers the native action `debug.heap.open`; interaction-level acceptance is pending |
+| `debug.heap.saveDump` | Save Heap Dump As… | `src/features/debugger/actions.ts` | partial - internal/app registers the native action `debug.heap.saveDump`; interaction-level acceptance is pending |
+| `debug.hotReload` | Hot Reload | `src/features/debugger/actions.ts` | partial - OpenIDEA id `debug.hotReload` aliases GoIDEA action `debug.reloadChangedClasses`; internal/app/hotswap.go HotSwapReload ports hotswap.ts: saveAll, java_build_workspace over the session's cwd, debug_redefine_classes into the session, hotSwapMessage wording (nothing to reload / N classes reloaded / obsolete methods warning / failure refuses), and the hotCodeReplace BUILD_COMPLETE event offers the reload (IDEA's Ask); hotswap.* release-gate checks pause at a breakpoint, reload the edited Greeter class and require the NEW text in the program's output; limits: no per-session caps gate, no Reset Frame action, no cancel-build UI |
+| `debug.hotRestart` | Hot Restart | `src/features/debugger/actions.ts` | partial - internal/app registers the native action `debug.hotRestart`; interaction-level acceptance is pending |
+| `debug.jumpToSource` | Jump to Source | `src/features/debugger/actions.ts` | partial - internal/app registers the native action `debug.jumpToSource`; interaction-level acceptance is pending |
+| `debug.memory.closeInstances` | Close Instances | `src/features/debugger/actions.ts` | partial - internal/app registers the native action `debug.memory.closeInstances`; interaction-level acceptance is pending |
+| `debug.memory.jumpToSource` | Jump to Source | `src/features/debugger/actions.ts` | partial - internal/app registers the native action `debug.memory.jumpToSource`; interaction-level acceptance is pending |
+| `debug.memory.refresh` | Refresh Memory View | `src/features/debugger/actions.ts` | partial - internal/app registers the native action `debug.memory.refresh`; interaction-level acceptance is pending |
+| `debug.memory.showInstances` | Show Instances | `src/features/debugger/actions.ts` | partial - internal/app registers the native action `debug.memory.showInstances`; interaction-level acceptance is pending |
+| `debug.memory.showReferrers` | Show Referrers | `src/features/debugger/actions.ts` | partial - internal/app registers the native action `debug.memory.showReferrers`; interaction-level acceptance is pending |
+| `debug.muteBreakpoints` | Mute Breakpoints | `src/features/debugger/actions.ts` | partial - internal/app registers the native action `debug.muteBreakpoints`; interaction-level acceptance is pending |
+| `debug.pause` | Pause Program | `src/features/debugger/actions.ts` | partial - internal/app registers the native action `run.pause`; interaction-level acceptance is pending |
+| `debug.pluginStart` | Debug Plugin Configuration | `src/features/debugger/actions.ts` | partial - internal/app registers the native action `debug.pluginStart`; interaction-level acceptance is pending |
+| `debug.quickEvaluate` | Quick Evaluate Expression | `src/features/debugger/actions.ts` | partial - internal/app registers the native action `debug.quickEvaluate`; interaction-level acceptance is pending |
 | `debug.reloadChangedClasses` | Reload Changed Classes | `src/features/debugger/actions.ts` | partial - internal/app/hotswap.go HotSwapReload ports hotswap.ts: saveAll, java_build_workspace over the session's cwd, debug_redefine_classes into the session, hotSwapMessage wording (nothing to reload / N classes reloaded / obsolete methods warning / failure refuses), and the hotCodeReplace BUILD_COMPLETE event offers the reload (IDEA's Ask); hotswap.* release-gate checks pause at a breakpoint, reload the edited Greeter class and require the NEW text in the program's output; limits: no per-session caps gate, no Reset Frame action, no cancel-build UI |
-| `debug.removeAllBreakpoints` | Remove All Breakpoints | `src/features/debugger/actions.ts` | missing |
-| `debug.rerun` | Rerun | `src/features/debugger/actions.ts` | missing |
-| `debug.resetFrame` | Reset Frame | `src/features/debugger/actions.ts` | missing |
-| `debug.resume` | Resume Program | `src/features/debugger/actions.ts` | missing |
-| `debug.runToCursor` | Run to Cursor | `src/features/debugger/actions.ts` | missing |
-| `debug.setValue` | Set Value… | `src/features/debugger/actions.ts` | missing |
-| `debug.showExecutionPoint` | Show Execution Point | `src/features/debugger/actions.ts` | missing |
-| `debug.showToolWindow` | Show Debug Tool Window | `src/features/debugger/actions.ts` | missing |
-| `debug.smartStepInto` | Smart Step Into | `src/features/debugger/actions.ts` | missing |
-| `debug.startConfig` | Debug… | `src/features/debugger/actions.ts` | missing |
-| `debug.stop` | Stop | `src/features/debugger/actions.ts` | missing |
-| `debug.toggleBreakpoint` | Toggle Line Breakpoint | `src/features/debugger/actions.ts` | missing |
-| `debug.toggleFieldWatchpoint` | Toggle Field Watchpoint | `src/features/debugger/actions.ts` | missing |
-| `debug.toggleMethodBreakpoint` | Toggle Method Breakpoint | `src/features/debugger/actions.ts` | missing |
-| `debug.toggleTemporaryBreakpoint` | Toggle Temporary Line Breakpoint | `src/features/debugger/actions.ts` | missing |
-| `debug.viewBreakpoints` | View Breakpoints… | `src/features/debugger/actions.ts` | missing |
+| `debug.removeAllBreakpoints` | Remove All Breakpoints | `src/features/debugger/actions.ts` | partial - internal/app registers the native action `debug.removeAllBreakpoints`; interaction-level acceptance is pending |
+| `debug.rerun` | Rerun | `src/features/debugger/actions.ts` | partial - internal/app registers the native action `debug.rerun`; interaction-level acceptance is pending |
+| `debug.resetFrame` | Reset Frame | `src/features/debugger/actions.ts` | partial - internal/app registers the native action `debug.resetFrame`; interaction-level acceptance is pending |
+| `debug.resume` | Resume Program | `src/features/debugger/actions.ts` | partial - internal/app registers the native action `run.continue`; interaction-level acceptance is pending |
+| `debug.runToCursor` | Run to Cursor | `src/features/debugger/actions.ts` | partial - internal/app registers the native action `run.runToCursor`; interaction-level acceptance is pending |
+| `debug.setValue` | Set Value… | `src/features/debugger/actions.ts` | partial - internal/app registers the native action `debug.setValue`; interaction-level acceptance is pending |
+| `debug.showExecutionPoint` | Show Execution Point | `src/features/debugger/actions.ts` | partial - internal/app registers the native action `debug.showExecutionPoint`; interaction-level acceptance is pending |
+| `debug.showToolWindow` | Show Debug Tool Window | `src/features/debugger/actions.ts` | partial - internal/app registers the native action `view.debug`; interaction-level acceptance is pending |
+| `debug.smartStepInto` | Smart Step Into | `src/features/debugger/actions.ts` | partial - internal/app registers the native action `debug.smartStepInto`; interaction-level acceptance is pending |
+| `debug.startConfig` | Debug… | `src/features/debugger/actions.ts` | partial - OpenIDEA id `debug.startConfig` aliases GoIDEA action `run.debug`; internal/app/debug.go Debug/DebugRunConfig: debug the SELECTED run configuration over the shared PrepareJavaLaunch + javaDebugLaunch (F9, run.debug); non-JVM kinds and unshipped adapters (kotlin-debug-adapter) are refused with the real reason; negatives.dbgcfg.session debugs the detected application configuration to its end on the real server; limits: gradle/maven debugging delegates are not ported |
+| `debug.stepInto` |  | `src/features/debugger/actions.ts` | partial - internal/app registers the native action `run.stepInto`; interaction-level acceptance is pending |
+| `debug.stepOut` |  | `src/features/debugger/actions.ts` | partial - internal/app registers the native action `run.stepOut`; interaction-level acceptance is pending |
+| `debug.stepOver` |  | `src/features/debugger/actions.ts` | partial - internal/app registers the native action `run.stepOver`; interaction-level acceptance is pending |
+| `debug.stop` | Stop | `src/features/debugger/actions.ts` | partial - internal/app registers the native action `debug.stop`; interaction-level acceptance is pending |
+| `debug.toggleBreakpoint` | Toggle Line Breakpoint | `src/features/debugger/actions.ts` | partial - internal/app registers the native action `run.breakpoint`; interaction-level acceptance is pending |
+| `debug.toggleFieldWatchpoint` | Toggle Field Watchpoint | `src/features/debugger/actions.ts` | partial - internal/app registers the native action `debug.toggleFieldWatchpoint`; interaction-level acceptance is pending |
+| `debug.toggleMethodBreakpoint` | Toggle Method Breakpoint | `src/features/debugger/actions.ts` | partial - internal/app registers the native action `debug.toggleMethodBreakpoint`; interaction-level acceptance is pending |
+| `debug.toggleTemporaryBreakpoint` | Toggle Temporary Line Breakpoint | `src/features/debugger/actions.ts` | partial - internal/app registers the native action `debug.toggleTemporaryBreakpoint`; interaction-level acceptance is pending |
+| `debug.viewBreakpoints` | View Breakpoints… | `src/features/debugger/actions.ts` | partial - internal/app registers the native action `debug.viewBreakpoints`; interaction-level acceptance is pending |
 
 ### deployment
 
@@ -334,7 +406,10 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `github.pullRequest.diff.nextComment` | Next Comment | `src/features/github/diff/index.ts` | missing |
 | `github.pullRequest.diff.previousComment` | Previous Comment | `src/features/github/diff/index.ts` | missing |
 | `github.pullRequest.diff.refreshReview` | Refresh Review Data | `src/features/github/diff/index.ts` | missing |
+| `github.pullRequest.reviewMode` | Review Mode | `src/features/github/index.ts` | missing |
 | `github.pullRequest.reviewMode.showDiff` | Show Review Diff | `src/features/github/reviewMode/index.ts` | missing |
+| `github.pullRequest.showInToolWindow` | Show Pull Request in the Tool Window | `src/features/github/index.ts` | missing |
+| `github.pullRequest.updateBranch` | Update to Enable Review Mode… | `src/features/github/index.ts` | missing |
 
 ### graphql
 
@@ -378,10 +453,20 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `macro.startRecording` | Start Macro Recording | `src/features/macros/index.ts` | missing |
 | `macro.stopRecording` | Stop Macro Recording | `src/features/macros/index.ts` | missing |
 
+### perf
+
+| Action | Title | Source | Status |
+| --- | --- | --- | --- |
+| `perf.clearCaches` | Clear Caches | `src/features/perf/actions.ts` | missing |
+| `perf.showMemory` | Show Memory Indicator Details | `src/features/perf/actions.ts` | missing |
+| `perf.toggleMemoryIndicator` | Memory Indicator | `src/features/perf/actions.ts` | missing |
+| `perf.toggleOverlay` | Toggle Performance Overlay (Dev) | `src/features/perf/actions.ts` | missing |
+
 ### plugins
 
 | Action | Title | Source | Status |
 | --- | --- | --- | --- |
+| `plugin.${pluginId}.${decl.id}` |  | `src/features/plugins/views/serviceProvider.tsx` | missing |
 | `plugins.content.action` | Run Content Editor Action | `src/features/plugins/views/contentActions.ts` | missing |
 | `plugins.content.find` | Find in Editor | `src/features/plugins/views/contentActions.ts` | missing |
 | `plugins.importInstalledIntellijTheme` | Import Theme from JetBrains IDE… | `src/features/plugins/index.ts` | missing |
@@ -406,87 +491,112 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 
 | Action | Title | Source | Status |
 | --- | --- | --- | --- |
-| `file.new` | New… | `src/features/project-tree/actions.ts` | missing |
-| `navigate.selectIn` | Select In… | `src/features/project-tree/actions.ts` | partial - Alt+F1 reveals the active file in the project view; the Select In popup's other target is Reveal in Finder, which GoIDEA leaves out; base.files.select |
-| `navigate.selectInProjectView` | Select in Project View | `src/features/project-tree/actions.ts` | partial - internal/app/tree_ops.go SelectInProjectView reveals the active tab and marks its row; base.files.select |
-| `navigate.showFilePath` | File Path | `src/features/project-tree/actions.ts` | missing |
-| `project.collapseAll` | Collapse All | `src/features/project-tree/actions.ts` | partial - internal/app/tree.go CollapseAll leaves only the root row; base.files.expand |
-| `project.compareWith` | Compare With… | `src/features/project-tree/actions.ts` | missing |
-| `project.copy` | Copy | `src/features/project-tree/actions.ts` | partial - internal/app/tree_ops.go SetTreeClip; base.files.menu, base.files.copy; internal/app/tree_ops_test.go |
-| `project.copyElement` | Copy… | `src/features/project-tree/actions.ts` | missing |
-| `project.copyPath` | Copy Path | `src/features/project-tree/actions.ts` | partial - internal/app/tree_ops.go CopyTreePath with absolute, file name and content-root paths; base.files.menu |
-| `project.cut` | Cut | `src/features/project-tree/actions.ts` | partial - internal/app/tree_ops.go SetTreeClip; base.files.menu, base.files.move; internal/app/tree_ops_test.go |
-| `project.delete` | Delete… | `src/features/project-tree/actions.ts` | partial - internal/app/tree_ops.go deleteTreeEntry over fs_delete after a confirmation; base.files.delete; internal/app/tree_ops_test.go |
-| `project.expandAll` | Expand All | `src/features/project-tree/actions.ts` | partial - internal/app/tree.go ExpandAll opens each folder as its read arrives; base.files.expand |
-| `project.findInFolder` | Find in Folder… | `src/features/project-tree/actions.ts` | partial - internal/app/tree_ops.go treeActFindInFolder -> internal/app/search.go ShowSearchInFolder scopes search_start to the folder; base.files.findInFolder; replace in folder is missing |
-| `project.findUsages` | Find Usages of File | `src/features/project-tree/actions.ts` | missing |
-| `project.move` | Move File… | `src/features/project-tree/actions.ts` | missing |
-| `project.newFile` | New File | `src/features/project-tree/actions.ts` | partial - internal/app/tree_ops.go treeMenuItems OpenNewTreeEntry; base.files.menu, base.files.new; internal/app/tree_ops_test.go |
-| `project.newFolder` | New Directory | `src/features/project-tree/actions.ts` | partial - internal/app/tree_ops.go treeMenuItems OpenNewTreeEntry; base.files.menu, base.files.new; internal/app/tree_ops_test.go |
-| `project.newInThisDirectory` | New in This Directory… | `src/features/project-tree/actions.ts` | missing |
-| `project.open` | Jump to Source | `src/features/project-tree/actions.ts` | partial - internal/app/tree_ops.go runTreeAct treeActJump -> openFile; base.files.menu; internal/app/tree_ops_test.go |
-| `project.openInTerminal` | Open in Terminal | `src/features/project-tree/actions.ts` | partial - internal/app/tree_ops.go treeActTerminal -> OpenTerminalAt in internal/app/term.go; base.files.menu, base.term.output |
-| `project.optimizeImports` | Optimize Imports in File | `src/features/project-tree/actions.ts` | missing |
-| `project.paste` | Paste | `src/features/project-tree/actions.ts` | partial - internal/app/tree_ops.go PasteTreeEntry over fs_copy and fs_rename; base.files.copy, base.files.move |
-| `project.reformatCode` | Reformat File | `src/features/project-tree/actions.ts` | missing |
+| `file.new` | New… | `src/features/project-tree/actions.ts` | integrated - internal/app/commands.go file.new; internal/app/project_tree_actions.go NewFileAtProjectSelection opens the templates.newFile chooser in internal/app/project_new.go; TestProjectNewTemplateSearchAndOpenState and TestFileTemplateCreateUsesBytesRPC |
+| `navigate.selectIn` | Select In… | `src/features/project-tree/actions.ts` | integrated - internal/app/tree.go and tree_ops.go implement Alt+F1 Select In; base.files.select and TestProjectTreeOpenIDEAActionsAreRegistered |
+| `navigate.selectInProjectView` | Select in Project View | `src/features/project-tree/actions.ts` | integrated - internal/app/tree_ops.go reveals and selects the active file; base.files.select and TestProjectTreeOpenIDEAActionsAreRegistered |
+| `navigate.showFilePath` | File Path | `src/features/project-tree/actions.ts` | integrated - internal/app/project_tree_actions.go opens OpenIDEA's path notification; TestProjectTreeOpenIDEAActionsAreRegistered |
+| `project.collapseAll` | Collapse All | `src/features/project-tree/actions.ts` | integrated - internal/app/tree.go collapses every project root; TestProjectViewOpenIDEAActionsAndOptions and TestProjectTreeViewOptionsFilterSortAndCompact |
+| `project.compareWith` | Compare With… | `src/features/project-tree/actions.ts` | integrated - internal/app/tree_ops.go and dircompare.go compare a selected tree entry with another path through the native compare view; base.files.compareDirs and TestProjectTreeOpenIDEAActionsAreRegistered |
+| `project.copy` | Copy | `src/features/project-tree/actions.ts` | integrated - internal/app/tree_ops.go copies a file or directory through fs_copy with unsaved-buffer guards; TestProjectTreeOpenIDEAActionsAreRegistered and TestTreeMenuLabelsFlattenSubmenus |
+| `project.copyAbsolutePath` |  | `src/features/project-tree/actions.ts` | integrated - internal/app/commands.go project.copyAbsolutePath; internal/app/project_tree_actions.go CopySelectedTreePath |
+| `project.copyElement` | Copy… | `src/features/project-tree/actions.ts` | integrated - internal/app/tree_ops.go provides the OpenIDEA element-copy command and target; TestProjectTreeOpenIDEAActionsAreRegistered |
+| `project.copyFileName` |  | `src/features/project-tree/actions.ts` | integrated - internal/app/commands.go project.copyFileName; internal/app/project_tree_actions.go CopySelectedTreePath |
+| `project.copyPath` | Copy Path | `src/features/project-tree/actions.ts` | integrated - internal/app/tree_ops.go copies absolute, relative and source-root paths; TestProjectTreeOpenIDEAActionsAreRegistered |
+| `project.copyRelativePath` |  | `src/features/project-tree/actions.ts` | integrated - internal/app/commands.go project.copyRelativePath; internal/app/project_tree_actions.go CopySelectedTreePath computes the content-root relative path |
+| `project.copySourceRootPath` |  | `src/features/project-tree/actions.ts` | integrated - internal/app/commands.go CopySelectedTreePath("source") and tree_ops.go resolve the source root; TestProjectTreeOpenIDEAActionsAreRegistered |
+| `project.cut` | Cut | `src/features/project-tree/actions.ts` | integrated - internal/app/tree_ops.go cuts a selected file or directory into the tree clipboard; TestTreeMenuFollowsTheSelection and TestTreeMenuLabelsFlattenSubmenus |
+| `project.delete` | Delete… | `src/features/project-tree/actions.ts` | integrated - internal/app/tree_ops.go confirms deletion, closes affected tabs and calls fs_delete; TestProjectTreeOpenIDEAActionsAreRegistered and tree_ops_test.go |
+| `project.expandAll` | Expand All | `src/features/project-tree/actions.ts` | integrated - internal/app/tree.go expands loaded folders; base.files.expand and TestProjectTreeOpenIDEAActionsAreRegistered |
+| `project.findInFolder` | Find in Folder… | `src/features/project-tree/actions.ts` | integrated - internal/app/tree_ops.go opens project search scoped to the selected directory; TestProjectTreeOpenIDEAActionsAreRegistered and search_actions_test.go |
+| `project.findUsages` | Find Usages of File | `src/features/project-tree/actions.ts` | integrated - internal/app/tree_ops.go findUsagesOfTreeFile opens the file and runs FindUsages over the language service |
+| `project.move` | Move File… | `src/features/project-tree/actions.ts` | integrated - internal/app/tree_ops.go moves files and directories and updates open references; TestReferenceAwareTreeMoveUsesOpenIDEARPC and TestProjectTreeNewAndClipboardUseTheSelection |
+| `project.newFile` | New File | `src/features/project-tree/actions.ts` | integrated - internal/app/project_tree_actions.go NewFileAtProjectSelection opens internal/app/project_new.go's anchored project.newPopup; choosing File or a template opens templates.newFile; TestProjectNewTemplateSearchAndOpenState, TestProjectNewPopupRendersOpenIDEAFilterAndActions and TestFileTemplateCreateUsesBytesRPC |
+| `project.newFolder` | New Directory | `src/features/project-tree/actions.ts` | integrated - internal/app/tree_ops.go creates a directory through fs_create_dir; TestProjectTreeNewAndClipboardUseTheSelection |
+| `project.newInThisDirectory` | New in This Directory… | `src/features/project-tree/actions.ts` | integrated - internal/app/project_tree_actions.go NewInThisDirectory; internal/app/commands.go project.newInThisDirectory; internal/app/project_tree_actions_test.go |
+| `project.open` | Jump to Source | `src/features/project-tree/actions.ts` | integrated - internal/app/tree.go opens the selected file and honours the project view's single-click and preview-tab options; tree_test.go and project_view_test.go |
+| `project.openInTerminal` | Open in Terminal | `src/features/project-tree/actions.ts` | integrated - internal/app/project_tree_actions.go and terminal_actions.go open a shell at the selected directory; TestProjectTreeOpenIDEAActionsAreRegistered |
+| `project.optimizeImports` | Optimize Imports in File | `src/features/project-tree/actions.ts` | integrated - internal/app/tree_ops.go optimizeImportsTreeFile and OptimizeImportsOfSelectedTreeFile run the language service source.organizeImports action |
+| `project.option.autoscrollFromSource` | Project View: Always Select Opened File | `src/features/project-tree/actions.ts` | integrated - internal/app/project_view.go and tree.go keep the active editor file selected; TestProjectTreeViewOptionsFilterSortAndCompact |
+| `project.option.autoscrollToSource` | Project View: Autoscroll to Source | `src/features/project-tree/actions.ts` | integrated - internal/app/project_view.go opens the selected tree file as the editor focus; TestProjectTreeViewOptionsFilterSortAndCompact |
+| `project.option.compact` | Project View: Compact Middle Packages | `src/features/project-tree/actions.ts` | integrated - internal/app/tree.go packageChain and internal/app/project_view_test.go TestProjectTreeViewOptionsFilterSortAndCompact |
+| `project.option.foldersFirst` | Project View: Sort Folders First | `src/features/project-tree/actions.ts` | integrated - internal/app/tree.go sorts folders first according to OpenIDEA's option; TestProjectTreeViewOptionsFilterSortAndCompact |
+| `project.option.previewTab` | Project View: Enable Preview Tab | `src/features/project-tree/actions.ts` | integrated - internal/app/project_view.go and tabs.go route single-click opens through the preview tab; TestProjectTreeViewOptionsFilterSortAndCompact |
+| `project.option.showExcluded` | Project View: Show Excluded Files | `src/features/project-tree/actions.ts` | integrated - internal/app/tree.go entryVisible; internal/app/project_view_test.go TestProjectTreeViewOptionsFilterSortAndCompact |
+| `project.option.showHidden` | Project View: Show Hidden Files | `src/features/project-tree/actions.ts` | integrated - internal/app/project_view.go SetProjectTreeOption; internal/workspace Tree.IncludeHidden and SortEntries refresh; internal/app/project_view_test.go TestProjectTreeViewOptionsFilterSortAndCompact |
+| `project.option.showMembers` | Project View: Show Members | `src/features/project-tree/actions.ts` | integrated - internal/app/project_view.go projectTree members loading and internal/app/tree.go appendMembers; internal/app/project_view_test.go TestProjectTreeOpenChangedScratchAndMembers |
+| `project.option.showRootPaths` | Project View: Show Root Paths | `src/features/project-tree/actions.ts` | integrated - internal/app/tree.go renders root paths from the persisted project-view option; TestProjectTreeViewOptionsFilterSortAndCompact |
+| `project.option.singleClickExpand` | Project View: Expand Directories with Single Click | `src/features/project-tree/actions.ts` | integrated - internal/app/tree.go expands a directory on a single click when enabled; TestProjectTreeViewOptionsFilterSortAndCompact |
+| `project.option.singleClickOpen` | Project View: Open Files with Single Click | `src/features/project-tree/actions.ts` | integrated - internal/app/tree.go opens a file on a single click when enabled; TestProjectTreeViewOptionsFilterSortAndCompact |
+| `project.paste` | Paste | `src/features/project-tree/actions.ts` | integrated - internal/app/tree_ops.go pastes copied or cut entries through fs_copy and refreshes affected tabs; TestProjectTreeNewAndClipboardUseTheSelection |
+| `project.reformatCode` | Reformat File | `src/features/project-tree/actions.ts` | integrated - internal/app/tree_ops.go formatTreeFile and FormatSelectedTreeFile open the file and run FormatActive |
 | `project.refresh` | Reload Project Tree from Disk | `src/features/project-tree/actions.ts` | integrated - internal/app/tree_ops.go ReloadProjectTree -> internal/app/tree.go Refresh -> workspace.Tree.Refresh rereads every folder read so far, from the palette's 从磁盘重新加载项目树; base.files.expand |
-| `project.reloadFromDisk` | Reload from Disk | `src/features/project-tree/actions.ts` | partial - internal/app/tree_ops.go ReloadPathFromDisk -> internal/app/tree.go RefreshDir -> workspace.Tree.RefreshDir rereads the selected folder and the read folders below it, from the popup and Cmd+Alt+Y; base.files.reload; re-reading a selected file's open document is missing |
-| `project.rename` | Rename File… | `src/features/project-tree/actions.ts` | partial - internal/app/tree_ops.go ConfirmTreeOp over fs_rename, moving bookmarks and closing clean tabs; base.files.rename; internal/app/tree_ops_test.go |
-| `project.renameInline` | Rename File Inline | `src/features/project-tree/actions.ts` | missing |
-| `project.reveal` | Reveal in Project View | `src/features/project-tree/actions.ts` | partial - internal/app/tree.go reveal plus Select; base.files.select |
-| `project.revealInFinder` |  | `src/features/project-tree/actions.ts` | missing |
-| `project.showHistory` | Local History: Show History | `src/features/project-tree/actions.ts` | partial - internal/app/history.go ShowHistory over history_list_dir and RestoreHistoryEntry over history_restore; base.files.historyRestore |
-| `project.undoMove` | Undo Move / Rename | `src/features/project-tree/actions.ts` | missing |
+| `project.reloadFromDisk` | Reload from Disk | `src/features/project-tree/actions.ts` | integrated - internal/app/tree_ops.go refreshes the selected subtree from disk; base.files.reload and TestProjectTreeOpenIDEAActionsAreRegistered |
+| `project.rename` | Rename File… | `src/features/project-tree/actions.ts` | integrated - internal/app/tree_ops.go renames through fs_rename and updates open documents; TestProjectTreeOpenIDEAActionsAreRegistered and TestReferenceAwareTreeMoveUsesOpenIDEARPC |
+| `project.renameInline` | Rename File Inline | `src/features/project-tree/actions.ts` | integrated - internal/app/tree_ops.go opens the native inline rename path and shares the same guarded RPC; TestProjectTreeOpenIDEAActionsAreRegistered |
+| `project.reveal` | Reveal in Project View | `src/features/project-tree/actions.ts` | integrated - internal/app/project_tree_actions.go reveals the selected path in the system file manager; TestProjectTreeOpenIDEAActionsAreRegistered |
+| `project.revealInFinder` |  | `src/features/project-tree/actions.ts` | integrated - internal/app/tree_ops.go RevealSelectedInFinder and revealPath; Project View Open In submenu |
+| `project.showHistory` | Local History: Show History | `src/features/project-tree/actions.ts` | integrated - internal/app/history.go lists and restores folder history; base.files.historyRestore and TestProjectTreeOpenIDEAActionsAreRegistered |
+| `project.sortBy.modified` | Project View: Sort by Modification Time | `src/features/project-tree/actions.ts` | integrated - internal/app/tree.go pathLess; internal/app/project_view_test.go TestProjectTreeSortsByModificationTime |
+| `project.sortBy.name` | Project View: Sort by Name | `src/features/project-tree/actions.ts` | integrated - internal/app/tree.go default Name sorting and natural numeric comparison; internal/app/project_view_test.go |
+| `project.sortBy.type` | Project View: Sort by Type | `src/features/project-tree/actions.ts` | integrated - internal/app/project_view.go and workspace tree sort by type; TestProjectTreeViewOptionsFilterSortAndCompact |
+| `project.undoMove` | Undo Move / Rename | `src/features/project-tree/actions.ts` | integrated - internal/app/project_tree_actions.go UndoLastTreeMove over refactor_undo_file_move; internal/app/project_tree_actions_test.go |
+| `project.viewMode.changedFiles` | Project View: Show All Changed Files | `src/features/project-tree/actions.ts` | integrated - internal/app/tree.go SetMode changedFiles and internal/app/vcs.go filtered-file sync; internal/app/project_view_test.go |
+| `project.viewMode.openFiles` | Project View: Show Open Files | `src/features/project-tree/actions.ts` | integrated - internal/app/tree.go SetMode openFiles and SetFilteredFiles; internal/app/project_view_test.go TestProjectTreeOpenChangedScratchAndMembers |
+| `project.viewMode.project` | Project View: Show Project | `src/features/project-tree/actions.ts` | integrated - internal/app/tree.go SetMode project; internal/app/project_view_test.go OpenIDEA action registry test |
+| `project.viewMode.projectFiles` | Project View: Show Project Files | `src/features/project-tree/actions.ts` | integrated - internal/app/tree.go SetMode projectFiles; internal/app/project_view_test.go TestProjectTreeOpenChangedScratchAndMembers |
+| `project.viewMode.scratches` | Project View: Show Scratches and Consoles | `src/features/project-tree/actions.ts` | integrated - internal/app/tree.go SetScratchRoot and Scratches mode; internal/app/project_view_test.go TestProjectTreeOpenChangedScratchAndMembers |
+| `project.viewMode.unity` | Project View: Show Unity | `src/features/project-tree/actions.ts` | integrated - internal/app/project_view.go switches the tree to OpenIDEA's Unity view; TestProjectTreeOpenChangedScratchAndMembers |
 
 ### project-trust
 
 | Action | Title | Source | Status |
 | --- | --- | --- | --- |
-| `project.dontOpen` | Don't Open | `src/features/project-trust/index.tsx` | missing |
-| `project.previewRestricted` | Preview in Restricted Mode | `src/features/project-trust/index.tsx` | missing |
-| `project.removeTrustedLocation` | Remove Trusted Location | `src/features/project-trust/index.tsx` | missing |
-| `project.revokeTrust` | Revoke Trust | `src/features/project-trust/index.tsx` | missing |
-| `project.trust` | Trust Project | `src/features/project-trust/index.tsx` | missing |
+| `project.dontOpen` | Don't Open | `src/features/project-trust/index.tsx` | integrated - internal/app/run.go closes project.trustDialog without changing the stored decision and leaves no project attached; TestProjectTrustDialogCancelKeepsTheProjectClosed |
+| `project.previewRestricted` | Preview in Restricted Mode | `src/features/project-trust/index.tsx` | integrated - internal/app/run.go TrustProjectPreview records the restricted decision, opens the project without allowing build/run/debug RPCs, and is rendered as Preview in Restricted Mode in project.trustDialog; TestProjectTrustPreviewClearsFolderScope |
+| `project.removeTrustedLocation` | Remove Trusted Location | `src/features/project-trust/index.tsx` | integrated - internal/app/project_trust_settings.go exposes Remove for every trusted location through project_trust_remove_location, then reloads project_trust_list; TestProjectTrustSettingsPageMatchesOpenIDEA |
+| `project.revokeTrust` | Revoke Trust | `src/features/project-trust/index.tsx` | integrated - internal/app/project_trust_settings.go exposes Revoke Trust for every trusted project through project_trust_set(path,false,false), then reloads project_trust_list; TestProjectTrustSettingsPageMatchesOpenIDEA |
+| `project.trust` | Trust Project | `src/features/project-trust/index.tsx` | integrated - internal/app/run.go and actions_builtin.go expose OpenIDEA's project.trust action; TrustProject persists the current-project decision or the selected parent-folder scope and refreshes Restricted Mode; TestRunningAnUntrustedProjectAsksToTrust and TestProjectTrustPromptMatchesOpenIDEA |
 
 ### remote-dev
 
 | Action | Title | Source | Status |
 | --- | --- | --- | --- |
-| `remote.connect` | Remote Development… | `src/features/remote-dev/index.ts` | missing |
-| `remote.disconnect` | Disconnect from Remote Host | `src/features/remote-dev/index.ts` | missing |
-| `remote.reloadEnvironment` | Reload Environment | `src/features/remote-dev/index.ts` | missing |
-| `remote.reopenInContainer` | Reopen in Container | `src/features/remote-dev/index.ts` | missing |
+| `remote.connect` | Remote Development… | `src/features/remote-dev/index.ts` | partial - internal/app/remote.go opens the native SSH, WSL and Dev Container chooser and states that this build's backend has no remote orchestration RPC; TestRemoteConnectAndReopenDialogsExplainBackendGap |
+| `remote.disconnect` | Disconnect from Remote Host | `src/features/remote-dev/index.ts` | partial - internal/app/remote.go confirms the action and leaves the project open because the backend has no remote teardown RPC; TestRemoteDisconnectConfirmsWithoutClosingProject |
+| `remote.reloadEnvironment` | Reload Environment | `src/features/remote-dev/index.ts` | partial - internal/app/remote.go calls env_reload and renders changed names, devcontainer.json and login-shell state; TestRemoteEnvironmentReloadSuccess and TestRemoteEnvironmentReloadErrorClearsBusyState |
+| `remote.reopenInContainer` | Reopen in Container | `src/features/remote-dev/index.ts` | partial - internal/app/remote.go shows a native unavailable notice without closing or reopening the project; TestRemoteConnectAndReopenDialogsExplainBackendGap |
 
 ### run
 
 | Action | Title | Source | Status |
 | --- | --- | --- | --- |
 | `analyze.stackTrace` | Analyze Stack Trace or Thread Dump… | `src/features/run/stackTrace.tsx` | partial - Code menu and action registry open internal/app/stack_trace.go; clipboard detection, Run trace tabs, clickable JVM/Python/path source frames and file index resolution; stack_trace_test.go; remaining console link patterns and upstream Run session integration are pending |
+| `externalTools.${t.id}` |  | `src/features/run/externalTools.ts` | missing |
 | `go.generate.${scope}` |  | `src/features/run/goActions.ts` | missing |
 | `php.composerInstall` | Composer Install | `src/features/run/composerInstall.ts` | missing |
 | `run.agentStart` | Run Agent Command | `src/features/run/index.ts` | missing |
 | `run.chooseConfig` | Select Run/Debug Configuration… | `src/features/run/index.ts` | partial - internal/app/run_config_chooser.go runChooserDialog (Ctrl+Alt+R, run.chooseConfig in internal/app/commands.go): the ConfigChooser modes ported - run (Enter starts as saved now through askOrStart with the rerun confirm, Shift+Enter debugs), debug (run.chooseDebugConfig Ctrl+Alt+D), select (the widget's chooser); the current-file row debugs the context; limits: no temporary-configuration Save row, no mnemonics, no recent/pinned grouping |
 | `run.chooseDebugConfig` | Debug… | `src/features/run/index.ts` | partial - internal/app/run_config_chooser.go chooser in debug mode (Ctrl+Alt+D): Enter debugs the chosen configuration through DebugRunConfig over the shared adapter.PrepareJavaLaunch |
-| `run.createConfig` | Create Run Configuration | `src/features/run/index.ts` | missing |
+| `run.createConfig` | Create Run Configuration | `src/features/run/index.ts` | partial - internal/app registers the native action `run.createConfig`; interaction-level acceptance is pending |
 | `run.debug` | Debug | `src/features/run/index.ts` | partial - internal/app/debug.go Debug/DebugRunConfig: debug the SELECTED run configuration over the shared PrepareJavaLaunch + javaDebugLaunch (F9, run.debug); non-JVM kinds and unshipped adapters (kotlin-debug-adapter) are refused with the real reason; negatives.dbgcfg.session debugs the detected application configuration to its end on the real server; limits: gradle/maven debugging delegates are not ported |
-| `run.debugConfig` | Debug Configuration | `src/features/run/index.ts` | missing |
+| `run.debugConfig` | Debug Configuration | `src/features/run/index.ts` | partial - OpenIDEA id `run.debugConfig` aliases GoIDEA action `run.debug`; internal/app/debug.go Debug/DebugRunConfig: debug the SELECTED run configuration over the shared PrepareJavaLaunch + javaDebugLaunch (F9, run.debug); non-JVM kinds and unshipped adapters (kotlin-debug-adapter) are refused with the real reason; negatives.dbgcfg.session debugs the detected application configuration to its end on the real server; limits: gradle/maven debugging delegates are not ported |
 | `run.debugContext` | Debug Context Configuration | `src/features/run/index.ts` | partial - internal/app/debug.go DebugContext (Ctrl+Shift+D): the active file's applicationConfig over the shared PrepareJavaLaunch; the debug e2e phase proves the flow (debug.paused, debug.vars, debug.watch) |
 | `run.editConfigs` | Edit Configurations… | `src/features/run/index.ts` | partial - internal/app/run_config_dialog.go runConfigsDialog (Ctrl+Alt+Shift+R, run.editConfigs): the ConfigForm fields GoIDEA edits (name, command, program args via adapter.ParseArgs/FormatArgs, working directory, environment, module with save-time resolution, Build select with per-kind options), configs.ts validation and upsertConfig override semantics, saveUserConfigs through run_save_configs with removedDetectedIds; base.runcfg.* proves the round trip on the real server; limits: no per-template Add menu, no before-launch task editor, no compound editor |
-| `run.importJetbrains` | Import Run Configurations from JetBrains (.run, .idea) | `src/features/run/index.ts` | missing |
-| `run.importVscodeLaunch` | Import Run Configurations from .vscode/launch.json | `src/features/run/index.ts` | missing |
+| `run.importJetbrains` | Import Run Configurations from JetBrains (.run, .idea) | `src/features/run/index.ts` | partial - internal/app registers the native action `run.importJetbrains`; interaction-level acceptance is pending |
+| `run.importVscodeLaunch` | Import Run Configurations from .vscode/launch.json | `src/features/run/index.ts` | partial - internal/app registers the native action `run.importVscodeLaunch`; interaction-level acceptance is pending |
 | `run.modifyContext` | Modify Run Configuration… | `src/features/run/index.ts` | missing |
 | `run.pluginStart` | Run Plugin Configuration | `src/features/run/index.ts` | missing |
-| `run.reloadConfigs` | Reload Run Configurations | `src/features/run/index.ts` | missing |
+| `run.reloadConfigs` | Reload Run Configurations | `src/features/run/index.ts` | partial - internal/app registers the native action `run.reloadConfigs`; interaction-level acceptance is pending |
 | `run.rerun` | Rerun | `src/features/run/index.ts` | partial - internal/app/run_config_dialog.go Rerun over the run widget's rerun button (⌘R, run.rerun in internal/app/commands.go): rerunConfig semantics (the configuration as saved now), the Process 'x' Is Running confirm (dialogs.tsx confirmRerun) with 不再询问 persisted under run.confirmRerun in internal/app/settings.go RunPrefs, stop + wait for exit + restart; limits: allowParallel restarts instead of a second instance (single run session) |
 | `run.rerunFailed` | Rerun Failed Tests | `src/features/run/index.ts` | partial - internal/adapter/testing_results.go, testing_jvm.go and testing_rerun.go port the testing pipeline's results.ts, jvm.ts (surefire 2/3, Gradle logging, TeamCity init-script messages) and rerun.ts's jvmArgs; internal/app/run.go folds the run output into the tree, and the Run pane renders the results TREE (internal/app/view.go: status marks, durations, per-node output); run.rerunFailed derives the -Dtest=/--tests filter; rerunfail.* checks prove the derivation and the Tests run: 1 rerun; limits: other frameworks' parsers and Gradle's init-script wiring are not ported; the go test pipeline (internal/adapter/testing_go.go ports go.ts: plain/-v/-json parsing, benchmarks, locations) folds go test -json records into the tree and gorerun.* main-gate checks prove the derivation anchors -run ^TestFailsOnPurpose$ and the rerun executes; limits: the backend's quoting of the $ anchor in the rerun's filter is a suspected upstream-backend issue, so the go rerun's final one-test assertion stays out until verified against an OpenIDEA change; the pytest pipeline (internal/adapter/testing_pytest.go ports pytest.ts: -v verbose lines, -rA summaries, progress dots, failure sections with buffered resolution) folds pytest output into the tree and pyrerun.* main-gate checks prove the node-id derivation reruns only the failed test; the fixture's venv interpreter is set through the configuration's command (Edit Configurations semantics); the jest pipeline (internal/adapter/testing_javascript.go ports js.ts: jest/vitest verbose lines, describe indentation, fail headers, vitest console blocks) and jsrerun.* main-gate checks prove the anchored -t derivation and the rerun of only the failed test with a real npm-installed jest; the parser's rune decoding and fail-header path are covered by internal/adapter/testing_javascript_test.go; the phpunit/ruby/dotnet parsers are not ported yet |
 | `run.run` | Run | `src/features/run/index.ts` | integrated - base.run.exit, base.run.build |
 | `run.runConfig` | Run Configuration | `src/features/run/index.ts` | partial - internal/app/run_anything.go runAnythingLine executes a run configuration by its exact name (upstream runConfigsRunAnything.execute) with the same multi-word filter and prefix-first ordering as upstream matchingConfigs (runAnythingConfigs); limits: the chooser's debug executor and RunWidget per-kind icons differ |
-| `run.runContext` | Run Context Configuration | `src/features/run/index.ts` | missing |
+| `run.runContext` | Run Context Configuration | `src/features/run/index.ts` | partial - internal/app registers the native action `run.runContext`; interaction-level acceptance is pending |
 | `run.sampleOutput` | Stream Sample Output | `src/features/run/index.ts` | missing |
 | `run.services.addType` | Add Service | `src/features/run/services.tsx` | missing |
 | `run.services.hideConfig` | Remove from Services | `src/features/run/services.tsx` | missing |
-| `run.stop` | Stop | `src/features/run/index.ts` | missing |
-| `run.stopProcess` | Stop | `src/features/run/index.ts` | missing |
+| `run.stop` | Stop | `src/features/run/index.ts` | partial - internal/app registers the native action `run.stop`; interaction-level acceptance is pending |
+| `run.stopProcess` | Stop | `src/features/run/index.ts` | partial - internal/app registers the native action `run.stop`; interaction-level acceptance is pending |
 | `run.updateApplication` | Update Application | `src/features/run/index.ts` | missing |
 | `run.withExecutor` | Run with Executor | `src/features/run/index.ts` | missing |
 
@@ -506,30 +616,48 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 
 | Action | Title | Source | Status |
 | --- | --- | --- | --- |
-| `bookmarks.newList` | New Bookmark List… | `src/features/search/index.ts` | partial - internal/app/bookmarks.go addBookmarkList, renameBookmarkList, removeBookmarkList and newListDialog; tool-window chips 重命名/删除; the move chooser's 新建列表… creates a list and moves the bookmark into it; cmd/goidea/main.go 新建书签列表…; base.bookmark.list, base.bookmark.listOps, base.bookmark.move; internal/app/bookmarks_test.go |
-| `bookmarks.toggleFileBookmark` | Toggle File Bookmark | `src/features/search/index.ts` | partial - internal/app/bookmarks.go ToggleFileBookmark and ToggleFolderBookmark with PathBookmark.Dir, pathBookmarkLabel; project tree rows chip 书签 in internal/app/view.go; cmd/goidea/main.go 切换文件书签; base.bookmark.file, base.bookmark.folder; internal/app/bookmarks_test.go |
-| `find.inPath` | Find in Files… | `src/features/search/index.ts` | missing |
-| `find.replaceInPath` | Replace in Files… | `src/features/search/index.ts` | missing |
-| `find.rerun` | Rerun Search | `src/features/search/index.ts` | missing |
-| `navigate.fileStructure` | File Structure | `src/features/search/index.ts` | missing |
+| `bookmarks.newList` | New Bookmark List… | `src/features/search/index.ts` | integrated - internal/app/bookmarks.go addBookmarkList, renameBookmarkList, removeBookmarkList and newListDialog; tool-window chips 重命名/删除; the move chooser's 新建列表… creates a list and moves the bookmark into it; cmd/goidea/main.go 新建书签列表…; base.bookmark.list, base.bookmark.listOps, base.bookmark.move; internal/app/bookmarks_test.go |
+| `bookmarks.toggleFileBookmark` | Toggle File Bookmark | `src/features/search/index.ts` | integrated - internal/app/bookmarks.go ToggleFileBookmark and ToggleFolderBookmark with PathBookmark.Dir, pathBookmarkLabel; project tree rows chip 书签 in internal/app/view.go; cmd/goidea/main.go 切换文件书签; base.bookmark.file, base.bookmark.folder; internal/app/bookmarks_test.go |
+| `find.inPath` | Find in Files… | `src/features/search/index.ts` | partial - internal/app registers the native action `find.inPath`; interaction-level acceptance is pending |
+| `find.replaceInPath` | Replace in Files… | `src/features/search/index.ts` | partial - internal/app registers the native action `find.replaceInPath`; interaction-level acceptance is pending |
+| `find.rerun` | Rerun Search | `src/features/search/index.ts` | partial - internal/app registers the native action `find.rerun`; interaction-level acceptance is pending |
+| `navigate.fileStructure` | File Structure | `src/features/search/index.ts` | partial - internal/app registers the native action `navigate.fileStructure`; interaction-level acceptance is pending |
 | `navigate.findAction` | Find Action… | `src/features/search/index.ts` | integrated - lsp.se.navigation, lsp.se.actions |
-| `navigate.gotoBookmark${d}` |  | `src/features/search/index.ts` | partial - internal/app/bookmarks.go JumpBookmarkMnemonic bound to Ctrl+digit for 0-9; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go |
+| `navigate.gotoBookmark0` |  | `src/features/search/index.ts` | partial - internal/app/bookmarks.go JumpBookmarkMnemonic via Ctrl+digit; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go |
+| `navigate.gotoBookmark1` |  | `src/features/search/index.ts` | partial - internal/app/bookmarks.go JumpBookmarkMnemonic via Ctrl+digit; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go |
+| `navigate.gotoBookmark2` |  | `src/features/search/index.ts` | partial - internal/app/bookmarks.go JumpBookmarkMnemonic via Ctrl+digit; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go |
+| `navigate.gotoBookmark3` |  | `src/features/search/index.ts` | partial - internal/app/bookmarks.go JumpBookmarkMnemonic via Ctrl+digit; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go |
+| `navigate.gotoBookmark4` |  | `src/features/search/index.ts` | partial - internal/app/bookmarks.go JumpBookmarkMnemonic via Ctrl+digit; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go |
+| `navigate.gotoBookmark5` |  | `src/features/search/index.ts` | partial - internal/app/bookmarks.go JumpBookmarkMnemonic via Ctrl+digit; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go |
+| `navigate.gotoBookmark6` |  | `src/features/search/index.ts` | partial - internal/app/bookmarks.go JumpBookmarkMnemonic via Ctrl+digit; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go |
+| `navigate.gotoBookmark7` |  | `src/features/search/index.ts` | partial - internal/app/bookmarks.go JumpBookmarkMnemonic via Ctrl+digit; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go |
+| `navigate.gotoBookmark8` |  | `src/features/search/index.ts` | partial - internal/app/bookmarks.go JumpBookmarkMnemonic via Ctrl+digit; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go |
+| `navigate.gotoBookmark9` |  | `src/features/search/index.ts` | partial - internal/app/bookmarks.go JumpBookmarkMnemonic via Ctrl+digit; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go |
 | `navigate.gotoClass` | Go to Class… | `src/features/search/index.ts` | integrated - lsp.se.navigation; Classes uses the real workspace symbol query |
 | `navigate.gotoFile` | Go to File… | `src/features/search/index.ts` | integrated - lsp.se.navigation, lsp.se.files |
 | `navigate.gotoSymbol` | Go to Symbol… | `src/features/search/index.ts` | integrated - lsp.se.navigation, lsp.se.symbols |
 | `navigate.nextBookmark` | Next Bookmark | `src/features/search/index.ts` | partial - internal/app/bookmarks.go NextBookmark and stepBookmark wrap; base.bookmark.next; internal/app/bookmarks_test.go |
 | `navigate.prevBookmark` | Previous Bookmark | `src/features/search/index.ts` | partial - internal/app/bookmarks.go PrevBookmark and stepBookmark wrap; base.bookmark.prev; internal/app/bookmarks_test.go |
-| `navigate.recentFiles` | Recent Files | `src/features/search/index.ts` | partial - internal/app/recent_navigation.go and recent_navigation_view.go; Navigate or Cmd+E, previous-file selection, filter, tool windows and Show edited only; internal/app/recent_navigation_test.go; multi-select, opening to the side, Delete for recent files, and the separate Switcher are pending |
+| `navigate.recentFiles` | Recent Files | `src/features/search/index.ts` | integrated - internal/app/recent_navigation.go and recent_navigation_view.go implement Navigate or Cmd+E, previous-file selection, speed search, tool windows, single-click activation, Show edited only, guarded Delete close plus remove_recent, Shift/Cmd multi-selection, Enter in list order, Shift+Enter opening to the side, and OpenIDEA's Ctrl+Tab Switcher. The Switcher has no speed-search field, lists open files plus Agent Session/Home editors, releases Ctrl to activate, accepts native Enter and navigation keys, and walks from files into tool windows across both columns; TestRecentFilesShowsPreviousAndEditedFiles, TestRecentFilesDeleteForgetsTheSelectedFile, TestRecentFilesKeyboardRangeAndModifierClicks, TestRecentFilesEnterOpensSelectionInListOrder, TestRecentFilesShiftEnterOpensInSideGroup, TestRecentFilesShiftEnterCopiesTheOnlyFocusedTab, TestSwitcherListsOnlyOpenFilesInActivationOrder, TestSwitcherListsAgentEditorsAndFiltersTheirTitles, TestSwitcherNavigationWrapsAcrossFilesAndTools, TestSwitcherHasNoSpeedSearchAndAcceptsNativeKeys and TestSwitcherOpensSelectionWhenControlIsReleased cover the native UI |
 | `navigate.recentLocations` | Recent Locations | `src/features/search/index.ts` | partial - internal/app/recent_navigation.go and recent_navigation_view.go; Navigate or Cmd+Shift+E, bounded caret history, code snippets, changed filter, dismiss and jump; internal/app/recent_navigation_test.go; syntax-highlighted snippets, symbol breadcrumbs and opening to the side are pending |
 | `navigate.searchEverywhere` | Search Everywhere | `src/features/search/index.ts` | integrated - internal/app/se.go OpenSearchEverywhere; internal/app/commands.go navigate.searchEverywhere; Navigate menu and the title bar search button; e2e searchEverywhere.files/symbols/actions/text/allSections; internal/app/se_test.go |
 | `navigate.searchText` | Search Text Everywhere | `src/features/search/index.ts` | integrated - base.search.done, base.search.files, base.search.matches |
 | `navigate.showBookmarks` | Show Bookmarks | `src/features/search/index.ts` | partial - internal/app/bookmarks.go ShowBookmarks popup groups files and lines by list with jump and delete; base.bookmark.popup; Cmd+F3 in internal/app/app.go; internal/app/bookmarks_test.go |
-| `navigate.switcher` | Switcher | `src/features/search/index.ts` | missing |
-| `navigate.switcherBack` | Switcher (Backward) | `src/features/search/index.ts` | missing |
+| `navigate.switcher` | Switcher | `src/features/search/index.ts` | partial - internal/app registers the native action `navigate.switcher`; interaction-level acceptance is pending |
+| `navigate.switcherBack` | Switcher (Backward) | `src/features/search/index.ts` | partial - internal/app registers the native action `navigate.switcherBack`; interaction-level acceptance is pending |
 | `navigate.toggleBookmark` | Toggle Bookmark | `src/features/search/index.ts` | partial - internal/app/bookmarks.go ToggleBookmark at the caret and gutter dots; F3 in internal/app/app.go; base.bookmark.added, base.bookmark.gutter, base.bookmark.remove; internal/app/bookmarks_test.go |
-| `navigate.toggleBookmark${d}` |  | `src/features/search/index.ts` | partial - internal/app/bookmarks.go ToggleBookmarkMnemonic bound to Ctrl+Shift+digit for 0-9; base.bookmark.mnemonic; internal/app/bookmarks_test.go |
+| `navigate.toggleBookmark0` |  | `src/features/search/index.ts` | partial - internal/app/bookmarks.go ToggleBookmarkMnemonic via Ctrl+Shift+digit; base.bookmark.mnemonic; internal/app/bookmarks_test.go |
+| `navigate.toggleBookmark1` |  | `src/features/search/index.ts` | partial - internal/app/bookmarks.go ToggleBookmarkMnemonic via Ctrl+Shift+digit; base.bookmark.mnemonic; internal/app/bookmarks_test.go |
+| `navigate.toggleBookmark2` |  | `src/features/search/index.ts` | partial - internal/app/bookmarks.go ToggleBookmarkMnemonic via Ctrl+Shift+digit; base.bookmark.mnemonic; internal/app/bookmarks_test.go |
+| `navigate.toggleBookmark3` |  | `src/features/search/index.ts` | partial - internal/app/bookmarks.go ToggleBookmarkMnemonic via Ctrl+Shift+digit; base.bookmark.mnemonic; internal/app/bookmarks_test.go |
+| `navigate.toggleBookmark4` |  | `src/features/search/index.ts` | partial - internal/app/bookmarks.go ToggleBookmarkMnemonic via Ctrl+Shift+digit; base.bookmark.mnemonic; internal/app/bookmarks_test.go |
+| `navigate.toggleBookmark5` |  | `src/features/search/index.ts` | partial - internal/app/bookmarks.go ToggleBookmarkMnemonic via Ctrl+Shift+digit; base.bookmark.mnemonic; internal/app/bookmarks_test.go |
+| `navigate.toggleBookmark6` |  | `src/features/search/index.ts` | partial - internal/app/bookmarks.go ToggleBookmarkMnemonic via Ctrl+Shift+digit; base.bookmark.mnemonic; internal/app/bookmarks_test.go |
+| `navigate.toggleBookmark7` |  | `src/features/search/index.ts` | partial - internal/app/bookmarks.go ToggleBookmarkMnemonic via Ctrl+Shift+digit; base.bookmark.mnemonic; internal/app/bookmarks_test.go |
+| `navigate.toggleBookmark8` |  | `src/features/search/index.ts` | partial - internal/app/bookmarks.go ToggleBookmarkMnemonic via Ctrl+Shift+digit; base.bookmark.mnemonic; internal/app/bookmarks_test.go |
+| `navigate.toggleBookmark9` |  | `src/features/search/index.ts` | partial - internal/app/bookmarks.go ToggleBookmarkMnemonic via Ctrl+Shift+digit; base.bookmark.mnemonic; internal/app/bookmarks_test.go |
 | `navigate.toggleBookmarkWithMnemonic` | Toggle Bookmark with Mnemonic | `src/features/search/index.ts` | partial - internal/app/bookmarks.go OpenBookmarkMnemonics Alt+F3 chooser over digits and A-Z; internal/app/app.go shortcut; internal/app/bookmarks_test.go |
-| `search.editScopes` | Edit Scopes… | `src/features/search/index.ts` | missing |
+| `search.editScopes` | Edit Scopes… | `src/features/search/index.ts` | partial - internal/app registers the native action `search.editScopes`; interaction-level acceptance is pending |
 
 ### services
 
@@ -554,23 +682,38 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `docker.toggleStoppedContainers` | Toggle Stopped Containers | `src/features/services/index.ts` | missing |
 | `docker.toggleUntaggedImages` | Toggle Untagged Images | `src/features/services/index.ts` | missing |
 | `services.addService` | Add Service | `src/features/services/index.ts` | missing |
-| `services.show` | Services | `src/features/services/index.ts` | missing |
+| `services.show` | Services | `src/features/services/index.ts` | partial - internal/app registers the native action `view.services`; interaction-level acceptance is pending |
 
 ### settings
 
 | Action | Title | Source | Status |
 | --- | --- | --- | --- |
 | `editor.colorScheme.${name}` |  | `src/features/settings/pages/editor/colorScheme.tsx` | missing |
+| `editor.encodings.toggleNativeToAscii` | Transparent native-to-ascii conversion | `src/features/settings/nativeToAscii.ts` | missing |
+| `file.newProjectsSettings` | Settings for New Projects… | `src/features/settings/index.ts` | missing |
 | `file.overrideFileType` | Override File Type | `src/features/settings/fileTypesRuntime.ts` | missing |
 | `file.projectStructure` | Project Structure… | `src/features/settings/index.ts` | missing |
 | `file.revertFileTypeOverride` | Revert File Type Override | `src/features/settings/fileTypesRuntime.ts` | missing |
+| `file.settings` | Settings… | `src/features/settings/index.ts` | partial - internal/app/commands.go file.settings -> internal/app/settings_window.go + settings_pages.go, OpenIDEA's Settings dialog over Appearance, Keymap, Editor Appearance/Font and Java; OpenIDEA's remaining settings pages are not ported yet |
 | `php.languageLevelPopup` | PHP Language Level | `src/features/settings/languages/PhpStatus.tsx` | missing |
 | `php.selectLanguageLevel` | Select PHP Language Level | `src/features/settings/languages/PhpStatus.tsx` | missing |
 | `python.addInterpreter` | Add New Interpreter… | `src/features/settings/languages/PythonStatus.tsx` | missing |
 | `python.interpreterPopup` | Python Interpreter | `src/features/settings/languages/PythonStatus.tsx` | missing |
 | `python.interpreterSettings` | Interpreter Settings… | `src/features/settings/languages/PythonStatus.tsx` | missing |
 | `python.selectInterpreter` | Select Python Interpreter | `src/features/settings/languages/PythonStatus.tsx` | missing |
+| `settings.appearance` | Appearance… | `src/features/settings/index.ts` | partial - internal/app registers the native action `settings.appearance`; interaction-level acceptance is pending |
 | `settings.assignShortcut` | Assign Shortcut… | `src/features/settings/index.ts` | missing |
+| `settings.keymap` | Keymap… | `src/features/settings/index.ts` | partial - internal/app registers the native action `settings.keymap`; interaction-level acceptance is pending |
+| `view.navigationBarHidden` |  | `src/features/settings/appearanceRuntime.ts` | integrated - internal/app/navigation_bar.go persists Don't Show as hidden and removes the bar from both the top and status-bar placements; View › Appearance › Navigation Bar › Don't Show exposes the checked action; TestNavigationBarPlacementAndStatusWidgetPersistence |
+| `view.navigationBarStatusBar` |  | `src/features/settings/appearanceRuntime.ts` | integrated - internal/app/navigation_bar.go defaults to OpenIDEA's statusBar placement, renders it through the Navigation Bar status item and restores it through View › Appearance › Navigation Bar › Status Bar; navigationBarPosition normalizes malformed settings to statusBar and TestNavigationBarPlacementAndStatusWidgetPersistence proves persistence |
+| `view.navigationBarTop` |  | `src/features/settings/appearanceRuntime.ts` | integrated - internal/app/navigation_bar.go SetNavigationBarPosition("top") persists the global setting and renders the same project › directory › file › symbol bar above the editor while leaving the status widget independent; View › Appearance › Navigation Bar › Top and the action registry use the upstream id; TestNavigationBarPlacementAndStatusWidgetPersistence |
+| `view.resetZoom` | Reset IDE Zoom | `src/features/settings/appearanceRuntime.ts` | partial - internal/app registers the native action `view.resetZoom`; interaction-level acceptance is pending |
+| `view.toggleCompactMode` |  | `src/features/settings/appearanceRuntime.ts` | integrated - internal/app/appearance_runtime.go persists Compact Mode and internal/app/tokens.go applies OpenIDEA's :root[data-compact] chrome, header, tab, row, button and input sizes; View › Appearance exposes a checked toggle and keeping the toolbar off still renders the compact document header; TestCompactModeChangesChromeAndKeepsCompactHeaderWithToolbarOff |
+| `view.toggleStatusBar` |  | `src/features/settings/appearanceRuntime.ts` | partial - internal/app registers the native action `view.toggleStatusBar`; interaction-level acceptance is pending |
+| `view.toggleToolWindowBars` |  | `src/features/settings/appearanceRuntime.ts` | partial - internal/app registers the native action `view.toggleToolWindowBars`; interaction-level acceptance is pending |
+| `view.toggleToolbar` |  | `src/features/settings/appearanceRuntime.ts` | partial - internal/app registers the native action `view.toggleToolbar`; interaction-level acceptance is pending |
+| `view.zoomIn` | Zoom In IDE | `src/features/settings/appearanceRuntime.ts` | partial - internal/app registers the native action `view.zoomIn`; interaction-level acceptance is pending |
+| `view.zoomOut` | Zoom Out IDE | `src/features/settings/appearanceRuntime.ts` | partial - internal/app registers the native action `view.zoomOut`; interaction-level acceptance is pending |
 
 ### ssh
 
@@ -587,26 +730,27 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | `code.surroundWith` | Surround With… | `src/features/templates/index.ts` | missing |
 | `code.surroundWithLiveTemplate` | Surround with Live Template… | `src/features/templates/index.ts` | missing |
 | `emmet.updateTag` | Update Tag with Emmet | `src/features/templates/index.ts` | missing |
+| `templates.new.${t.id}` |  | `src/features/templates/index.ts` | missing |
 | `templates.newFromTemplate` | New from Template… | `src/features/templates/index.ts` | missing |
 
 ### terminal
 
 | Action | Title | Source | Status |
 | --- | --- | --- | --- |
-| `terminal.clear` | Clear Terminal Buffer | `src/features/terminal/index.ts` | missing |
-| `terminal.closeSession` | Close Terminal Session | `src/features/terminal/index.ts` | missing |
-| `terminal.find` | Find in Terminal | `src/features/terminal/index.ts` | missing |
-| `terminal.new` | New Terminal Tab | `src/features/terminal/index.ts` | missing |
-| `terminal.newPredefinedSession` | New Predefined Session | `src/features/terminal/index.ts` | missing |
-| `terminal.openAt` | Open in Terminal | `src/features/terminal/index.ts` | missing |
-| `terminal.pluginSession` | Open Plugin Terminal Session | `src/features/terminal/index.ts` | missing |
-| `terminal.runCommand` | Run Command in Terminal | `src/features/terminal/index.ts` | missing |
+| `terminal.clear` | Clear Terminal Buffer | `src/features/terminal/index.ts` | partial - internal/app registers the native action `term.clear`; interaction-level acceptance is pending |
+| `terminal.closeSession` | Close Terminal Session | `src/features/terminal/index.ts` | partial - internal/app registers the native action `term.close`; interaction-level acceptance is pending |
+| `terminal.find` | Find in Terminal | `src/features/terminal/index.ts` | partial - internal/app registers the native action `term.find`; interaction-level acceptance is pending |
+| `terminal.new` | New Terminal Tab | `src/features/terminal/index.ts` | partial - internal/app registers the native action `term.new`; interaction-level acceptance is pending |
+| `terminal.newPredefinedSession` | New Predefined Session | `src/features/terminal/index.ts` | partial - internal/app registers the native action `terminal.newPredefinedSession`; interaction-level acceptance is pending |
+| `terminal.openAt` | Open in Terminal | `src/features/terminal/index.ts` | partial - internal/app registers the native action `terminal.openAt`; interaction-level acceptance is pending |
+| `terminal.pluginSession` | Open Plugin Terminal Session | `src/features/terminal/index.ts` | partial - internal/app registers the native action `terminal.pluginSession`; interaction-level acceptance is pending |
+| `terminal.runCommand` | Run Command in Terminal | `src/features/terminal/index.ts` | partial - internal/app registers the native action `terminal.runCommand`; interaction-level acceptance is pending |
 | `terminal.sampleTui` | Stream Sample TUI | `src/features/terminal/index.ts` | missing |
-| `terminal.splitAndMoveDown` | Split and Move Down | `src/features/terminal/index.ts` | missing |
-| `terminal.splitAndMoveRight` | Split and Move Right | `src/features/terminal/index.ts` | missing |
-| `terminal.splitDown` | Split Down | `src/features/terminal/index.ts` | missing |
-| `terminal.splitRight` | Split Right | `src/features/terminal/index.ts` | missing |
-| `terminal.unsplit` | Unsplit | `src/features/terminal/index.ts` | missing |
+| `terminal.splitAndMoveDown` | Split and Move Down | `src/features/terminal/index.ts` | partial - internal/app registers the native action `terminal.splitAndMoveDown`; interaction-level acceptance is pending |
+| `terminal.splitAndMoveRight` | Split and Move Right | `src/features/terminal/index.ts` | partial - internal/app registers the native action `terminal.splitAndMoveRight`; interaction-level acceptance is pending |
+| `terminal.splitDown` | Split Down | `src/features/terminal/index.ts` | partial - internal/app registers the native action `terminal.splitDown`; interaction-level acceptance is pending |
+| `terminal.splitRight` | Split Right | `src/features/terminal/index.ts` | partial - internal/app registers the native action `terminal.splitRight`; interaction-level acceptance is pending |
+| `terminal.unsplit` | Unsplit | `src/features/terminal/index.ts` | partial - internal/app registers the native action `term.unsplit`; interaction-level acceptance is pending |
 
 ### todo
 
@@ -619,48 +763,184 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 
 | Action | Title | Source | Status |
 | --- | --- | --- | --- |
-| `java.downloadJdk` | Download JDK… | `src/features/tools/jdk.ts` | missing |
-| `tools.install` | Install Language Server / Debugger | `src/features/tools/index.ts` | missing |
-| `tools.languageServers` | Language Servers… | `src/features/tools/index.ts` | missing |
-| `tools.promptInstall` | Install Missing Tool | `src/features/tools/index.ts` | missing |
+| `java.downloadJdk` | Download JDK… | `src/features/tools/jdk.ts` | partial - internal/app registers the native action `java.downloadJdk`; interaction-level acceptance is pending |
+| `tools.install` | Install Language Server / Debugger | `src/features/tools/index.ts` | partial - internal/app registers the native action `tools.install`; interaction-level acceptance is pending |
+| `tools.languageServers` | Language Servers… | `src/features/tools/index.ts` | partial - internal/app registers the native action `tools.languageServers`; interaction-level acceptance is pending |
+| `tools.promptInstall` | Install Missing Tool | `src/features/tools/index.ts` | partial - internal/app registers the native action `tools.promptInstall`; interaction-level acceptance is pending |
 
 ### vcs
 
 | Action | Title | Source | Status |
 | --- | --- | --- | --- |
-| `diff.applyLeftSide` | Accept Left Side | `src/features/vcs/compare.tsx` | missing |
-| `diff.applyRightSide` | Accept Right Side | `src/features/vcs/compare.tsx` | missing |
+| `diff.applyLeftSide` | Accept Left Side | `src/features/vcs/compare.tsx` | partial - internal/app registers the native action `diff.applyLeftSide`; interaction-level acceptance is pending |
+| `diff.applyRightSide` | Accept Right Side | `src/features/vcs/compare.tsx` | partial - internal/app registers the native action `diff.applyRightSide`; interaction-level acceptance is pending |
 | `diff.compareDirectories` | Compare Directories | `src/features/vcs/compare.tsx` | integrated - internal/app/dircompare.go OpenDirCompare and ConfirmDirCompare over fs_compare_directories with its onProgress channel, rows opening internal/app/diff.go ShowFileDiff; base.files.compareDirs |
-| `diff.compareFiles` | Compare Files | `src/features/vcs/compare.tsx` | missing |
-| `diff.compareTexts` | Compare Texts | `src/features/vcs/compare.tsx` | missing |
-| `diff.compareWith` | Compare With… | `src/features/vcs/compare.tsx` | partial - internal/app/workbench.go tabMenu's Compare With… over internal/app/diff.go PickCompareFile (mygo.Dialog.Open from the tab's folder) then CompareTabWithFile, which compares the chosen file with the tab's buffer text so unsaved edits count, through diffRows and finishCompare (a guarded m.post, so a newer compare wins) into the read-only diffDialog titled by diffTitle; also reachable from the tab menu only, proven by diff_test.go TestDiffRowsCountsBothSides, TestDiffTitleNamesEachCompare and TestCompareWithoutATabOpensNothing; limits: a row list rather than OpenIDEA's editable two-pane diff editor, the project tree's Compare With… is not ported, and the tab menu's Git submenu is not ported |
+| `diff.compareFiles` | Compare Files | `src/features/vcs/compare.tsx` | partial - internal/app registers the native action `diff.compareFiles`; interaction-level acceptance is pending |
+| `diff.compareTexts` | Compare Texts | `src/features/vcs/compare.tsx` | partial - internal/app registers the native action `diff.compareTexts`; interaction-level acceptance is pending |
+| `diff.compareWith` | Compare With… | `src/features/vcs/compare.tsx` | partial - internal/app/workbench.go tabMenu's Compare With… over internal/app/diff.go PickCompareFile (mygo.Dialog.Open from the tab's folder) then CompareTabWithFile, which compares the chosen file with the tab's buffer text so unsaved edits count, through diffRows and finishCompare (a guarded m.post, so a newer compare wins) into the read-only diffDialog titled by diffTitle; the tab menu's Git submenu is present alongside this entry, proven by diff_test.go TestDiffRowsCountsBothSides, TestDiffTitleNamesEachCompare and TestCompareWithoutATabOpensNothing; limits: a row list rather than OpenIDEA's editable two-pane diff editor and the project tree's Compare With… is not ported |
 | `diff.compareWithClipboard` | Compare with Clipboard | `src/features/vcs/compare.tsx` | partial - internal/app/workbench.go tabMenu's Compare with Clipboard over internal/app/diff.go CompareTabWithClipboard (mygo.Clipboard.Read(transfer.Text), with a 剪贴板中没有文本 status when the clipboard holds no text) then ShowTextCompare, which diffs the tab's buffer against the clipboard text and titles the read-only diffDialog 剪贴板 by diffTitle; proven by diff_test.go TestDiffTitleNamesEachCompare and TestCompareWithoutATabOpensNothing; limits: the row list is not OpenIDEA's editable two-pane diff editor |
-| `diff.jumpToSource` | Jump to Source | `src/features/vcs/compare.tsx` | missing |
-| `diff.nextDifference` | Next Difference | `src/features/vcs/compare.tsx` | missing |
-| `diff.nextFile` | Compare Next File | `src/features/vcs/compare.tsx` | missing |
-| `diff.prevDifference` | Previous Difference | `src/features/vcs/compare.tsx` | missing |
-| `diff.prevFile` | Compare Previous File | `src/features/vcs/compare.tsx` | missing |
-| `diff.showSettings` | Diff Settings | `src/features/vcs/compare.tsx` | missing |
+| `diff.jumpToSource` | Jump to Source | `src/features/vcs/compare.tsx` | partial - internal/app registers the native action `diff.jumpToSource`; interaction-level acceptance is pending |
+| `diff.nextDifference` | Next Difference | `src/features/vcs/compare.tsx` | partial - internal/app registers the native action `diff.nextDifference`; interaction-level acceptance is pending |
+| `diff.nextFile` | Compare Next File | `src/features/vcs/compare.tsx` | partial - internal/app registers the native action `diff.nextFile`; interaction-level acceptance is pending |
+| `diff.prevDifference` | Previous Difference | `src/features/vcs/compare.tsx` | partial - internal/app registers the native action `diff.prevDifference`; interaction-level acceptance is pending |
+| `diff.prevFile` | Compare Previous File | `src/features/vcs/compare.tsx` | partial - internal/app registers the native action `diff.prevFile`; interaction-level acceptance is pending |
+| `diff.showSettings` | Diff Settings | `src/features/vcs/compare.tsx` | partial - internal/app registers the native action `diff.showSettings`; interaction-level acceptance is pending |
 | `localHistory.putLabel` | Local History: Put Label… | `src/features/vcs/localHistoryActions.ts` | partial - internal/app/history.go ConfirmHistoryLabel over history_put_label; base.files.historyLabel |
-| `localHistory.recentChanges` | Recent Changes | `src/features/vcs/localHistoryActions.ts` | missing |
-| `merge.${command}` |  | `src/features/vcs/mergeActions.ts` | missing |
-| `vcs.log.branches.delete` | Delete Branch | `src/features/vcs/logPaneActions.ts` | missing |
-| `vcs.log.branches.navigate` | Navigate Log to Selected Branch | `src/features/vcs/logPaneActions.ts` | missing |
-| `vcs.log.branches.new` | New Branch… | `src/features/vcs/logPaneActions.ts` | missing |
-| `vcs.log.branches.toggleFavorite` | Mark/Unmark As Favorite | `src/features/vcs/logPaneActions.ts` | missing |
-| `vcs.log.branches.update` | Update Selected | `src/features/vcs/logPaneActions.ts` | missing |
-| `vcs.log.changes.compareBeforeWithLocal` | Compare Before with Local | `src/features/vcs/logPaneActions.ts` | missing |
-| `vcs.log.changes.compareWithLocal` | Compare with Local | `src/features/vcs/logPaneActions.ts` | missing |
-| `vcs.log.changes.diffPreview` | Show Diff Preview | `src/features/vcs/logPaneActions.ts` | missing |
-| `vcs.log.changes.getFromRevision` | Get from Revision | `src/features/vcs/logPaneActions.ts` | missing |
-| `vcs.log.changes.groupByDirectory` | Group by Directory | `src/features/vcs/logPaneActions.ts` | missing |
-| `vcs.log.changes.jumpToSource` | Jump to Source | `src/features/vcs/logPaneActions.ts` | missing |
-| `vcs.log.changes.revert` | Revert Selected Changes | `src/features/vcs/logPaneActions.ts` | missing |
-| `vcs.log.changes.showDiff` | Show Diff | `src/features/vcs/logPaneActions.ts` | missing |
-| `vcs.log.collapseLinear` | Collapse Linear Branches | `src/features/vcs/logPaneActions.ts` | missing |
-| `vcs.log.expandLinear` | Expand Linear Branches | `src/features/vcs/logPaneActions.ts` | missing |
-| `vcs.log.showBranches` | Show Branches | `src/features/vcs/logPaneActions.ts` | missing |
-| `vcs.openDiff` | Open Diff | `src/features/vcs/compare.tsx` | missing |
+| `localHistory.recentChanges` | Recent Changes | `src/features/vcs/localHistoryActions.ts` | partial - internal/app registers the native action `localHistory.recentChanges`; interaction-level acceptance is pending |
+| `merge.accept` | Accept | `src/features/vcs/mergeActions.ts` | integrated - internal/app/merge_editor_actions.go registers the full OpenIDEA merge command list; internal/app/merge_editor.go runMergeCommand and mergePaneMenu dispatch Accept through the selected side change; TestMergeCommandsAreAllRegistered and TestMergeEditorRendersOpenIDEAControls |
+| `merge.acceptTheirs` | Accept Theirs | `src/features/vcs/mergeActions.ts` | integrated - internal/app/merge_editor.go AcceptMergeTheirs and applyMergeTextPointer write and stage the complete Theirs version; the full command registration and footer are covered by TestMergeCommandsAreAllRegistered and TestMergeEditorRendersOpenIDEAControls |
+| `merge.acceptYours` | Accept Yours | `src/features/vcs/mergeActions.ts` | integrated - internal/app/merge_editor.go AcceptMergeYours and applyMergeTextPointer write and stage the complete Yours version, including deletion when the side is absent; TestMergeMissingSideDeletesAndStagesTheFile |
+| `merge.annotate` | Annotate with Git Blame | `src/features/vcs/mergeActions.ts` | integrated - internal/app/merge_editor.go AnnotateMergePane opens native blame for the focused side using HEAD or the merge commit; internal/app/merge_editor_actions.go registers the side-only action and mergePaneMenu exposes it |
+| `merge.apply` | Apply Merge Result | `src/features/vcs/mergeActions.ts` | integrated - internal/app/merge_editor.go ApplyMerge confirms unresolved changes, writes the result, calls vcs_stage, refreshes VCS and closes the editor; TestMergeApplyWritesStagesAndClosesTheEditor and TestMergeUnresolvedApplyWaitsForConfirmation |
+| `merge.applyAll` | Apply All Non-Conflicting Changes | `src/features/vcs/mergeActions.ts` | integrated - internal/app/merge_editor.go ApplyMergeNonConflicting handles OpenIDEA's apply-all operation and merge summary state; internal/app/merge_model_test.go TestMergeActionsAutoIgnoreAndRevert and the registered toolbar in TestMergeEditorRendersOpenIDEAControls |
+| `merge.applyLeft` | Apply Non-Conflicting Changes from the Left Side | `src/features/vcs/mergeActions.ts` | integrated - internal/app/merge_editor.go ApplyMergeNonConflicting applies only left non-conflicting changes; internal/app/merge_model_test.go TestMergeTextChangesKeepsIndependentChangesApart and TestMergeActionsAutoIgnoreAndRevert |
+| `merge.applyRight` | Apply Non-Conflicting Changes from the Right Side | `src/features/vcs/mergeActions.ts` | integrated - internal/app/merge_editor.go ApplyMergeNonConflicting applies only right non-conflicting changes; internal/app/merge_model_test.go TestMergeTextChangesKeepsIndependentChangesApart and TestMergeActionsAutoIgnoreAndRevert |
+| `merge.autoApply` | Automatically Apply Non-Conflicting Changes | `src/features/vcs/mergeActions.ts` | integrated - internal/app/merge_editor.go setMergeAutoApply persists the OpenIDEA setting and applies non-conflicting changes without recording the initial application as an edit; TestMergeAutoApplyPreferencePersists and TestMergeAutoApplyOnLoadDoesNotMakeTheEditorDirty |
+| `merge.cancel` | Cancel Merge | `src/features/vcs/mergeActions.ts` | integrated - internal/app/merge_editor.go RequestCloseMerge and drawMergeConfirmation discard only after confirmation when the result was touched; the footer and registered action are covered by TestMergeEditorRendersOpenIDEAControls |
+| `merge.change` | Resolve Merge Change | `src/features/vcs/mergeActions.ts` | integrated - internal/app/merge_editor.go RunMergeChange parses OpenIDEA's {indexes, action} payload and applies side accept, ignore, auto resolve and manual result edits; TestMergeEditorLoadsVersionsAndResolvesSelectedChange and internal/app/merge_model_test.go |
+| `merge.compare` | Compare Contents | `src/features/vcs/mergeActions.ts` | integrated - internal/app/merge_editor.go ToggleMergeCompareMenu opens the six native version comparisons; TestMergeEditorRendersOpenIDEAControls and TestMergeCompareUsesAllSixOpenIDEAVersionPairs |
+| `merge.compareBaseResult` | Base and Result | `src/features/vcs/mergeActions.ts` | integrated - internal/app/merge_editor.go ShowMergeCompare opens Base and Result through the shared native diff view; TestMergeCompareUsesAllSixOpenIDEAVersionPairs |
+| `merge.compareBaseTheirs` | Base and Theirs | `src/features/vcs/mergeActions.ts` | integrated - internal/app/merge_editor.go ShowMergeCompare opens Base and Theirs through the shared native diff view; TestMergeCompareUsesAllSixOpenIDEAVersionPairs |
+| `merge.compareBaseYours` | Base and Yours | `src/features/vcs/mergeActions.ts` | integrated - internal/app/merge_editor.go ShowMergeCompare opens Base and Yours through the shared native diff view; TestMergeCompareUsesAllSixOpenIDEAVersionPairs |
+| `merge.compareResultTheirs` | Result and Theirs | `src/features/vcs/mergeActions.ts` | integrated - internal/app/merge_editor.go ShowMergeCompare opens Result and Theirs through the shared native diff view; TestMergeCompareUsesAllSixOpenIDEAVersionPairs |
+| `merge.compareYoursResult` | Yours and Result | `src/features/vcs/mergeActions.ts` | integrated - internal/app/merge_editor.go ShowMergeCompare opens Yours and Result through the shared native diff view; TestMergeCompareUsesAllSixOpenIDEAVersionPairs |
+| `merge.compareYoursTheirs` | Yours and Theirs | `src/features/vcs/mergeActions.ts` | integrated - internal/app/merge_editor.go ShowMergeCompare opens Yours and Theirs through the shared native diff view; TestMergeCompareUsesAllSixOpenIDEAVersionPairs |
+| `merge.copy` | Copy | `src/features/vcs/mergeActions.ts` | integrated - internal/app/merge_editor.go MergeCopy copies the focused pane selection; the result context menu and complete action registry are covered by TestMergeEditorRendersOpenIDEAControls and TestMergeCommandsAreAllRegistered |
+| `merge.cut` | Cut | `src/features/vcs/mergeActions.ts` | integrated - internal/app/merge_editor.go MergeCut copies the result selection and replaceResultRunes removes it with undo-safe change mapping; the result context menu and action registry are covered by TestMergeEditorRendersOpenIDEAControls |
+| `merge.ignore` | Ignore | `src/features/vcs/mergeActions.ts` | integrated - internal/app/merge_editor.go MergeIgnoreSelected handles whole-change and side-specific ignore through mergeEditorModel.ignoreChange and ignoreWholeChange; internal/app/merge_model_test.go TestMergeActionsAutoIgnoreAndRevert |
+| `merge.paste` | Paste | `src/features/vcs/mergeActions.ts` | integrated - internal/app/merge_editor.go MergePaste inserts text at the result selection with the same change remapping used by direct editing; the result context menu and action registry are covered by TestMergeEditorRendersOpenIDEAControls |
+| `merge.reload` | Reload from Disk | `src/features/vcs/mergeActions.ts` | integrated - internal/app/merge_editor.go ReloadMerge reloads all three versions and asks before discarding touched decisions; the toolbar action is covered by TestMergeEditorRendersOpenIDEAControls |
+| `merge.resolveAutomatically` | Resolve Automatically | `src/features/vcs/mergeActions.ts` | integrated - internal/app/merge_editor.go ResolveMergeSelectedAutomatically calls the word-level auto resolver for the selected changes; internal/app/merge_model_test.go TestMergeActionsAutoIgnoreAndRevert |
+| `merge.resolveSimple` | Resolve Simple Conflicts | `src/features/vcs/mergeActions.ts` | integrated - internal/app/merge_editor.go ResolveSimpleMergeConflicts applies every simple automatic resolution and reveals what remains; internal/app/merge_model_test.go TestMergeActionsAutoIgnoreAndRevert |
+| `merge.resolveUsingTheirs` | Resolve Using Theirs | `src/features/vcs/mergeActions.ts` | integrated - internal/app/merge_editor.go MergeAcceptSelected resolves the selected conflict using Theirs; internal/app/merge_editor_actions.go gates it to the Theirs pane and mergePaneMenu exposes it |
+| `merge.resolveUsingYours` | Resolve Using Yours | `src/features/vcs/mergeActions.ts` | integrated - internal/app/merge_editor.go MergeAcceptSelected resolves the selected conflict using Yours; internal/app/merge_editor_actions.go gates it to the Yours pane and mergePaneMenu exposes it |
+| `merge.revert` | Revert Conflict Resolution | `src/features/vcs/mergeActions.ts` | integrated - internal/app/merge_editor.go RevertMergeResolution restores the base and clears every decision and manual marker; internal/app/merge_model_test.go TestMergeActionsAutoIgnoreAndRevert |
+| `merge.selectAll` | Select All | `src/features/vcs/mergeActions.ts` | integrated - internal/app/merge_editor.go MergeSelectAll selects the focused pane and updates the native text selection on the next frame; the result context menu and action registry are covered by TestMergeEditorRendersOpenIDEAControls |
+| `merge.settings` | Merge Settings | `src/features/vcs/mergeActions.ts` | integrated - internal/app/merge_editor.go ToggleMergeSettingsMenu renders OpenIDEA's automatic non-conflicting-change setting; TestMergeEditorRendersOpenIDEAControls and TestMergeAutoApplyPreferencePersists |
+| `vcs.acceptBoth` | Accept Both (Conflict at Caret) | `src/features/vcs/actions.tsx` | partial - internal/app registers the native action `vcs.acceptBoth`; interaction-level acceptance is pending |
+| `vcs.acceptTheirs` | Accept Theirs (Conflict at Caret) | `src/features/vcs/actions.tsx` | partial - internal/app registers the native action `vcs.acceptTheirs`; interaction-level acceptance is pending |
+| `vcs.acceptYours` | Accept Yours (Conflict at Caret) | `src/features/vcs/actions.tsx` | partial - internal/app registers the native action `vcs.acceptYours`; interaction-level acceptance is pending |
+| `vcs.addToVcs` | Add to VCS | `src/features/vcs/actions.tsx` | partial - internal/app/workbench.go tabGitMenu's Add stages the tab's unversioned file through internal/app/vcs.go StageChange over vcs_stage, and the project view's Git › Add stages the selected unversioned file the same way via statusFor, proven by commit_test.go TestStatusForFindsAChangedFile and the base-phase stage checks; limits: the changes view offers Stage/Unstage rather than a separate Add action elsewhere |
+| `vcs.annotate` | Annotate with Git Blame | `src/features/vcs/actions.tsx` | integrated - internal/app/annotate.go ShowAnnotate toggles a per-editor vcs_blame gutter with commit tints, scroll/fold/soft-wrap geometry, same-commit hover highlighting and an 800 ms edit refresh; clicking opens the commit and the context menu offers Show Commit in Git Log, Copy Revision Number and Close Annotations. Hovering lazily loads vcs_log and shows full author, email, formatted date and complete commit message with Issue Navigation links. annotate_test.go covers grouping, toggling, rich commit loading and the native author/date gutter; offscreen WORKBENCH_SHOT verifies the complete dynamic-width columns |
+| `vcs.applyPatch` | Apply Patch… | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.applyPatch`; interaction-level acceptance is pending |
+| `vcs.applyPatchFromClipboard` | Apply Patch from Clipboard… | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.applyPatchFromClipboard`; interaction-level acceptance is pending |
+| `vcs.branches` | Branches… | `src/features/vcs/actions.tsx` | integrated - internal/app/branch.go ToggleBranches and ShowBranches render a native branch list from vcs_branch_info/vcs_branches with checkout, create, update, push, merge, rebase, compare, working-tree diff, history, scoped favorite, rename, local delete + Restore/View Commits/Delete Tracked Branch notification and confirmed remote delete; rename uses vcs_rename_branch, local delete vcs_delete_branch and restore vcs_restore_branch; branch_test.go covers validation, prompts, restore actions, favorites and the native rename dialog; SmokeBranch exercises the real backend |
+| `vcs.changelist.commit` | Commit Changelist… | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.changelist.commit`; interaction-level acceptance is pending |
+| `vcs.changelist.delete` | Delete Changelist | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.changelist.delete`; interaction-level acceptance is pending |
+| `vcs.changelist.edit` | Edit Changelist… | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.changelist.edit`; interaction-level acceptance is pending |
+| `vcs.changelist.move` | Move to Another Changelist… | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.changelist.move`; interaction-level acceptance is pending |
+| `vcs.changelist.new` | New Changelist… | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.changelist.new`; interaction-level acceptance is pending |
+| `vcs.changelist.setActive` | Set Active Changelist | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.changelist.setActive`; interaction-level acceptance is pending |
+| `vcs.checkoutRevision` | Checkout Tag or Revision… | `src/features/vcs/actions.tsx` | partial - internal/app registers the native action `vcs.checkoutRevision`; interaction-level acceptance is pending |
+| `vcs.cherryPick.abort` | Abort Cherry-Pick | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.cherryPick.abort`; interaction-level acceptance is pending |
+| `vcs.cherryPick.continue` | Continue Cherry-Pick | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.cherryPick.continue`; interaction-level acceptance is pending |
+| `vcs.clone` | Get from Version Control… | `src/features/vcs/actions.tsx` | partial - internal/app registers the native action `vcs.clone`; interaction-level acceptance is pending |
+| `vcs.commit` | Commit… | `src/features/vcs/actions.tsx` | integrated - base.commit.id, base.commit.staged, base.commit.clean; the tab menu's Commit File… opens the same dialog with commitState.only, which keeps every other change out and includes a new file, proven by commit_test.go TestCommitFileIncludesOnlyItsFile; the project view's Git › Commit… opens the dialog with commitState.scope so only changes under the directory are listed and committed, proven by commit_test.go TestCommitDirKeepsChangesUnderTheDirectory |
+| `vcs.commitAndPush` | Commit and Push… | `src/features/vcs/actions.tsx` | partial - internal/app registers the native action `vcs.commitAndPush`; interaction-level acceptance is pending |
+| `vcs.compareWithBranch` | Compare with Branch or Revision… | `src/features/vcs/actions.tsx` | partial - internal/app registers the native action `vcs.compareWithBranch`; interaction-level acceptance is pending |
+| `vcs.compareWithRevision` | Compare with Revision… | `src/features/vcs/actions.tsx` | partial - internal/app registers the native action `vcs.compareWithRevision`; interaction-level acceptance is pending |
+| `vcs.createPatch` | Create Patch… | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.createPatch`; interaction-level acceptance is pending |
+| `vcs.fetch` | Fetch | `src/features/vcs/actions.tsx` | partial - internal/app registers the native action `vcs.fetch`; interaction-level acceptance is pending |
+| `vcs.localHistory` | Show Local History | `src/features/vcs/actions.tsx` | integrated - internal/app/history.go ShowHistory loads file snapshots through history_list and labels/deleted paths through history_list_dir, previews one revision against the worktree or two snapshots through history_content, and restores through history_restore; historyDialog renders the native timeline, deleted-path styling, multi-revision comparison and label-time group restore; branch tests cover scoped favorites and deleted-branch restore, history_test.go covers revisionRange, folder labels, content loading, merged file/list_dir data and the native dialog; base.files.historyRestore and base.files.historyLabel run on the real server |
+| `vcs.log.branches.delete` | Delete Branch | `src/features/vcs/logPaneActions.ts` | partial - internal/app registers the native action `vcs.log.branches.delete`; interaction-level acceptance is pending |
+| `vcs.log.branches.navigate` | Navigate Log to Selected Branch | `src/features/vcs/logPaneActions.ts` | partial - internal/app registers the native action `vcs.log.branches.navigate`; interaction-level acceptance is pending |
+| `vcs.log.branches.new` | New Branch… | `src/features/vcs/logPaneActions.ts` | partial - internal/app registers the native action `vcs.log.branches.new`; interaction-level acceptance is pending |
+| `vcs.log.branches.toggleFavorite` | Mark/Unmark As Favorite | `src/features/vcs/logPaneActions.ts` | partial - internal/app registers the native action `vcs.log.branches.toggleFavorite`; interaction-level acceptance is pending |
+| `vcs.log.branches.update` | Update Selected | `src/features/vcs/logPaneActions.ts` | partial - internal/app registers the native action `vcs.log.branches.update`; interaction-level acceptance is pending |
+| `vcs.log.changes.compareBeforeWithLocal` | Compare Before with Local | `src/features/vcs/logPaneActions.ts` | partial - internal/app registers the native action `vcs.log.changes.compareBeforeWithLocal`; interaction-level acceptance is pending |
+| `vcs.log.changes.compareWithLocal` | Compare with Local | `src/features/vcs/logPaneActions.ts` | partial - internal/app registers the native action `vcs.log.changes.compareWithLocal`; interaction-level acceptance is pending |
+| `vcs.log.changes.diffPreview` | Show Diff Preview | `src/features/vcs/logPaneActions.ts` | partial - internal/app registers the native action `vcs.log.changes.diffPreview`; interaction-level acceptance is pending |
+| `vcs.log.changes.getFromRevision` | Get from Revision | `src/features/vcs/logPaneActions.ts` | partial - internal/app registers the native action `vcs.log.changes.getFromRevision`; interaction-level acceptance is pending |
+| `vcs.log.changes.groupByDirectory` | Group by Directory | `src/features/vcs/logPaneActions.ts` | partial - internal/app registers the native action `vcs.log.changes.groupByDirectory`; interaction-level acceptance is pending |
+| `vcs.log.changes.jumpToSource` | Jump to Source | `src/features/vcs/logPaneActions.ts` | partial - internal/app registers the native action `vcs.log.changes.jumpToSource`; interaction-level acceptance is pending |
+| `vcs.log.changes.revert` | Revert Selected Changes | `src/features/vcs/logPaneActions.ts` | partial - internal/app registers the native action `vcs.log.changes.revert`; interaction-level acceptance is pending |
+| `vcs.log.changes.showDiff` | Show Diff | `src/features/vcs/logPaneActions.ts` | partial - internal/app registers the native action `vcs.log.changes.showDiff`; interaction-level acceptance is pending |
+| `vcs.log.checkoutRevision` | Checkout Revision | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.log.checkoutRevision`; interaction-level acceptance is pending |
+| `vcs.log.cherryPick` | Cherry-Pick | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.log.cherryPick`; interaction-level acceptance is pending |
+| `vcs.log.collapseLinear` | Collapse Linear Branches | `src/features/vcs/logPaneActions.ts` | partial - internal/app registers the native action `vcs.log.collapseLinear`; interaction-level acceptance is pending |
+| `vcs.log.compareVersions` | Compare Versions | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.log.compareVersions`; interaction-level acceptance is pending |
+| `vcs.log.compareWithLocal` | Compare with Local | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.log.compareWithLocal`; interaction-level acceptance is pending |
+| `vcs.log.copyRevision` | Copy Revision Number | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.log.copyRevision`; interaction-level acceptance is pending |
+| `vcs.log.createPatch` | Create Patch… | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.log.createPatch`; interaction-level acceptance is pending |
+| `vcs.log.dropCommit` | Drop Commit | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.log.dropCommit`; interaction-level acceptance is pending |
+| `vcs.log.editMessage` | Edit Commit Message… | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.log.editMessage`; interaction-level acceptance is pending |
+| `vcs.log.expandLinear` | Expand Linear Branches | `src/features/vcs/logPaneActions.ts` | partial - internal/app registers the native action `vcs.log.expandLinear`; interaction-level acceptance is pending |
+| `vcs.log.fixup` | Fixup… | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.log.fixup`; interaction-level acceptance is pending |
+| `vcs.log.goToChild` | Go to Child Commit | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.log.goToChild`; interaction-level acceptance is pending |
+| `vcs.log.goToParent` | Go to Parent Commit | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.log.goToParent`; interaction-level acceptance is pending |
+| `vcs.log.goToRef` | Go to Hash/Branch/Tag | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.log.goToRef`; interaction-level acceptance is pending |
+| `vcs.log.interactiveRebase` | Interactively Rebase from Here… | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.log.interactiveRebase`; interaction-level acceptance is pending |
+| `vcs.log.newBranch` | New Branch… | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.log.newBranch`; interaction-level acceptance is pending |
+| `vcs.log.newTag` | New Tag… | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.log.newTag`; interaction-level acceptance is pending |
+| `vcs.log.openExternal` | Open External Git Log… | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.log.openExternal`; interaction-level acceptance is pending |
+| `vcs.log.openInBrowser` | View in Browser | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.log.openInBrowser`; interaction-level acceptance is pending |
+| `vcs.log.pushUpToHere` | Push All up to Here… | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.log.pushUpToHere`; interaction-level acceptance is pending |
+| `vcs.log.rebaseOntoCommit` | Rebase Current Branch onto Selected Commit | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.log.rebaseOntoCommit`; interaction-level acceptance is pending |
+| `vcs.log.resetToHere` | Reset Current Branch to Here… | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.log.resetToHere`; interaction-level acceptance is pending |
+| `vcs.log.revealBookmark` | Show Commit Bookmark | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.log.revealBookmark`; interaction-level acceptance is pending |
+| `vcs.log.revert` | Revert Commit | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.log.revert`; interaction-level acceptance is pending |
+| `vcs.log.showBranches` | Show Branches | `src/features/vcs/logPaneActions.ts` | partial - internal/app registers the native action `vcs.log.showBranches`; interaction-level acceptance is pending |
+| `vcs.log.squashCommits` | Squash Commits… | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.log.squashCommits`; interaction-level acceptance is pending |
+| `vcs.log.squashInto` | Squash Into… | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.log.squashInto`; interaction-level acceptance is pending |
+| `vcs.log.undoCommit` | Undo Commit… | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.log.undoCommit`; interaction-level acceptance is pending |
+| `vcs.manageRemotes` | Manage Remotes… | `src/features/vcs/actions.tsx` | partial - internal/app registers the native action `vcs.manageRemotes`; interaction-level acceptance is pending |
+| `vcs.merge` | Merge… | `src/features/vcs/actions.tsx` | partial - internal/app registers the native action `vcs.merge`; interaction-level acceptance is pending |
+| `vcs.merge.abort` | Abort Merge | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.merge.abort`; interaction-level acceptance is pending |
+| `vcs.newBranch` | New Branch… | `src/features/vcs/actions.tsx` | integrated - internal/app/vcs_operations.go OpenNewGitBranch and native revision/name sheet; Git menu, project tree, tab menu, palette and VCS Operations quick list; vcsoperations.branch proves a real branch create and checkout |
+| `vcs.newTag` | New Tag… | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.newTag`; interaction-level acceptance is pending |
+| `vcs.newWorktree` | New Worktree… | `src/features/vcs/actions.tsx` | partial - internal/app registers the native action `vcs.newWorktree`; interaction-level acceptance is pending |
+| `vcs.nextChange` | Next Change | `src/features/vcs/actions.tsx` | partial - internal/app registers the native action `vcs.nextChange`; interaction-level acceptance is pending |
+| `vcs.nextConflict` | Next Conflict Marker | `src/features/vcs/actions.tsx` | partial - internal/app registers the native action `vcs.nextConflict`; interaction-level acceptance is pending |
+| `vcs.openDiff` | Open Diff | `src/features/vcs/compare.tsx` | partial - internal/app registers the native action `vcs.openDiff`; interaction-level acceptance is pending |
+| `vcs.openOnRemote` | Open on Git Remote | `src/features/vcs/openOnRemote.ts` | partial - internal/app registers the native action `vcs.openOnRemote`; interaction-level acceptance is pending |
+| `vcs.operations` | VCS Operations… | `src/features/vcs/actions.tsx` | integrated - internal/app/vcs_operations.go OpenVCSOperations Ctrl+V quick list with OpenIDEA action ids; Git menu and palette entry; TestVCSOperationsQuickListFiltersAndDispatches and vcsoperations.* |
+| `vcs.prevChange` | Previous Change | `src/features/vcs/actions.tsx` | partial - internal/app registers the native action `vcs.prevChange`; interaction-level acceptance is pending |
+| `vcs.prevConflict` | Previous Conflict Marker | `src/features/vcs/actions.tsx` | partial - internal/app registers the native action `vcs.prevConflict`; interaction-level acceptance is pending |
+| `vcs.pull` | Pull… | `src/features/vcs/actions.tsx` | partial - internal/app registers the native action `vcs.pull`; interaction-level acceptance is pending |
+| `vcs.push` | Push… | `src/features/vcs/actions.tsx` | integrated - internal/app/vcs_operations.go OpenGitPush and native remote, target, force-with-lease, set-upstream and no-verify choices; vcsoperations.push publishes to the real local remote |
+| `vcs.rebase` | Rebase… | `src/features/vcs/actions.tsx` | partial - internal/app registers the native action `vcs.rebase`; interaction-level acceptance is pending |
+| `vcs.rebase.abort` | Abort Rebase | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.rebase.abort`; interaction-level acceptance is pending |
+| `vcs.rebase.continue` | Continue Rebase | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.rebase.continue`; interaction-level acceptance is pending |
+| `vcs.rebase.skip` | Skip Commit | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.rebase.skip`; interaction-level acceptance is pending |
+| `vcs.refresh` | Refresh VCS Status | `src/features/vcs/actions.tsx` | partial - internal/app registers the native action `vcs.refresh`; interaction-level acceptance is pending |
+| `vcs.resetHead` | Reset HEAD… | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.resetHead`; interaction-level acceptance is pending |
+| `vcs.resolveConflicts` | Resolve Conflicts… | `src/features/vcs/actions.tsx` | partial - internal/app registers the native action `vcs.resolveConflicts`; interaction-level acceptance is pending |
+| `vcs.revert.abort` | Abort Revert | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.revert.abort`; interaction-level acceptance is pending |
+| `vcs.revert.continue` | Continue Revert | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.revert.continue`; interaction-level acceptance is pending |
+| `vcs.rollback` | Rollback… | `src/features/vcs/actions.tsx` | integrated - internal/app/vcs.go AskRollback and ConfirmRollback over vcs_discard with a confirmation, from the changes view, the tab menu's Git › Rollback… and the project view's Git › Rollback…; SmokeStage |
+| `vcs.shelf.compareLocal` | Compare Shelved Changes with Local | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.shelf.compareLocal`; interaction-level acceptance is pending |
+| `vcs.shelf.copyPatch` | Copy as Patch to Clipboard | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.shelf.copyPatch`; interaction-level acceptance is pending |
+| `vcs.shelf.createPatch` | Create Patch from Shelved Changes… | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.shelf.createPatch`; interaction-level acceptance is pending |
+| `vcs.shelf.delete` | Delete Shelved Changes | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.shelf.delete`; interaction-level acceptance is pending |
+| `vcs.shelf.importPatches` | Import Patches… | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.shelf.importPatches`; interaction-level acceptance is pending |
+| `vcs.shelf.refresh` | Refresh Shelf | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.shelf.refresh`; interaction-level acceptance is pending |
+| `vcs.shelf.rename` | Rename Shelved Changes… | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.shelf.rename`; interaction-level acceptance is pending |
+| `vcs.shelf.showDiff` | Show Shelved Diff | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.shelf.showDiff`; interaction-level acceptance is pending |
+| `vcs.shelf.showDiffNewTab` | Show Diff in a New Tab | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.shelf.showDiffNewTab`; interaction-level acceptance is pending |
+| `vcs.shelve` | Shelve Changes… | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.shelve`; interaction-level acceptance is pending |
+| `vcs.showCommit` | Show Commit in Git Log | `src/features/vcs/actions.tsx` | partial - internal/app registers the native action `vcs.showCommit`; interaction-level acceptance is pending |
+| `vcs.showCurrentRevision` | Show Current Revision | `src/features/vcs/actions.tsx` | partial - internal/app registers the native action `vcs.showCurrentRevision`; interaction-level acceptance is pending |
+| `vcs.showDiff` | Show Diff | `src/features/vcs/actions.tsx` | integrated - internal/app/diff.go ShowDiff over vcs_file_at with the buffer text, opened from the changes view, the tab menu's Git › Show Diff and the project view's Git › Show Diff; SmokeDiff |
+| `vcs.showDiffInNewWindow` | Show Diff in New Window | `src/features/vcs/actions.tsx` | partial - internal/app registers the native action `vcs.showDiffInNewWindow`; interaction-level acceptance is pending |
+| `vcs.showHistory` | Show History for File | `src/features/vcs/actions.tsx` | partial - internal/app registers the native action `vcs.showHistory`; interaction-level acceptance is pending |
+| `vcs.showHistoryForSelection` | Show History for Selection | `src/features/vcs/actions.tsx` | partial - internal/app registers the native action `vcs.showHistoryForSelection`; interaction-level acceptance is pending |
+| `vcs.showLog` | Show Git Log | `src/features/vcs/actions.tsx` | partial - internal/app registers the native action `vcs.showLog`; interaction-level acceptance is pending |
+| `vcs.showMessageHistory` | Show Commit Message History | `src/features/vcs/actions.tsx` | partial - internal/app registers the native action `vcs.showMessageHistory`; interaction-level acceptance is pending |
+| `vcs.showShelf` | Show Shelf | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.showShelf`; interaction-level acceptance is pending |
+| `vcs.stash` | Stash Changes… | `src/features/vcs/actions.tsx` | partial - internal/app registers the native action `vcs.stash`; interaction-level acceptance is pending |
+| `vcs.toggleAmend` | Amend Commit | `src/features/vcs/actions.tsx` | partial - internal/app registers the native action `vcs.toggleAmend`; interaction-level acceptance is pending |
+| `vcs.unshelve` | Unshelve… | `src/features/vcs/historyActions.tsx` | partial - internal/app registers the native action `vcs.unshelve`; interaction-level acceptance is pending |
+| `vcs.unstash` | Unstash Changes… | `src/features/vcs/actions.tsx` | partial - internal/app registers the native action `vcs.unstash`; interaction-level acceptance is pending |
+| `vcs.update` | Update Project… | `src/features/vcs/actions.tsx` | integrated - internal/app/vcs_operations.go OpenGitPull and OpenGitFetch; native remote and strategy choices stream vcs_remote output; vcsoperations.fetch and vcsoperations.pull prove fetch and pull against a real local remote |
+| `vcs.worktrees` | Worktrees… | `src/features/vcs/actions.tsx` | partial - internal/app registers the native action `vcs.worktrees`; interaction-level acceptance is pending |
+
+### viewers
+
+| Action | Title | Source | Status |
+| --- | --- | --- | --- |
+| `markdown.editorAndPreview` |  | `src/features/viewers/index.ts` | missing |
+| `markdown.editorOnly` |  | `src/features/viewers/index.ts` | missing |
+| `markdown.previewOnly` |  | `src/features/viewers/index.ts` | missing |
 
 ### vim
 
@@ -681,8 +961,8 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 
 | Action | Title | Source | Status |
 | --- | --- | --- | --- |
-| `file.openRecent` | Open Recent… | `src/features/welcome/index.ts` | missing |
-| `welcome.recentProjects` | Recent Projects… | `src/features/welcome/index.ts` | missing |
+| `file.openRecent` | Open Recent… | `src/features/welcome/index.ts` | integrated - internal/app/menu.go exposes File › Open Recent › Recent Projects…, commands.go registers file.openRecent, and internal/app/recent_projects.go opens OpenIDEA's compact welcome.recentProjects chooser; internal/app/recent_projects_test.go and the recent-projects screenshot prove it |
+| `welcome.recentProjects` | Recent Projects… | `src/features/welcome/index.ts` | integrated - internal/app/recent_projects.go filters the current project, searches, moves with arrows and PageUp/PageDown, opens with Enter or a single click, removes with Delete or Cmd+Backspace, and exposes row menus; internal/app/recent_projects_test.go and the recent-projects screenshot |
 
 ### whats-new
 
@@ -696,82 +976,89 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 | --- | --- | --- | --- |
 | `code.applyPastedImports` | Add Imports | `src/editor/lsp/importsOnPaste.ts` | missing |
 | `code.cleanupFile` | Code Cleanup in File | `src/editor/lsp/actions.ts` | missing |
-| `code.optimizeImportsFile` | Optimize Imports in File | `src/editor/lsp/actions.ts` | missing |
-| `code.reformatFile` | Reformat File | `src/editor/lsp/actions.ts` | missing |
-| `editor.addOrRemoveCaret` | Add or Remove Caret | `src/editor/core/actions.ts` | missing |
+| `code.optimizeImportsFile` | Optimize Imports in File | `src/editor/lsp/actions.ts` | partial - internal/app registers the native action `code.optimizeImportsFile`; interaction-level acceptance is pending |
+| `code.reformatFile` | Reformat File | `src/editor/lsp/actions.ts` | partial - internal/app registers the native action `code.reformatFile`; interaction-level acceptance is pending |
+| `editor.addOrRemoveCaret` | Add or Remove Caret | `src/editor/core/actions.ts` | partial - internal/app registers the native action `editor.addOrRemoveCaret`; interaction-level acceptance is pending |
 | `editor.cancelSourceDownload` | Cancel | `src/editor/core/librarySources.ts` | missing |
 | `editor.changeSplitOrientation` | Change Splitter Orientation | `src/editor/core/actions.ts` | partial - internal/app/editor_split.go ChangeSplitterOrientation flips Model.splitDown between side by side and stacked; Window › Editor Tabs and the tab context menu show it only while the editor has two groups; internal/app/commands.go editor.changeSplitOrientation |
 | `editor.chooseSources` | Choose Sources… | `src/editor/core/librarySources.ts` | missing |
 | `editor.closeAllTabs` | Close All Tabs | `src/editor/core/actions.ts` | partial - internal/app/tabs.go CloseAllTabs with Close All Tabs and Close All but Pinned in the tab context menu; internal/app/tabs_test.go |
 | `editor.closeOtherTabs` | Close Other Tabs | `src/editor/core/actions.ts` | partial - internal/app/tabs.go CloseOtherTabs, CloseTabsToLeft/Right and CloseUnmodifiedTabs; internal/app/workbench.go tabMenu; internal/app/tabs_test.go |
-| `editor.closeTab` | Close Tab | `src/editor/core/actions.ts` | missing |
+| `editor.closeTab` | Close Tab | `src/editor/core/actions.ts` | partial - internal/app registers the native action `file.close`; interaction-level acceptance is pending |
 | `editor.copyPath` | Absolute Path | `src/editor/core/actions.ts` | partial - internal/app/editor_menu.go editorMenu: Copy / Paste Special › Copy Path/Reference › Absolute Path copies the active editor's path through copyEditorText and reports it in the status bar, in OpenIDEA's context-menu order after MyGo's editing commands. internal/app/editor_menu_test.go. OpenIDEA also binds the action to a shortcut, while GoIDEA reaches it from the context menu only |
 | `editor.copyPathReference` | Copy Path/Reference… | `src/editor/core/actions.ts` | partial - internal/app/editor_menu.go editorMenu Copy / Paste Special › Copy Path/Reference submenu with Absolute Path, File Name, Path From Content Root and Path with line number over editorPathFlavours/projectRelative; internal/app/editor_menu_test.go. OpenIDEA opens a caret popup that also lists Reference, resolved through the language server; GoIDEA's submenu neither pops up at the caret nor offers the LSP reference row |
 | `editor.copyPathWithLineNumber` | Copy Path with Line Number | `src/editor/core/actions.ts` | partial - internal/app/editor_menu.go editorMenu Copy Path/Reference › Path with line number builds the project-relative path and the caret's line from editor.State.CursorPos; internal/app/editor_menu_test.go. There is no command-palette entry or shortcut for it |
-| `editor.copyReference` | Copy Reference | `src/editor/core/actions.ts` | missing |
-| `editor.decreaseFontSize` | Decrease Font Size | `src/editor/core/actions.ts` | missing |
+| `editor.copyReference` | Copy Reference | `src/editor/core/actions.ts` | partial - internal/app registers the native action `editor.copyReference`; interaction-level acceptance is pending |
+| `editor.decreaseFontSize` | Decrease Font Size | `src/editor/core/actions.ts` | integrated - internal/app/settings_ui.go stepEditorFontZoom applies Alt+Shift+, across every open editor within OpenIDEA's shared -6..36 zoom; TestEditorFontActionsUseSharedRuntimeZoom |
 | `editor.downloadSources` | Download Sources | `src/editor/core/librarySources.ts` | missing |
-| `editor.formatDocument` | Reformat Code | `src/platform/actions.ts` | missing |
-| `editor.increaseFontSize` | Increase Font Size | `src/editor/core/actions.ts` | missing |
+| `editor.increaseFontSize` | Increase Font Size | `src/editor/core/actions.ts` | integrated - internal/app/settings_ui.go stepEditorFontZoom applies Alt+Shift+. across every open editor within OpenIDEA's shared -6..36 zoom; TestEditorFontActionsUseSharedRuntimeZoom |
 | `editor.inlineCompletion.trigger` | Call Inline Completion | `src/editor/lsp/inlineCompletion.ts` | missing |
 | `editor.moveToOppositeGroup` | Move to Opposite Group | `src/editor/core/actions.ts` | partial - internal/app/editor_split.go MoveToOppositeGroup/moveToGroup takes the active tab to the other window group and focuses it there; Window › Editor Tabs and the tab context menu; internal/app/commands.go editor.moveToOppositeGroup; internal/app/editor_groups_test.go TestRemoveFromGroupKeepsItsActiveTabValid |
 | `editor.nextSplitter` | Go to Next Splitter | `src/editor/core/actions.ts` | partial - internal/app/editor_split.go GoToNextSplitter focuses the other window group; Alt+Tab in internal/app/app.go and the Window › Editor Tabs entry report it; internal/app/commands.go editor.nextSplitter; internal/app/editor_groups_test.go TestFocusGroupSwapsThePanesAndTheirPositions. Two groups make next and previous the same step |
-| `editor.nextTab` | Select Next Tab | `src/editor/core/actions.ts` | missing |
+| `editor.nextTab` | Select Next Tab | `src/editor/core/actions.ts` | integrated - internal/app/commands.go editor.nextTab; internal/app/tabs.go cycleEditorTab wraps within the focused group, and the IntelliJ bindings are Ctrl+Right and Cmd+Shift+]; TestCycleTabIndexWrapsInBothDirections and TestEditorTabActionsHaveOpenIDEAIdentityAndBindings |
 | `editor.openInOppositeGroup` | Open in Opposite Group | `src/editor/core/actions.ts` | partial - internal/app/editor_split.go OpenInOppositeGroup opens a copy of the active tab in the other group over the shared document, splitting first when the editor has one group; Window › Editor Tabs and the tab context menu; internal/app/commands.go editor.openInOppositeGroup |
 | `editor.pasteHistory.paste` | Paste | `src/editor/core/view/PasteHistoryDialog.tsx` | missing |
 | `editor.pasteHistory.remove` | Delete | `src/editor/core/view/PasteHistoryDialog.tsx` | missing |
 | `editor.pinTab` | Pin / Unpin Tab | `src/editor/core/actions.ts` | partial - internal/app/tabs.go PinActiveTab/placeTab and the tab context menu in internal/app/workbench.go; pinned tabs in Session.Pinned; internal/app/tabs_test.go |
 | `editor.prevSplitter` | Go to Previous Splitter | `src/editor/core/actions.ts` | partial - internal/app/editor_split.go GoToPreviousSplitter; Alt+Shift+Tab in internal/app/app.go and the Window › Editor Tabs entry report it; internal/app/commands.go editor.previousSplitter. Two groups make previous and next the same step |
-| `editor.prevTab` | Select Previous Tab | `src/editor/core/actions.ts` | missing |
-| `editor.reopenClosedTab` | Reopen Closed Tab | `src/editor/core/actions.ts` | partial - internal/app/tabs.go closedTab/rememberClosed/nextClosed/insertTabAt (maxClosedTabs 50, newest poppable last, open files skipped) and ReopenClosedTab; internal/app/app.go openWith openSpec at/pinned, removeTab records, removeTabNow skips the trimmed preview; internal/app/commands.go Reopen Closed Tab with no default key, as OpenIDEA's IntelliJ macOS keymap leaves Shift+Cmd+T to Go to Test; internal/app/tabs_test.go TestClosedTabsKeepTheNewestAndReopenNewestFirst, TestInsertTabAtFollowsThePinnedGroup, TestTabForPathIgnoresTabsWithoutADocument. Undo history and caret of a reopened document are not restored |
-| `editor.resetFontSize` | Reset Font Size in All Editors | `src/editor/core/actions.ts` | missing |
+| `editor.prevTab` | Select Previous Tab | `src/editor/core/actions.ts` | integrated - internal/app/commands.go editor.prevTab; internal/app/tabs.go cycleEditorTab wraps within the focused group, and the IntelliJ bindings are Ctrl+Left and Cmd+Shift+[; TestCycleTabIndexWrapsInBothDirections and TestEditorTabActionsHaveOpenIDEAIdentityAndBindings |
+| `editor.reopenClosedTab` | Reopen Closed Tab | `src/editor/core/actions.ts` | integrated - internal/app/tabs.go closedTab/rememberClosed/nextClosed/insertTabAt (maxClosedTabs 50, newest poppable last, open files skipped) and ReopenClosedTab restore the original position, pin state, selections, scroll offset and shared undo history while retaining the document; internal/app/app.go removeTab records and removeTabNow skips the trimmed preview; internal/app/commands.go Reopen Closed Tab has no default key, as OpenIDEA's IntelliJ macOS keymap leaves Shift+Cmd+T to Go to Test; internal/app/tabs_test.go TestClosedTabsKeepTheNewestAndReopenNewestFirst, TestReopenClosedTabRestoresSelectionsAndUndoHistory, TestInsertTabAtFollowsThePinnedGroup and TestTabForPathIgnoresTabsWithoutADocument cover the native behavior |
+| `editor.resetFontSize` | Reset Font Size in All Editors | `src/editor/core/actions.ts` | integrated - internal/app/settings_ui.go resetEditorFontZoom resets shared runtime zoom without changing Settings; TestEditorFontActionsUseSharedRuntimeZoom |
 | `editor.showHint` | Show Editor Hint | `src/editor/lsp/actions.ts` | missing |
 | `editor.splitDown` | Split Down | `src/editor/core/actions.ts` | partial - internal/app/editor_split.go SplitEditorDown/splitEditor with Model.splitDown drawing the stacked split; Window › Editor Tabs and the tab context menu in internal/app/menu.go and internal/app/workbench.go; internal/app/commands.go editor.splitDown; internal/app/editor_groups_test.go. The IntelliJ macOS keymap leaves editor.splitDown unbound, so GoIDEA has no default key |
 | `editor.splitRight` | Split Right | `src/editor/core/actions.ts` | partial - internal/app/editor_split.go SplitEditorRight/splitEditor copies the active tab into the second window group over the shared docbridge document, so both panes edit one buffer and one undo history; Cmd+\ in internal/app/app.go; Window › Editor Tabs in internal/app/menu.go and the tab context menu's Split Right with its shortcut label in internal/app/workbench.go; internal/app/commands.go editor.splitRight; internal/app/editor_groups_test.go TestFocusGroupSwapsThePanesAndTheirPositions. GoIDEA keeps at most one other window group, so a further split adds its copy beside the first; dragging a tab to the editor edge to split is not ported |
 | `editor.toggleColumnSelection` | Column Selection Mode | `src/editor/core/actions.ts` | missing |
-| `editor.toggleRenderedDocs` | Render Documentation Comments | `src/editor/core/actions.ts` | missing |
-| `editor.toggleSoftWrap` | Soft-Wrap | `src/editor/core/actions.ts` | missing |
+| `editor.toggleRainbowBrackets` |  | `src/editor/core/actions.ts` | missing |
+| `editor.toggleRenderedDocs` | Render Documentation Comments | `src/editor/core/actions.ts` | partial - internal/app registers the native action `editor.toggleRenderedDocs`; interaction-level acceptance is pending |
+| `editor.toggleSemanticHighlighting` |  | `src/editor/core/actions.ts` | missing |
+| `editor.toggleSoftWrap` | Soft-Wrap | `src/editor/core/actions.ts` | integrated - internal/app/commands.go editor.toggleSoftWrap toggles the active MyGo editor's effective wrapping and exposes it through ActionToggled; TestSoftWrapActionTogglesTheActiveTabAndState |
+| `editor.toggleZen` |  | `src/workbench/distractionFree.ts` | integrated - internal/app/zen.go ToggleZen/StepZenWidth/zenWorkbench hints and compact header; prefs Zen/ZenWidth persisted; internal/app/gear_test.go TestViewModeTitleFollowsTheMode, TestZenWidthClamps |
 | `editor.unsplit` | Unsplit | `src/editor/core/actions.ts` | partial - internal/app/editor_split.go Unsplit closes the focused group's tabs through the dirty guard and leaves the other group as the editor; Window › Editor Tabs and the tab context menu; internal/app/commands.go editor.unsplit; internal/app/editor_groups_test.go TestSettleGroupsCollapsesAnEmptyPane |
 | `editor.unsplitAll` | Unsplit All | `src/editor/core/actions.ts` | partial - internal/app/editor_split.go UnsplitAll closes the other group's tabs through the dirty guard and keeps the active group; Window › Editor Tabs and the tab context menu; internal/app/commands.go editor.unsplitAll; internal/app/editor_groups_test.go |
-| `file.closeProject` | Close Project | `src/workbench/shellActions.ts` | missing |
-| `file.openProject` | Open… | `src/workbench/shellActions.ts` | missing |
+| `file.closeProject` | Close Project | `src/workbench/shellActions.ts` | partial - internal/app registers the native action `project.close`; interaction-level acceptance is pending |
+| `file.openProject` | Open… | `src/workbench/shellActions.ts` | partial - internal/app registers the native action `file.openProject`; interaction-level acceptance is pending |
 | `file.reloadAllFromDisk` | Reload All from Disk | `src/editor/core/actions.ts` | integrated - internal/app/commands.go file.reloadAllFromDisk -> internal/app/watch.go ReloadAllFromDisk, which rereads every clean buffer through reloadTab (a shared ApplyEdits against the disk text), skips a buffer with unsaved edits and says so in the banner, and reports how many files it is reloading; File menu Reload All from Disk; base.watch.reloadAll |
-| `file.reloadFromDisk` | Reload from Disk | `src/editor/core/actions.ts` | missing |
-| `file.save` | Save All | `src/editor/core/actions.ts` | missing |
-| `file.toggleReadOnly` | Toggle Read-only Attribute | `src/editor/core/actions.ts` | missing |
+| `file.reloadFromDisk` | Reload from Disk | `src/editor/core/actions.ts` | integrated - OpenIDEA id `file.reloadFromDisk` aliases GoIDEA action `project.reloadFromDisk`; internal/app/tree_ops.go refreshes the selected subtree from disk; base.files.reload and TestProjectTreeOpenIDEAActionsAreRegistered |
+| `file.save` | Save All | `src/editor/core/actions.ts` | partial - internal/app registers the native action `file.save`; interaction-level acceptance is pending |
+| `file.toggleReadOnly` | Toggle Read-only Attribute | `src/editor/core/actions.ts` | integrated - internal/app/editor_file_actions.go calls OpenIDEA fs_set_writable and updates every tab sharing the document; internal/app/commands.go and menu.go expose the action; TestToggleReadOnlyRequiresARealFileDocument, TestSetFileWritableUpdatesEveryTabSharingTheDocument and TestSetFileWritableFailureLeavesTheDocumentEditable |
 | `find.field.newLine` | New Line in Search Field | `src/workbench/shellActions.ts` | missing |
 | `find.field.recentSearches` | Recent Searches | `src/workbench/shellActions.ts` | missing |
-| `find.inFile` | Find | `src/editor/core/actions.ts` | missing |
-| `find.next` | Find Next Occurrence | `src/editor/core/actions.ts` | missing |
+| `find.inFile` | Find | `src/editor/core/actions.ts` | integrated - internal/app/commands.go runs the native MyGo editor Find bar, action.go keeps it distinct from view.find, and the Edit menu exposes it; TestFileFindActionsUseTheNativeFindBar and TestFileFindActionsKeepTheirOpenIDEAIdentity |
+| `find.next` | Find Next Occurrence | `src/editor/core/actions.ts` | integrated - internal/app/commands.go runs editor.FindNext and the IntelliJ macOS Cmd+G binding is registered; TestFileFindActionsUseTheNativeFindBar and TestFileFindActionsKeepTheirOpenIDEAIdentity |
 | `find.openInWindow` | Open Results in Find Window | `src/editor/core/actions.ts` | missing |
-| `find.previous` | Find Previous Occurrence | `src/editor/core/actions.ts` | missing |
-| `find.replaceInFile` | Replace | `src/editor/core/actions.ts` | missing |
+| `find.previous` | Find Previous Occurrence | `src/editor/core/actions.ts` | integrated - internal/app/commands.go runs editor.FindPrevious and the IntelliJ macOS Cmd+Shift+G binding is registered; TestFileFindActionsUseTheNativeFindBar and TestFileFindActionsKeepTheirOpenIDEAIdentity |
+| `find.replaceInFile` | Replace | `src/editor/core/actions.ts` | integrated - internal/app/editor_keys.go binds Cmd+R to editor.FindReplace and commands.go runs it through the action registry; TestIntellijEditorBindingsMatchOpenIDEA and TestFileFindActionsUseTheNativeFindBar |
 | `find.scrollToResults` | Scroll to Results During Typing | `src/editor/core/actions.ts` | missing |
-| `navigate.back` | Back | `src/editor/core/actions.ts` | missing |
-| `navigate.forward` | Forward | `src/editor/core/actions.ts` | missing |
+| `layout.delete` | Delete Tool Window Layout… | `src/workbench/toolwindows/actions.ts` | integrated - internal/app/toolwindow_layouts.go registers OpenIDEA's layout.delete, renders the saved-layout chooser and confirmation in MyGo, and clears the active check when the active layout is deleted; TestNamedToolWindowLayoutsSaveRestoreRenameDeleteAndPersist |
+| `layout.rename` | Rename Tool Window Layout… | `src/workbench/toolwindows/actions.ts` | integrated - internal/app/toolwindow_layouts.go implements Rename Layout… with chooser, name prompt, blank and duplicate validation, active-name migration and session persistence; TestNamedToolWindowLayoutsSaveRestoreRenameDeleteAndPersist |
+| `layout.restore` | Restore Tool Window Layout | `src/workbench/toolwindows/actions.ts` | integrated - internal/app/toolwindow_layouts.go exposes layout.restore with an argument or native chooser, applies every dock, size, split, placement and view mode, exits Distraction Free Mode and marks the restored name active; TestNamedToolWindowLayoutsSaveRestoreRenameDeleteAndPersist and TestNamedToolWindowLayoutDialogRendersAndRestores |
+| `layout.restoreDefault` | Restore Default Layout | `src/workbench/toolwindows/actions.ts` | integrated - internal/app/toolwindow.go applies OpenIDEA's fresh-project snapshot, and internal/app/toolwindow_layouts_test.go verifies the upstream id, view.resetLayout alias and Shift+F12 binding; TestRestoreDefaultLayoutMatchesOpenIDEAsFreshLayout and TestLayoutRestoreDefaultUsesOpenIDEAIDAndShortcut |
+| `layout.save` | Save Current Layout as… | `src/workbench/toolwindows/actions.ts` | integrated - internal/app/toolwindow_layouts.go implements Save Current Layout as… with the active name prefilled, blank validation, replace-on-same-name, active state and shared session persistence; TestNamedToolWindowLayoutsSaveRestoreRenameDeleteAndPersist and TestNamedLayoutPersistenceIsSharedAcrossProjects |
+| `navigate.back` | Back | `src/editor/core/actions.ts` | partial - internal/app registers the native action `navigate.back`; interaction-level acceptance is pending |
+| `navigate.forward` | Forward | `src/editor/core/actions.ts` | partial - internal/app registers the native action `navigate.forward`; interaction-level acceptance is pending |
 | `navigate.gotoLine` | Go to Line:Column… | `src/editor/core/actions.ts` | integrated - internal/app/goto_line.go accepts one-based line and UTF-16 column, with clamping; Navigate, Cmd+L and the status bar; internal/app/goto_line_test.go and TestRecentNavigationAndGotoLineRenderOffscreen |
-| `navigate.lastEditLocation` | Last Edit Location | `src/editor/core/actions.ts` | missing |
-| `navigate.navigationBar` | Jump to Navigation Bar | `src/editor/core/actions.ts` | missing |
-| `navigate.nextEditLocation` | Next Edit Location | `src/editor/core/actions.ts` | missing |
+| `navigate.lastEditLocation` | Last Edit Location | `src/editor/core/actions.ts` | partial - internal/app registers the native action `navigate.lastEditLocation`; interaction-level acceptance is pending |
+| `navigate.navigationBar` | Jump to Navigation Bar | `src/editor/core/actions.ts` | integrated - internal/app/navigation_bar.go opens the native project › directory › file › symbol popup from Navigate and registers both Cmd+Up and Alt+Home; left/right traverse and clamp across every segment, Up/Down move child rows, Enter descends, and layered Escape closes the child list before the bar; parity_shell_actions_test.go verifies placement and bindings and navigation_bar_test.go TestNavigationBarKeyboardTraversalAndChildList verifies the native flow |
+| `navigate.nextEditLocation` | Next Edit Location | `src/editor/core/actions.ts` | partial - internal/app registers the native action `navigate.nextEditLocation`; interaction-level acceptance is pending |
 | `navigate.nextOccurrence` | Next Occurrence | `src/workbench/toolwindows/actions.ts` | integrated - internal/app/problems.go StepProblem; internal/app/toolwindow_test.go |
 | `navigate.prevOccurrence` | Previous Occurrence | `src/workbench/toolwindows/actions.ts` | integrated - internal/app/problems.go StepProblem; internal/app/toolwindow_test.go |
 | `refactor.thisMenu` | Refactor This… | `src/editor/lsp/actions.ts` | missing |
 | `toolbar.customize` | Customize Main Toolbar… | `src/workbench/shellActions.ts` | integrated - internal/app/toolbar.go OpenToolbarCustomize/toolbarCustomizeDialog draft with Add/Remove/Move/side switch and Restore Defaults; internal/app/gear_test.go TestToolbarDraftEdits |
 | `toolwindow.${id}` |  | `src/workbench/toolwindows/actions.ts` | missing |
-| `toolwindow.closeContent` | Close Tool Window Tab | `src/workbench/toolwindows/actions.ts` | missing |
-| `toolwindow.focusEditor` | Focus Editor | `src/workbench/toolwindows/actions.ts` | missing |
+| `toolwindow.closeContent` | Close Tool Window Tab | `src/workbench/toolwindows/actions.ts` | partial - internal/app/toolwindow.go closes the active terminal content tab before hiding the tool window, synchronizes the dock when the last tab closes, and carries OpenIDEA's Cmd+W and Ctrl+Shift+F4 bindings; TestBackgroundTasksOpenEmptyStopAllAndToolWindowCloseContent and TestOpenIDEAShellShortcuts; Find and Run do not yet expose multiple content tabs of their own |
+| `toolwindow.focusEditor` | Focus Editor | `src/workbench/toolwindows/actions.ts` | partial - internal/app registers the native action `toolwindow.focusEditor`; interaction-level acceptance is pending |
 | `toolwindow.hideActive` | Hide Active Tool Window | `src/workbench/toolwindows/actions.ts` | integrated - internal/app/toolwindow.go HideActiveToolWindow; internal/app/toolwindow_test.go |
 | `toolwindow.hideAll` | Hide All Tool Windows | `src/workbench/toolwindows/actions.ts` | integrated - internal/app/toolwindow.go HideAllToolWindows; internal/app/toolwindow_test.go |
 | `toolwindow.jumpToLast` | Jump to Last Tool Window | `src/workbench/toolwindows/actions.ts` | integrated - internal/app/toolwindow.go JumpToLastToolWindow; internal/app/toolwindow_test.go |
 | `toolwindow.maximize` | Maximize Tool Window | `src/workbench/toolwindows/actions.ts` | integrated - internal/app/toolwindow.go ToggleMaximizeToolWindow; internal/app/app.go View; internal/app/maximize_test.go |
 | `toolwindow.resize${dir[0]!.toUpperCase()}${dir.slice(1)}` |  | `src/workbench/toolwindows/actions.ts` | missing |
 | `toolwindow.viewMode.${mode}` |  | `src/workbench/toolwindows/actions.ts` | missing |
-| `view.backgroundTasks` | Background Tasks | `src/workbench/shellActions.ts` | missing |
-| `view.notifications` | Notifications | `src/workbench/shellActions.ts` | missing |
-| `view.quickSwitchScheme` | Quick Switch Scheme… | `src/workbench/shellActions.ts` | missing |
-| `view.toggleStatusBarWidget` | Status Bar Widget | `src/workbench/shellActions.ts` | missing |
-| `view.toggleTheme` | Toggle Light/Dark Theme | `src/workbench/shellActions.ts` | missing |
-| `workbench.stopBackgroundProcesses` | Stop Background Processes… | `src/workbench/shellActions.ts` | missing |
+| `view.backgroundTasks` | Background Tasks | `src/workbench/shellActions.ts` | integrated - internal/app/tasks.go ShowBackgroundTasks opens the registered workbench.backgroundTasks native popup regardless of status-bar visibility and renders No background tasks when the queue is empty; TestBackgroundTasksOpenEmptyStopAllAndToolWindowCloseContent |
+| `view.notifications` | Notifications | `src/workbench/shellActions.ts` | partial - internal/app registers the native action `view.notifications`; interaction-level acceptance is pending |
+| `view.quickSwitchScheme` | Quick Switch Scheme… | `src/workbench/shellActions.ts` | partial - internal/app registers the native action `view.quickSwitchScheme`; interaction-level acceptance is pending |
+| `view.toggleStatusBarWidget` | Status Bar Widget | `src/workbench/shellActions.ts` | integrated - internal/app/statuscontrib.go resolves a named StatusItem, persists one appearance.statusBarWidgets override and invalidates the bar; internal/app/menu.go lists named built-in and plugin widgets under View › Appearance › Status Bar Widgets, and the status-bar context menu uses the same rows; TestNavigationBarPlacementAndStatusWidgetPersistence and TestStatusBarContextMenuTogglesWidgets |
+| `view.toggleTheme` | Toggle Light/Dark Theme | `src/workbench/shellActions.ts` | partial - internal/app registers the native action `view.toggleTheme`; interaction-level acceptance is pending |
+| `workbench.stopBackgroundProcesses` | Stop Background Processes… | `src/workbench/shellActions.ts` | integrated - internal/app/tasks.go StopBackgroundProcesses cancels one task directly, opens a chooser for several cancellable tasks with Stop All, and reports status when none exist; the action carries OpenIDEA's Cmd+Shift+F2 binding; TestBackgroundTasksOpenEmptyStopAllAndToolWindowCloseContent and TestOpenIDEAShellShortcuts |
 
 ### Keymap-only ids
 
@@ -819,12 +1106,12 @@ expected to come from a plugin or a hidden registration.
 | `code.moveLineUp` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | integrated - internal/app/editor_keys.go Alt+Shift+Up to editor.MoveLinesUp; internal/app/editor_keys_test.go |
 | `code.moveStatementDown` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | partial - internal/app/editor_keys.go Cmd+Shift+Down runs editor.MoveLinesDown; moves whole lines, not the statement tree IntelliJ parses |
 | `code.moveStatementUp` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | partial - internal/app/editor_keys.go Cmd+Shift+Up runs editor.MoveLinesUp; moves whole lines, not the statement tree IntelliJ parses |
-| `code.optimizeImports` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
+| `code.optimizeImports` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | partial - internal/app registers the native action `code.optimizeImports`; interaction-level acceptance is pending |
 | `code.overrideMethods` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos, vscode-windows | missing |
 | `code.parameterInfo` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
 | `code.pasteAsPlainText` | intellij-macos, intellij-windows, vscode-macos, vscode-windows | missing |
 | `code.pasteFromHistory` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `code.quickDefinition` | intellij-macos, intellij-windows, vscode-macos | missing |
+| `code.quickDefinition` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app registers the native action `code.quickDefinition`; interaction-level acceptance is pending |
 | `code.quickDocumentation` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | partial - internal/app/app.go routes F1 and Ctrl+J to Quick Documentation |
 | `code.reformat` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
 | `code.reformatDialog` | intellij-macos, intellij-windows, vscode-macos | missing |
@@ -842,9 +1129,6 @@ expected to come from a plugin or a hidden registration.
 | `code.unfoldAll` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
 | `code.unselectOccurrence` | eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
 | `code.unwrap` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
-| `debug.stepInto` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
-| `debug.stepOut` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
-| `debug.stepOver` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
 | `editor.cloneCaretAbove` | intellij-macos, intellij-windows, vscode-macos | missing |
 | `editor.cloneCaretBelow` | intellij-macos, intellij-windows, vscode-macos | missing |
 | `editor.codeBlockEnd` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
@@ -860,8 +1144,6 @@ expected to come from a plugin or a hidden registration.
 | `editor.matchBrace` | eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
 | `editor.scrollToCenter` | intellij-macos, intellij-windows, vscode-macos | missing |
 | `editor.toggleInsertState` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `editor.toggleZen` | intellij-macos, intellij-windows, vscode-macos | integrated - internal/app/zen.go ToggleZen/StepZenWidth/zenWorkbench hints and compact header; prefs Zen/ZenWidth persisted; internal/app/gear_test.go TestViewModeTitleFollowsTheMode, TestZenWidthClamps |
-| `file.settings` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/commands.go file.settings -> internal/app/settings_window.go + settings_pages.go, OpenIDEA's Settings dialog over Appearance, Keymap, Editor Appearance/Font and Java; OpenIDEA's remaining settings pages are not ported yet |
 | `find.highlightUsages` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
 | `find.popup.nextResult` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos, vscode-windows | missing |
 | `find.popup.openResult` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
@@ -877,24 +1159,10 @@ expected to come from a plugin or a hidden registration.
 | `image.toggleChessboard` | intellij-macos, intellij-windows, vscode-macos, vscode-windows | missing |
 | `image.zoomIn` | intellij-macos, intellij-windows, vscode-macos, vscode-windows | missing |
 | `image.zoomOut` | intellij-macos, intellij-windows, vscode-macos, vscode-windows | missing |
-| `layout.restoreDefault` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `markdown.editorAndPreview` | intellij-macos, intellij-windows, vscode-macos, vscode-windows | missing |
-| `markdown.editorOnly` | intellij-macos, intellij-windows, vscode-macos, vscode-windows | missing |
-| `markdown.previewOnly` | intellij-macos, intellij-windows, vscode-macos, vscode-windows | missing |
 | `navigate.customRegion` | intellij-macos, intellij-windows, vscode-macos | missing |
 | `navigate.declaration` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
-| `navigate.gotoBookmark0` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/bookmarks.go JumpBookmarkMnemonic via Ctrl+digit; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go |
-| `navigate.gotoBookmark1` | eclipse-windows, intellij-macos, intellij-windows, vscode-macos | partial - internal/app/bookmarks.go JumpBookmarkMnemonic via Ctrl+digit; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go |
-| `navigate.gotoBookmark2` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/bookmarks.go JumpBookmarkMnemonic via Ctrl+digit; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go |
-| `navigate.gotoBookmark3` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/bookmarks.go JumpBookmarkMnemonic via Ctrl+digit; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go |
-| `navigate.gotoBookmark4` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/bookmarks.go JumpBookmarkMnemonic via Ctrl+digit; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go |
-| `navigate.gotoBookmark5` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/bookmarks.go JumpBookmarkMnemonic via Ctrl+digit; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go |
-| `navigate.gotoBookmark6` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/bookmarks.go JumpBookmarkMnemonic via Ctrl+digit; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go |
-| `navigate.gotoBookmark7` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/bookmarks.go JumpBookmarkMnemonic via Ctrl+digit; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go |
-| `navigate.gotoBookmark8` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/bookmarks.go JumpBookmarkMnemonic via Ctrl+digit; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go |
-| `navigate.gotoBookmark9` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/bookmarks.go JumpBookmarkMnemonic via Ctrl+digit; base.bookmark.mnemonic, base.bookmark.mnemonicUnique; internal/app/bookmarks_test.go |
 | `navigate.gotoTest` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
-| `navigate.implementation` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
+| `navigate.implementation` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | partial - internal/app registers the native action `navigate.implementation`; interaction-level acceptance is pending |
 | `navigate.nextError` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
 | `navigate.nextHighlightedUsage` | eclipse-macos, intellij-macos, intellij-windows, vscode-macos | missing |
 | `navigate.nextMethod` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
@@ -903,18 +1171,7 @@ expected to come from a plugin or a hidden registration.
 | `navigate.previousMethod` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
 | `navigate.relatedSymbol` | vscode-macos | missing |
 | `navigate.superMethod` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
-| `navigate.toggleBookmark0` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/bookmarks.go ToggleBookmarkMnemonic via Ctrl+Shift+digit; base.bookmark.mnemonic; internal/app/bookmarks_test.go |
-| `navigate.toggleBookmark1` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/bookmarks.go ToggleBookmarkMnemonic via Ctrl+Shift+digit; base.bookmark.mnemonic; internal/app/bookmarks_test.go |
-| `navigate.toggleBookmark2` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/bookmarks.go ToggleBookmarkMnemonic via Ctrl+Shift+digit; base.bookmark.mnemonic; internal/app/bookmarks_test.go |
-| `navigate.toggleBookmark3` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/bookmarks.go ToggleBookmarkMnemonic via Ctrl+Shift+digit; base.bookmark.mnemonic; internal/app/bookmarks_test.go |
-| `navigate.toggleBookmark4` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/bookmarks.go ToggleBookmarkMnemonic via Ctrl+Shift+digit; base.bookmark.mnemonic; internal/app/bookmarks_test.go |
-| `navigate.toggleBookmark5` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/bookmarks.go ToggleBookmarkMnemonic via Ctrl+Shift+digit; base.bookmark.mnemonic; internal/app/bookmarks_test.go |
-| `navigate.toggleBookmark6` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/bookmarks.go ToggleBookmarkMnemonic via Ctrl+Shift+digit; base.bookmark.mnemonic; internal/app/bookmarks_test.go |
-| `navigate.toggleBookmark7` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/bookmarks.go ToggleBookmarkMnemonic via Ctrl+Shift+digit; base.bookmark.mnemonic; internal/app/bookmarks_test.go |
-| `navigate.toggleBookmark8` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/bookmarks.go ToggleBookmarkMnemonic via Ctrl+Shift+digit; base.bookmark.mnemonic; internal/app/bookmarks_test.go |
-| `navigate.toggleBookmark9` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/bookmarks.go ToggleBookmarkMnemonic via Ctrl+Shift+digit; base.bookmark.mnemonic; internal/app/bookmarks_test.go |
-| `navigate.typeDeclaration` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
-| `project.copyAbsolutePath` | intellij-macos, intellij-windows, vscode-macos, vscode-windows | missing |
+| `navigate.typeDeclaration` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | partial - internal/app registers the native action `navigate.typeDeclaration`; interaction-level acceptance is pending |
 | `refactor.changeSignature` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
 | `refactor.extractConstant` | eclipse-macos, intellij-macos, intellij-windows, vscode-macos | missing |
 | `refactor.extractField` | intellij-macos, intellij-windows, vscode-macos | missing |
@@ -926,7 +1183,7 @@ expected to come from a plugin or a hidden registration.
 | `refactor.pullMembersUp` | intellij-macos, intellij-windows, vscode-macos | missing |
 | `refactor.pushMembersDown` | intellij-macos, intellij-windows, vscode-macos | missing |
 | `refactor.rename` | eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
-| `refactor.safeDelete` | eclipse-macos, intellij-macos, intellij-windows, vscode-macos | missing |
+| `refactor.safeDelete` | eclipse-macos, intellij-macos, intellij-windows, vscode-macos | integrated - internal/app/editor_safe_delete.go mirrors OpenIDEA's editor refactor.safeDelete with definition/outline resolution, JDT references, Find Usages transfer, Delete Anyway, comment/string preview, remembered search text and stale-edit cancellation; the command, Refactor menu, editor context menu, command palette and Cmd+Delete entry are wired through internal/app/commands.go, menu.go, editor_menu.go and overlay_registry.go; lsp.safeDelete.usages, lsp.safeDelete.view, lsp.safeDelete.anyway, lsp.safeDelete.text and lsp.safeDelete.editCancel pass against real JDT; editor_safe_delete_test.go covers local declarations and refusals |
 | `toolwindow.bookmarks` | eclipse-macos, intellij-macos, intellij-windows, vscode-macos | integrated - internal/app/app.go Cmd+2 ToggleBookmarksWindow; cmd/goidea/main.go 显示书签; internal/app/view.go sidebar tab; base.bookmark.window |
 | `toolwindow.commit` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/commit.go OpenCommit; Cmd+0 in cmd/goidea/main.go |
 | `toolwindow.debug` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/debug.go ShowDebug; cmd/goidea/main.go 视图 menu |
@@ -942,37 +1199,6 @@ expected to come from a plugin or a hidden registration.
 | `toolwindow.services` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
 | `toolwindow.structure` | intellij-macos, intellij-windows, vscode-macos | integrated - internal/app/structure.go ToggleStructure; lsp.structure.visible; internal/app/structure_test.go |
 | `toolwindow.terminal` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/term.go ShowTerm; UPSTREAM_FEATURE_MATRIX.md Terminal |
-| `vcs.addToVcs` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/workbench.go tabGitMenu's Add stages the tab's unversioned file through internal/app/vcs.go StageChange over vcs_stage, and the project view's Git › Add stages the selected unversioned file the same way via statusFor, proven by commit_test.go TestStatusForFindsAChangedFile and the base-phase stage checks; limits: the changes view offers Stage/Unstage rather than a separate Add action elsewhere |
-| `vcs.annotate` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/annotate.go ShowAnnotate over vcs_blame with the tab's buffer text, grouping consecutive lines of one commit, opened from the tab menu's Git › Annotate and the project view's Git › Annotate with Git Blame; annotate_test.go covers the grouping and line ranges; limits: the blame is a read-only sheet rather than OpenIDEA's gutter annotations and line hover popup |
-| `vcs.branches` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/branch.go ToggleBranches and ShowBranches over vcs_branch_info/vcs_branches with checkout over vcs_checkout, from the title-bar widget and the tab menu's Git › Branches…; SmokeBranch; limits: branch create/delete/rename inside the popup is not ported |
-| `vcs.changelist.edit` | eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
-| `vcs.changelist.move` | eclipse-windows, intellij-macos, intellij-windows, vscode-macos | missing |
-| `vcs.commit` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | integrated - base.commit.id, base.commit.staged, base.commit.clean; the tab menu's Commit File… opens the same dialog with commitState.only, which keeps every other change out and includes a new file, proven by commit_test.go TestCommitFileIncludesOnlyItsFile; the project view's Git › Commit… opens the dialog with commitState.scope so only changes under the directory are listed and committed, proven by commit_test.go TestCommitDirKeepsChangesUnderTheDirectory |
-| `vcs.commitAndPush` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `vcs.localHistory` | intellij-macos, intellij-windows, vscode-macos | partial - internal/app/history.go ShowHistory over history_list_dir, RestoreHistoryEntry over history_restore and ConfirmHistoryLabel over history_put_label, with the timeline dialog (internal/app/history.go historyDialog); base.files.historyRestore proves a saved file's older snapshot restores and base.files.historyLabel proves a named point lists, both on the real server in the Main Gate's files phase; the editor's context menu carries Local History › Show History / Put Label… (internal/app/editor_menu.go); the label-time group restore (LocalHistory.tsx's snapshotsBefore) is RestoreHistoryLabelTime; limits: history_list and history_content are desktop-only in the pinned server, so the diff editor and revision preview are not available |
-| `vcs.log.copyRevision` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `vcs.log.editMessage` | eclipse-windows | missing |
-| `vcs.log.goToRef` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `vcs.newBranch` | intellij-macos, intellij-windows, vscode-macos | integrated - internal/app/vcs_operations.go OpenNewGitBranch and native revision/name sheet; Git menu, project tree, tab menu, palette and VCS Operations quick list; vcsoperations.branch proves a real branch create and checkout |
-| `vcs.nextChange` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `vcs.operations` | intellij-macos, intellij-windows, vscode-macos | integrated - internal/app/vcs_operations.go OpenVCSOperations Ctrl+V quick list with OpenIDEA action ids; Git menu and palette entry; TestVCSOperationsQuickListFiltersAndDispatches and vcsoperations.* |
-| `vcs.prevChange` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `vcs.push` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | integrated - internal/app/vcs_operations.go OpenGitPush and native remote, target, force-with-lease, set-upstream and no-verify choices; vcsoperations.push publishes to the real local remote |
-| `vcs.rollback` | eclipse-macos, intellij-macos, intellij-windows, vscode-macos | integrated - internal/app/vcs.go AskRollback and ConfirmRollback over vcs_discard with a confirmation, from the changes view, the tab menu's Git › Rollback… and the project view's Git › Rollback…; SmokeStage |
-| `vcs.shelf.rename` | eclipse-windows | missing |
-| `vcs.showDiff` | intellij-macos, intellij-windows, vscode-macos | integrated - internal/app/diff.go ShowDiff over vcs_file_at with the buffer text, opened from the changes view, the tab menu's Git › Show Diff and the project view's Git › Show Diff; SmokeDiff |
-| `vcs.showDiffInNewWindow` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `vcs.showMessageHistory` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `vcs.toggleAmend` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `vcs.update` | eclipse-macos, eclipse-windows, intellij-macos, intellij-windows, vscode-macos | integrated - internal/app/vcs_operations.go OpenGitPull and OpenGitFetch; native remote and strategy choices stream vcs_remote output; vcsoperations.fetch and vcsoperations.pull prove fetch and pull against a real local remote |
-| `view.resetZoom` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `view.zoomIn` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `view.zoomOut` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `window.next` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `window.nextTab` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `window.previous` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `window.previousTab` | intellij-macos, intellij-windows, vscode-macos | missing |
-| `window.toggleFullScreen` | intellij-macos, intellij-windows, vscode-macos, vscode-windows | partial - internal/app/zen.go ToggleFullScreen through mygo Window.ToggleFullScreen; the native full-screen transition is not exercised headless |
 
 ## Keymaps
 
@@ -999,7 +1225,7 @@ same bindings until a check records it.
 | `build` | Build | bottom | `src/features/build/index.ts` | partial - base.build.console, base.build.lines; internal/app/view.go buildPanel |
 | `commit` | Commit | left | `src/features/vcs/index.ts` | partial - internal/app/commit.go commitDialog; base.commit.id |
 | `compare` | Compare | left | `src/features/vcs/compareTool.tsx` | missing |
-| `coverage` | Coverage | right | `src/features/coverage/index.ts` | partial - base.coverage.report; internal/app/coverage_test.go tests rendering of line and branch metrics |
+| `coverage` | Coverage | right | `src/features/coverage/index.ts` | integrated - internal/app/coverage_view.go renders Coverage suite tabs, compact package/file rollups and OpenIDEA line/branch percentages; TestCoverageWindowRendersLineAndBranchMetrics, TestCoverageMetricsRollUpThroughCompactDirectories and TestCoverageEmptyStateMatchesOpenIDEA cover the native window |
 | `database` | Database | right | `src/features/database/index.ts` | partial - UPSTREAM_FEATURE_MATRIX.md database console; db_* commands |
 | `debug` | Debug | bottom | `src/features/debugger/index.ts` | integrated - debug.paused, debug.vars, debug.step.paused, debug.watch |
 | `documentation` | Documentation | right | `src/editor/lsp/index.ts` | partial - lsp.documentation and TestDocumentationFocusAndKeyboardDock; completion and dependency-editor triggers are pending |
@@ -1012,12 +1238,12 @@ same bindings until a check records it.
 | `inspection` | Inspection Results | bottom | `src/features/analysis/index.ts` | missing |
 | `logcat` | Logcat | bottom | `src/features/logcat/index.ts` | missing |
 | `maven` | Maven | right | `src/features/build-tools/index.ts` | partial - internal/app/maven.go and dockregistry.go; right-side Maven reactor, lifecycle and plugin goals, profiles, dependencies, and reload; internal/app/maven_test.go and UPSTREAM_FEATURE_MATRIX.md Maven row; dependency navigation, add and exclude are pending |
-| `notifications` | Notifications | right | `src/workbench/activate.ts` | partial - internal/app/notifications.go balloons (3 newest, 10 s fade, sticky errors, hover pause, keyed replacement, actions) and notificationsView history with unread badge and Clear All; build results and failures notify; base.notify.* in the e2e; Settings › Appearance & Behavior › Notifications with the global balloon switch, per-group Balloon/Sticky/No popup and Log, and the balloon's Don't Show Again; missing sound and verbatim plugin text |
+| `notifications` | Notifications | right | `src/workbench/activate.ts` | partial - internal/app/notifications.go balloons (3 newest, 10 s fade, sticky errors, hover pause, keyed replacement, actions) and notificationsView history with unread badge and Clear All; build results and failures notify; plugin notifications preserve their verbatim multiline body, grouping, actions and 20-second timeout; base.notify.* in the e2e; Settings › Appearance & Behavior › Notifications with the global balloon switch, per-group Balloon/Sticky/No popup and Log, and the balloon's Don't Show Again; sound remains pending |
 | `problems` | Problems | bottom | `src/features/code-insight/index.ts` | integrated - internal/app/problems.go problemsPanel; lsp.problems.errors, lsp.problems.rows, lsp.problems.visible; internal/app/problems_test.go |
 | `profiler` | Profiler | bottom | `src/features/profiler/index.ts` | missing |
 | `project` | Project | left | `src/features/project-tree/index.ts` | integrated - internal/workspace tree tests; base.tabs |
 | `pullRequests` | Pull Requests | left | `src/features/github/index.ts` | missing |
-| `remote.ports` | Ports | bottom | `src/features/remote-dev/index.ts` | missing |
+| `remote.ports` | Ports | bottom | `src/features/remote-dev/index.ts` | blocked - OpenIDEA registers Ports only after an SSH or dev-container session; remote_forwarded_ports, remote_forward_port and remote_stop_forwarding exist only in the pinned desktop shell, not in openidea-server --stdio. internal/app/remote.go renders the unavailable native state until the OpenIDEA fork exposes matching RPCs |
 | `remoteHost` | Remote Host | right | `src/features/deployment/index.ts` | missing |
 | `run` | Run | bottom | `src/features/run/index.ts` | integrated - base.run.config, base.run.exit, base.run.build |
 | `services` | Services | bottom | `src/features/services/index.ts` | partial - internal/app/services.go: build system detection, run configurations and tool settings rows that run their action; internal/app/services_test.go; missing the compose/plugin service model and per-service logs |
@@ -1038,8 +1264,8 @@ same bindings until a check records it.
 | `app.termination` | `src/features/app/index.ts` | missing |
 | `app.workspace` | `src/features/app/index.ts` | missing |
 | `build-tools.execute` | `src/features/build-tools/index.ts` | missing |
-| `code-insight.usagesPopup` | `src/features/code-insight/index.ts` | missing |
-| `coverage.manageReports` | `src/features/coverage/index.ts` | partial - base.coverage.report opens native report management |
+| `code-insight.usagesPopup` | `src/features/code-insight/index.ts` | integrated - internal/app/overlay_registry.go registers code-insight.usagesPopup; internal/app/usage_popup.go renders the caret-anchored native speed-search popup with scope, read/write filters, bounded scrolling and a 60 ms-debounced source preview; TestUsagePopupRendersAndSpeedSearches, TestEditorCaretAnchorUsesScrolledLineTop and TestUsagePopupPreviewLoadIsDebounced cover the native interaction, while lsp.usagesPopup.open and lsp.usagesPopup.transfer prove the real JDT path |
+| `coverage.manageReports` | `src/features/coverage/index.ts` | integrated - internal/app/coverage.go opens and closes the native report-management overlay and coverage_view.go renders suite selection, import metadata and removal; TestCoverageReportsRestoreWithoutDeletingSourceReport and TestCoverageActionsFollowOpenIDEAContextState cover it |
 | `database.dialogs` | `src/features/database/index.ts` | missing |
 | `debugger` | `src/features/debugger/index.ts` | missing |
 | `deployment.dialogs` | `src/features/deployment/index.ts` | missing |
@@ -1055,11 +1281,11 @@ same bindings until a check records it.
 | `perf.overlay` | `src/features/perf/index.ts` | missing |
 | `plugins.consent` | `src/features/plugins/index.ts` | missing |
 | `plugins.intellijThemes` | `src/features/plugins/index.ts` | missing |
-| `project.fileRefactor` | `src/features/project-tree/index.ts` | missing |
-| `project.newPopup` | `src/features/project-tree/index.ts` | missing |
-| `project.refactoringPreview` | `src/features/project-tree/index.ts` | missing |
-| `project.trustDialog` | `src/features/project-trust/index.tsx` | missing |
-| `remote.connect` | `src/features/remote-dev/index.ts` | missing |
+| `project.fileRefactor` | `src/features/project-tree/index.ts` | integrated - internal/app/overlay_registry.go registers project.fileRefactor; internal/app/project_file_refactor.go renders native Rename, Move and Copy dialogs with reference search options; TestProjectFileRefactorOverlaysRenderNativeDialogs and TestProjectMoveDialogValidatesTargetAndUsesRefactoring |
+| `project.newPopup` | `src/features/project-tree/index.ts` | integrated - internal/app/overlay_registry.go registers project.newPopup; internal/app/project_new.go renders OpenIDEA's 280 DIP anchored search field, File, Directory, built-in file kinds and From Template row; TestProjectNewPopupRendersOpenIDEAFilterAndActions |
+| `project.refactoringPreview` | `src/features/project-tree/index.ts` | integrated - internal/app/overlay_registry.go registers project.refactoringPreview; internal/app/project_file_refactor.go renders included files, occurrence summaries and before/after edits before Do Refactor; TestProjectFileRefactorOverlaysRenderNativeDialogs and TestProjectMoveDialogValidatesTargetAndUsesRefactoring |
+| `project.trustDialog` | `src/features/project-trust/index.tsx` | integrated - internal/app/overlay_registry.go registers OpenIDEA id project.trustDialog; internal/app/run.go renders the 560 DIP GoIDEA-logo dialog with Preview in Restricted Mode, Don't Open, Trust Project and Trust projects in parent-folder scope; TestProjectTrustPromptMatchesOpenIDEA and the trust screenshot |
+| `remote.connect` | `src/features/remote-dev/index.ts` | partial - internal/app/overlay_registry.go registers remote.connect and internal/app/remote.go renders the native unavailable chooser; TestRemoteConnectAndReopenDialogsExplainBackendGap |
 | `run.chooser` | `src/features/run/index.ts` | missing |
 | `run.dialogs` | `src/features/run/index.ts` | missing |
 | `run.editConfigs` | `src/features/run/index.ts` | partial - internal/app/run_config_dialog.go runConfigsDialog drawn by the overlay registry (internal/app/overlay_registry.go runConfigs) |
@@ -1080,10 +1306,10 @@ same bindings until a check records it.
 | `ssh.askpass` | `src/features/ssh/index.ts` | missing |
 | `templates.chooser` | `src/features/templates/index.ts` | missing |
 | `templates.emmetUpdateTag` | `src/features/templates/index.ts` | missing |
-| `templates.newFile` | `src/features/templates/index.ts` | missing |
+| `templates.newFile` | `src/features/templates/index.ts` | integrated - internal/app/overlay_registry.go registers OpenIDEA's templates.newFile overlay over the native name and kind prompt; TestProjectNewTemplateSearchAndOpenState verifies the overlay opens only after a kind is chosen |
 | `vcs.branches` | `src/features/vcs/index.ts` | missing |
 | `vcs.dialogs` | `src/features/vcs/index.ts` | missing |
-| `welcome.recentProjects` | `src/features/welcome/index.ts` | missing |
+| `welcome.recentProjects` | `src/features/welcome/index.ts` | integrated - internal/app/overlay_registry.go registers OpenIDEA id welcome.recentProjects; internal/app/recent_projects.go renders the 560 DIP chooser with 40 DIP rows, search, path, branch, menus and delete confirmation; internal/app/recent_projects_test.go and the recent-projects screenshot |
 | `workbench.backgroundTasks` | `src/workbench/activate.ts` | partial - internal/app/tasks.go shows updater task progress and cancellation from the status bar; registration for other background task producers is pending |
 | `workbench.customizeToolbar` | `src/workbench/activate.ts` | missing |
 
@@ -1097,7 +1323,7 @@ same bindings until a check records it.
 | `build-tools.pomNavigation` | `src/features/build-tools/index.ts` | missing |
 | `build-tools.versionCatalog` | `src/features/build-tools/index.ts` | missing |
 | `colorPreview.gutter` | `src/features/color-preview/index.ts` | missing |
-| `coverage.gutter` | `src/features/coverage/index.ts` | partial - base.coverage.report proves gutter marks; hover and remapping after edits are pending |
+| `coverage.gutter` | `src/features/coverage/index.ts` | integrated - internal/app/coverage.go paints covered and missed line stripes, follows edits until another run and supplies OpenIDEA's line/branch title; TestCoverageGutterMarksFollowEditsUntilAnotherRun and TestCoverageGutterTooltipMatchesOpenIDEATitles cover the contribution |
 | `database.console` | `src/features/database/index.ts` | missing |
 | `debugger` | `src/features/debugger/index.ts` | missing |
 | `dependency-versions` | `src/features/dependencies/index.ts` | missing |
@@ -1116,7 +1342,6 @@ same bindings until a check records it.
 | `plugins.languageFeatures` | `src/features/plugins/index.ts` | missing |
 | `plugins.lineMarkers` | `src/features/plugins/index.ts` | missing |
 | `plugins.navigation` | `src/features/plugins/navigation.ts` | missing |
-| `run.lens` | `src/editor/api.ts` | missing |
 | `run.npmScripts` | `src/features/run/index.ts` | missing |
 | `run.targets` | `src/features/run/index.ts` | missing |
 | `search.bookmarks` | `src/features/search/index.ts` | missing |
@@ -1126,7 +1351,6 @@ same bindings until a check records it.
 | `templates` | `src/features/templates/index.ts` | missing |
 | `todo.highlight` | `src/features/todo/index.ts` | partial - internal/app/todo.go todoMarksOf and refreshTodoHighlights: the open buffer's TODOs, matched by the same keyword and comment rules and rescanned 400ms after typing pauses, paint as editor.TextBackground spans tinted in the pattern's tone (internal/app/app.go View), proven by base.todo.highlight; OpenIDEA colours and italicises the comment text instead, which the MyGo editor has no foreground-span API for, so the tint is the native equivalent |
 | `vcs.changeMarkers` | `src/features/vcs/index.ts` | missing |
-| `vcs.marks` | `src/editor/api.ts` | missing |
 | `viewers.markdownLive` | `src/features/viewers/markdown/live.ts` | missing |
 | `vim` | `src/features/vim/index.ts` | missing |
 | `web.djangoContent` | `src/features/web/index.ts` | missing |
@@ -1158,21 +1382,24 @@ The plain text editor is the workbench default and is not registered through
 
 | Page | Title | Group | Source | Status |
 | --- | --- | --- | --- | --- |
-| `agents.chat` | Chat | Agents | `src/features/settings/pages/tools.tsx` | missing |
+| `agents.chat` | Chat | Agents | `src/features/settings/pages/tools.tsx` | integrated - internal/app/settings_pages.go renders OpenIDEA's Chat settings over the persisted agent preferences; internal/app/settings_test.go and agent_composer_test.go |
+| `agents.list` | Coding Agents | Agents | `src/features/agents/index.ts` | integrated - internal/app/settings_window.go registers Coding Agents with OpenIDEA's exact agents.list id and internal/app/agent_registry_settings.go renders providers, registry and launch settings; TestAgentRegistryPageShowsProvidersAndLaunchSettings |
 | `agents.mcpServer` | IDE MCP Server | Agents | `src/features/settings/pages/mcpServer.tsx` | missing |
-| `appearance` | Appearance |  | `src/features/settings/pages/behavior.tsx` | partial - base.settings.theme; internal/app/settings_pages.go settingsAppearanceBody Theme row (Select + Sync with OS checkbox); the preferred-themes gear is not ported |
-| `build.cmake` | CMake |  | `src/features/settings/pages/execution.tsx` | missing |
-| `build.console` | Console |  | `src/features/settings/pages/execution.tsx` | missing |
-| `build.debugger` | Debugger |  | `src/features/settings/pages/execution.tsx` | missing |
+| `agents.mcpServers` | External MCP Servers | Agents | `src/features/agents/index.ts` | integrated - internal/app/settings_window.go registers External MCP Servers with OpenIDEA's exact agents.mcpServers id and internal/app/agent_mcp_settings.go renders user/workspace servers; internal/app/agent_registry_test.go |
+| `agents.policy` | Command Permissions | Agents | `src/features/agents/index.ts` | integrated - internal/app/agent_policy_settings.go implements OpenIDEA's Command Permissions page and policy validation; internal/app/settings_test.go and agent_registry_test.go |
+| `appearance` | Appearance | Appearance & Behavior | `src/features/settings/pages/behavior.tsx` | partial - base.settings.theme; internal/app/settings_pages.go settingsAppearanceBody Theme row (Select + Sync with OS checkbox); the preferred-themes gear is not ported |
+| `build.cmake` | CMake | Build, Execution, Deployment | `src/features/settings/pages/execution.tsx` | missing |
+| `build.console` | Console | Build, Execution, Deployment | `src/features/settings/pages/execution.tsx` | missing |
+| `build.debugger` | Debugger | Build, Execution, Deployment | `src/features/settings/pages/execution.tsx` | missing |
 | `build.debugger.dataViews` | Data Views |  | `src/features/settings/pages/execution.tsx` | missing |
 | `build.debugger.stepping` | Stepping |  | `src/features/settings/pages/execution.tsx` | missing |
-| `build.deployment` | Deployment |  | `src/features/settings/pages/deployment.tsx` | missing |
+| `build.deployment` | Deployment | Build, Execution, Deployment | `src/features/settings/pages/deployment.tsx` | missing |
 | `build.deployment.options` | Options |  | `src/features/settings/pages/deployment.tsx` | missing |
-| `build.gradle` | Gradle |  | `src/features/settings/pages/execution.tsx` | missing |
-| `build.maven` | Maven |  | `src/features/settings/pages/execution.tsx` | missing |
-| `build.pythonDebugger` | Python Debugger |  | `src/features/settings/pages/execution.tsx` | missing |
-| `build.run` | Run/Debug |  | `src/features/settings/pages/execution.tsx` | missing |
-| `build.runTargets` | Run Targets |  | `src/features/settings/pages/runTargets.tsx` | missing |
+| `build.gradle` | Gradle | Build, Execution, Deployment | `src/features/settings/pages/execution.tsx` | missing |
+| `build.maven` | Maven | Build, Execution, Deployment | `src/features/settings/pages/execution.tsx` | missing |
+| `build.pythonDebugger` | Python Debugger | Build, Execution, Deployment | `src/features/settings/pages/execution.tsx` | missing |
+| `build.run` | Run/Debug | Build, Execution, Deployment | `src/features/settings/pages/execution.tsx` | missing |
+| `build.runTargets` | Run Targets | Build, Execution, Deployment | `src/features/settings/pages/runTargets.tsx` | missing |
 | `editor.codeEditing` | Code Editing |  | `src/features/settings/pages/editor/general.tsx` | missing |
 | `editor.codeStyle` | Code Style | Editor | `src/features/settings/pages/editor/codeStyle.tsx` | missing |
 | `editor.codeStyle.other` | Other File Types |  | `src/features/settings/pages/editor/codeStyle.tsx` | missing |
@@ -1183,8 +1410,8 @@ The plain text editor is the workbench default and is not registered through
 | `editor.colorScheme.language-defaults` | Language Defaults |  | `src/features/settings/pages/editor/colorScheme.tsx` | missing |
 | `editor.fileEncodings` | File Encodings |  | `src/features/settings/pages/editor/codeStyle.tsx` | missing |
 | `editor.fileTemplates` | File and Code Templates | Editor | `src/features/templates/index.ts` | missing |
-| `editor.files` | File Types |  | `src/features/settings/pages/builtins.tsx` | missing |
-| `editor.font` | Font |  | `src/features/settings/pages/editor/font.tsx` | partial - internal/app/settings_pages.go settingsFontBody Size NumberInput 10.0-24.0 px over Preferences.FontSize; typeface, spacing and ligatures are not ported |
+| `editor.files` | File Types | Editor | `src/features/settings/pages/builtins.tsx` | missing |
+| `editor.font` | Font |  | `src/features/settings/pages/editor/font.tsx` | integrated - internal/app/settings_pages.go settingsFontBody renders OpenIDEA's Editor › Font controls in MyGo: installed-family selector with the bundled JetBrains Mono, monospace-only filter, size, line height, ligatures, main weight, fallback family and a live editable preview; settings_window.go stages every choice and previews tabs before Apply, then persists Preferences.Font and FontSize; TestSettingsFontStagesPreviewAndPersistsEveryTypographyChoice verifies defaults, preview, Apply and the stored file |
 | `editor.general` | General |  | `src/features/settings/pages/editor/general.tsx` | partial - internal/app/settings_pages.go settingsGeneralBody: Soft-wrap files over Preferences.Editor.SoftWrap with the File patterns field matched against each tab's base name by EditorAppearance.WrapsFile (default *.md; *.txt; *.rst; *.adoc, * wraps every file) and Show virtual space at file bottom over Preferences.Editor.ScrollPastEnd feeding the MyGo editor, plus the Save Files section (Remove trailing spaces on Modified lines/All lines, Remove trailing blank lines at the end of saved files and Ensure every saved file ends with a line break) over Preferences.SaveFiles, applied by internal/app/save_files.go cleanForSave before every save through docbridge SavedText and a single undoable ApplyEdits step, staged through settingsDraft and proven by settings_test.go TestSettingsGeneralWrapsAndVirtualSpace and save_files_test.go TestSaveTextCleansTheDocument, TestSaveEditsTurnTheTextIntoTheSavedOne, TestCleanForSaveLeavesTheDocumentReady, TestSettingsSaveFilesStageAndApply; Markdown Images, Mouse Control, Scrolling, the soft-wrap indent child, the Keep trailing spaces on caret line child and Reformat code on save are not ported |
 | `editor.general.appearance` | Appearance |  | `src/features/settings/pages/editor/general.tsx` | partial - internal/app/settings_pages.go settingsEditorAppearanceBody: Use block caret over Preferences.Editor.BlockCaret feeding the MyGo caret shape (CursorBar / CursorBlock), Show line numbers, Show whitespaces and Show indent guides checkboxes over Preferences.Editor feeding the MyGo editor gutter and whitespace state, plus Distraction free mode text width 20-500 chars over Preferences.ZenWidth, staged through settingsDraft and proven by settings_test.go TestSettingsAppearanceSwitchesReachTheEditor and TestSettingsBlockCaretReachesTheEditor; the caret blinking period, smooth caret blinking/movement, hard wrap guides, method separators, intention bulb, rainbow indent guides and the leading/inner/trailing whitespace children are not ported |
 | `editor.general.autoImport` | Auto Import |  | `src/features/settings/pages/editor/general.tsx` | missing |
@@ -1204,41 +1431,42 @@ The plain text editor is the workbench default and is not registered through
 | `editor.naturalLanguages` | Natural Languages | Editor | `src/features/settings/pages/editor/spelling.tsx` | missing |
 | `editor.naturalLanguages.spelling` | Spelling | Editor | `src/features/settings/pages/editor/spelling.tsx` | missing |
 | `editor.todo` | TODO | Editor | `src/features/todo/index.ts` | integrated - internal/app/settings_pages.go settingsTodoBody: Case sensitive and Only in comments checkboxes, the Patterns list with each row's enable checkbox, keyword field (whitespace stripped) and Blue/Red/Yellow/Green/Violet/Grey colour select, Add Pattern (NOTE in green), Remove Pattern and Restore Defaults, staged through settingsDraft.todoPrefs into Preferences.Todo and applied to the tool window by internal/app/todo.go applyTodoSettings (rescans); base.todo.settings; internal/app/todo_test.go TestTodoSettingsDefaults, TestPreferencesTodoRoundTrip, TestSettingsTodoPageStagesAndApplies |
-| `general` | System Settings |  | `src/features/settings/pages/behavior.tsx` | missing |
-| `general.dateFormats` | Date Formats |  | `src/features/settings/pages/behavior.tsx` | missing |
+| `editor.vim` | Vim | Editor | `src/features/vim/index.ts` | missing |
+| `general` | System Settings | Appearance & Behavior | `src/features/settings/pages/behavior.tsx` | partial - internal/app/settings_window.go registers OpenIDEA's System Settings parent and internal/app/settings_pages.go settingsSystemBody exposes Reopen projects on startup over Preferences.Startup, the local data directory and Show in Finder; settings_test.go TestSettingsSystemReopenProjectStagesAndApplies and customize_test.go TestStartupIsWelcomeUnlessReopenChosen cover the staged preference and startup behavior; the remaining Exit, Desktop, Caches and updates choices are not ported |
+| `general.dateFormats` | Date Formats |  | `src/features/settings/pages/behavior.tsx` | integrated - internal/app/settings_pages.go settingsDateFormatsBody mirrors behavior.tsx DateFormatRows: Override system date and time format, the date pattern, Use 24-hour time format, Use pretty formatting and a live preview over Preferences.DateFormat; internal/app/dateformat.go follows Intl.DateTimeFormat with MyGo's system region and CLDR formats, and shares the result with Git Log, Local History, Code Vision and Git blame; dateformat_test.go TestSystemDateFormatMatchesIntlRegionalPatterns and TestFormatAppTimestampPrettyAndClock plus settings_test.go TestSettingsDateFormatsStageApplyAndReset prove the page and persistence |
 | `general.httpProxy` | HTTP Proxy |  | `src/features/settings/pages/httpProxy.tsx` | missing |
 | `general.language` | Language and Region |  | `src/features/settings/pages/behavior.tsx` | missing |
 | `general.updates` | Updates |  | `src/features/settings/pages/updates.tsx` | partial - internal/app/settings_pages.go opens Settings › Updates with version, last checked, Check Now, automatic checks and What's New; update source setting is absent |
-| `keymap` | Keymap |  | `src/features/settings/pages/builtins.tsx` | partial - internal/app/settings_pages.go settingsKeymapBody lists every registry shortcut; rebinding keys is not ported |
-| `languages.go` | Go |  | `src/features/settings/pages/languages.tsx` | missing |
-| `languages.go.buildTags` | Build Tags |  | `src/features/settings/pages/languages.tsx` | missing |
-| `languages.go.modules` | Go Modules |  | `src/features/settings/pages/languages.tsx` | missing |
-| `languages.java` | Java |  | `src/features/settings/pages/languages.tsx` | partial - internal/app/settings_ui.go javaToolsSection lists the real JDT LS/java-debug state with install and cancel; JDK selection is not ported |
-| `languages.markdown` | Markdown |  | `src/features/settings/pages/languages.tsx` | missing |
-| `languages.node` | Node.js |  | `src/features/settings/pages/languages.tsx` | missing |
-| `languages.oxfmt` | oxfmt |  | `src/features/settings/pages/languages.tsx` | missing |
-| `languages.php` | PHP |  | `src/features/settings/pages/languages.tsx` | missing |
-| `languages.prettier` | Prettier |  | `src/features/settings/pages/languages.tsx` | missing |
-| `languages.ruby` | Ruby |  | `src/features/settings/pages/languages.tsx` | missing |
-| `languages.rust` | Rust |  | `src/features/settings/pages/languages.tsx` | missing |
-| `languages.typescript` | TypeScript |  | `src/features/settings/pages/languages.tsx` | missing |
-| `notifications` | Notifications |  | `src/features/settings/pages/behavior.tsx` | missing |
-| `projectTrust` | Project Trust | Security | `src/features/project-trust/index.tsx` | missing |
-| `python` | Python |  | `src/features/settings/pages/languages.tsx` | missing |
-| `python.docstrings` | Docstrings |  | `src/features/settings/pages/languages.tsx` | missing |
-| `python.interpreter` | Dependencies |  | `src/features/settings/pages/languages.tsx` | missing |
-| `python.interpreters` | All Interpreters |  | `src/features/settings/pages/languages.tsx` | missing |
-| `python.ruff` | Ruff |  | `src/features/settings/pages/languages.tsx` | missing |
-| `tools.actionsOnSave` | Actions on Save |  | `src/features/settings/pages/tools.tsx` | missing |
-| `tools.externalTools` | External Tools |  | `src/features/settings/pages/tools.tsx` | missing |
-| `tools.sshConfigurations` | SSH Configurations |  | `src/features/settings/pages/ssh.tsx` | missing |
-| `tools.terminal` | Terminal |  | `src/features/settings/pages/tools.tsx` | missing |
+| `keymap` | Keymap |  | `src/features/settings/pages/builtins.tsx` | integrated - internal/app/settings_pages.go settingsKeymapBody lists every registry action and its bindings; internal/app/settings_keymap.go adds the native Set Keyboard Shortcut recorder, normalized chord capture, conflict warnings, cancel and staged Save, while Remove restores defaults and Settings Apply persists overrides; action_test.go TestKeymapDefaultsAndOverrides and TestKeymapConflicts plus TestSettingsKeymapRecorderStagesAndPersistsABinding cover the flow |
+| `languages.go` | Go | Languages & Frameworks | `src/features/settings/pages/languages.tsx` | missing |
+| `languages.go.buildTags` | Build Tags | Languages & Frameworks | `src/features/settings/pages/languages.tsx` | missing |
+| `languages.go.modules` | Go Modules | Languages & Frameworks | `src/features/settings/pages/languages.tsx` | missing |
+| `languages.java` | Java | Languages & Frameworks | `src/features/settings/pages/languages.tsx` | partial - internal/app/settings_ui.go javaToolsSection lists the real JDT LS/java-debug state with install and cancel; JDK selection is not ported |
+| `languages.markdown` | Markdown | Languages & Frameworks | `src/features/settings/pages/languages.tsx` | missing |
+| `languages.node` | Node.js | Languages & Frameworks | `src/features/settings/pages/languages.tsx` | missing |
+| `languages.oxfmt` | oxfmt | Languages & Frameworks | `src/features/settings/pages/languages.tsx` | missing |
+| `languages.php` | PHP | Languages & Frameworks | `src/features/settings/pages/languages.tsx` | missing |
+| `languages.prettier` | Prettier | Languages & Frameworks | `src/features/settings/pages/languages.tsx` | missing |
+| `languages.ruby` | Ruby | Languages & Frameworks | `src/features/settings/pages/languages.tsx` | missing |
+| `languages.rust` | Rust | Languages & Frameworks | `src/features/settings/pages/languages.tsx` | missing |
+| `languages.typescript` | TypeScript | Languages & Frameworks | `src/features/settings/pages/languages.tsx` | missing |
+| `notifications` | Notifications | Appearance & Behavior | `src/features/settings/pages/behavior.tsx` | missing |
+| `projectTrust` | Project Trust | Security | `src/features/project-trust/index.tsx` | integrated - internal/app/settings_window.go registers Project Trust under Security and internal/app/project_trust_settings.go renders trusted projects and locations plus Revoke Trust, Remove and Add folder…; internal/app/project_trust_settings_test.go and the settings-project-trust screenshot |
+| `python` | Python | Languages & Frameworks | `src/features/settings/pages/languages.tsx` | missing |
+| `python.docstrings` | Docstrings | Languages & Frameworks | `src/features/settings/pages/languages.tsx` | missing |
+| `python.interpreter` | Dependencies | Languages & Frameworks | `src/features/settings/pages/languages.tsx` | missing |
+| `python.interpreters` | All Interpreters | Languages & Frameworks | `src/features/settings/pages/languages.tsx` | missing |
+| `python.ruff` | Ruff | Languages & Frameworks | `src/features/settings/pages/languages.tsx` | missing |
+| `tools.actionsOnSave` | Actions on Save | Tools | `src/features/settings/pages/tools.tsx` | missing |
+| `tools.externalTools` | External Tools | Tools | `src/features/settings/pages/tools.tsx` | missing |
+| `tools.sshConfigurations` | SSH Configurations | Tools | `src/features/settings/pages/ssh.tsx` | missing |
+| `tools.terminal` | Terminal | Tools | `src/features/settings/pages/tools.tsx` | missing |
 | `vcs` | Version Control |  | `src/features/settings/pages/vcs.tsx` | missing |
 | `vcs.commit` | Commit |  | `src/features/settings/pages/vcs.tsx` | missing |
 | `vcs.confirmation` | Confirmation |  | `src/features/settings/pages/vcs.tsx` | missing |
 | `vcs.git` | Git |  | `src/features/settings/pages/vcs.tsx` | missing |
 | `vcs.github` | GitHub |  | `src/features/github/settingsPages.ts` | missing |
-| `vcs.issueNavigation` | Issue Navigation |  | `src/features/settings/pages/vcs.tsx` | missing |
+| `vcs.issueNavigation` | Issue Navigation |  | `src/features/settings/pages/vcs.tsx` | integrated - internal/app/settings_window.go registers Version Control › Issue Navigation and internal/app/settings_issue_navigation.go renders OpenIDEA's Issue ID/Issue Link table, Add, Remove, Edit, Enter to commit, Escape to cancel, invalid-regex feedback and JIRA, YouTrack and GitHub presets over Preferences.VCS.IssueNavigation; internal/app/issue_links.go links matching issue ids in Git Log, commit details and blame, while issue_links_test.go and settings_test.go TestSettingsIssueNavigationStagesAppliesAndEdits and TestIssueNavigationEditorCommitsWithEnterAndCancelsWithEscape prove the flow |
 | `vcs.log` | Log |  | `src/features/vcs/index.ts` | missing |
 | `vcs.mappings` | Directory Mappings |  | `src/features/settings/pages/vcs.tsx` | missing |
 | `vcs.shelf` | Shelf |  | `src/features/settings/pages/vcs.tsx` | missing |
@@ -1504,17 +1732,17 @@ settings.
 | `general.closeTabsWithWindow` | general | missing |
 | `general.closeWithoutWelcome` | general | missing |
 | `general.confirmExit` | general | missing |
-| `general.dateFormat.overrideSystem` |  | missing |
-| `general.dateFormat.pattern` |  | missing |
-| `general.dateFormat.pretty` |  | missing |
-| `general.dateFormat.use24Hour` |  | missing |
+| `general.dateFormat.overrideSystem` |  | integrated - internal/app/settings_pages.go settingsDateFormatsBody toggles Preferences.DateFormat.OverrideSystem; internal/app/dateformat.go switches between the custom pattern and MyGo's system region; dateformat_test.go and settings_test.go TestSettingsDateFormatsStageApplyAndReset |
+| `general.dateFormat.pattern` |  | integrated - internal/app/settings_pages.go settingsDateFormatsBody edits Preferences.DateFormat.Pattern with OpenIDEA's yyyy, yy, MMMM, MMM, MM, M, dd and d placeholders; internal/app/dateformat.go formatDatePattern and TestDateFormatPatternUsesOpenIDEAPlaceholders |
+| `general.dateFormat.pretty` |  | integrated - internal/app/settings_pages.go settingsDateFormatsBody toggles Preferences.DateFormat.Pretty; internal/app/dateformat.go formatAppTimestamp supplies Moments ago, N min ago, Today and Yesterday; TestFormatAppTimestampPrettyAndClock and TestSettingsDateFormatsStageApplyAndReset |
+| `general.dateFormat.use24Hour` |  | integrated - internal/app/settings_pages.go settingsDateFormatsBody toggles Preferences.DateFormat.Use24Hour; internal/app/dateformat.go formatAppClock writes 12- or 24-hour times and formatSystemClock follows the system hour cycle without an override; TestFormatAppTimestampPrettyAndClock and TestSystemDateFormatMatchesIntlRegionalPatterns |
 | `general.defaultProjectDirectory` |  | missing |
 | `general.idleSeconds` |  | missing |
 | `general.lastRunVersion` |  | missing |
 | `general.openProjectIn` |  | missing |
 | `general.powerSaveMode` |  | missing |
 | `general.projectName` |  | missing |
-| `general.reopenLastProject` | general | missing |
+| `general.reopenLastProject` | general | integrated - internal/app/settings_pages.go settingsSystemBody stages Reopen projects on startup; internal/app/settings_window.go persists Preferences.Startup and customize_test.go TestStartupIsWelcomeUnlessReopenChosen verifies the effective startup choice; settings_test.go TestSettingsSystemReopenProjectStagesAndApplies covers Apply and Reset |
 | `general.saveOnIdle` |  | missing |
 | `general.showWhatsNewAfterUpdate` | general.updates | missing |
 | `general.updateSource` | general.updates | missing |
@@ -1718,7 +1946,7 @@ settings.
 | `vcs.git.warnDetachedHead` | vcs.git | missing |
 | `vcs.git.warnLargeFiles` |  | missing |
 | `vcs.historyLimit` |  | missing |
-| `vcs.issueNavigation` |  | missing |
+| `vcs.issueNavigation` |  | integrated - internal/app/settings_issue_navigation.go and Preferences.VCS.IssueNavigation carry OpenIDEA's Issue ID regular expressions and Issue Link templates; internal/app/settings_window.go stages, applies, persists and resets them, while internal/app/issue_links.go applies earliest-match-wins capture expansion and HTTP(S) links in Git Log, commit details and blame; issue_links_test.go and settings_test.go TestSettingsIssueNavigationStagesAppliesAndEdits and TestIssueNavigationEditorCommitsWithEnterAndCancelsWithEscape |
 | `vcs.limitHistory` |  | missing |
 | `vcs.shelf.removeApplied` | vcs.shelf | missing |
 | `vcs.showDirtyDirectories` | vcs.confirmation | missing |
@@ -1819,45 +2047,45 @@ Local-only commands and the per-command argument lists are in
 
 | Command | Module | stdio | GoIDEA | Status |
 | --- | --- | --- | --- | --- |
-| `agent_accept_changes` | agent | yes |  | missing |
-| `agent_archive` | agent | yes |  | missing |
-| `agent_base_text` | agent | yes |  | missing |
-| `agent_cancel` | agent | yes |  | missing |
-| `agent_changes` | agent | yes |  | missing |
-| `agent_commands` | agent | yes |  | missing |
-| `agent_create` | agent | yes |  | missing |
-| `agent_custom_import` | agent | no |  | missing |
-| `agent_custom_remove` | agent | no |  | missing |
-| `agent_custom_save` | agent | no |  | missing |
-| `agent_delete` | agent | yes |  | missing |
-| `agent_entries` | agent | yes |  | missing |
-| `agent_external_sessions` | agent | yes |  | missing |
-| `agent_fork` | agent | yes |  | missing |
-| `agent_grouped_changes` | agent | yes |  | missing |
-| `agent_import_session` | agent | yes |  | missing |
-| `agent_mcp_import` | agent | yes |  | missing |
-| `agent_mcp_list` | agent | yes |  | missing |
-| `agent_mcp_remove` | agent | yes |  | missing |
-| `agent_mcp_save` | agent | yes |  | missing |
-| `agent_mcp_set_enabled` | agent | yes |  | missing |
+| `agent_accept_changes` | agent | yes | yes | integrated - internal/app/agents.go invokes the OpenIDEA RPC through the native Go adapter |
+| `agent_archive` | agent | yes | yes | integrated - internal/app/agent_workspace.go invokes the OpenIDEA RPC through the native Go adapter |
+| `agent_base_text` | agent | yes | yes | integrated - internal/app/agent_diff.go invokes the OpenIDEA RPC through the native Go adapter |
+| `agent_cancel` | agent | yes | yes | integrated - internal/app/agents.go invokes the OpenIDEA RPC through the native Go adapter |
+| `agent_changes` | agent | yes | yes | integrated - internal/app/agents.go invokes the OpenIDEA RPC through the native Go adapter |
+| `agent_commands` | agent | yes | yes | integrated - internal/app/agent_composer.go invokes the OpenIDEA RPC through the native Go adapter |
+| `agent_create` | agent | yes | yes | integrated - internal/app/agents.go invokes the OpenIDEA RPC through the native Go adapter |
+| `agent_custom_import` | agent | no |  | integrated - internal/app/agent_registry_actions.go invokes the OpenIDEA RPC through the native Go adapter |
+| `agent_custom_remove` | agent | no |  | integrated - internal/app/agent_registry_actions.go invokes the OpenIDEA RPC through the native Go adapter |
+| `agent_custom_save` | agent | no |  | integrated - internal/app/agent_registry_actions.go invokes the OpenIDEA RPC through the native Go adapter |
+| `agent_delete` | agent | yes | yes | integrated - internal/app/agents.go invokes the OpenIDEA RPC through the native Go adapter |
+| `agent_entries` | agent | yes | yes | integrated - internal/app/agents.go invokes the OpenIDEA RPC through the native Go adapter |
+| `agent_external_sessions` | agent | yes | yes | integrated - internal/app/agents.go, internal/app/agents_smoke.go invokes the OpenIDEA RPC through the native Go adapter |
+| `agent_fork` | agent | yes | yes | integrated - internal/app/agents.go invokes the OpenIDEA RPC through the native Go adapter |
+| `agent_grouped_changes` | agent | yes | yes | integrated - internal/app/agents.go invokes the OpenIDEA RPC through the native Go adapter |
+| `agent_import_session` | agent | yes | yes | integrated - internal/app/agents.go invokes the OpenIDEA RPC through the native Go adapter |
+| `agent_mcp_import` | agent | yes | yes | integrated - internal/app/agent_mcp_settings.go invokes the OpenIDEA RPC through the native Go adapter |
+| `agent_mcp_list` | agent | yes | yes | integrated - internal/app/agent_mcp_settings.go invokes the OpenIDEA RPC through the native Go adapter |
+| `agent_mcp_remove` | agent | yes | yes | integrated - internal/app/agent_mcp_settings.go invokes the OpenIDEA RPC through the native Go adapter |
+| `agent_mcp_save` | agent | yes | yes | integrated - internal/app/agent_mcp_settings.go invokes the OpenIDEA RPC through the native Go adapter |
+| `agent_mcp_set_enabled` | agent | yes | yes | integrated - internal/app/agent_mcp_settings.go invokes the OpenIDEA RPC through the native Go adapter |
 | `agent_probe` | agent | yes |  | missing |
-| `agent_prompt` | agent | yes |  | missing |
-| `agent_providers` | agent | yes |  | missing |
-| `agent_registry_install` | agent | yes |  | missing |
-| `agent_registry_list` | agent | yes |  | missing |
-| `agent_registry_remove` | agent | yes |  | missing |
-| `agent_rename` | agent | yes |  | missing |
-| `agent_respond` | agent | yes |  | missing |
-| `agent_rollback` | agent | yes |  | missing |
-| `agent_rollback_changes` | agent | yes |  | missing |
-| `agent_send_queued_now` | agent | yes |  | missing |
-| `agent_set_command` | agent | yes |  | missing |
-| `agent_set_config` | agent | yes |  | missing |
-| `agent_set_env` | agent | yes |  | missing |
-| `agent_stop_background` | agent | yes |  | missing |
-| `agent_subscribe` | agent | yes |  | missing |
-| `agent_unarchive` | agent | yes |  | missing |
-| `agent_unqueue` | agent | yes |  | missing |
+| `agent_prompt` | agent | yes | yes | integrated - internal/app/agents.go, internal/app/agents_view.go invokes the OpenIDEA RPC through the native Go adapter |
+| `agent_providers` | agent | yes | yes | integrated - internal/app/agents.go, internal/app/agents_smoke.go invokes the OpenIDEA RPC through the native Go adapter |
+| `agent_registry_install` | agent | yes | yes | integrated - internal/app/agent_registry_settings.go invokes the OpenIDEA RPC through the native Go adapter |
+| `agent_registry_list` | agent | yes | yes | integrated - internal/app/agent_registry_settings.go invokes the OpenIDEA RPC through the native Go adapter |
+| `agent_registry_remove` | agent | yes | yes | integrated - internal/app/agent_registry_settings.go invokes the OpenIDEA RPC through the native Go adapter |
+| `agent_rename` | agent | yes | yes | integrated - internal/app/agents.go invokes the OpenIDEA RPC through the native Go adapter |
+| `agent_respond` | agent | yes | yes | integrated - internal/app/agents.go invokes the OpenIDEA RPC through the native Go adapter |
+| `agent_rollback` | agent | yes | yes | integrated - internal/app/agents.go invokes the OpenIDEA RPC through the native Go adapter |
+| `agent_rollback_changes` | agent | yes | yes | integrated - internal/app/agents.go invokes the OpenIDEA RPC through the native Go adapter |
+| `agent_send_queued_now` | agent | yes | yes | integrated - internal/app/agents.go invokes the OpenIDEA RPC through the native Go adapter |
+| `agent_set_command` | agent | yes | yes | integrated - internal/app/agent_registry_actions.go invokes the OpenIDEA RPC through the native Go adapter |
+| `agent_set_config` | agent | yes | yes | integrated - internal/app/agents.go invokes the OpenIDEA RPC through the native Go adapter |
+| `agent_set_env` | agent | yes | yes | integrated - internal/app/agent_registry_actions.go invokes the OpenIDEA RPC through the native Go adapter |
+| `agent_stop_background` | agent | yes | yes | integrated - internal/app/agents.go invokes the OpenIDEA RPC through the native Go adapter |
+| `agent_subscribe` | agent | yes | yes | integrated - internal/app/agents.go, internal/app/agents_smoke.go invokes the OpenIDEA RPC through the native Go adapter |
+| `agent_unarchive` | agent | yes | yes | integrated - internal/app/agent_workspace.go invokes the OpenIDEA RPC through the native Go adapter |
+| `agent_unqueue` | agent | yes | yes | integrated - internal/app/agents.go invokes the OpenIDEA RPC through the native Go adapter |
 | `analysis_locate_duplicates` | analysis | yes |  | missing |
 | `android_devices` | android | no |  | missing |
 | `android_logcat` | android | no |  | missing |
@@ -1876,15 +2104,15 @@ Local-only commands and the per-command argument lists are in
 | `app_update_announcement` | window | no |  | missing |
 | `app_update_status` | window | no |  | missing |
 | `app_update_window_ready` | window | no |  | missing |
-| `apply_workspace_edit` | lsp | yes | yes | missing |
-| `build_compile_file` | build | yes | yes | missing |
-| `build_model` | build | yes | yes | missing |
-| `build_run` | build | yes | yes | missing |
-| `build_sync` | build | yes | yes | missing |
+| `apply_workspace_edit` | lsp | yes | yes | integrated - internal/app/rename.go invokes the OpenIDEA RPC through the native Go adapter |
+| `build_compile_file` | build | yes | yes | integrated - internal/app/build.go invokes the OpenIDEA RPC through the native Go adapter |
+| `build_model` | build | yes | yes | integrated - internal/app/maven.go invokes the OpenIDEA RPC through the native Go adapter |
+| `build_run` | build | yes | yes | integrated - internal/app/build.go invokes the OpenIDEA RPC through the native Go adapter |
+| `build_sync` | build | yes | yes | integrated - internal/app/maven.go invokes the OpenIDEA RPC through the native Go adapter |
 | `caches_local_data_info` | caches | no |  | missing |
 | `caches_schedule_invalidation` | caches | no |  | missing |
 | `caches_set_local_data_dir` | caches | no |  | missing |
-| `cancel_request` | app | yes | yes | missing |
+| `cancel_request` | app | yes | yes | integrated - internal/app/intents.go, internal/app/build.go, internal/app/vcs_operations.go and 11 more invokes the OpenIDEA RPC through the native Go adapter |
 | `cancel_task` | app | yes |  | missing |
 | `clear_caches` | perf | no |  | missing |
 | `clipboard_file_list` | clipboard | no |  | missing |
@@ -1893,88 +2121,88 @@ Local-only commands and the per-command argument lists are in
 | `clipboard_set_file_list` | clipboard | no |  | missing |
 | `clipboard_text` | clipboard | no |  | missing |
 | `clipboard_write_text` | clipboard | no |  | missing |
-| `close_project` | app | yes | yes | missing |
-| `coverage_collect` | coverage | yes | yes | partial - internal/app/coverage_run.go collects the backend report after process exit |
+| `close_project` | app | yes | yes | integrated - internal/app/app.go invokes the OpenIDEA RPC through the native Go adapter |
+| `coverage_collect` | coverage | yes | yes | integrated - internal/app/coverage_run.go calls coverage_collect with the prepared report after process exit and handles early exit replies through a bounded queue; TestCoverageCollectsAnExitBeforeTheRunStartReply covers it |
 | `coverage_import` | coverage | yes | yes | integrated - base.coverage.report |
-| `coverage_prepare` | coverage | yes | yes | partial - internal/app/coverage_run.go prepares the selected configuration with the backend |
-| `db_apply_edits` | db | yes |  | missing |
-| `db_completion` | db | yes |  | missing |
-| `db_connect` | db | yes | yes | missing |
-| `db_connected` | db | yes | yes | missing |
-| `db_console_path` | db | yes |  | missing |
-| `db_database_catalog` | db | yes |  | missing |
-| `db_databases` | db | yes |  | missing |
-| `db_ddl` | db | yes | yes | missing |
-| `db_disconnect` | db | yes | yes | missing |
-| `db_execute` | db | yes | yes | missing |
-| `db_explain` | db | yes | yes | missing |
+| `coverage_prepare` | coverage | yes | yes | integrated - internal/app/coverage_run.go calls coverage_prepare, validates ready/missingTool/unsupported replies and preserves the returned launch and report JSON; TestContextRunWithCoveragePreparesLaunchesAndCollects covers the flow |
+| `db_apply_edits` | db | yes | yes | integrated - internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter |
+| `db_completion` | db | yes | yes | integrated - internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter |
+| `db_connect` | db | yes | yes | integrated - internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter |
+| `db_connected` | db | yes | yes | integrated - internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter |
+| `db_console_path` | db | yes | yes | integrated - internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter |
+| `db_database_catalog` | db | yes | yes | integrated - internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter |
+| `db_databases` | db | yes | yes | integrated - internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter |
+| `db_ddl` | db | yes | yes | integrated - internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter |
+| `db_disconnect` | db | yes | yes | integrated - internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter |
+| `db_execute` | db | yes | yes | integrated - internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter |
+| `db_explain` | db | yes | yes | integrated - internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter |
 | `db_export_file` | db | no |  | missing |
-| `db_finish_transaction` | db | yes |  | missing |
-| `db_history` | db | yes | yes | missing |
-| `db_object_ddl` | db | yes |  | missing |
-| `db_remove_history` | db | yes |  | missing |
-| `db_retain_catalog` | db | yes |  | missing |
-| `db_save_sources` | db | yes | yes | missing |
-| `db_saved_catalog` | db | yes |  | missing |
-| `db_schema_objects` | db | yes |  | missing |
-| `db_schemas` | db | yes | yes | missing |
-| `db_session_context` | db | yes |  | missing |
-| `db_set_manual_commit` | db | yes |  | missing |
-| `db_set_password` | db | yes |  | missing |
-| `db_set_ssh_secret` | db | yes |  | missing |
-| `db_sources` | db | yes | yes | missing |
-| `db_statements` | db | yes | yes | missing |
-| `db_table_details` | db | yes |  | missing |
-| `db_table_page` | db | yes | yes | missing |
-| `db_tables` | db | yes | yes | missing |
-| `db_test` | db | yes |  | missing |
-| `db_trust_ssh_host` | db | yes |  | missing |
-| `debug_attachable_processes` | debug | yes | yes | missing |
+| `db_finish_transaction` | db | yes | yes | integrated - internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter |
+| `db_history` | db | yes | yes | integrated - internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter |
+| `db_object_ddl` | db | yes | yes | integrated - internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter |
+| `db_remove_history` | db | yes | yes | integrated - internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter |
+| `db_retain_catalog` | db | yes | yes | integrated - internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter |
+| `db_save_sources` | db | yes | yes | integrated - internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter |
+| `db_saved_catalog` | db | yes | yes | integrated - internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter |
+| `db_schema_objects` | db | yes | yes | integrated - internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter |
+| `db_schemas` | db | yes | yes | integrated - internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter |
+| `db_session_context` | db | yes | yes | integrated - internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter |
+| `db_set_manual_commit` | db | yes | yes | integrated - internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter |
+| `db_set_password` | db | yes | yes | integrated - internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter |
+| `db_set_ssh_secret` | db | yes | yes | integrated - internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter |
+| `db_sources` | db | yes | yes | integrated - internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter |
+| `db_statements` | db | yes | yes | integrated - internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter |
+| `db_table_details` | db | yes | yes | integrated - internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter |
+| `db_table_page` | db | yes | yes | integrated - internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter |
+| `db_tables` | db | yes | yes | integrated - internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter |
+| `db_test` | db | yes | yes | integrated - internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter |
+| `db_trust_ssh_host` | db | yes | yes | integrated - internal/openidea/db.go invokes the OpenIDEA RPC through the native Go adapter |
+| `debug_attachable_processes` | debug | yes | yes | integrated - internal/app/attach.go, internal/app/negatives.go invokes the OpenIDEA RPC through the native Go adapter |
 | `debug_breakpoint_states` | debug | yes |  | missing |
 | `debug_capabilities` | debug | yes |  | missing |
 | `debug_completions` | debug | yes |  | missing |
 | `debug_data_breakpoint_info` | debug | yes |  | missing |
-| `debug_evaluate` | debug | yes | yes | missing |
-| `debug_evaluate_in` | debug | yes | yes | missing |
+| `debug_evaluate` | debug | yes | yes | integrated - internal/app/debug.go invokes the OpenIDEA RPC through the native Go adapter |
+| `debug_evaluate_in` | debug | yes | yes | integrated - internal/app/debug_view.go invokes the OpenIDEA RPC through the native Go adapter |
 | `debug_exception_filters` | debug | yes |  | missing |
-| `debug_force_step_over` | debug | yes | yes | missing |
+| `debug_force_step_over` | debug | yes | yes | integrated - internal/app/debug.go invokes the OpenIDEA RPC through the native Go adapter |
 | `debug_free_port` | debug | yes |  | missing |
-| `debug_heap_capture` | heap | yes |  | missing |
-| `debug_heap_classes` | heap | yes |  | missing |
-| `debug_heap_close` | heap | yes |  | missing |
+| `debug_heap_capture` | heap | yes | yes | integrated - internal/app/debug_heap.go invokes the OpenIDEA RPC through the native Go adapter |
+| `debug_heap_classes` | heap | yes | yes | integrated - internal/app/debug_heap.go invokes the OpenIDEA RPC through the native Go adapter |
+| `debug_heap_close` | heap | yes | yes | integrated - internal/app/debug_heap.go invokes the OpenIDEA RPC through the native Go adapter |
 | `debug_heap_compare` | heap | yes |  | missing |
 | `debug_heap_dominators` | heap | yes |  | missing |
-| `debug_heap_open` | heap | yes |  | missing |
+| `debug_heap_open` | heap | yes | yes | integrated - internal/app/debug_heap.go invokes the OpenIDEA RPC through the native Go adapter |
 | `debug_heap_path` | heap | yes |  | missing |
-| `debug_heap_save` | heap | yes |  | missing |
+| `debug_heap_save` | heap | yes | yes | integrated - internal/app/debug_heap.go invokes the OpenIDEA RPC through the native Go adapter |
 | `debug_hot_reload` | debug | no |  | missing |
-| `debug_hot_restart` | debug | no |  | missing |
-| `debug_jvm_memory_classes` | debug | yes | yes | missing |
-| `debug_jvm_memory_fields` | debug | yes |  | missing |
-| `debug_jvm_memory_instances` | debug | yes |  | missing |
-| `debug_jvm_memory_referrers` | debug | yes |  | missing |
+| `debug_hot_restart` | debug | no |  | integrated - internal/app/debug_actions.go invokes the OpenIDEA RPC through the native Go adapter |
+| `debug_jvm_memory_classes` | debug | yes | yes | integrated - internal/app/debug_memory.go invokes the OpenIDEA RPC through the native Go adapter |
+| `debug_jvm_memory_fields` | debug | yes | yes | integrated - internal/app/debug_memory_instances.go invokes the OpenIDEA RPC through the native Go adapter |
+| `debug_jvm_memory_instances` | debug | yes | yes | integrated - internal/app/debug_memory_instances.go invokes the OpenIDEA RPC through the native Go adapter |
+| `debug_jvm_memory_referrers` | debug | yes | yes | integrated - internal/app/debug_memory_instances.go invokes the OpenIDEA RPC through the native Go adapter |
 | `debug_listen_for_jvm` | debug | yes |  | missing |
-| `debug_pause` | debug | yes | yes | missing |
-| `debug_redefine_classes` | debug | yes | yes | missing |
-| `debug_restart_frame` | debug | yes |  | missing |
-| `debug_resume` | debug | yes | yes | missing |
-| `debug_run_to` | debug | yes | yes | missing |
-| `debug_scopes` | debug | yes | yes | missing |
+| `debug_pause` | debug | yes | yes | integrated - internal/app/debug.go invokes the OpenIDEA RPC through the native Go adapter |
+| `debug_redefine_classes` | debug | yes | yes | integrated - internal/app/hotswap.go invokes the OpenIDEA RPC through the native Go adapter |
+| `debug_restart_frame` | debug | yes | yes | integrated - internal/app/debug_actions.go invokes the OpenIDEA RPC through the native Go adapter |
+| `debug_resume` | debug | yes | yes | integrated - internal/app/attach.go, internal/app/debug.go invokes the OpenIDEA RPC through the native Go adapter |
+| `debug_run_to` | debug | yes | yes | integrated - internal/app/debug.go invokes the OpenIDEA RPC through the native Go adapter |
+| `debug_scopes` | debug | yes | yes | integrated - internal/app/debug.go invokes the OpenIDEA RPC through the native Go adapter |
 | `debug_send_input` | debug | yes |  | missing |
 | `debug_sessions` | debug | yes |  | missing |
-| `debug_set_breakpoints` | debug | yes | yes | missing |
-| `debug_set_data_breakpoints` | debug | yes |  | missing |
+| `debug_set_breakpoints` | debug | yes | yes | integrated - internal/app/hotswap_smoke.go, internal/app/debug.go invokes the OpenIDEA RPC through the native Go adapter |
+| `debug_set_data_breakpoints` | debug | yes | yes | integrated - internal/app/debug_actions.go, internal/app/debug.go invokes the OpenIDEA RPC through the native Go adapter |
 | `debug_set_exception_breakpoints` | debug | yes |  | missing |
-| `debug_set_function_breakpoints` | debug | yes |  | missing |
-| `debug_set_variable` | debug | yes |  | missing |
-| `debug_stack_trace` | debug | yes | yes | missing |
-| `debug_start` | debug | yes | yes | missing |
-| `debug_step` | debug | yes | yes | missing |
-| `debug_step_in_target` | debug | yes |  | missing |
-| `debug_step_in_targets` | debug | yes |  | missing |
-| `debug_stop` | debug | yes | yes | missing |
-| `debug_threads` | debug | yes | yes | missing |
-| `debug_variables` | debug | yes | yes | missing |
+| `debug_set_function_breakpoints` | debug | yes | yes | integrated - internal/app/debug_actions.go, internal/app/debug.go invokes the OpenIDEA RPC through the native Go adapter |
+| `debug_set_variable` | debug | yes | yes | integrated - internal/app/debug_actions.go invokes the OpenIDEA RPC through the native Go adapter |
+| `debug_stack_trace` | debug | yes | yes | integrated - internal/app/debug.go invokes the OpenIDEA RPC through the native Go adapter |
+| `debug_start` | debug | yes | yes | integrated - internal/app/attach.go, internal/app/debug.go invokes the OpenIDEA RPC through the native Go adapter |
+| `debug_step` | debug | yes | yes | integrated - internal/app/debug.go invokes the OpenIDEA RPC through the native Go adapter |
+| `debug_step_in_target` | debug | yes | yes | integrated - internal/app/debug_actions.go invokes the OpenIDEA RPC through the native Go adapter |
+| `debug_step_in_targets` | debug | yes | yes | integrated - internal/app/debug_actions.go invokes the OpenIDEA RPC through the native Go adapter |
+| `debug_stop` | debug | yes | yes | integrated - internal/app/attach.go, internal/app/app.go, internal/app/debug.go invokes the OpenIDEA RPC through the native Go adapter |
+| `debug_threads` | debug | yes | yes | integrated - internal/app/attach.go, internal/app/debug.go invokes the OpenIDEA RPC through the native Go adapter |
+| `debug_variables` | debug | yes | yes | integrated - internal/app/debug.go invokes the OpenIDEA RPC through the native Go adapter |
 | `dependency_versions` | dependencies | yes |  | missing |
 | `deploy_compare` | deploy | yes |  | missing |
 | `deploy_coverage` | deploy | yes |  | missing |
@@ -1985,20 +2213,20 @@ Local-only commands and the per-command argument lists are in
 | `deploy_sync` | deploy | yes |  | missing |
 | `deploy_test_connection` | deploy | yes |  | missing |
 | `deploy_upload` | deploy | yes |  | missing |
-| `doc_close` | doc | yes | yes | missing |
-| `doc_edit` | doc | yes | yes | missing |
+| `doc_close` | doc | yes | yes | integrated - internal/openidea/docs.go, internal/app/documentation.go invokes the OpenIDEA RPC through the native Go adapter |
+| `doc_edit` | doc | yes | yes | integrated - internal/openidea/docs.go invokes the OpenIDEA RPC through the native Go adapter |
 | `doc_folding` | doc | yes |  | missing |
 | `doc_highlights` | doc | yes |  | missing |
-| `doc_open` | doc | yes | yes | missing |
-| `doc_open_virtual` | doc | yes | yes | missing |
-| `doc_outline` | doc | yes | yes | missing |
-| `doc_save` | doc | yes | yes | missing |
+| `doc_open` | doc | yes | yes | integrated - internal/openidea/docs.go, internal/app/documentation.go invokes the OpenIDEA RPC through the native Go adapter |
+| `doc_open_virtual` | doc | yes | yes | integrated - internal/app/documentation.go invokes the OpenIDEA RPC through the native Go adapter |
+| `doc_outline` | doc | yes | yes | integrated - internal/app/project_view.go, internal/app/codeintel.go, internal/app/copy_reference.go invokes the OpenIDEA RPC through the native Go adapter |
+| `doc_save` | doc | yes | yes | integrated - internal/openidea/docs.go invokes the OpenIDEA RPC through the native Go adapter |
 | `doc_save_all` | doc | yes |  | missing |
 | `doc_selection_ranges` | doc | yes |  | missing |
 | `doc_set_bom` | doc | yes |  | missing |
 | `doc_set_encoding` | doc | yes |  | missing |
 | `doc_set_line_ending` | doc | yes |  | missing |
-| `doc_snapshot` | doc | yes | yes | missing |
+| `doc_snapshot` | doc | yes | yes | integrated - internal/openidea/docs.go invokes the OpenIDEA RPC through the native Go adapter |
 | `doc_sync_from_disk` | doc | yes |  | missing |
 | `doc_ui_mode` | doc | yes |  | missing |
 | `docker_compose_op` | docker | no |  | missing |
@@ -2018,29 +2246,29 @@ Local-only commands and the per-command argument lists are in
 | `docker_set_registry_password` | docker | no |  | missing |
 | `docker_settings` | docker | no |  | missing |
 | `docker_snapshot` | docker | no |  | missing |
-| `env_reload` | env | yes |  | missing |
+| `env_reload` | env | yes | yes | missing |
 | `file_dialog_needs_gtk` | file_dialog | no |  | missing |
-| `find_dirs` | nav | yes |  | missing |
-| `find_files` | nav | yes | yes | missing |
+| `find_dirs` | nav | yes | yes | integrated - internal/app/agent_composer.go invokes the OpenIDEA RPC through the native Go adapter |
+| `find_files` | nav | yes | yes | integrated - internal/app/agent_composer.go, internal/app/run.go, internal/app/stack_trace.go and 3 more invokes the OpenIDEA RPC through the native Go adapter |
 | `find_files_named` | nav | yes |  | missing |
 | `find_symbols` | nav | yes |  | missing |
-| `fs_compare_directories` | fs | yes | yes | missing |
-| `fs_copy` | fs | yes | yes | missing |
+| `fs_compare_directories` | fs | yes | yes | integrated - internal/app/dircompare.go invokes the OpenIDEA RPC through the native Go adapter |
+| `fs_copy` | fs | yes | yes | integrated - internal/app/tree_ops.go invokes the OpenIDEA RPC through the native Go adapter |
 | `fs_copy_merge` | fs | yes |  | missing |
-| `fs_create_dir` | fs | yes | yes | missing |
-| `fs_create_file` | fs | yes | yes | missing |
-| `fs_create_file_bytes` | fs | yes |  | missing |
-| `fs_delete` | fs | yes | yes | missing |
+| `fs_create_dir` | fs | yes | yes | integrated - internal/app/newproject.go, internal/app/tree_ops.go invokes the OpenIDEA RPC through the native Go adapter |
+| `fs_create_file` | fs | yes | yes | integrated - internal/app/tree_ops.go invokes the OpenIDEA RPC through the native Go adapter |
+| `fs_create_file_bytes` | fs | yes | yes | missing |
+| `fs_delete` | fs | yes | yes | integrated - internal/app/tree_ops.go, internal/app/vcs_log_actions.go invokes the OpenIDEA RPC through the native Go adapter |
 | `fs_entry_kind` | fs | yes |  | missing |
 | `fs_open_with_system` | fs | no |  | missing |
 | `fs_probe` | bytes | yes |  | missing |
-| `fs_read_dir` | fs | yes | yes | missing |
+| `fs_read_dir` | fs | yes | yes | integrated - internal/app/newproject.go invokes the OpenIDEA RPC through the native Go adapter |
 | `fs_read_image` | bytes | yes |  | missing |
 | `fs_read_range` | bytes | yes |  | missing |
-| `fs_read_text` | fs | yes | yes | missing |
-| `fs_rename` | fs | yes | yes | missing |
+| `fs_read_text` | fs | yes | yes | integrated - internal/app/java_run.go invokes the OpenIDEA RPC through the native Go adapter |
+| `fs_rename` | fs | yes | yes | integrated - internal/app/tree_ops.go invokes the OpenIDEA RPC through the native Go adapter |
 | `fs_resolve_reference` | nav | yes |  | missing |
-| `fs_set_writable` | fs | yes |  | missing |
+| `fs_set_writable` | fs | yes | yes | integrated - internal/app/editor_file_actions.go invokes the OpenIDEA RPC through the native Go adapter |
 | `gh_account_repos` | github | no |  | missing |
 | `gh_api` | github | no |  | missing |
 | `gh_availability` | github | no |  | missing |
@@ -2055,15 +2283,15 @@ Local-only commands and the per-command argument lists are in
 | `git_credential_forget` | ssh | no |  | missing |
 | `git_credentials` | ssh | no |  | missing |
 | `gradle_dependencies` | build | yes |  | missing |
-| `gradle_link_projects` | build | yes |  | missing |
+| `gradle_link_projects` | build | yes | yes | integrated - internal/app/build_tool_actions.go invokes the OpenIDEA RPC through the native Go adapter |
 | `gradle_published_catalog` | build | yes |  | missing |
-| `gradle_unlink_projects` | build | yes |  | missing |
+| `gradle_unlink_projects` | build | yes | yes | integrated - internal/app/build_tool_actions.go invokes the OpenIDEA RPC through the native Go adapter |
 | `gtk_pick_paths` | file_dialog | no |  | missing |
-| `history_content` | doc | yes |  | missing |
-| `history_list` | doc | yes |  | missing |
-| `history_list_dir` | history | yes | yes | missing |
-| `history_put_label` | history | yes | yes | missing |
-| `history_restore` | history | yes | yes | missing |
+| `history_content` | doc | yes | yes | integrated - internal/app/history.go invokes the OpenIDEA RPC through the native Go adapter for revision previews |
+| `history_list` | doc | yes | yes | integrated - internal/app/history.go invokes the OpenIDEA RPC through the native Go adapter |
+| `history_list_dir` | history | yes | yes | integrated - internal/app/history.go invokes the OpenIDEA RPC through the native Go adapter |
+| `history_put_label` | history | yes | yes | integrated - internal/app/history.go invokes the OpenIDEA RPC through the native Go adapter |
+| `history_restore` | history | yes | yes | integrated - internal/app/history.go invokes the OpenIDEA RPC through the native Go adapter |
 | `http_curl` | http | no |  | missing |
 | `http_environment_file` | http | no |  | missing |
 | `http_environments` | http | no |  | missing |
@@ -2077,60 +2305,60 @@ Local-only commands and the per-command argument lists are in
 | `index_file_extensions` | nav | yes |  | missing |
 | `index_status` | nav | yes |  | missing |
 | `inspect_code` | analysis | yes |  | missing |
-| `java_build_workspace` | java | yes | yes | missing |
-| `java_debug_server` | java | yes | yes | missing |
-| `java_resolve_launch` | java | yes | yes | missing |
-| `jdk_download` | tools | yes |  | missing |
-| `jdk_download_location` | tools | yes |  | missing |
-| `jdk_download_releases` | tools | yes |  | missing |
-| `jdk_download_vendors` | tools | yes |  | missing |
-| `jdtls_required_java` | tools | yes |  | missing |
+| `java_build_workspace` | java | yes | yes | integrated - internal/app/hotswap.go invokes the OpenIDEA RPC through the native Go adapter |
+| `java_debug_server` | java | yes | yes | integrated - internal/app/attach.go, internal/app/debug.go invokes the OpenIDEA RPC through the native Go adapter |
+| `java_resolve_launch` | java | yes | yes | integrated - internal/app/java_run.go invokes the OpenIDEA RPC through the native Go adapter |
+| `jdk_download` | tools | yes | yes | integrated - internal/openidea/tools.go, internal/app/jdk_download.go invokes the OpenIDEA RPC through the native Go adapter |
+| `jdk_download_location` | tools | yes | yes | integrated - internal/openidea/tools.go, internal/app/jdk_download.go invokes the OpenIDEA RPC through the native Go adapter |
+| `jdk_download_releases` | tools | yes | yes | integrated - internal/openidea/tools.go, internal/app/jdk_download.go invokes the OpenIDEA RPC through the native Go adapter |
+| `jdk_download_vendors` | tools | yes | yes | integrated - internal/openidea/tools.go, internal/app/jdk_download.go invokes the OpenIDEA RPC through the native Go adapter |
+| `jdtls_required_java` | tools | yes | yes | integrated - internal/openidea/tools.go invokes the OpenIDEA RPC through the native Go adapter |
 | `jvm_file_presentations` | syntax | yes |  | missing |
-| `languages` | app | no |  | missing |
+| `languages` | app | no |  | integrated - internal/openidea/tools.go, internal/app/scratch.go, internal/app/build_tool_actions.go and 4 more invokes the OpenIDEA RPC through the native Go adapter |
 | `light_edit_open` | app | no |  | missing |
 | `log_frontend` | app | no |  | missing |
-| `lsp_apply_code_action` | lsp | yes | yes | missing |
-| `lsp_call_hierarchy` | lsp | yes | yes | missing |
+| `lsp_apply_code_action` | lsp | yes | yes | integrated - internal/app/intents.go, internal/app/source_actions.go invokes the OpenIDEA RPC through the native Go adapter |
+| `lsp_call_hierarchy` | lsp | yes | yes | integrated - internal/app/hierarchy.go invokes the OpenIDEA RPC through the native Go adapter |
 | `lsp_can_download_sources` | lsp | yes |  | missing |
-| `lsp_code_action_query` | lsp | yes | yes | missing |
+| `lsp_code_action_query` | lsp | yes | yes | integrated - internal/app/intents.go, internal/app/source_actions.go invokes the OpenIDEA RPC through the native Go adapter |
 | `lsp_code_actions` | lsp | yes |  | missing |
 | `lsp_code_lens` | lsp | yes |  | missing |
-| `lsp_completion` | lsp | yes | yes | missing |
+| `lsp_completion` | lsp | yes | yes | integrated - internal/app/lsp.go invokes the OpenIDEA RPC through the native Go adapter |
 | `lsp_document_highlights` | lsp | yes |  | missing |
 | `lsp_document_links` | lsp | yes |  | missing |
 | `lsp_execute_code_action` | lsp | yes |  | missing |
 | `lsp_execute_command` | lsp | yes |  | missing |
-| `lsp_format` | lsp | yes | yes | missing |
-| `lsp_goto` | lsp | yes | yes | missing |
-| `lsp_goto_implementation` | lsp | yes | yes | missing |
+| `lsp_format` | lsp | yes | yes | integrated - internal/app/format.go invokes the OpenIDEA RPC through the native Go adapter |
+| `lsp_goto` | lsp | yes | yes | integrated - internal/app/documentation.go, internal/app/lsp.go, internal/app/copy_reference.go invokes the OpenIDEA RPC through the native Go adapter |
+| `lsp_goto_implementation` | lsp | yes | yes | integrated - internal/app/navigation.go invokes the OpenIDEA RPC through the native Go adapter |
 | `lsp_hierarchy_members` | lsp | yes |  | missing |
 | `lsp_hierarchy_refactor` | lsp | yes |  | missing |
-| `lsp_hover` | lsp | yes | yes | missing |
+| `lsp_hover` | lsp | yes | yes | integrated - internal/app/documentation.go, internal/app/lsp.go invokes the OpenIDEA RPC through the native Go adapter |
 | `lsp_implementations` | lsp | yes |  | missing |
-| `lsp_inlay_hints` | lsp | yes |  | missing |
+| `lsp_inlay_hints` | lsp | yes | yes | integrated - internal/app/inlay.go invokes the OpenIDEA RPC through the native Go adapter |
 | `lsp_inline_completion` | lsp | yes |  | missing |
 | `lsp_library_sources` | lsp | yes |  | missing |
-| `lsp_prepare_rename` | lsp | yes | yes | missing |
-| `lsp_references` | lsp | yes | yes | missing |
-| `lsp_rename` | lsp | yes | yes | missing |
+| `lsp_prepare_rename` | lsp | yes | yes | integrated - internal/app/rename.go invokes the OpenIDEA RPC through the native Go adapter |
+| `lsp_references` | lsp | yes | yes | integrated - internal/app/codevision.go, internal/app/usages.go invokes the OpenIDEA RPC through the native Go adapter |
+| `lsp_rename` | lsp | yes | yes | integrated - internal/app/rename.go invokes the OpenIDEA RPC through the native Go adapter |
 | `lsp_resend_diagnostics` | lsp | yes |  | missing |
 | `lsp_resolve_class_file` | lsp | yes |  | missing |
 | `lsp_resolve_code_action` | lsp | yes |  | missing |
 | `lsp_resolve_command` | lsp | yes |  | missing |
 | `lsp_resolve_completion` | lsp | yes |  | missing |
-| `lsp_restart` | lsp | yes |  | missing |
+| `lsp_restart` | lsp | yes | yes | missing |
 | `lsp_restart_named` | lsp | no |  | missing |
 | `lsp_semantic_tokens` | lsp | yes |  | missing |
-| `lsp_servers` | lsp | yes | yes | missing |
+| `lsp_servers` | lsp | yes | yes | integrated - internal/app/debug.go, internal/app/lsp.go, internal/app/readiness.go invokes the OpenIDEA RPC through the native Go adapter |
 | `lsp_signature_help` | lsp | yes |  | missing |
-| `lsp_type_hierarchy` | lsp | yes | yes | missing |
-| `lsp_virtual_document` | lsp | yes | yes | missing |
-| `lsp_workspace_symbols` | lsp | yes | yes | missing |
-| `mark_recent` | nav | yes | yes | missing |
-| `maven_dependency_completion` | build | yes | yes | missing |
+| `lsp_type_hierarchy` | lsp | yes | yes | integrated - internal/app/hierarchy.go invokes the OpenIDEA RPC through the native Go adapter |
+| `lsp_virtual_document` | lsp | yes | yes | integrated - internal/app/documentation.go invokes the OpenIDEA RPC through the native Go adapter |
+| `lsp_workspace_symbols` | lsp | yes | yes | integrated - internal/app/symbols.go, internal/app/debug_memory.go, internal/app/se.go invokes the OpenIDEA RPC through the native Go adapter |
+| `mark_recent` | nav | yes | yes | integrated - internal/app/quickopen.go invokes the OpenIDEA RPC through the native Go adapter |
+| `maven_dependency_completion` | build | yes | yes | integrated - internal/app/pom_completion.go invokes the OpenIDEA RPC through the native Go adapter |
 | `maven_dependency_declaration` | build | yes |  | missing |
 | `maven_exclude_dependency` | build | yes |  | missing |
-| `maven_goto_declaration` | build | yes | yes | missing |
+| `maven_goto_declaration` | build | yes | yes | integrated - internal/app/pom_goto.go invokes the OpenIDEA RPC through the native Go adapter |
 | `mcp_agent_run_closed` | mcp | no |  | missing |
 | `mcp_report_problems` | mcp | yes |  | missing |
 | `mcp_respond` | mcp | no |  | missing |
@@ -2156,8 +2384,8 @@ Local-only commands and the per-command argument lists are in
 | `notebook_restart` | notebook | yes |  | missing |
 | `notebook_save` | notebook | yes |  | missing |
 | `notebook_undo` | notebook | yes |  | missing |
-| `open_project` | app | yes | yes | missing |
-| `path_completions` | nav | yes |  | missing |
+| `open_project` | app | yes | yes | integrated - internal/app/app.go invokes the OpenIDEA RPC through the native Go adapter |
+| `path_completions` | nav | yes | yes | integrated - internal/app/agent_composer.go invokes the OpenIDEA RPC through the native Go adapter |
 | `plugin_activation_event` | plugin | no |  | missing |
 | `plugin_answer_command` | plugin | yes |  | missing |
 | `plugin_answer_commit` | plugin | yes |  | missing |
@@ -2194,7 +2422,7 @@ Local-only commands and the per-command argument lists are in
 | `plugin_navigation_markers` | plugin | yes |  | missing |
 | `plugin_parse_test_results` | plugin | yes |  | missing |
 | `plugin_post_events` | plugin | yes |  | missing |
-| `plugin_prepare_debug_run` | plugin | yes |  | missing |
+| `plugin_prepare_debug_run` | plugin | yes | yes | integrated - internal/app/debug_actions.go invokes the OpenIDEA RPC through the native Go adapter |
 | `plugin_preview_install` | plugin | no |  | missing |
 | `plugin_program` | plugin | yes |  | missing |
 | `plugin_read_intellij_theme` | plugin | no |  | missing |
@@ -2233,24 +2461,24 @@ Local-only commands and the per-command argument lists are in
 | `profiler_collect` | profiler | no |  | missing |
 | `profiler_gc_before_stop` | profiler | no |  | missing |
 | `profiler_prepare` | profiler | no |  | missing |
-| `project_current` | app | yes | yes | missing |
+| `project_current` | app | yes | yes | integrated - internal/app/recovery.go, internal/app/app.go, internal/app/project_workspace.go and 2 more invokes the OpenIDEA RPC through the native Go adapter |
 | `project_rename` | app | no |  | missing |
 | `project_roots` | app | yes |  | missing |
-| `project_trust_add_location` | app | no |  | missing |
-| `project_trust_list` | app | yes |  | missing |
-| `project_trust_remove_location` | app | yes | yes | missing |
-| `project_trust_set` | app | yes | yes | missing |
-| `project_trust_status` | app | yes | yes | missing |
+| `project_trust_add_location` | app | yes | yes | integrated - OpenIDEA crates/ide-host/src/rpc.rs exposes project_trust_add_location; internal/app/project_trust_settings.go opens the native Add Trusted Location picker and refreshes the page; crates/ide-host/tests/rpc.rs round-trips add/list/remove |
+| `project_trust_list` | app | yes | yes | integrated - internal/app/project_trust_settings.go loads project_trust_list into Settings › Security › Project Trust and refreshes it after every mutation; internal/app/project_trust_settings_test.go |
+| `project_trust_remove_location` | app | yes | yes | integrated - internal/app/run.go and project_trust_settings.go remove trusted locations through project_trust_remove_location; crates/ide-host/tests/rpc.rs round-trips add/list/remove |
+| `project_trust_set` | app | yes | yes | integrated - internal/app/run.go and project_trust_settings.go persist trust and Restricted Mode decisions through project_trust_set; internal/app/trust_test.go and internal/openidea integration tests |
+| `project_trust_status` | app | yes | yes | integrated - internal/app/run.go and project_workspace.go call project_trust_status before project commands and when an untrusted project opens; internal/app/trust_test.go and internal/openidea integration tests |
 | `proxy_check_connection` | http | no |  | missing |
-| `recent_files` | nav | yes | yes | missing |
+| `recent_files` | nav | yes | yes | integrated - internal/app/recent_navigation.go invokes the OpenIDEA RPC through the native Go adapter |
 | `recent_project_groups` | app | no |  | missing |
 | `recent_projects` | app | no |  | missing |
-| `redo_workspace_edit` | lsp | yes | yes | missing |
+| `redo_workspace_edit` | lsp | yes | yes | integrated - internal/app/refactor.go invokes the OpenIDEA RPC through the native Go adapter |
 | `refactor_can_undo_file_move` | refactor | yes |  | missing |
-| `refactor_file_move_edits` | refactor | yes |  | missing |
-| `refactor_file_move_text_edits` | refactor | yes |  | missing |
-| `refactor_move_files` | refactor | yes |  | missing |
-| `refactor_undo_file_move` | refactor | yes |  | missing |
+| `refactor_file_move_edits` | refactor | yes | yes | integrated - internal/app/project_tree_actions.go invokes the OpenIDEA RPC through the native Go adapter |
+| `refactor_file_move_text_edits` | refactor | yes | yes | missing |
+| `refactor_move_files` | refactor | yes | yes | integrated - internal/app/project_tree_actions.go invokes the OpenIDEA RPC through the native Go adapter |
+| `refactor_undo_file_move` | refactor | yes | yes | integrated - internal/app/project_tree_actions.go invokes the OpenIDEA RPC through the native Go adapter |
 | `remote_bootstrap_list` | remote_dev | no |  | missing |
 | `remote_connect` | remote_dev | no |  | missing |
 | `remote_current` | remote_dev | no |  | missing |
@@ -2269,28 +2497,28 @@ Local-only commands and the per-command argument lists are in
 | `remote_stop_forwarding` | remote_dev | no |  | missing |
 | `remote_trust_set` | remote_dev | no |  | missing |
 | `remote_trust_status` | remote_dev | no |  | missing |
-| `remove_recent` | nav | yes |  | missing |
+| `remove_recent` | nav | yes | yes | integrated - internal/app/recent_navigation.go invokes the OpenIDEA RPC through the native Go adapter |
 | `remove_recent_project` | app | no |  | missing |
-| `replace_in_files` | search | yes |  | missing |
+| `replace_in_files` | search | yes | yes | integrated - internal/app/search.go invokes the OpenIDEA RPC through the native Go adapter |
 | `replace_preview` | search | yes |  | missing |
 | `run_application_build` | run | yes |  | missing |
 | `run_application_publish` | run | yes |  | missing |
 | `run_apply_settings` | run | yes |  | missing |
 | `run_close_stdin` | run | yes |  | missing |
-| `run_configs` | run | yes | yes | missing |
+| `run_configs` | run | yes | yes | integrated - internal/app/run_parity_actions.go, internal/app/run.go, internal/app/java_run.go and 2 more invokes the OpenIDEA RPC through the native Go adapter |
 | `run_dotnet_resolve` | run | yes |  | missing |
-| `run_env_files` | run | yes | yes | missing |
+| `run_env_files` | run | yes | yes | integrated - internal/app/debug.go invokes the OpenIDEA RPC through the native Go adapter |
 | `run_gradle_init_script` | run | yes |  | missing |
 | `run_gradle_jvm_args_script` | run | yes |  | missing |
-| `run_import_configs` | run | yes |  | missing |
-| `run_import_sources` | run | yes |  | missing |
-| `run_list` | run | yes | yes | missing |
+| `run_import_configs` | run | yes | yes | integrated - internal/app/run_parity_actions.go invokes the OpenIDEA RPC through the native Go adapter |
+| `run_import_sources` | run | yes | yes | integrated - internal/app/run_parity_actions.go invokes the OpenIDEA RPC through the native Go adapter |
+| `run_list` | run | yes | yes | integrated - internal/app/run.go, internal/app/negatives.go invokes the OpenIDEA RPC through the native Go adapter |
 | `run_resize` | run | yes |  | missing |
-| `run_save_configs` | run | yes | yes | missing |
+| `run_save_configs` | run | yes | yes | integrated - internal/app/java_run.go, internal/app/negatives.go invokes the OpenIDEA RPC through the native Go adapter |
 | `run_save_templates` | run | yes |  | missing |
-| `run_start` | run | yes | yes | missing |
+| `run_start` | run | yes | yes | integrated - internal/app/run.go invokes the OpenIDEA RPC through the native Go adapter |
 | `run_stdin` | run | yes |  | missing |
-| `run_stop` | run | yes | yes | missing |
+| `run_stop` | run | yes | yes | integrated - internal/app/run.go, internal/app/app.go invokes the OpenIDEA RPC through the native Go adapter |
 | `run_system_env` | run | yes |  | missing |
 | `run_templates` | run | yes |  | missing |
 | `run_test_reports` | run | yes |  | missing |
@@ -2301,11 +2529,11 @@ Local-only commands and the per-command argument lists are in
 | `run_tomcat_sync` | run | yes |  | missing |
 | `run_tomcat_update` | run | yes |  | missing |
 | `run_without_derived` | run | yes |  | missing |
-| `scaffold_catalog` | scaffold | yes | yes | missing |
-| `scaffold_create` | scaffold | yes | yes | missing |
-| `scaffold_options` | scaffold | yes | yes | missing |
+| `scaffold_catalog` | scaffold | yes | yes | integrated - internal/app/newproject_scaffold.go invokes the OpenIDEA RPC through the native Go adapter |
+| `scaffold_create` | scaffold | yes | yes | integrated - internal/app/newproject_scaffold.go invokes the OpenIDEA RPC through the native Go adapter |
+| `scaffold_options` | scaffold | yes | yes | integrated - internal/app/newproject_scaffold.go invokes the OpenIDEA RPC through the native Go adapter |
 | `scaffold_requirements` | scaffold | yes |  | missing |
-| `sdk_detect` | sdk | yes |  | missing |
+| `sdk_detect` | sdk | yes | yes | missing |
 | `sdk_locate_tools` | sdk | yes |  | missing |
 | `sdk_php_composer_install` | sdk | yes |  | missing |
 | `sdk_php_effective` | sdk | yes |  | missing |
@@ -2318,16 +2546,16 @@ Local-only commands and the per-command argument lists are in
 | `sdk_python_packages` | sdk | yes |  | missing |
 | `sdk_python_pip` | sdk | yes |  | missing |
 | `sdk_python_project_interpreters` | sdk | yes |  | missing |
-| `search_start` | search | yes | yes | missing |
-| `search_validate` | search | yes |  | missing |
+| `search_start` | search | yes | yes | integrated - internal/app/search.go, internal/app/bench.go, internal/app/se.go and 1 more invokes the OpenIDEA RPC through the native Go adapter |
+| `search_validate` | search | yes | yes | integrated - internal/app/search.go invokes the OpenIDEA RPC through the native Go adapter |
 | `set_recent_project_groups` | app | no |  | missing |
 | `settings_export` | app | no |  | missing |
-| `settings_get` | app | yes |  | missing |
-| `settings_get_global` | app | no |  | missing |
+| `settings_get` | app | yes | yes | integrated - internal/app/build_tool_actions.go, internal/app/jdk_download.go invokes the OpenIDEA RPC through the native Go adapter |
+| `settings_get_global` | app | no |  | integrated - internal/app/agent_settings_backend.go invokes the OpenIDEA RPC through the native Go adapter |
 | `settings_import` | app | no |  | missing |
 | `settings_list_jetbrains_ides` | app | no |  | missing |
 | `settings_read_jetbrains` | app | no |  | missing |
-| `settings_set` | app | yes |  | missing |
+| `settings_set` | app | yes | yes | integrated - internal/app/build_tool_actions.go, internal/app/agent_settings_backend.go, internal/app/jdk_download.go and 1 more invokes the OpenIDEA RPC through the native Go adapter |
 | `spell_check` | spell | yes |  | missing |
 | `spell_suggest` | spell | yes |  | missing |
 | `spring_route_sources` | nav | no |  | missing |
@@ -2344,108 +2572,108 @@ Local-only commands and the per-command argument lists are in
 | `structural_validate` | analysis | yes |  | missing |
 | `syntax_errors` | syntax | yes |  | missing |
 | `syntax_expression_at` | syntax | yes |  | missing |
-| `syntax_identifiers` | syntax | yes |  | missing |
+| `syntax_identifiers` | syntax | yes | yes | missing |
 | `syntax_identifiers_in_files` | syntax | yes |  | missing |
-| `syntax_locals` | syntax | yes |  | missing |
+| `syntax_locals` | syntax | yes | yes | missing |
 | `syntax_node_at` | syntax | yes |  | missing |
-| `syntax_structural_ranges` | syntax | yes |  | missing |
+| `syntax_structural_ranges` | syntax | yes | yes | missing |
 | `syntax_support` | syntax | yes |  | missing |
 | `system_font_families` | fonts | no |  | missing |
 | `system_probe_hotkeys` | hotkeys | no |  | missing |
-| `term_available_shells` | term | yes | yes | missing |
-| `term_default_shell` | term | yes | yes | missing |
+| `term_available_shells` | term | yes | yes | integrated - internal/app/term.go invokes the OpenIDEA RPC through the native Go adapter |
+| `term_default_shell` | term | yes | yes | integrated - internal/app/term.go invokes the OpenIDEA RPC through the native Go adapter |
 | `term_is_busy` | term | yes |  | missing |
-| `term_kill` | term | yes | yes | missing |
+| `term_kill` | term | yes | yes | integrated - internal/app/term.go, internal/app/app.go invokes the OpenIDEA RPC through the native Go adapter |
 | `term_resize` | term | yes |  | missing |
-| `term_spawn` | term | yes | yes | missing |
+| `term_spawn` | term | yes | yes | integrated - internal/app/term.go invokes the OpenIDEA RPC through the native Go adapter |
 | `term_store_image` | term | yes |  | missing |
-| `term_write` | term | yes | yes | missing |
-| `tools_install` | tools | yes | yes | missing |
-| `tools_list` | tools | yes | yes | missing |
-| `tools_uninstall` | tools | yes | yes | missing |
-| `undo_workspace_edit` | lsp | yes | yes | missing |
-| `vcs_add_to_ignore` | vcs | yes | yes | missing |
-| `vcs_add_worktree` | vcs | yes |  | missing |
-| `vcs_apply_patch` | vcs | yes |  | missing |
-| `vcs_blame` | vcs | yes | yes | missing |
+| `term_write` | term | yes | yes | integrated - internal/app/term.go invokes the OpenIDEA RPC through the native Go adapter |
+| `tools_install` | tools | yes | yes | integrated - internal/openidea/tools.go invokes the OpenIDEA RPC through the native Go adapter |
+| `tools_list` | tools | yes | yes | integrated - internal/openidea/tools.go invokes the OpenIDEA RPC through the native Go adapter |
+| `tools_uninstall` | tools | yes | yes | integrated - internal/openidea/tools.go invokes the OpenIDEA RPC through the native Go adapter |
+| `undo_workspace_edit` | lsp | yes | yes | integrated - internal/app/refactor.go invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_add_to_ignore` | vcs | yes | yes | integrated - internal/app/vcs_more.go, internal/app/vcs.go invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_add_worktree` | vcs | yes | yes | integrated - internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_apply_patch` | vcs | yes | yes | integrated - internal/app/vcs_more.go, internal/app/vcs_log_actions.go invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_blame` | vcs | yes | yes | integrated - internal/app/annotate.go, internal/app/codevision.go invokes the OpenIDEA RPC through the native Go adapter |
 | `vcs_block_history` | vcs | yes |  | missing |
-| `vcs_branch_info` | vcs | yes | yes | missing |
-| `vcs_branches` | vcs | yes | yes | missing |
-| `vcs_changelists_load` | vcs | yes |  | missing |
-| `vcs_changelists_save` | vcs | yes |  | missing |
-| `vcs_checkout` | vcs | yes | yes | missing |
-| `vcs_clone` | vcs | yes |  | missing |
-| `vcs_commit` | vcs | yes | yes | missing |
+| `vcs_branch_info` | vcs | yes | yes | integrated - internal/openidea/types.go, internal/app/branch.go invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_branches` | vcs | yes | yes | integrated - internal/openidea/types.go, internal/app/branch.go, internal/app/vcs_log_actions.go invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_changelists_load` | vcs | yes | yes | integrated - internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_changelists_save` | vcs | yes | yes | integrated - internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_checkout` | vcs | yes | yes | integrated - internal/app/vcs_operations.go, internal/app/branch.go, internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_clone` | vcs | yes | yes | integrated - internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_commit` | vcs | yes | yes | integrated - internal/app/vcs_operations.go, internal/app/commit.go invokes the OpenIDEA RPC through the native Go adapter |
 | `vcs_commit_files` | vcs | yes |  | missing |
-| `vcs_commits_changes` | vcs | yes | yes | missing |
-| `vcs_compare_paths` | vcs | yes |  | missing |
+| `vcs_commits_changes` | vcs | yes | yes | integrated - internal/app/log.go invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_compare_paths` | vcs | yes | yes | integrated - internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter |
 | `vcs_compare_scope` | vcs | yes |  | missing |
-| `vcs_config_get` | vcs | yes |  | missing |
-| `vcs_conflict_versions` | vcs | yes |  | missing |
-| `vcs_create_branch` | vcs | yes | yes | missing |
-| `vcs_create_patch` | vcs | yes |  | missing |
-| `vcs_create_tag` | vcs | yes | yes | missing |
-| `vcs_delete_branch` | vcs | yes | yes | missing |
-| `vcs_delete_tag` | vcs | yes | yes | missing |
+| `vcs_config_get` | vcs | yes | yes | integrated - internal/app/vcs_more.go, internal/app/vcs_log_actions.go invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_conflict_versions` | vcs | yes | yes | integrated - internal/app/vcs_more.go, internal/app/merge_editor.go invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_create_branch` | vcs | yes | yes | integrated - internal/app/vcs_operations.go, internal/app/branch.go invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_create_patch` | vcs | yes | yes | integrated - internal/app/vcs_more.go, internal/app/vcs_log_actions.go invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_create_tag` | vcs | yes | yes | integrated - internal/app/vcs_operations.go invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_delete_branch` | vcs | yes | yes | integrated - internal/app/vcs_operations.go, internal/app/branch.go, internal/app/vcs_log_actions.go invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_delete_tag` | vcs | yes | yes | integrated - internal/app/vcs_operations.go invokes the OpenIDEA RPC through the native Go adapter |
 | `vcs_detected_git` | vcs | yes |  | missing |
-| `vcs_diff_hunks` | vcs | yes | yes | missing |
+| `vcs_diff_hunks` | vcs | yes | yes | integrated - internal/app/codeintel.go invokes the OpenIDEA RPC through the native Go adapter |
 | `vcs_diff_numstat` | vcs | yes |  | missing |
-| `vcs_diff_revisions` | vcs | yes |  | missing |
+| `vcs_diff_revisions` | vcs | yes | yes | integrated - internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter |
 | `vcs_diff_text` | vcs | yes |  | missing |
-| `vcs_diff_with_worktree` | vcs | yes |  | missing |
-| `vcs_discard` | vcs | yes | yes | missing |
-| `vcs_edit_remote` | vcs | yes |  | missing |
-| `vcs_file_at` | vcs | yes | yes | missing |
+| `vcs_diff_with_worktree` | vcs | yes | yes | integrated - internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_discard` | vcs | yes | yes | integrated - internal/app/vcs_operations.go, internal/app/vcs.go invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_edit_remote` | vcs | yes | yes | integrated - internal/app/vcs_remotes.go invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_file_at` | vcs | yes | yes | integrated - internal/app/codeintel.go, internal/app/agent_diff.go, internal/app/vcs_more.go and 2 more invokes the OpenIDEA RPC through the native Go adapter |
 | `vcs_file_mode` | vcs | yes |  | missing |
 | `vcs_git_version` | vcs | yes |  | missing |
 | `vcs_has_hook` | vcs | yes |  | missing |
-| `vcs_init` | vcs | yes | yes | missing |
+| `vcs_init` | vcs | yes | yes | integrated - internal/app/newproject.go invokes the OpenIDEA RPC through the native Go adapter |
 | `vcs_line_hunks` | vcs | yes |  | missing |
-| `vcs_log` | vcs | yes | yes | missing |
-| `vcs_log_details` | vcs | yes | yes | missing |
+| `vcs_log` | vcs | yes | yes | integrated - internal/app/log.go, internal/app/vcs_more.go, internal/app/vcs_log_actions.go invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_log_details` | vcs | yes | yes | integrated - internal/app/log.go invokes the OpenIDEA RPC through the native Go adapter |
 | `vcs_log_details_batch` | vcs | yes |  | missing |
 | `vcs_log_refs` | vcs | yes |  | missing |
 | `vcs_log_users` | vcs | yes |  | missing |
 | `vcs_merge` | vcs | yes |  | missing |
 | `vcs_merge_base` | vcs | yes |  | missing |
-| `vcs_merge_with` | vcs | yes | yes | missing |
+| `vcs_merge_with` | vcs | yes | yes | integrated - internal/app/vcs_operations.go invokes the OpenIDEA RPC through the native Go adapter |
 | `vcs_move_worktree` | vcs | yes |  | missing |
-| `vcs_open_external_log` | vcs | yes |  | missing |
-| `vcs_operation` | vcs | yes | yes | missing |
-| `vcs_patch_preview` | vcs | yes |  | missing |
+| `vcs_open_external_log` | vcs | yes | yes | integrated - internal/app/agent_diff.go, internal/app/vcs_log_actions.go invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_operation` | vcs | yes | yes | integrated - internal/app/vcs_operations.go invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_patch_preview` | vcs | yes | yes | integrated - internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter |
 | `vcs_rebase` | vcs | yes |  | missing |
-| `vcs_rebase_with` | vcs | yes | yes | missing |
-| `vcs_remote` | vcs | yes | yes | missing |
-| `vcs_remotes` | vcs | yes |  | missing |
-| `vcs_remove_worktree` | vcs | yes |  | missing |
-| `vcs_rename_branch` | vcs | yes |  | missing |
-| `vcs_restore_branch` | vcs | yes |  | missing |
+| `vcs_rebase_with` | vcs | yes | yes | integrated - internal/app/vcs_operations.go, internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_remote` | vcs | yes | yes | integrated - internal/app/vcs_operations.go invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_remotes` | vcs | yes | yes | integrated - internal/openidea/types.go, internal/app/vcs_remotes.go invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_remove_worktree` | vcs | yes | yes | integrated - internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_rename_branch` | vcs | yes | yes | missing |
+| `vcs_restore_branch` | vcs | yes | yes | missing |
 | `vcs_restore_head` | vcs | yes |  | missing |
 | `vcs_restore_tag` | vcs | yes |  | missing |
 | `vcs_revision_children` | vcs | yes |  | missing |
 | `vcs_revision_files` | vcs | yes |  | missing |
-| `vcs_reword` | vcs | yes |  | missing |
+| `vcs_reword` | vcs | yes | yes | integrated - internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter |
 | `vcs_roots` | vcs | yes |  | missing |
-| `vcs_shelf_delete` | vcs | yes |  | missing |
-| `vcs_shelf_diff` | vcs | yes |  | missing |
-| `vcs_shelf_import` | vcs | yes |  | missing |
-| `vcs_shelf_patch` | vcs | yes |  | missing |
-| `vcs_shelf_rename` | vcs | yes |  | missing |
-| `vcs_shelve` | vcs | yes |  | missing |
-| `vcs_shelves` | vcs | yes |  | missing |
-| `vcs_stage` | vcs | yes | yes | missing |
+| `vcs_shelf_delete` | vcs | yes | yes | integrated - internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_shelf_diff` | vcs | yes | yes | integrated - internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_shelf_import` | vcs | yes | yes | integrated - internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_shelf_patch` | vcs | yes | yes | integrated - internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_shelf_rename` | vcs | yes | yes | integrated - internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_shelve` | vcs | yes | yes | integrated - internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_shelves` | vcs | yes | yes | integrated - internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_stage` | vcs | yes | yes | integrated - internal/app/vcs_operations.go, internal/app/vcs_more.go, internal/app/merge_editor.go and 1 more invokes the OpenIDEA RPC through the native Go adapter |
 | `vcs_stage_hunks` | vcs | yes |  | missing |
 | `vcs_stage_patch` | vcs | yes |  | missing |
-| `vcs_stash_apply` | vcs | yes | yes | missing |
+| `vcs_stash_apply` | vcs | yes | yes | integrated - internal/app/vcs_operations.go invokes the OpenIDEA RPC through the native Go adapter |
 | `vcs_stash_drop` | vcs | yes |  | missing |
-| `vcs_stash_push` | vcs | yes | yes | missing |
-| `vcs_stashes` | vcs | yes | yes | missing |
-| `vcs_status` | vcs | yes | yes | missing |
-| `vcs_tags` | vcs | yes | yes | missing |
-| `vcs_undo_commit` | vcs | yes |  | missing |
-| `vcs_unshelve` | vcs | yes |  | missing |
-| `vcs_unstage` | vcs | yes | yes | missing |
-| `vcs_worktrees` | vcs | yes |  | missing |
+| `vcs_stash_push` | vcs | yes | yes | integrated - internal/app/vcs_operations.go invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_stashes` | vcs | yes | yes | integrated - internal/openidea/types.go, internal/app/vcs_operations.go invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_status` | vcs | yes | yes | integrated - internal/app/commit.go, internal/app/merge_editor.go, internal/app/diff.go and 1 more invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_tags` | vcs | yes | yes | integrated - internal/app/vcs_operations.go invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_undo_commit` | vcs | yes | yes | integrated - internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_unshelve` | vcs | yes | yes | integrated - internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_unstage` | vcs | yes | yes | integrated - internal/app/vcs.go invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_worktrees` | vcs | yes | yes | integrated - internal/openidea/types.go, internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter |
 | `vcs_write_patch` | vcs | yes |  | missing |
 | `web_browsers` | web | no |  | missing |
 | `web_goto` | nav | yes |  | missing |
@@ -2481,14 +2709,14 @@ Local-only commands and the per-command argument lists are in
 | `window_take_launch` | window | no |  | missing |
 | `window_toggle_fullscreen` | window | no |  | missing |
 | `window_toggle_zoom` | window | no |  | missing |
-| `workspace_attach` | workspace | no |  | missing |
-| `workspace_create` | workspace | no |  | missing |
-| `workspace_discover_projects` | workspace | no |  | missing |
-| `workspace_update` | workspace | no |  | missing |
+| `workspace_attach` | workspace | yes | yes | integrated - internal/app/project_workspace.go invokes the OpenIDEA RPC through the native Go adapter |
+| `workspace_create` | workspace | yes | yes | integrated - internal/app/project_workspace.go invokes the OpenIDEA RPC through the native Go adapter |
+| `workspace_discover_projects` | workspace | yes | yes | integrated - internal/app/project_workspace.go invokes the OpenIDEA RPC through the native Go adapter |
+| `workspace_update` | workspace | yes | yes | integrated - internal/app/project_workspace.go invokes the OpenIDEA RPC through the native Go adapter |
 | `wsl_distros` | wsl | no |  | missing |
 | `wsl_resolve` | wsl | no |  | missing |
 
-476 commands are served over stdio and 134 are called by GoIDEA today. A command
+481 commands are served over stdio and 268 are called by GoIDEA today. A command
 that is registered only in the desktop shell needs an `ops` module before stdio
 can serve it; a GoIDEA check counts only when the UI path works end to end.
 
@@ -2538,38 +2766,38 @@ instead (RPC_PROTOCOL.md).
 
 | Command | Streaming arguments | Status |
 | --- | --- | --- |
-| `agent_registry_install` | `onEvent` | missing |
-| `agent_subscribe` | `onEvent` | missing |
-| `build_compile_file` | `onEvent` | missing |
-| `build_run` | `onEvent` | missing |
-| `build_sync` | `onProgress` | missing |
-| `debug_heap_capture` | `onProgress` | missing |
-| `debug_heap_open` | `onProgress` | missing |
-| `fs_compare_directories` | `onProgress` | missing |
+| `agent_registry_install` | `onEvent` | integrated - internal/app/agent_registry_settings.go invokes the OpenIDEA RPC through the native Go adapter |
+| `agent_subscribe` | `onEvent` | integrated - internal/app/agents.go, internal/app/agents_smoke.go invokes the OpenIDEA RPC through the native Go adapter |
+| `build_compile_file` | `onEvent` | integrated - internal/app/build.go invokes the OpenIDEA RPC through the native Go adapter |
+| `build_run` | `onEvent` | integrated - internal/app/build.go invokes the OpenIDEA RPC through the native Go adapter |
+| `build_sync` | `onProgress` | integrated - internal/app/maven.go invokes the OpenIDEA RPC through the native Go adapter |
+| `debug_heap_capture` | `onProgress` | integrated - internal/app/debug_heap.go invokes the OpenIDEA RPC through the native Go adapter |
+| `debug_heap_open` | `onProgress` | integrated - internal/app/debug_heap.go invokes the OpenIDEA RPC through the native Go adapter |
+| `fs_compare_directories` | `onProgress` | integrated - internal/app/dircompare.go invokes the OpenIDEA RPC through the native Go adapter |
 | `inspect_code` | `onEvent` | missing |
-| `jdk_download` | `onEvent` | missing |
-| `lsp_code_action_query` | `only` | missing |
+| `jdk_download` | `onEvent` | integrated - internal/openidea/tools.go, internal/app/jdk_download.go invokes the OpenIDEA RPC through the native Go adapter |
+| `lsp_code_action_query` | `only` | integrated - internal/app/intents.go, internal/app/source_actions.go invokes the OpenIDEA RPC through the native Go adapter |
 | `lsp_code_actions` | `only` | missing |
-| `lsp_goto_implementation` | `onPartial` | missing |
-| `lsp_references` | `onPartial` | missing |
+| `lsp_goto_implementation` | `onPartial` | integrated - internal/app/navigation.go invokes the OpenIDEA RPC through the native Go adapter |
+| `lsp_references` | `onPartial` | integrated - internal/app/codevision.go, internal/app/usages.go invokes the OpenIDEA RPC through the native Go adapter |
 | `notebook_execute` | `onOutput` | missing |
 | `plugin_service_log` | `on`, `onLine` | missing |
 | `plugin_terminal_session_spawn` | `onOutput` | missing |
-| `replace_in_files` | `onEvent` | missing |
+| `replace_in_files` | `onEvent` | integrated - internal/app/search.go invokes the OpenIDEA RPC through the native Go adapter |
 | `replace_preview` | `only` | missing |
-| `run_start` | `onOutput` | missing |
-| `scaffold_create` | `onEvent` | missing |
+| `run_start` | `onOutput` | integrated - internal/app/run.go invokes the OpenIDEA RPC through the native Go adapter |
+| `scaffold_create` | `onEvent` | integrated - internal/app/newproject_scaffold.go invokes the OpenIDEA RPC through the native Go adapter |
 | `sdk_project_libraries` | `onGroups` | missing |
 | `sdk_python_create_venv` | `onOutput` | missing |
 | `sdk_python_pip` | `onOutput` | missing |
-| `search_start` | `onEvent` | missing |
+| `search_start` | `onEvent` | integrated - internal/app/search.go, internal/app/bench.go, internal/app/se.go and 1 more invokes the OpenIDEA RPC through the native Go adapter |
 | `structural_search` | `onEvent` | missing |
-| `term_spawn` | `onOutput` | missing |
-| `tools_install` | `onEvent` | missing |
-| `vcs_clone` | `onOutput` | missing |
-| `vcs_operation` | `onOutput` | missing |
+| `term_spawn` | `onOutput` | integrated - internal/app/term.go invokes the OpenIDEA RPC through the native Go adapter |
+| `tools_install` | `onEvent` | integrated - internal/openidea/tools.go invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_clone` | `onOutput` | integrated - internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter |
+| `vcs_operation` | `onOutput` | integrated - internal/app/vcs_operations.go invokes the OpenIDEA RPC through the native Go adapter |
 | `vcs_rebase` | `onto` | missing |
-| `vcs_remote` | `onOutput` | missing |
+| `vcs_remote` | `onOutput` | integrated - internal/app/vcs_operations.go invokes the OpenIDEA RPC through the native Go adapter |
 
 ## Backend feature modules (crates)
 

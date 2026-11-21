@@ -20,16 +20,19 @@ const (
 	debugViewVariables debugView = iota
 	debugViewConsole
 	debugViewMemory
+	debugViewHeap
 )
 
 type debugConsoleView struct {
-	searching bool
-	query     string
-	noFollow  bool
-	wrap      bool
-	expr      string
-	busy      bool
-	list      ui.ListState
+	searching   bool
+	query       string
+	noFollow    bool
+	wrap        bool
+	expr        string
+	busy        bool
+	history     []string
+	historyOpen bool
+	list        ui.ListState
 }
 
 func (m *Model) debugPanel(c *ui.Context, p *ui.Theme) {
@@ -73,6 +76,8 @@ func (m *Model) debugPanel(c *ui.Context, p *ui.Theme) {
 			m.debugConsole(c, p, oi)
 		case debugViewMemory:
 			m.debugMemory(c, p, oi)
+		case debugViewHeap:
+			m.debugHeap(c, p, oi)
 		default:
 			ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
 				m.debugFrames(c, p)
@@ -119,7 +124,7 @@ func (m *Model) debugActions(c *ui.Context, oi oiColors) {
 		debugIcon(c, oi, "into", "run/stepInto", "Step Into", paused, false, m.StepInto)
 		debugIcon(c, oi, "out", "run/stepOut", "Step Out", paused, false, m.StepOut)
 		separator()
-		debugIcon(c, oi, "breakpoints", "run/viewBreakpoints", "View Breakpoints", true, false, nil).
+		debugIcon(c, oi, "breakpoints", "run/viewBreakpoints", "View Breakpoints", true, false, m.OpenDebugBreakpoints).
 			Menu(func(menu *ui.Menu) { m.debugBreakpointMenu(menu) })
 		debugIcon(c, oi, "mute", "run/muteBreakpoints", "Mute Breakpoints", true, d.muted, m.ToggleBreakpointsMuted)
 		debugIcon(c, oi, "more", "general/moreVertical", "More Debug Actions", true, false, nil).
@@ -127,16 +132,24 @@ func (m *Model) debugActions(c *ui.Context, oi oiColors) {
 				addMenuEntries(menu, m, []menuEntry{
 					action("Evaluate Expression…", "debug.evaluate", ""),
 					action("Show Execution Point", "debug.showExecutionPoint", ""),
+					action("Smart Step Into", "debug.smartStepInto", ""),
+					action("Reset Frame", "debug.resetFrame", ""),
+					action("Set Value…", "debug.setValue", ""),
+					action("Browse Console History", "debug.browseConsoleHistory", ""),
 					action("Force Step Into", "debug.forceStepInto", ""),
 					action("Force Step Over", "debug.forceStepOver", ""),
 					action("Reload Changed Classes", "debug.reloadChangedClasses", ""),
+					action("Cancel Hot Swap Build", "debug.cancelHotSwap", ""),
+					action("Capture Heap Snapshot", "debug.heap.capture", ""),
+					action("Open Heap Dump…", "debug.heap.open", ""),
+					action("Save Heap Dump As…", "debug.heap.saveDump", ""),
 				})
 			})
 		separator()
 		for _, tab := range []struct {
 			id    debugView
 			label string
-		}{{debugViewVariables, "Threads & Variables"}, {debugViewConsole, "Console"}, {debugViewMemory, "Memory"}} {
+		}{{debugViewVariables, "Threads & Variables"}, {debugViewConsole, "Console"}, {debugViewMemory, "Memory"}, {debugViewHeap, "Heap"}} {
 			b := ui.ButtonBase(c.Key("debug-view:"+tab.label)).Height(25).Padding(0, 8).
 				Radius(4).AlignItems(ui.Center)
 			if d.view == tab.id {
@@ -276,6 +289,12 @@ func (m *Model) evaluateDebugConsole() {
 		return
 	}
 	v.expr, v.busy = "", true
+	if len(v.history) == 0 || v.history[len(v.history)-1] != expr {
+		v.history = append(v.history, expr)
+		if over := len(v.history) - maxWatches*5; over > 0 {
+			v.history = append(v.history[:0], v.history[over:]...)
+		}
+	}
 	session, frame := d.session, d.frameID
 	d.appendOutput("› "+expr, "system")
 	m.invalidate()

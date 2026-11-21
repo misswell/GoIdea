@@ -12,6 +12,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
+	mermaidpkg "mayoi/internal/mermaid"
 	"mayoi/internal/remote"
 	"mayoi/locales"
 )
@@ -28,20 +29,20 @@ const (
 	mermaidExportSide  = 8192
 )
 
-// png draws the diagram as a PNG, as the window shows it, on the
+// mermaidPNG draws the diagram as a PNG, as the window shows it, on the
 // background of the theme it was drawn in.
-func (d *mermaidDiagram) png() ([]byte, error) {
-	if d.svg == nil || d.w <= 0 || d.h <= 0 {
+func mermaidPNG(d *mermaidDiagram) ([]byte, error) {
+	if d.SVG == nil || d.W <= 0 || d.H <= 0 {
 		return nil, fmt.Errorf("%s", locales.ErrSVGNoSize())
 	}
 	// A copy, so that its labels are shaped for the scale here.
 	dg := *d
-	dg.shaped, dg.scale = nil, 0
-	w, h := int(math.Ceil(float64(d.w+2*mermaidExportPad))), int(math.Ceil(float64(d.h+2*mermaidExportPad)))
+	dg.Shaped, dg.Scale = nil, 0
+	w, h := int(math.Ceil(float64(d.W+2*mermaidExportPad))), int(math.Ceil(float64(d.H+2*mermaidExportPad)))
 	scale := min(float32(mermaidExportScale), mermaidExportSide/float32(max(w, h)))
 	img := ui.Render(func(c *ui.Context) {
-		ui.Box(c).Fill().Background(d.style.bg).Draw(func(pt *ui.Painter, r ui.Rect) {
-			dg.draw(pt, ui.Rect{X: r.X + mermaidExportPad, Y: r.Y + mermaidExportPad, W: d.w, H: d.h})
+		ui.Box(c).Fill().Background(d.Style.BG).Draw(func(pt *ui.Painter, r ui.Rect) {
+			dg.Draw(pt, ui.Rect{X: r.X + mermaidExportPad, Y: r.Y + mermaidExportPad, W: d.W, H: d.H})
 		})
 	}, w, h, scale)
 	var b bytes.Buffer
@@ -51,48 +52,48 @@ func (d *mermaidDiagram) png() ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-// exportSVG is the diagram as an SVG that draws it whole, its labels as
+// mermaidExportSVG is the diagram as an SVG that draws it whole, its labels as
 // text where the window draws them, on the background of its theme.
-func (d *mermaidDiagram) exportSVG() []byte {
+func mermaidExportSVG(d *mermaidDiagram) []byte {
 	var b bytes.Buffer
-	w, h := d.w+2*mermaidExportPad, d.h+2*mermaidExportPad
+	w, h := d.W+2*mermaidExportPad, d.H+2*mermaidExportPad
 	fmt.Fprintf(&b, `<svg xmlns="http://www.w3.org/2000/svg" width="%g" height="%g" viewBox="0 0 %g %g">`, w, h, w, h)
-	fmt.Fprintf(&b, `<rect width="%g" height="%g" fill="%s"/>`, w, h, hexColor(d.style.bg))
+	fmt.Fprintf(&b, `<rect width="%g" height="%g" fill="%s"/>`, w, h, hexColor(d.Style.BG))
 	// The diagram's own SVG, placed in the room around it.
-	shapes := d.shapes
+	shapes := d.Shapes
 	open := bytes.Index(shapes, []byte("<svg"))
 	last := bytes.LastIndex(shapes, []byte("</svg>"))
 	inner := open >= 0 && bytes.IndexByte(shapes[open:], '>') >= 0 && last > open
 	if inner {
 		end := open + bytes.IndexByte(shapes[open:], '>')
-		root := svgSizeAttr.ReplaceAllString(string(shapes[open:end]), "")
+		root := mermaidpkg.StripSVGSizeAttributes(string(shapes[open:end]))
 		root = svgStyleAttr.ReplaceAllString(root, "")
 		fmt.Fprintf(&b, `%s x="%d" y="%d" width="%g" height="%g" viewBox="0 0 %g %g" overflow="visible">`,
-			root, mermaidExportPad, mermaidExportPad, d.w, d.h, d.w, d.h)
+			root, mermaidExportPad, mermaidExportPad, d.W, d.H, d.W, d.H)
 		b.Write(shapes[end+1 : last])
 	} else {
 		fmt.Fprintf(&b, `<g transform="translate(%d %d)">`, mermaidExportPad, mermaidExportPad)
 	}
-	for _, l := range d.labels {
-		lay := ui.ShapeText(l.text, l.font, 0)
+	for _, l := range d.Labels {
+		lay := ui.ShapeText(l.Text, l.Font, 0)
 		_, lh := lay.Size()
-		m := l.font.Metrics()
+		m := l.Font.Metrics()
 		base := (lh-m.Ascent-m.Descent)/2 + m.Ascent
 		fmt.Fprintf(&b, `<text x="%g" y="%g" xml:space="preserve" font-family="%s" font-size="%g" fill="%s"`,
-			l.x, l.y+base, xmlEscape(svgFontFamily(l.font.Family)), l.font.Size, hexColor(l.color))
-		if l.font.Weight >= 600 {
+			l.X, l.Y+base, mermaidpkg.XMLEscape(svgFontFamily(l.Font.Family)), l.Font.Size, hexColor(l.Color))
+		if l.Font.Weight >= 600 {
 			b.WriteString(` font-weight="bold"`)
-		} else if l.font.Weight != 0 && l.font.Weight != 400 {
-			fmt.Fprintf(&b, ` font-weight="%d"`, l.font.Weight)
+		} else if l.Font.Weight != 0 && l.Font.Weight != 400 {
+			fmt.Fprintf(&b, ` font-weight="%d"`, l.Font.Weight)
 		}
-		if l.font.Italic {
+		if l.Font.Italic {
 			b.WriteString(` font-style="italic"`)
 		}
-		if l.angle != 0 {
-			fmt.Fprintf(&b, ` transform="rotate(%g %g %g)"`, l.angle, l.x, l.y)
+		if l.Angle != 0 {
+			fmt.Fprintf(&b, ` transform="rotate(%g %g %g)"`, l.Angle, l.X, l.Y)
 		}
 		b.WriteByte('>')
-		xmlEscapeTo(&b, l.text)
+		mermaidpkg.XMLEscapeTo(&b, l.Text)
 		b.WriteString("</text>")
 	}
 	if inner {
@@ -121,7 +122,7 @@ func svgFontFamily(family string) string {
 
 // copyDiagramImage puts the diagram on the clipboard as a PNG.
 func (a *app) copyDiagramImage(d *mermaidDiagram) {
-	img, err := d.png()
+	img, err := mermaidPNG(d)
 	if err == nil {
 		err = a.host.copyImage(img)
 	}
@@ -152,9 +153,9 @@ func (a *app) exportDiagram(d *mermaidDiagram, doc *document, n int, ext string)
 		var data []byte
 		var err error
 		if ext == "svg" {
-			data = d.exportSVG()
+			data = mermaidExportSVG(d)
 		} else {
-			data, err = d.png()
+			data, err = mermaidPNG(d)
 		}
 		if err == nil {
 			err = os.WriteFile(path, data, 0o644)

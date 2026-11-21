@@ -65,6 +65,8 @@ def main():
     ipc = parity.load_ipc()
     remote = ipc.remote_commands()
     status = parity.load_status()
+    aliases = parity.goidea_action_aliases()
+    registered_actions = parity.goidea_registered_actions()
 
     # The client-side orchestration each feature folder carries, which decides
     # B against A: a folder that is only glue over RPC is A, one with real
@@ -102,15 +104,22 @@ def main():
                 return "A"
         return "-"
 
-    def item_rows(area_dirs, kind):
+    def item_rows(area_dirs, kind, excluded_dirs=None):
         out = []
         for it in kind[1]:
             d = parity.feature_of(it.get("source", ""))
             key = kind[0] + ":" + it["id"]
-            st, ev = parity.status_doc(status, key, status)
+            if kind[0] == "action":
+                st, ev = parity.action_status(
+                    status, it["id"], aliases, registered_actions
+                )
+            else:
+                st, ev = parity.status_doc(status, key, status)
             if st in ("integrated", "engine"):
                 continue
             if area_dirs is not None and d not in area_dirs:
+                continue
+            if excluded_dirs is not None and d in excluded_dirs:
                 continue
             out.append((key, st, classify(key, st, d, kind[0]), d, ev))
         return out
@@ -143,6 +152,10 @@ def main():
     summary = {}
     for name, dirs in AREAS:
         rows = []
+        claimed = set()
+        for _, area_dirs in AREAS[:-1]:
+            if area_dirs:
+                claimed |= set(area_dirs)
         for kname, items in kinds:
             if kname == "feature" and dirs is not None:
                 for d in dirs:
@@ -154,10 +167,6 @@ def main():
                 continue
             if kname == "feature":
                 # 其他: every feature folder no earlier area claimed.
-                claimed = set()
-                for _, ds in AREAS[:-1]:
-                    if ds:
-                        claimed |= set(ds)
                 for d in sorted(orch):
                     if d in claimed:
                         continue
@@ -167,7 +176,9 @@ def main():
                         continue
                     rows.append((key, st, classify(key, st, d, "feature"), d, ev))
                 continue
-            rows += item_rows(dirs, (kname, items))
+            rows += item_rows(
+                dirs, (kname, items), claimed if name == "其他" else None
+            )
         seen = set()
         rows = [r for r in rows if not (r[0] in seen or seen.add(r[0]))]
         summary[name] = rows

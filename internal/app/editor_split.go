@@ -164,6 +164,12 @@ func (m *Model) duplicateTab(t *Tab) *Tab {
 	if t == nil || t.doc == nil {
 		return nil
 	}
+	switch t.kind {
+	case tabKindAgentSession, tabKindAgentHome:
+		return m.newAgentPageTab(t.kind, t.doc.Path(), t.pageTitle, t.agentTask)
+	case tabKindWhatsNew:
+		return m.newWhatsNewTab(t.pageVersion, t.pageNotes)
+	}
 	doc, err := m.reg.Open(context.Background(), t.doc.Path())
 	if err != nil {
 		m.fail(t.doc.Path(), err)

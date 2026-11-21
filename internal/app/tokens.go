@@ -37,9 +37,9 @@ type themeTokens struct {
 	SpaceXS, SpaceS, SpaceM, SpaceL, SpaceXL float32
 	RadiusS, RadiusM, RadiusL                float32
 
-	TitleBarHeight, StatusBarHeight, HeaderHeight float32
-	TabBarHeight, TabHeight                       float32
-	ButtonHeight, InputHeight                     float32
+	TitleBarHeight, StatusBarHeight, HeaderHeight, NavigationBarHeight float32
+	TabBarHeight, TabHeight                                            float32
+	ButtonHeight, InputHeight                                          float32
 
 	FontSizeS, FontSizeM, FontSizeL float32
 
@@ -54,7 +54,8 @@ var oiTokens = themeTokens{
 	RadiusS: oiRadiusS, RadiusM: oiRadiusM, RadiusL: oiRadiusL,
 
 	TitleBarHeight: oiTitleBarHeight, StatusBarHeight: oiStatusBarHeight,
-	HeaderHeight: oiHeaderHeight, TabBarHeight: oiTabBarHeight, TabHeight: oiTabHeight,
+	HeaderHeight: oiHeaderHeight, NavigationBarHeight: oiNavigationBarHeight,
+	TabBarHeight: oiTabBarHeight, TabHeight: oiTabHeight,
 	ButtonHeight: oiButtonHeight, InputHeight: oiInputHeight,
 
 	FontSizeS: oiFontSizeS, FontSizeM: oiFontSizeM, FontSizeL: oiFontSizeL,
@@ -68,3 +69,23 @@ var oiTokens = themeTokens{
 // oiTokensOf is the token set in use. Both appearances share it, as OpenIDEA's
 // light theme overrides colours only.
 func oiTokensOf(p *ui.Theme) themeTokens { return oiTokens }
+
+// oiTokensFor applies OpenIDEA's :root[data-compact] overrides. Only the
+// sizing tokens named there change; colours continue to follow the theme.
+func oiTokensFor(m *Model, p *ui.Theme) themeTokens {
+	if m == nil || !m.prefs.Appearance.CompactMode {
+		return oiTokensOf(p)
+	}
+	tk := oiTokensOf(p)
+	tk.TitleBarHeight = 32
+	tk.StatusBarHeight = 28 // IDEA's 24px row plus the same 4px frame as normal
+	tk.HeaderHeight = 32
+	tk.TabBarHeight = 32
+	tk.TabHeight = 24
+	tk.ButtonHeight = 24
+	tk.InputHeight = 24
+	tk.StripeButton = 24
+	tk.StripeWidth = 34 // 24px button + 4px outer padding + 6px island gap
+	tk.StripeGap = 8
+	return tk
+}

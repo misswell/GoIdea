@@ -58,6 +58,22 @@ func (m *Model) openWhatsNewPage(version, notes string) {
 		m.invalidate()
 		return
 	}
+	t := m.newWhatsNewTab(version, notes)
+	m.noteTabUse(t)
+	if m.split != nil {
+		m.focusGroup(groupFocused)
+	}
+	m.insertTab(t)
+	m.active = m.tabIndex(t)
+	m.showingWelcome = false
+	m.revealEditor()
+	m.applyActive()
+	m.invalidate()
+}
+
+// newWhatsNewTab builds one independent page tab. The registry is not
+// involved because the page is a virtual read-only document.
+func (m *Model) newWhatsNewTab(version, notes string) *Tab {
 	doc := docbridge.Virtual("What's New", "")
 	t := &Tab{
 		doc:         doc,
@@ -69,16 +85,7 @@ func (m *Model) openWhatsNewPage(version, notes string) {
 	t.state.Font = ui.Font{Family: oiFontUI, Size: m.prefs.fontSize()}
 	t.synced = doc.Buffer().Version()
 	t.seen = t.synced
-	m.noteTabUse(t)
-	if m.split != nil {
-		m.focusGroup(groupFocused)
-	}
-	m.insertTab(t)
-	m.active = m.tabIndex(t)
-	m.showingWelcome = false
-	m.revealEditor()
-	m.applyActive()
-	m.invalidate()
+	return t
 }
 
 // CloseWhatsNew closes the page, which the standalone page's close button
@@ -128,7 +135,7 @@ func (m *Model) whatsNewStandalone(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	ui.Column(c).Fill().Background(p.Background).Children(func() {
-		ui.Row(c).Height(oiTabBarHeight).Shrink(0).Padding(0, 6).
+		ui.Row(c).Height(oiTokensFor(m, p).TabBarHeight).Shrink(0).Padding(0, 6).
 			AlignItems(ui.Center).Gap(6).Background(p.Surface).
 			BorderWidth(0, 0, 1, 0).BorderColor(p.Border).Children(func() {
 			ui.Text(c, "What's New").FontSize(13).TextColor(p.Text).SingleLine()

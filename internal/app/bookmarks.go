@@ -41,6 +41,44 @@ type BookmarkList struct {
 // bookmarkMnemonics are the keys a bookmark can be reached with.
 const bookmarkMnemonics = "1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
+type bookmarkDigitKey struct {
+	key   ui.Key
+	label string
+}
+
+var bookmarkDigitKeys = []bookmarkDigitKey{
+	{ui.Key1, "1"}, {ui.Key2, "2"}, {ui.Key3, "3"}, {ui.Key4, "4"},
+	{ui.Key5, "5"}, {ui.Key6, "6"}, {ui.Key7, "7"}, {ui.Key8, "8"},
+	{ui.Key9, "9"}, {ui.Key0, "0"},
+}
+
+func init() {
+	for _, digit := range bookmarkDigitKeys {
+		digit := digit
+		_ = registerAction(&Action{
+			ID:       "navigate.toggleBookmark" + digit.label,
+			Title:    "Toggle Bookmark with Mnemonic " + digit.label,
+			Category: "Navigate",
+			Keywords: "bookmark mnemonic toggle line",
+			When:     func(m *Model) bool { return m.activeEditorAvailable() },
+			Builtin:  true,
+			Run: func(m *Model) {
+				m.ToggleBookmarkMnemonic(digit.label)
+			},
+		})
+		_ = registerAction(&Action{
+			ID:       "navigate.gotoBookmark" + digit.label,
+			Title:    "Go to Bookmark " + digit.label,
+			Category: "Navigate",
+			Keywords: "bookmark mnemonic navigate jump",
+			Builtin:  true,
+			Run: func(m *Model) {
+				m.JumpBookmarkMnemonic(digit.label)
+			},
+		})
+	}
+}
+
 // bookmarkColor paints a bookmark in the gutter, apart from the colors Git
 // changes and breakpoints use.
 var bookmarkColor = ui.RGB(232, 168, 64)
@@ -417,21 +455,13 @@ func (m *Model) bookmarkDigitShortcuts(c *ui.Context) {
 	if m.overlayOpen() {
 		return
 	}
-	digits := []struct {
-		key   ui.Key
-		label string
-	}{
-		{ui.Key1, "1"}, {ui.Key2, "2"}, {ui.Key3, "3"}, {ui.Key4, "4"},
-		{ui.Key5, "5"}, {ui.Key6, "6"}, {ui.Key7, "7"}, {ui.Key8, "8"},
-		{ui.Key9, "9"}, {ui.Key0, "0"},
-	}
-	for _, d := range digits {
+	for _, d := range bookmarkDigitKeys {
 		if c.Shortcut(ui.Ctrl|ui.Shift, d.key) {
 			m.ToggleBookmarkMnemonic(d.label)
 			return
 		}
 	}
-	for _, d := range digits {
+	for _, d := range bookmarkDigitKeys {
 		if c.Shortcut(ui.Ctrl, d.key) {
 			m.JumpBookmarkMnemonic(d.label)
 			return

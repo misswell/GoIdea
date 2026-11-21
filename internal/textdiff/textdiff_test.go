@@ -101,6 +101,57 @@ func TestCompareDeletion(t *testing.T) {
 	}
 }
 
+func TestCompareWithWhitespacePolicies(t *testing.T) {
+	old := "if (ready) {\n\tvalue = 1;\n}\n"
+	cur := "if ( ready ) {\n  value=1;\n}\n"
+	if rows := CompareWithOptions(old, cur, 3, Options{}); len(rows) == 0 {
+		t.Fatal("default comparison ignored whitespace changes")
+	}
+	if rows := CompareWithOptions(old, cur, 3, Options{TrimWhitespace: true}); len(rows) == 0 {
+		t.Fatal("trim comparison ignored inner whitespace changes")
+	}
+	if rows := CompareWithOptions(old, cur, 3, Options{IgnoreWhitespace: true}); rows != nil {
+		t.Fatalf("ignore-whitespace rows = %v", rows)
+	}
+}
+
+func TestCompareIgnoreWhitespaceAndEmptyLines(t *testing.T) {
+	old := "first\n \n\t\nlast\n"
+	cur := " first\nlast\n"
+	if rows := CompareWithOptions(old, cur, 3, Options{IgnoreWhitespaceLines: true}); rows != nil {
+		t.Fatalf("whitespace and empty line changes produced %v", rows)
+	}
+
+	old = "first\n\nold\nlast\n"
+	cur = "first\nnew\nlast\n"
+	rows := CompareWithOptions(old, cur, 3, Options{IgnoreWhitespaceLines: true})
+	if got := kinds(rows); got != "H -+ " {
+		t.Fatalf("kinds = %q in %v", got, rows)
+	}
+	if rows[0].Text != "@@ -1,3 +1,3 @@" {
+		t.Fatalf("header = %q", rows[0].Text)
+	}
+	if rows[2].Old != 3 || rows[2].Text != "old" {
+		t.Fatalf("delete row = %+v", rows[2])
+	}
+	if rows[3].New != 2 || rows[3].Text != "new" {
+		t.Fatalf("add row = %+v", rows[3])
+	}
+}
+
+func TestCompareIgnoreWhitespaceAndEmptyLinesAtEdges(t *testing.T) {
+	rows := CompareWithOptions("old\n\n", "\nnew\n", 0, Options{IgnoreWhitespaceLines: true})
+	if got := kinds(rows); got != "H-+" {
+		t.Fatalf("kinds = %q in %v", got, rows)
+	}
+	if rows[0].Text != "@@ -1 +2 @@" {
+		t.Fatalf("header = %q", rows[0].Text)
+	}
+	if rows[1].Old != 1 || rows[2].New != 2 {
+		t.Fatalf("content coordinates = %+v", rows)
+	}
+}
+
 func TestSplitLines(t *testing.T) {
 	cases := []struct {
 		text string

@@ -24,11 +24,29 @@ type appCommand struct {
 // commands this build ships. They are registered into the registry at start,
 // which is what every entry point reads.
 func builtinCommands() []appCommand {
-	return []appCommand{
-		{"project.new", "New Project…", "File", "Cmd+N", "new project create", func(m *Model) { m.NewProject() }},
+	return append([]appCommand{
+		{"app.about", "About GoIDEA", "Help", "", "about version platform build", func(m *Model) { m.OpenAbout() }},
+		{"app.quit", "Quit GoIDEA", "File", "Cmd+Q", "quit exit close application", func(m *Model) { m.Quit() }},
+		{"app.installCli", "Install 'goidea' Command", "Tools", "", "cli shell terminal path command line launcher", func(m *Model) { m.InstallCLI() }},
+		{"app.uninstallCli", "Uninstall 'goidea' Command", "Tools", "", "cli shell terminal path command line launcher", func(m *Model) { m.UninstallCLI() }},
+		{"help.keymapReference", "Keyboard Reference", "Help", "", "shortcuts keyboard keymap cheat sheet", func(m *Model) { m.OpenKeymapReference() }},
+		{"help.showLog", "Show Log in Finder", "Help", "", "log logs diagnose open reveal", func(m *Model) { m.ShowAppLog() }},
+		{"file.newProject", "New Project…", "File", "", "new project create", func(m *Model) { m.NewProject() }},
+		{"file.new", "New…", "File", "Cmd+N", "new file project view create", func(m *Model) { m.NewFileAtProjectSelection() }},
 		{"file.newScratchFile", "New Scratch File…", "File", "Cmd+Shift+N", "scratch temporary buffer new file language", func(m *Model) { m.OpenScratchChooser() }},
-		{"project.open", "Open…", "File", "Cmd+Shift+Alt+O", "open project folder", func(m *Model) { m.ChooseProject() }},
-		{"file.openRecent", "Open Recent…", "File", "", "recent projects welcome", func(m *Model) { m.showWelcome() }},
+		{"file.openProject", "Open…", "File", "Cmd+Shift+Alt+O", "open project folder", func(m *Model) { m.ChooseProject() }},
+		{"file.openFile", "Open File…", "File", "", "file light edit open document", func(m *Model) { m.OpenFile() }},
+		{"file.openPaths", "Open Paths", "File", "", "open files folders paths drop", func(*Model) {}},
+		{"file.openProjectPath", "Open Project Path", "File", "", "open project folder path recent", func(*Model) {}},
+		{"file.openRecentProject", "Open Recent Project", "File", "", "open recent project folder", func(*Model) {}},
+		{"file.openRecent", "Open Recent…", "File", "", "recent projects welcome", func(m *Model) { m.showRecentProjectsPopup() }},
+		{"welcome.recentProjects", "Recent Projects…", "File", "", "recent projects open folder", func(m *Model) { m.showRecentProjectsPopup() }},
+		{"project.attach", "Attach Project…", "File", "", "attach project workspace linked folder", func(m *Model) { m.AttachProject() }},
+		{"project.detach", "Detach Project", "File", "", "detach remove project attachment workspace", func(*Model) {}},
+		{"workspace.create", "New Workspace…", "File", "", "new workspace linked projects", func(m *Model) { m.OpenNewWorkspace() }},
+		{"workspace.open", "Open Workspace…", "File", "", "open workspace linked projects", func(m *Model) { m.OpenWorkspace() }},
+		{"workspace.manage", "Manage Workspace…", "File", "", "manage workspace linked projects rename remove", func(m *Model) { m.OpenManageWorkspace() }},
+		{"workspace.removeProject", "Remove from Workspace", "File", "", "remove project workspace linked folder", func(*Model) {}},
 		{"project.close", "Close Project", "File", "", "close project welcome", func(m *Model) { m.CloseProject() }},
 		{"welcome.manageProjects", "Manage Projects…", "File", "", "manage projects welcome recent", func(m *Model) { m.showWelcome() }},
 		{"navigate.searchEverywhere", "Search Everywhere", "Navigate", "Shift Shift", "search everywhere find class file symbol action text", func(m *Model) { m.OpenSearchEverywhere() }},
@@ -37,12 +55,28 @@ func builtinCommands() []appCommand {
 		{"navigate.gotoSymbol", "Go to Symbol…", "Navigate", "Cmd+Alt+O", "function method field", func(m *Model) { m.openSearchEverywhereAt(seTabSymbols) }},
 		{"navigate.findAction", "Find Action…", "Help", "Cmd+Shift+A", "command palette search", func(m *Model) { m.openSearchEverywhereAt(seTabActions) }},
 		{"navigate.gotoLine", "Go to Line:Column…", "Navigate", "Cmd+L", "go to line column caret", func(m *Model) { m.OpenGotoLine() }},
+		{"navigate.back", "Back", "Navigate", "Cmd+[ Cmd+Alt+Left", "previous navigation history location", func(m *Model) { m.NavigateBack() }},
+		{"navigate.forward", "Forward", "Navigate", "Cmd+] Cmd+Alt+Right", "next navigation history location", func(m *Model) { m.NavigateForward() }},
+		{"navigate.lastEditLocation", "Last Edit Location", "Navigate", "Cmd+Shift+Backspace", "previous edit changed location history", func(m *Model) { m.LastEditLocation() }},
+		{"navigate.nextEditLocation", "Next Edit Location", "Navigate", "", "next edit changed location history", func(m *Model) { m.NextEditLocation() }},
 		{"navigate.recentFiles", "Recent Files", "Navigate", "Cmd+E", "recently opened edited files switcher", func(m *Model) { m.openRecentNavigation(false) }},
 		{"navigate.recentLocations", "Recent Locations", "Navigate", "Cmd+Shift+E", "recently changed locations", func(m *Model) { m.openRecentNavigation(true) }},
 		{"analyze.stackTrace", "Analyze Stack Trace or Thread Dump…", "Code", "", "exception console source line thread dump", func(m *Model) { m.OpenStackTrace() }},
 		{"code.quickDocumentation", "Quick Documentation", "Code", "F1 Ctrl+J", "javadoc hover symbol help", func(m *Model) { m.QuickDocumentation() }},
+		{"code.quickDefinition", "Quick Definition", "Code", "Alt+Space Cmd+Y", "declaration source peek definition", func(m *Model) { m.QuickDefinition("definition") }},
+		{"code.quickTypeDefinition", "Quick Type Definition", "Code", "", "type declaration source peek definition", func(m *Model) { m.QuickDefinition("typeDefinition") }},
 		{"toolwindow.documentation", "Documentation", "View", "", "documentation javadoc window", func(m *Model) { m.DockToggle(documentationWindow) }},
 		{"toolwindow.coverage", "Coverage", "View", "", "test coverage lines branches", func(m *Model) { m.DockToggle("coverage") }},
+		{"agents.showToolWindow", "Agents", "View", "", "agent tasks claude codex gemini acp", func(m *Model) { m.OpenAgentsWindow() }},
+		{"agents.newTask", "New Agent Task", "Agents", "", "agent new task claude codex gemini prompt", func(m *Model) { m.NewAgentTaskOpen() }},
+		{"agents.findInConversation", "Find in Conversation", "Agents", "Cmd+F", "agent conversation search find", func(m *Model) { m.FindAgentConversation() }},
+		{"agents.closeTask", "Close Agent Task", "Agents", "", "agent close conversation task", func(m *Model) { m.CloseAgentTask() }},
+		{"agents.closeAndNewTask", "Close and New Agent Task", "Agents", "", "agent close new task", func(m *Model) { m.CloseAndNewAgentTask() }},
+		{"agents.sendToAgent", "Send to Agent", "Agents", "", "agent send selection file context", func(m *Model) { m.SendEditorToAgent() }},
+		{"agents.externalSessions", "Agent Sessions…", "Agents", "", "agent history external resume import session", func(m *Model) { m.OpenAgentExternalSessions() }},
+		{"agents.addAgent", "More Agents…", "Agents", "", "agent acp registry install update coding agent", func(m *Model) { m.OpenSettingsPage(settingsPageAgentRegistry) }},
+		{"agents.mcpServers", "External MCP Servers…", "Agents", "", "mcp model context protocol servers tools agent", func(m *Model) { m.OpenSettingsPage(settingsPageAgentMCP) }},
+		{"agents.openSampleConversations", "Open Sample Conversations", "Agents", "", "agent sample performance benchmark conversation", func(m *Model) { m.OpenAgentSampleConversations(2, 150) }},
 		{"run.coverage", "Run with Coverage", "Run", "", "test code coverage", func(m *Model) { m.RunWithCoverage() }},
 		{"coverage.importReport", "Import a Coverage Report…", "Run", "", "coverage report lcov jacoco cobertura", func(m *Model) { m.ImportCoverageReport() }},
 		{"coverage.manageReports", "Manage Coverage Reports…", "Run", "", "coverage reports suites", func(m *Model) { m.ManageCoverageReports() }},
@@ -54,12 +88,65 @@ func builtinCommands() []appCommand {
 		{"file.quickOpen", "Go to File…", "File", "Cmd+P", "quick open file goto recent", func(m *Model) { m.OpenQuickFiles() }},
 		{"file.save", "Save", "File", "Cmd+S", "save write", func(m *Model) { m.SaveActive() }},
 		{"file.close", "Close Tab", "File", "Cmd+W", "close tab", func(m *Model) { m.closeTab(m.active) }},
+		{"edit.undo", "Undo", "Edit", "Cmd+Z", "undo history", func(m *Model) {
+			if m.projectTreeFocus {
+				m.UndoLastProjectFileOperation()
+				return
+			}
+			m.runEditorCommand(editor.Undo)
+		}},
+		{"edit.redo", "Redo", "Edit", "Cmd+Shift+Z", "redo history", func(m *Model) { m.runEditorCommand(editor.Redo) }},
+		{"edit.cut", "Cut", "Edit", "Cmd+X", "cut selection clipboard", func(m *Model) {
+			if m.projectTreeFocus {
+				m.CutSelectedTreeEntry()
+				return
+			}
+			m.runEditorCommand(editor.Cut)
+		}},
+		{"edit.copy", "Copy", "Edit", "Cmd+C", "copy selection clipboard", func(m *Model) {
+			if m.projectTreeFocus {
+				m.CopySelectedTreeEntry()
+				return
+			}
+			m.runEditorCommand(editor.Copy)
+		}},
+		{"edit.paste", "Paste", "Edit", "Cmd+V", "paste clipboard", func(m *Model) {
+			if m.projectTreeFocus {
+				m.PasteIntoTreeSelection()
+				return
+			}
+			m.runEditorCommand(editor.Paste)
+		}},
+		{"edit.selectAll", "Select All", "Edit", "Cmd+A", "select all editor", func(m *Model) {
+			if m.projectTreeFocus && m.tree != nil {
+				m.tree.SelectAll()
+				return
+			}
+			m.runEditorCommand(editor.SelectAll)
+		}},
+		{"editor.copyPath", "Absolute Path", "Edit", "", "copy path clipboard editor", func(m *Model) { m.CopyActiveEditorPath() }},
+		{"editor.copyPathReference", "Copy Path/Reference…", "Edit", "Cmd+Shift+C", "copy absolute relative source line reference chooser", func(m *Model) { m.OpenCopyPathReferencePopup() }},
+		{"editor.copyPathWithLineNumber", "Copy Path with Line Number", "Edit", "", "copy relative path line number", func(m *Model) { m.CopyActiveEditorPathWithLineNumber() }},
+		{"editor.copyReference", "Copy Reference", "Edit", "Cmd+Alt+Shift+C", "fully qualified name fqn copy path", func(m *Model) { m.CopyActiveEditorReference() }},
+		{"editor.addOrRemoveCaret", "Add or Remove Caret", "Editor Actions", "Alt+Shift+Button1", "multiple cursor caret pointer", func(m *Model) {}},
+		{"find.inFile", "Find", "Find", "Cmd+F", "find search editor current file", func(m *Model) { m.runEditorCommand(editor.Find) }},
+		{"find.replaceInFile", "Replace", "Find", "Cmd+R", "replace editor current file", func(m *Model) { m.runEditorCommand(editor.FindReplace) }},
+		{"find.next", "Find Next Occurrence", "Find", "Cmd+G", "find next search occurrence", func(m *Model) { m.runEditorCommand(editor.FindNext) }},
+		{"find.previous", "Find Previous Occurrence", "Find", "Cmd+Shift+G", "find previous search occurrence", func(m *Model) { m.runEditorCommand(editor.FindPrevious) }},
 		{"file.reloadAllFromDisk", "Reload All from Disk", "File", "", "reload all from disk synchronize refresh external", func(m *Model) { m.ReloadAllFromDisk() }},
+		{"file.toggleReadOnly", "Toggle Read-only Attribute", "File", "", "make file writable read-only lock", func(m *Model) { m.ToggleActiveFileReadOnly() }},
 		{"editor.pinTab", "Pin/Unpin Tab", "File", "", "pin unpin tab", func(m *Model) { m.PinActiveTab() }},
 		{"editor.closeOthers", "Close Other Tabs", "File", "", "close other tabs", func(m *Model) { m.CloseOtherTabs(nil) }},
 		{"editor.closeAll", "Close All Tabs", "File", "", "close all tabs", func(m *Model) { m.CloseAllTabs(false) }},
 		{"editor.closeAllPinned", "Close Unpinned Tabs", "File", "", "close all but pinned tabs", func(m *Model) { m.CloseAllTabs(true) }},
 		{"editor.reopenClosedTab", "Reopen Closed Tab", "File", "", "reopen closed tab history restore", func(m *Model) { m.ReopenClosedTab() }},
+		{"editor.nextTab", "Select Next Tab", "Window", "Ctrl+Right Cmd+Shift+]", "next tab cycle editor", func(m *Model) { m.cycleEditorTab(1) }},
+		{"editor.prevTab", "Select Previous Tab", "Window", "Ctrl+Left Cmd+Shift+[", "previous tab cycle editor", func(m *Model) { m.cycleEditorTab(-1) }},
+		{"editor.toggleSoftWrap", "Soft-Wrap", "View", "", "word wrap line wrap", func(m *Model) { m.toggleActiveEditorSoftWrap() }},
+		{"editor.toggleRenderedDocs", "Render Documentation Comments", "View", "", "javadoc kdoc jsdoc rustdoc comments reader mode", func(m *Model) { m.toggleActiveEditorRenderedDocs() }},
+		{"editor.resetFontSize", "Reset Font Size in All Editors", "View", "", "zoom font size reset", func(m *Model) { m.resetEditorFontZoom() }},
+		{"editor.increaseFontSize", "Increase Font Size", "View", "Alt+Shift+.", "zoom font size increase", func(m *Model) { m.stepEditorFontZoom(1) }},
+		{"editor.decreaseFontSize", "Decrease Font Size", "View", "Alt+Shift+,", "zoom font size decrease", func(m *Model) { m.stepEditorFontZoom(-1) }},
 		{"editor.splitRight", "Split Right", "View", "Cmd+\\", "split editor right window group pane", func(m *Model) { m.SplitEditorRight() }},
 		{"editor.splitDown", "Split Down", "View", "", "split editor down window group pane stacked", func(m *Model) { m.SplitEditorDown() }},
 		{"editor.splitAndMoveRight", "Split and Move Right", "View", "", "split and move right tab window group", func(m *Model) { m.SplitAndMoveRight() }},
@@ -72,6 +159,7 @@ func builtinCommands() []appCommand {
 		{"editor.nextSplitter", "Go to Next Splitter", "View", "Alt+Tab", "go to next splitter editor group pane", func(m *Model) { m.GoToNextSplitter() }},
 		{"editor.previousSplitter", "Go to Previous Splitter", "View", "Alt+Shift+Tab", "go to previous splitter editor group pane", func(m *Model) { m.GoToPreviousSplitter() }},
 		{"editor.configureTabs", "Configure Editor Tabs…", "File", "", "configure editor tabs settings", func(m *Model) { m.OpenSettingsPage(settingsPageEditorTabs) }},
+		{"editor.inlayHintsSettings", "Configure Code Vision…", "View", "", "code vision inlay hints usages author settings", func(m *Model) { m.OpenSettingsPage(settingsPageInlayHints) }},
 		{"view.notifications", "Notifications", "View", "", "notifications balloon history alerts unread", func(m *Model) { m.ToggleNotificationsWindow() }},
 		{"view.maven", "Maven", "View", "", "maven tool window modules reactor", func(m *Model) { m.ToggleMaven() }},
 		{"view.services", "Services", "View", "", "services build maven gradle run tools", func(m *Model) { m.ToggleServices() }},
@@ -97,6 +185,7 @@ func builtinCommands() []appCommand {
 		{"vcs.fetch", "Fetch", "Git", "", "git fetch remote download", func(m *Model) { m.GitFetch() }},
 		{"vcs.pull", "Pull…", "Git", "", "git pull update project upstream", func(m *Model) { m.OpenGitPull() }},
 		{"vcs.update", "Update Project…", "Git", "", "git update project pull fetch", func(m *Model) { m.OpenGitPull() }},
+		{"vcs.manageRemotes", "Manage Remotes…", "Git", "", "git remote origin url add edit remove rename", func(m *Model) { m.OpenGitRemotes() }},
 		{"vcs.push", "Push…", "Git", "", "git push remote upstream", func(m *Model) { m.OpenGitPush() }},
 		{"vcs.stash", "Stash Changes…", "Git", "", "git stash shelve local changes", func(m *Model) { m.OpenGitStash() }},
 		{"vcs.unstash", "Unstash Changes…", "Git", "", "git unstash apply pop shelf", func(m *Model) { m.OpenGitUnstash() }},
@@ -119,21 +208,45 @@ func builtinCommands() []appCommand {
 		{"view.project", "Show Project", "View", "Cmd+1", "project tree files sidebar", func(m *Model) { m.ShowProject() }},
 		{"project.expandAll", "Expand All", "Navigate", "Cmd+=", "expand all project tree folders", func(m *Model) { m.ExpandProjectAll() }},
 		{"project.collapseAll", "Collapse All", "Navigate", "Cmd+-", "collapse all project tree folders", func(m *Model) { m.CollapseProjectAll() }},
+		{"project.newFile", "New File", "File", "", "create new file project view", func(m *Model) { m.NewFileAtProjectSelection() }},
+		{"project.newFolder", "New Directory", "File", "", "create new folder directory project view", func(m *Model) { m.NewDirectoryAtProjectSelection() }},
+		{"project.newInThisDirectory", "New in This Directory…", "File", "Cmd+Alt+N", "create file same place current directory", func(m *Model) { m.NewInThisDirectory() }},
+		{"project.copy", "Copy", "Project View", "", "copy file folder project view", func(m *Model) { m.CopySelectedTreeEntry() }},
+		{"project.cut", "Cut", "Project View", "", "cut move file folder project view", func(m *Model) { m.CutSelectedTreeEntry() }},
+		{"project.paste", "Paste", "Project View", "", "paste copy move file folder project view", func(m *Model) { m.PasteIntoTreeSelection() }},
+		{"project.copyElement", "Copy…", "Project View", "F5", "copy duplicate clone file folder project view", func(m *Model) { m.CopySelectedTreeElement() }},
+		{"project.copyAbsolutePath", "Copy Absolute Path", "Project View", "", "path clipboard absolute", func(m *Model) { m.CopySelectedTreePath("absolute") }},
+		{"project.copyRelativePath", "Copy Path From Content Root", "Project View", "", "path clipboard relative content root", func(m *Model) { m.CopySelectedTreePath("relative") }},
+		{"project.copyFileName", "Copy File Name", "Project View", "", "path clipboard name file", func(m *Model) { m.CopySelectedTreePath("name") }},
+		{"project.copySourceRootPath", "Copy Path From Source Root", "Project View", "", "path clipboard source root", func(m *Model) { m.CopySelectedTreePath("source") }},
+		{"project.copyPath", "Copy Path", "Project View", "", "path clipboard copy selected", func(m *Model) { m.CopySelectedTreePath("absolute") }},
+		{"project.move", "Move File…", "Project View", "F6", "move rename file folder refactor", func(m *Model) { m.MoveSelectedTreeEntry() }},
+		{"project.undoMove", "Undo Move / Rename", "Project View", "", "undo move rename refactor", func(m *Model) { m.UndoLastTreeMove() }},
+		{"project.rename", "Rename File…", "Project View", "Shift+F6", "rename file folder refactor", func(m *Model) { m.RenameSelectedTreeEntry() }},
+		{"project.delete", "Delete…", "Project View", "Cmd+Backspace", "delete remove trash selected file folder project view", func(m *Model) { m.DeleteSelectedTreeEntry() }},
 		{"project.refresh", "Reload Project Tree from Disk", "File", "", "reload project tree disk synchronize refresh all", func(m *Model) { m.ReloadProjectTree() }},
 		{"project.reloadFromDisk", "Reload from Disk", "File", "Cmd+Alt+Y", "reload selected folder from disk synchronize refresh", func(m *Model) { m.ReloadSelectedFromDisk() }},
 		{"project.reveal", "Reveal in Project View", "File", "", "reveal select active file project tree", func(m *Model) { m.SelectInProjectView() }},
+		{"project.open", "Jump to Source", "Project View", "F4", "open selected project tree file source", func(m *Model) { m.OpenSelectedTreeEntry() }},
 		{"project.revealInFinder", "Reveal in Finder", "File", "", "reveal selected finder explorer folder", func(m *Model) { m.RevealSelectedInFinder() }},
 		{"project.renameInline", "Rename…", "File", "", "rename selected tree file folder", func(m *Model) { m.RenameSelectedTreeEntry() }},
 		{"project.compareWith", "Compare With…", "File", "", "compare selected file", func(m *Model) { m.CompareSelectedTreeFile() }},
 		{"project.findUsages", "Find Usages of File", "File", "", "find usages selected file", func(m *Model) { m.FindUsagesOfSelectedTreeFile() }},
 		{"project.reformatCode", "Reformat File", "File", "", "reformat selected source file", func(m *Model) { m.FormatSelectedTreeFile() }},
+		{"code.reformatFile", "Reformat File", "Code", "", "reformat selected source file", func(m *Model) { m.FormatSelectedTreeFile() }},
+		{"project.optimizeImports", "Optimize Imports in File", "Project View", "", "organize imports selected source file", func(m *Model) { m.OptimizeImportsOfSelectedTreeFile() }},
+		{"code.optimizeImportsFile", "Optimize Imports in File", "Code", "", "organize imports selected source file", func(m *Model) { m.OptimizeImportsOfSelectedTreeFile() }},
 		{"project.openInTerminal", "Open in Terminal", "Tools", "", "terminal selected folder file", func(m *Model) { m.OpenSelectedTreeInTerminal() }},
-		{"project.revokeTrust", "Revoke Project Trust", "File", "", "revoke trust restricted mode", func(m *Model) { m.RevokeProjectTrust() }},
+		{"project.trust", "Trust Project", "Project", "", "trust allow build run restricted mode", func(m *Model) { m.TrustProject() }},
+		{"project.previewRestricted", "Preview in Restricted Mode", "Project", "", "preview restricted untrusted safe", func(m *Model) { m.PreviewProjectRestricted() }},
+		{"project.dontOpen", "Don't Open", "Project", "", "reject close untrusted project", func(m *Model) { m.DontOpenProject() }},
+		{"project.revokeTrust", "Revoke Project Trust", "Project", "", "revoke trust restricted mode", func(m *Model) { m.RevokeProjectTrust() }},
 		{"project.removeTrustedLocation", "Remove Trusted Location…", "File", "", "remove trusted location trust", func(m *Model) { m.RemoveTrustedLocation() }},
 		{"project.showHistory", "Show Local History", "File", "", "local history revisions snapshots restore", func(m *Model) { m.ShowHistorySelected() }},
 		{"project.putLabel", "Put Label…", "File", "", "local history put label version", func(m *Model) { m.OpenHistoryLabel() }},
-		{"project.compareDirectories", "Compare Directories…", "File", "", "compare directories diff folders", func(m *Model) { m.CompareDirectoriesSelected() }},
 		{"navigate.selectInProjectView", "Select in Project View", "Navigate", "Alt+F1", "select in project view reveal active file locate", func(m *Model) { m.SelectInProjectView() }},
+		{"navigate.showFilePath", "File Path", "Navigate", "Cmd+Alt+F12", "file path popup copy reveal finder", func(m *Model) { m.ShowSelectedFilePath() }},
+		{"navigate.navigationBar", "Jump to Navigation Bar", "Navigate", "Cmd+Up Alt+Home", "breadcrumbs file path project directory symbol", func(m *Model) { m.ShowNavigationBar() }},
 		{"navigate.callHierarchy", "Call Hierarchy", "Navigate", "Ctrl+Alt+H", "call hierarchy callers callees", func(m *Model) { m.OpenCallHierarchy() }},
 		{"navigate.typeHierarchy", "Type Hierarchy", "Navigate", "Ctrl+H", "type hierarchy supertypes subtypes class", func(m *Model) { m.OpenTypeHierarchy() }},
 		{"navigate.implementation", "Go to Implementation(s)", "Navigate", "Cmd+Alt+B", "implementation implementations overrides goto", func(m *Model) { m.GoToImplementation() }},
@@ -158,7 +271,11 @@ func builtinCommands() []appCommand {
 		{"view.hideAll", "Hide All Tool Windows", "View", "Cmd+Shift+F12", "hide all tool windows restore", func(m *Model) { m.HideAllToolWindows() }},
 		{"view.jumpLast", "Jump to Last Tool Window", "View", "F12", "jump last tool window", func(m *Model) { m.JumpToLastToolWindow() }},
 		{"view.maximize", "Maximize Tool Window", "View", "Cmd+Shift+'", "maximize tool window restore size", func(m *Model) { m.ToggleMaximizeToolWindow() }},
-		{"view.resetLayout", "Restore Default Layout", "View", "", "restore default layout reset tool windows split", func(m *Model) { m.ResetToolWindowLayout() }},
+		{"layout.save", "Save Current Layout as…", "Window", "", "tool window layout store save current", func(m *Model) { m.OpenSaveCurrentLayout() }},
+		{"layout.restore", "Restore Tool Window Layout", "Window", "", "tool window layout restore saved apply", func(m *Model) { m.OpenRestoreToolWindowLayout(nil) }},
+		{"layout.restoreDefault", "Restore Default Layout", "Window", "Shift+F12", "tool window layout reset default sizes placement view mode", func(m *Model) { m.ResetToolWindowLayout() }},
+		{"layout.rename", "Rename Tool Window Layout…", "Window", "", "tool window layout rename saved", func(m *Model) { m.OpenRenameToolWindowLayout() }},
+		{"layout.delete", "Delete Tool Window Layout…", "Window", "", "tool window layout delete remove saved", func(m *Model) { m.OpenDeleteToolWindowLayout() }},
 		{"view.resizeUp", "Stretch Tool Window Up", "View", "Ctrl+Alt+Up", "resize stretch tool window taller", func(m *Model) { m.ResizeBottomToolWindow("up") }},
 		{"view.resizeDown", "Stretch Tool Window Down", "View", "Ctrl+Alt+Down", "resize stretch tool window shorter", func(m *Model) { m.ResizeBottomToolWindow("down") }},
 		{"view.resizeLeft", "Stretch Tool Window Left", "View", "Ctrl+Alt+Left", "resize stretch tool window left", func(m *Model) { m.ResizeBottomToolWindow("left") }},
@@ -172,7 +289,10 @@ func builtinCommands() []appCommand {
 		{"code.intentions", "Show Context Actions", "Code", "Alt+Enter", "intention action quickfix", func(m *Model) { m.ShowIntentions() }},
 		{"code.symbols", "Go to Symbol…", "Code", "Cmd+Shift+O", "go to symbol navigate", func(m *Model) { m.OpenSymbols() }},
 		{"code.usages", "Find Usages", "Code", "Alt+F7", "find usages references", func(m *Model) { m.FindUsages() }},
-		{"code.showUsages", "Show Usages", "Code", "", "show usages results window", func(m *Model) { m.showUsages() }},
+		{"code.showUsages", "Show Usages", "Code", "Cmd+Alt+F7", "show usages popup references", func(m *Model) { m.ShowUsagesPopup() }},
+		{"code.showUsageResults", "Open Usage Results in Find Window", "Code", "", "show already found usages results window", func(m *Model) { m.OpenUsageResultsInFindWindow() }},
+		{"code.optimizeImports", "Optimize Imports", "Code", "Cmd+Alt+O", "organize imports", func(m *Model) { m.OptimizeImports() }},
+		{"code.fixEslintProblems", "Fix ESLint Problems", "Code", "", "eslint lint fix all", func(m *Model) { m.FixESLintProblems() }},
 		{"bookmarks.toggle", "Toggle Bookmark", "Navigate", "F3", "bookmark toggle line mark", func(m *Model) { m.ToggleBookmark() }},
 		{"bookmarks.show", "Show Bookmarks", "Navigate", "Cmd+F3", "bookmarks show popup list", func(m *Model) { m.ShowBookmarks() }},
 		{"bookmarks.next", "Next Bookmark", "Navigate", "", "next bookmark navigate", func(m *Model) { m.NextBookmark() }},
@@ -182,6 +302,7 @@ func builtinCommands() []appCommand {
 		{"bookmarks.file", "Toggle File Bookmark", "Navigate", "", "file bookmark", func(m *Model) { m.ToggleFileBookmark() }},
 		{"bookmarks.newList", "New Bookmark List…", "Navigate", "", "new bookmark list", func(m *Model) { m.OpenNewBookmarkList() }},
 		{"code.rename", "Rename Symbol", "Refactor", "Shift+F6", "rename symbol refactor", func(m *Model) { m.RenameActive() }},
+		{"refactor.safeDelete", "Safe Delete…", "Refactor", "Cmd+Delete", "safe delete remove declaration usages", func(m *Model) { m.SafeDeleteActive() }},
 		{"code.undoRefactor", "Undo Refactoring", "Refactor", "Cmd+Alt+Z", "undo refactor", func(m *Model) { m.UndoRefactor() }},
 		{"code.redoRefactor", "Redo Refactoring", "Refactor", "Cmd+Alt+Shift+Z", "redo refactor", func(m *Model) { m.RedoRefactor() }},
 		{"code.format", "Reformat Code", "Code", "Cmd+Alt+L", "format code", func(m *Model) { m.FormatActive() }},
@@ -201,8 +322,16 @@ func builtinCommands() []appCommand {
 		{"run.rerunFailed", "Rerun Failed Tests", "Run", "", "rerun failed tests", func(m *Model) { m.RerunFailedTests() }},
 		{"debug.rerun", "Rerun Debug", "Run", "", "rerun debug session restart", func(m *Model) { m.DebugRerun() }},
 		{"debug.reloadChangedClasses", "Reload Changed Classes", "Run", "", "hotswap hot swap reload changed classes hot code replace", func(m *Model) { m.HotSwapReload() }},
+		{"debug.cancelHotSwap", "Cancel Hot Swap Build", "Run", "", "hotswap stop cancel compile build", func(m *Model) { m.CancelHotSwap() }},
+		{"debug.hotRestart", "Hot Restart", "Run", "", "flutter dart restart application discard state", func(m *Model) { m.DebugHotRestart() }},
+		{"debug.stop", "Stop Debug Session", "Run", "", "debugger stop terminate", func(m *Model) { m.StopDebug() }},
 		{"debug.evaluate", "Evaluate Expression…", "Run", "", "evaluate expression watch debug", func(m *Model) { m.OpenDebugEvaluate() }},
 		{"debug.quickEvaluate", "Quick Evaluate Expression", "Run", "", "quick evaluate selection word debug", func(m *Model) { m.QuickEvaluate() }},
+		{"debug.setValue", "Set Value…", "Run", "", "set variable value edit debug", func(m *Model) { m.OpenDebugSetValue() }},
+		{"debug.jumpToSource", "Jump to Source", "Run", "", "debug frame variable source declaration", func(m *Model) { m.DebugJumpToSource() }},
+		{"debug.resetFrame", "Reset Frame", "Run", "", "drop frame restart frame debug", func(m *Model) { m.DebugResetFrame() }},
+		{"debug.smartStepInto", "Smart Step Into", "Run", "", "choose call step into debug", func(m *Model) { m.DebugSmartStepInto() }},
+		{"debug.browseConsoleHistory", "Browse Console History", "Run", "", "debug console repl history expression", func(m *Model) { m.DebugBrowseConsoleHistory() }},
 		{"debug.showExecutionPoint", "Show Execution Point", "Run", "", "debug execution point current frame", func(m *Model) { m.ShowExecutionPoint() }},
 		{"run.chooseConfig", "Choose Run/Debug Configuration…", "Run", "Ctrl+Alt+R", "choose run configuration select popup", func(m *Model) { m.OpenRunChooser("run") }},
 		{"run.chooseDebugConfig", "Choose Debug Configuration…", "Run", "Ctrl+Alt+D", "choose debug configuration popup", func(m *Model) { m.OpenRunChooser("debug") }},
@@ -221,9 +350,20 @@ func builtinCommands() []appCommand {
 		{"run.forceRunToCursor", "Force Run to Cursor", "Run", "Cmd+Alt+F9", "force run to cursor ignore breakpoints", func(m *Model) { m.ForceRunToCursor() }},
 		{"debug.removeAllBreakpoints", "Remove All Breakpoints", "Run", "", "remove clear all breakpoints", func(m *Model) { m.RemoveAllBreakpoints() }},
 		{"debug.muteBreakpoints", "Mute Breakpoints", "Run", "", "mute disable breakpoints temporarily", func(m *Model) { m.ToggleBreakpointsMuted() }},
+		{"debug.toggleTemporaryBreakpoint", "Toggle Temporary Breakpoint", "Run", "", "temporary breakpoint remove after hit", func(m *Model) { m.ToggleTemporaryBreakpoint() }},
+		{"debug.toggleMethodBreakpoint", "Toggle Method Breakpoint", "Run", "", "method breakpoint function debug", func(m *Model) { m.ToggleMethodBreakpoint() }},
+		{"debug.toggleFieldWatchpoint", "Toggle Field Watchpoint", "Run", "", "field watchpoint data breakpoint debug", func(m *Model) { m.ToggleFieldWatchpoint() }},
+		{"debug.viewBreakpoints", "View Breakpoints…", "Run", "", "breakpoints methods fields watchpoints", func(m *Model) { m.OpenDebugBreakpoints() }},
+		{"debug.memory.refresh", "Refresh Memory View", "Run", "", "jvm memory classes refresh", func(m *Model) { m.refreshDebugMemory() }},
+		{"debug.memory.showInstances", "Show Instances", "Run", "", "jvm memory instances objects", func(m *Model) { m.DebugShowMemoryInstances() }},
+		{"debug.memory.showReferrers", "Show Referrers", "Run", "", "jvm memory referrers incoming references", func(m *Model) { m.DebugShowMemoryReferrers() }},
+		{"debug.memory.closeInstances", "Close Instances", "Run", "", "jvm memory close instances", func(m *Model) { m.DebugCloseMemoryInstances() }},
+		{"debug.memory.jumpToSource", "Jump to Source", "Run", "", "jvm memory class source", func(m *Model) { m.DebugMemoryJumpToSource("") }},
+		{"debug.heap.capture", "Capture Heap Snapshot", "Run", "", "heap memory dump hprof snapshot", func(m *Model) { m.DebugCaptureHeap() }},
+		{"debug.heap.open", "Open Heap Dump…", "Run", "", "heap memory dump hprof open", func(m *Model) { m.DebugOpenHeapDump() }},
+		{"debug.heap.saveDump", "Save Heap Dump As…", "Run", "", "heap memory dump hprof save export", func(m *Model) { m.DebugSaveHeapDump() }},
 		{"run.continue", "Resume Program", "Run", "", "continue resume", func(m *Model) { m.DebugContinue() }},
 		{"run.pause", "Pause Program", "Run", "", "pause suspend", func(m *Model) { m.DebugPause() }},
-		{"run.trust", "Trust Project", "Run", "", "trust project", func(m *Model) { m.TrustProject() }},
 		{"run.reloadConfigs", "Reload Run Configurations", "Run", "", "reload run configurations", func(m *Model) { m.ReloadRunConfigs() }},
 		{"run.configNext", "Next Run Configuration", "Run", "", "next run configuration", func(m *Model) { m.CycleRunConfig(1) }},
 		{"run.configPrev", "Previous Run Configuration", "Run", "", "previous run configuration", func(m *Model) { m.CycleRunConfig(-1) }},
@@ -257,15 +397,31 @@ func builtinCommands() []appCommand {
 		{"app.themeLight", "Light", "View", "", "theme light appearance", func(m *Model) { m.SetThemePref("light") }},
 		{"app.themeDark", "Dark", "View", "", "theme dark appearance", func(m *Model) { m.SetThemePref("dark") }},
 		{"app.themeSystem", "Sync with OS", "View", "", "theme system appearance", func(m *Model) { m.SetThemePref("system") }},
+		{"view.zoomIn", "Zoom In IDE", "View", "Ctrl+Alt+=", "zoom scale bigger accessibility interface", func(m *Model) { m.StepIDEOZoom(1) }},
+		{"view.zoomOut", "Zoom Out IDE", "View", "Ctrl+Alt+-", "zoom scale smaller accessibility interface", func(m *Model) { m.StepIDEOZoom(-1) }},
+		{"view.resetZoom", "Reset IDE Zoom", "View", "Ctrl+Alt+0", "zoom scale 100 accessibility interface", func(m *Model) { m.ResetIDEOZoom() }},
+		{"view.toggleCompactMode", "Compact Mode", "View", "", "appearance density smaller compact toolbars rows tabs", func(m *Model) { m.ToggleCompactMode() }},
+		{"view.toggleToolbar", "Toolbar", "View", "", "appearance main toolbar header hide show", func(m *Model) { m.ToggleMainToolbar() }},
+		{"view.toggleToolWindowBars", "Tool Window Bars", "View", "", "appearance stripes tool window buttons hide show", func(m *Model) { m.ToggleToolWindowBars() }},
+		{"view.toggleStatusBar", "Status Bar", "View", "", "appearance hide show", func(m *Model) { m.ToggleStatusBar() }},
+		{"view.navigationBarTop", "Top", "View", "", "appearance navigation bar breadcrumbs above editor project path", func(m *Model) { m.SetNavigationBarPosition("top") }},
+		{"view.navigationBarStatusBar", "Status Bar", "View", "", "appearance navigation bar breadcrumbs footer project path", func(m *Model) { m.SetNavigationBarPosition("statusBar") }},
+		{"view.navigationBarHidden", "Don't Show", "View", "", "appearance navigation bar breadcrumbs hide file path", func(m *Model) { m.SetNavigationBarPosition("hidden") }},
+		{"view.backgroundTasks", "Background Tasks", "View", "", "progress running processes downloads cancel", func(m *Model) { m.ShowBackgroundTasks() }},
+		{"workbench.stopBackgroundProcesses", "Stop Background Processes…", "Window", "Cmd+Shift+F2", "cancel task background tasks progress", func(m *Model) { m.StopBackgroundProcesses() }},
+		{"view.toggleStatusBarWidget", "Status Bar Widget", "View", "", "appearance footer widget hide show", func(m *Model) {}},
+		{"toolwindow.closeContent", "Close Tool Window Tab", "Window", "Cmd+W Ctrl+Shift+F4", "close selected tool window content tab", func(m *Model) { m.CloseToolWindowContent() }},
 		{"editor.toggleZen", "Toggle Distraction Free Mode", "View", "", "distraction free mode zen presentation", func(m *Model) { m.ToggleZen() }},
 		{"window.toggleFullScreen", "Toggle Full Screen", "View", "Cmd+Ctrl+F", "fullscreen window display", func(m *Model) { m.ToggleFullScreen() }},
+		{"view.quickSwitchScheme", "Quick Switch Scheme…", "View", "Ctrl+`", "theme color scheme keymap view mode", func(m *Model) { m.QuickSwitchScheme() }},
 		{"settings.appearance", "Appearance…", "View", "", "settings appearance theme font", func(m *Model) { m.OpenSettingsPage("appearance") }},
 		{"settings.keymap", "Keymap…", "View", "", "settings keymap shortcuts bindings", func(m *Model) { m.OpenSettingsPage("keymap") }},
 		{"toolbar.customize", "Customize Main Toolbar…", "View", "", "toolbar widgets title bar customize", func(m *Model) { m.OpenToolbarCustomize() }},
 		{"toolbar.reset", "Restore Default Toolbar", "View", "", "toolbar default widgets restore", func(m *Model) { m.RestoreDefaultToolbar() }},
 		{"app.checkForUpdates", "Check for Updates…", "Help", "", "update upgrade version release", func(m *Model) { m.CheckForUpdates() }},
 		{"app.whatsNew", "What's New", "Help", "", "whats new release notes changelog update notes", func(m *Model) { m.OpenCurrentWhatsNew() }},
-	}
+	}, append(append(append(projectTreeCommands(), parityWindowCommands()...),
+		parityToolCommands()...), append(downloadJDKCommands(), parityRunCommands()...)...)...)
 }
 
 // Command returns the registry's command with id, the one entry the menu, the
@@ -276,6 +432,9 @@ func commands() []appCommand {
 	list := actionList()
 	out := make([]appCommand, 0, len(list))
 	for _, a := range list {
+		if hiddenActionIDs[a.ID] {
+			continue
+		}
 		out = append(out, commandOf(a))
 	}
 	return out
@@ -299,14 +458,21 @@ func commandOf(a *Action) appCommand {
 		group:    a.Category,
 		shortcut: keymapShortcutLabel(a.ID),
 		keywords: a.Keywords,
-		run:      a.Run,
+		run: func(m *Model) {
+			m.RunActionWithArg(a.ID, nil)
+		},
 	}
 }
 
 // RunCommand runs the registry command with id and reports whether the
 // registry knew it.
 func (m *Model) RunCommand(id string) bool {
-	if !m.RunAction(id) {
+	return m.RunCommandWithArg(id, nil)
+}
+
+// RunCommandWithArg runs a registry command and records it in Recent Actions.
+func (m *Model) RunCommandWithArg(id string, arg any) bool {
+	if !m.RunActionWithArg(id, arg) {
 		return false
 	}
 	m.rememberRecentAction(id)

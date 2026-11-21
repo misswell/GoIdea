@@ -51,14 +51,17 @@ openidea="$(head_of misswell/openidea main)"
 upstream="$(head_of l0ng-ai/openidea main)"
 git -C third_party/openidea fetch --quiet origin main
 git -C third_party/openidea checkout --quiet "$openidea"
-release="$(gh api repos/l0ng-ai/openidea/releases/latest --jq .tag_name)"
-release_commit="$(gh api "repos/l0ng-ai/openidea/git/ref/tags/$release" --jq .object.sha)"
+release="$(gh api repos/misswell/openidea/releases/latest --jq .tag_name)"
+release_commit="$(gh api "repos/misswell/openidea/git/ref/tags/$release" --jq .object.sha)"
+while [[ "$(gh api "repos/misswell/openidea/git/tags/$release_commit" --jq .object.type 2>/dev/null || true)" == "tag" ]]; do
+  release_commit="$(gh api "repos/misswell/openidea/git/tags/$release_commit" --jq .object.sha)"
+done
 set_field openidea commit "$openidea"
 set_field openidea version "${release#v}"
 set_field openidea synced_at "$today"
 set_server_field release "$release"
 set_server_field release_commit "$release_commit"
-echo "  source $openidea (upstream $upstream), server $release ($release_commit)"
+echo "  source $openidea (upstream $upstream), server $release from misswell/openidea ($release_commit)"
 if [[ "$openidea" != "$upstream" ]]; then
   echo "  note: the fork is not at upstream main; merge l0ng-ai/openidea into the fork to inherit those commits" >&2
 fi

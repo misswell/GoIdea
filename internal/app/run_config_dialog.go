@@ -43,6 +43,11 @@ type runConfigDlg struct {
 
 	errs    adapter.ConfigErrors
 	saveErr string
+
+	importing    bool
+	importFile   string
+	importNotice []string
+	importErr    string
 }
 
 // rerunAsk is the "Process 'x' Is Running" confirm of a rerun.
@@ -274,6 +279,33 @@ func (m *Model) runConfigsDialog(c *ui.Context, p *ui.Theme) {
 			ui.Text(c, "Run/Debug Configurations").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			if len(d.items) == 0 {
 				ui.Text(c, "The project has no run configurations yet.").FontSize(12).TextColor(p.TextMuted).SingleLine()
+			}
+			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+				ui.Button(c, "Import from .vscode/launch.json").
+					Disabled(d.importing || m.run.busy || m.run.running).
+					OnClick(func() { m.ImportRunConfigurations(openidea.RunImportVSCode) })
+				ui.Button(c, "Import from JetBrains").
+					Disabled(d.importing || m.run.busy || m.run.running).
+					OnClick(func() { m.ImportRunConfigurations(openidea.RunImportJetBrains) })
+				if d.importing {
+					ui.Text(c, "Reading run configurations…").FontSize(12).TextColor(p.TextMuted).SingleLine()
+				}
+			})
+			if len(d.importNotice) > 0 {
+				ui.Column(c).Gap(3).Padding(8, 10).Background(oiPaletteOf(p).island).
+					Border(1, oiPaletteOf(p).border).Radius(4).Children(func() {
+					title := "Imported from " + d.importFile
+					if d.importFile == "" {
+						title = "Run configuration import"
+					}
+					ui.Text(c, title).FontSize(12).Bold().TextColor(p.Text).SingleLine()
+					for _, line := range d.importNotice {
+						ui.Text(c, line).FontSize(11).TextColor(p.TextMuted).MaxWidth(600)
+					}
+				})
+			}
+			if d.importErr != "" {
+				ui.Text(c, d.importErr).FontSize(12).TextColor(p.Danger).MaxWidth(600)
 			}
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				list := make([]string, 0, len(d.items))

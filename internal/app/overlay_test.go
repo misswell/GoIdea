@@ -10,7 +10,8 @@ import (
 func TestOverlaysAreRegisteredOnce(t *testing.T) {
 	want := []string{"rename", "symbols", "intentions", "quickFiles", "branches",
 		"bookmarksPopup", "commandPalette", "searchEverywhere", "runAnything", "diff",
-		"settings", "newProject", "invalidateCaches", "scratchChooser", "commit", "database"}
+		"settings", "jdk.download", "newProject", "invalidateCaches", "scratchChooser",
+		"commit", "database"}
 	for _, id := range want {
 		if _, ok := overlays.byID[id]; !ok {
 			t.Fatalf("%s is not registered", id)

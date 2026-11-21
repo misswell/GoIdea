@@ -24,6 +24,13 @@ import (
 func main() {
 	started := time.Now()
 	mygo.App.SetName("GoIDEA")
+	if handled, code := handleCommandLine(os.Args[1:], os.Stdout, os.Stderr, mygo.App.Version()); handled {
+		if code != 0 {
+			os.Exit(code)
+		}
+		return
+	}
+	startupDir, startupFiles, startupErrs := commandLineTargets(os.Args[1:])
 
 	// GOIDEA_DATA_DIR keeps a run's session, settings and server home apart
 	// from the user's: the E2E harness uses a temporary one.
@@ -58,11 +65,19 @@ func main() {
 	if serverErr != nil {
 		model.Notify(serverErr.Error())
 	}
+	for _, err := range startupErrs {
+		model.Notify(err.Error())
+	}
 	if dir := os.Getenv("GOIDEA_OPEN_PROJECT"); dir != "" {
 		model.OpenAtStartup(dir)
 		if files := os.Getenv("GOIDEA_OPEN_FILES"); files != "" {
 			model.OpenFilesAtStartup(filepath.SplitList(files))
 		}
+	} else if startupDir != "" {
+		model.OpenAtStartup(startupDir)
+		model.OpenFilesAtStartup(startupFiles)
+	} else if len(startupFiles) > 0 {
+		model.OpenFilesAtStartup(startupFiles)
 	}
 	headless := os.Getenv("GOIDEA_HEADLESS") == "1"
 	if headless {
@@ -561,6 +576,15 @@ func smoke(m *app.Model) {
 	if os.Getenv("GOIDEA_SMOKE_COMMANDS") == "1" {
 		fields["commands"] = m.SmokeCommands()
 	}
+	if os.Getenv("GOIDEA_SMOKE_AGENTS") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		agents, agentsErr := m.SmokeAgents(ctx)
+		cancel()
+		fields["agents"] = agents
+		if agentsErr != nil {
+			fields["agentsError"] = agentsErr.Error()
+		}
+	}
 	if os.Getenv("GOIDEA_SMOKE_NOTIFY") == "1" {
 		fields["notifications"] = m.SmokeNotifications()
 	}
@@ -683,6 +707,17 @@ func smoke(m *app.Model) {
 			fields["shotsError"] = shotsErr.Error()
 		}
 	}
+	// Workspace management can switch the current project, so it runs after
+	// the checks and screenshots that inspect the original project.
+	if os.Getenv("GOIDEA_SMOKE_WORKSPACE") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
+		workspace, workspaceErr := m.SmokeWorkspace(ctx)
+		cancel()
+		fields["workspace"] = workspace
+		if workspaceErr != nil {
+			fields["workspaceError"] = workspaceErr.Error()
+		}
+	}
 	out, _ := json.MarshalIndent(fields, "", "  ")
 	if path := os.Getenv("GOIDEA_SMOKE_OUT"); path != "" {
 		_ = os.WriteFile(path, out, 0o644)
@@ -734,7 +769,7 @@ func resolveServer() (string, error) {
 
 // serverMinVersion is the OpenIDEA release this client speaks to; it moves
 // with the pin in UPSTREAMS.yml and the shipped server.
-const serverMinVersion = "0.1.44"
+const serverMinVersion = "0.1.52"
 
 // serverChecksum reads the release checksum shipped beside the binary, when
 // fetch-server.sh wrote one; a hand-placed server skips the comparison.

@@ -4,11 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/egoist/mygo/ui"
+
+	"mayoi/internal/textdiff"
 )
 
 // historyEntry is one Local History row: a stored revision or a label.
@@ -37,12 +40,31 @@ type historyState struct {
 	entries []historyEntry
 	deleted []string
 	sel     int
+	folder  bool
+	// extra holds the additional rows selected with Cmd/Ctrl or Shift. IDEA
+	// compares the oldest and newest snapshots when they belong to one file.
+	extra  map[int]bool
+	anchor int
+	// preview is the revision diff OpenIDEA shows beside the timeline.
+	preview    historyPreview
+	previewSeq int
 	// confirmRestore arms the selected snapshot's restore for a second click.
 	confirmRestore bool
 	busy           bool
 	// labeling asks for the name of a new history point.
 	labeling bool
 	label    string
+}
+
+type historyPreview struct {
+	loading    bool
+	err        string
+	message    string
+	leftLabel  string
+	rightLabel string
+	rows       []textdiff.Row
+	added      int
+	gone       int
 }
 
 // ShowHistory opens Local History for path, as Local History › Show History
@@ -90,7 +112,17 @@ func (m *Model) loadHistory(h *historyState) {
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, time.Minute)
 		defer cancel()
-		raw, err := m.mgr.Invoke(ctx, Window, "history_list_dir", map[string]any{"path": h.path})
+		var direct []historyEntry
+		if info, statErr := os.Stat(h.path); statErr == nil && !info.IsDir() {
+			raw, listErr := m.invoke(ctx, "history_list", map[string]any{"path": h.path})
+			if listErr == nil {
+				listErr = json.Unmarshal(raw, &direct)
+			}
+			if listErr != nil {
+				direct = nil
+			}
+		}
+		raw, err := m.invoke(ctx, "history_list_dir", map[string]any{"path": h.path})
 		var dir directoryHistory
 		if err == nil {
 			err = json.Unmarshal(raw, &dir)
@@ -105,13 +137,49 @@ func (m *Model) loadHistory(h *historyState) {
 				m.invalidate()
 				return
 			}
-			h.entries, h.deleted = dir.Entries, dir.Deleted
+			h.entries, h.deleted = mergeHistoryEntries(dir.Entries, direct), dir.Deleted
+			sortHistoryNewestFirst(h.entries)
+			h.folder = len(h.deleted) > 0
+			for _, e := range h.entries {
+				if e.Kind != "label" && filepath.Clean(e.Path) != filepath.Clean(h.path) {
+					h.folder = true
+					break
+				}
+			}
+			h.extra = map[int]bool{}
+			h.anchor = 0
 			if h.sel >= len(h.entries) {
 				h.sel = 0
 			}
+			m.refreshHistoryPreview(h)
 			m.invalidate()
 		})
 	}()
+}
+
+func mergeHistoryEntries(groups ...[]historyEntry) []historyEntry {
+	seen := map[string]bool{}
+	var out []historyEntry
+	for _, entries := range groups {
+		for _, entry := range entries {
+			key := entry.Kind + "\x00" + entry.ID + "\x00" + entry.Path + "\x00" +
+				fmt.Sprintf("%.0f", entry.Ms)
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			out = append(out, entry)
+		}
+	}
+	return out
+}
+
+func sortHistoryNewestFirst(entries []historyEntry) {
+	for i := 1; i < len(entries); i++ {
+		for j := i; j > 0 && entries[j].Ms > entries[j-1].Ms; j-- {
+			entries[j], entries[j-1] = entries[j-1], entries[j]
+		}
+	}
 }
 
 // RestoreHistoryEntry puts the selected snapshot back: the first call arms the
@@ -135,7 +203,7 @@ func (m *Model) RestoreHistoryEntry() {
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, time.Minute)
 		defer cancel()
-		_, err := m.mgr.Invoke(ctx, Window, "history_restore", map[string]any{
+		_, err := m.invoke(ctx, "history_restore", map[string]any{
 			"path": e.Path, "id": e.ID,
 		})
 		m.post(func() {
@@ -150,7 +218,8 @@ func (m *Model) RestoreHistoryEntry() {
 			}
 			h.err = ""
 			m.refreshTree(filepath.Dir(e.Path))
-			m.status = "Restored " + filepath.Base(e.Path) + " to the " + historyTime(e.Ms) + " version"
+			m.status = "Restored " + filepath.Base(e.Path) + " to the " +
+				historyTime(m.prefs.dateFormatPrefs(), m.systemRegion, e.Ms) + " version"
 			m.invalidate()
 			m.loadHistory(h)
 		})
@@ -174,7 +243,7 @@ func (m *Model) ConfirmHistoryLabel() {
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, time.Minute)
 		defer cancel()
-		_, err := m.mgr.Invoke(ctx, Window, "history_put_label", map[string]any{"label": label})
+		_, err := m.invoke(ctx, "history_put_label", map[string]any{"label": label})
 		m.post(func() {
 			if m.history != h {
 				return
@@ -191,9 +260,9 @@ func (m *Model) ConfirmHistoryLabel() {
 	}()
 }
 
-// historyTime is a snapshot's local time, to the minute.
-func historyTime(ms float64) string {
-	return time.UnixMilli(int64(ms)).Format("2006-01-02 15:04")
+// historyTime is a snapshot's local time, following Date Formats.
+func historyTime(prefs DateFormatPrefs, region dateRegion, ms float64) string {
+	return formatAppTimestamp(prefs, region, ms, time.Now())
 }
 
 // snapshotBefore is LocalHistory.tsx's snapshotsBefore for one file: the
@@ -210,6 +279,221 @@ func snapshotBefore(entries []historyEntry, at float64, path string) *historyEnt
 		}
 	}
 	return best
+}
+
+// revisionRange returns the oldest and newest snapshots selected by index.
+// Entries are newest first, so the largest index is the older revision. As in
+// OpenIDEA, a comparison is available only for snapshots of one file.
+func revisionRange(entries []historyEntry, selected map[int]bool) (*historyEntry, *historyEntry) {
+	var picked []int
+	for i := range entries {
+		if selected != nil && selected[i] {
+			picked = append(picked, i)
+		}
+	}
+	if len(picked) < 2 {
+		return nil, nil
+	}
+	path := ""
+	for _, i := range picked {
+		if entries[i].Kind == "label" {
+			return nil, nil
+		}
+		if path == "" {
+			path = entries[i].Path
+		} else if entries[i].Path != path {
+			return nil, nil
+		}
+	}
+	older, newer := picked[0], picked[0]
+	for _, i := range picked[1:] {
+		if i > older {
+			older = i
+		}
+		if i < newer {
+			newer = i
+		}
+	}
+	return &entries[older], &entries[newer]
+}
+
+type historyPreviewPlan struct {
+	leftID     string
+	rightID    string
+	leftLabel  string
+	rightLabel string
+	path       string
+	current    bool
+	deleted    bool
+	message    string
+}
+
+func historyEntryLabel(prefs DateFormatPrefs, region dateRegion, entry historyEntry) string {
+	return historyTime(prefs, region, entry.Ms) + " · " + entry.Label
+}
+
+// planHistoryPreview mirrors LocalHistory.tsx's detail choice: selected
+// snapshots compare with each other, a snapshot compares with the worktree,
+// and a label compares the last version before it with the worktree.
+func (m *Model) planHistoryPreview(h *historyState) historyPreviewPlan {
+	if h == nil || h.sel < 0 || h.sel >= len(h.entries) {
+		return historyPreviewPlan{message: "Select a revision"}
+	}
+	selected := map[int]bool{h.sel: true}
+	for i, on := range h.extra {
+		if on {
+			selected[i] = true
+		}
+	}
+	if older, newer := revisionRange(h.entries, selected); older != nil {
+		return historyPreviewPlan{
+			leftID: older.ID, rightID: newer.ID,
+			leftLabel:  historyEntryLabel(m.prefs.dateFormatPrefs(), m.systemRegion, *older),
+			rightLabel: historyEntryLabel(m.prefs.dateFormatPrefs(), m.systemRegion, *newer),
+			path:       newer.Path,
+		}
+	}
+	if len(h.extra) > 0 {
+		return historyPreviewPlan{message: "Select revisions of one file to compare them"}
+	}
+
+	current := h.entries[h.sel]
+	if current.Kind != "label" {
+		return historyPreviewPlan{
+			leftID:    current.ID,
+			leftLabel: historyEntryLabel(m.prefs.dateFormatPrefs(), m.systemRegion, current),
+			path:      current.Path, current: true, deleted: historyPathDeleted(h, current.Path),
+			rightLabel: "Current",
+		}
+	}
+
+	at := current.Ms
+	if h.folder {
+		targets := snapshotsBefore(historyEntriesBefore(h.entries, at))
+		message := "Label '" + current.Label + "'"
+		if len(targets) > 0 {
+			message += fmt.Sprintf(" · %s recorded before it", count(len(targets), "file", "files"))
+		}
+		return historyPreviewPlan{message: message}
+	}
+	if snap := snapshotBefore(h.entries, at, h.path); snap != nil {
+		return historyPreviewPlan{
+			leftID:    snap.ID,
+			leftLabel: historyEntryLabel(m.prefs.dateFormatPrefs(), m.systemRegion, *snap),
+			path:      h.path, current: true, deleted: historyPathDeleted(h, h.path),
+			rightLabel: "Current",
+		}
+	}
+	return historyPreviewPlan{message: "Nothing recorded before label '" + current.Label + "'"}
+}
+
+func historyEntriesBefore(entries []historyEntry, at float64) []historyEntry {
+	out := make([]historyEntry, 0, len(entries))
+	for _, entry := range entries {
+		if entry.Kind != "label" && entry.Ms < at {
+			out = append(out, entry)
+		}
+	}
+	return out
+}
+
+func snapshotsBefore(entries []historyEntry) map[string]historyEntry {
+	out := map[string]historyEntry{}
+	for _, entry := range entries {
+		prev, exists := out[entry.Path]
+		if !exists || prev.Ms < entry.Ms {
+			out[entry.Path] = entry
+		}
+	}
+	return out
+}
+
+func historyPathDeleted(h *historyState, path string) bool {
+	if h == nil {
+		return false
+	}
+	for _, deleted := range h.deleted {
+		if filepath.Clean(deleted) == filepath.Clean(path) {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *Model) refreshHistoryPreview(h *historyState) {
+	if h == nil {
+		return
+	}
+	h.previewSeq++
+	seq := h.previewSeq
+	plan := m.planHistoryPreview(h)
+	preview := historyPreview{message: plan.message, leftLabel: plan.leftLabel, rightLabel: plan.rightLabel}
+	preview.loading = plan.leftID != "" && (plan.rightID != "" || plan.current)
+	h.preview = preview
+	if !preview.loading {
+		m.invalidate()
+		return
+	}
+
+	currentText := ""
+	if plan.current {
+		currentText = m.historyCurrentText(plan.path)
+		if plan.deleted {
+			currentText = ""
+			preview.rightLabel = "Deleted"
+		}
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, 45*time.Second)
+		defer cancel()
+		readContent := func(id string) (string, error) {
+			if id == "" {
+				return "", nil
+			}
+			raw, err := m.invoke(ctx, "history_content", map[string]any{"id": id})
+			if err != nil {
+				return "", err
+			}
+			var text string
+			if err := json.Unmarshal(raw, &text); err != nil {
+				return "", err
+			}
+			return text, nil
+		}
+		leftText, err := readContent(plan.leftID)
+		rightText := currentText
+		if err == nil && plan.rightID != "" {
+			rightText, err = readContent(plan.rightID)
+		}
+		m.post(func() {
+			if m.history != h || h.previewSeq != seq {
+				return
+			}
+			h.preview.loading = false
+			if err != nil {
+				h.preview.err = "Could not read the revision: " + err.Error()
+				m.invalidate()
+				return
+			}
+			rows, added, gone := diffRows(leftText, rightText)
+			h.preview.rows, h.preview.added, h.preview.gone = rows, added, gone
+			if added == 0 && gone == 0 {
+				h.preview.message = "The selected revisions are identical"
+			}
+			m.invalidate()
+		})
+	}()
+}
+
+func (m *Model) historyCurrentText(path string) string {
+	if text, ok := m.bufferText(path); ok {
+		return text
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return string(data)
 }
 
 // RestoreHistoryLabelTime restores every file of the label's directory to
@@ -242,7 +526,7 @@ func (m *Model) RestoreHistoryLabelTime() {
 			if snap == nil || snap.ID != e.ID {
 				continue
 			}
-			if _, err := m.mgr.Invoke(ctx, Window, "history_restore", map[string]any{"path": e.Path, "id": e.ID}); err != nil {
+			if _, err := m.invoke(ctx, "history_restore", map[string]any{"path": e.Path, "id": e.ID}); err != nil {
 				failed++
 			} else {
 				restored++
@@ -280,7 +564,7 @@ func (m *Model) historyDialog(c *ui.Context, p *ui.Theme) {
 	}
 	open := h.open
 	d := ui.Modal(c, &open, func() {
-		ui.Column(c).Width(680).Gap(8).Children(func() {
+		ui.Column(c).Width(980).Gap(8).Children(func() {
 			title := "Local History · " + filepath.Base(h.path)
 			if h.loading {
 				title = "Local History · Reading…"
@@ -312,40 +596,63 @@ func (m *Model) historyDialog(c *ui.Context, p *ui.Theme) {
 			case len(h.entries) == 0:
 				ui.Text(c, "No history yet").FontSize(12).TextColor(p.TextMuted)
 			default:
-				ui.Scroll(c).Height(380).Children(func() {
-					ui.Column(c).Children(func() {
-						for i, e := range h.entries {
-							i, e := i, e
-							row := ui.Row(c.Key(fmt.Sprintf("history:%d", i))).Height(24).
-								Padding(0, 8).Gap(8).AlignItems(ui.Center)
-							if i == h.sel {
-								row.Background(p.Selection)
-							} else if row.Hovered() {
-								row.Background(p.SurfaceHover)
-							}
-							row.Children(func() {
-								ui.Row(c).Width(118).Shrink(0).Children(func() {
-									ui.Text(c, historyTime(e.Ms)).FontSize(12).
-										TextColor(p.TextMuted).SingleLine()
-								})
-								ui.Text(c, e.Label).FontSize(13).TextColor(p.Text).
-									SingleLine().Ellipsis("…")
-								if e.Kind != "label" {
-									if rel, err := filepath.Rel(m.Root(), e.Path); err == nil {
-										ui.Spacer(c)
-										ui.Text(c, filepath.ToSlash(rel)).FontSize(12).
-											TextColor(p.TextMuted).SingleLine().Ellipsis("…")
-										ui.Text(c, historySize(e.Size)).FontSize(12).
+				ui.Row(c).Height(410).Gap(12).AlignItems(ui.Start).Children(func() {
+					ui.Column(c).Width(390).Height(410).Gap(4).Children(func() {
+						ui.Text(c, "Revisions").FontSize(12).Bold().TextColor(p.Text)
+						ui.Scroll(c).Grow(1).Children(func() {
+							ui.Column(c).Children(func() {
+								for i, e := range h.entries {
+									i, e := i, e
+									height := float32(38)
+									if h.folder {
+										height = 52
+									}
+									row := ui.Row(c.Key(fmt.Sprintf("history:%d", i))).Height(height).
+										Padding(0, 8).Gap(8).AlignItems(ui.Center)
+									switch {
+									case i == h.sel:
+										row.Background(p.Selection)
+									case h.extra[i]:
+										row.Background(p.SurfaceHover)
+									case row.Hovered():
+										row.Background(p.SurfaceHover)
+									}
+									row.Children(func() {
+										ui.Text(c, historyTime(m.prefs.dateFormatPrefs(), c.Region(), e.Ms)).Width(118).Shrink(0).FontSize(12).
 											TextColor(p.TextMuted).SingleLine()
+										ui.Column(c).Grow(1).MinWidth(0).Gap(1).Children(func() {
+											label := e.Label
+											if e.Kind == "label" {
+												label = "◆ " + label
+											}
+											ui.Text(c, label).FontSize(13).TextColor(p.Text).
+												SingleLine().Ellipsis("…")
+											if e.Kind != "label" && h.folder {
+												rel := e.Path
+												if relative, err := filepath.Rel(m.Root(), e.Path); err == nil {
+													rel = relative
+												}
+												pathText := ui.Text(c, filepath.ToSlash(rel)).FontSize(12).
+													TextColor(p.TextMuted).SingleLine().Ellipsis("…")
+												if historyPathDeleted(h, e.Path) {
+													pathText.TextColor(p.Danger).Strikethrough()
+												}
+											}
+										})
+										if e.Kind != "label" {
+											ui.Text(c, historySize(e.Size)).FontSize(12).
+												TextColor(p.TextMuted).SingleLine()
+										}
+									})
+									if row.Clicked() {
+										m.selectHistoryRow(h, i, row.ClickModifiers())
 									}
 								}
 							})
-							if row.Clicked() {
-								h.sel = i
-								h.confirmRestore = false
-								m.invalidate()
-							}
-						}
+						})
+					})
+					ui.Column(c).Grow(1).MinWidth(0).Height(410).Gap(4).Children(func() {
+						m.historyPreviewPane(c, p, h)
 					})
 				})
 			}
@@ -366,6 +673,9 @@ func (m *Model) historyDialog(c *ui.Context, p *ui.Theme) {
 				}
 				if len(h.entries) > 0 && h.entries[h.sel].Kind != "label" {
 					label := "Restore This Version"
+					if historyPathDeleted(h, h.entries[h.sel].Path) {
+						label = "Restore"
+					}
 					if h.confirmRestore {
 						label = "Confirm Restore"
 					}
@@ -378,4 +688,96 @@ func (m *Model) historyDialog(c *ui.Context, p *ui.Theme) {
 	if d.Dismissed() || !open {
 		m.closeHistory()
 	}
+}
+
+func (m *Model) selectHistoryRow(h *historyState, index int, mods ui.Modifiers) {
+	if h == nil || index < 0 || index >= len(h.entries) {
+		return
+	}
+	if h.extra == nil {
+		h.extra = map[int]bool{}
+	}
+	old := h.sel
+	switch {
+	case mods&ui.Shift != 0:
+		from, to := h.anchor, index
+		if from > to {
+			from, to = to, from
+		}
+		h.extra = map[int]bool{}
+		for i := from; i <= to; i++ {
+			if i != index {
+				h.extra[i] = true
+			}
+		}
+	case mods&(ui.Cmd|ui.Ctrl) != 0:
+		if old != index && old >= 0 && old < len(h.entries) {
+			h.extra[old] = true
+		}
+		h.anchor = index
+	default:
+		h.extra = map[int]bool{}
+		h.anchor = index
+	}
+	h.sel = index
+	h.confirmRestore = false
+	m.refreshHistoryPreview(h)
+}
+
+func (m *Model) historyPreviewPane(c *ui.Context, p *ui.Theme, h *historyState) {
+	switch {
+	case h.preview.loading:
+		ui.Text(c, "Reading the revision…").FontSize(12).TextColor(p.TextMuted)
+		return
+	case h.preview.err != "":
+		ui.Text(c, h.preview.err).FontSize(12).TextColor(p.Danger)
+		return
+	case h.preview.message != "":
+		ui.Text(c, h.preview.message).FontSize(12).TextColor(p.TextMuted)
+		return
+	}
+	ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+		ui.Text(c, h.preview.leftLabel).FontSize(11).TextColor(p.TextMuted).
+			SingleLine().Ellipsis("…")
+		ui.Text(c, "→").FontSize(11).TextColor(p.TextMuted)
+		ui.Text(c, h.preview.rightLabel).FontSize(11).TextColor(p.TextMuted).
+			SingleLine().Ellipsis("…")
+		ui.Spacer(c)
+		ui.Text(c, fmt.Sprintf("+%d −%d", h.preview.added, h.preview.gone)).
+			FontSize(11).TextColor(p.TextMuted)
+	})
+	ui.Column(c).Grow(1).MinWidth(0).Children(func() {
+		ui.Scroll(c).Grow(1).Children(func() {
+			ui.Column(c).Children(func() {
+				for i, row := range h.preview.rows {
+					if row.Kind == textdiff.Hunk {
+						ui.Text(c, "⋯").Height(18).FontSize(11).TextColor(p.TextMuted)
+						continue
+					}
+					line := ui.Row(c.Key(fmt.Sprintf("history-preview:%d", i))).Height(18).
+						Gap(8).Padding(0, 4).AlignItems(ui.Center)
+					if row.Kind == textdiff.Add || row.Kind == textdiff.Delete {
+						line.Background(diffRowTint(p, row.Kind))
+					}
+					line.Children(func() {
+						oldLine, newLine := "", ""
+						if row.Old > 0 {
+							oldLine = fmt.Sprintf("%d", row.Old)
+						}
+						if row.New > 0 {
+							newLine = fmt.Sprintf("%d", row.New)
+						}
+						ui.Text(c, oldLine).Width(38).Shrink(0).FontSize(11).
+							TextColor(p.TextMuted).SingleLine()
+						ui.Text(c, newLine).Width(38).Shrink(0).FontSize(11).
+							TextColor(p.TextMuted).SingleLine()
+						ui.Text(c, diffSign(row.Kind)).Width(12).Shrink(0).FontSize(11).
+							TextColor(diffColor(row.Kind, p)).SingleLine()
+						ui.Text(c, row.Text).FontSize(12).TextColor(p.Text).
+							SingleLine().Ellipsis("…")
+					})
+				}
+			})
+		})
+	})
 }

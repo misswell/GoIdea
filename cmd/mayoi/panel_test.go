@@ -196,9 +196,11 @@ func TestTerminalExitedEarlyStays(t *testing.T) {
 	if len(a.terms) != 1 || a.column().tab().term != s {
 		t.Fatal("the terminal closed")
 	}
-	if !hs.tt.HasText(locales.NoteTermExitedEarly(shellName(), "3")) || !hs.tt.HasText(locales.ReportProblem()) {
-		t.Fatalf("no toast offers to report it: %q", hs.tt.Texts())
-	}
+	wanted := locales.NoteTermExitedEarly(shellName(), "3")
+	report := locales.ReportProblem()
+	hs.until("the early exit toast", func() bool {
+		return hs.tt.HasText(wanted) && hs.tt.HasText(report)
+	})
 }
 
 func TestReportURL(t *testing.T) {

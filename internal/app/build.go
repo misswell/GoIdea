@@ -22,6 +22,7 @@ type BuildPane struct {
 	busy    bool
 	request uint32
 	channel uint32
+	taskID  string
 
 	title    string
 	system   string
@@ -107,11 +108,13 @@ func (m *Model) startBuild(kind string, file *string) {
 	root := m.Root()
 	req := m.nextRequest()
 	ch := m.nextChannel()
+	taskID := fmt.Sprintf("build:%d", req)
 	clear := append([]string{}, m.build.files...)
 	m.build.kind = kind
 	m.build.busy = true
 	m.build.request = req
 	m.build.channel = ch
+	m.build.taskID = taskID
 	m.build.title = kindLabel(kind)
 	m.build.system = ""
 	m.build.progress = ""
@@ -123,20 +126,28 @@ func (m *Model) startBuild(kind string, file *string) {
 	m.build.output = nil
 	m.build.truncated = false
 	m.status = "Building…"
+	m.upsertTask(BackgroundTask{
+		ID: taskID, Title: kindLabel(kind), Message: "Saving files…",
+		Fraction: -1,
+		Cancel: func() {
+			m.cancelBuildRequest(req, ch, taskID)
+		},
+	})
 	m.invalidate()
 
 	command, args := buildInvocation(kind, file, req, ch, clear)
-	p := m.prefs.SaveFiles
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Minute)
 		defer cancel()
-		if err := saveAll(ctx, tabs, p); err != nil {
+		if err := m.saveOpenTabs(ctx, tabs); err != nil {
 			m.post(func() {
 				if m.build.channel != ch || m.Root() != root {
+					m.removeTask(taskID)
 					return
 				}
 				m.build.busy = false
 				m.build.err = "Saving before building failed: " + err.Error()
+				m.finishBuildTask(taskID, "Saving before building failed")
 				m.invalidate()
 			})
 			return
@@ -148,6 +159,8 @@ func (m *Model) startBuild(kind string, file *string) {
 		}
 		m.post(func() {
 			if m.build.channel != ch || m.Root() != root {
+				// A stale request must never finish the newer build's task.
+				m.removeTask(taskID)
 				return
 			}
 			m.build.busy = false
@@ -155,6 +168,7 @@ func (m *Model) startBuild(kind string, file *string) {
 				m.build.err = "Build failed: " + err.Error()
 				m.status = "The build request failed"
 				m.notifyError("build", "Build failed", notifySuffix(err.Error()))
+				m.finishBuildTask(taskID, "Build request failed")
 				m.invalidate()
 				return
 			}
@@ -171,6 +185,7 @@ func (m *Model) startBuild(kind string, file *string) {
 				m.build.system = result.System
 			}
 			m.status = buildSummary(result)
+			m.finishBuildTask(taskID, buildSummary(result))
 			show := notifyAction{label: "Show Build Output", run: func(m *Model) { m.ShowBuild() }}
 			switch {
 			case !ok:
@@ -182,6 +197,66 @@ func (m *Model) startBuild(kind string, file *string) {
 			}
 			m.invalidate()
 		})
+	}()
+}
+
+func (m *Model) finishBuildTask(id, message string) {
+	title := m.build.title
+	if title == "" {
+		title = "Build"
+	}
+	m.upsertTask(BackgroundTask{
+		ID: id, Title: title, Message: message, Fraction: 1, Done: true,
+	})
+}
+
+func (m *Model) updateBuildTask(title, message string) {
+	for i := range m.tasks {
+		task := &m.tasks[i]
+		if task.ID != m.build.taskID || task.Done {
+			continue
+		}
+		if title != "" {
+			task.Title = title
+		}
+		if message != "" && !task.Cancelling {
+			task.Message = message
+		}
+		m.invalidate()
+		return
+	}
+}
+
+func (m *Model) cancelBuildRequest(request, channel uint32, taskID string) {
+	if !m.build.busy || m.build.request != request || m.build.channel != channel {
+		return
+	}
+	if m.mgr == nil && m.invokeHook == nil {
+		m.build.err = "Stopping the build failed: the backend is unavailable"
+		m.finishBuildTask(taskID, "Stopping the build failed")
+		m.invalidate()
+		return
+	}
+	m.status = "Stopping the build…"
+	m.invalidate()
+	base := m.ctx
+	if base == nil {
+		base = context.Background()
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(base, 15*time.Second)
+		defer cancel()
+		if _, err := m.invoke(ctx, "cancel_request", map[string]any{"id": request}); err != nil {
+			m.post(func() {
+				if m.build.channel != channel {
+					return
+				}
+				m.build.err = "Stopping the build failed: " + err.Error()
+				m.status = "Stopping the build failed"
+				m.finishBuildTask(taskID, "Stopping the build failed")
+				m.invalidate()
+			})
+		}
 	}()
 }
 
@@ -204,19 +279,13 @@ func (m *Model) StopBuild() {
 	if !m.build.busy || m.build.request == 0 {
 		return
 	}
-	id := m.build.request
-	m.status = "Stopping the build…"
-	m.invalidate()
-	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
-		defer cancel()
-		if _, err := m.mgr.Invoke(ctx, Window, "cancel_request", map[string]any{"id": id}); err != nil {
-			m.post(func() {
-				m.build.err = "Stopping the build failed: " + err.Error()
-				m.invalidate()
-			})
+	for _, task := range m.tasks {
+		if task.ID == m.build.taskID && !task.Done && task.Cancel != nil {
+			m.cancelTask(task.ID)
+			return
 		}
-	}()
+	}
+	m.cancelBuildRequest(m.build.request, m.build.channel, m.build.taskID)
 }
 
 // ClearBuild empties the console.
@@ -236,8 +305,10 @@ func (m *Model) acceptBuildEvent(data json.RawMessage) {
 	switch ev.Kind {
 	case "started":
 		m.build.title, m.build.system = ev.Title, ev.System
+		m.updateBuildTask(ev.Title, "")
 	case "step":
 		m.build.append("system", ev.Command)
+		m.updateBuildTask("", ev.Command)
 	case "output":
 		kind := "stdout"
 		if ev.Stderr {
@@ -264,6 +335,7 @@ func (m *Model) acceptBuildEvent(data json.RawMessage) {
 		}
 		m.build.progress = text
 		m.status = text
+		m.updateBuildTask("", text)
 	}
 	m.invalidate()
 }

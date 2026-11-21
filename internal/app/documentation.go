@@ -326,7 +326,7 @@ func (m *Model) documentationPanel(c *ui.Context, p *ui.Theme) {
 	box := ui.Column(c.Key("documentation:tool")).Grow(1).MinHeight(0).MinWidth(0).
 		Background(oi.island).Radius(oiIslandRadius).Focusable().Bind(&d.dockFocus)
 	box.Children(func() {
-		ui.Row(c).Height(oiHeaderHeight).Shrink(0).Padding(0, 6, 0, 8).Gap(6).AlignItems(ui.Center).Children(func() {
+		ui.Row(c).Height(oiTokensFor(m, p).HeaderHeight).Shrink(0).Padding(0, 6, 0, 8).Gap(6).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, "Documentation").FontSize(13).TextColor(oi.textStrong).SingleLine().Ellipsis("…")
 			ui.Spacer(c)
 			m.headerIcon(c, p, oi, "documentation-close", "Hide", "general/remove", func() { m.DockHide(documentationWindow) })
@@ -642,6 +642,8 @@ func (m *Model) openDocumentationSource(v *documentationView, target documentati
 				}}
 			m.noteTabUse(t)
 			m.insertTab(t)
+			m.applyEditorFontPrefs(m.prefs.Font, m.prefs.fontSize())
+			m.applyTabAppearance(t, m.prefs.Editor)
 			if d.virtual == nil {
 				d.virtual = make(map[string]*Tab)
 			}

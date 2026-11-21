@@ -1811,7 +1811,7 @@ func (a *app) markdownCodeCard(c *ui.Context, m *markdownPreview, path string, b
 				return
 			}
 			ui.Row(c).Gap(2).Children(func() {
-				if d := b.diagram; d != nil && d.err == "" && a.smallButton(c, iconImage, locales.ShowDiagram()) {
+				if d := b.diagram; d != nil && d.Err == "" && a.smallButton(c, iconImage, locales.ShowDiagram()) {
 					delete(m.sources, b.line)
 				}
 				if a.smallButton(c, iconCopy, locales.CopyCode()) {
@@ -1829,15 +1829,15 @@ func (a *app) markdownCodeCard(c *ui.Context, m *markdownPreview, path string, b
 func (a *app) markdownDiagram(c *ui.Context, v *viewer, b markdownBlock, size, width float32) {
 	m, p, d := v.markdown, a.pal, b.diagram
 	pad := size
-	w := min(d.w, max(1, width-2*pad-2))
-	h := w * d.h / d.w
+	w := min(d.W, max(1, width-2*pad-2))
+	h := w * d.H / d.W
 	card := ui.Column(c.Key("diagram")).WidthPercent(100).Padding(pad).Background(p.editor).Border(1, p.border).Radius(8).AlignItems(ui.Center)
 	over := card.Hovered()
 	card.Children(func() {
 		// Unselectable, so that a double click opens it rather than
 		// selecting the text around it. It opens as the second click is
 		// released, as the overlay would take its press as one outside it.
-		ui.Box(c).Width(w).Height(h).Label(b.language).Draw(d.draw).Unselectable().HandleInput(func(ev ui.InputEvent) bool {
+		ui.Box(c).Width(w).Height(h).Label(b.language).Draw(d.Draw).Unselectable().HandleInput(func(ev ui.InputEvent) bool {
 			if ev.Button != 0 || ev.Clicks != 2 {
 				return false
 			}
@@ -2040,13 +2040,13 @@ func (a *app) markdownView(c *ui.Context, v *viewer, name string) {
 							}
 						})
 					case markdownCodeBlock:
-						if d := b.diagram; d != nil && d.err == "" && !m.sources[b.line] {
+						if d := b.diagram; d != nil && d.Err == "" && !m.sources[b.line] {
 							a.markdownDiagram(c, v, b, size, max(1, width-(b.offset+b.markerWidth)*size-float32(b.quote)*size))
 							break
 						}
 						a.markdownCodeCard(c, m, path, b, size, a.previewHits(m, row.Index, -1, 0))
-						if d := b.diagram; d != nil && d.err != "" {
-							ui.Text(c, locales.MermaidCannotDraw(d.err)).FontSize(size*0.85).TextColor(p.dangerFg).Margin(size*0.4, 0, 0, 0)
+						if d := b.diagram; d != nil && d.Err != "" {
+							ui.Text(c, locales.MermaidCannotDraw(d.Err)).FontSize(size*0.85).TextColor(p.dangerFg).Margin(size*0.4, 0, 0, 0)
 						}
 					case markdownMathBlock:
 						if f := b.formula; f != nil && f.err == "" && f.w > 0 {

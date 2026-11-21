@@ -261,21 +261,38 @@ func TestLayoutsAreBoundedAndKeepTheOpenProject(t *testing.T) {
 	}
 }
 
-func TestRestoreDefaultLayoutMergesTheSplitArea(t *testing.T) {
+func TestRestoreDefaultLayoutMatchesOpenIDEAsFreshLayout(t *testing.T) {
 	m, _ := layoutModel(t)
 	m.ShowRun()
 	m.MoveActiveToolWindowToSplit()
 	m.ShowProblems()
+	m.sideMode = "vcs"
+	m.leftHidden = true
+	m.leftWidth = 420
+	m.rightTool = "problems"
+	m.rightHidden = false
+	m.rightWidth = 380
+	m.bottomHeight = 440
 	m.ResetToolWindowLayout()
 
 	if len(m.splitNames) != 0 {
 		t.Fatalf("split = %v after the reset", m.splitNames)
 	}
-	if m.run.visible {
-		t.Fatal("a window in the split area stayed open")
+	for _, name := range toolWindows {
+		if m.toolVisible(name) {
+			t.Fatalf("%s stayed visible after Restore Default Layout", name)
+		}
 	}
-	if !m.problems.visible || m.tool != "problems" {
-		t.Fatalf("the primary window changed: visible=%v tool=%q", m.problems.visible, m.tool)
+	if m.sideMode != "" || m.leftHidden || m.leftWidth != 0 {
+		t.Fatalf("left side = mode %q hidden %v width %v, want defaults",
+			m.sideMode, m.leftHidden, m.leftWidth)
+	}
+	if m.rightTool != "" || !m.rightHidden || m.rightWidth != 0 {
+		t.Fatalf("right side = tool %q hidden %v width %v, want defaults",
+			m.rightTool, m.rightHidden, m.rightWidth)
+	}
+	if m.bottomHeight != 0 || m.tool != "" {
+		t.Fatalf("bottom = height %d tool %q, want defaults", m.bottomHeight, m.tool)
 	}
 }
 

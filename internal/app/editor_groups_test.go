@@ -45,6 +45,30 @@ func TestFocusGroupSwapsThePanesAndTheirPositions(t *testing.T) {
 	}
 }
 
+func TestOpenWhatsNewInSideUsesAnIndependentVirtualTab(t *testing.T) {
+	m := toolModel()
+	original := m.newWhatsNewTab("0.1.31", "Release notes")
+	m.tabs = []*Tab{original}
+	m.active = 0
+
+	m.openTabInSide(original)
+
+	if m.split == nil || len(m.split.tabs) != 1 || len(m.tabs) != 1 {
+		t.Fatalf("What's New side group = %+v", m.split)
+	}
+	copy := m.tabs[0]
+	if m.split.tabs[0] != original {
+		t.Fatal("the original What's New tab moved to the side")
+	}
+	if copy == original || copy.kind != tabKindWhatsNew ||
+		copy.pageVersion != original.pageVersion || copy.pageNotes != original.pageNotes {
+		t.Fatalf("What's New side tab = %+v", copy)
+	}
+	if copy.doc == nil || copy.doc.Path() != "What's New" {
+		t.Fatalf("What's New virtual document = %+v", copy.doc)
+	}
+}
+
 func TestFocusGroupWithoutASplitDoesNothing(t *testing.T) {
 	a := &Tab{}
 	m := toolModel()

@@ -16,6 +16,9 @@ func TestBuiltinCommandsAreRegisteredOnce(t *testing.T) {
 			t.Fatalf("%s is registered twice", a.ID)
 		}
 		seen[a.ID] = true
+		if canonical := canonicalActionID(a.ID); canonical != a.ID {
+			t.Fatalf("%s is shadowed by alias target %s", a.ID, canonical)
+		}
 		if a.Builtin && (a.Title == "" || a.Run == nil) {
 			t.Fatalf("%s has no title or run", a.ID)
 		}
@@ -50,6 +53,48 @@ func TestActionRegistrationLifecycle(t *testing.T) {
 	}
 	if m.RunCommand("test.action") {
 		t.Fatal("a removed action ran")
+	}
+}
+
+func TestActionArgumentReachesTheOpenIDEAEntryPoint(t *testing.T) {
+	var got any
+	if err := registerAction(&Action{
+		ID: "test.withArg", Title: "With Arg",
+		RunWithArg: func(_ *Model, arg any) { got = arg },
+	}); err != nil {
+		t.Fatal(err)
+	}
+	defer unregisterAction("test.withArg")
+
+	m := &Model{}
+	arg := map[string]any{"task": "open", "turn": float64(2)}
+	if !m.RunActionWithArg("test.withArg", arg) {
+		t.Fatal("the argument action did not run")
+	}
+	if arg["task"] != got.(map[string]any)["task"] {
+		t.Fatalf("argument = %#v", got)
+	}
+	cmd, ok := Command("test.withArg")
+	if !ok || cmd.run == nil {
+		t.Fatal("the argument action is not available from the command palette")
+	}
+	cmd.run(m)
+}
+
+func TestOpenProjectAndJumpToSourceKeepOpenIDEASemantics(t *testing.T) {
+	openProject, ok := Command("file.openProject")
+	if !ok || openProject.title != "Open…" || openProject.group != "File" {
+		t.Fatalf("file.openProject = %+v, %v", openProject, ok)
+	}
+	jump, ok := Command("project.open")
+	if !ok || jump.title != "Jump to Source" || jump.group != "Project View" {
+		t.Fatalf("project.open = %+v, %v", jump, ok)
+	}
+	if got := canonicalActionID("file.openProject"); got != "file.openProject" {
+		t.Fatalf("file.openProject aliased to %q", got)
+	}
+	if got := canonicalActionID("project.open"); got != "project.open" {
+		t.Fatalf("project.open aliased to %q", got)
 	}
 }
 

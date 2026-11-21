@@ -8,6 +8,16 @@ import "github.com/egoist/mygo/ui"
 
 func init() {
 	registerToolWindow(&toolWindowSpec{
+		id: "agents", title: "Agents", icon: "toolwindows/agents", anchor: dockRight, order: 0, stripe: true,
+		open: func(m *Model) {
+			m.agents.visible = true
+			m.connectAgents(false)
+		},
+		close:  func(m *Model) { m.agents.visible = false },
+		shown:  func(m *Model) bool { return m.agents.visible },
+		render: func(m *Model, c *ui.Context, p *ui.Theme, oi oiColors) { m.agentsRightView(c, p, oi) },
+	})
+	registerToolWindow(&toolWindowSpec{
 		id: documentationWindow, title: "Documentation", icon: "status/info", anchor: dockRightSplit, order: 90, stripe: true,
 		render: func(m *Model, c *ui.Context, p *ui.Theme, _ oiColors) { m.documentationPanel(c, p) },
 	})

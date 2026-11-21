@@ -91,6 +91,10 @@ type VCSOperationPane struct {
 
 	request uint32
 	channel uint32
+	remotes *vcsRemotesPane
+	// preferredStart is the branch/tag selected by a Git Log or Branches pane
+	// action before the shared revision chooser finishes loading.
+	preferredStart string
 }
 
 func (m *Model) resetVCSOperations() { m.vcsOps = VCSOperationPane{} }
@@ -207,6 +211,13 @@ func (m *Model) OpenNewGitBranch() {
 	m.openVCSOperation(vcsOpNewBranch)
 }
 
+// OpenNewGitBranchAt starts the branch chooser at a ref selected outside the
+// popup, as the Git Log Branches pane does.
+func (m *Model) OpenNewGitBranchAt(ref string) {
+	m.openVCSOperation(vcsOpNewBranch)
+	m.vcsOps.preferredStart = ref
+}
+
 func (m *Model) OpenNewGitTag() {
 	m.openVCSOperation(vcsOpNewTag)
 }
@@ -215,8 +226,20 @@ func (m *Model) OpenGitMerge() {
 	m.openVCSOperation(vcsOpMerge)
 }
 
+// OpenGitMergeAt opens Merge with a branch selected in the Branches popup.
+func (m *Model) OpenGitMergeAt(ref string) {
+	m.openVCSOperation(vcsOpMerge)
+	m.vcsOps.preferredStart = ref
+}
+
 func (m *Model) OpenGitRebase() {
 	m.openVCSOperation(vcsOpRebase)
+}
+
+// OpenGitRebaseAt opens Rebase with a branch selected in the Branches popup.
+func (m *Model) OpenGitRebaseAt(ref string) {
+	m.openVCSOperation(vcsOpRebase)
+	m.vcsOps.preferredStart = ref
 }
 
 func (m *Model) OpenGitStash() {
@@ -298,7 +321,7 @@ func (m *Model) openVCSOperation(kind string) {
 }
 
 func (m *Model) closeVCSOperation() {
-	if m.vcsOps.busy {
+	if m.vcsOps.busy || m.vcsOps.remotes != nil && m.vcsOps.remotes.busy {
 		return
 	}
 	m.resetVCSOperations()
@@ -322,7 +345,7 @@ func (m *Model) loadVCSStartChoices(state *VCSOperationPane) {
 		defer cancel()
 		branches, branchErr := m.branchList(ctx)
 		var tags []string
-		tagRaw, tagErr := m.mgr.Invoke(ctx, Window, "vcs_tags", map[string]any{"repo": nil})
+		tagRaw, tagErr := m.invoke(ctx, "vcs_tags", map[string]any{"repo": nil})
 		if tagErr == nil {
 			tagErr = json.Unmarshal(tagRaw, &tags)
 		}
@@ -337,6 +360,14 @@ func (m *Model) loadVCSStartChoices(state *VCSOperationPane) {
 				m.vcsOps.err = "Could not read the tags: " + tagErr.Error()
 			}
 			m.vcsOps.choices = m.vcsRevisionChoices(branches, tags)
+			if m.vcsOps.preferredStart != "" {
+				for i, choice := range m.vcsOps.choices {
+					if choice.value == m.vcsOps.preferredStart {
+						m.vcsOps.sel = i
+						break
+					}
+				}
+			}
 			m.invalidate()
 		})
 	}()
@@ -351,7 +382,7 @@ func (m *Model) loadVCSRevisionChoices(state *VCSOperationPane, empty string) {
 		defer cancel()
 		branches, branchErr := m.branchList(ctx)
 		var tags []string
-		tagRaw, tagErr := m.mgr.Invoke(ctx, Window, "vcs_tags", map[string]any{"repo": nil})
+		tagRaw, tagErr := m.invoke(ctx, "vcs_tags", map[string]any{"repo": nil})
 		if tagErr == nil {
 			tagErr = json.Unmarshal(tagRaw, &tags)
 		}
@@ -366,6 +397,14 @@ func (m *Model) loadVCSRevisionChoices(state *VCSOperationPane, empty string) {
 				m.vcsOps.err = "Could not read the tags: " + tagErr.Error()
 			}
 			m.vcsOps.choices = m.vcsRevisionChoices(branches, tags)
+			if m.vcsOps.preferredStart != "" {
+				for i, choice := range m.vcsOps.choices {
+					if choice.value == m.vcsOps.preferredStart {
+						m.vcsOps.sel = i
+						break
+					}
+				}
+			}
 			if len(m.vcsOps.choices) == 0 && m.vcsOps.err == "" {
 				m.vcsOps.err = empty
 			}
@@ -399,7 +438,7 @@ func (m *Model) loadVCSStashes(state *VCSOperationPane) {
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 		defer cancel()
-		raw, err := m.mgr.Invoke(ctx, Window, "vcs_stashes", map[string]any{"repo": nil})
+		raw, err := m.invoke(ctx, "vcs_stashes", map[string]any{"repo": nil})
 		var stashes []openidea.Stash
 		if err == nil {
 			err = json.Unmarshal(raw, &stashes)
@@ -419,7 +458,7 @@ func (m *Model) loadVCSStashes(state *VCSOperationPane) {
 				if label == "" {
 					label = fmt.Sprintf("Stash #%d", s.Index)
 				}
-				detail := logTime(s.TimeMs)
+				detail := logTime(m.prefs.dateFormatPrefs(), m.systemRegion, s.TimeMs)
 				if detail != "" {
 					detail = fmt.Sprintf("#%d · %s", s.Index, detail)
 				} else {
@@ -561,7 +600,7 @@ func (m *Model) runVCSOperation(title, command string, args map[string]any) {
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 5*time.Minute)
 		defer cancel()
-		_, err := m.mgr.Invoke(ctx, Window, command, args)
+		_, err := m.invoke(ctx, command, args)
 		m.post(func() {
 			if m.Root() != root || !m.vcsOps.open || m.vcsOps.kind != state.kind {
 				return
@@ -599,7 +638,7 @@ func (m *Model) runVCSRemote(kind, title string, op map[string]any) {
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 10*time.Minute)
 		defer cancel()
-		_, err := m.mgr.Invoke(ctx, Window, "vcs_remote", map[string]any{
+		_, err := m.invoke(ctx, "vcs_remote", map[string]any{
 			"repo": nil, "request": request, "op": op,
 			"onOutput": map[string]any{"$channel": channel},
 		})
@@ -633,7 +672,7 @@ func (m *Model) runVCSGitOperation(title string, op map[string]any) {
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 10*time.Minute)
 		defer cancel()
-		_, err := m.mgr.Invoke(ctx, Window, "vcs_operation", map[string]any{
+		_, err := m.invoke(ctx, "vcs_operation", map[string]any{
 			"repo": nil, "request": request, "op": op,
 			"onOutput": map[string]any{"$channel": channel},
 		})
@@ -741,6 +780,10 @@ func (m *Model) RevertSelectedCommit() {
 func (m *Model) vcsOperationDialog(c *ui.Context, p *ui.Theme) {
 	state := &m.vcsOps
 	if !state.open {
+		return
+	}
+	if state.remotes != nil {
+		m.vcsRemotesDialog(c, p, state.remotes)
 		return
 	}
 	open := state.open
@@ -874,7 +917,7 @@ func (m *Model) vcsOperationDialog(c *ui.Context, p *ui.Theme) {
 						go func() {
 							ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
 							defer cancel()
-							_, _ = m.mgr.Invoke(ctx, Window, "cancel_request", map[string]any{"id": id})
+							_, _ = m.invoke(ctx, "cancel_request", map[string]any{"id": id})
 						}()
 					})
 				}
@@ -895,7 +938,7 @@ func (m *Model) SmokeVCSOperations(ctx context.Context) (map[string]any, error) 
 		return nil, errors.New("No project is open")
 	}
 	out := map[string]any{"root": root}
-	if _, err := m.mgr.Invoke(ctx, Window, "project_trust_set", map[string]any{
+	if _, err := m.invoke(ctx, "project_trust_set", map[string]any{
 		"path": root, "trusted": true, "folder": true,
 	}); err != nil {
 		return out, err
@@ -912,31 +955,31 @@ func (m *Model) SmokeVCSOperations(ctx context.Context) (map[string]any, error) 
 	out["head"] = original
 
 	tag := "goidea-smoke-" + fmt.Sprint(time.Now().UnixNano())
-	if _, err := m.mgr.Invoke(ctx, Window, "vcs_create_tag", map[string]any{
+	if _, err := m.invoke(ctx, "vcs_create_tag", map[string]any{
 		"repo": nil, "name": tag, "commit": original, "message": "GoIDEA smoke tag", "force": false,
 	}); err != nil {
 		return out, err
 	}
-	tagRaw, tagErr := m.mgr.Invoke(ctx, Window, "vcs_tags", map[string]any{"repo": nil})
+	tagRaw, tagErr := m.invoke(ctx, "vcs_tags", map[string]any{"repo": nil})
 	var tags []string
 	if tagErr == nil {
 		tagErr = json.Unmarshal(tagRaw, &tags)
 	}
 	out["tagCreated"] = tagErr == nil && containsString(tags, tag)
 	if tagErr == nil {
-		_, _ = m.mgr.Invoke(ctx, Window, "vcs_delete_tag", map[string]any{"repo": nil, "name": tag})
+		_, _ = m.invoke(ctx, "vcs_delete_tag", map[string]any{"repo": nil, "name": tag})
 	}
 
 	file := filepath.Join(root, "goidea-vcs-smoke.txt")
 	if err := osWriteFile(file, []byte("stash smoke\n")); err != nil {
 		return out, err
 	}
-	if _, err := m.mgr.Invoke(ctx, Window, "vcs_stash_push", map[string]any{
+	if _, err := m.invoke(ctx, "vcs_stash_push", map[string]any{
 		"repo": nil, "message": "GoIDEA smoke stash", "includeUntracked": true, "keepIndex": false,
 	}); err != nil {
 		return out, err
 	}
-	stashRaw, stashErr := m.mgr.Invoke(ctx, Window, "vcs_stashes", map[string]any{"repo": nil})
+	stashRaw, stashErr := m.invoke(ctx, "vcs_stashes", map[string]any{"repo": nil})
 	var stashes []openidea.Stash
 	if stashErr == nil {
 		stashErr = json.Unmarshal(stashRaw, &stashes)
@@ -944,7 +987,7 @@ func (m *Model) SmokeVCSOperations(ctx context.Context) (map[string]any, error) 
 	out["stashCreated"] = stashErr == nil && len(stashes) > 0
 	if stashErr == nil && len(stashes) > 0 {
 		index := stashes[0].Index
-		if _, err := m.mgr.Invoke(ctx, Window, "vcs_stash_apply", map[string]any{
+		if _, err := m.invoke(ctx, "vcs_stash_apply", map[string]any{
 			"repo": nil, "index": index, "pop": true, "reinstateIndex": false, "branch": nil,
 		}); err != nil {
 			return out, err
@@ -957,7 +1000,7 @@ func (m *Model) SmokeVCSOperations(ctx context.Context) (map[string]any, error) 
 			return out, fmt.Errorf("unstash restored %q, want the original change", restored)
 		}
 		out["stashRestored"] = true
-		_, _ = m.mgr.Invoke(ctx, Window, "vcs_discard", map[string]any{"paths": []string{file}})
+		_, _ = m.invoke(ctx, "vcs_discard", map[string]any{"paths": []string{file}})
 	}
 
 	remoteDir := filepath.Join(filepath.Dir(root), "goidea-vcs-smoke-remote.git")
@@ -967,7 +1010,7 @@ func (m *Model) SmokeVCSOperations(ctx context.Context) (map[string]any, error) 
 	}
 	remoteCh := m.nextChannel()
 	remoteRequest := m.nextRequest()
-	if _, err := m.mgr.Invoke(ctx, Window, "vcs_remote", map[string]any{
+	if _, err := m.invoke(ctx, "vcs_remote", map[string]any{
 		"repo": nil, "request": remoteRequest, "op": map[string]any{"op": "fetch"},
 		"onOutput": map[string]any{"$channel": remoteCh},
 	}); err != nil {
@@ -975,7 +1018,7 @@ func (m *Model) SmokeVCSOperations(ctx context.Context) (map[string]any, error) 
 	}
 	pushCh := m.nextChannel()
 	pushRequest := m.nextRequest()
-	if _, err := m.mgr.Invoke(ctx, Window, "vcs_remote", map[string]any{
+	if _, err := m.invoke(ctx, "vcs_remote", map[string]any{
 		"repo": nil, "request": pushRequest,
 		"op": map[string]any{
 			"op": "pushBranch", "branch": branch, "revision": nil,
@@ -994,7 +1037,7 @@ func (m *Model) SmokeVCSOperations(ctx context.Context) (map[string]any, error) 
 	}
 	pullCh := m.nextChannel()
 	pullRequest := m.nextRequest()
-	if _, err := m.mgr.Invoke(ctx, Window, "vcs_remote", map[string]any{
+	if _, err := m.invoke(ctx, "vcs_remote", map[string]any{
 		"repo": nil, "request": pullRequest,
 		"op":       map[string]any{"op": "pull", "rebase": false},
 		"onOutput": map[string]any{"$channel": pullCh},
@@ -1015,7 +1058,7 @@ func (m *Model) SmokeVCSOperations(ctx context.Context) (map[string]any, error) 
 	}
 	rebaseStart := *info.HeadCommit
 	feature := "goidea-smoke-" + fmt.Sprint(time.Now().UnixNano())
-	if _, err := m.mgr.Invoke(ctx, Window, "vcs_create_branch", map[string]any{
+	if _, err := m.invoke(ctx, "vcs_create_branch", map[string]any{
 		"repo": nil, "name": feature, "start": rebaseStart, "checkout": true, "overwrite": nil,
 	}); err != nil {
 		return out, err
@@ -1024,10 +1067,10 @@ func (m *Model) SmokeVCSOperations(ctx context.Context) (map[string]any, error) 
 	if err := osWriteFile(file, []byte("merge smoke\n")); err != nil {
 		return out, err
 	}
-	if _, err := m.mgr.Invoke(ctx, Window, "vcs_stage", map[string]any{"paths": []string{file}}); err != nil {
+	if _, err := m.invoke(ctx, "vcs_stage", map[string]any{"paths": []string{file}}); err != nil {
 		return out, err
 	}
-	if _, err := m.mgr.Invoke(ctx, Window, "vcs_commit", map[string]any{
+	if _, err := m.invoke(ctx, "vcs_commit", map[string]any{
 		"repo": nil, "message": "VCS operation smoke",
 		"options": map[string]any{
 			"amend": false, "signOff": false, "author": nil,
@@ -1036,7 +1079,7 @@ func (m *Model) SmokeVCSOperations(ctx context.Context) (map[string]any, error) 
 	}); err != nil {
 		return out, err
 	}
-	if _, err := m.mgr.Invoke(ctx, Window, "vcs_checkout", map[string]any{
+	if _, err := m.invoke(ctx, "vcs_checkout", map[string]any{
 		"repo": nil, "branch": branch, "create": false, "options": nil,
 	}); err != nil {
 		return out, err
@@ -1045,10 +1088,10 @@ func (m *Model) SmokeVCSOperations(ctx context.Context) (map[string]any, error) 
 	if err := osWriteFile(mainOnly, []byte("main moved after the feature\n")); err != nil {
 		return out, err
 	}
-	if _, err := m.mgr.Invoke(ctx, Window, "vcs_stage", map[string]any{"paths": []string{mainOnly}}); err != nil {
+	if _, err := m.invoke(ctx, "vcs_stage", map[string]any{"paths": []string{mainOnly}}); err != nil {
 		return out, err
 	}
-	if _, err := m.mgr.Invoke(ctx, Window, "vcs_commit", map[string]any{
+	if _, err := m.invoke(ctx, "vcs_commit", map[string]any{
 		"repo": nil, "message": "VCS rebase smoke on main",
 		"options": map[string]any{
 			"amend": false, "signOff": false, "author": nil,
@@ -1057,24 +1100,24 @@ func (m *Model) SmokeVCSOperations(ctx context.Context) (map[string]any, error) 
 	}); err != nil {
 		return out, err
 	}
-	if _, err := m.mgr.Invoke(ctx, Window, "vcs_checkout", map[string]any{
+	if _, err := m.invoke(ctx, "vcs_checkout", map[string]any{
 		"repo": nil, "branch": feature, "create": false, "options": nil,
 	}); err != nil {
 		return out, err
 	}
-	if _, err := m.mgr.Invoke(ctx, Window, "vcs_rebase_with", map[string]any{
+	if _, err := m.invoke(ctx, "vcs_rebase_with", map[string]any{
 		"repo": nil, "upstream": branch,
 		"options": map[string]any{"onto": nil, "rebaseMerges": false, "keepEmpty": false},
 	}); err != nil {
 		return out, err
 	}
 	out["rebased"] = true
-	if _, err := m.mgr.Invoke(ctx, Window, "vcs_checkout", map[string]any{
+	if _, err := m.invoke(ctx, "vcs_checkout", map[string]any{
 		"repo": nil, "branch": branch, "create": false, "options": nil,
 	}); err != nil {
 		return out, err
 	}
-	if _, err := m.mgr.Invoke(ctx, Window, "vcs_merge_with", map[string]any{
+	if _, err := m.invoke(ctx, "vcs_merge_with", map[string]any{
 		"repo": nil, "branches": []string{feature},
 		"options": map[string]any{
 			"noFf": false, "ffOnly": false, "squash": false,
@@ -1086,7 +1129,7 @@ func (m *Model) SmokeVCSOperations(ctx context.Context) (map[string]any, error) 
 	out["merged"] = true
 	opCh := m.nextChannel()
 	opRequest := m.nextRequest()
-	if _, err := m.mgr.Invoke(ctx, Window, "vcs_operation", map[string]any{
+	if _, err := m.invoke(ctx, "vcs_operation", map[string]any{
 		"repo": nil, "request": opRequest,
 		"op":       map[string]any{"op": "reset", "commit": original, "mode": "hard"},
 		"onOutput": map[string]any{"$channel": opCh},
@@ -1101,8 +1144,8 @@ func (m *Model) SmokeVCSOperations(ctx context.Context) (map[string]any, error) 
 		return out, fmt.Errorf("hard reset left HEAD at %v, want %s", info.HeadCommit, original)
 	}
 	out["reset"] = true
-	_, _ = m.mgr.Invoke(ctx, Window, "vcs_delete_branch", map[string]any{"repo": nil, "branch": feature})
-	_, _ = m.mgr.Invoke(ctx, Window, "vcs_remote", map[string]any{
+	_, _ = m.invoke(ctx, "vcs_delete_branch", map[string]any{"repo": nil, "branch": feature})
+	_, _ = m.invoke(ctx, "vcs_remote", map[string]any{
 		"repo": nil, "request": m.nextRequest(),
 		"op":       map[string]any{"op": "deleteBranch", "branch": remoteName + "/" + branch},
 		"onOutput": map[string]any{"$channel": m.nextChannel()},

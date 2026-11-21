@@ -1,7 +1,10 @@
 // Package textdiff computes the line diff the editor's compare view shows.
 package textdiff
 
-import "strings"
+import (
+	"strings"
+	"unicode"
+)
 
 // Kind is what a diff row is.
 type Kind int
@@ -26,6 +29,14 @@ type Row struct {
 	Text string
 }
 
+// Options controls how lines are matched. Row.Text always remains the text
+// shown to the user.
+type Options struct {
+	TrimWhitespace        bool
+	IgnoreWhitespace      bool
+	IgnoreWhitespaceLines bool
+}
+
 // SplitLines splits text into lines, without the empty tail a final newline
 // would add.
 func SplitLines(text string) []string {
@@ -42,11 +53,16 @@ func SplitLines(text string) []string {
 // Compare diffs oldText against newText and returns the unified rows with
 // context unchanged lines around each change.
 func Compare(oldText, newText string, context int) []Row {
+	return CompareWithOptions(oldText, newText, context, Options{})
+}
+
+// CompareWithOptions diffs with IDEA's whitespace policies.
+func CompareWithOptions(oldText, newText string, context int, options Options) []Row {
 	if context < 0 {
 		context = 0
 	}
 	oldLines, newLines := SplitLines(oldText), SplitLines(newText)
-	ops := lineOps(oldLines, newLines)
+	ops := lineOpsWithOptions(oldLines, newLines, options)
 	rows := make([]Row, 0, len(ops))
 	for _, op := range ops {
 		rows = append(rows, Row{
@@ -72,13 +88,21 @@ type op struct {
 // prefixes and suffixes are trimmed first, and a pair too large to tabulate is
 // reported as one replaced block, which is still a correct diff.
 func lineOps(a, b []string) []op {
+	return lineOpsWithOptions(a, b, Options{})
+}
+
+func lineOpsWithOptions(a, b []string, options Options) []op {
+	if options.IgnoreWhitespaceLines {
+		return lineOpsIgnoringBlankLines(a, b)
+	}
+	aKeys, bKeys := normalizedLines(a, options), normalizedLines(b, options)
 	prefix := 0
-	for prefix < len(a) && prefix < len(b) && a[prefix] == b[prefix] {
+	for prefix < len(a) && prefix < len(b) && aKeys[prefix] == bKeys[prefix] {
 		prefix++
 	}
 	suffix := 0
 	for suffix < len(a)-prefix && suffix < len(b)-prefix &&
-		a[len(a)-1-suffix] == b[len(b)-1-suffix] {
+		aKeys[len(a)-1-suffix] == bKeys[len(b)-1-suffix] {
 		suffix++
 	}
 	out := make([]op, 0, len(a)+len(b))
@@ -86,7 +110,8 @@ func lineOps(a, b []string) []op {
 		out = append(out, op{kind: Context, old: i, new: i, text: a[i]})
 	}
 	ma, mb := a[prefix:len(a)-suffix], b[prefix:len(b)-suffix]
-	mid := middleOps(ma, mb)
+	mka, mkb := aKeys[prefix:len(a)-suffix], bKeys[prefix:len(b)-suffix]
+	mid := middleOps(ma, mb, mka, mkb)
 	for i, o := range mid {
 		o.old += prefix
 		o.new += prefix
@@ -100,8 +125,54 @@ func lineOps(a, b []string) []op {
 	return out
 }
 
+// lineOpsIgnoringBlankLines compares the content lines and leaves empty or
+// whitespace-only lines out of the result. The original line indexes survive,
+// so applying one side still edits the exact lines the user selected.
+func lineOpsIgnoringBlankLines(a, b []string) []op {
+	aContent, aIndexes := contentLines(a)
+	bContent, bIndexes := contentLines(b)
+	aKeys, bKeys := normalizedLines(aContent, Options{IgnoreWhitespace: true}),
+		normalizedLines(bContent, Options{IgnoreWhitespace: true})
+	mid := middleOps(aContent, bContent, aKeys, bKeys)
+	out := make([]op, 0, len(mid))
+	for _, operation := range mid {
+		switch operation.kind {
+		case Context:
+			operation.old = aIndexes[operation.old]
+			operation.new = bIndexes[operation.new]
+		case Delete:
+			operation.old = aIndexes[operation.old]
+		case Add:
+			operation.new = bIndexes[operation.new]
+		}
+		out = append(out, operation)
+	}
+	return out
+}
+
+// contentLines returns the lines that carry content and their indexes in the
+// complete document. An empty line is blank after all Unicode whitespace is
+// removed.
+func contentLines(lines []string) ([]string, []int) {
+	content := make([]string, 0, len(lines))
+	indexes := make([]int, 0, len(lines))
+	for i, line := range lines {
+		if strings.Map(func(r rune) rune {
+			if unicode.IsSpace(r) {
+				return -1
+			}
+			return r
+		}, line) == "" {
+			continue
+		}
+		content = append(content, line)
+		indexes = append(indexes, i)
+	}
+	return content, indexes
+}
+
 // middleOps diffs two texts whose first and last lines already matched.
-func middleOps(a, b []string) []op {
+func middleOps(a, b, aKeys, bKeys []string) []op {
 	n, m := len(a), len(b)
 	if n == 0 || m == 0 {
 		return replaced(a, b, 0, 0)
@@ -115,7 +186,7 @@ func middleOps(a, b []string) []op {
 	lcs := make([]int32, (n+1)*width)
 	for i := n - 1; i >= 0; i-- {
 		for j := m - 1; j >= 0; j-- {
-			if a[i] == b[j] {
+			if aKeys[i] == bKeys[j] {
 				lcs[i*width+j] = lcs[(i+1)*width+j+1] + 1
 			} else if down, right := lcs[(i+1)*width+j], lcs[i*width+j+1]; down >= right {
 				lcs[i*width+j] = down
@@ -128,7 +199,7 @@ func middleOps(a, b []string) []op {
 	i, j := 0, 0
 	for i < n && j < m {
 		switch {
-		case a[i] == b[j]:
+		case aKeys[i] == bKeys[j]:
 			out = append(out, op{kind: Context, old: i, new: j, text: a[i]})
 			i, j = i+1, j+1
 		case lcs[(i+1)*width+j] >= lcs[i*width+j+1]:
@@ -140,6 +211,27 @@ func middleOps(a, b []string) []op {
 		}
 	}
 	out = append(out, replaced(a[i:], b[j:], i, j)...)
+	return out
+}
+
+func normalizedLines(lines []string, options Options) []string {
+	if !options.TrimWhitespace && !options.IgnoreWhitespace && !options.IgnoreWhitespaceLines {
+		return lines
+	}
+	out := make([]string, len(lines))
+	for i, line := range lines {
+		switch {
+		case options.IgnoreWhitespace || options.IgnoreWhitespaceLines:
+			out[i] = strings.Map(func(r rune) rune {
+				if unicode.IsSpace(r) {
+					return -1
+				}
+				return r
+			}, line)
+		case options.TrimWhitespace:
+			out[i] = strings.TrimSpace(line)
+		}
+	}
 	return out
 }
 

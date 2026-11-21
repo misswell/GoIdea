@@ -4,6 +4,11 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/editor"
+
+	"mayoi/internal/docbridge"
 )
 
 func TestToggleBookmarkAddsAndRemoves(t *testing.T) {
@@ -120,6 +125,59 @@ func TestToggleBookmarkMnemonic(t *testing.T) {
 	if !added || len(list) != 1 || list[0].Mnemonic != "B" {
 		t.Fatalf("toggle other key = %+v, %v; want key B", list, added)
 	}
+}
+
+func TestBookmarkMnemonicActionsAndShortcuts(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "Main.java")
+	tab := &Tab{doc: docbridge.Virtual(file, "class Main {\n  void run() {}\n}\n")}
+	tab.state = &editor.State{Buffer: tab.doc.Buffer()}
+	m := &Model{tabs: []*Tab{tab}}
+
+	for _, id := range []string{
+		"navigate.toggleBookmarkWithMnemonic",
+		"navigate.toggleBookmark1",
+		"navigate.gotoBookmark1",
+		"navigate.toggleBookmark0",
+		"navigate.gotoBookmark0",
+	} {
+		if _, ok := actionGet(id); !ok {
+			t.Fatalf("%s is not registered", id)
+		}
+	}
+	toggleID := "navigate.toggleBookmark1"
+	if got := m.KeymapBindings(toggleID); len(got) != 1 || got[0] != "Ctrl+Shift+1" {
+		t.Fatalf("%s bindings = %v", toggleID, got)
+	}
+	gotoID := "navigate.gotoBookmark1"
+	if got := m.KeymapBindings(gotoID); len(got) != 1 || got[0] != "Ctrl+1" {
+		t.Fatalf("%s bindings = %v", gotoID, got)
+	}
+	if !m.RunAction(toggleID) || len(m.bookmarks) != 1 || m.bookmarks[0].Mnemonic != "1" {
+		t.Fatalf("toggle action bookmarks = %+v", m.bookmarks)
+	}
+	tab.state.GoTo(editor.Pos{Line: 1, Col: 0})
+
+	tt := ui.NewTester(m.View, 900, 700)
+	tt.Frame()
+	tt.Key(ui.Ctrl|ui.Shift, ui.Key2)
+	if len(m.bookmarks) != 2 || bookmarkByMnemonicValue(m.bookmarks, "2") == nil {
+		t.Fatalf("Ctrl+Shift+2 bookmarks = %+v", m.bookmarks)
+	}
+	tab.state.GoTo(editor.Pos{Line: 1, Col: 0})
+	tt.Frame()
+	tt.Key(ui.Ctrl, ui.Key1)
+	if got := tab.state.CursorPos().Line; got != 0 {
+		t.Fatalf("Ctrl+1 moved to line %d, want the mnemonic 1 bookmark", got)
+	}
+}
+
+func bookmarkByMnemonicValue(list []Bookmark, mnemonic string) *Bookmark {
+	for i := range list {
+		if list[i].Mnemonic == mnemonic {
+			return &list[i]
+		}
+	}
+	return nil
 }
 
 func TestBookmarkByMnemonic(t *testing.T) {

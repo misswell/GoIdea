@@ -30,22 +30,106 @@ type diffView struct {
 	rows  []textdiff.Row
 	added int
 	gone  int
+	// leftText and rightText are the complete sides. Keeping them lets the
+	// compare view navigate hunks and apply either side without re-reading a
+	// file or guessing from the context-trimmed rows.
+	leftText  string
+	rightText string
+	leftPath  string
+	rightPath string
+	changes   []diffChange
+	selected  int
+	// leftLabel and rightLabel name an agent review's two versions instead of
+	// the plain HEAD/current labels of the Git compare.
+	leftLabel  string
+	rightLabel string
+	// agentChain is the files of one review, so Previous and Next stay inside
+	// the same task and commit group.
+	agentTask  string
+	agentChain []agentDiffTarget
+	agentIndex int
 	// other is the right-hand file of a two-file compare; empty means the
 	// compare is against HEAD.
 	other string
+	// fileChain carries Compare Directories files for Previous/Next File.
+	fileChain []diffFileTarget
+	fileIndex int
 	// inline marks a compare whose right side is text rather than a file, as
 	// Compare with Clipboard; label names that side.
 	inline bool
 	label  string
+	// options are the shared Diff Settings choices shown by the toolbar.
+	options      DiffPrefs
+	settingsOpen bool
+	// Each layout keeps its own scroll positions. Split panes can scroll
+	// independently, or transfer the user's movement to the other side when
+	// Synchronize Scrolling is on.
+	unifiedScroll ui.ScrollState
+	leftScroll    ui.ScrollState
+	rightScroll   ui.ScrollState
+	scrollReady   bool
+	lastUnifiedX  float32
+	lastUnifiedY  float32
+	lastLeftX     float32
+	lastLeftY     float32
+	lastRightX    float32
+	lastRightY    float32
 
 	loading bool
 	err     string
 	message string
 }
 
+// diffChange is one non-overlapping edit in the full texts. Starts and ends
+// are zero-based and end is exclusive.
+type diffChange struct {
+	oldStart int
+	oldEnd   int
+	newStart int
+	newEnd   int
+}
+
+// diffFileTarget is one file of a multi-file compare such as Compare
+// Directories. Previous/Next File moves through this list.
+type diffFileTarget struct {
+	left  string
+	right string
+	label string
+}
+
+// diffPaneRow is one row of one side. source is its index in diffView.rows,
+// and present is false for the empty spacer an aligned pane keeps opposite a
+// line the other document has by itself.
+type diffPaneRow struct {
+	source  int
+	row     textdiff.Row
+	present bool
+}
+
+// diffRowsForPane removes the other side's rows for unaligned panes, or keeps
+// them as empty spacers for aligned panes.
+func diffRowsForPane(rows []textdiff.Row, left, align bool) []diffPaneRow {
+	out := make([]diffPaneRow, 0, len(rows))
+	for i, row := range rows {
+		present := row.Kind != textdiff.Add
+		if !left {
+			present = row.Kind != textdiff.Delete
+		}
+		if present || align {
+			out = append(out, diffPaneRow{source: i, row: row, present: present})
+		}
+	}
+	return out
+}
+
 // diffRows compares old against cur and counts the added and removed lines.
 func diffRows(old, cur string) ([]textdiff.Row, int, int) {
-	rows := textdiff.Compare(old, cur, diffContext)
+	return diffRowsWithOptions(old, cur, diffContext, DiffPrefs{})
+}
+
+func diffRowsWithOptions(old, cur string, context int, options DiffPrefs) ([]textdiff.Row, int, int) {
+	options = options.normalized()
+	rows := textdiff.CompareWithOptions(old, cur, context, diffComparisonOptions(options))
 	added, gone := 0, 0
 	for _, r := range rows {
 		switch r.Kind {
@@ -58,6 +142,95 @@ func diffRows(old, cur string) ([]textdiff.Row, int, int) {
 	return rows, added, gone
 }
 
+func diffComparisonOptions(options DiffPrefs) textdiff.Options {
+	return textdiff.Options{
+		TrimWhitespace:        options.Ignore == "trim",
+		IgnoreWhitespace:      options.Ignore == "whitespace",
+		IgnoreWhitespaceLines: options.Ignore == "whitespaceAndLines",
+	}
+}
+
+func (m *Model) diffPrefs() DiffPrefs {
+	options := m.prefs.VCS.Diff.normalized()
+	if options.Collapse == nil {
+		options.Collapse = boolPref(true)
+	}
+	if options.SyncScroll == nil {
+		options.SyncScroll = boolPref(true)
+	}
+	return options
+}
+
+// diffUsesSoftWrap resolves Diff Settings' Follow editor choice against the
+// same file-pattern setting the text editors use.
+func (m *Model) diffUsesSoftWrap(d *diffView, options DiffPrefs) bool {
+	switch options.SoftWrap {
+	case "on":
+		return true
+	case "off":
+		return false
+	default:
+		return d != nil && d.path != "" && m.prefs.Editor.WrapsFile(d.path)
+	}
+}
+
+// syncDiffScroll transfers a user scroll from the pane that moved to the
+// other one. The second ScrollState is also the source when the user moves the
+// right pane. Max values come from the previous layout, so the transfer keeps
+// the same relative place in panes with different content heights.
+func (d *diffView) syncDiffScroll() {
+	options := d.options.normalized()
+	if !d.scrollReady {
+		d.lastUnifiedX, d.lastUnifiedY = d.unifiedScroll.X, d.unifiedScroll.Y
+		d.lastLeftX, d.lastLeftY = d.leftScroll.X, d.leftScroll.Y
+		d.lastRightX, d.lastRightY = d.rightScroll.X, d.rightScroll.Y
+		d.scrollReady = true
+		return
+	}
+	if options.Mode == "unified" || !prefBool(options.SyncScroll, true) {
+		d.lastUnifiedX, d.lastUnifiedY = d.unifiedScroll.X, d.unifiedScroll.Y
+		d.lastLeftX, d.lastLeftY = d.leftScroll.X, d.leftScroll.Y
+		d.lastRightX, d.lastRightY = d.rightScroll.X, d.rightScroll.Y
+		return
+	}
+	leftMoved := d.leftScroll.X != d.lastLeftX || d.leftScroll.Y != d.lastLeftY
+	rightMoved := d.rightScroll.X != d.lastRightX || d.rightScroll.Y != d.lastRightY
+	switch {
+	case leftMoved && !rightMoved:
+		d.rightScroll.X = transferDiffOffset(d.leftScroll.X, d.leftScroll.MaxX, d.rightScroll.MaxX)
+		d.rightScroll.Y = transferDiffOffset(d.leftScroll.Y, d.leftScroll.MaxY, d.rightScroll.MaxY)
+	case rightMoved && !leftMoved:
+		d.leftScroll.X = transferDiffOffset(d.rightScroll.X, d.rightScroll.MaxX, d.leftScroll.MaxX)
+		d.leftScroll.Y = transferDiffOffset(d.rightScroll.Y, d.rightScroll.MaxY, d.leftScroll.MaxY)
+	}
+	d.lastUnifiedX, d.lastUnifiedY = d.unifiedScroll.X, d.unifiedScroll.Y
+	d.lastLeftX, d.lastLeftY = d.leftScroll.X, d.leftScroll.Y
+	d.lastRightX, d.lastRightY = d.rightScroll.X, d.rightScroll.Y
+}
+
+func transferDiffOffset(value, fromMax, toMax float32) float32 {
+	if toMax <= 0 {
+		return 0
+	}
+	if fromMax <= 0 {
+		if value < 0 {
+			return 0
+		}
+		if value > toMax {
+			return toMax
+		}
+		return value
+	}
+	next := value / fromMax * toMax
+	if next < 0 {
+		return 0
+	}
+	if next > toMax {
+		return toMax
+	}
+	return next
+}
+
 // ShowDiff opens the compare view for a file against its committed version.
 func (m *Model) ShowDiff(path string) {
 	if path == "" || m.Root() == "" {
@@ -66,7 +239,10 @@ func (m *Model) ShowDiff(path string) {
 	path = realPath(path)
 	// The buffer, not the saved file, is what the user is looking at.
 	cur, fromTab := m.bufferText(path)
-	m.diff = &diffView{open: true, path: path, loading: true}
+	m.diff = &diffView{
+		open: true, path: path, rightPath: path, loading: true,
+		options: m.diffPrefs(),
+	}
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
@@ -86,19 +262,6 @@ func (m *Model) ShowDiff(path string) {
 				cur = string(data)
 			}
 		}
-		var rows []textdiff.Row
-		var added, gone int
-		if err == nil {
-			rows = textdiff.Compare(old, cur, diffContext)
-			for _, r := range rows {
-				switch r.Kind {
-				case textdiff.Add:
-					added++
-				case textdiff.Delete:
-					gone++
-				}
-			}
-		}
 		m.post(func() {
 			d := m.diff
 			if d == nil || d.path != path {
@@ -111,13 +274,13 @@ func (m *Model) ShowDiff(path string) {
 				return
 			}
 			d.err = ""
-			d.added, d.gone = added, gone
-			if added == 0 && gone == 0 {
+			d.leftText, d.rightText = old, cur
+			d.setDiffRows(old, cur)
+			if d.added == 0 && d.gone == 0 {
 				d.message = "Identical to HEAD"
 				m.invalidate()
 				return
 			}
-			d.rows = rows
 			m.invalidate()
 		})
 	}()
@@ -130,7 +293,11 @@ func (m *Model) ShowFileDiff(left, right string) {
 		return
 	}
 	left, right = realPath(left), realPath(right)
-	d := &diffView{open: true, path: left, other: right, loading: true}
+	d := &diffView{
+		open: true, path: right, other: left, leftPath: left, rightPath: right,
+		leftLabel: filepath.Base(left), rightLabel: filepath.Base(right), loading: true,
+		options: m.diffPrefs(),
+	}
 	m.diff = d
 	m.invalidate()
 	go func() {
@@ -160,8 +327,7 @@ func (m *Model) ShowFileDiff(left, right string) {
 			})
 			return
 		}
-		rows, added, gone := diffRows(old, cur)
-		m.finishCompare(d, rows, added, gone, "The two files are identical")
+		m.finishCompare(d, old, cur, "The two files are identical")
 	}()
 }
 
@@ -177,7 +343,11 @@ func (m *Model) CompareTabWithFile(t *Tab, picked string) {
 	if picked == path {
 		return
 	}
-	d := &diffView{open: true, path: path, other: picked, loading: true}
+	d := &diffView{
+		open: true, path: path, other: picked, leftPath: picked, rightPath: path,
+		leftLabel: filepath.Base(picked), rightLabel: filepath.Base(path), loading: true,
+		options: m.diffPrefs(),
+	}
 	m.diff = d
 	m.invalidate()
 	cur := t.doc.Text()
@@ -194,8 +364,7 @@ func (m *Model) CompareTabWithFile(t *Tab, picked string) {
 			})
 			return
 		}
-		rows, added, gone := diffRows(string(data), cur)
-		m.finishCompare(d, rows, added, gone, "The two files are identical")
+		m.finishCompare(d, string(data), cur, "The two files are identical")
 	}()
 }
 
@@ -235,38 +404,41 @@ func (m *Model) CompareTabWithClipboard(t *Tab) {
 		m.invalidate()
 		return
 	}
-	m.ShowTextCompare(t.doc.Path(), t.doc.Text(), "Clipboard", string(raw))
+	m.ShowTextCompare(t.doc.Path(), string(raw), "Clipboard", t.doc.Text())
 }
 
 // ShowTextCompare opens the compare view on a tab's text and a text that is
-// not a file; label names the right-hand side.
-func (m *Model) ShowTextCompare(path, cur, label, text string) {
+// not a file; label names the left-hand side and the tab names the right one.
+func (m *Model) ShowTextCompare(path, left, leftLabel, right string) {
 	if path == "" {
 		return
 	}
-	d := &diffView{open: true, path: path, inline: true, label: label, loading: true}
+	d := &diffView{
+		open: true, path: path, rightPath: path, inline: true,
+		leftLabel: leftLabel, rightLabel: filepath.Base(path), loading: true,
+		options: m.diffPrefs(),
+	}
 	m.diff = d
 	m.invalidate()
 	go func() {
-		rows, added, gone := diffRows(cur, text)
-		m.finishCompare(d, rows, added, gone, label+" is identical to the current file")
+		m.finishCompare(d, left, right, leftLabel+" is identical to the current file")
 	}()
 }
 
 // finishCompare posts a computed comparison unless another one replaced it.
-func (m *Model) finishCompare(d *diffView, rows []textdiff.Row, added, gone int, same string) {
+func (m *Model) finishCompare(d *diffView, left, right, same string) {
 	m.post(func() {
 		if m.diff != d {
 			return
 		}
+		d.leftText, d.rightText = left, right
+		d.setDiffRows(left, right)
 		d.loading = false
-		d.added, d.gone = added, gone
-		if added == 0 && gone == 0 {
+		if d.added == 0 && d.gone == 0 {
 			d.message = same
 			m.invalidate()
 			return
 		}
-		d.rows = rows
 		m.invalidate()
 	})
 }
@@ -316,22 +488,49 @@ func (m *Model) diffDialog(c *ui.Context, p *ui.Theme) {
 	}
 	open := d.open
 	dlg := ui.Modal(c, &open, func() {
-		ui.Column(c).Width(920).Gap(8).Children(func() {
+		ui.Column(c).Width(1080).Gap(8).Children(func() {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, diffTitle(d)).FontSize(13).Bold().TextColor(p.Text).SingleLine()
 				ui.Spacer(c)
+				if len(d.agentChain) > 1 || len(d.fileChain) > 1 {
+					index, count := d.agentIndex, len(d.agentChain)
+					if len(d.fileChain) > count {
+						index, count = d.fileIndex, len(d.fileChain)
+					}
+					ui.Button(c, "‹ Previous File").Disabled(index <= 0).OnClick(func() { m.StepDiffFile(-1) })
+					ui.Text(c, fmt.Sprintf("%d of %d", index+1, count)).
+						FontSize(11).TextColor(p.TextMuted).SingleLine()
+					ui.Button(c, "Next File ›").Disabled(index >= count-1).OnClick(func() { m.StepDiffFile(1) })
+				}
 				if !d.loading && d.err == "" && d.message == "" {
 					ui.Text(c, fmt.Sprintf("+%d  −%d", d.added, d.gone)).
 						FontSize(12).TextColor(p.TextMuted).SingleLine()
 				}
 			})
-			if rel, err := filepath.Rel(m.Root(), d.path); err == nil && !strings.HasPrefix(rel, "..") {
-				ui.Text(c, filepath.ToSlash(rel)).FontSize(12).TextColor(p.TextMuted).
-					SingleLine().Ellipsis("…")
+			if !d.loading && d.err == "" {
+				diffToolbar(c, m, p)
+				if d.settingsOpen {
+					diffSettingsPanel(c, m, p)
+				}
 			}
-			if d.other != "" {
-				ui.Text(c, filepath.ToSlash(d.other)).FontSize(12).TextColor(p.TextMuted).
-					SingleLine().Ellipsis("…")
+			leftName, rightName := diffBanner(d)
+			ui.Row(c).Gap(1).Children(func() {
+				ui.Column(c).Grow(1).MinWidth(0).Padding(5, 8).Background(p.Surface).
+					BorderWidth(1).BorderColor(p.Border).Children(func() {
+					ui.Text(c, leftName).FontSize(12).Bold().TextColor(p.TextMuted).
+						SingleLine().Ellipsis("…")
+				})
+				ui.Column(c).Grow(1).MinWidth(0).Padding(5, 8).Background(p.Surface).
+					BorderWidth(1).BorderColor(p.Border).Children(func() {
+					ui.Text(c, rightName).FontSize(12).Bold().TextColor(p.TextMuted).
+						SingleLine().Ellipsis("…")
+				})
+			})
+			if d.path != "" {
+				if rel, err := filepath.Rel(m.Root(), d.path); err == nil && !strings.HasPrefix(rel, "..") {
+					ui.Text(c, filepath.ToSlash(rel)).FontSize(12).TextColor(p.TextMuted).
+						SingleLine().Ellipsis("…")
+				}
 			}
 			switch {
 			case d.err != "":
@@ -340,52 +539,9 @@ func (m *Model) diffDialog(c *ui.Context, p *ui.Theme) {
 				ui.Text(c, d.message).FontSize(12).TextColor(p.TextMuted).SingleLine()
 			}
 			if len(d.rows) > 0 {
-				// Mix(tint, 0.14) keeps 86% of the tint: the row became a
-				// solid bar with its text barely readable. The background is
-				// the base and the change's colour the small share.
-				addTint := p.Background.Mix(p.Success, 0.14)
-				delTint := p.Background.Mix(p.Danger, 0.14)
-				hunkTint := p.Background.Mix(p.Accent, 0.08)
-				ui.Scroll(c).Height(480).Children(func() {
-					ui.Column(c).Children(func() {
-						for i, r := range d.rows {
-							i, r := i, r
-							row := ui.Row(c.Key(fmt.Sprintf("diff:%d", i))).Height(22).
-								Padding(0, 8).AlignItems(ui.Center)
-							switch r.Kind {
-							case textdiff.Add:
-								row.Background(addTint)
-							case textdiff.Delete:
-								row.Background(delTint)
-							case textdiff.Hunk:
-								row.Background(hunkTint)
-							}
-							row.Children(func() {
-								switch r.Kind {
-								case textdiff.Hunk:
-									ui.Text(c, r.Text).FontSize(13).Font("monospace").TextColor(p.Accent).
-										SingleLine().Ellipsis("…")
-								default:
-									ui.Row(c).Width(34).Shrink(0).Children(func() {
-										ui.Text(c, lineNumber(r.Old)).FontSize(12).Font("monospace").
-											TextColor(p.TextMuted).SingleLine()
-									})
-									ui.Row(c).Width(34).Shrink(0).Children(func() {
-										ui.Text(c, lineNumber(r.New)).FontSize(12).Font("monospace").
-											TextColor(p.TextMuted).SingleLine()
-									})
-									ui.Row(c).Width(16).Shrink(0).Justify(ui.Center).Children(func() {
-										ui.Text(c, diffSign(r.Kind)).FontSize(13).Font("monospace").
-											TextColor(diffColor(r.Kind, p)).SingleLine()
-									})
-									ui.Text(c, r.Text).FontSize(13).Font("monospace").
-										TextColor(diffColor(r.Kind, p)).
-										SingleLine().Ellipsis("…")
-								}
-							})
-						}
-					})
-				})
+				options := d.options.normalized()
+				d.syncDiffScroll()
+				m.renderDiffRows(c, p, options)
 			}
 		})
 	})
@@ -394,12 +550,135 @@ func (m *Model) diffDialog(c *ui.Context, p *ui.Theme) {
 	}
 }
 
+// renderDiffRows draws the unified source, or two independent side-by-side
+// sources. Aligned split panes keep empty spacers where the other side has an
+// extra line. Unaligned panes omit those rows, so each side scrolls its own
+// document as IDEA's diff does.
+func (m *Model) renderDiffRows(c *ui.Context, p *ui.Theme, options DiffPrefs) {
+	d := m.diff
+	if d == nil {
+		return
+	}
+	softWrap := m.diffUsesSoftWrap(d, options)
+	if options.Mode == "unified" {
+		scroll := ui.Scroll(c)
+		if !softWrap {
+			scroll = ui.ScrollBoth(c)
+		}
+		scroll.Height(510).TrackScroll(&d.unifiedScroll).Children(func() {
+			ui.Column(c).Children(func() {
+				for i, row := range d.rows {
+					m.renderDiffRow(c, p, diffPaneRow{source: i, row: row, present: true},
+						options, softWrap, false, false)
+				}
+			})
+		})
+		return
+	}
+	leftRows := diffRowsForPane(d.rows, true, options.AlignChanges)
+	rightRows := diffRowsForPane(d.rows, false, options.AlignChanges)
+	ui.Row(c).Gap(1).Children(func() {
+		m.renderDiffPane(c, p, true, leftRows, &d.leftScroll, options, softWrap)
+		m.renderDiffPane(c, p, false, rightRows, &d.rightScroll, options, softWrap)
+	})
+}
+
+func (m *Model) renderDiffPane(c *ui.Context, p *ui.Theme, left bool, rows []diffPaneRow,
+	state *ui.ScrollState, options DiffPrefs, softWrap bool) {
+	scroll := ui.Scroll(c)
+	if !softWrap {
+		scroll = ui.ScrollBoth(c)
+	}
+	scroll.Grow(1).Height(510).MinWidth(0).TrackScroll(state).Children(func() {
+		ui.Column(c).Children(func() {
+			for _, row := range rows {
+				m.renderDiffRow(c, p, row, options, softWrap, true, left)
+			}
+		})
+	})
+}
+
+func (m *Model) renderDiffRow(c *ui.Context, p *ui.Theme, item diffPaneRow,
+	options DiffPrefs, softWrap, split, left bool) {
+	d := m.diff
+	if d == nil {
+		return
+	}
+	row := ui.Row(c.Key(fmt.Sprintf("diff:%t:%d", options.Mode == "unified", item.source))).
+		MinHeight(22).AlignItems(ui.Center)
+	selected := diffRowSelected(d, item.source)
+	if selected {
+		row.Background(p.Background.Mix(p.Accent, 0.18))
+	} else if options.Highlight != "none" && item.present {
+		switch item.row.Kind {
+		case textdiff.Add, textdiff.Delete:
+			row.Background(diffRowTint(p, item.row.Kind))
+		case textdiff.Hunk:
+			row.Background(p.Background.Mix(p.Accent, 0.08))
+		}
+	}
+	row.Children(func() {
+		if item.row.Kind == textdiff.Hunk {
+			ui.Row(c).Padding(0, 8).Children(func() {
+				text := ui.Text(c, item.row.Text).FontSize(13).Font("monospace").TextColor(p.Accent)
+				if softWrap {
+					text.Grow(1).MinWidth(0)
+				} else {
+					text.NoWrap()
+				}
+			})
+			return
+		}
+		if !split {
+			diffUnifiedLine(c, p, item.row, options.Highlight, softWrap)
+			return
+		}
+		line, changed := item.row.Old, item.row.Kind == textdiff.Delete
+		if !left {
+			line, changed = item.row.New, item.row.Kind == textdiff.Add
+		}
+		if !item.present {
+			line = 0
+		}
+		ui.Row(c).Grow(1).MinWidth(0).Children(func() {
+			text := ""
+			if item.present {
+				text = item.row.Text
+			}
+			diffPaneLine(c, p, line, text, item.present,
+				changed && options.Highlight != "none", softWrap)
+		})
+	})
+	if row.Clicked() {
+		m.diffSelectRow(item.source)
+	}
+}
+
+func diffRowTint(p *ui.Theme, kind textdiff.Kind) ui.Color {
+	if kind == textdiff.Add {
+		return p.Background.Mix(p.Success, 0.14)
+	}
+	return p.Background.Mix(p.Danger, 0.14)
+}
+
 // diffTitle names the compare view in its header.
 func diffTitle(d *diffView) string {
 	name := filepath.Base(d.path)
 	switch {
 	case d.loading:
 		return name + " · Comparing…"
+	case d.leftLabel != "" || d.rightLabel != "":
+		left, right := d.leftLabel, d.rightLabel
+		if left == "" {
+			left = "Empty"
+		}
+		if right == "" {
+			right = "Empty"
+		}
+		if d.inline || d.leftPath != "" || d.rightPath != "" {
+			return left + " ↔ " + right
+		}
+		return name + " ↔ " + left + " / " + right
 	case d.inline:
 		return name + " ↔ " + d.label
 	case d.other != "":

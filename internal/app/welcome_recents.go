@@ -97,10 +97,19 @@ func isWordRune(r rune) bool {
 // filteredRecents is the Welcome list for the typed query: name matches score
 // above path matches, ties keep the stored order.
 func (m *Model) filteredRecents() []recentMatch {
-	q := strings.ToLower(strings.TrimSpace(m.welcomeQuery))
+	return m.filteredRecentsFor(m.welcomeQuery, "")
+}
+
+// filteredRecentsFor is the same recent-project search over an optional query,
+// hiding one path as the File › Open Recent popup hides the current project.
+func (m *Model) filteredRecentsFor(query, exclude string) []recentMatch {
+	q := strings.ToLower(strings.TrimSpace(query))
 	if q == "" {
 		out := make([]recentMatch, 0, len(m.recents))
 		for _, p := range m.recents {
+			if exclude != "" && p.Path == exclude {
+				continue
+			}
 			name := p.Name
 			if name == "" {
 				name = filepath.Base(p.Path)
@@ -111,6 +120,9 @@ func (m *Model) filteredRecents() []recentMatch {
 	}
 	var out []recentMatch
 	for _, p := range m.recents {
+		if exclude != "" && p.Path == exclude {
+			continue
+		}
 		name := p.Name
 		if name == "" {
 			name = filepath.Base(p.Path)

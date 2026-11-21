@@ -24,6 +24,8 @@ func (m *Model) coveragePanel(c *ui.Context, p *ui.Theme) {
 				m.headerIcon(c, p, oi, "coverage-hide", "Hide Coverage", "general/hide", func() { m.SetCoverageVisible(false) })
 			} else if s.active != 0 {
 				m.headerIcon(c, p, oi, "coverage-show", "Show Coverage", "general/show", func() { m.SetCoverageVisible(true) })
+			} else {
+				m.headerIconDisabled(c, p, oi, "coverage-show", "Show Coverage", "general/show", nil)
 			}
 			m.headerIcon(c, p, oi, "coverage-close", "Hide Coverage Tool Window", "general/close", func() { m.DockHide("coverage") })
 		})
@@ -33,12 +35,14 @@ func (m *Model) coveragePanel(c *ui.Context, p *ui.Theme) {
 		case suite == nil:
 			ui.Column(c).Grow(1).Padding(14, 10).Gap(8).AlignItems(ui.Center).Justify(ui.Center).Children(func() {
 				ui.Text(c, "No coverage data").FontSize(13).TextColor(oi.textSecondary)
+				ui.Text(c, "Run a configuration with coverage to see which lines its tests execute.").
+					FontSize(12).TextColor(oi.textMuted)
 				ui.Button(c, "Run with Coverage").OnClick(m.RunWithCoverage)
-				ui.Button(c, "Import Coverage Report…").OnClick(m.ImportCoverageReport)
+				ui.Button(c, "Import a report collected in CI from disk").OnClick(m.ImportCoverageReport)
 			})
 		case len(suite.tree) == 0:
 			ui.Column(c).Padding(10).Children(func() {
-				ui.Text(c, "The report covers no files of this project.").FontSize(12).TextColor(oi.textMuted)
+				ui.Text(c, "The report covers no files").FontSize(12).TextColor(oi.textMuted)
 			})
 		default:
 			m.coverageTable(c, oi, suite)
@@ -58,7 +62,7 @@ func (m *Model) coverageTabs(c *ui.Context, p *ui.Theme, oi oiColors) {
 				} else if button.Hovered() {
 					button.Background(oi.hover)
 				}
-				button.Tooltip(suite.name + " · " + suite.runner)
+				button.Tooltip(suite.runner + ", " + suite.created.Local().Format("3:04:05 PM"))
 				button.Children(func() {
 					ui.Text(c, suite.name).FontSize(12).TextColor(oi.text).SingleLine().Ellipsis("…")
 				})
@@ -174,7 +178,7 @@ func (m *Model) coverageManageDialog(c *ui.Context, p *ui.Theme) {
 			ui.Row(c).Gap(8).Children(func() {
 				busy := s.request != nil
 				ui.Button(c, "Import…").Disabled(busy).OnClick(m.ImportCoverageReport)
-				ui.Button(c, "Remove").Disabled(len(entries) == 0 || busy).OnClick(func() { m.deleteCoverageReport(entries[s.reportIndex]) })
+				ui.Button(c, "Delete").Disabled(len(entries) == 0 || busy).OnClick(func() { m.deleteCoverageReport(entries[s.reportIndex]) })
 				ui.Spacer(c)
 				ui.Button(c, "Cancel").OnClick(func() { s.manage = false; m.invalidate() })
 				ui.Button(c, "Show Selected").Disabled(len(entries) == 0 || busy).OnClick(func() { m.showCoverageReport(entries[s.reportIndex]) })
@@ -199,9 +203,9 @@ func (m *Model) coverageReportRow(c *ui.Context, oi oiColors, entry coverageRepo
 		})
 		status := entry.created.Format("Jan 2 · 15:04")
 		if entry.suite == nil {
-			status = "Not loaded · " + status
+			status = "not loaded " + entry.created.Local().Format("1/2/2006, 3:04:05 PM")
 		} else if m.coverage.active == entry.suite.id {
-			status = "Selected · " + status
+			status = "shown " + entry.created.Local().Format("1/2/2006, 3:04:05 PM")
 		}
 		ui.Text(c, status).FontSize(11).TextColor(oi.textMuted).SingleLine()
 	})

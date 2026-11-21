@@ -107,7 +107,8 @@ echo "- Submodule \`third_party/openidea\`: \`${sub:0:8}\`"
 if [[ "$sub" != "$pin" ]]; then
   echo "- **Submodule is not at the pin**: commit \`third_party/openidea\` or update the pin, or the next clone gets a different source than the manifest records"
 fi
-echo "- Latest release: \`$(latest_release l0ng-ai/openidea)\`"
+echo "- Latest upstream release: \`$(latest_release l0ng-ai/openidea)\`"
+echo "- Latest GoIDEA fork release: \`$(latest_release misswell/openidea)\`"
 echo "- Shipped server: release \`$(server_field release)\`, commit \`$(server_field release_commit)\`"
 compare_section l0ng-ai/openidea "$pin" "OpenIDEA upstream"
 

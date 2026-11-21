@@ -12,10 +12,20 @@ import (
 // is the text the file held at the last open or save: only lines that differ
 // from it count as modified.
 func saveText(text, disk string, p SavePrefs) string {
+	return saveTextAtCaret(text, disk, p, -1, false)
+}
+
+// saveTextAtCaret is saveText with the caret line protected when
+// keepCaretLine is on. The line is zero-based; a negative line means there is
+// no caret.
+func saveTextAtCaret(text, disk string, p SavePrefs, caretLine int, keepCaretLine bool) string {
 	if p.TrimTrailing {
 		lines := strings.Split(text, "\n")
 		diskLines := strings.Split(disk, "\n")
 		for i, line := range lines {
+			if keepCaretLine && i == caretLine {
+				continue
+			}
 			// A line too short for the disk's is new or cut, hence modified.
 			if !p.TrimAllLines && i < len(diskLines) && diskLines[i] == line {
 				continue
@@ -57,7 +67,13 @@ func trimTrailingBlankLines(text string) string {
 // bytes saveText changed, from the first to the last, so the editor's undo
 // takes the cleanup back in one step.
 func saveEdits(text, disk string, p SavePrefs) []editor.Edit {
-	want := saveText(text, disk, p)
+	return saveEditsAtCaret(text, disk, p, -1, false)
+}
+
+// saveEditsAtCaret is saveEdits with the optional caret-line protection of
+// saveTextAtCaret.
+func saveEditsAtCaret(text, disk string, p SavePrefs, caretLine int, keepCaretLine bool) []editor.Edit {
+	want := saveTextAtCaret(text, disk, p, caretLine, keepCaretLine)
 	if want == text {
 		return nil
 	}
@@ -79,10 +95,20 @@ func cleanForSave(ctx context.Context, doc interface {
 	SavedText() string
 	ApplyEdits(context.Context, ...editor.Edit) error
 }, p SavePrefs) error {
+	return cleanForSaveAtCaret(ctx, doc, p, -1, false)
+}
+
+// cleanForSaveAtCaret applies the save cleanup while optionally leaving the
+// caret's line untouched.
+func cleanForSaveAtCaret(ctx context.Context, doc interface {
+	Buffer() *editor.Buffer
+	SavedText() string
+	ApplyEdits(context.Context, ...editor.Edit) error
+}, p SavePrefs, caretLine int, keepCaretLine bool) error {
 	if p.empty() {
 		return nil
 	}
-	edits := saveEdits(doc.Buffer().String(), doc.SavedText(), p)
+	edits := saveEditsAtCaret(doc.Buffer().String(), doc.SavedText(), p, caretLine, keepCaretLine)
 	if len(edits) == 0 {
 		return nil
 	}

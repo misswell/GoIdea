@@ -61,26 +61,27 @@ func (m *Model) editorMenu(menu *ui.Menu, t *Tab) {
 	if path == "" {
 		return
 	}
-	line := t.state.CursorPos().Line + 1
 	if menu.Item("Show Context Actions").Shortcut(ui.Alt, ui.KeyEnter).Chosen() {
 		m.ShowIntentions()
 	}
 	menu.Separator()
 	menu.Submenu("Copy / Paste Special", func(menu *ui.Menu) {
-		menu.Submenu("Copy Path/Reference…", func(menu *ui.Menu) {
-			for _, f := range editorPathFlavours(m.Root(), path, line) {
-				if menu.Item(f.label).Chosen() {
-					m.copyEditorText(f.value)
-				}
-			}
-		})
+		if menu.Item("Copy Path/Reference…").Shortcut(ui.Cmd|ui.Shift, ui.KeyC).Chosen() {
+			m.OpenCopyPathReferencePopup()
+		}
 	})
 	menu.Separator()
 	menu.Submenu("Go To", func(menu *ui.Menu) {
 		if menu.Item("Find Usages").Shortcut(ui.Alt, ui.KeyF7).Chosen() {
 			m.FindUsages()
 		}
+		if menu.Item("Show Usages").Shortcut(ui.Cmd|ui.Alt, ui.KeyF7).Chosen() {
+			m.ShowUsagesPopup()
+		}
 	})
+	if menu.Item("Configure Code Vision…").Chosen() {
+		m.OpenSettingsPage(settingsPageInlayHints)
+	}
 	menu.Separator()
 	menu.Submenu("Local History", func(menu *ui.Menu) {
 		if menu.Item("Show History").Chosen() {
@@ -94,8 +95,18 @@ func (m *Model) editorMenu(menu *ui.Menu, t *Tab) {
 	if menu.Item("Reformat Code").Shortcut(ui.Cmd|ui.Alt, ui.KeyL).Chosen() {
 		m.FormatActive()
 	}
+	if m.fixESLintProblemsAvailable(t) &&
+		menu.Item("Fix ESLint Problems").Chosen() {
+		m.FixESLintProblems()
+	}
 	if menu.Item("Rename…").Shortcut(ui.Shift, ui.KeyF6).Chosen() {
 		m.RenameActive()
+	}
+	if menu.Item("Safe Delete…").Shortcut(ui.Cmd, ui.KeyDelete).Chosen() {
+		m.SafeDeleteActive()
+	}
+	if menu.Item("Send to Agent").Chosen() {
+		m.SendEditorToAgent()
 	}
 	m.compileFileMenu(menu, path)
 }

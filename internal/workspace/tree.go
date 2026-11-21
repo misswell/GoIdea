@@ -47,6 +47,9 @@ var skippedNames = []string{"node_modules", ".next", ".turbo", ".cache", "__pyca
 // and hands their entries to the main thread with post.
 type Tree struct {
 	Root string
+	// IncludeHidden keeps ignored VCS and OS entries while reading a
+	// directory. Project View enables it when Show Hidden Files is on.
+	IncludeHidden bool
 
 	post func(func()) // runs a function on the main thread
 
@@ -180,7 +183,7 @@ func (t *Tree) Load(dir string) {
 	}
 	if l, ok := t.ahead[dir]; ok {
 		delete(t.ahead, dir)
-		kids, dirs := sortEntries(dir, l.entries)
+		kids, dirs := sortEntries(dir, l.entries, t.IncludeHidden)
 		t.set(dir, kids, dirs)
 		if time.Since(l.at) > aheadFresh {
 			t.reload(dir)
@@ -254,7 +257,7 @@ func (t *Tree) reload(dir string) {
 				// The host is not there: what was read stays.
 				return
 			}
-			kids, dirs := sortEntries(dir, entries)
+			kids, dirs := sortEntries(dir, entries, t.IncludeHidden)
 			t.set(dir, kids, dirs)
 			if err == nil {
 				t.readAhead(dir)
@@ -333,11 +336,11 @@ func (t *Tree) RefreshDir(dir string) {
 // sortEntries are the paths of a directory's entries, directories first,
 // then files, each by name, as the file managers sort them, and the
 // directories among them.
-func sortEntries(dir string, entries []vfs.Entry) ([]string, map[string]bool) {
+func sortEntries(dir string, entries []vfs.Entry, includeHidden bool) ([]string, map[string]bool) {
 	kids := make([]string, 0, len(entries))
 	dirs := map[string]bool{}
 	for _, e := range entries {
-		if Hidden(e.Name) {
+		if !includeHidden && Hidden(e.Name) {
 			continue
 		}
 		p := filepath.Join(dir, e.Name)
@@ -616,7 +619,7 @@ func (t *Tree) took(lists map[string][]vfs.Entry, errs map[string]error, files [
 		if !ok || !t.dirs[dir] || t.loading[dir] {
 			continue
 		}
-		kids, dirs := sortEntries(dir, entries)
+		kids, dirs := sortEntries(dir, entries, t.IncludeHidden)
 		same := slices.Equal(old, kids)
 		for _, k := range kids {
 			if same && t.dirs[k] != dirs[k] {
@@ -781,5 +784,5 @@ func (t *Tree) startNotify() {
 // them, directories first and the hidden ones left out, and the
 // directories among them.
 func SortEntries(dir string, entries []vfs.Entry) ([]string, map[string]bool) {
-	return sortEntries(dir, entries)
+	return sortEntries(dir, entries, false)
 }

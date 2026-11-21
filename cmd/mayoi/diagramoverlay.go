@@ -32,13 +32,13 @@ func (a *app) openDiagram(from *viewer, b markdownBlock) {
 // another size.
 func (o *diagramOverlay) show(d *mermaidDiagram, st mermaidStyle) {
 	dg := *d
-	dg.shaped, dg.scale = nil, 0
+	dg.Shaped, dg.Scale = nil, 0
 	v := o.view
-	if v.src != nil && (v.w != dg.w || v.h != dg.h) {
+	if v.src != nil && (v.w != dg.W || v.h != dg.H) {
 		v.zoom, v.panX, v.panY = 0, 0, 0
 	}
 	o.shown = d
-	v.diagram, v.src, v.w, v.h, v.style = &dg, dg.svg, dg.w, dg.h, st
+	v.diagram, v.src, v.w, v.h, v.style = &dg, dg.SVG, dg.W, dg.H, st
 }
 
 // diagramBlock is the block the overlay shows, as the preview has it now, nil
@@ -50,7 +50,7 @@ func (a *app) diagramBlock(o *diagramOverlay) *markdownBlock {
 	}
 	for i := range m.blocks {
 		if b := &m.blocks[i]; b.line == o.line && b.kind == markdownCodeBlock {
-			if b.diagram == nil || b.diagram.err != "" {
+			if b.diagram == nil || b.diagram.Err != "" {
 				return nil
 			}
 			return b

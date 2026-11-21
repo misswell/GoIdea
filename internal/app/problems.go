@@ -6,7 +6,10 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+
+	"mayoi/internal/openidea"
 )
 
 // The Problems tool window is OpenIDEA's list of what language servers and
@@ -16,25 +19,39 @@ import (
 // Problem is one row of the Problems tool window: a diagnostic's position, its
 // severity and what it says.
 type Problem struct {
-	Path      string
-	Line, Col int
-	Severity  string
-	Message   string
-	Source    string
-	Code      string
+	Path                       string
+	Line, Col, EndLine, EndCol int
+	Severity                   string
+	Message                    string
+	Source                     string
+	Code                       string
 }
 
 // ProblemsPane is the tool window's state: which scope and severities it shows.
 type ProblemsPane struct {
-	visible  bool
-	project  bool
-	showErr  bool
-	showWarn bool
-	showInfo bool
+	visible   bool
+	project   bool
+	showErr   bool
+	showWarn  bool
+	showInfo  bool
+	collapsed map[string]bool
+	selected  string
+	preview   problemPreview
+}
+
+type problemPreview struct {
+	path              string
+	line, col, endCol int
+	start             int
+	lines             []string
+	err               string
 }
 
 func (m *Model) resetProblems() {
-	m.problems = ProblemsPane{showErr: true, showWarn: true, showInfo: true}
+	m.problems = ProblemsPane{
+		showErr: true, showWarn: true, showInfo: true,
+		collapsed: map[string]bool{},
+	}
 	// -1 is "no row visited yet", so the first Cmd+Alt+Down lands on the first.
 	m.problemStep = -1
 }
@@ -55,6 +72,9 @@ func (m *Model) problemRows() []Problem {
 	groups := m.problemList()
 	rows := make([]Problem, 0, 8)
 	for _, items := range groups {
+		if len(items) > 0 && m.problems.collapsed[items[0].Path] {
+			continue
+		}
 		rows = append(rows, items...)
 	}
 	return rows
@@ -74,6 +94,7 @@ func (m *Model) nextProblem(dir int) (Problem, bool) {
 // Problems window: Cmd+Alt+Down and Up walk its rows and put the caret there.
 func (m *Model) StepProblem(dir int) {
 	if r, ok := m.nextProblem(dir); ok {
+		m.selectProblem(r)
 		m.revealAt(r.Path, r.Line, r.Col)
 	}
 }
@@ -131,6 +152,8 @@ func (m *Model) problemsOf(path string) []Problem {
 				Path:     path,
 				Line:     int(it.Range.Start.Line),
 				Col:      int(it.Range.Start.Col),
+				EndLine:  int(it.Range.End.Line),
+				EndCol:   int(it.Range.End.Col),
 				Severity: problemSeverity(it.Severity),
 				Message:  it.Message,
 				Source:   diagSource(src, it),
@@ -141,16 +164,58 @@ func (m *Model) problemsOf(path string) []Problem {
 			out = append(out, p)
 		}
 	}
-	sort.SliceStable(out, func(i, j int) bool {
-		if a, b := severityRank(out[i].Severity), severityRank(out[j].Severity); a != b {
-			return a < b
-		}
-		if out[i].Line != out[j].Line {
-			return out[i].Line < out[j].Line
-		}
-		return out[i].Col < out[j].Col
-	})
+	m.sortProblems(out)
 	return out
+}
+
+func (m *Model) sortProblems(items []Problem) {
+	prefs := m.prefs.Problems
+	position := func(a, b Problem) int {
+		if a.Line != b.Line {
+			if a.Line < b.Line {
+				return -1
+			}
+			return 1
+		}
+		if a.Col < b.Col {
+			return -1
+		}
+		if a.Col > b.Col {
+			return 1
+		}
+		return 0
+	}
+	name := func(a, b Problem) int {
+		left, right := strings.ToLower(a.Message), strings.ToLower(b.Message)
+		if left < right {
+			return -1
+		}
+		if left > right {
+			return 1
+		}
+		return 0
+	}
+	sort.SliceStable(items, func(i, j int) bool {
+		a, b := items[i], items[j]
+		if prefs.SortBySeverity() {
+			if rank := severityRank(a.Severity) - severityRank(b.Severity); rank != 0 {
+				return rank < 0
+			}
+		}
+		if prefs.SortByName {
+			if cmp := name(a, b); cmp != 0 {
+				return cmp < 0
+			}
+			if cmp := position(a, b); cmp != 0 {
+				return cmp < 0
+			}
+			return false
+		}
+		if cmp := position(a, b); cmp != 0 {
+			return cmp < 0
+		}
+		return name(a, b) < 0
+	})
 }
 
 // problemPaths lists the files the tool window covers: every file with
@@ -306,36 +371,105 @@ func (m *Model) problemsPanel(c *ui.Context, p *ui.Theme) {
 	errors, warnings, infos := m.problemCounts()
 	groups := m.problemList()
 	col := ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Background(p.Surface).
-		BorderWidth(1, 0, 0, 0).BorderColor(p.Border)
+		BorderWidth(1, 0, 0, 0).BorderColor(p.Border).
+		Focusable().AutoFocus().HandleInput(m.handleProblemsInput)
 	col.Children(func() {
 		ui.Row(c).Height(30).Padding(0, 8).Gap(10).AlignItems(ui.Center).
 			BorderWidth(0, 0, 1, 0).BorderColor(p.Border).Children(func() {
 			ui.Text(c, "Problems").FontSize(12).Bold().TextColor(p.Text)
+			ui.Button(c, "↑").Disabled(len(m.problemRows()) == 0).OnClick(func() { m.StepProblem(-1) })
+			ui.Button(c, "↓").Disabled(len(m.problemRows()) == 0).OnClick(func() { m.StepProblem(1) })
 			m.problemFilter(c, p, "Errors", errors, p.Danger, &m.problems.showErr)
 			m.problemFilter(c, p, "Warnings", warnings, p.Warning, &m.problems.showWarn)
 			m.problemFilter(c, p, "Info", infos, p.TextMuted, &m.problems.showInfo)
 			ui.Spacer(c)
-			m.problemScope(c, p, "Current File", false)
-			m.problemScope(c, p, "Project", true)
+			fileLabel := "File"
+			if t := m.tab(); t != nil && t.doc != nil {
+				fileLabel = "File: " + filepath.Base(t.doc.Path())
+				n := 0
+				for _, problem := range m.problemsOf(realPath(t.doc.Path())) {
+					if problem.Severity == "error" || problem.Severity == "warning" {
+						n++
+					}
+				}
+				if n > 0 {
+					fileLabel += fmt.Sprintf("  %d", n)
+				}
+			}
+			projectLabel := "Project Errors"
+			if errors > 0 {
+				projectLabel += fmt.Sprintf("  %d", errors)
+			}
+			m.problemScope(c, p, fileLabel, false)
+			m.problemScope(c, p, projectLabel, true)
+			options := ui.Button(c, "Options…")
+			options.Menu(func(menu *ui.Menu) { m.problemsOptionsMenu(menu) })
 			ui.Button(c, "Close").OnClick(func() { m.CloseProblems() })
 		})
-		ui.Scroll(c).Grow(1).Children(func() {
-			ui.Column(c).Padding(4, 0).Children(func() {
-				if len(groups) == 0 {
-					hint := "No problems in the current file"
-					if m.problems.project {
-						hint = "No problems in the project"
-					}
+		if m.prefs.Problems.ShowPreview {
+			ui.Row(c).Grow(1).MinHeight(0).MinWidth(0).AlignItems(ui.Stretch).
+				Children(func() {
+					ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Children(func() {
+						m.problemListBody(c, p, groups)
+					})
+					ui.Column(c).Width(1).Shrink(0).Background(p.Border)
+					ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Children(func() {
+						m.problemSourcePreview(c, p)
+					})
+				})
+		} else {
+			m.problemListBody(c, p, groups)
+		}
+	})
+}
+
+func (m *Model) problemListBody(c *ui.Context, p *ui.Theme, groups [][]Problem) {
+	ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
+		ui.Column(c).Padding(4, 0).Children(func() {
+			if len(groups) == 0 {
+				hint := "No problems found"
+				if !m.problems.project && m.tab() == nil {
+					hint = "No file is open"
+				}
+				ui.Row(c).Padding(8, 8).Children(func() {
 					ui.Text(c, hint).FontSize(12).TextColor(p.TextMuted)
-					return
-				}
-				for gi, items := range groups {
-					gi, items := gi, items
-					m.problemFileRow(c, p, gi, items)
-				}
-			})
+				})
+				return
+			}
+			for gi, items := range groups {
+				gi, items := gi, items
+				m.problemFileRow(c, p, gi, items)
+			}
 		})
 	})
+}
+
+func (m *Model) problemsOptionsMenu(menu *ui.Menu) {
+	prefs := &m.prefs.Problems
+	if menu.Item("Severity").Checked(prefs.SortBySeverity()).Chosen() {
+		prefs.NoSeveritySort = !prefs.NoSeveritySort
+		m.savePreferences()
+		m.invalidate()
+	}
+	if menu.Item("Name").Checked(prefs.SortByName).Chosen() {
+		prefs.SortByName = !prefs.SortByName
+		m.savePreferences()
+		m.invalidate()
+	}
+	menu.Separator()
+	if menu.Item("Show Preview").Checked(prefs.ShowPreview).Chosen() {
+		prefs.ShowPreview = !prefs.ShowPreview
+		m.savePreferences()
+		if prefs.ShowPreview {
+			m.ensureProblemPreview()
+		}
+		m.invalidate()
+	}
+	if menu.Item("Autoscroll to Source").Checked(prefs.Autoscroll).Chosen() {
+		prefs.Autoscroll = !prefs.Autoscroll
+		m.savePreferences()
+		m.invalidate()
+	}
 }
 
 // problemFilter is one severity count in the header; a click toggles that
@@ -385,6 +519,7 @@ func (m *Model) problemScope(c *ui.Context, p *ui.Theme, label string, project b
 // problemFileRow is a file's header row and its problems under it.
 func (m *Model) problemFileRow(c *ui.Context, p *ui.Theme, gi int, items []Problem) {
 	first := items[0]
+	collapsed := m.problems.collapsed[first.Path]
 	dir := filepath.Dir(first.Path)
 	dir = strings.TrimPrefix(dir, m.Root())
 	dir = strings.TrimPrefix(dir, string(filepath.Separator))
@@ -395,8 +530,20 @@ func (m *Model) problemFileRow(c *ui.Context, p *ui.Theme, gi int, items []Probl
 		head.Background(oi.hoverTint)
 	}
 	head.Children(func() {
+		caret := "▾"
+		if collapsed {
+			caret = "▸"
+		}
+		if ui.Button(c, caret).Clicked() {
+			m.problems.collapsed[first.Path] = !collapsed
+			m.invalidate()
+		}
 		fileIconEl(c, oi, first.Path, 16, oi.textMuted)
-		ui.Text(c, filepath.Base(first.Path)).FontSize(13).TextColor(oi.textStrong).SingleLine()
+		nameColor := oi.textStrong
+		if hasError(items) {
+			nameColor = oi.danger
+		}
+		ui.Text(c, filepath.Base(first.Path)).FontSize(13).TextColor(nameColor).SingleLine()
 		if dir != "" && dir != "." {
 			ui.Text(c, dir).FontSize(13).TextColor(oi.textSubtle).SingleLine().Ellipsis("…")
 		}
@@ -426,18 +573,33 @@ func (m *Model) problemFileRow(c *ui.Context, p *ui.Theme, gi int, items []Probl
 			SingleLine().MarginStart(4)
 	})
 	if head.Clicked() {
-		m.previewAt(first.Path, first.Line, first.Col)
+		m.selectProblem(first)
 	}
 	if head.DoubleClicked() {
 		m.revealAt(first.Path, first.Line, first.Col)
+	}
+	head.Menu(func(menu *ui.Menu) {
+		if menu.Item("Show Quick Fixes").Chosen() {
+			m.showProblemQuickFixes(first)
+		}
+		if menu.Item("Jump to Source").Chosen() {
+			m.revealAt(first.Path, first.Line, first.Col)
+		}
+		menu.Item("Copy Problem Description").Disabled(true)
+	})
+	if collapsed {
+		return
 	}
 	for i, item := range items {
 		i, item := i, item
 		r := ui.Row(c.Key(fmt.Sprintf("problem:%d:%d", gi, i))).Height(24).
 			PaddingStart(24).PaddingEnd(8).Gap(6).Radius(5).AlignItems(ui.Center)
-		if r.Hovered() {
+		if m.problems.selected == problemKey(item) {
+			r.Background(oi.selected)
+		} else if r.Hovered() {
 			r.Background(oi.hoverTint)
 		}
+		r.Tooltip(item.Message)
 		r.Children(func() {
 			oiIconEl(c, problemSeverityIcon(item.Severity), 14, oi, oi.textMuted)
 			ui.Text(c, firstLineOf(item.Message)).FontSize(13).TextColor(oi.text).
@@ -445,16 +607,204 @@ func (m *Model) problemFileRow(c *ui.Context, p *ui.Theme, gi int, items []Probl
 			ui.Text(c, fmt.Sprintf(":%d", item.Line+1)).FontSize(13).
 				TextColor(oi.textSubtle).SingleLine()
 			ui.Spacer(c)
-			if item.Code != "" {
-				ui.Text(c, item.Code).FontSize(13).TextColor(oi.textFaint).SingleLine()
+			if source := problemSourceLabel(item); source != "" {
+				ui.Text(c, source).FontSize(13).TextColor(oi.textFaint).SingleLine()
 			}
 		})
 		if r.Clicked() {
-			m.previewAt(item.Path, item.Line, item.Col)
+			m.selectProblem(item)
 		}
 		if r.DoubleClicked() {
 			m.revealAt(item.Path, item.Line, item.Col)
 		}
+		r.Menu(func(menu *ui.Menu) {
+			if menu.Item("Show Quick Fixes").Chosen() {
+				m.showProblemQuickFixes(item)
+			}
+			if menu.Item("Jump to Source").Chosen() {
+				m.revealAt(item.Path, item.Line, item.Col)
+			}
+			if menu.Item("Copy Problem Description").Chosen() {
+				mygo.Clipboard.WriteText(problemDescription(item))
+				m.status = "Problem description copied"
+				m.invalidate()
+			}
+		})
+	}
+}
+
+func problemKey(p Problem) string {
+	return fmt.Sprintf("%s\x00%d\x00%d\x00%s", p.Path, p.Line, p.Col, p.Message)
+}
+
+func problemDescription(p Problem) string {
+	text := p.Message
+	if p.Source != "" {
+		text += " (" + p.Source
+		if p.Code != "" {
+			text += "(" + p.Code + ")"
+		}
+		text += ")"
+	}
+	return text
+}
+
+func problemSourceLabel(p Problem) string {
+	if p.Source == "" {
+		return ""
+	}
+	if p.Code == "" {
+		return p.Source
+	}
+	return p.Source + "(" + p.Code + ")"
+}
+
+func (m *Model) selectProblem(p Problem) {
+	m.problems.selected = problemKey(p)
+	if m.prefs.Problems.Autoscroll {
+		m.previewAt(p.Path, p.Line, p.Col)
+	}
+	if m.prefs.Problems.ShowPreview {
+		m.loadProblemPreview(p)
+	}
+	m.invalidate()
+}
+
+func (m *Model) selectedProblem() (Problem, bool) {
+	for _, p := range m.problemRows() {
+		if problemKey(p) == m.problems.selected {
+			return p, true
+		}
+	}
+	return Problem{}, false
+}
+
+func (m *Model) showProblemQuickFixes(p Problem) {
+	m.selectProblem(p)
+	m.revealAt(p.Path, p.Line, p.Col)
+	m.ShowIntentions()
+}
+
+func (m *Model) copySelectedProblem() {
+	p, ok := m.selectedProblem()
+	if !ok {
+		return
+	}
+	mygo.Clipboard.WriteText(problemDescription(p))
+	m.status = "Problem description copied"
+	m.invalidate()
+}
+
+func (m *Model) handleProblemsInput(ev ui.InputEvent) bool {
+	if ev.Kind != ui.InputKeyDown {
+		return false
+	}
+	p, ok := m.selectedProblem()
+	if !ok {
+		return false
+	}
+	switch {
+	case ev.Key == ui.KeyEnter && ev.Mods == ui.Alt:
+		m.showProblemQuickFixes(p)
+	case ev.Key == ui.KeyC && ev.Mods&(ui.Cmd|ui.Ctrl) != 0:
+		m.copySelectedProblem()
+	case ev.Key == ui.KeyF4 && ev.Mods == 0:
+		m.revealAt(p.Path, p.Line, p.Col)
+	default:
+		return false
+	}
+	return true
+}
+
+func (m *Model) ensureProblemPreview() {
+	rows := m.problemRows()
+	if len(rows) == 0 {
+		m.problems.preview = problemPreview{}
+		return
+	}
+	selected := m.problems.selected
+	for _, p := range rows {
+		if problemKey(p) == selected {
+			m.loadProblemPreview(p)
+			return
+		}
+	}
+	m.loadProblemPreview(rows[0])
+}
+
+func (m *Model) loadProblemPreview(p Problem) {
+	m.problems.selected = problemKey(p)
+	endCol := p.EndCol
+	if p.EndLine != p.Line {
+		endCol = int(^uint(0) >> 1)
+	}
+	start, lines, err := readUsagePreview(p.Path, p.Line, 20, 20)
+	preview := problemPreview{
+		path: p.Path, line: p.Line, col: p.Col, endCol: endCol,
+		start: start, lines: lines,
+	}
+	if err != nil {
+		preview.err = err.Error()
+	}
+	m.problems.preview = preview
+}
+
+func (m *Model) problemSourcePreview(c *ui.Context, p *ui.Theme) {
+	preview := m.problems.preview
+	oi := oiPaletteOf(p)
+	ui.Row(c).Height(26).Shrink(0).Padding(0, 8).Gap(6).AlignItems(ui.Center).
+		Background(oi.elev).Children(func() {
+		ui.Text(c, "Preview").FontSize(10).Bold().TextColor(oi.textMuted).SingleLine()
+		ui.Spacer(c)
+		if preview.path != "" {
+			ui.Text(c, filepath.Base(preview.path)).FontSize(10).TextColor(oi.textSubtle).
+				SingleLine().Ellipsis("…")
+		}
+	})
+	switch {
+	case preview.err != "":
+		ui.Row(c).Padding(8, 10).Children(func() {
+			ui.Text(c, preview.err).FontSize(11).TextColor(oi.warning).SingleLine().Ellipsis("…")
+		})
+	case len(preview.lines) > 0:
+		ui.ScrollBoth(c).Grow(1).MinHeight(0).Children(func() {
+			ui.Column(c).Padding(5, 0).Children(func() {
+				for i, line := range preview.lines {
+					lineNo := preview.start + i
+					row := ui.Row(c.Key(fmt.Sprintf("problem-preview:%d", lineNo))).
+						Height(18).Padding(0, 5).Gap(8).AlignItems(ui.Center)
+					if lineNo == preview.line {
+						row.Background(oi.hoverTint)
+					}
+					row.Children(func() {
+						ui.Text(c, fmt.Sprintf("%d", lineNo+1)).Width(42).
+							Font("monospace").FontSize(10).TextColor(oi.textSubtle)
+						if lineNo == preview.line {
+							usageRow := usagePopupRow{
+								source: openidea.Location{
+									Path: preview.path,
+									Range: openidea.OutlineRange{
+										Start: openidea.OutlinePos{Line: uint32(lineNo), Col: uint32(preview.col)},
+										End:   openidea.OutlinePos{Line: uint32(lineNo), Col: uint32(preview.endCol)},
+									},
+								},
+								text: line, endCol: uint32(preview.endCol),
+							}
+							text, from, to := usagePreviewText(usageRow)
+							ui.RichText(c, usageHighlightedSpans(text, from, to, oi)...).
+								Font("monospace").FontSize(11).SingleLine()
+						} else {
+							ui.Text(c, line).Font("monospace").FontSize(11).
+								TextColor(oi.textMuted).SingleLine()
+						}
+					})
+				}
+			})
+		})
+	default:
+		ui.Row(c).Padding(8, 10).Children(func() {
+			ui.Text(c, "Choose a problem to preview its source").FontSize(11).TextColor(oi.textMuted)
+		})
 	}
 }
 

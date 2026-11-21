@@ -26,12 +26,11 @@ type TermPane struct {
 	groups  []termGroup
 	// active is the group that takes typing; split is "right" or "down" while
 	// a second group shows, "" with one group.
-	active  int
-	split   string
-	input   string
-	err     string
-	finding bool
-	find    string
+	active int
+	split  string
+	input  string
+	err    string
+	rename *termRenameState
 }
 
 // termGroup is one pane's tabs: the primary group is 0, the split group 1.
@@ -48,18 +47,31 @@ type termSession struct {
 	pid      *int32
 	channel  uint32
 	shell    string
+	// customName wins over the shell title after Rename Session.
+	customName string
+	cwd        string
 
 	lines     []string
 	truncated bool
 	ended     bool
 	exitCode  *int32
 
-	// scroll keeps this tab's place in the scrollback; findAt is the line the
-	// find bar last jumped to, -1 when the query matched nothing, and reveal
-	// asks the next frame to scroll that line into view.
-	scroll ui.ScrollState
-	findAt int
-	reveal bool
+	// scroll, finding and find stay with this tab when another tab becomes
+	// active. findAt is the line the find bar last jumped to, -1 when the query
+	// matched nothing, and reveal asks the next frame to scroll it into view.
+	scroll  ui.ScrollState
+	finding bool
+	find    string
+	findAt  int
+	reveal  bool
+}
+
+type termRenameState struct {
+	group  int
+	tab    int
+	text   string
+	anchor ui.Rect
+	focus  ui.Handle
 }
 
 // group returns group g, creating it when it does not exist.
@@ -98,6 +110,65 @@ func (p *TermPane) current() *termSession {
 		return g.tab()
 	}
 	return nil
+}
+
+// ActivateTermTab selects a tab in its group and makes that group active.
+func (m *Model) ActivateTermTab(group, tab int) bool {
+	if group < 0 || group >= len(m.term.groups) {
+		return false
+	}
+	g := &m.term.groups[group]
+	if tab < 0 || tab >= len(g.tabs) {
+		return false
+	}
+	m.term.active = group
+	g.active = tab
+	m.invalidate()
+	return true
+}
+
+// ActivateTermGroup focuses the selected tab of group.
+func (m *Model) ActivateTermGroup(group int) bool {
+	if group < 0 || group >= len(m.term.groups) {
+		return false
+	}
+	g := &m.term.groups[group]
+	if len(g.tabs) == 0 {
+		return false
+	}
+	if g.active < 0 || g.active >= len(g.tabs) {
+		g.active = 0
+	}
+	m.term.active = group
+	m.invalidate()
+	return true
+}
+
+// MoveTermTab swaps a tab with its left or right neighbour while keeping the
+// same session active.
+func (m *Model) MoveTermTab(group, tab, delta int) bool {
+	if group < 0 || group >= len(m.term.groups) || delta == 0 {
+		return false
+	}
+	g := &m.term.groups[group]
+	target := tab + delta
+	if tab < 0 || tab >= len(g.tabs) || target < 0 || target >= len(g.tabs) {
+		return false
+	}
+	active := g.active
+	if active < 0 || active >= len(g.tabs) {
+		active = 0
+	}
+	g.tabs[tab], g.tabs[target] = g.tabs[target], g.tabs[tab]
+	switch active {
+	case tab:
+		active = target
+	case target:
+		active = tab
+	}
+	g.active = active
+	m.invalidate()
+	return true
 }
 
 // byChannel finds the tab a streaming channel belongs to.
@@ -289,18 +360,26 @@ func (m *Model) spawnTermSession(root, cwd string, g int) {
 
 // spawnTermSessionShell starts a login shell (or shell) in cwd as a new tab.
 func (m *Model) spawnTermSessionShell(root, cwd string, g int, shell string) {
+	m.spawnTermProcess(root, cwd, g, shell, nil, "")
+}
+
+// spawnTermProcess opens one PTY tab. program is empty for the user's login
+// shell, and name overrides the tab title until the backend reports one.
+func (m *Model) spawnTermProcess(root, cwd string, g int, program string, args []string, name string) {
 	ch := m.nextChannel()
 	s := m.term.add(g)
 	s.starting = true
 	s.channel = ch
+	s.cwd = cwd
+	s.shell = name
 	m.term.err = ""
 	m.invalidate()
 	opts := map[string]any{
-		"cwd": cwd, "args": []string{}, "env": map[string]string{},
+		"cwd": cwd, "args": append([]string{}, args...), "env": map[string]string{},
 		"cols": 100, "rows": 30, "shellIntegration": true,
 	}
-	if shell != "" {
-		opts["shell"] = shell
+	if program != "" {
+		opts["shell"] = program
 	}
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
@@ -383,10 +462,21 @@ func (m *Model) KillTerm() {
 	s.pid = nil
 	s.ended = true
 	m.invalidate()
+	m.killTerminalSession(id, true)
+}
+
+func (m *Model) killTerminalSession(id uint32, report bool) {
+	if id == 0 || m.mgr == nil {
+		return
+	}
+	base := m.ctx
+	if base == nil {
+		base = context.Background()
+	}
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, 10*time.Second)
+		ctx, cancel := context.WithTimeout(base, 10*time.Second)
 		defer cancel()
-		if _, err := m.mgr.Invoke(ctx, Window, "term_kill", map[string]any{"id": id}); err != nil {
+		if _, err := m.mgr.Invoke(ctx, Window, "term_kill", map[string]any{"id": id}); err != nil && report {
 			m.post(func() {
 				m.term.err = "Killing the terminal failed: " + err.Error()
 				m.invalidate()
@@ -406,17 +496,14 @@ func (m *Model) CloseTermTab(g, ti int) {
 	if ti < 0 || ti >= len(tabs) {
 		return
 	}
-	id := tabs[ti].id
-	if id != 0 {
-		go func() {
-			ctx, cancel := context.WithTimeout(m.ctx, 10*time.Second)
-			defer cancel()
-			_, _ = m.mgr.Invoke(ctx, Window, "term_kill", map[string]any{"id": id})
-		}()
-	}
+	m.killTerminalSession(tabs[ti].id, false)
 	m.term.remove(g, ti)
 	if m.term.total() == 0 {
-		m.hideTool("term")
+		if dockSpec("term") != nil {
+			m.DockHide("term")
+		} else {
+			m.hideTool("term")
+		}
 	}
 	m.invalidate()
 }
@@ -428,6 +515,31 @@ func (m *Model) CloseActiveTermTab() {
 		return
 	}
 	m.CloseTermTab(m.term.active, gr.active)
+}
+
+// CloseOtherTermTabs keeps one tab in its group and ends every sibling shell.
+func (m *Model) CloseOtherTermTabs(group, keep int) bool {
+	if group < 0 || group >= len(m.term.groups) {
+		return false
+	}
+	g := &m.term.groups[group]
+	if keep < 0 || keep >= len(g.tabs) {
+		return false
+	}
+	if len(g.tabs) == 1 {
+		return true
+	}
+	kept := g.tabs[keep]
+	for index, session := range g.tabs {
+		if index != keep {
+			m.killTerminalSession(session.id, false)
+		}
+	}
+	g.tabs = []termSession{kept}
+	g.active = 0
+	m.term.active = group
+	m.invalidate()
+	return true
 }
 
 // ClearTerm empties the active tab's scrollback.
@@ -446,15 +558,20 @@ func (m *Model) ShowTermFind() {
 		m.term.visible = true
 		m.occupyBottom("term")
 	}
-	m.term.finding = true
+	s := m.term.current()
+	if s == nil {
+		m.invalidate()
+		return
+	}
+	s.finding = true
 	m.invalidate()
 }
 
 // HideTermFind closes the bar and drops its matches.
 func (m *Model) HideTermFind() {
-	m.term.finding = false
-	m.term.find = ""
 	if s := m.term.current(); s != nil {
+		s.finding = false
+		s.find = ""
 		s.findAt = -1
 		s.reveal = false
 	}
@@ -466,10 +583,10 @@ func (m *Model) HideTermFind() {
 // match, or the top when going forward.
 func (m *Model) FindTermStep(dir int) {
 	s := m.term.current()
-	if s == nil || m.term.find == "" {
+	if s == nil || s.find == "" {
 		return
 	}
-	hits := termHits(s.lines, m.term.find)
+	hits := termHits(s.lines, s.find)
 	if len(hits) == 0 {
 		s.findAt = -1
 		s.reveal = false
@@ -499,10 +616,10 @@ func (m *Model) FindTermStep(dir int) {
 // termFindLabel is the bar's match position, "" before a query.
 func (m *Model) termFindLabel() string {
 	s := m.term.current()
-	if s == nil || m.term.find == "" {
+	if s == nil || s.find == "" {
 		return ""
 	}
-	hits := termHits(s.lines, m.term.find)
+	hits := termHits(s.lines, s.find)
 	if len(hits) == 0 {
 		return "No matches"
 	}
@@ -695,7 +812,9 @@ func (m *Model) SmokeTerm(ctx context.Context) (map[string]any, error) {
 	// Find in Terminal marks the line that holds the query.
 	m.post(func() {
 		m.ShowTermFind()
-		m.term.find = "GOIDEA_TERM_OK"
+		if s := m.term.current(); s != nil {
+			s.find = "GOIDEA_TERM_OK"
+		}
 		m.FindTermStep(1)
 	})
 	var findAt, findHits int
@@ -837,6 +956,28 @@ func (m *Model) waitTermSplit(ctx context.Context, ch uint32) (int, bool) {
 // text is the scrollback, one line per entry.
 func (p *termSession) text() string {
 	return strings.Join(p.lines, "\n")
+}
+
+// termTabTitle is the label shown in a terminal tab strip.
+func termTabTitle(session *termSession, index int) string {
+	if session == nil {
+		return ""
+	}
+	label := strings.TrimSpace(session.customName)
+	if label == "" {
+		label = strings.TrimSpace(session.shell)
+	}
+	if label == "" {
+		label = fmt.Sprintf("Terminal %d", index+1)
+	}
+	switch {
+	case session.starting:
+		return "Starting…"
+	case session.id == 0 && session.ended:
+		return label + " (ended)"
+	default:
+		return label
+	}
 }
 
 // termShellPicker is the open shell list of New Terminal Tab.

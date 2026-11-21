@@ -66,11 +66,14 @@ func (h *goideaPluginHost) setFolder(folder string) { h.folder.Store(&folder) }
 // error naming them, so a plugin sees the limit instead of a silent nil.
 func (h *goideaPluginHost) Call(p *plugin.Plugin, method string, args json.RawMessage) (any, error) {
 	var in struct {
-		ID   string          `json:"id"`
-		Arg  json.RawMessage `json:"arg"`
-		Path string          `json:"path"`
-		Item json.RawMessage `json:"item"`
-		Tree json.RawMessage `json:"tree"`
+		ID      string          `json:"id"`
+		Arg     json.RawMessage `json:"arg"`
+		Path    string          `json:"path"`
+		Item    json.RawMessage `json:"item"`
+		Tree    json.RawMessage `json:"tree"`
+		Message string          `json:"message"`
+		Kind    string          `json:"kind"`
+		Action  string          `json:"action"`
 	}
 	if len(args) > 0 {
 		_ = json.Unmarshal(args, &in)
@@ -114,8 +117,61 @@ func (h *goideaPluginHost) Call(p *plugin.Plugin, method string, args json.RawMe
 		if in.ID == "" {
 			return nil, errors.New("commands.run needs an id")
 		}
-		h.m.post(func() { h.m.RunCommand(in.ID) })
+		var arg any
+		if len(in.Arg) > 0 && string(in.Arg) != "null" {
+			if err := json.Unmarshal(in.Arg, &arg); err != nil {
+				return nil, fmt.Errorf("commands.run arg: %w", err)
+			}
+		}
+		h.m.post(func() { h.m.RunCommandWithArg(in.ID, arg) })
 		return nil, nil
+	case "window.notify":
+		if strings.TrimSpace(in.Message) == "" {
+			return nil, errors.New("window.notify needs a message")
+		}
+		level := in.Kind
+		switch level {
+		case "info", "warning", "error", "success":
+		default:
+			level = "info"
+		}
+		title := "Plugin"
+		if p != nil {
+			if text := strings.TrimSpace(p.Title()); text != "" {
+				title = text
+			} else if text := strings.TrimSpace(p.Name); text != "" {
+				title = text
+			}
+		}
+		if in.Action == "" {
+			h.m.post(func() {
+				h.m.notifyPlugin(title, in.Message, level)
+			})
+			return false, nil
+		}
+
+		// window.notify resolves true when the optional action is chosen and
+		// false after the same 20 second window Mayoi's notification toast uses.
+		result := make(chan bool, 1)
+		h.m.post(func() {
+			h.m.notifyPlugin(title, in.Message, level, notifyAction{
+				label: in.Action,
+				run: func(*Model) {
+					select {
+					case result <- true:
+					default:
+					}
+				},
+			})
+		})
+		timer := time.NewTimer(20 * time.Second)
+		defer timer.Stop()
+		select {
+		case chosen := <-result:
+			return chosen, nil
+		case <-timer.C:
+			return false, nil
+		}
 	case "status.set":
 		var item *pluginStatusItem
 		if len(in.Item) > 0 && string(in.Item) != "null" {
@@ -170,11 +226,19 @@ func (h *goideaPluginHost) setStatus(p *plugin.Plugin, id string, item *pluginSt
 	_, existed := h.status[full]
 	h.status[full] = *item
 	h.statusMu.Unlock()
+	title := p.Name
+	if label := item.tooltip; label != "" {
+		title += ": " + label
+	} else if label := item.text; label != "" {
+		title += ": " + label
+	}
 	if !existed {
-		registerStatusItem(&StatusItem{ID: full, Side: "right", Order: 100,
+		registerStatusItem(&StatusItem{ID: full, Title: title, Side: "right", Order: 100,
 			Render: func(m *Model, c *ui.Context, theme *ui.Theme, oi oiColors) {
 				h.renderStatus(c, oi, full)
 			}})
+	} else {
+		updateStatusItemTitle(full, title)
 	}
 	h.m.invalidate()
 }

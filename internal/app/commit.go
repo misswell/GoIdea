@@ -30,8 +30,13 @@ type commitState struct {
 	// scope keeps only the changed files under a directory in the commit, as
 	// the project view's Git › Commit… asks for; empty means every change.
 	scope string
-	busy  bool
-	err   string
+	// onlyPaths limits the commit to an explicit set, as Commit Changelist
+	// does. A non-nil empty map means no changelist file is present.
+	onlyPaths map[string]bool
+	// pushAfter opens Push once the commit succeeds.
+	pushAfter bool
+	busy      bool
+	err       string
 }
 
 // commitPlan is what vcs_commit gets: files committed with their working-tree
@@ -109,6 +114,9 @@ func (m *Model) commitFiles(c *commitState) []openidea.FileStatus {
 // single-file commit includes only that file, even when it is new.
 func (m *Model) commitIncluded(c *commitState, f openidea.FileStatus) bool {
 	if !commitVisible(c, f) {
+		return false
+	}
+	if c.onlyPaths != nil && !c.onlyPaths[f.Path] {
 		return false
 	}
 	if c.only != "" {
@@ -222,11 +230,10 @@ func (m *Model) submitCommit() {
 		Amend: c.amend, SignOff: c.signOff, RunHooks: c.runHooks,
 		Stage: plan.stage, Exclude: plan.exclude,
 	}
-	p := m.prefs.SaveFiles
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 3*time.Minute)
 		defer cancel()
-		if err := saveAll(ctx, tabs, p); err != nil {
+		if err := m.saveOpenTabs(ctx, tabs); err != nil {
 			m.finishCommit(c, "", err)
 			return
 		}
@@ -260,6 +267,9 @@ func (m *Model) finishCommit(c *commitState, id string, err error) {
 		}
 		m.status = fmt.Sprintf("Committed %s: %s", shortID(id), summary)
 		m.RefreshVCS()
+		if c.pushAfter {
+			m.OpenGitPush()
+		}
 		m.invalidate()
 	})
 }

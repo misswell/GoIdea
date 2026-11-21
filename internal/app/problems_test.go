@@ -1,6 +1,8 @@
 package app
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"mayoi/internal/openidea"
@@ -16,8 +18,11 @@ func diag(line, col uint32, severity, message string) openidea.Diagnostic {
 
 func problemsModel(files map[string]map[string][]openidea.Diagnostic) *Model {
 	return &Model{
-		diags:       files,
-		problems:    ProblemsPane{showErr: true, showWarn: true, showInfo: true},
+		diags: files,
+		problems: ProblemsPane{
+			showErr: true, showWarn: true, showInfo: true,
+			collapsed: map[string]bool{},
+		},
 		problemStep: -1,
 	}
 }
@@ -137,5 +142,64 @@ func TestProblemCounts(t *testing.T) {
 	if errors != 2 || warnings != 1 || infos != 2 {
 		t.Errorf("counts = %d errors, %d warnings, %d infos, want 2, 1, 2",
 			errors, warnings, infos)
+	}
+}
+
+func TestProblemOrderOptionsMatchOpenIDEA(t *testing.T) {
+	m := problemsModel(map[string]map[string][]openidea.Diagnostic{
+		"/p/A.java": {"jdtls": {
+			diag(3, 0, "warning", "Zulu warning"),
+			diag(1, 0, "error", "Bravo error"),
+			diag(2, 0, "info", "Alpha info"),
+		}},
+	})
+
+	got := m.problemsOf("/p/A.java")
+	if got[0].Message != "Bravo error" || got[1].Message != "Zulu warning" || got[2].Message != "Alpha info" {
+		t.Fatalf("default order = %v, want severity order", []string{got[0].Message, got[1].Message, got[2].Message})
+	}
+
+	m.prefs.Problems.NoSeveritySort = true
+	got = m.problemsOf("/p/A.java")
+	if got[0].Message != "Bravo error" || got[1].Message != "Alpha info" || got[2].Message != "Zulu warning" {
+		t.Fatalf("position order = %v, want source positions", []string{got[0].Message, got[1].Message, got[2].Message})
+	}
+
+	m.prefs.Problems.SortByName = true
+	got = m.problemsOf("/p/A.java")
+	if got[0].Message != "Alpha info" || got[1].Message != "Bravo error" || got[2].Message != "Zulu warning" {
+		t.Fatalf("name order = %v, want alphabetical messages", []string{got[0].Message, got[1].Message, got[2].Message})
+	}
+}
+
+func TestCollapsedProblemFileIsSkippedByOccurrenceNavigation(t *testing.T) {
+	m := problemsModel(map[string]map[string][]openidea.Diagnostic{
+		"/p/A.java": {"jdtls": {diag(1, 0, "error", "first")}},
+		"/p/B.java": {"jdtls": {diag(2, 0, "warning", "second")}},
+	})
+	m.problems.project = true
+	m.problems.collapsed["/p/A.java"] = true
+
+	rows := m.problemRows()
+	if len(rows) != 1 || rows[0].Message != "second" {
+		t.Fatalf("rows = %+v, want only the expanded file", rows)
+	}
+}
+
+func TestProblemPreviewReadsSurroundingSource(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "Main.java")
+	if err := os.WriteFile(path, []byte("class Main {\n  int value;\n  void run() {}\n}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := problemsModel(nil)
+	m.loadProblemPreview(Problem{
+		Path: path, Line: 1, Col: 6, EndLine: 1, EndCol: 11,
+	})
+	if m.problems.preview.path != path || m.problems.preview.line != 1 {
+		t.Fatalf("preview target = %+v", m.problems.preview)
+	}
+	if len(m.problems.preview.lines) < 3 || m.problems.preview.lines[1] != "  int value;" {
+		t.Fatalf("preview lines = %#v", m.problems.preview.lines)
 	}
 }

@@ -19,14 +19,25 @@ var javaToolNames = []string{"jdtls", "java-debug"}
 // javaTool is one row of the settings sheet: a tool with its state, and why
 // it cannot be installed when that is the case.
 type javaTool struct {
-	Name       string
-	Display    string
-	Status     string
-	CanInstall bool
-	Path       string
-	Version    string
-	Reason     string
-	Homepage   string
+	Name          string
+	Display       string
+	Kind          string
+	Command       string
+	Languages     []string
+	Status        string
+	CanInstall    bool
+	CanRemove     bool
+	Install       string
+	Path          string
+	Version       string
+	Reason        string
+	Hint          string
+	Homepage      string
+	CustomError   string
+	DefaultArgs   []string
+	DefaultInit   string
+	Alternatives  []string
+	PendingCreate bool
 }
 
 const toolsLogLimit = 400
@@ -35,6 +46,12 @@ const toolsLogLimit = 400
 // whether Java language support is installed.
 func (m *Model) LoadJavaTools() {
 	if m.Root() == "" || m.toolsLoading {
+		return
+	}
+	if m.mgr == nil {
+		m.toolsLoading = false
+		m.toolsErr = "The GoIDEA backend is not connected"
+		m.invalidate()
 		return
 	}
 	m.toolsLoading = true
@@ -49,7 +66,9 @@ func (m *Model) LoadJavaTools() {
 				m.invalidate()
 				return
 			}
-			m.javaTools = javaToolRows(list)
+			m.languageTools = languageToolRows(list)
+			m.javaTools = javaToolRowsFrom(m.languageTools)
+			m.ensureLanguageToolSelection()
 			m.toolsLoaded = true
 			m.toolsErr = ""
 			m.invalidate()
@@ -60,32 +79,67 @@ func (m *Model) LoadJavaTools() {
 // javaToolRows keeps the Java tools out of the full registry, in the order
 // jdtls then java-debug.
 func javaToolRows(list []openidea.ToolInfo) []javaTool {
+	return javaToolRowsFrom(languageToolRows(list))
+}
+
+func javaToolRowsFrom(list []javaTool) []javaTool {
 	rows := make([]javaTool, 0, len(javaToolNames))
 	for _, want := range javaToolNames {
 		for _, t := range list {
 			if t.Name != want {
 				continue
 			}
-			row := javaTool{
-				Name:       t.Name,
-				Display:    t.DisplayName,
-				Status:     t.Status,
-				CanInstall: t.CanInstall && t.Status == "missing",
-			}
-			if t.Path != nil {
-				row.Path = *t.Path
-			}
-			if t.Version != nil {
-				row.Version = *t.Version
-			}
-			if t.UnavailableReason != nil {
-				row.Reason = *t.UnavailableReason
-			}
-			if t.Homepage != nil {
-				row.Homepage = *t.Homepage
-			}
-			rows = append(rows, row)
+			rows = append(rows, t)
 		}
+	}
+	return rows
+}
+
+// languageToolRows maps every backend tool into the native Language Servers
+// page. Java uses the same rows, so the two views cannot drift.
+func languageToolRows(list []openidea.ToolInfo) []javaTool {
+	rows := make([]javaTool, 0, len(list))
+	for _, t := range list {
+		row := javaTool{
+			Name:         t.Name,
+			Display:      t.DisplayName,
+			Kind:         t.Kind,
+			Command:      t.Command,
+			Languages:    append([]string(nil), t.Languages...),
+			Status:       t.Status,
+			CanInstall:   t.CanInstall,
+			CanRemove:    t.CanUninstall,
+			DefaultArgs:  append([]string(nil), t.DefaultArgs...),
+			Alternatives: append([]string(nil), t.Alternatives...),
+		}
+		if row.Display == "" {
+			row.Display = row.Name
+		}
+		if t.Path != nil {
+			row.Path = *t.Path
+		}
+		if t.Version != nil {
+			row.Version = *t.Version
+		}
+		if t.InstallMethod != nil {
+			row.Install = *t.InstallMethod
+		}
+		if t.UnavailableReason != nil {
+			row.Reason = *t.UnavailableReason
+		}
+		if t.InstallHint != nil {
+			row.Hint = *t.InstallHint
+		}
+		if t.Homepage != nil {
+			row.Homepage = *t.Homepage
+		}
+		if t.CustomError != nil {
+			row.CustomError = *t.CustomError
+		}
+		if t.DefaultInitializationOptions != nil {
+			row.DefaultInit = *t.DefaultInitializationOptions
+		}
+		rows = append(rows, row)
 	}
 	return rows
 }
@@ -197,7 +251,9 @@ func (m *Model) InstallJavaToolchain() {
 			return
 		}
 		m.post(func() {
-			m.javaTools = javaToolRows(reloaded)
+			m.languageTools = languageToolRows(reloaded)
+			m.javaTools = javaToolRowsFrom(m.languageTools)
+			m.ensureLanguageToolSelection()
 			m.toolsLoaded = true
 		})
 		// jdtls starts with the new server binary and the java-debug bundle;
@@ -255,7 +311,10 @@ func (m *Model) CancelToolInstall() {
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
 		defer cancel()
-		if _, err := m.mgr.Invoke(ctx, Window, "cancel_request", map[string]any{"id": req}); err != nil {
+		if !m.languageToolBackendAvailable() {
+			return
+		}
+		if _, err := m.invoke(ctx, "cancel_request", map[string]any{"id": req}); err != nil {
 			m.post(func() {
 				m.toolsErr = "Cancelling the installation failed: " + err.Error()
 				m.invalidate()

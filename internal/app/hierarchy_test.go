@@ -12,8 +12,8 @@ func hierarchyTestModel() *Model {
 		mode: "call", direction: "incoming",
 		rootName: "main", rootPath: "/p/App.java", rootLine: 4, rootCol: 20,
 		children: map[string][]hierarchyNode{},
-		expanded: map[string]bool{}, loading: map[string]bool{},
-		failed: map[string]string{}, gen: 1,
+		expanded: map[string]bool{hierarchyRoot: true}, loading: map[string]bool{},
+		failed: map[string]string{}, notes: map[string]string{}, gen: 1,
 	}
 	m.rightTool = "hierarchy"
 	return m
@@ -87,6 +87,20 @@ func TestHierarchyRowsFollowExpansion(t *testing.T) {
 	if len(rows) != 2 || rows[1].item.Name != "callee" {
 		t.Fatalf("expanded rows = %+v", rows)
 	}
+	m.hierarchy.expanded[hierarchyRoot] = false
+	if rows = m.hierarchyRows(); len(rows) != 0 {
+		t.Fatalf("collapsed root rows = %+v, want none", rows)
+	}
+}
+
+func TestHierarchyRootLevelMatchesOpenIDEADepth(t *testing.T) {
+	m := hierarchyTestModel()
+	nodes := m.hierarchyNodes(hierarchyRoot, m.hierarchy.rootPath, []hierarchyItem{
+		hierarchyItemAt("caller", 1, 0),
+	})
+	if len(nodes) != 1 || nodes[0].depth != 1 {
+		t.Fatalf("root children = %+v, want depth 1 under the visible root", nodes)
+	}
 }
 
 func TestHierarchyLabels(t *testing.T) {
@@ -100,9 +114,45 @@ func TestHierarchyLabels(t *testing.T) {
 	if got := m.hierarchyEmptyLabel(); got != "— no callers found" {
 		t.Fatalf("empty = %q", got)
 	}
+	if got := m.hierarchyTitle(); got != "Callers of main" {
+		t.Fatalf("title = %q", got)
+	}
 	m.hierarchy.mode = "type"
 	if got := m.hierarchyDirectionLabel("incoming"); got != "Supertypes" {
 		t.Fatalf("type incoming = %q, want Supertypes", got)
+	}
+	if got := m.hierarchyTitle(); got != "Supertypes of main" {
+		t.Fatalf("type title = %q", got)
+	}
+}
+
+func TestHierarchyIncomingCallerOpensItsCallSite(t *testing.T) {
+	m := hierarchyTestModel()
+	item := hierarchyItemAt("caller", 8, 3)
+	item.FromRanges = []openidea.OutlineRange{{
+		Start: openidea.OutlinePos{Line: 12, Col: 7},
+		End:   openidea.OutlinePos{Line: 12, Col: 13},
+	}}
+	line, col := m.hierarchyTarget(item)
+	if line != 12 || col != 7 {
+		t.Fatalf("incoming target = %d:%d, want the fromRange 12:7", line, col)
+	}
+	m.hierarchy.direction = "outgoing"
+	line, col = m.hierarchyTarget(item)
+	if line != 8 || col != 3 {
+		t.Fatalf("outgoing target = %d:%d, want the declaration 8:3", line, col)
+	}
+}
+
+func TestHierarchyDefaultsMatchOpenIDEA(t *testing.T) {
+	m := gotoLineTestModel("class A { void run() {} }", 0)
+	m.OpenCallHierarchy()
+	if m.hierarchy.direction != "incoming" {
+		t.Fatalf("call hierarchy direction = %q, want incoming", m.hierarchy.direction)
+	}
+	m.OpenTypeHierarchy()
+	if m.hierarchy.direction != "outgoing" {
+		t.Fatalf("fresh type hierarchy direction = %q, want outgoing", m.hierarchy.direction)
 	}
 }
 

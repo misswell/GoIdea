@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -18,6 +19,20 @@ import (
 type SearchPane struct {
 	visible bool
 	query   string
+	// replaceMode shows the replacement field and enables Replace in Files.
+	replaceMode   bool
+	replacement   string
+	preserveCase  bool
+	isRegex       bool
+	caseSensitive bool
+	wholeWord     bool
+	include       string
+	exclude       string
+	options       bool
+	// scopeName selects a named custom scope. scopePath, when set, limits the
+	// search to one directory and takes precedence.
+	scopeName string
+
 	channel uint32
 	request uint32
 	running bool
@@ -31,6 +46,24 @@ type SearchPane struct {
 	matches   int
 	truncated bool
 	err       string
+
+	// selectedFile and selectedMatch choose one result for Replace.
+	selectedFile  int
+	selectedMatch int
+
+	replaceChannel  uint32
+	replaceRequest  uint32
+	replaceRunning  bool
+	replaceDone     bool
+	replaceProgress string
+	replaceSummary  string
+	replaceErr      string
+
+	scopesOpen     bool
+	scopesDraft    []SearchScope
+	scopesSelected int
+	scopesChoice   string
+	scopesErr      string
 }
 
 const (
@@ -44,6 +77,9 @@ func (m *Model) resetSearch() { m.search = SearchPane{} }
 // query field runs it.
 func (m *Model) ShowSearch() {
 	m.search.scopePath = ""
+	if m.search.scopeName == "" {
+		m.search.scopeName = "Project"
+	}
 	m.DockShow("find")
 }
 
@@ -54,7 +90,46 @@ func (m *Model) ShowSearchInFolder(dir string) {
 		return
 	}
 	m.search.scopePath = dir
+	m.search.scopeName = "Project"
 	m.DockShow("find")
+}
+
+// ShowFind opens Find in Files or Replace in Files. The argument accepts the
+// same query/directory/path fields as OpenIDEA's find.inPath action.
+func (m *Model) ShowFind(replace bool, arg any) {
+	request := searchActionObject(arg)
+	if query, _ := request["query"].(string); query != "" {
+		m.search.query = query
+	} else if selected := m.activeSelection(); selected != "" {
+		m.search.query = selected
+	}
+	for _, key := range []string{"directory", "path"} {
+		if path, _ := request[key].(string); path != "" {
+			m.search.scopePath = path
+			break
+		}
+	}
+	m.search.replaceMode = replace
+	if m.search.scopeName == "" {
+		m.search.scopeName = "Project"
+	}
+	m.DockShow("find")
+}
+
+func (m *Model) activeSelection() string {
+	t := m.tab()
+	if t == nil || t.state == nil {
+		return ""
+	}
+	return strings.TrimSpace(t.state.SelectedText())
+}
+
+// RerunSearch repeats the current Find query.
+func (m *Model) RerunSearch() {
+	if m.search.query == "" || m.search.running || m.search.replaceRunning {
+		return
+	}
+	m.RunSearch()
 }
 
 // FindInFolderSelected scopes Find to the folder selected in the project view,
@@ -77,7 +152,7 @@ func (m *Model) FindInFolderSelected() {
 func (m *Model) RunSearch() {
 	pattern := strings.TrimSpace(m.search.query)
 	m.cancelSearch()
-	if pattern == "" || m.Root() == "" {
+	if pattern == "" || m.Root() == "" || m.search.replaceRunning {
 		m.search.files = nil
 		m.search.matches = 0
 		m.search.summary = ""
@@ -99,29 +174,35 @@ func (m *Model) RunSearch() {
 	m.search.err = ""
 	m.invalidate()
 	root := m.Root()
-	scope := map[string]any{"kind": "project"}
-	if m.search.scopePath != "" {
-		scope = map[string]any{"kind": "directory", "path": m.search.scopePath}
-	}
+	query := m.searchQueryMap()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 5*time.Minute)
 		defer cancel()
-		_, err := m.mgr.Invoke(ctx, Window, "search_start", map[string]any{
+		if _, err := m.invoke(ctx, "search_validate", map[string]any{"query": query}); err != nil {
+			m.post(func() {
+				if m.search.request != ch {
+					return
+				}
+				m.search.running = false
+				m.search.err = "Search pattern is invalid: " + err.Error()
+				m.invalidate()
+			})
+			return
+		}
+		_, err := m.invoke(ctx, "search_start", map[string]any{
 			"request": ch,
-			"query": map[string]any{
-				"pattern": pattern, "isRegex": false, "caseSensitive": false,
-				"wholeWord": false, "include": []string{}, "exclude": []string{},
-				"scope": scope, "maxMatches": 0,
-			},
+			"query":   query,
 			"onEvent": map[string]any{"$channel": ch},
 		})
 		m.post(func() {
 			if m.search.request != ch {
 				return
 			}
-			m.search.running = false
 			if err != nil && m.search.err == "" {
+				m.search.running = false
 				m.search.err = "Searching failed: " + err.Error()
+			} else if m.search.done {
+				m.search.running = false
 			}
 			if m.Root() != root {
 				m.search.files = nil
@@ -129,6 +210,42 @@ func (m *Model) RunSearch() {
 			m.invalidate()
 		})
 	}()
+}
+
+func (m *Model) searchQueryMap() map[string]any {
+	p := &m.search
+	scope := map[string]any{"kind": "project"}
+	switch {
+	case p.scopePath != "":
+		scope = map[string]any{"kind": "directory", "path": p.scopePath}
+	case p.scopeName != "" && p.scopeName != "Project":
+		for _, custom := range m.searchScopes {
+			if custom.Name == p.scopeName {
+				scope = map[string]any{"kind": "pattern", "pattern": custom.Pattern}
+				break
+			}
+		}
+	}
+	return map[string]any{
+		"pattern":       strings.TrimSpace(p.query),
+		"isRegex":       p.isRegex,
+		"caseSensitive": p.caseSensitive,
+		"wholeWord":     p.wholeWord,
+		"include":       searchMaskList(p.include),
+		"exclude":       searchMaskList(p.exclude),
+		"scope":         scope,
+		"maxMatches":    maxSearchMatches,
+	}
+}
+
+func searchMaskList(text string) []string {
+	out := []string{}
+	for _, part := range strings.Split(text, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }
 
 // cancelSearch stops a running search; its summary then reports cancelled.
@@ -141,7 +258,7 @@ func (m *Model) cancelSearch() {
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 10*time.Second)
 		defer cancel()
-		_, _ = m.mgr.Invoke(ctx, Window, "cancel_request", map[string]any{"id": id})
+		_, _ = m.invoke(ctx, "cancel_request", map[string]any{"id": id})
 	}()
 }
 
@@ -163,6 +280,7 @@ func (m *Model) acceptSearchEvent(data json.RawMessage) {
 		m.search.files = append(m.search.files, *ev.File)
 		m.search.matches += len(ev.File.Matches)
 	case "done":
+		m.search.running = false
 		m.search.done = true
 		if ev.Summary != nil {
 			m.search.cancelled = ev.Summary.Cancelled
@@ -172,6 +290,235 @@ func (m *Model) acceptSearchEvent(data json.RawMessage) {
 		}
 	}
 	m.invalidate()
+}
+
+// ReplaceSearchSelected replaces the selected Find result.
+func (m *Model) ReplaceSearchSelected() {
+	m.startReplace(false)
+}
+
+// ReplaceSearchAll replaces every result of the current Find query.
+func (m *Model) ReplaceSearchAll() {
+	m.startReplace(true)
+}
+
+func (m *Model) startReplace(all bool) {
+	s := &m.search
+	if !s.replaceMode || s.query == "" || s.replaceRunning || len(s.files) == 0 || m.Root() == "" {
+		return
+	}
+	var targets []openidea.ReplaceTarget
+	if all {
+		targets = make([]openidea.ReplaceTarget, 0, len(s.files))
+		for _, file := range s.files {
+			targets = append(targets, openidea.ReplaceTarget{Path: file.Path})
+		}
+	} else {
+		if s.selectedFile < 0 || s.selectedFile >= len(s.files) {
+			s.replaceErr = "Choose a search result to replace"
+			m.invalidate()
+			return
+		}
+		file := s.files[s.selectedFile]
+		if s.selectedMatch < 0 || s.selectedMatch >= len(file.Matches) {
+			s.selectedMatch = 0
+		}
+		match := file.Matches[s.selectedMatch]
+		col := uint32(0)
+		if len(match.Ranges) > 0 {
+			col = match.Ranges[0][0]
+		}
+		targets = []openidea.ReplaceTarget{{
+			Path: file.Path,
+			Only: []openidea.SearchPosition{{Line: match.Line, Col: col}},
+		}}
+	}
+	ch := m.nextChannel()
+	s.replaceChannel = ch
+	s.replaceRequest = ch
+	s.replaceRunning = true
+	s.replaceDone = false
+	s.replaceProgress = fmt.Sprintf("0 of %d files", len(targets))
+	s.replaceSummary = ""
+	s.replaceErr = ""
+	query := m.searchQueryMap()
+	replacement := s.replacement
+	preserveCase := s.preserveCase
+	m.invalidate()
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, 5*time.Minute)
+		defer cancel()
+		_, err := m.invoke(ctx, "replace_in_files", map[string]any{
+			"request":      ch,
+			"query":        query,
+			"replacement":  replacement,
+			"preserveCase": preserveCase,
+			"targets":      targets,
+			"onEvent":      map[string]any{"$channel": ch},
+		})
+		m.post(func() {
+			if m.search.replaceRequest != ch {
+				return
+			}
+			m.search.replaceRunning = false
+			if err != nil && m.search.replaceErr == "" {
+				m.search.replaceErr = "Replacing failed: " + err.Error()
+			}
+			m.invalidate()
+		})
+	}()
+}
+
+// CancelReplace stops a Replace in Files run between files.
+func (m *Model) CancelReplace() {
+	s := &m.search
+	if !s.replaceRunning || s.replaceRequest == 0 {
+		return
+	}
+	id := s.replaceRequest
+	s.replaceRunning = false
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, 10*time.Second)
+		defer cancel()
+		_, _ = m.invoke(ctx, "cancel_request", map[string]any{"id": id})
+	}()
+}
+
+func (m *Model) acceptReplaceEvent(data json.RawMessage) {
+	var event openidea.ReplaceEvent
+	if json.Unmarshal(data, &event) != nil {
+		return
+	}
+	s := &m.search
+	switch event.Type {
+	case "file":
+		s.replaceProgress = fmt.Sprintf("%d of %d files · %d replaced",
+			event.Done, event.Total, event.Replacements)
+	case "failed":
+		s.replaceProgress = fmt.Sprintf("%d of %d files", event.Done, event.Total)
+		s.replaceErr = fmt.Sprintf("%s: %s", filepath.Base(event.Path), event.Message)
+	case "done":
+		s.replaceRunning = false
+		s.replaceDone = true
+		if event.Summary != nil {
+			verb := "Replaced"
+			if event.Summary.Cancelled {
+				verb = "Stopped after replacing"
+			}
+			s.replaceSummary = fmt.Sprintf("%s %d occurrences in %d files",
+				verb, event.Summary.Replacements, event.Summary.Files)
+			if event.Summary.Failed > 0 {
+				s.replaceSummary += fmt.Sprintf(" (%d failed)", event.Summary.Failed)
+			}
+		}
+	}
+	m.invalidate()
+}
+
+// OpenSearchScopes opens the native editor for named file-pattern scopes.
+func (m *Model) OpenSearchScopes() {
+	m.search.scopesOpen = true
+	m.search.scopesDraft = append([]SearchScope(nil), m.searchScopes...)
+	m.search.scopesSelected = 0
+	m.search.scopesChoice = ""
+	if len(m.search.scopesDraft) > 0 {
+		m.search.scopesChoice = m.search.scopesDraft[0].Name
+	}
+	m.search.scopesErr = ""
+	m.invalidate()
+}
+
+func (m *Model) addSearchScope() {
+	s := &m.search
+	for index := 1; ; index++ {
+		name := "Unnamed"
+		if index > 1 {
+			name = fmt.Sprintf("Unnamed (%d)", index)
+		}
+		found := false
+		for _, scope := range s.scopesDraft {
+			if scope.Name == name {
+				found = true
+				break
+			}
+		}
+		if !found {
+			s.scopesDraft = append(s.scopesDraft, SearchScope{Name: name})
+			s.scopesSelected = len(s.scopesDraft) - 1
+			s.scopesChoice = name
+			m.invalidate()
+			return
+		}
+	}
+}
+
+func (m *Model) removeSearchScope() {
+	s := &m.search
+	if s.scopesSelected < 0 || s.scopesSelected >= len(s.scopesDraft) {
+		return
+	}
+	s.scopesDraft = append(s.scopesDraft[:s.scopesSelected], s.scopesDraft[s.scopesSelected+1:]...)
+	if s.scopesSelected >= len(s.scopesDraft) {
+		s.scopesSelected = max(0, len(s.scopesDraft)-1)
+	}
+	if len(s.scopesDraft) > 0 {
+		s.scopesChoice = s.scopesDraft[s.scopesSelected].Name
+	} else {
+		s.scopesChoice = ""
+	}
+	m.invalidate()
+}
+
+func (m *Model) saveSearchScopes() {
+	s := &m.search
+	names := map[string]bool{}
+	for index, scope := range s.scopesDraft {
+		scope.Name = strings.TrimSpace(scope.Name)
+		scope.Pattern = strings.TrimSpace(scope.Pattern)
+		if scope.Name == "" {
+			s.scopesErr = "Every scope needs a name"
+			m.invalidate()
+			return
+		}
+		if names[scope.Name] {
+			s.scopesErr = fmt.Sprintf("Duplicate scope name '%s'", scope.Name)
+			m.invalidate()
+			return
+		}
+		if scope.Pattern == "" {
+			s.scopesErr = fmt.Sprintf("Scope '%s' has no pattern", scope.Name)
+			m.invalidate()
+			return
+		}
+		names[scope.Name] = true
+		s.scopesDraft[index] = scope
+	}
+	m.searchScopes = append([]SearchScope(nil), s.scopesDraft...)
+	if s.scopeName != "Project" && !names[s.scopeName] {
+		s.scopeName = "Project"
+	}
+	s.scopesOpen = false
+	s.scopesErr = ""
+	m.saveSession()
+	m.invalidate()
+}
+
+func searchActionObject(arg any) map[string]any {
+	switch value := arg.(type) {
+	case map[string]any:
+		return value
+	case json.RawMessage:
+		var out map[string]any
+		if json.Unmarshal(value, &out) == nil {
+			return out
+		}
+	case []byte:
+		var out map[string]any
+		if json.Unmarshal(value, &out) == nil {
+			return out
+		}
+	}
+	return map[string]any{}
 }
 
 // revealPos is a caret position to apply when its file becomes active. The
@@ -199,6 +546,7 @@ func (m *Model) previewAt(path string, line, col int) {
 // revealTo opens path in a tab, preview or regular, and puts the caret where
 // the navigation points.
 func (m *Model) revealTo(path string, line, col int, preview bool) {
+	m.recordNavigation(true)
 	m.reveal = &revealPos{path: path, line: line, col: col, endLine: -1, endCol: -1}
 	if preview {
 		m.openPreview(path)
@@ -213,6 +561,7 @@ func (m *Model) revealTo(path string, line, col int, preview bool) {
 // revealRange opens path in a regular tab and selects the declaration a
 // navigation points at, 0-based.
 func (m *Model) revealRange(path string, line, col, endLine, endCol int) {
+	m.recordNavigation(true)
 	m.reveal = &revealPos{path: path, line: line, col: col, endLine: endLine, endCol: endCol}
 	m.openFile(path)
 	if t := m.tab(); t != nil && t.doc.Path() == path {
@@ -234,12 +583,14 @@ func (m *Model) applyReveal(t *Tab) {
 		})
 		t.state.Select(start, end)
 		t.state.ScrollTo(r.line)
+		m.recordNavigation(true)
 		m.invalidate()
 		return
 	}
 	line, col := t.doc.BytePos(r.line, r.col)
 	t.state.GoTo(editor.Pos{Line: line, Col: col})
 	t.state.ScrollTo(line)
+	m.recordNavigation(true)
 	m.invalidate()
 }
 
@@ -258,11 +609,11 @@ func (m *Model) SmokeSearch(ctx context.Context) (map[string]any, error) {
 	for {
 		var done, running bool
 		var files, matches int
-		var summary, firstFile, firstText string
+		var summary, firstFile, firstText, errorText string
 		var firstLine int
 		m.post(func() {
 			done, running = m.search.done, m.search.running
-			files, matches, summary = len(m.search.files), m.search.matches, m.search.summary
+			files, matches, summary, errorText = len(m.search.files), m.search.matches, m.search.summary, m.search.err
 			firstFile = m.search.firstRel()
 			if f := m.search.firstFile(); f != nil && len(f.Matches) > 0 {
 				firstLine = int(f.Matches[0].Line) + 1
@@ -280,6 +631,9 @@ func (m *Model) SmokeSearch(ctx context.Context) (map[string]any, error) {
 			out["firstFile"] = firstFile
 			out["firstLine"] = firstLine
 			out["firstText"] = firstText
+			if errorText != "" {
+				return out, errors.New(errorText)
+			}
 			return out, nil
 		}
 		select {

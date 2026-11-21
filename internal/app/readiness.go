@@ -96,11 +96,11 @@ func (m *Model) readinessNow(ctx context.Context) Readiness {
 	}
 	if !r.Java {
 		r.Importing = r.JavaDetail == "" || r.JavaDetail == "starting" || r.JavaDetail == "busy"
-		return r
 	}
 
 	// Build Model Ready: the Maven/Gradle window's model, loaded with the
-	// project.
+	// project. It is independent of the optional language server: Maven runs
+	// and compile actions work while Java language services are absent.
 	var loading bool
 	var modelErr string
 	m.post(func() {
@@ -108,11 +108,10 @@ func (m *Model) readinessNow(ctx context.Context) Readiness {
 		modelErr = m.maven.err
 	})
 	r.BuildModel = !loading && modelErr == ""
-	if !r.BuildModel {
-		return r
-	}
 
-	// Run Ready: the project is trusted and its configurations are loaded.
+	// Run Ready: the project is trusted and its configurations are loaded. The
+	// three outcomes stay independent so the UI can name all missing startup
+	// stages instead of stopping at the first optional tool.
 	var trusted, loaded bool
 	var n int
 	m.post(func() {

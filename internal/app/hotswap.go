@@ -55,8 +55,10 @@ func (m *Model) HotSwapReload() {
 	}
 	m.debug.reloading = true
 	m.debug.hotSwapStage = "called"
+	m.debug.hotSwapRequest = m.nextRequest()
 	m.debug.status = "Compiling the changed classes…"
 	m.invalidate()
+	request := m.debug.hotSwapRequest
 	go func() {
 		defer func() { m.post(func() { m.debug.reloading = false }) }()
 		ctx, cancel := context.WithTimeout(m.ctx, 10*time.Minute)
@@ -86,7 +88,7 @@ func (m *Model) HotSwapReload() {
 		// The build reads the files from disk.
 		stage("saving")
 		tabs := append([]*Tab(nil), m.tabs...)
-		if err := saveAll(ctx, tabs, m.prefs.SaveFiles); err != nil {
+		if err := m.saveOpenTabs(ctx, tabs); err != nil {
 			done("error", "Hot Swap failed", err.Error())
 			return
 		}
@@ -101,9 +103,13 @@ func (m *Model) HotSwapReload() {
 		// "withErrors" | "cancelled" (bindings.ts JavaBuildStatus).
 		stage("building " + module)
 		raw, err := m.invoke(ctx, "java_build_workspace", map[string]any{
-			"module": module, "request": m.nextRequest(),
+			"module": module, "request": request,
 		})
 		if err != nil {
+			if ctx.Err() != nil {
+				done("info", "Hot Swap build cancelled", "")
+				return
+			}
 			done("error", "Hot Swap failed", "Compilation failed: fix the errors and reload. ("+err.Error()+")")
 			return
 		}
@@ -136,6 +142,21 @@ func (m *Model) HotSwapReload() {
 		}
 		level, title, body := hotSwapMessage(len(result.ChangedClasses), errorsList, obsolete)
 		done(level, title, body)
+	}()
+}
+
+// CancelHotSwap cancels the compile Reload Changed Classes is waiting on.
+func (m *Model) CancelHotSwap() {
+	if !m.debug.reloading || m.debug.hotSwapRequest == 0 {
+		return
+	}
+	request := m.debug.hotSwapRequest
+	m.debug.status = "Cancelling Hot Swap build…"
+	m.invalidate()
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
+		defer cancel()
+		_, _ = m.invoke(ctx, "cancel_request", map[string]any{"id": request})
 	}()
 }
 

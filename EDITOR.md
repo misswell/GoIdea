@@ -14,6 +14,27 @@ open the corresponding Search Everywhere tabs. Their macOS shortcuts are
 the caret and displays the result in a native popup. `F1` focuses the popup,
 then moves the documentation to the right tool window on the next press.
 
+## Find and Show Usages
+
+**Find Usages** (`Alt+F7`) runs the normal JDT reference search and opens the
+bottom **Find Usages** window. **Show Usages** (`Cmd+Option+F7`) uses the same
+streaming `lsp_references` request but keeps the results at the caret in a
+MyGo-rendered speed-search popup.
+
+The popup filters by file name and source line as text is typed, wraps with
+the arrow keys, pages with Page Up/Page Down, and uses Enter to open the
+selected location. The first Escape clears the filter and the next closes the
+popup. When the server supports scoped Java searches, Project Files can be
+widened to Project and Libraries by the scope control or by invoking Show
+Usages again. Read and write access filters preserve unclassified rows.
+
+The optional source preview is remembered across starts and waits 60 ms after
+selection changes before reading the file. **Open in Find Window** (`Alt+F7`)
+transfers the exact rows, multiline ranges and semantic metadata to the Find
+Usages tool window without repeating the search. `usage_popup_test.go` covers
+the native interaction, and `lsp.usagesPopup.open` plus
+`lsp.usagesPopup.transfer` exercise real JDT references in the release gate.
+
 ## Documents and tabs
 
 - One `docbridge.Document` exists per path; several tabs can show the same
@@ -268,7 +289,8 @@ read, as OpenIDEA's Reload All does.
 | Staged and unstaged change groups | `internal/app/vcs.go`; 已暂存/未暂存 split, per-row `vcs_stage` / `vcs_unstage` / `vcs_discard` with a rollback confirmation |
 | Branch widget and Branches popup | `internal/app/branch.go`; title bar `vcs_branch_info`, popup `vcs_branches` / `vcs_checkout` |
 | Line bookmarks | `internal/app/bookmarks.go`; F3 toggles the caret line, Cmd+F3 lists files and lines grouped by list with F2 description editing, next/previous cycle, gutter dots, saved in the session; Alt+F3 assigns a unique mnemonic, Ctrl+Shift+digit toggles and Ctrl+digit jumps; Cmd+2 opens the Bookmarks tool window; Toggle File Bookmark marks the active file, project tree rows mark files and folders; named lists group the window, can be renamed or deleted, and rows move between lists |
-| Project view menu | `internal/app/tree_ops.go`; New File/Directory, Cut, Copy, Paste, Copy Path, Jump to Source, Find in Folder, Open in Terminal, Rename and Delete over `fs_*`, with a confirmation sheet and unsaved-tab guards |
+| Project view menu | `internal/app/tree_ops.go`; New File/Directory, Cut, Copy, Paste, Copy Path, Jump to Source, Find in Folder, Open in Terminal, Rename and Delete over `fs_*`, with a confirmation sheet and unsaved-tab guards. **New File** opens the row-anchored searchable `project.newPopup`; templates use `templates.newFile` |
+| Project view refactoring | `internal/app/project_file_refactor.go`; Move, Rename and Copy share `project.fileRefactor`, while cross-file JDT edits open `project.refactoringPreview` with per-file inclusion and before/after edit rendering |
 | Quick open (Cmd+P) / command palette | `quickopen.go`, `commands.go` |
 | Vim mode, sticky scroll | Mayoi's implementations are in-tree but not wired into `cmd/goidea` (see `UPSTREAM_FEATURE_MATRIX.md`) |
 

@@ -36,6 +36,101 @@ func TestMainMenuFollowsOpenIDEAOrder(t *testing.T) {
 	}
 }
 
+func TestViewMenuFollowsOpenIDEAStructure(t *testing.T) {
+	var view menuEntry
+	for _, group := range mainMenuGroups() {
+		if group.label == "View" {
+			view = group
+			break
+		}
+	}
+	if view.label == "" {
+		t.Fatal("main menu has no View menu")
+	}
+	var labels []string
+	for _, item := range view.sub {
+		if item.sep {
+			labels = append(labels, "")
+		} else {
+			labels = append(labels, item.label)
+		}
+	}
+	want := []string{
+		"Tool Windows",
+		"Appearance",
+		"Active Editor",
+		"",
+		"Quick Definition",
+		"Quick Type Definition",
+		"",
+		"Recent Locations",
+		"Recent Files",
+		"Recent Changes",
+		"",
+		"Compare with Clipboard",
+		"",
+		"Quick Switch Scheme…",
+		"",
+		"Reset Font Size in All Editors",
+		"",
+		"Notifications",
+	}
+	if len(labels) != len(want) {
+		t.Fatalf("View menu = %v, want %v", labels, want)
+	}
+	for i := range want {
+		if labels[i] != want[i] {
+			t.Fatalf("View[%d] = %q, want %q (all: %v)", i, labels[i], want[i], labels)
+		}
+	}
+	if got := view.sub[4].command; got != "code.quickDefinition" {
+		t.Fatalf("Quick Definition command = %q", got)
+	}
+	if got := view.sub[5].command; got != "code.quickTypeDefinition" {
+		t.Fatalf("Quick Type Definition command = %q", got)
+	}
+	if got := view.sub[13].command; got != "view.quickSwitchScheme" {
+		t.Fatalf("Quick Switch Scheme command = %q", got)
+	}
+
+	appearance := view.sub[1].sub
+	appearanceLabels := make([]string, 0, len(appearance))
+	for _, item := range appearance {
+		if item.sep {
+			appearanceLabels = append(appearanceLabels, "")
+		} else {
+			appearanceLabels = append(appearanceLabels, item.label)
+		}
+	}
+	wantAppearance := []string{
+		"Enter Distraction Free Mode",
+		"Toggle Full Screen",
+		"Compact Mode",
+		"",
+		"Zoom In IDE",
+		"Zoom Out IDE",
+		"Reset IDE Zoom",
+		"",
+		"Toggle Light/Dark Theme",
+		"Customize Main Toolbar…",
+		"",
+		"Toolbar",
+		"Tool Window Bars",
+		"Navigation Bar",
+		"Status Bar",
+		"Status Bar Widgets",
+	}
+	if len(appearanceLabels) != len(wantAppearance) {
+		t.Fatalf("Appearance menu = %v, want %v", appearanceLabels, wantAppearance)
+	}
+	for i := range wantAppearance {
+		if appearanceLabels[i] != wantAppearance[i] {
+			t.Fatalf("Appearance[%d] = %q, want %q (all: %v)",
+				i, appearanceLabels[i], wantAppearance[i], appearanceLabels)
+		}
+	}
+}
+
 func TestMenuSubmenusCarryEntries(t *testing.T) {
 	walkMenu(mainMenuGroups(), func(e menuEntry) {
 		if e.label != "" && len(e.sub) > 0 && e.command != "" {

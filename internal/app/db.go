@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -26,14 +27,36 @@ const (
 // dbView is the open database sheet: the sources, the connection and schema it
 // has open, the console text and the results of its last run.
 type dbView struct {
-	open      bool
-	sources   []openidea.DataSource
-	connected map[string]bool
-	source    string
-	schemas   []string
-	schema    string
-	tables    []openidea.DBTable
-	sql       string
+	open            bool
+	sources         []openidea.DataSource
+	connected       map[string]bool
+	source          string
+	databaseTarget  string
+	currentDatabase string
+	databases       []string
+	// selectedTable is the table or view the toolbar and context actions act
+	// on when no explicit argument is supplied.
+	selectedTable  openidea.DBTable
+	schemas        []string
+	schema         string
+	tables         []openidea.DBTable
+	objects        map[string]openidea.DBSchemaObjects
+	sql            string
+	completion     openidea.DBCompletion
+	consoleSources map[string]string
+	// manualCommit and pendingTx mirror the backend's transaction mode for the
+	// selected connection.
+	manualCommit       map[string]bool
+	pendingTx          map[string]bool
+	separateProcedures bool
+	collapsed          bool
+	renamingResult     int
+	actionPrompt       *dbActionPrompt
+	sourceForm         *dbSourceForm
+	tableForm          *dbTableForm
+	importForm         *dbImportForm
+	connectRemedy      *dbConnectRemedy
+	newMenu            *dbNewMenu
 
 	loading  bool
 	running  bool
@@ -49,6 +72,29 @@ type dbView struct {
 
 	// gen drops replies that a newer request for the same list superseded.
 	gen uint64
+}
+
+// dbActionPrompt is a small native prompt used by database actions that need
+// one value or a destructive confirmation.
+type dbActionPrompt struct {
+	kind        string
+	title       string
+	value       string
+	source      string
+	schema      string
+	table       string
+	database    string
+	column      string
+	objectKind  string
+	objectName  string
+	arguments   string
+	sql         string
+	err         string
+	busy        bool
+	resultIndex int
+	ifExists    bool
+	cascade     bool
+	restartID   bool
 }
 
 // dbResult is one run's result tab.
@@ -195,6 +241,9 @@ func (m *Model) SelectDBSource(id string) {
 		return
 	}
 	v.source = id
+	v.databaseTarget = id
+	v.currentDatabase = ""
+	v.databases = nil
 	v.schemas = nil
 	v.schema = ""
 	v.tables = nil
@@ -216,6 +265,32 @@ func (m *Model) ConnectDBSource(id string) {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		err := m.mgr.DBConnect(ctx, Window, id)
+		manual := false
+		var completion openidea.DBCompletion
+		var failedSource map[string]any
+		if err == nil {
+			loadedCompletion, completionErr := m.mgr.DBCompletion(ctx, Window, id)
+			if completionErr == nil {
+				completion = loadedCompletion
+			}
+			if sources, sourcesErr := m.mgr.DBSourcesRaw(ctx, Window); sourcesErr == nil {
+				for _, source := range sources {
+					if fmt.Sprint(source["id"]) != dbBaseTarget(id) {
+						continue
+					}
+					if options, ok := source["options"].(map[string]any); ok &&
+						fmt.Sprint(options["transaction"]) == "manual" {
+						manual = true
+					}
+					break
+				}
+			}
+			if manual {
+				_ = m.mgr.DBSetManualCommit(ctx, Window, id, true)
+			}
+		} else {
+			failedSource = m.dbSourceRawForID(ctx, id)
+		}
 		m.post(func() {
 			if m.db != v {
 				return
@@ -223,6 +298,7 @@ func (m *Model) ConnectDBSource(id string) {
 			v.loading = false
 			if err != nil {
 				v.err = "Connect failed: " + err.Error()
+				m.openDBConnectRemedy(id, err, failedSource)
 				m.invalidate()
 				return
 			}
@@ -230,10 +306,71 @@ func (m *Model) ConnectDBSource(id string) {
 				v.connected = map[string]bool{}
 			}
 			v.connected[id] = true
+			if manual {
+				v.manualCommit[id] = true
+			}
+			if completion.DefaultSchema != "" || len(completion.Tables) > 0 {
+				v.completion = completion
+			}
 			m.loadDBSchemas(id)
+			if !strings.Contains(id, ":") {
+				m.loadDBDatabases(id)
+			}
 			m.invalidate()
 		})
 	}()
+}
+
+func dbBaseTarget(id string) string {
+	if i := strings.IndexByte(id, ':'); i >= 0 {
+		return id[:i]
+	}
+	return id
+}
+
+func (m *Model) loadDBDatabases(id string) {
+	v := m.db
+	if v == nil || id == "" {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		databases, err := m.mgr.DBDatabases(ctx, Window, id)
+		m.post(func() {
+			if m.db != v || v.source != id {
+				return
+			}
+			if err == nil {
+				v.databases = databases.Names
+				v.currentDatabase = databases.Current
+				if v.databaseTarget == "" {
+					v.databaseTarget = id
+				}
+			}
+			m.invalidate()
+		})
+	}()
+}
+
+// SelectDBDatabase opens id:database and lists that database's schemas.
+func (m *Model) SelectDBDatabase(database string) {
+	v := m.db
+	if v == nil || v.source == "" || strings.TrimSpace(database) == "" {
+		return
+	}
+	target := v.source + ":" + database
+	v.databaseTarget = target
+	v.currentDatabase = database
+	v.schemas = nil
+	v.schema = ""
+	v.tables = nil
+	v.selectedTable = openidea.DBTable{}
+	if v.connected[target] {
+		m.loadDBSchemas(target)
+		return
+	}
+	m.ConnectDBSource(target)
 }
 
 // DisconnectDBSource closes the connection of id.
@@ -257,6 +394,7 @@ func (m *Model) DisconnectDBSource(id string) {
 				v.schemas = nil
 				v.schema = ""
 				v.tables = nil
+				v.selectedTable = openidea.DBTable{}
 			}
 			m.invalidate()
 		})
@@ -326,7 +464,10 @@ func (m *Model) loadDBSchemas(id string) {
 			}
 			v.schemas = schemas
 			if len(schemas) > 0 {
-				schema := schemas[0]
+				schema := v.completion.DefaultSchema
+				if schema == "" {
+					schema = schemas[0]
+				}
 				for _, s := range schemas {
 					if s == "main" || s == "public" {
 						schema = s
@@ -353,6 +494,7 @@ func (m *Model) loadDBTables(id, schema string) {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		tables, err := m.mgr.DBTables(ctx, Window, id, schema)
+		objects, _ := m.mgr.DBSchemaObjects(ctx, Window, id, schema)
 		m.post(func() {
 			if m.db != v || v.gen != gen || v.source != id || v.schema != schema {
 				return
@@ -363,6 +505,11 @@ func (m *Model) loadDBTables(id, schema string) {
 				return
 			}
 			v.tables = tables
+			if v.objects == nil {
+				v.objects = map[string]openidea.DBSchemaObjects{}
+			}
+			key := id + "\x00" + schema
+			v.objects[key] = objects
 			m.invalidate()
 		})
 	}()
@@ -380,7 +527,11 @@ func (m *Model) RunDB() {
 		m.invalidate()
 		return
 	}
-	if !v.connected[v.source] {
+	target := v.databaseTarget
+	if target == "" {
+		target = v.source
+	}
+	if !v.connected[target] && !v.connected[v.source] {
 		v.err = "Connect the data source first"
 		m.invalidate()
 		return
@@ -400,7 +551,7 @@ func (m *Model) RunDB() {
 		v.outLog = v.outLog[len(v.outLog)-200:]
 	}
 	request := m.chanSeq.Add(1)
-	id, schema := v.source, v.schema
+	id, schema := target, v.schema
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
@@ -431,6 +582,14 @@ func (m *Model) RunDB() {
 				for _, o := range outcomes {
 					v.outLog = append(v.outLog, oneLine(o.Statement.Text)+" · "+dbOutcomeSummary(o))
 				}
+				if v.manualCommit[id] {
+					for _, outcome := range outcomes {
+						if outcome.Error == "" && !dbReadOnlyStatement(outcome.Statement.Text) {
+							v.pendingTx[id] = true
+							break
+						}
+					}
+				}
 			}
 			if len(v.outLog) > 200 {
 				v.outLog = v.outLog[len(v.outLog)-200:]
@@ -439,6 +598,16 @@ func (m *Model) RunDB() {
 			m.invalidate()
 		})
 	}()
+}
+
+func dbReadOnlyStatement(text string) bool {
+	text = strings.TrimSpace(strings.ToLower(text))
+	for _, prefix := range []string{"select", "show", "pragma", "explain", "describe", "desc", "values", "table", "with"} {
+		if strings.HasPrefix(text, prefix+" ") || text == prefix {
+			return true
+		}
+	}
+	return false
 }
 
 // utf16Len is the length of s in UTF-16 code units, the offsets the backend
@@ -561,14 +730,53 @@ func (m *Model) dbDialog(c *ui.Context, p *ui.Theme) {
 									m.SelectDBSource(s.ID)
 									m.ConnectDBSource(s.ID)
 								}
+								r.ContextMenu(func(menu *ui.Menu) {
+									if menu.Item("Data Source Properties…").Chosen() {
+										m.DBProperties(map[string]any{"source": s.ID})
+									}
+									if menu.Item("Duplicate").Chosen() {
+										m.DBDuplicateSource(map[string]any{"source": s.ID})
+									}
+									if menu.Item("Query Console").Chosen() {
+										m.DBOpenConsole(map[string]any{"source": s.ID})
+									}
+									menu.Separator()
+									if menu.Item("Remove Data Source…").Chosen() {
+										m.DBDrop(map[string]any{"source": s.ID})
+									}
+								})
 							}
 						})
 					})
 					ui.Row(c).Gap(6).Children(func() {
-						ui.Button(c, "Connect").OnClick(func() { m.ConnectDBSource(v.source) })
-						ui.Button(c, "Disconnect").OnClick(func() { m.DisconnectDBSource(v.source) })
-						ui.Button(c, "Add SQLite…").OnClick(func() { m.AddSQLiteSource() })
+						ui.Button(c, "Connect").OnClick(func() { m.ConnectDBSource(v.activeTarget()) })
+						ui.Button(c, "Disconnect").OnClick(func() { m.DisconnectDBSource(v.activeTarget()) })
+						ui.Button(c, "+").OnClick(func() { m.DBNew(nil) })
+						ui.Button(c, "Properties").OnClick(func() { m.DBProperties(nil) })
+						ui.Button(c, "Console").OnClick(func() { m.DBOpenConsole(nil) })
 					})
+					if len(v.databases) > 0 {
+						ui.Text(c, "Databases").FontSize(12).TextColor(p.TextMuted).SingleLine()
+						ui.Scroll(c).Height(88).Children(func() {
+							ui.Column(c).Padding(0, 6).Children(func() {
+								for _, database := range v.databases {
+									database := database
+									row := ui.Row(c.Key("dbdatabase:" + database)).Height(24).
+										PaddingStart(4).PaddingEnd(8).Gap(4).Radius(5).AlignItems(ui.Center)
+									if database == v.currentDatabase || row.Hovered() {
+										row.Background(p.SurfaceHover)
+									}
+									row.Children(func() {
+										oiIconEl(c, "openidea/database/schema", 16, oiPaletteOf(p), p.TextMuted).MarginEnd(2)
+										ui.Text(c, database).FontSize(13).TextColor(p.Text).SingleLine().Ellipsis("…")
+									})
+									if row.Clicked() {
+										m.SelectDBDatabase(database)
+									}
+								}
+							})
+						})
+					}
 					if len(v.schemas) > 0 {
 						ui.Text(c, "Schemas").FontSize(12).TextColor(p.TextMuted).SingleLine()
 						ui.Scroll(c).Height(88).Children(func() {
@@ -596,6 +804,9 @@ func (m *Model) dbDialog(c *ui.Context, p *ui.Theme) {
 					ui.Text(c, "Tables").FontSize(12).TextColor(p.TextMuted).SingleLine()
 					ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
 						ui.Column(c).Padding(0, 6).Children(func() {
+							if v.collapsed {
+								return
+							}
 							for _, t := range v.tables {
 								t := t
 								icon := "openidea/database/table"
@@ -604,7 +815,7 @@ func (m *Model) dbDialog(c *ui.Context, p *ui.Theme) {
 								}
 								r := ui.Row(c.Key("dbtable:" + t.Name)).Height(24).PaddingStart(4).
 									PaddingEnd(8).Gap(4).Radius(5).AlignItems(ui.Center)
-								if r.Hovered() {
+								if v.selectedTable.Name == t.Name || r.Hovered() {
 									r.Background(p.SurfaceHover)
 								}
 								r.Children(func() {
@@ -613,16 +824,117 @@ func (m *Model) dbDialog(c *ui.Context, p *ui.Theme) {
 										SingleLine().Ellipsis("…")
 								})
 								if r.Clicked() {
-									table := t.Name
-									if v.schema != "" && v.schema != "main" && v.schema != "public" {
-										table = v.schema + "." + t.Name
-									}
-									v.sql = "SELECT * FROM " + table
+									v.selectedTable = t
+									v.sql = "SELECT * FROM " + m.dbQualifiedName(v.source, v.schema, t.Name)
 									m.invalidate()
 								}
 								if r.DoubleClicked() {
 									m.OpenDBTable(v.schema, t.Name)
 								}
+								r.ContextMenu(func(menu *ui.Menu) {
+									target := map[string]any{
+										"source": v.source, "schema": v.schema,
+										"table": t.Name, "kind": t.Kind,
+									}
+									if menu.Item("Edit Data").Chosen() {
+										m.DBEditData(target)
+									}
+									if menu.Item("Go to DDL").Chosen() {
+										m.DBGoToDDL(target)
+									}
+									if menu.Item("Copy Reference").Chosen() {
+										m.DBCopyReference(target)
+									}
+									menu.Separator()
+									if menu.Item("Rename…").Chosen() {
+										m.DBRename(target)
+									}
+									if menu.Item("Truncate…").Chosen() {
+										m.DBTruncate(target)
+									}
+									if menu.Item("Drop…").Chosen() {
+										m.DBDrop(target)
+									}
+								})
+							}
+							objects := v.objects[v.source+"\x00"+v.schema]
+							renderObject := func(kind, name, detail, arguments string) {
+								icon := "openidea/database/table"
+								switch kind {
+								case "function", "procedure":
+									icon = "openidea/database/function"
+								case "sequence":
+									icon = "openidea/database/sequence"
+								}
+								row := ui.Row(c.Key("dbobject:" + kind + ":" + name)).Height(24).
+									PaddingStart(18).PaddingEnd(8).Gap(4).Radius(5).AlignItems(ui.Center)
+								if row.Hovered() {
+									row.Background(p.SurfaceHover)
+								}
+								row.Children(func() {
+									oiIconEl(c, icon, 16, oiPaletteOf(p), p.TextMuted).MarginEnd(2)
+									ui.Text(c, name).FontSize(13).TextColor(p.Text).SingleLine().Ellipsis("…")
+									if detail != "" {
+										ui.Spacer(c)
+										ui.Text(c, oneLine(detail)).FontSize(11).TextColor(p.TextMuted).
+											SingleLine().Ellipsis("…")
+									}
+								})
+								target := map[string]any{
+									"source": v.source, "schema": v.schema,
+									"objectKind": kind, "objectName": name, "arguments": arguments,
+								}
+								if row.DoubleClicked() {
+									m.DBGoToDDL(target)
+								}
+								row.ContextMenu(func(menu *ui.Menu) {
+									if menu.Item("Go to DDL").Chosen() {
+										m.DBGoToDDL(target)
+									}
+									if menu.Item("Quick Documentation").Chosen() {
+										m.DBQuickDoc(target)
+									}
+									if menu.Item("Copy Reference").Chosen() {
+										m.DBCopyReference(target)
+									}
+									menu.Separator()
+									if menu.Item("Rename…").Chosen() {
+										m.DBRename(target)
+									}
+									if menu.Item("Drop…").Chosen() {
+										m.DBDrop(target)
+									}
+								})
+							}
+							if !v.separateProcedures {
+								for _, routine := range objects.Routines {
+									detail := routine.Arguments
+									if routine.Returns != nil {
+										detail += " → " + *routine.Returns
+									}
+									renderObject(routine.Kind, routine.Name, detail, routine.Arguments)
+								}
+							} else {
+								for _, kind := range []string{"procedure", "function"} {
+									for _, routine := range objects.Routines {
+										if routine.Kind == kind {
+											detail := routine.Arguments
+											if routine.Returns != nil {
+												detail += " → " + *routine.Returns
+											}
+											renderObject(routine.Kind, routine.Name, detail, routine.Arguments)
+										}
+									}
+								}
+							}
+							for _, pkg := range objects.Packages {
+								renderObject("package", pkg.Name, "", "")
+							}
+							for _, seq := range objects.Sequences {
+								renderObject("sequence", seq.Name, seq.DataType, "")
+							}
+							for _, other := range objects.Others {
+								renderObject(other.Kind, other.Name, other.Detail, "")
 							}
 						})
 					})
@@ -634,6 +946,18 @@ func (m *Model) dbDialog(c *ui.Context, p *ui.Theme) {
 						ui.Button(c, "Run").Disabled(v.running).OnClick(func() { m.RunDB() })
 						ui.Button(c, "History").OnClick(func() { m.OpenDBHistory() })
 						ui.Button(c, "Explain").OnClick(func() { m.ExplainDB() })
+						ui.Button(c, "Query History").OnClick(func() { m.DBHistoryAction() })
+						ui.Button(c, "Run Script…").OnClick(func() { m.DBRunSQLScript(nil) })
+						activeTarget := v.activeTarget()
+						txLabel := "Tx: Auto"
+						if v.manualCommit[activeTarget] {
+							txLabel = "Tx: Manual"
+						}
+						ui.Button(c, txLabel).OnClick(func() { m.ToggleDBManualCommit() })
+						if v.manualCommit[activeTarget] {
+							ui.Button(c, "Commit").OnClick(func() { m.FinishDBTransaction(true) })
+							ui.Button(c, "Rollback").OnClick(func() { m.FinishDBTransaction(false) })
+						}
 						ui.Text(c, "Cmd+Enter runs the statement; results show the first 50 rows").FontSize(12).
 							TextColor(p.TextMuted).SingleLine()
 					})
@@ -665,6 +989,12 @@ func (m *Model) dbDialog(c *ui.Context, p *ui.Theme) {
 									}
 									if menu.Item("Close Others").Chosen() {
 										m.CloseOtherDBResults(i)
+									}
+									if menu.Item("Close All").Chosen() {
+										m.DBCloseAllResultsAction()
+									}
+									if menu.Item("Rename Tab…").Chosen() {
+										m.DBRenameResultAction(i)
 									}
 									menu.Separator()
 									if menu.Item("Next Result").Chosen() {
@@ -999,6 +1329,19 @@ type dbTableSheet struct {
 	showDetails bool
 	ddlLoad     bool
 	gen         uint64
+	filter      string
+	sort        []openidea.DBSortKey
+	selectedRow int
+	selectedCol int
+	// pending maps "row:column" to an edited value. deletes and inserts use
+	// the same edit representation OpenIDEA submits.
+	pending    map[string]*string
+	deletes    map[int]bool
+	inserts    []map[string]*string
+	valueOpen  bool
+	valueText  string
+	valueFind  string
+	submitting bool
 }
 
 // OpenDBTable shows the data page of a table of the selected source.
@@ -1010,7 +1353,8 @@ func (m *Model) OpenDBTable(schema, table string) {
 		schema = m.db.schema
 	}
 	m.dbTable = &dbTableSheet{
-		open: true, source: m.db.source, schema: schema, table: table, limit: 100,
+		open: true, source: m.db.activeTarget(), schema: schema, table: table, limit: 100,
+		pending: map[string]*string{}, deletes: map[int]bool{},
 	}
 	m.loadDBTablePage()
 }
@@ -1036,12 +1380,18 @@ func (m *Model) loadDBTablePage() {
 	gen := s.gen
 	source, schema, table := s.source, s.schema, s.table
 	offset, limit := s.offset, s.limit
+	var filter *string
+	if strings.TrimSpace(s.filter) != "" {
+		value := strings.TrimSpace(s.filter)
+		filter = &value
+	}
+	sort := append([]openidea.DBSortKey(nil), s.sort...)
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 60*time.Second)
 		defer cancel()
-		page, err := m.mgr.DBTablePageData(ctx, Window, m.nextRequest(), source, schema, table,
-			uint32(offset), uint32(limit))
+		page, err := m.mgr.DBTablePageQuery(ctx, Window, m.nextRequest(), source, schema, table,
+			filter, sort, uint32(offset), uint32(limit))
 		m.post(func() {
 			if m.dbTable != s || s.gen != gen {
 				return
@@ -1194,7 +1544,39 @@ func (m *Model) dbTableDialog(c *ui.Context, p *ui.Theme) {
 					OnClick(func() { m.DBTableStepPage(1) })
 				ui.Button(c, "Details").OnClick(func() { m.ToggleDBTableDetails() })
 				ui.Button(c, "DDL").OnClick(func() { m.ToggleDBTableDDL() })
+				ui.Button(c, "Go to Column").OnClick(func() { m.DBGoToColumn() })
+				ui.Button(c, "Submit").Disabled(s.submitting).OnClick(func() { m.DBSubmitChanges() })
+				ui.Button(c, "Revert").OnClick(func() { m.DBRevertChanges() })
 				ui.Button(c, "Close").OnClick(func() { m.closeDBTable() })
+			})
+			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, "Filter").FontSize(12).TextColor(p.TextMuted).SingleLine()
+				ui.TextArea(c, &s.filter).Height(28).SingleLine().Grow(1)
+				ui.Button(c, "Apply").OnClick(func() {
+					s.offset = 0
+					m.loadDBTablePage()
+				})
+				ui.Button(c, "Clear").OnClick(func() {
+					s.filter = ""
+					s.offset = 0
+					m.loadDBTablePage()
+				})
+				ui.Button(c, "Add Row").OnClick(func() {
+					s.inserts = append(s.inserts, map[string]*string{})
+					s.selectedRow = len(s.page.Result.Rows) + len(s.inserts) - 1
+					s.selectedCol = 0
+					m.invalidate()
+				})
+				ui.Button(c, "Delete Row").OnClick(func() {
+					if s.selectedRow >= 0 && s.selectedRow < len(s.page.Result.Rows) {
+						s.deletes[s.selectedRow] = !s.deletes[s.selectedRow]
+						m.invalidate()
+					}
+				})
+				if len(s.pending) > 0 || len(s.deletes) > 0 || len(s.inserts) > 0 {
+					ui.Text(c, fmt.Sprintf("%d pending", len(s.pending)+len(s.deletes)+len(s.inserts))).
+						FontSize(12).TextColor(p.TextMuted).SingleLine()
+				}
 			})
 			if s.err != "" {
 				ui.Text(c, s.err).FontSize(12).TextColor(p.Danger).SingleLine().Ellipsis("…")
@@ -1225,20 +1607,145 @@ func (m *Model) dbTableDialog(c *ui.Context, p *ui.Theme) {
 			ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
 				ui.Column(c).Children(func() {
 					ui.Row(c).Height(24).Children(func() {
-						for _, col := range s.page.Result.Columns {
-							ui.Text(c, col.Name).FontSize(12).Bold().TextColor(p.TextMuted).
-								Width(140).SingleLine().Ellipsis("…")
+						ui.Text(c, "#").FontSize(12).Bold().TextColor(p.TextMuted).
+							Width(36).SingleLine()
+						for colIndex, col := range s.page.Result.Columns {
+							colIndex, col := colIndex, col
+							head := ui.ButtonBase(c.Key(fmt.Sprintf("dbtheader:%d", colIndex))).
+								Height(24).Width(160).AlignItems(ui.Center)
+							if head.Hovered() {
+								head.Background(p.SurfaceHover)
+							}
+							head.Children(func() {
+								label := col.Name
+								for _, key := range s.sort {
+									if key.Column == col.Name {
+										if key.Descending {
+											label += " ↓"
+										} else {
+											label += " ↑"
+										}
+									}
+								}
+								ui.Text(c, label).FontSize(12).Bold().TextColor(p.TextMuted).
+									SingleLine().Ellipsis("…")
+							})
+							head.OnClick(func() {
+								next := []openidea.DBSortKey{{Column: col.Name}}
+								for _, key := range s.sort {
+									if key.Column == col.Name {
+										next[0].Descending = !key.Descending
+									}
+								}
+								s.sort = next
+								s.offset = 0
+								m.loadDBTablePage()
+							})
 						}
 					})
-					for _, row := range s.page.Result.Rows {
-						ui.Row(c).Height(24).Children(func() {
-							for _, cell := range row {
+					for rowIndex, row := range s.page.Result.Rows {
+						rowIndex, row := rowIndex, row
+						ui.Row(c).Height(28).Children(func() {
+							ui.Text(c, strconv.Itoa(rowIndex+1)).FontSize(11).TextColor(p.TextMuted).
+								Width(36).SingleLine()
+							for colIndex := range s.page.Result.Columns {
+								colIndex := colIndex
+								var cell *string
+								if colIndex < len(row) {
+									cell = row[colIndex]
+								}
+								selected := rowIndex == s.selectedRow && colIndex == s.selectedCol
+								key := fmt.Sprintf("%d:%d", rowIndex, colIndex)
+								edited := false
+								if value, ok := s.pending[key]; ok {
+									cell = value
+									edited = true
+								}
 								text, tone := "NULL", p.TextMuted
 								if cell != nil {
-									text, tone = *cell, p.Text
+									text = *cell
+									tone = p.Text
+									if text == "DEFAULT" {
+										tone = p.TextMuted
+									}
 								}
-								ui.Text(c, text).FontSize(12).Font("monospace").TextColor(tone).
-									Width(140).SingleLine().Ellipsis("…")
+								if selected {
+									value := text
+									area := ui.TextArea(c.Key("dbcell:"+key), &value).Height(28).Width(160).
+										Font("monospace").FontSize(12).SingleLine()
+									area.OnChange(func() {
+										if s.pending == nil {
+											s.pending = map[string]*string{}
+										}
+										next := value
+										s.pending[key] = &next
+										m.invalidate()
+									})
+								} else {
+									cellButton := ui.ButtonBase(c.Key("dbcell:" + key)).Height(28).
+										Width(160).PaddingStart(4).AlignItems(ui.Center)
+									if s.deletes[rowIndex] {
+										cellButton.Background(p.SurfaceHover)
+									}
+									cellButton.Children(func() {
+										ui.Text(c, text).FontSize(12).Font("monospace").TextColor(tone).
+											SingleLine().Ellipsis("…")
+									})
+									if edited {
+										cellButton.BorderWidth(0, 0, 1, 0).BorderColor(p.Accent)
+									}
+									cellButton.OnClick(func() {
+										s.selectedRow, s.selectedCol = rowIndex, colIndex
+										m.invalidate()
+									})
+									if cellButton.DoubleClicked() {
+										s.selectedRow, s.selectedCol = rowIndex, colIndex
+										m.DBOpenValueWindow()
+									}
+									cellButton.ContextMenu(func(menu *ui.Menu) {
+										if menu.Item("Edit Value…").Chosen() {
+											s.selectedRow, s.selectedCol = rowIndex, colIndex
+											m.DBOpenValueWindow()
+										}
+										if menu.Item("Set NULL").Chosen() {
+											s.selectedRow, s.selectedCol = rowIndex, colIndex
+											m.DBSetCellNull()
+										}
+										if menu.Item("Set DEFAULT").Chosen() {
+											s.selectedRow, s.selectedCol = rowIndex, colIndex
+											m.DBSetCellDefault()
+										}
+										if menu.Item("Toggle Boolean").Chosen() {
+											s.selectedRow, s.selectedCol = rowIndex, colIndex
+											m.DBToggleBooleanCell()
+										}
+										if menu.Item("Reformat Value").Chosen() {
+											s.selectedRow, s.selectedCol = rowIndex, colIndex
+											m.DBReformatValue()
+										}
+									})
+								}
+							}
+						})
+					}
+					for insertIndex, values := range s.inserts {
+						insertIndex, values := insertIndex, values
+						rowNumber := len(s.page.Result.Rows) + insertIndex + 1
+						ui.Row(c).Height(28).Children(func() {
+							ui.Text(c, strconv.Itoa(rowNumber)).FontSize(11).TextColor(p.Accent).Width(36).SingleLine()
+							for colIndex, column := range s.page.Result.Columns {
+								colIndex, column := colIndex, column
+								value := ""
+								if current := values[column.Name]; current != nil {
+									value = *current
+								}
+								area := ui.TextArea(c.Key(fmt.Sprintf("dbinsert:%d:%d", insertIndex, colIndex)), &value).
+									Height(28).Width(160).Font("monospace").FontSize(12).SingleLine()
+								area.OnChange(func() {
+									next := value
+									values[column.Name] = &next
+									m.invalidate()
+								})
 							}
 						})
 					}

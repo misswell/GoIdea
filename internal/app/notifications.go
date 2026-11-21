@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -39,6 +40,10 @@ type ideNotification struct {
 	actions []notifyAction
 	at      time.Time
 	read    bool
+	// verbatim keeps text supplied by a plugin as written. Native messages
+	// already contain their final text, but the flag follows upstream's
+	// notification model and survives history persistence.
+	verbatim bool
 	// group is Settings › Notifications' group, logged whether it is listed
 	// in the tool window, and userInitiated the answer to a command the user
 	// ran (it pops up even with balloons off).
@@ -90,6 +95,16 @@ func (m *Model) notifyUser(key, level, title, body string, actions ...notifyActi
 func (m *Model) notifySticky(key, level, title, body string, userInitiated bool, actions ...notifyAction) {
 	m.postNotification(ideNotification{key: key, level: level, title: title, body: body,
 		actions: actions, userInitiated: userInitiated, permanent: true})
+}
+
+// notifyPlugin posts text supplied by a plugin. It is user-initiated because
+// the plugin call comes from a command the user ran or one of its listeners,
+// and belongs to the Plugins notification group.
+func (m *Model) notifyPlugin(title, body string, level string, actions ...notifyAction) {
+	m.postNotification(ideNotification{
+		level: level, title: title, body: body, actions: actions,
+		group: "plugins", verbatim: true, userInitiated: true,
+	})
 }
 
 // updateNotificationBody changes the newest notification of a key in place,
@@ -161,6 +176,7 @@ func (m *Model) notificationHistory() []StoredNotification {
 		out = append(out, StoredNotification{
 			Key: n.key, Level: n.level, Title: n.title, Body: n.body,
 			At: n.at.UnixMilli(), Read: n.read, Group: n.group, Logged: true,
+			Verbatim: n.verbatim,
 		})
 	}
 	return out
@@ -181,6 +197,7 @@ func (m *Model) restoreNotificationHistory(items []StoredNotification) {
 			id: m.notify.seq, key: stored.Key, level: stored.Level,
 			title: stored.Title, body: stored.Body, at: time.UnixMilli(stored.At),
 			read: stored.Read, group: stored.Group, logged: stored.Logged,
+			verbatim: stored.Verbatim,
 		})
 	}
 }
@@ -379,7 +396,11 @@ func (m *Model) balloons(c *ui.Context, p *ui.Theme) {
 		total += notifyHeight(it, len(m.balloonActions(it))) + 8
 	}
 	x := w - notifyBalloonWidth - 16
-	y := h - oiStatusBarHeight - 12 - total
+	statusHeight := oiStatusBarHeight
+	if !m.prefs.Appearance.HideStatusBar {
+		statusHeight = oiTokensFor(m, p).StatusBarHeight
+	}
+	y := h - statusHeight - 12 - total
 	ui.Overlay(c, func() {
 		ui.Column(c).Absolute().Left(x).Top(y).Width(notifyBalloonWidth).Gap(8).
 			Children(func() {
@@ -396,7 +417,7 @@ func (m *Model) balloons(c *ui.Context, p *ui.Theme) {
 func notifyHeight(n ideNotification, actions int) float32 {
 	h := float32(46)
 	if n.body != "" {
-		h += 20
+		h += notificationBodyHeight(n.body)
 	}
 	if actions > 0 {
 		h += 24
@@ -462,8 +483,8 @@ func (m *Model) balloonView(c *ui.Context, p *ui.Theme, n ideNotification) {
 				close.OnClick(func() { m.dismissBalloon(n.id) })
 			})
 			if n.body != "" {
-				ui.Text(c, n.body).FontSize(13).TextColor(oi.textSecondary).
-					SingleLine().Ellipsis("…")
+				body := ui.Text(c, n.body).FontSize(13).TextColor(oi.textSecondary).Wrap()
+				body.MaxHeight(notificationBodyHeight(n.body))
 			}
 			if len(actions) > 0 {
 				ui.Row(c).Gap(14).Margin(4, 0, 0, 0).Children(func() {
@@ -542,7 +563,7 @@ func (m *Model) notificationsView(c *ui.Context, p *ui.Theme, oi oiColors) {
 								x.OnClick(func() { m.removeNotification(it.id) })
 							})
 							if it.body != "" {
-								ui.Text(c, it.body).FontSize(13).TextColor(oi.textSecondary)
+								ui.Text(c, it.body).FontSize(13).TextColor(oi.textSecondary).Wrap()
 							}
 							if len(it.actions) > 0 {
 								ui.Row(c).Gap(14).Margin(4, 0, 0, 0).Children(func() {
@@ -563,6 +584,21 @@ func (m *Model) notificationsView(c *ui.Context, p *ui.Theme, oi oiColors) {
 			})
 		})
 	})
+}
+
+// notificationBodyHeight reserves room for explicit lines and wraps long
+// lines at the balloon's text width. Balloons cap the body so three large
+// plugin messages cannot push their close buttons beyond the window.
+func notificationBodyHeight(body string) float32 {
+	body = strings.ReplaceAll(body, "\r\n", "\n")
+	body = strings.ReplaceAll(body, "\r", "\n")
+	lines := 0
+	for _, line := range strings.Split(body, "\n") {
+		n := utf8.RuneCountInString(line)
+		lines += max(1, (n+41)/42)
+	}
+	lines = max(1, min(lines, 8))
+	return float32(lines * 20)
 }
 
 // removeNotification drops one entry from the history.

@@ -2,6 +2,7 @@ package app
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -45,6 +46,18 @@ func TestBalloonHeightCountsTheSuppressionAction(t *testing.T) {
 	err := ideNotification{group: "shot.error", level: "error", title: "Build failed", body: "two"}
 	if got := len(m.balloonActions(err)); got != 0 {
 		t.Fatalf("an error offers %d actions, want none", got)
+	}
+}
+
+func TestNotificationBodyHeightPreservesMultilineText(t *testing.T) {
+	if got := notificationBodyHeight("one\ntwo\nthree"); got != 60 {
+		t.Fatalf("three-line body height = %v, want 60", got)
+	}
+	if got := notificationBodyHeight(strings.Repeat("x", 85)); got != 60 {
+		t.Fatalf("wrapped body height = %v, want 60", got)
+	}
+	if got := notificationBodyHeight(strings.Repeat("line\n", 20)); got != 160 {
+		t.Fatalf("unbounded body height = %v, want the eight-line cap", got)
 	}
 }
 
@@ -145,7 +158,18 @@ func TestNotificationHistorySurvivesARestart(t *testing.T) {
 		t.Fatalf("restored notifications = %+v", restored.notify.items)
 	}
 	got := restored.notify.items[0]
-	if got.title != "Saved notification" || got.body != "Its text is restored." || !got.read || !got.logged || got.balloon {
+	m.notifyPlugin("Demo Plugin", "first\nsecond", "info")
+	m.notify.items[0].read = true
+	m.saveSessionNow()
+	session = LoadSession(path)
+	if len(session.Notifications) != 2 || !session.Notifications[0].Verbatim {
+		t.Fatalf("plugin notification history = %+v", session.Notifications)
+	}
+	restored = &Model{}
+	restored.restoreNotificationHistory(session.Notifications)
+	got = restored.notify.items[0]
+	if got.title != "Demo Plugin" || got.body != "first\nsecond" ||
+		!got.read || !got.logged || got.balloon || !got.verbatim {
 		t.Fatalf("restored notification = %+v", got)
 	}
 	m.ClearNotifications()

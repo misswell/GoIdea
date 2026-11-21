@@ -251,7 +251,13 @@ func (m *Model) SmokeDebugSelectedConfig(ctx context.Context) (map[string]any, e
 		if dbgErr != "" {
 			return out, fmt.Errorf("调试所选配置失败：%s", dbgErr)
 		}
-		if started && ended {
+		if started {
+			out["sessionStarted"] = true
+		}
+		// A short program can start and end between two polls. The terminated
+		// handler clears session before setting ended, so requiring both to be
+		// true in the same snapshot misses a debugger run that did complete.
+		if ended {
 			out["sessionEnded"] = true
 			return out, nil
 		}
@@ -504,6 +510,7 @@ func (m *Model) SmokeRunSwitch(ctx context.Context, other string) (map[string]an
 // run must be refused with the real error, never started, and the app must
 // recover and run the configuration successfully afterwards.
 func (m *Model) SmokeRunKill(ctx context.Context) (map[string]any, error) {
+	offlineRerun := os.Getenv("GOIDEA_SMOKE_RUNKILL_OFFLINE") == "1"
 	out := map[string]any{"root": m.Root()}
 	configs, err := m.smokeRunConfigs(ctx)
 	if err != nil {
@@ -521,6 +528,18 @@ func (m *Model) SmokeRunKill(ctx context.Context) (map[string]any, error) {
 	}
 	if build == nil {
 		return out, errors.New("没有检测到 JVM application 配置")
+	}
+	var offlineRun *openidea.RunConfig
+	if offlineRerun {
+		for _, c := range configs {
+			if c.Kind == "maven" || c.Kind == "gradle" {
+				offlineRun = c
+				break
+			}
+		}
+		if offlineRun == nil {
+			return out, errors.New("离线重跑没有 Maven 或 Gradle 配置")
+		}
 	}
 	m.post(func() {
 		m.run.trusted = true
@@ -585,21 +604,30 @@ func (m *Model) SmokeRunKill(ctx context.Context) (map[string]any, error) {
 	if !recovered {
 		return out, errors.New("90 秒内后端没有恢复")
 	}
-	// After the recovery the same configuration runs to its exit.
+	// After the recovery the same JVM configuration runs to its exit when the
+	// Java toolchain is installed. The offline main gate uses a detected Maven
+	// configuration instead, because JDT is intentionally absent there.
 	configs, err = m.smokeRunConfigs(ctx)
 	if err != nil {
 		return out, err
 	}
+	rerunConfig := build
+	out["rerunMode"] = "same"
+	if offlineRerun {
+		rerunConfig = offlineRun
+		out["rerunMode"] = "maven"
+	}
 	var again *openidea.RunConfig
 	for _, c := range configs {
-		if c.ID == build.ID {
+		if c.ID == rerunConfig.ID {
 			again = c
 			break
 		}
 	}
 	if again == nil {
-		return out, errors.New("恢复后没有找到原配置")
+		return out, errors.New("恢复后没有找到重跑配置")
 	}
+	out["rerunConfig"] = again.Name
 	m.post(func() {
 		m.run.trusted = true
 		m.run.loaded = true
@@ -641,7 +669,8 @@ func (m *Model) SmokeRunKill(ctx context.Context) (map[string]any, error) {
 // Importing, Java Ready, Build Model Ready, Run Ready — was first reached,
 // and that they arrive in order.
 func (m *Model) SmokeReadiness(ctx context.Context) (map[string]any, error) {
-	out := map[string]any{"root": m.Root()}
+	javaRequired := os.Getenv("GOIDEA_SMOKE_READINESS_JAVA_OPTIONAL") != "1"
+	out := map[string]any{"root": m.Root(), "javaRequired": javaRequired}
 	first := map[string]time.Time{}
 	started := time.Now()
 	deadline := time.Now().Add(6 * time.Minute)
@@ -660,7 +689,7 @@ func (m *Model) SmokeReadiness(ctx context.Context) (map[string]any, error) {
 		note("java", r.Java)
 		note("buildModel", r.BuildModel)
 		note("run", r.Run)
-		if r.Backend && r.Project && r.Java && r.BuildModel && r.Run {
+		if r.Backend && r.Project && (!javaRequired || r.Java) && r.BuildModel && r.Run {
 			break
 		}
 		select {
@@ -788,12 +817,19 @@ func (m *Model) SmokeAttach(ctx context.Context) (map[string]any, error) {
 	for time.Now().Before(attachDeadline) {
 		var session uint32
 		var starting bool
+		var ended bool
 		var dbgErr string
-		m.post(func() { session, starting = m.debug.session, m.debug.starting; dbgErr = m.debug.err })
+		m.post(func() {
+			session, starting = m.debug.session, m.debug.starting
+			ended, dbgErr = m.debug.ended, m.debug.err
+		})
 		if dbgErr != "" {
 			return out, fmt.Errorf("附加失败：%s", dbgErr)
 		}
-		if session != 0 && !starting {
+		// Attaching to a program that finishes immediately can clear session
+		// before the poll sees it. A launch still in progress starts with
+		// ended=false, so a later ended=true proves this attach session ran.
+		if ended || (session != 0 && !starting) {
 			attached = true
 			break
 		}
@@ -805,6 +841,12 @@ func (m *Model) SmokeAttach(ctx context.Context) (map[string]any, error) {
 	}
 	out["attached"] = attached
 	if !attached {
+		m.post(func() {
+			out["debugStarting"] = m.debug.starting
+			out["debugStatus"] = m.debug.status
+			out["debugSession"] = m.debug.session
+			out["debugEnded"] = m.debug.ended
+		})
 		return out, errors.New("90 秒内没有完成附加")
 	}
 	// An attached JVM's stdout stays with the process that launched it (the

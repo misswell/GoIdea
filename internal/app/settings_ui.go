@@ -20,6 +20,9 @@ func (m *Model) OpenSettingsPage(page string) {
 	}
 	if m.settingsOpen {
 		m.settingsSelectPage(page)
+		if m.settingsPage == settingsPageLanguageServers {
+			m.loadLanguageServerSettings()
+		}
 		m.invalidate()
 		return
 	}
@@ -32,20 +35,49 @@ func (m *Model) OpenSettingsPage(page string) {
 	m.settingsHistory = []string{page}
 	m.settingsHistoryAt = 0
 	m.LoadJavaTools()
+	if page == settingsPageJava {
+		m.javaSettings = javaSettingsState{}
+		m.LoadJavaSettings()
+	}
+	if settingsPageUsesAgentBackend(page) {
+		m.loadAgentSettings()
+	}
+	if page == settingsPageLanguageServers {
+		m.loadLanguageServerSettings()
+	}
+	if page == settingsPageProjectTrust {
+		m.loadProjectTrust()
+	}
 	m.invalidate()
+}
+
+func settingsPageUsesAgentBackend(page string) bool {
+	switch page {
+	case settingsPageAgents, settingsPageAgentPolicy,
+		settingsPageAgentRegistry, settingsPageAgentMCP:
+		return true
+	default:
+		return false
+	}
 }
 
 // closeSettings closes the dialog as Cancel does: the staged choices are
 // dropped and the stored ones go back on the window.
 func (m *Model) closeSettings() {
+	if m.languageToolSettings.saving {
+		return
+	}
 	if !m.settingsOpen {
 		return
 	}
 	m.settingsOpen = false
+	m.keymapRecorder = keymapRecorderState{}
 	m.settingsQuery = ""
 	m.settingsCollapsed = nil
 	m.settingsErr = ""
 	m.applyPreferences()
+	m.resetJavaSettingsSession()
+	m.resetLanguageServerSettingsSession()
 	m.invalidate()
 }
 
@@ -61,13 +93,27 @@ func themeForName(name string) *ui.Theme {
 	return nil
 }
 
-// applyEditorFont puts size on every open editor.
-// applyEditorFont sets the size of every open editor's font.
+// applyEditorFont sets the configured Font page choices plus the shared
+// runtime zoom on every open editor.
 func (m *Model) applyEditorFont(size float32) {
-	for _, t := range m.tabs {
-		t.state.Font = ui.Font{Family: t.state.Font.Family, Size: size}
+	m.applyEditorFontPrefs(m.prefs.Font, size)
+}
+
+// applyEditorFontPrefs is applyEditorFont with a staged Font page value.
+func (m *Model) applyEditorFontPrefs(prefs FontPrefs, size float32) {
+	size += float32(m.editorFontZoom)
+	for _, t := range m.allTabs() {
+		if t == nil || t.state == nil {
+			continue
+		}
+		t.state.Font = ui.Font{
+			Family:   prefs.fontFamily(),
+			Size:     size,
+			Weight:   prefs.weight(),
+			Features: prefs.features(),
+		}
 		if t.kind != tabKindWhatsNew {
-			t.state.LineHeight = editorLineHeight(size)
+			t.state.LineHeight = prefs.lineHeightPixels(size) / size
 		}
 	}
 }
@@ -80,7 +126,7 @@ func (m *Model) applyEditorAppearance() {
 
 // applyAppearanceToTabs is the same with an appearance the dialog stages.
 func (m *Model) applyAppearanceToTabs(a EditorAppearance) {
-	for _, t := range m.tabs {
+	for _, t := range m.allTabs() {
 		m.applyTabAppearance(t, a)
 	}
 }
@@ -89,9 +135,15 @@ func (m *Model) applyAppearanceToTabs(a EditorAppearance) {
 // the choice was made. Distraction Free Mode hides the gutter over whatever
 // the settings say.
 func (m *Model) applyTabAppearance(t *Tab, a EditorAppearance) {
+	if t == nil || t.state == nil {
+		return
+	}
 	t.state.LineNumbers = editor.LineNumbersOn
-	if a.NoLineNumbers || m.zen {
+	switch {
+	case a.NoLineNumbers || m.zen:
 		t.state.LineNumbers = editor.LineNumbersOff
+	case a.LineNumberMode == "relative":
+		t.state.LineNumbers = editor.LineNumbersRelative
 	}
 	t.state.NoIndentGuides = a.NoIndentGuides
 	t.state.NoFolding = a.NoFolding || m.zen
@@ -143,6 +195,42 @@ func (m *Model) stepFont(delta int) {
 	m.setFontSize(int(m.prefs.fontSize()) + delta)
 }
 
+const (
+	minEditorFontZoom = -6
+	maxEditorFontZoom = 36
+)
+
+// editorFontSize is the configured editor font with the shared runtime zoom
+// applied. New tabs use it so they match every editor already open.
+func (m *Model) editorFontSize() float32 {
+	return m.prefs.fontSize() + float32(m.editorFontZoom)
+}
+
+// stepEditorFontZoom changes all open editors together without rewriting the
+// configured font size, as OpenIDEA's Increase/Decrease Font Size actions do.
+func (m *Model) stepEditorFontZoom(delta int) {
+	next := max(minEditorFontZoom, min(m.editorFontZoom+delta, maxEditorFontZoom))
+	if next == m.editorFontZoom {
+		return
+	}
+	m.editorFontZoom = next
+	m.applyEditorFont(m.prefs.fontSize())
+	m.status = fmt.Sprintf("Editor font zoom %+d", next)
+	m.invalidate()
+}
+
+// resetEditorFontZoom removes the shared runtime zoom and leaves the
+// configured size unchanged.
+func (m *Model) resetEditorFontZoom() {
+	if m.editorFontZoom == 0 {
+		return
+	}
+	m.editorFontZoom = 0
+	m.applyEditorFont(m.prefs.fontSize())
+	m.status = "Editor font size reset"
+	m.invalidate()
+}
+
 // setFontSize stores an editor font size, clamped to the readable range, and
 // applies it to the open editors.
 func (m *Model) setFontSize(size int) {
@@ -166,6 +254,7 @@ func (m *Model) applyPreferences() {
 	m.tabPrefs = m.prefs.Tabs
 	m.applyEditorFont(m.prefs.fontSize())
 	m.applyEditorAppearance()
+	m.invalidateCodeVision()
 	m.sortTabsAlphabetically()
 }
 
@@ -230,6 +319,13 @@ func (m *Model) SmokeSettings() map[string]any {
 // install action, so a fresh data directory can get a working Java toolchain
 // without leaving the app.
 func (m *Model) javaToolsSection(c *ui.Context, p *ui.Theme) {
+	ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+		ui.Text(c, "JDK").FontSize(12).TextColor(p.TextMuted).SingleLine()
+		ui.Spacer(c)
+		ui.Button(c, "Download JDK…").OnClick(func() {
+			m.OpenJDKDownloadDialog(0)
+		})
+	})
 	ui.Text(c, "Java Language Services and Debugger").FontSize(12).TextColor(p.TextMuted).SingleLine()
 	if m.Root() == "" {
 		ui.Text(c, "Open a Java project to install it").FontSize(12).TextColor(p.TextMuted).SingleLine()

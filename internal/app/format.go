@@ -29,41 +29,53 @@ func (m *Model) formatTab(t *Tab) {
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, lspTimeout)
 		defer cancel()
-		// The server formats the text it was last given; typing since the
-		// debounce sync has to land first or its ranges mean other text.
-		if serr := t.doc.Sync(ctx); serr != nil {
-			m.finishFormat(t, serr, false, 0)
-			return
-		}
-		raw, err := m.mgr.Invoke(ctx, Window, "lsp_format", map[string]any{
-			"doc":   docID,
-			"range": nil,
-			"options": map[string]any{
-				"tabSize": 4, "insertSpaces": true, "onSave": false, "tool": nil,
-			},
-		})
-		var edits []openidea.TextEdit
-		if err == nil {
-			err = json.Unmarshal(raw, &edits)
-		}
-		var applied int
-		var stale bool
-		if err == nil {
-			// The ranges are against the text the server formatted; typing
-			// since then makes them mean something else.
-			if t.doc.Buffer().Version() != version {
-				stale = true
-			} else if len(edits) > 0 {
-				es := t.doc.ByteEdits(edits)
-				if aerr := t.doc.ApplyEdits(ctx, es...); aerr != nil {
-					err = aerr
-				} else {
-					applied = len(es)
-				}
-			}
-		}
+		applied, stale, err := m.applyLanguageFormat(ctx, t, docID, version, false)
 		m.finishFormat(t, err, stale, applied)
 	}()
+}
+
+// applyLanguageFormat asks the language server for whole-document formatting
+// edits and applies them when the document still matches the version sent.
+// It is shared by Reformat Code and Format on Save.
+func (m *Model) applyLanguageFormat(
+	ctx context.Context,
+	t *Tab,
+	docID uint32,
+	version uint64,
+	onSave bool,
+) (applied int, stale bool, err error) {
+	// The server formats the text it was last given; typing since the
+	// debounce sync has to land first or its ranges mean other text.
+	if err = t.doc.Sync(ctx); err != nil {
+		return 0, false, err
+	}
+	raw, err := m.invoke(ctx, "lsp_format", map[string]any{
+		"doc":   docID,
+		"range": nil,
+		"options": map[string]any{
+			"tabSize": 4, "insertSpaces": true, "onSave": onSave, "tool": nil,
+		},
+	})
+	var edits []openidea.TextEdit
+	if err == nil {
+		err = json.Unmarshal(raw, &edits)
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	// The ranges are against the text the server formatted; typing since then
+	// makes them mean something else.
+	if t.doc.Buffer().Version() != version {
+		return 0, true, nil
+	}
+	if len(edits) == 0 {
+		return 0, false, nil
+	}
+	es := t.doc.ByteEdits(edits)
+	if err := t.doc.ApplyEdits(ctx, es...); err != nil {
+		return 0, false, err
+	}
+	return len(es), false, nil
 }
 
 func (m *Model) finishFormat(t *Tab, err error, stale bool, applied int) {

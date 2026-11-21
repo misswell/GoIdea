@@ -2,6 +2,7 @@ package openidea_test
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -179,6 +180,73 @@ func TestIntegrationDocumentSync(t *testing.T) {
 	}
 }
 
+func TestIntegrationSearchStreamsProjectMatches(t *testing.T) {
+	m := launchForTest(t)
+	dir := t.TempDir()
+	path, _ := writeFixture(t, dir)
+	const window = "goidea-search-it"
+
+	openProject(t, m, window, dir)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	if _, err := m.Invoke(ctx, window, "project_trust_set", map[string]any{
+		"path": dir, "trusted": true, "folder": false,
+	}); err != nil {
+		t.Fatalf("trust project: %v", err)
+	}
+
+	notifications, stop := m.Listen(64)
+	defer stop()
+	const channel = uint32(91)
+	reply, err := m.Invoke(ctx, window, "search_start", map[string]any{
+		"request": channel,
+		"query": map[string]any{
+			"pattern": "class ", "isRegex": false, "caseSensitive": false,
+			"wholeWord": false, "include": []string{}, "exclude": []string{},
+			"scope": map[string]any{"kind": "project"}, "maxMatches": 200,
+		},
+		"onEvent": map[string]any{"$channel": channel},
+	})
+	if err != nil {
+		t.Fatalf("search_start: %v (reply %s)", err, reply)
+	}
+
+	deadline := time.After(30 * time.Second)
+	for {
+		select {
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
+		case <-deadline:
+			t.Fatal("search did not stream Done")
+		case note := <-notifications:
+			if note.Method != "channel" {
+				continue
+			}
+			var msg openidea.ChannelMessage
+			if err := json.Unmarshal(note.Params, &msg); err != nil || msg.ID != channel {
+				continue
+			}
+			var event struct {
+				Type string `json:"type"`
+				File *struct {
+					Path string `json:"path"`
+				} `json:"file"`
+			}
+			if err := json.Unmarshal(msg.Data, &event); err != nil {
+				t.Fatalf("decode search event: %v", err)
+			}
+			switch event.Type {
+			case "file":
+				if event.File == nil || canonicalPath(t, event.File.Path) != canonicalPath(t, path) {
+					t.Fatalf("unexpected search file: %s", msg.Data)
+				}
+			case "done":
+				return
+			}
+		}
+	}
+}
+
 func TestIntegrationRestartAndCleanup(t *testing.T) {
 	m := launchForTest(t)
 	dir := t.TempDir()
@@ -271,6 +339,139 @@ func TestIntegrationRestartAndCleanup(t *testing.T) {
 	if !strings.Contains(text, "class 世界") {
 		t.Fatal("fixture")
 	}
+}
+
+func TestIntegrationWorkspaceLifecycle(t *testing.T) {
+	m := launchForTest(t)
+	const window = "goidea-workspace-it"
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	for _, command := range []string{
+		"workspace_create",
+		"workspace_update",
+		"workspace_attach",
+		"workspace_discover_projects",
+	} {
+		if !m.Server().HasCommand(command) {
+			t.Fatalf("server does not offer %s", command)
+		}
+	}
+
+	base := t.TempDir()
+	primary := filepath.Join(base, "app")
+	secondary := filepath.Join(base, "library")
+	container := filepath.Join(base, "team")
+	for _, dir := range []string{primary, secondary} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.test/project\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, dir := range []string{primary, secondary} {
+		if _, err := m.Invoke(ctx, window, "project_trust_set", map[string]any{
+			"path": dir, "trusted": true, "folder": false,
+		}); err != nil {
+			t.Fatalf("trust %s: %v", dir, err)
+		}
+	}
+
+	raw, err := m.Invoke(ctx, window, "workspace_create", map[string]any{
+		"path": container, "name": "Team", "projects": []string{},
+	})
+	if err != nil {
+		t.Fatalf("workspace_create: %v", err)
+	}
+	var created string
+	if err := json.Unmarshal(raw, &created); err != nil {
+		t.Fatalf("workspace_create reply: %v (%s)", err, raw)
+	}
+	container = canonicalPath(t, container)
+	if canonicalPath(t, created) != container {
+		t.Fatalf("workspace_create root = %q, want %q", created, container)
+	}
+	openProject(t, m, window, container)
+
+	for _, project := range []string{primary, secondary} {
+		if _, err := m.Invoke(ctx, window, "workspace_attach", map[string]any{"path": project}); err != nil {
+			t.Fatalf("workspace_attach %s: %v", project, err)
+		}
+	}
+	raw, err = m.Invoke(ctx, window, "project_current", nil)
+	if err != nil {
+		t.Fatalf("project_current after attach: %v", err)
+	}
+	info, err := openidea.DecodeProjectInfo(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Workspace == nil || len(info.Workspace.Projects) != 2 {
+		t.Fatalf("attached workspace = %+v", info.Workspace)
+	}
+	if canonicalPath(t, info.Workspace.Projects[0]) != canonicalPath(t, primary) ||
+		canonicalPath(t, info.Workspace.Projects[1]) != canonicalPath(t, secondary) {
+		t.Fatalf("attached projects = %v", info.Workspace.Projects)
+	}
+
+	raw, err = m.Invoke(ctx, window, "workspace_discover_projects", map[string]any{
+		"request": uint32(91), "folders": []string{base},
+	})
+	if err != nil {
+		t.Fatalf("workspace_discover_projects: %v", err)
+	}
+	var discovery openidea.ProjectDiscovery
+	if err := json.Unmarshal(raw, &discovery); err != nil {
+		t.Fatal(err)
+	}
+	found := map[string]bool{}
+	for _, project := range discovery.Projects {
+		found[canonicalPath(t, project.Path)] = true
+	}
+	if !found[canonicalPath(t, primary)] || !found[canonicalPath(t, secondary)] {
+		t.Fatalf("discovered projects = %+v", discovery)
+	}
+
+	raw, err = m.Invoke(ctx, window, "workspace_update", map[string]any{
+		"name": "Team Final", "projects": []string{primary},
+	})
+	if err != nil {
+		t.Fatalf("workspace_update remove: %v", err)
+	}
+	info, err = openidea.DecodeProjectInfo(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if canonicalPath(t, info.Root) != container ||
+		info.Workspace == nil || info.Workspace.Name != "Team Final" ||
+		len(info.Workspace.Projects) != 1 {
+		t.Fatalf("updated workspace = %+v root=%q", info.Workspace, info.Root)
+	}
+
+	raw, err = m.Invoke(ctx, window, "workspace_update", map[string]any{
+		"name": "Team Final", "projects": []string{primary, secondary},
+	})
+	if err != nil {
+		t.Fatalf("workspace_update add: %v", err)
+	}
+	info, err = openidea.DecodeProjectInfo(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Workspace == nil || len(info.Workspace.Projects) != 2 ||
+		canonicalPath(t, info.Workspace.Projects[1]) != canonicalPath(t, secondary) {
+		t.Fatalf("re-added workspace = %+v", info.Workspace)
+	}
+}
+
+func canonicalPath(t *testing.T, path string) string {
+	t.Helper()
+	canonical, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		t.Fatalf("canonicalize %s: %v", path, err)
+	}
+	return filepath.Clean(canonical)
 }
 
 func mapperMatches(text string, got *position.Mapper) bool {

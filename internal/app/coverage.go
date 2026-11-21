@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/egoist/mygo"
@@ -36,6 +38,12 @@ type coverageLine struct {
 	Hits            int `json:"hits"`
 	BranchesTotal   int `json:"branchesTotal"`
 	BranchesCovered int `json:"branchesCovered"`
+}
+
+type tabCoverageMap struct {
+	suite uint64
+	text  string
+	lines []coverageLine
 }
 
 type coverageCounts struct {
@@ -155,6 +163,28 @@ func (m *Model) SetCoverageVisible(visible bool) {
 	m.invalidate()
 }
 
+// coverageActionState mirrors the project/suite gates on OpenIDEA's Coverage
+// actions, so the menu and palette do not offer no-op commands.
+func coverageActionState(a *Action) {
+	switch a.ID {
+	case "run.coverage", "run.coverageContext", "coverage.importReport",
+		"coverage.manageReports":
+		a.When = func(m *Model) bool {
+			return m.Root() != "" && !m.showingWelcome
+		}
+	case "coverage.show":
+		a.When = func(m *Model) bool {
+			return m.Root() != "" && !m.showingWelcome &&
+				m.coverage.activeSuite() != nil && !m.coverage.visible
+		}
+	case "coverage.hide":
+		a.When = func(m *Model) bool {
+			return m.Root() != "" && !m.showingWelcome &&
+				m.coverage.activeSuite() != nil && m.coverage.visible
+		}
+	}
+}
+
 func (m *Model) coverageBadge(path string) string {
 	if s := m.coverage.activeSuite(); s != nil && m.coverage.visible {
 		return s.badges[filepath.Clean(path)]
@@ -168,21 +198,222 @@ func (m *Model) coverageGutterMarks(path string) []editor.GutterMark {
 		return nil
 	}
 	lines := suite.lines[filepath.Clean(path)]
+	return m.coverageMarksForLines(lines)
+}
+
+// coverageLinesForTab maps the report's line numbers through this tab's edits.
+// OpenIDEA keeps coverage markers in a RangeSet that follows every document
+// change; this cache does the same until a new report becomes active.
+func (m *Model) coverageLinesForTab(t *Tab) []coverageLine {
+	suite := m.coverage.activeSuite()
+	if suite == nil || t == nil || t.doc == nil {
+		return nil
+	}
+	raw := suite.lines[filepath.Clean(t.doc.Path())]
+	if len(raw) == 0 {
+		t.coverageMap = nil
+		return nil
+	}
+	current := t.doc.Text()
+	if t.coverageMap == nil || t.coverageMap.suite != suite.id {
+		t.coverageMap = &tabCoverageMap{
+			suite: suite.id,
+			text:  current,
+			lines: append([]coverageLine(nil), raw...),
+		}
+		return t.coverageMap.lines
+	}
+	if t.coverageMap.text != current {
+		t.coverageMap.lines = remapCoverageLines(
+			t.coverageMap.text, current, t.coverageMap.lines,
+		)
+		t.coverageMap.text = current
+	}
+	return t.coverageMap.lines
+}
+
+func (m *Model) coverageGutterMarksForTab(t *Tab) []editor.GutterMark {
+	if !m.coverage.visible {
+		return nil
+	}
+	return m.coverageMarksForLines(m.coverageLinesForTab(t))
+}
+
+func (m *Model) coverageMarksForLines(lines []coverageLine) []editor.GutterMark {
 	if len(lines) == 0 {
 		return nil
 	}
 	oi := oiPaletteOf(m.theme)
 	marks := make([]editor.GutterMark, 0, len(lines))
 	for _, line := range lines {
-		color := gutterAddedColor
-		if line.Hits == 0 {
-			color = oi.danger
-		} else if line.BranchesCovered < line.BranchesTotal {
-			color = oi.warning
-		}
+		color, _ := coverageLineState(line, oi)
 		marks = append(marks, editor.GutterMark{Line: line.Line, Color: color})
 	}
 	return marks
+}
+
+func coverageLineState(line coverageLine, oi oiColors) (ui.Color, string) {
+	hits := fmt.Sprintf("Hits: %d", line.Hits)
+	color := gutterAddedColor
+	switch {
+	case line.Hits <= 0:
+		hits = "Not covered"
+		color = oi.danger
+	case line.BranchesCovered < line.BranchesTotal:
+		color = oi.warning
+	}
+	if line.BranchesTotal > 0 {
+		hits += fmt.Sprintf(", %d/%d branches covered",
+			line.BranchesCovered, line.BranchesTotal)
+	}
+	return color, hits
+}
+
+func remapCoverageLines(oldText, newText string, lines []coverageLine) []coverageLine {
+	oldLines := strings.Split(oldText, "\n")
+	newLines := strings.Split(newText, "\n")
+	prefix := 0
+	for prefix < len(oldLines) && prefix < len(newLines) &&
+		oldLines[prefix] == newLines[prefix] {
+		prefix++
+	}
+	suffix := 0
+	for suffix < len(oldLines)-prefix && suffix < len(newLines)-prefix &&
+		oldLines[len(oldLines)-1-suffix] == newLines[len(newLines)-1-suffix] {
+		suffix++
+	}
+	removed := len(oldLines) - prefix - suffix
+	added := len(newLines) - prefix - suffix
+	mapped := make(map[int]coverageLine, len(lines))
+	for _, line := range lines {
+		oldLine := line.Line
+		if oldLine < 0 || oldLine >= len(oldLines) {
+			continue
+		}
+		newLine := oldLine
+		switch {
+		case oldLine < prefix:
+		case oldLine >= len(oldLines)-suffix:
+			newLine += added - removed
+		case removed == added:
+		case removed == 0:
+			newLine += added
+		case added == 0:
+			continue
+		default:
+			relative := oldLine - prefix
+			relative = relative * added / removed
+			newLine = prefix + min(relative, added-1)
+		}
+		if newLine < 0 || newLine >= len(newLines) {
+			continue
+		}
+		line.Line = newLine
+		if previous, ok := mapped[newLine]; !ok ||
+			coverageLinePriority(line) > coverageLinePriority(previous) {
+			mapped[newLine] = line
+		}
+	}
+	out := make([]coverageLine, 0, len(mapped))
+	for _, line := range mapped {
+		out = append(out, line)
+	}
+	slices.SortFunc(out, func(a, b coverageLine) int {
+		return a.Line - b.Line
+	})
+	return out
+}
+
+func coverageLinePriority(line coverageLine) int {
+	switch {
+	case line.Hits <= 0:
+		return 3
+	case line.BranchesCovered < line.BranchesTotal:
+		return 2
+	default:
+		return 1
+	}
+}
+
+// coverageGutterTooltip shows the same title as OpenIDEA's coverage gutter
+// marker when the pointer rests over the gutter's marker for a covered line.
+func (m *Model) coverageGutterTooltip(c *ui.Context, view ui.Element, t *Tab) {
+	if t == nil || t.state == nil || !m.coverage.visible || m.coverage.activeSuite() == nil {
+		view.Tooltip("")
+		return
+	}
+	x, y, over := view.PointerPosition()
+	if !over || x < 0 || x > coverageGutterWidth(c, t.state) {
+		view.Tooltip("")
+		return
+	}
+	line := coverageLineAtY(t.state, y)
+	if line < 0 {
+		view.Tooltip("")
+		return
+	}
+	for _, coverage := range m.coverageLinesForTab(t) {
+		if coverage.Line == line {
+			_, title := coverageLineState(coverage, oiPaletteOf(m.theme))
+			view.Tooltip(title)
+			return
+		}
+	}
+	view.Tooltip("")
+}
+
+func coverageGutterWidth(c *ui.Context, state *editor.State) float32 {
+	if c == nil || state == nil {
+		return 0
+	}
+	charWidth, _ := c.MeasureText(0, ui.Span{
+		Text: "0", Font: state.Font.Family, Size: state.Font.Size,
+		Weight: state.Font.Weight, Italic: state.Font.Italic,
+		Features: state.Font.Features,
+	})
+	lineHeight := state.LineHeight
+	if lineHeight <= 0 {
+		lineHeight = editorLineHeight(state.Font.Size)
+	}
+	width := float32(0)
+	if state.LineNumbers != editor.LineNumbersOff {
+		lineCount := 1
+		if state.Buffer != nil {
+			lineCount = state.Buffer.LineCount()
+		}
+		digits := max(3, len(strconv.Itoa(max(1, lineCount))))
+		width += float32(digits)*charWidth + charWidth*1.5
+	}
+	if !state.NoFolding {
+		width += lineHeight * 0.8
+	}
+	if state.DiffBase != nil {
+		width += 6
+	}
+	if len(state.GutterMarks) > 0 && state.LineNumbers == editor.LineNumbersOff {
+		width += lineHeight * 0.7
+	}
+	if width > 0 {
+		width += 4
+	}
+	return width
+}
+
+func coverageLineAtY(state *editor.State, y float32) int {
+	if state == nil || state.Buffer == nil {
+		return -1
+	}
+	first, last := state.VisibleLines()
+	last = min(last, state.Buffer.LineCount()-1)
+	scroll := float32(state.ScrollY())
+	for line := max(first, 0); line <= last; line++ {
+		top := float32(state.LineTop(line)) - scroll
+		bottom := float32(state.LineTop(line+1)) - scroll
+		if y >= top && y < bottom {
+			return line
+		}
+	}
+	return -1
 }
 
 // ImportCoverageReport asks which local report to import. The backend detects

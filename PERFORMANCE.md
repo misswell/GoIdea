@@ -73,6 +73,11 @@ First recorded run: 2026-11-13, macOS 27.2.0 arm64, Go 1.27.3, server
 `openidea-server-macos-aarch64.gz` from v0.1.44 (sha256 `01d79a70bebf034ba0771134b7700ac10f08b5956678d08b2e526d0c3cd90748`),
 `build/bench/20261113-160605/`.
 
+The current shipped server is v0.1.51
+(sha256 `3fb12218728aca9f14fb719597082c684e69c5e6e3938994feeef45f77390d5e`).
+The table below remains the historical v0.1.44 measurement until the v0.1.51
+benchmark is recorded.
+
 | Path | Target | Measured |
 | --- | --- | --- |
 | Cold start to first frame (warm caches) | ≤ 1.5 s | 110 ms |

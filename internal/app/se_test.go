@@ -140,7 +140,7 @@ func TestSearchEverywhereActionsFilter(t *testing.T) {
 		t.Fatalf("the Actions tab did not list Reload All from Disk: %+v", rows)
 	}
 	for _, r := range rows {
-		if r.item.kind == "action" && r.item.action == "project.new" {
+		if r.item.kind == "action" && r.item.action == "file.newProject" {
 			t.Fatalf("an unmatched action was listed")
 		}
 	}

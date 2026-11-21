@@ -393,6 +393,12 @@ def render(server=None):
         )
     )
     w(
+        "GoIDEA decodes the full `lsp_references` answer used by Find and Show Usages:\n"
+        "`locations`, semantic `classified` rows with `kind`, `access` and optional\n"
+        "line `text`, `incomplete`, and `librariesSkipped`. The latter fields are\n"
+        "optional so responses from older servers remain valid.\n"
+    )
+    w(
         "The gaps that need OpenIDEA work are the {} `shared-op`, `host` and `crate`\n"
         "commands above, in that order: the first already have an `ops`\n"
         "implementation, the second work against the host, and the third must move\n"
