@@ -3,7 +3,7 @@
 The GitHub release notes, which **Help › What's New** shows, come from the
 `## <version>` section here. Every release needs one, or its build fails.
 
-## Unreleased
+## 0.1.34
 
 - **Run** 可显示 PHPUnit/Pest、Minitest、Django、unittest 和 .NET 测试树。
 - **Rerun Failed Tests** 可为这些框架生成过滤条件并只重跑失败项。
