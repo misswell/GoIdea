@@ -31,6 +31,21 @@ func (m *Model) SmokeWorkspace(ctx context.Context) (map[string]any, error) {
 	if root == "" {
 		return out, fmt.Errorf("workspace smoke needs an open project")
 	}
+	var tabs []*Tab
+	m.post(func() {
+		tabs = append([]*Tab(nil), m.tabs...)
+		if m.split != nil {
+			tabs = append(tabs, m.split.tabs...)
+		}
+	})
+	if err := m.saveOpenTabs(ctx, tabs); err != nil {
+		return out, fmt.Errorf("save before workspace smoke: %w", err)
+	}
+	var dirty []string
+	m.post(func() { dirty = m.dirtyPaths() })
+	if len(dirty) > 0 {
+		return out, fmt.Errorf("workspace smoke still has unsaved files: %v", dirty)
+	}
 	base, err := os.MkdirTemp(filepath.Dir(root), ".goidea-workspace-smoke-")
 	if err != nil {
 		return out, err
@@ -166,9 +181,15 @@ func (m *Model) SmokeWorkspace(ctx context.Context) (map[string]any, error) {
 		var count int
 		var phase string
 		var dialogError string
+		var dirty int
+		var dialogOpen bool
+		var banner, statusText string
 		m.post(func() {
 			current, busy, phase = m.Root(), m.busy, m.Phase()
 			dialogError = created.error
+			dirty = len(m.dirtyPaths())
+			dialogOpen = m.workspaceDialog != nil
+			banner, statusText = m.banner, m.status
 			if m.workspace != nil {
 				count = len(m.workspace.Projects)
 			}
@@ -180,7 +201,10 @@ func (m *Model) SmokeWorkspace(ctx context.Context) (map[string]any, error) {
 			return out, fmt.Errorf("create workspace: %s", dialogError)
 		}
 		if phase == "failed" || time.Now().After(createDeadline) {
-			return out, fmt.Errorf("create workspace timed out in phase %s", phase)
+			return out, fmt.Errorf(
+				"create workspace timed out in phase %s (root %q, busy %v, projects %d, dirty %d, dialog %v, status %q, banner %q)",
+				phase, current, busy, count, dirty, dialogOpen, statusText, banner,
+			)
 		}
 		select {
 		case <-ctx.Done():
