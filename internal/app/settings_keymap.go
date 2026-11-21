@@ -123,13 +123,13 @@ func keymapBindingFromInput(ev ui.InputEvent) (string, bool) {
 		return "", false
 	}
 	var parts []string
-	cmdAdded := false
-	if ev.Mods&ui.Cmd != 0 {
-		parts = append(parts, "Cmd")
-		cmdAdded = true
-	}
-	if ev.Mods&ui.Ctrl != 0 && (!cmdAdded || ui.Cmd != ui.Ctrl) {
+	ctrlAdded := false
+	if ev.Mods&ui.Ctrl != 0 {
 		parts = append(parts, "Ctrl")
+		ctrlAdded = true
+	}
+	if ev.Mods&ui.Cmd != 0 && (!ctrlAdded || ui.Cmd != ui.Ctrl) {
+		parts = append(parts, "Cmd")
 	}
 	if ev.Mods&ui.Alt != 0 {
 		parts = append(parts, "Alt")

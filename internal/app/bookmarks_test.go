@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
@@ -156,6 +157,18 @@ func TestBookmarkMnemonicActionsAndShortcuts(t *testing.T) {
 		t.Fatalf("toggle action bookmarks = %+v", m.bookmarks)
 	}
 	tab.state.GoTo(editor.Pos{Line: 1, Col: 0})
+	if runtime.GOOS != "darwin" {
+		// On Linux MyGo's platform-primary modifier is Ctrl, so the native
+		// UI chain cannot represent macOS's separate Ctrl and Cmd modifiers.
+		// Exercise the same registered action without that ambiguous chord.
+		if !m.RunAction(gotoID) {
+			t.Fatalf("goto action %s did not run", gotoID)
+		}
+		if got := tab.state.CursorPos().Line; got != 0 {
+			t.Fatalf("goto action moved to line %d, want mnemonic 1", got)
+		}
+		return
+	}
 
 	tt := ui.NewTester(m.View, 900, 700)
 	tt.Frame()
