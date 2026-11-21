@@ -70,13 +70,17 @@ type RunPane struct {
 	// tests folds the run's test output into a results tree (testing
 	// feature), and testParser feeds it; set for JVM configurations, whose
 	// output Maven Surefire and Gradle report per test.
-	tests      *adapter.TestResults
-	testParser *adapter.JvmParser
-	testGo     *adapter.GoParser
-	testCargo  *adapter.CargoParser
-	testPytest *adapter.PytestParser
-	testJs     *adapter.JsParser
-	testStdout *adapter.TestStdoutBuffer
+	tests        *adapter.TestResults
+	testParser   *adapter.JvmParser
+	testGo       *adapter.GoParser
+	testCargo    *adapter.CargoParser
+	testPytest   *adapter.PytestParser
+	testUnittest *adapter.UnittestParser
+	testJs       *adapter.JsParser
+	testPHPUnit  *adapter.PHPUnitParser
+	testRuby     *adapter.RubyParser
+	testDotnet   *adapter.DotnetReports
+	testStdout   *adapter.TestStdoutBuffer
 	// selTest is the selected node of the results tree view.
 	selTest string
 }
@@ -459,6 +463,7 @@ func (m *Model) startRunWithCoverage(raw json.RawMessage, name string, coverage 
 	// withTestReporting (testing/index.ts): a `go test` run reports per test
 	// only with -json, which the parser consumes; the console shows the
 	// records' output text.
+	var dotnetReports *adapter.DotnetReports
 	if probeCfg, rerr := openidea.DecodeRunConfig(raw); rerr == nil {
 		switch adapter.FrameworkFor(probeCfg) {
 		case "go":
@@ -491,6 +496,29 @@ func (m *Model) startRunWithCoverage(raw json.RawMessage, name string, coverage 
 					raw = patched
 				}
 			}
+		case "unittest":
+			args := adapter.UnittestWithVerbose(probeCfg)
+			if patched, ok := patchRunConfigArgs(raw, args); ok {
+				raw = patched
+			}
+		case "phpunit":
+			args := adapter.PHPUnitWithTeamcity(probeCfg.Args)
+			if patched, ok := patchRunConfigArgs(raw, args); ok {
+				raw = patched
+			}
+		case "ruby":
+			if probeCfg.Kind != "rspec" {
+				args := adapter.RubyVerboseArgs(probeCfg)
+				if patched, ok := patchRunConfigArgs(raw, args); ok {
+					raw = patched
+				}
+			}
+		case "dotnet":
+			dotnetReports = adapter.NewDotnetReports(probeCfg)
+			args := dotnetReports.Args(probeCfg)
+			if patched, ok := patchRunConfigArgs(raw, args); ok {
+				raw = patched
+			}
 		}
 	}
 	m.run.lastID = probe.ID
@@ -518,9 +546,25 @@ func (m *Model) startRunWithCoverage(raw json.RawMessage, name string, coverage 
 			m.run.tests = adapter.NewTestResults()
 			m.run.testPytest = adapter.NewPytestParser()
 			m.run.testStdout = adapter.NewTestStdoutBuffer()
+		case "unittest":
+			m.run.tests = adapter.NewTestResults()
+			m.run.testUnittest = adapter.NewUnittestParser()
+			m.run.testStdout = adapter.NewTestStdoutBuffer()
 		case "js":
 			m.run.tests = adapter.NewTestResults()
 			m.run.testJs = adapter.NewJsParser()
+			m.run.testStdout = adapter.NewTestStdoutBuffer()
+		case "phpunit":
+			m.run.tests = adapter.NewTestResults()
+			m.run.testPHPUnit = adapter.NewPHPUnitParser()
+			m.run.testStdout = adapter.NewTestStdoutBuffer()
+		case "ruby":
+			m.run.tests = adapter.NewTestResults()
+			m.run.testRuby = adapter.NewRubyParser()
+			m.run.testStdout = adapter.NewTestStdoutBuffer()
+		case "dotnet":
+			m.run.tests = adapter.NewTestResults()
+			m.run.testDotnet = dotnetReports
 			m.run.testStdout = adapter.NewTestStdoutBuffer()
 		}
 	}
@@ -529,7 +573,11 @@ func (m *Model) startRunWithCoverage(raw json.RawMessage, name string, coverage 
 		m.run.testGo = nil
 		m.run.testCargo = nil
 		m.run.testPytest = nil
+		m.run.testUnittest = nil
 		m.run.testJs = nil
+		m.run.testPHPUnit = nil
+		m.run.testRuby = nil
+		m.run.testDotnet = nil
 		m.run.testStdout = nil
 	}
 	tabs := append([]*Tab(nil), m.tabs...)
@@ -971,8 +1019,20 @@ func (m *Model) feedRunTests(text string) string {
 	if m.run.testStdout == nil || m.run.tests == nil {
 		return text
 	}
+	return m.foldRunTestLines(m.run.testStdout.Feed(stripANSI(text)), text)
+}
+
+func (m *Model) flushRunTests() string {
+	if m.run.testStdout == nil || m.run.tests == nil {
+		return ""
+	}
+	lines := m.run.testStdout.End()
+	return m.foldRunTestLines(lines, strings.Join(lines, ""))
+}
+
+func (m *Model) foldRunTestLines(lines []string, fallback string) string {
 	var display []string
-	for _, line := range m.run.testStdout.Feed(stripANSI(text)) {
+	for _, line := range lines {
 		var events []adapter.TestEvent
 		if m.run.testGo != nil {
 			events = m.run.testGo.Feed(line)
@@ -981,17 +1041,32 @@ func (m *Model) feedRunTests(text string) string {
 			events = m.run.testCargo.Feed(line)
 		} else if m.run.testPytest != nil {
 			events = m.run.testPytest.Feed(line)
+		} else if m.run.testUnittest != nil {
+			events = m.run.testUnittest.Feed(line)
 		} else if m.run.testJs != nil {
 			events = m.run.testJs.Feed(line)
+		} else if m.run.testPHPUnit != nil {
+			events = m.run.testPHPUnit.Feed(line)
+			if adapter.ServiceMessageOf(line) == nil {
+				display = append(display, line+"\n")
+			}
+		} else if m.run.testRuby != nil {
+			events = m.run.testRuby.Feed(line)
+			display = append(display, adapter.RubyConsoleText(line))
+		} else if m.run.testDotnet != nil {
+			m.run.testDotnet.Feed(line)
 		} else if m.run.testParser != nil {
 			events = m.run.testParser.Feed(line)
 		}
 		m.run.tests.Apply(events)
 	}
-	if m.run.testGo != nil {
+	if m.run.testGo != nil || m.run.testPHPUnit != nil {
 		return strings.Join(display, "")
 	}
-	return text
+	if m.run.testRuby != nil {
+		return strings.Join(display, "")
+	}
+	return fallback
 }
 
 func (m *Model) acceptExit(e openidea.RunExitedEvent) {
@@ -1016,11 +1091,38 @@ func (m *Model) acceptExit(e openidea.RunExitedEvent) {
 	m.run.exitCode = e.Code
 	// The test results tree finishes with the process (results.ts finish).
 	if m.run.tests != nil {
+		if display := m.flushRunTests(); display != "" {
+			m.run.append(openidea.OutputChunk{Kind: "stdout", Text: display})
+		}
+		if m.run.testUnittest != nil {
+			m.run.tests.Apply(m.run.testUnittest.End())
+		}
 		code := 0
 		if e.Code != nil {
 			code = int(*e.Code)
 		}
 		m.run.tests.Finish(code)
+	}
+	if reports := m.run.testDotnet; reports != nil && m.run.tests != nil {
+		tests := m.run.tests
+		channel := m.run.channel
+		root := m.Root()
+		go func() {
+			events, err := reports.ReadReports(func(path string) (string, error) {
+				data, readErr := os.ReadFile(path)
+				return string(data), readErr
+			})
+			m.post(func() {
+				if m.Root() != root || m.run.channel != channel || m.run.tests != tests {
+					return
+				}
+				tests.Apply(events)
+				if err != nil {
+					m.notifyWarning("run.dotnet-report", "Could not read .NET test results", notifySuffix(err.Error()))
+				}
+				m.invalidate()
+			})
+		}()
 	}
 	switch {
 	case e.Code == nil:

@@ -280,17 +280,25 @@ func goArgs(base []string, paths [][]string, file string) []string {
 	return args
 }
 
-// FrameworkFor is the testing framework of a configuration (testing/index.ts
-// frameworkFor's jvm and go branches, the ones GoIDEA parses today).
+// FrameworkFor is the testing framework of a configuration
+// (testing/index.ts frameworkFor).
 func FrameworkFor(config *openidea.RunConfig) string {
 	switch config.Kind {
 	case "maven", "gradle":
 		return "jvm"
+	case "django-test":
+		return "unittest"
+	case "python":
+		cmd := config.Command + " " + strings.Join(config.Args, " ")
+		if regexp.MustCompile(`\bmanage\.py test\b`).MatchString(cmd) {
+			return "unittest"
+		}
+		return "pytest"
 	case "go":
 		return "go"
 	case "cargo":
 		return "cargo"
-	case "npm", "deno", "bun", "node":
+	case "npm", "deno", "bun":
 		return "js"
 	case "pytest":
 		return "pytest"
@@ -298,22 +306,34 @@ func FrameworkFor(config *openidea.RunConfig) string {
 		return "phpunit"
 	case "ruby", "rake", "rspec":
 		return "ruby"
+	case "dotnet-test":
+		return "dotnet"
 	}
 	cmd := config.Command + " " + strings.Join(config.Args, " ")
-	if regexp.MustCompile(`\b(gradlew?|mvnw?)\b`).MatchString(cmd) {
-		return "jvm"
-	}
-	if regexp.MustCompile(`\bgo\s+test\b`).MatchString(cmd) {
-		return "go"
+	if regexp.MustCompile(`(^|[/\\])dotnet(?:\.exe)?$`).MatchString(config.Command) &&
+		len(config.Args) > 0 && config.Args[0] == "test" {
+		return "dotnet"
 	}
 	if regexp.MustCompile(`\bcargo\b`).MatchString(cmd) {
 		return "cargo"
 	}
+	if regexp.MustCompile(`\b(jest|vitest|npm|pnpm|yarn|bun|npx|deno)\b`).MatchString(cmd) {
+		return "js"
+	}
 	if regexp.MustCompile(`\bpytest\b`).MatchString(cmd) {
 		return "pytest"
 	}
-	if regexp.MustCompile(`\b(jest|vitest|npm|pnpm|yarn|bun|npx|deno)\b`).MatchString(cmd) {
-		return "js"
+	if regexp.MustCompile(`\bmanage\.py test\b`).MatchString(cmd) {
+		return "unittest"
+	}
+	if regexp.MustCompile(`(^|[/\\\s])(phpunit|pest)(\.phar|\.bat)?(\s|$)`).MatchString(cmd) {
+		return "phpunit"
+	}
+	if regexp.MustCompile(`\bgo\s+test\b`).MatchString(cmd) {
+		return "go"
+	}
+	if regexp.MustCompile(`\b(gradlew?|mvnw?)\b`).MatchString(cmd) {
+		return "jvm"
 	}
 	return ""
 }
@@ -345,10 +365,41 @@ func RerunFailedConfig(config *openidea.RunConfig, paths [][]string) *openidea.R
 		args = PytestArgs(config.Args, paths)
 	case "js":
 		args = JsArgs(config, paths)
+	case "phpunit":
+		args = PHPUnitArgs(config.Args, "", PHPUnitFilter(paths), true)
+	case "dotnet":
+		filter := DotnetFilter(paths)
+		if filter != "" {
+			args = DotnetArgs(config.Args, filter)
+		}
+	case "unittest":
+		labels := UnittestLabels(paths)
+		args = UnittestArgs(config.Args, labels)
+		if args != nil {
+			var params map[string]any
+			if _, ok := config.Params["target"]; ok {
+				params = map[string]any{"target": FormatArgs(labels)}
+			}
+			return RerunConfigWithArgsAndParams(config, args, params)
+		}
 	}
 	if args == nil {
 		return nil
 	}
+	return RerunConfigWithArgs(config, args)
+}
+
+// RerunConfigWithArgs applies the "Failed: <name>" identity and filter
+// arguments to a configuration while preserving every unmodelled field.
+func RerunConfigWithArgs(config *openidea.RunConfig, args []string) *openidea.RunConfig {
+	return RerunConfigWithArgsAndParams(config, args, nil)
+}
+
+func RerunConfigWithArgsAndParams(
+	config *openidea.RunConfig,
+	args []string,
+	params map[string]any,
+) *openidea.RunConfig {
 	// The derived configuration carries the base's raw object with the
 	// filter arguments and the "Failed: <name>" identity applied, so
 	// run_start gets every field GoIDEA does not model.
@@ -365,6 +416,18 @@ func RerunFailedConfig(config *openidea.RunConfig, paths [][]string) *openidea.R
 		return nil
 	}
 	obj["args"] = args
+	if params != nil {
+		merged := map[string]any{}
+		if existing, ok := obj["params"].(map[string]any); ok {
+			for key, value := range existing {
+				merged[key] = value
+			}
+		}
+		for key, value := range params {
+			merged[key] = value
+		}
+		obj["params"] = merged
+	}
 	obj["name"] = "Failed: " + strings.TrimPrefix(config.Name, "Failed: ")
 	obj["detected"] = false
 	raw, err := json.Marshal(obj)
