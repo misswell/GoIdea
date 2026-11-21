@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -66,11 +67,19 @@ func (m *Model) SmokeHotSwap(ctx context.Context) (map[string]any, error) {
 		}
 		m.invalidate()
 	})
-	// The active tab is App.java and the breakpoint pauses it on the println
-	// line (0-based 4); the reloaded class is Greeter.
+	// The active tab is App.java. Pause on the line that invokes Greeter.greet
+	// before the JVM calls the old method; the reloaded class is Greeter.
 	path := root + "/src/main/java/com/example/App.java"
+	source, err := os.ReadFile(path)
+	if err != nil {
+		return out, err
+	}
+	breakLine := lineContaining(string(source), "greeter.greet()")
+	if breakLine < 0 {
+		return out, errors.New("App.java has no Greeter.greet() call")
+	}
 	if _, err := m.mgr.Invoke(ctx, Window, "debug_set_breakpoints", map[string]any{
-		"path": path, "breakpoints": []openidea.Breakpoint{{Line: 4, Enabled: true}},
+		"path": path, "breakpoints": []openidea.Breakpoint{{Line: breakLine, Enabled: true}},
 	}); err != nil {
 		return out, err
 	}
@@ -80,7 +89,7 @@ func (m *Model) SmokeHotSwap(ctx context.Context) (map[string]any, error) {
 		if m.debug.bps == nil {
 			m.debug.bps = map[string][]int{}
 		}
-		m.debug.bps[path] = []int{4}
+		m.debug.bps[path] = []int{breakLine}
 		m.invalidate()
 	})
 	// Debug requires Java Ready (section 8): wait for the import.
@@ -122,6 +131,18 @@ func (m *Model) SmokeHotSwap(ctx context.Context) (map[string]any, error) {
 		return out, errors.New("4 分钟内没有在断点暂停")
 	}
 	out["paused"] = true
+	if !m.waitDebug(ctx, func(d *DebugPane) bool {
+		return d.paused && d.stopLine >= 0
+	}, 30*time.Second) {
+		return out, errors.New("30 秒内没有取得断点所在行")
+	}
+	var pausedLine int
+	m.post(func() { pausedLine = m.debug.stopLine })
+	out["breakpointLine"] = breakLine
+	out["pausedLine"] = pausedLine
+	if pausedLine != breakLine {
+		return out, fmt.Errorf("断点停在第 %d 行，期望第 %d 行", pausedLine+1, breakLine+1)
+	}
 
 	var sess uint32
 	var ended bool
@@ -201,4 +222,13 @@ func (m *Model) SmokeHotSwap(ctx context.Context) (map[string]any, error) {
 		return out, fmt.Errorf("恢复后没有打印重载后的文本；输出尾部：%s", tailOf(output, 500))
 	}
 	return out, nil
+}
+
+func lineContaining(text, needle string) int {
+	for i, line := range strings.Split(text, "\n") {
+		if strings.Contains(line, needle) {
+			return i
+		}
+	}
+	return -1
 }
