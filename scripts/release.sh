@@ -15,6 +15,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 platform="${1:-darwin/arm64}"
+version="$(jq -r .version mygo.json)"
 identity="${GOIDEA_SIGN_IDENTITY:-Developer ID Application: Guofeng Liu (U8U443D7ZL)}"
 notary_mode="${GOIDEA_NOTARY_MODE:-}"
 notary_profile="${GOIDEA_NOTARY_PROFILE:-}"
@@ -83,9 +84,10 @@ if ! git diff --quiet -- mygo.json; then
   exit 1
 fi
 
-app="$(find build -maxdepth 3 -name GoIDEA.app -type d | head -1)"
-dmg="$(find build -maxdepth 3 -name 'goidea-*.dmg' | head -1)"
-[[ -n "$app" && -n "$dmg" ]] || { echo "build did not produce an app and a dmg" >&2; exit 1; }
+build_dir="build/darwin-${platform#*/}"
+app="$build_dir/GoIDEA.app"
+dmg="$(find "$build_dir" -maxdepth 1 -type f -name "goidea-$version-*.dmg" -print -quit)"
+[[ -d "$app" && -n "$dmg" ]] || { echo "build did not produce an app and a dmg" >&2; exit 1; }
 
 # The shipped server's sidecar is fixed before the image is built: signing the
 # bundle rewrites the server, and the app refuses a sidecar that disagrees with
