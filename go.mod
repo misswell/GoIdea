@@ -15,6 +15,7 @@ require (
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/yuin/goldmark v1.7.13
 	golang.org/x/image v0.46.0
+	golang.org/x/net v0.59.0
 	golang.org/x/sys v0.48.0
 )
 
@@ -25,11 +26,10 @@ require (
 	github.com/go-text/typesetting v0.3.5 // indirect
 	golang.org/x/exp/typeparams v0.0.0-20231108232855-2478ac86f678 // indirect
 	golang.org/x/mod v0.41.0 // indirect
-	golang.org/x/net v0.59.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
 	golang.org/x/tools v0.51.0 // indirect
 	honnef.co/go/tools v0.8.2 // indirect
 )
 
-replace github.com/egoist/mygo => github.com/sorrycc/mygo v0.4.9-0.20261106101517-f970e7091911
+replace github.com/egoist/mygo => github.com/sorrycc/mygo v0.4.9-0.20261123040358-40c1a26e61b4

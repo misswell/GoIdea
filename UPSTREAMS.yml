@@ -15,9 +15,9 @@ upstreams:
     # through the `mayoi` remote, so upstream commits arrive with git merge.
     remote: mayoi
     default_branch: main
-    commit: 89bc891e74cb2b759eaf0ef087401b021313859b
+commit: 106341fb55c23f4c5ae1e0a07f791a311eee675f
     version: 0.19.3
-    synced_at: 2026-11-13
+synced_at: 2026-11-23
     license: MIT
     sync: fork-merge
     local_changes:
@@ -36,9 +36,9 @@ upstreams:
     default_branch: main
     # The replacement in go.mod resolves here; the pseudo-version has the
     # same commit.
-    commit: f970e709191126e80e73e721b6b7b9c41cf358ab
-    module_version: v0.4.9-0.20261106101517-f970e7091911
-    synced_at: 2026-11-13
+commit: 40c1a26e61b4d93c1b4c6f6dd250b8f3c2dd27e4
+module_version: github.com/sorrycc/mygo
+synced_at: 2026-11-23
     license: MIT
     sync: go-module-replace
     local_changes: none-to-fork
@@ -54,15 +54,14 @@ upstreams:
     # The Rust source is a submodule pinned to the commit the RPC client was
     # tested against; the shipped server is the release build below.
     submodule: third_party/openidea
-    commit: 203871f1250ba5054bf976de2ce3267963c6011e
-    version: 0.1.52
-    synced_at: 2026-11-21
+commit: 4015a5b71ff428283680fcb712d8cba15bf98bba
+version: 0.1.52
+synced_at: 2026-11-23
     license: Apache-2.0
     sync: fork-submodule
     # The server GoIDEA ships is the official release asset for
     # macos-aarch64, verified against the release's SHA-256.
-    server:
-      release: v0.1.52
+release: v0.1.52
       release_commit: 203871f1250ba5054bf976de2ce3267963c6011e
       asset: openidea-server-macos-aarch64.gz
       sha256_file: openidea-server-macos-aarch64.gz.sha256
