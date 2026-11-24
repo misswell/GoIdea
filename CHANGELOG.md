@@ -3,7 +3,7 @@
 The GitHub release notes, which **Help › What's New** shows, come from the
 `## <version>` section here. Every release needs one, or its build fails.
 
-## Unreleased
+## 0.1.35
 
 - **Plugins** can import IntelliJ theme files and installed JetBrains IDE themes.
 - Plugin Services logs now find, clear, soft-wrap and toggle options from native actions.
