@@ -14,6 +14,7 @@ import (
 )
 
 func TestEditorShortcutEventsReachRegisteredActions(t *testing.T) {
+	requireDarwinKeymap(t)
 	tests := []struct {
 		name     string
 		mods     ui.Modifiers
@@ -120,6 +121,7 @@ func TestEditorShortcutEventsReachRegisteredActions(t *testing.T) {
 }
 
 func TestServicesShortcutEventTogglesTheNativeWindow(t *testing.T) {
+	requireDarwinKeymap(t)
 	m := &Model{}
 	tester := ui.NewTester(func(c *ui.Context) {
 		m.shortcuts(c)

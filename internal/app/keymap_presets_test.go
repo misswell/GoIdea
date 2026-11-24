@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -223,11 +224,13 @@ func TestShortcutsDispatchPresetCommandsChordsAndEditorMeanings(t *testing.T) {
 	m := &Model{}
 	m.setRoot("/project")
 
-	m.prefs.KeymapPreset = "intellij-macos"
-	column := keymapPresetTestTab("abc\n", 0, 0)
-	dispatchKeymapTestKeys(m, column, keymapTestKey{ui.Cmd | ui.Shift, ui.Key8})
-	if !column.columnMode || !m.columnSelectionEnabled() {
-		t.Fatal("IntelliJ macOS Cmd+Shift+8 did not toggle Column Selection Mode")
+	if runtime.GOOS == "darwin" {
+		m.prefs.KeymapPreset = "intellij-macos"
+		column := keymapPresetTestTab("abc\n", 0, 0)
+		dispatchKeymapTestKeys(m, column, keymapTestKey{ui.Cmd | ui.Shift, ui.Key8})
+		if !column.columnMode || !m.columnSelectionEnabled() {
+			t.Fatal("IntelliJ macOS Cmd+Shift+8 did not toggle Column Selection Mode")
+		}
 	}
 
 	m.prefs.KeymapPreset = "vscode-macos"

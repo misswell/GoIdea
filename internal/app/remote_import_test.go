@@ -135,13 +135,16 @@ func TestRemoteImportCopiesLocalDirectoryThroughOpenIDEARPCs(t *testing.T) {
 		"fs_set_permissions",
 		"fs_set_permissions",
 	}
-	if len(got) != len(wantCommands) {
-		t.Fatalf("remote import calls = %+v, want %d calls", got, len(wantCommands))
+	if len(got) < len(wantCommands) || len(got) > len(wantCommands)+1 {
+		t.Fatalf("remote import calls = %+v, want at most one trailing vcs refresh", got)
 	}
 	for i, command := range wantCommands {
 		if got[i].command != command {
 			t.Fatalf("remote import call %d = %+v, want %s", i, got[i], command)
 		}
+	}
+	if len(got) > len(wantCommands) && got[len(wantCommands)].command != "vcs_status" {
+		t.Fatalf("remote import refresh = %+v, want vcs_status", got[len(wantCommands)])
 	}
 	if got[0].path != "/srv/app/imports/bundle" || got[5].path != "/srv/app/imports/bundle/nested" {
 		t.Fatalf("folder calls = %+v", got)

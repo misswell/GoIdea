@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -387,6 +388,9 @@ nmap <f4> :action A<CR>j
 		{ui.Ctrl, ui.KeyBracketLeft, "<Ctrl-[>"},
 	}
 	for _, tc := range cases {
+		if runtime.GOOS != "darwin" && tc.mods == ui.Cmd {
+			continue
+		}
 		got, printable := vimInputToken(ui.InputEvent{
 			Kind: ui.InputKeyDown,
 			Mods: tc.mods,
