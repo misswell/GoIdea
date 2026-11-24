@@ -8,6 +8,7 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"image/png"
 	"os"
 	"path/filepath"
@@ -31,6 +32,18 @@ func (m *Model) SmokeShots(ctx context.Context, dir string) (map[string]any, err
 	out := map[string]any{}
 	sizes := map[string]int{}
 	var errs []string
+	// The database shots execute real SQL. A reused E2E data directory may
+	// not retain trust for this run's unique project path, so establish it
+	// through the same backend setting the user's trust prompt writes.
+	if root := m.Root(); root != "" && m.mgr != nil {
+		trustCtx, trustCancel := context.WithTimeout(ctx, 30*time.Second)
+		defer trustCancel()
+		if _, err := m.mgr.Invoke(trustCtx, Window, "project_trust_set", map[string]any{
+			"path": root, "trusted": true, "folder": false,
+		}); err != nil {
+			return nil, fmt.Errorf("trust screenshot project: %w", err)
+		}
+	}
 	// Every state is captured in both appearances, as the Dark and Light
 	// golden sets require.
 	shot := func(name string) {
