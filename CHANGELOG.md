@@ -3,6 +3,10 @@
 The GitHub release notes, which **Help › What's New** shows, come from the
 `## <version>` section here. Every release needs one, or its build fails.
 
+## Unreleased
+
+- Bookmark shortcuts no longer crash when no document backs the active editor.
+
 ## 0.1.35
 
 - **Plugins** can import IntelliJ theme files and installed JetBrains IDE themes.
