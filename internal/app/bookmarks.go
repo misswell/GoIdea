@@ -348,7 +348,7 @@ func bookmarkTitle(b Bookmark) string {
 // caretBookmark is the active file's caret line as a bookmark.
 func (m *Model) caretBookmark() (Bookmark, bool) {
 	t := m.tab()
-	if t == nil {
+	if t == nil || t.doc == nil || t.state == nil {
 		m.status = "Open a file before adding a bookmark"
 		m.invalidate()
 		return Bookmark{}, false
