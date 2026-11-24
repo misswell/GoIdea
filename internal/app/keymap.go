@@ -58,12 +58,13 @@ type keymapDispatchState struct {
 }
 
 var (
+	keymapHostOS      = runtime.GOOS
 	keymapPresetsByID = map[string]keymapPresetRuntime{}
 	keymapPresetOrder = make([]keymapPresetRuntime, 0, len(keymapPresetDefinitions))
 )
 
 func keymapPresetDefinitionsByOS() string {
-	if runtime.GOOS == "darwin" {
+	if keymapHostOS == "darwin" {
 		return "intellij-macos"
 	}
 	return "intellij-windows"

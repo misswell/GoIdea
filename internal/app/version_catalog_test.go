@@ -315,7 +315,11 @@ func gradleCatalogAcceptanceBinary(t *testing.T) string {
 	if err != nil {
 		t.Skip("set GOIDEA_GRADLE_HOME to the Gradle 8.10.2 installation")
 	}
-	return binary
+	t.Skipf(
+		"set GOIDEA_GRADLE or GOIDEA_GRADLE_HOME to the fixed Gradle 8.10.2 binary; found %s",
+		binary,
+	)
+	return ""
 }
 
 func gradleCatalogEnvironment(overrides map[string]string) []string {

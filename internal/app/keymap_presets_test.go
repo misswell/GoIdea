@@ -4,7 +4,6 @@ import (
 	"context"
 	"path/filepath"
 	"reflect"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -46,7 +45,7 @@ func TestKeymapPresetRegistryMatchesPinnedOpenIDEASet(t *testing.T) {
 
 func TestKeymapPresetsFollowTheHostAndPinnedOverrides(t *testing.T) {
 	wantDefault := "intellij-windows"
-	if runtime.GOOS == "darwin" {
+	if keymapHostOS == "darwin" {
 		wantDefault = "intellij-macos"
 	}
 	if got := keymapPresetDefinitionsByOS(); got != wantDefault {
