@@ -73,11 +73,11 @@ func TestOpenQueueContinuesPastAnAlreadyOpenFile(t *testing.T) {
 	t.Cleanup(m.off)
 
 	opened := make(chan struct{})
-	var once sync.Once
+	var openedOnce sync.Once
 	m.postHook = func(fn func()) {
 		fn()
 		if m.tabForPath(realPath(first)) >= 0 {
-			once.Do(func() { close(opened) })
+			openedOnce.Do(func() { close(opened) })
 		}
 	}
 	m.openFile(first)
@@ -88,11 +88,11 @@ func TestOpenQueueContinuesPastAnAlreadyOpenFile(t *testing.T) {
 	}
 
 	done := make(chan struct{})
-	once = sync.Once{}
+	var doneOnce sync.Once
 	m.postHook = func(fn func()) {
 		fn()
 		if m.tabForPath(realPath(third)) >= 0 {
-			once.Do(func() { close(done) })
+			doneOnce.Do(func() { close(done) })
 		}
 	}
 	if !m.RunActionWithArg("file.openPaths", []any{second, first, third}) {

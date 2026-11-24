@@ -578,7 +578,7 @@ func keymapInputStrokeOf(stroke string) (keymapInputStroke, bool) {
 		case "Shift":
 			mods |= ui.Shift
 		case "Cmd":
-			mods |= ui.Super
+			mods |= ui.Cmd
 		default:
 			return keymapInputStroke{}, false
 		}
