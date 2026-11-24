@@ -465,7 +465,7 @@ func (m *Model) newRemoteBackend(target openidea.RemoteTarget, config openidea.S
 	}
 	version := strings.TrimSpace(m.cfg.ServerMinVersion)
 	if version == "" {
-		version = "0.1.52"
+		version = "0.1.54"
 	}
 	backend := newRemoteBackend(target, config, version, dataDir, m.cfg.ServerPath, m.cfg.Log)
 	if m.remote.secrets == nil {

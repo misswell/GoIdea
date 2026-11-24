@@ -122,9 +122,27 @@ func (m *Model) RunConfiguration(arg any) {
 		m.runTemporaryConfiguration(cfg)
 		return
 	}
+	if onExit := runExitCallback(arg); onExit != nil {
+		m.beginRunPlugin(cfg.ID, onExit)
+		if !m.startRunWith(cfg.Raw(), cfg.Name) {
+			m.cancelRunPlugin()
+			onExit(nil, false)
+		}
+		return
+	}
 	if m.startRunWith(cfg.Raw(), cfg.Name) {
 		m.adoptRunTemporary(cfg)
 		m.invalidate()
+	}
+}
+
+func runExitCallback(arg any) func(*int32, bool) {
+	switch value := arg.(type) {
+	case map[string]any:
+		callback, _ := value["onExit"].(func(*int32, bool))
+		return callback
+	default:
+		return nil
 	}
 }
 
@@ -137,6 +155,26 @@ func runConfigFromActionArg(arg any) (openidea.RunConfig, bool, bool) {
 	}
 	if cfg, ok := arg.(*openidea.RunConfig); ok && cfg != nil {
 		return *cfg, false, true
+	}
+	if values, ok := arg.(map[string]any); ok {
+		temporary, _ := values["temporary"].(bool)
+		switch cfg := values["config"].(type) {
+		case openidea.RunConfig:
+			return cfg, temporary, true
+		case *openidea.RunConfig:
+			if cfg != nil {
+				return *cfg, temporary, true
+			}
+		}
+		if rawConfig := values["config"]; rawConfig != nil {
+			raw, err := json.Marshal(rawConfig)
+			if err == nil {
+				cfg, decodeErr := openidea.DecodeRunConfig(raw)
+				if decodeErr == nil {
+					return *cfg, temporary, true
+				}
+			}
+		}
 	}
 
 	var wrapped struct {

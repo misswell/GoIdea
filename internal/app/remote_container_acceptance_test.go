@@ -58,7 +58,7 @@ func TestIntegrationDevContainerAcceptance(t *testing.T) {
 
 	version := strings.TrimSpace(os.Getenv("GOIDEA_SERVER_VERSION"))
 	if version == "" {
-		version = "0.1.52"
+		version = "0.1.54"
 	}
 	localServer := strings.TrimSpace(os.Getenv("GOIDEA_DEVCONTAINER_SERVER_BINARY"))
 	if localServer == "" {

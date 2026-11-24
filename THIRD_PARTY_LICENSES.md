@@ -12,21 +12,22 @@ into the app (`Contents/Resources/licenses`).
 ### openidea-server — Apache-2.0
 
 - Project: OpenIDEA, https://github.com/l0ng-ai/openidea
-- Version: 0.1.52, release `v0.1.52` (commit `203871f`)
-- Component: `openidea-server-macos-aarch64.gz`, the official prebuilt release
-  asset for Apple silicon, verified against the release's SHA-256
-- Modification: GoIDEA's fork cancels active RPC work before server exit; the
-  release binary itself is redistributed unmodified
+- Version: 0.1.54, release `v0.1.54` (commit `8f338999`)
+- Component: `openidea-server-macos-aarch64.gz`, the fork-built release asset
+  for Apple silicon, verified against the release's SHA-256
+- Modification: GoIDEA's fork cancels active RPC work before server exit and
+  exposes global settings import/export plus JetBrains settings discovery over
+  the server protocol; the release binary is redistributed byte-for-byte
 - Attribution: `third_party/openidea-server/LICENSE`, `third_party/openidea-server/NOTICE`
 
 ### OpenIDEA source — Apache-2.0
 
 - Project: https://github.com/l0ng-ai/openidea
 - Fork: https://github.com/misswell/openidea
-- Pin: submodule `third_party/openidea` at commit `203871f1` (the source the RPC
+- Pin: submodule `third_party/openidea` at commit `8f338999` (the source the RPC
   client is tested against and the commit used for the shipped server build)
-- Modification: the fork cancels active requests during host shutdown so tool
-  downloads terminate with the server instead of becoming orphan processes
+- Modification: the fork cancels active requests during host shutdown and adds
+  settings import/export and JetBrains settings RPCs
 - Attribution: the submodule's own `LICENSE` and `NOTICE`
 
 GoIDEA starts this server as a child process (`openidea-server --stdio`) and

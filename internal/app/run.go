@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -1089,6 +1090,64 @@ func (m *Model) StopRun() {
 			})
 		}
 	}()
+}
+
+// StopProcess is OpenIDEA's run.stop/run.stopProcess target. An explicit run
+// id stops that backend process. Without one, the focused Debug window owns
+// Stop, then the active Run session; a lone Debug session falls back to
+// StopDebug.
+func (m *Model) StopProcess(arg any) {
+	if id := runProcessID(arg); id != 0 {
+		if m.run.runID == id && (m.run.running || m.run.awaiting) {
+			m.StopRun()
+			return
+		}
+		go func() {
+			ctx, cancel := context.WithTimeout(modelContext(m), 15*time.Second)
+			defer cancel()
+			_, _ = m.invoke(ctx, "run_stop", map[string]any{"id": id})
+		}()
+		return
+	}
+	if m.dockWindowShown("debug") && m.debug.session != 0 {
+		m.StopDebug()
+		return
+	}
+	if m.run.running || m.run.awaiting {
+		m.StopRun()
+		return
+	}
+	m.StopDebug()
+}
+
+func runProcessID(arg any) uint32 {
+	switch value := arg.(type) {
+	case uint32:
+		return value
+	case int:
+		if value > 0 {
+			return uint32(value)
+		}
+	case int64:
+		if value > 0 && value <= math.MaxUint32 {
+			return uint32(value)
+		}
+	case float64:
+		if value > 0 && value <= math.MaxUint32 && value == math.Trunc(value) {
+			return uint32(value)
+		}
+	case json.Number:
+		number, err := value.Int64()
+		if err == nil && number > 0 && number <= math.MaxUint32 {
+			return uint32(number)
+		}
+	case string:
+		number, err := strconv.ParseUint(strings.TrimSpace(value), 10, 32)
+		if err == nil {
+			return uint32(number)
+		}
+	}
+	return 0
 }
 
 // CycleRunConfig selects the next (delta 1) or previous (delta -1)

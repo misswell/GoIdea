@@ -1133,6 +1133,9 @@ func nativeSettingsFieldScope(field nativeSettingsField, fallback string) string
 }
 
 func nativeSettingsPageScopes(m *Model, def nativeSettingsPageSpec) []string {
+	if m.settingsDraft.newProjects {
+		return []string{"global"}
+	}
 	fallback := def.defaultScope
 	if fallback == "" {
 		fallback = m.settingsBackendScope()
@@ -1602,13 +1605,20 @@ func (m *Model) pendingNativeSettingsWrites() []settingsBackendWrite {
 		if fallbackScope == "" {
 			fallbackScope = m.settingsBackendScope()
 		}
+		if m.settingsDraft.newProjects {
+			fallbackScope = "global"
+		}
 		for _, section := range def.sections {
 			for _, field := range section.fields {
 				before := state.applied[field.key]
 				after := state.draft[field.key]
 				if !nativeSettingsSameValue(before, after) {
+					scope := nativeSettingsFieldScope(field, fallbackScope)
+					if m.settingsDraft.newProjects {
+						scope = "global"
+					}
 					writes = append(writes, settingsBackendWrite{
-						nativeSettingsFieldScope(field, fallbackScope), field.key, after,
+						scope, field.key, after,
 					})
 				}
 			}

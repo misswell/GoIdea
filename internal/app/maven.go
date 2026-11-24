@@ -113,6 +113,7 @@ type mavenPane struct {
 
 	// syncing is Load Maven Changes in flight: its message and fraction.
 	syncing  bool
+	syncTool string
 	syncMsg  string
 	syncFrac *float32
 	request  uint32
@@ -300,6 +301,7 @@ func (m *Model) SyncMaven() {
 	req := m.nextRequest()
 	ch := m.nextChannel()
 	m.maven.syncing = true
+	m.maven.syncTool = "maven"
 	m.maven.syncMsg = "Syncing Maven projects…"
 	m.maven.syncFrac = nil
 	m.maven.request = req
@@ -327,6 +329,7 @@ func (m *Model) SyncMaven() {
 				return
 			}
 			m.maven.syncing = false
+			m.maven.syncTool = ""
 			m.maven.syncMsg = ""
 			m.maven.syncFrac = nil
 			if err != nil {
@@ -337,9 +340,16 @@ func (m *Model) SyncMaven() {
 			m.maven.loading = false
 			m.applyBuildToolModel(model)
 			m.syncInitialBuildModels()
+			m.refreshBuildToolRunConfigs()
 			m.invalidate()
 		})
 	}()
+}
+
+func (m *Model) refreshBuildToolRunConfigs() {
+	if m.run.trusted && m.ctx != nil {
+		m.loadRunConfigs()
+	}
 }
 
 // SyncGradle is the Gradle tool window's Reload All Gradle Projects. The
@@ -381,6 +391,7 @@ func (m *Model) SyncGradleBuilds(dirs []string) {
 	req := m.nextRequest()
 	ch := m.nextChannel()
 	m.maven.syncing = true
+	m.maven.syncTool = "gradle"
 	m.maven.syncMsg = "Syncing Gradle projects…"
 	m.maven.syncFrac = nil
 	m.maven.request = req
@@ -419,6 +430,7 @@ func (m *Model) SyncGradleBuilds(dirs []string) {
 				return
 			}
 			m.maven.syncing = false
+			m.maven.syncTool = ""
 			m.maven.syncMsg = ""
 			m.maven.syncFrac = nil
 			if first != nil {
@@ -429,6 +441,7 @@ func (m *Model) SyncGradleBuilds(dirs []string) {
 			m.maven.loading = false
 			m.applyBuildToolModel(model)
 			m.syncInitialBuildModels()
+			m.refreshBuildToolRunConfigs()
 			m.invalidate()
 		})
 	}()
@@ -436,13 +449,17 @@ func (m *Model) SyncGradleBuilds(dirs []string) {
 
 // CancelBuildToolReload stops the running Maven or Gradle sync, matching the
 // tool windows' Stop Reloading actions.
-func (m *Model) CancelBuildToolReload() {
+func (m *Model) CancelBuildToolReload(tool string) {
 	if !m.maven.syncing || m.maven.request == 0 {
+		return
+	}
+	if tool != "" && m.maven.syncTool != "" && m.maven.syncTool != tool {
 		return
 	}
 	request := m.maven.request
 	m.maven.gen++
 	m.maven.syncing = false
+	m.maven.syncTool = ""
 	m.maven.syncMsg = ""
 	m.maven.syncFrac = nil
 	m.maven.request = 0
@@ -871,16 +888,14 @@ func (m *Model) mavenPanel(c *ui.Context, p *ui.Theme) {
 func (m *Model) mavenToolbar(c *ui.Context, p *ui.Theme) {
 	ui.Row(c).Height(32).Padding(0, 6).Gap(2).AlignItems(ui.Center).Children(func() {
 		if m.maven.syncing {
-			m.mavenAction(c, p, "maven:reload", "run/stop", "Stop", func() { m.CancelBuildToolReload() })
+			m.mavenAction(c, p, "maven:reload", "run/stop", "Stop", func() { m.CancelBuildToolReload("maven") })
 		} else if m.maven.loading {
 			m.mavenActionDisabled(c, p, "maven:reload", "general/refresh", "Loading Maven Projects", false)
 		} else {
 			m.mavenAction(c, p, "maven:reload", "general/refresh", "Reload All Maven Projects", func() { m.SyncMaven() })
 		}
 		m.mavenAction(c, p, "maven:sources", "nodes/generatedSource", "Generate Sources", func() {
-			if proj := m.mavenRootProject(); proj != nil {
-				m.runMavenGoal(proj, []string{"generate-sources"})
-			}
+			m.GenerateMavenSources("")
 		})
 		m.mavenAction(c, p, "maven:add", "general/add", "Add Maven Projects", func() { m.AddMavenProjects() })
 		m.mavenSeparator(c, p)

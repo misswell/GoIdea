@@ -98,12 +98,12 @@
       "evidence": "internal/app/parity_settings_actions.go opens the native chooser, calls settings_import, restores GoIDEA preferences and templates, applies preferences and reports the restart requirement. TestSettingsBundleExportImportRoundTripsPreferencesAndTemplates covers the import path and restored state"
     },
     "action:file.importJetBrainsSettings": {
-      "status": "partial",
-      "evidence": "internal/app/parity_settings_actions.go parses supported JetBrains XML options, lists installed IDEs, shows a native confirmation summary and writes global settings_set values. TestJetBrainsSettingsPlanRendersConfirmsAndAppliesGlobalWrites covers nine mapped options, skipped categories, rendering and writes; real archive extraction by the backend has not been exercised"
+      "status": "integrated",
+      "evidence": "internal/app/parity_settings_actions.go lists installed JetBrains settings directories, renders the native IDE chooser and confirmation summary, and writes the mapped global settings. The v0.1.54 backend supplies settings_list_jetbrains_ides and settings_read_jetbrains for both folders and exported settings.zip archives. TestJetBrainsSettingsPlanRendersConfirmsAndAppliesGlobalWrites covers nine mapped options and writes, while TestIntegrationGlobalSettingsAndJetBrainsImport proves directory discovery plus real folder and ZIP extraction against the shipped backend"
     },
     "action:file.newProjectsSettings": {
-      "status": "partial",
-      "evidence": "internal/app/settings_ui.go opens the native Settings sheet with the Settings for New Projects title. Java and language-server pages force global scope and TestNewProjectsSettingsUsesGlobalJavaScopeAndTitle covers that path; settings pages that own separate IDE/project sections can still expose project values"
+      "status": "integrated",
+      "evidence": "internal/app/settings_ui.go opens the native Settings for New Projects sheet, and internal/app/settings_native_catalog.go forces every requested and written property to the global scope while that mode is active. TestNewProjectsSettingsUsesGlobalJavaScopeAndTitle covers the native Java entry, and TestNewProjectsSettingsForceEveryPageToGlobalScope covers a mixed project/global page"
     },
     "action:file.openInNewWindow": {
       "status": "integrated",
@@ -116,6 +116,86 @@
     "action:file.togglePowerSave": {
       "status": "partial",
       "evidence": "internal/app/parity_file_find_window_actions.go writes global general.powerSaveMode and suppresses completion, hover documentation, quick documentation, quick definition, usage highlights, code vision and inline completion. TestPowerSaveWritesGlobalSettingStopsEditorSurfacesAndPersists covers the RPC, local persistence and surface state; changes made by another client do not update this native toggle without an action refresh"
+    },
+    "action:run.debugConfig": {
+      "status": "integrated",
+      "evidence": "internal/app/debug.go accepts direct RunConfig objects, wrapped {config, show} arguments and saved configuration ids through DebugConfiguration, then calls the same real java-debug launch path as Run › Debug. TestDebugConfigurationActionUsesTheExplicitRunConfig proves the explicit id reaches that route, while debug.* release checks cover the live JVM session"
+    },
+    "action:run.stopProcess": {
+      "status": "integrated",
+      "evidence": "OpenIDEA's run.stopProcess aliases run.stop. internal/app/run.go StopProcess accepts numeric, JSON-number and string process ids, stops the owned session through StopRun or sends run_stop for a background id. TestRunActionArgumentsReachTheNativeFlows verifies the native action and exact run_stop payload"
+    },
+    "action:gradle.analyzeDependencies": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go routes gradle.analyzeDependencies to the native Dependency Analyzer. TestOpenIDEABuildToolCommandsReachNativeState proves the command entry and analyzer state, while TestDependencyAnalyzerUsesGradleDependencyRPC and TestDependencyAnalyzerStopCancelsTheGradleRequest cover the real RPC payload and cancellation path"
+    },
+    "action:gradle.cancelReload": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go routes gradle.cancelReload to CancelBuildToolReload. TestOpenIDEABuildToolCommandsReachNativeState proves the action clears live sync state and sends cancel_request"
+    },
+    "action:gradle.collapseAll": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go routes gradle.collapseAll to CollapseGradleAll. TestBuildToolCollapseKeepsTheOtherTreeExpanded proves that it closes every Gradle row without changing Maven expansion"
+    },
+    "action:gradle.executeTask": {
+      "status": "integrated",
+      "evidence": "internal/app/build_tool_actions.go opens the native Gradle window and Run Anything with the gradle prefix. TestOpenIDEABuildToolCommandsReachNativeState verifies the action route, active tool and query"
+    },
+    "action:gradle.expandAll": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go routes gradle.expandAll to the native Gradle tree expansion. TestOpenIDEABuildToolCommandsReachNativeState supplies a real Gradle project tree and verifies that nested Gradle rows become expanded"
+    },
+    "action:gradle.reload": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go routes gradle.reload to SyncGradle. TestBuildSyncUsesTheRealToolbarArguments and TestBuildModelAutoSyncsTheVisibleToolFirst prove the build model RPC payload, independent build roots and resulting native model"
+    },
+    "action:gradle.toggleOffline": {
+      "status": "partial",
+      "evidence": "internal/app/commands.go routes gradle.toggleOffline to the independent Gradle offline switch, and TestOpenIDEABuildToolCommandsReachNativeState plus TestBuildSyncUsesTheRealToolbarArguments prove the action state and build_sync payload. The switch is still session-only instead of project-persisted like OpenIDEA"
+    },
+    "action:gradle.toggleSkipTests": {
+      "status": "partial",
+      "evidence": "internal/app/commands.go routes gradle.toggleSkipTests to the Gradle-specific switch, and TestOpenIDEABuildToolCommandsReachNativeState proves it does not change Maven state. The switch still lacks OpenIDEA's project-level persistence"
+    },
+    "action:maven.analyzeDependencies": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go routes maven.analyzeDependencies to the native Dependency Analyzer. TestOpenIDEABuildToolCommandsReachNativeState proves the command entry and analyzer state, and TestMavenDependencyNavigationAndExclusionRPCArguments covers declaration, exclusion and native navigation payloads"
+    },
+    "action:maven.cancelReload": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go routes maven.cancelReload to CancelBuildToolReload. TestOpenIDEABuildToolCommandsReachNativeState proves the action clears live sync state and sends cancel_request"
+    },
+    "action:maven.collapseAll": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go routes maven.collapseAll to CollapseMavenAll. TestBuildToolCollapseKeepsTheOtherTreeExpanded proves that it closes every Maven row without changing Gradle expansion"
+    },
+    "action:maven.executeGoal": {
+      "status": "integrated",
+      "evidence": "internal/app/build_tool_actions.go opens the native Maven window and Run Anything with the mvn prefix. TestOpenIDEABuildToolCommandsReachNativeState verifies the action route, active tool and query"
+    },
+    "action:maven.expandAll": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go routes maven.expandAll to the native Maven tree expansion. TestOpenIDEABuildToolCommandsReachNativeState supplies a real reactor tree and verifies that nested Maven rows become expanded"
+    },
+    "action:maven.generateSources": {
+      "status": "integrated",
+      "evidence": "internal/app/build_tool_actions.go routes maven.generateSources to the selected-POM or all-project native run queue. TestGenerateMavenSourcesRunsEveryTopLevelProjectThenReloads, TestGenerateMavenSourcesSelectedPOMRunsOnceAndReloads, TestGenerateMavenSourcesDoesNotReloadWhenEveryProjectFails and TestGenerateMavenSourcesStopsTheQueueWhenStopped cover sequencing, scope, reload and cancellation"
+    },
+    "action:maven.reload": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go routes maven.reload to SyncMaven. TestBuildSyncUsesTheRealToolbarArguments proves the build_sync payload, profile selection, request channel and resulting native model"
+    },
+    "action:maven.settings": {
+      "status": "integrated",
+      "evidence": "internal/app/commands.go routes maven.settings to the native Java settings page where Maven configuration lives. TestOpenIDEABuildToolCommandsReachNativeState verifies the action route and page selection"
+    },
+    "action:maven.toggleOffline": {
+      "status": "partial",
+      "evidence": "internal/app/commands.go routes maven.toggleOffline to the Maven offline switch, and TestOpenIDEABuildToolCommandsReachNativeState plus TestBuildSyncUsesTheRealToolbarArguments prove the action state and build_sync payload. The switch is still session-only instead of project-persisted like OpenIDEA"
+    },
+    "action:maven.toggleSkipTests": {
+      "status": "partial",
+      "evidence": "internal/app/commands.go routes maven.toggleSkipTests to the Maven-specific switch, and TestOpenIDEABuildToolCommandsReachNativeState proves it does not change Gradle state. The switch still lacks OpenIDEA's project-level persistence"
     },
     "action:find.field.newLine": {
       "status": "integrated",
@@ -133,14 +213,14 @@
       "status": "integrated",
       "evidence": "internal/app/search.go tracks the default-on follow-results preference and internal/app/view.go scrolls the selected native result into view. TestFindFieldNewLineHistoryAndScrollStatePersist covers action state, rendering and the off-mode label"
     },
-    "action:window.detachTab": {
-      "status": "partial",
-      "evidence": "internal/app/parity_window_groups.go moves the selected tab into the other editor split group. It does not yet move the tab and its complete state into another native project window; TestWindowParityActionsDetachMergeAndCycleRealGroups covers the editor-group move"
-    },
-    "action:window.mergeAllWindows": {
-      "status": "partial",
-      "evidence": "internal/app/parity_window_groups.go merges every editor split group into the focused tab strip while preserving tab order and the active tab. It does not yet merge independent native project windows; TestWindowParityActionsDetachMergeAndCycleRealGroups covers the editor-group merge"
-    },
+  "action:window.detachTab": {
+    "status": "integrated",
+    "evidence": "internal/app/parity_window_groups.go captures the selected file tab's unsaved text, selections, scroll, pin and preview state, asks WorkspaceHost to restore it in an independent native project window, and removes the source tab only after the target accepts the snapshot. The standalone editor-group move remains a fallback; TestWindowCompatibilityActionsTargetProjectsAndPreserveEditorTabs and TestNativeProjectWindowActionsUseTheWorkspaceHost cover the native host route, and workspace smoke proves independent project windows and backends."
+  },
+  "action:window.mergeAllWindows": {
+    "status": "integrated",
+    "evidence": "internal/app/parity_window_groups.go calls WorkspaceHost.MergeProjectWindows while retaining every model and backend, and keeps the editor-group merge as the standalone fallback. TestNativeProjectWindowActionsUseTheWorkspaceHost covers the native host route and the workspace smoke verifies independent project windows and backend ownership."
+  },
     "action:window.new": {
       "status": "integrated",
       "evidence": "cmd/goidea/windows.go creates a Welcome model and native window with its own backend, and internal/app/workspace_host.go routes Window › New Window to it. TestNativeProjectWindowActionsUseTheWorkspaceHost and the real-server windows.newWindow/windows.windowNext checks prove an empty third window, independent PID and native focus cycling. macOS hidden-window acceptance is proven; other platforms remain unverified"
@@ -323,7 +403,7 @@
     },
     "feature:plugins": {
       "status": "partial",
-      "evidence": "internal/app/plugins.go implements the isolated native plugin registry, Welcome › Plugins management, Git install, enable, remove, contributed commands, views, forms, editor edits, workspace APIs and the OpenIDEA services bridge. internal/app/plugins_actions.go adds Install from Disk, Update All and Reload All. internal/app/plugin_visuals.go projects decoration sets, line markers and indexed markers into native MyGo text/line backgrounds, gutter dots, tooltips and a target chooser, with active-file reporting, edit hiding, event invalidation, stale-response guards and bounded 64-path batches. plugins_test.go, plugin_workspace_test.go, plugin_editor_test.go, plugin_visuals_test.go, plugins_services_test.go and plugins_actions_test.go cover the native flows; TestIntegrationPluginWorkspaceRPC passes against the fork-built server, and TestIntegrationDevContainerAcceptance proves plugin_workspace_read_text through a real container. Plugin overlays remain, plugin SVG asset retrieval, after-text widgets and arbitrary span underline/strikethrough styling are native limitations, and the v0.1.52 release asset predates the plugin workspace RPCs"
+      "evidence": "internal/app/plugins.go implements the isolated native plugin registry, Welcome › Plugins management, Git install, enable, remove, contributed commands, views, forms, editor edits, workspace APIs and the OpenIDEA services bridge. internal/app/plugins_actions.go adds Install from Disk, Update All and Reload All. internal/app/plugin_visuals.go projects decoration sets, line markers and indexed markers into native MyGo text/line backgrounds, gutter dots, tooltips and a target chooser, with active-file reporting, edit hiding, event invalidation, stale-response guards and bounded 64-path batches. plugins_test.go, plugin_workspace_test.go, plugin_editor_test.go, plugin_visuals_test.go, plugins_services_test.go and plugins_actions_test.go cover the native flows; TestIntegrationPluginWorkspaceRPC passes against the v0.1.54 shipped server, and TestIntegrationDevContainerAcceptance proves plugin_workspace_read_text through a real container. Plugin overlays remain, and plugin SVG asset retrieval, after-text widgets and arbitrary span underline/strikethrough styling are MyGo limitations"
     },
     "feature:viewers": {
       "status": "partial",
@@ -734,8 +814,8 @@
       "evidence": "internal/app/debug_actions.go queries debug_step_in_targets, opens the native chooser for multiple calls and steps directly for zero or one target with pause-generation ownership; TestDebugSmartStepUsesBackendTargets now covers the target query, chooser state and selected debug_step_in_target payload. Remaining gap: real JVM Smart Step acceptance"
     },
     "action:debug.startConfig": {
-      "status": "partial",
-      "evidence": "OpenIDEA id debug.startConfig aliases GoIDEA action run.debug; DebugRunConfig debugs the selected application configuration through shared Java preparation and java-debug launch, with F9 and the native Run menu as entry points. debug.* passes against a real JVM, while the clean fixture still cannot expose this application configuration to negatives.dbgcfg"
+      "status": "integrated",
+      "evidence": "OpenIDEA's debug.startConfig aliases GoIDEA action run.debug. internal/app/debug.go DebugConfiguration preserves an explicit RunConfig or saved configuration id instead of replacing it with the selected configuration, and TestDebugConfigurationActionUsesTheExplicitRunConfig covers the action route. The underlying debug.* release checks exercise real JVM pause, frames, variables, evaluation, stepping and termination"
     },
     "action:debug.stepInto": {
       "status": "integrated",
@@ -1711,7 +1791,7 @@
     },
     "feature:remote-dev": {
       "status": "partial",
-      "evidence": "internal/app/remote.go, remote_connection.go, remote_backend.go, remote_container_cli.go, remote_deployment.go, remote_fs_events.go, remote_import.go, remote_ports.go, remote_run_targets.go and remote_tree.go implement the native remote-development surface: SSH/WSL/dev containers, backend transport and recovery, host-key trust, remote filesystem/tree/editor reload, environment reload, deployment/import, run targets, forwarded ports and web preview. remote_parity_test.go, remote_test.go, remote_import_test.go, remote_ports_test.go, remote_tree_ops_test.go, remote_run_targets_test.go and remote_deployment_test.go cover configuration, transport lifecycle, path semantics, stale completion, cancellation, secret handling and forwarding. TestIntegrationDevContainerAcceptance passed against a real Docker Dev Container with a fork-built Linux server, including project open, forwarded-port echo and plugin_workspace_read_text; the v0.1.52 release asset still lacks the newer plugin workspace RPC. A live external SSH host remains unproven because the configured VPN route was unavailable"
+      "evidence": "internal/app/remote.go, remote_connection.go, remote_backend.go, remote_container_cli.go, remote_deployment.go, remote_fs_events.go, remote_import.go, remote_ports.go, remote_run_targets.go and remote_tree.go implement the native remote-development surface: SSH/WSL/dev containers, backend transport and recovery, host-key trust, remote filesystem/tree/editor reload, environment reload, deployment/import, run targets, forwarded ports and web preview. remote_parity_test.go, remote_test.go, remote_import_test.go, remote_ports_test.go, remote_tree_ops_test.go, remote_run_targets_test.go and remote_deployment_test.go cover configuration, transport lifecycle, path semantics, stale completion, cancellation, secret handling and forwarding. TestIntegrationDevContainerAcceptance passed against a real Docker Dev Container with a fork-built Linux server, including project open, forwarded-port echo and plugin_workspace_read_text. The v0.1.54 macOS release asset includes the current workspace and settings RPCs, while a published Linux release asset and live external SSH host remain unproven"
     },
     "feature:vim": {
       "status": "partial",
@@ -2478,8 +2558,8 @@
       "evidence": "internal/app/run_config_dialog.go Rerun over the run widget's rerun button (⌘R, run.rerun in internal/app/commands.go): rerunConfig semantics (the configuration as saved now), the Process 'x' Is Running confirm (dialogs.tsx confirmRerun) with 不再询问 persisted under run.confirmRerun in internal/app/settings.go RunPrefs, stop + wait for exit + restart; limits: allowParallel restarts instead of a second instance (single run session)"
     },
     "action:run.agentStart": {
-      "status": "partial",
-      "evidence": "internal/app/run_agent_actions.go starts or reuses one agent's primary Run tab through run_start and refuses a live same-name command; TestRunAgentStartBuildsUpstreamConfigAndRejectsLiveName. OpenIDEA's agentRuns.ts also keeps a collection of finished agent sessions, sorts it by endedAt/startedAt, archives beyond tabLimit and closes beyond archiveLimit. GoIDEA currently owns one primary Run session, and the pinned openidea-server exposes run_start/run_stop without a finished-agent collection or archive RPC, so archivedAgentSessions/trimAgentArchive cannot be represented honestly yet"
+      "status": "integrated",
+      "evidence": "internal/app/run_agent_actions.go starts or reuses an agent's Run tab through run_start and rejects a live same-name command. internal/app/run_agent_sessions.go maintains the finished collection with started/ended ordering, tabLimit archival and archiveLimit eviction. TestRunAgentStartBuildsUpstreamConfigAndRejectsLiveName, TestAgentRunLimitsArchiveOldestFinishedTabsAndNeverLiveOnes, TestAgentRunLimitsApplyTrimsArchive and TestAgentRunSettingPageRendersLimitsAndGlobalScope cover start, limits, archive and rendered settings rows"
     },
     "action:run.updateApplication": {
       "status": "partial",
@@ -2530,8 +2610,8 @@
       "evidence": "internal/app/hotswap.go ports hotswap.ts: saveAll, java_build_workspace over every captured session module, debug_redefine_classes into every capable session, scoped configId reloads for Update Application, hotSwapMessage wording, per-session caps and build state, Cancel Hot Swap Build with the real cancel_request, cancelled-build restart protection, and BUILD_COMPLETE handling that reloads only its owning config without compiling again; active and background sessions route to their owner. hotswap_test.go covers scoped and unscoped reloads plus cancellation isolation, and hotswap.* release-gate checks passed against the real server: pause at a breakpoint, compile and reload the edited Greeter class, then require the NEW text after resume. Remaining evidence gap: real concurrent-session HotSwap and cancel-build e2e"
     },
     "action:run.runConfig": {
-      "status": "partial",
-      "evidence": "internal/app/run_anything.go runAnythingLine executes a run configuration by its exact name (upstream runConfigsRunAnything.execute) with the same multi-word filter and prefix-first ordering as upstream matchingConfigs (runAnythingConfigs); limits: the chooser's debug executor and RunWidget per-kind icons differ"
+      "status": "integrated",
+      "evidence": "internal/app/run_parity_actions.go RunConfiguration accepts saved ids, direct and wrapped RunConfig objects, temporary configurations and {config, onExit} callbacks. TestRunConfigurationOnExitSurvivesWrappedArguments covers function-bearing wrappers and TestRunConfigurationActionArgAndTemporaryAdoption covers identifiers and temporary adoption; base.runcfg.* and real run_start/run_stop checks exercise the backend session"
     },
     "action:debug.attach": {
       "status": "partial",
@@ -4151,7 +4231,7 @@
     },
     "action:analyze.inspectCode": {
       "status": "integrated",
-      "evidence": "internal/app/analysis.go registers and menus analyze.inspectCode; internal/app/analysis_inspection.go streams inspect_code into the native Inspection Results tree with scope selection, severity/text filtering, previous/next navigation and CSV export. TestAnalysisInspectionPointerFiltersNavigateAndCancelOffscreen covers pointer interaction, and the hidden analysis acceptance runs both file and project scopes against openidea-server 0.1.52 and JDT 1.63.0-SNAPSHOT"
+      "evidence": "internal/app/analysis.go registers and menus analyze.inspectCode; internal/app/analysis_inspection.go streams inspect_code into the native Inspection Results tree with scope selection, severity/text filtering, previous/next navigation and CSV export. TestAnalysisInspectionPointerFiltersNavigateAndCancelOffscreen covers pointer interaction, and the hidden analysis acceptance runs both file and project scopes against openidea-server 0.1.54 and JDT 1.63.0-SNAPSHOT"
     },
     "action:analyze.inspectFile": {
       "status": "integrated",
@@ -4179,7 +4259,7 @@
     },
     "feature:analysis": {
       "status": "integrated",
-      "evidence": "internal/app/analysis.go, analysis_inspection.go, analysis_duplicates.go, analysis_structural.go and analysis_cleanup.go implement native Inspection Results, Duplicates, Code Cleanup and Structural Search/Replace over the pinned invoke/post/action/tool-window infrastructure. Focused and offscreen pointer tests cover the UI, while 16 hidden checks pass against openidea-server 0.1.52 and JDT 1.63.0-SNAPSHOT for file/project inspection, live cancellation, duplicates, language loading, structural search, Find Usages transfer, stale edit rejection, apply/undo, scope cleanup and the hidden per-file cleanup action"
+      "evidence": "internal/app/analysis.go, analysis_inspection.go, analysis_duplicates.go, analysis_structural.go and analysis_cleanup.go implement native Inspection Results, Duplicates, Code Cleanup and Structural Search/Replace over the pinned invoke/post/action/tool-window infrastructure. Focused and offscreen pointer tests cover the UI, while 16 hidden checks pass against openidea-server 0.1.54 and JDT 1.63.0-SNAPSHOT for file/project inspection, live cancellation, duplicates, language loading, structural search, Find Usages transfer, stale edit rejection, apply/undo, scope cleanup and the hidden per-file cleanup action"
     },
     "command:analysis_locate_duplicates": {
       "status": "integrated",

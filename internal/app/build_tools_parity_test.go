@@ -112,7 +112,9 @@ func TestBuildSyncUsesTheRealToolbarArguments(t *testing.T) {
 			mavenProfileKey(selectedProfile): true,
 		}
 
-		m.SyncMaven()
+		if !m.RunCommand("maven.reload") {
+			t.Fatal("maven.reload is unavailable")
+		}
 		waitBuildToolTest(t, 2*time.Second, func() bool {
 			callsMu.Lock()
 			defer callsMu.Unlock()
@@ -175,7 +177,6 @@ func TestBuildSyncUsesTheRealToolbarArguments(t *testing.T) {
 			return len(payloads) == 2 && !m.maven.syncing
 		})
 		callsMu.Lock()
-		defer callsMu.Unlock()
 		if payloads[0]["buildDir"] != nil || payloads[1]["buildDir"] != "tools" {
 			t.Fatalf("Gradle buildDir payloads = %#v, %#v", payloads[0]["buildDir"], payloads[1]["buildDir"])
 		}
@@ -186,6 +187,21 @@ func TestBuildSyncUsesTheRealToolbarArguments(t *testing.T) {
 			if got := payload["profiles"]; !slices.Equal(got.([]string), []string{}) {
 				t.Fatalf("Gradle profiles = %#v", got)
 			}
+		}
+		callsMu.Unlock()
+
+		if !m.RunActionWithArg("gradle.reload", map[string]any{"buildDir": "tools"}) {
+			t.Fatal("gradle.reload is unavailable with a buildDir argument")
+		}
+		waitBuildToolTest(t, 2*time.Second, func() bool {
+			callsMu.Lock()
+			defer callsMu.Unlock()
+			return len(payloads) == 3 && !m.maven.syncing
+		})
+		callsMu.Lock()
+		defer callsMu.Unlock()
+		if len(payloads) != 3 || payloads[2]["buildDir"] != "tools" {
+			t.Fatalf("gradle.reload argument payloads = %#v", payloads)
 		}
 	})
 }

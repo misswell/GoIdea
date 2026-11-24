@@ -53,33 +53,61 @@ func buildToolCompatibilityActions() []*Action {
 		action("gradle.unlinkProjects", "Unlink Gradle Project", func(m *Model, arg any) {
 			m.UnlinkGradleProject(buildToolArgString(arg, "buildDir"))
 		}),
-		action("gradle.executeTask", "Execute Gradle Task…", func(m *Model, _ any) {
+		action("gradle.executeTask", "Execute Gradle Task…", func(m *Model, arg any) {
+			m.selectGradleProjectKey(buildToolArgString(arg, "projectKey"))
 			m.OpenBuildToolExecute("gradle")
 		}),
 	}
 }
 
+func (m *Model) selectGradleProjectKey(key string) bool {
+	if strings.TrimSpace(key) == "" {
+		return false
+	}
+	for i := range m.maven.model.Gradle {
+		build := &m.maven.model.Gradle[i]
+		for j := range build.Projects {
+			project := &build.Projects[j]
+			if gradleProjectKey(build, project) != key {
+				continue
+			}
+			m.maven.activeTool = "gradle"
+			m.maven.gradleSel = gradleSelection{
+				kind: "gradleProject", build: build, project: project,
+			}
+			m.maven.gradleSelKey = key
+			return true
+		}
+	}
+	return false
+}
+
 func buildToolArgString(arg any, key string) string {
+	value, _ := buildToolArgValue(arg, key)
+	return value
+}
+
+func buildToolArgValue(arg any, key string) (string, bool) {
 	switch value := arg.(type) {
 	case string:
-		return strings.TrimSpace(value)
+		return strings.TrimSpace(value), true
 	case map[string]any:
-		text, _ := value[key].(string)
-		return strings.TrimSpace(text)
+		text, ok := value[key].(string)
+		return strings.TrimSpace(text), ok
 	case []byte:
 		var object map[string]any
 		if json.Unmarshal(value, &object) == nil {
-			text, _ := object[key].(string)
-			return strings.TrimSpace(text)
+			text, ok := object[key].(string)
+			return strings.TrimSpace(text), ok
 		}
 	case json.RawMessage:
 		var object map[string]any
 		if json.Unmarshal(value, &object) == nil {
-			text, _ := object[key].(string)
-			return strings.TrimSpace(text)
+			text, ok := object[key].(string)
+			return strings.TrimSpace(text), ok
 		}
 	}
-	return ""
+	return "", false
 }
 
 // OpenBuildToolExecute is Execute Maven Goal / Execute Gradle Task: the same
@@ -99,6 +127,7 @@ func (m *Model) OpenBuildToolExecute(tool string) {
 		command = "mvn"
 	}
 	m.runAnything.query = command + " "
+	m.refreshRunAnything()
 	m.invalidate()
 }
 

@@ -3,6 +3,14 @@
 The GitHub release notes, which **Help › What's New** shows, come from the
 `## <version>` section here. Every release needs one, or its build fails.
 
+## Unreleased
+
+- Settings import/export and JetBrains IDE imports now use real backend RPCs.
+- Build tool actions honor module targets, reload arguments and Maven/Gradle cancellation.
+- Run/Debug compatibility actions preserve explicit configuration and process targets.
+- Debug consoles keep final program output that arrives after the process terminates.
+- **Settings for New Projects** now edits only global defaults on every page.
+
 ## 0.1.38
 
 - Structural Search now keeps its channel results when the backend reply arrives first.

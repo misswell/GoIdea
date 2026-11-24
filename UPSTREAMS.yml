@@ -54,19 +54,19 @@ upstreams:
     # The Rust source is a submodule pinned to the commit the RPC client was
     # tested against; the shipped server is the release build below.
     submodule: third_party/openidea
-    commit: ea41215669a2a4337f5e38af375fccd3c80e4e8c
-    version: 0.1.53
+    commit: 8f338999ec4f9dfe89173c07fd4069c8f82ff0d3
+    version: 0.1.54
     synced_at: 2026-11-24
     license: Apache-2.0
     sync: fork-submodule
-    # The server GoIDEA ships is the official release asset for
+    # The server GoIDEA ships is the fork release asset for
     # macos-aarch64, verified against the release's SHA-256.
     server:
-      release: v0.1.53
-      release_commit: ea41215669a2a4337f5e38af375fccd3c80e4e8c
+      release: v0.1.54
+      release_commit: 8f338999ec4f9dfe89173c07fd4069c8f82ff0d3
       asset: openidea-server-macos-aarch64.gz
       sha256_file: openidea-server-macos-aarch64.gz.sha256
-      sha256: 1d8e49d72648e36fb06f2b6cbe31d1ac2586dd9827439a5bf12a6d7a108dc2c1
+      sha256: 7c0cf3599cc4b87c308af0152e4c19d96c31556111467b9f9b438119957db9ec
     local_changes: none-to-upstream
     watch:
       - commit

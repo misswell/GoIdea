@@ -38,7 +38,22 @@ var (
 // RunContextConfiguration runs the active file through the temporary
 // configuration OpenIDEA derives for tests, programs and scripts.
 func (m *Model) RunContextConfiguration() {
-	m.requestContextRun(false)
+	m.requestContextRun(false, false)
+}
+
+func (m *Model) RunContextConfigurationFor(arg any, debug bool) {
+	if path := buildToolArgString(arg, "path"); path != "" {
+		if tab, _ := m.tabByPathInAnyGroup(path); tab != nil {
+			group, ok := m.groupOf(tab)
+			if ok {
+				m.focusGroup(group)
+				m.activateIn(group, tabIndexIn(m.groupTabsAt(group), tab))
+			}
+		} else {
+			m.openFile(path)
+		}
+	}
+	m.requestContextRun(false, debug)
 }
 
 // RunContextConfigurationWithCoverage runs run.coverageContext: the same
@@ -53,8 +68,13 @@ func (m *Model) RunContextConfigurationWithProfiler() {
 	m.requestContextExecution(false, openidea.ProfileCPU)
 }
 
-func (m *Model) requestContextRun(coverage bool) {
+func (m *Model) requestContextRun(coverage, debug bool) {
 	m.requestContextExecution(coverage, "")
+	if debug {
+		m.run.pendingContext = false
+		m.run.pendingDebugContext = true
+		m.DockShow("debug")
+	}
 }
 
 func (m *Model) requestContextExecution(coverage bool, profile openidea.ProfileMode) {

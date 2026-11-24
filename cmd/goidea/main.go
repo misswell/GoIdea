@@ -844,7 +844,7 @@ func resolveServer() (string, error) {
 
 // serverMinVersion is the OpenIDEA release this client speaks to; it moves
 // with the pin in UPSTREAMS.yml and the shipped server.
-const serverMinVersion = "0.1.52"
+const serverMinVersion = "0.1.54"
 
 // serverChecksum reads the release checksum shipped beside the binary, when
 // fetch-server.sh wrote one; a hand-placed server skips the comparison.

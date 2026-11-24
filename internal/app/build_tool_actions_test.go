@@ -1,10 +1,14 @@
 package app
 
 import (
+	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestOpenIDEABuildToolActionsAreRegistered(t *testing.T) {
@@ -111,5 +115,190 @@ func TestBuildToolArgumentsAcceptOpenIDEAShapes(t *testing.T) {
 		if got := buildToolArgString(arg, "pom"); got != "pom.xml" {
 			t.Fatalf("buildToolArgString(%#v) = %q", arg, got)
 		}
+	}
+}
+
+func TestOpenIDEABuildToolCommandsReachNativeState(t *testing.T) {
+	m := &Model{
+		ctx:      context.Background(),
+		postHook: func(fn func()) { fn() },
+	}
+	m.setRoot("/project")
+	m.maven.model = buildModel{
+		Maven: &mavenModel{Projects: []mavenProject{{
+			Pom:        "pom.xml",
+			ArtifactID: "demo",
+			Dependencies: []mavenDependency{{
+				GroupID: "org.example", ArtifactID: "lib",
+			}},
+		}}},
+		Gradle: []gradleModel{{
+			Dir: "",
+			Projects: []gradleProject{{
+				Path: ":", Name: "demo",
+				Tasks: []gradleTask{{Name: "test", Group: "verification"}},
+			}},
+		}, {
+			Dir: "tools",
+			Projects: []gradleProject{{
+				Path: ":", Name: "tools",
+			}, {
+				Path: ":app", Name: "app",
+				Tasks: []gradleTask{{Name: "jar", Group: "build"}},
+			}},
+		}},
+	}
+	m.mavenInitTree()
+	m.maven.expanded = map[string]bool{
+		"mvn:pom.xml":      true,
+		"mvn:pom.xml:deps": true,
+		"gradle::":         true,
+		"gradle:::tasks":   true,
+	}
+
+	if !m.RunCommand("maven.collapseAll") || m.maven.expanded["mvn:pom.xml"] ||
+		!m.maven.expanded["gradle::"] {
+		t.Fatal("maven.collapseAll did not affect only the Maven tree")
+	}
+	if !m.RunCommand("gradle.collapseAll") || m.maven.expanded["gradle::"] {
+		t.Fatal("gradle.collapseAll did not affect the Gradle tree")
+	}
+	if !m.RunCommand("maven.expandAll") || !m.maven.expanded["mvn:pom.xml"] {
+		t.Fatal("maven.expandAll did not expand the Maven tree")
+	}
+	if !m.RunCommand("gradle.expandAll") {
+		t.Fatal("gradle.expandAll is unavailable")
+	}
+	gradleExpanded := false
+	for key := range m.maven.expanded {
+		if strings.HasPrefix(key, "gradle:") {
+			gradleExpanded = true
+			break
+		}
+	}
+	if !gradleExpanded {
+		t.Fatal("gradle.expandAll did not expand the Gradle tree")
+	}
+
+	for _, tc := range []struct {
+		command string
+		value   func() bool
+		before  bool
+	}{
+		{"maven.toggleOffline", func() bool { return m.maven.offline }, m.maven.offline},
+		{"maven.toggleSkipTests", func() bool { return m.maven.skipTests }, m.maven.skipTests},
+		{"gradle.toggleOffline", func() bool { return m.maven.gradleOffline }, m.maven.gradleOffline},
+		{"gradle.toggleSkipTests", func() bool { return m.maven.gradleSkipTests }, m.maven.gradleSkipTests},
+	} {
+		if !m.RunCommand(tc.command) || tc.value() == tc.before || !m.ActionToggled(tc.command) {
+			t.Errorf("%s did not toggle native build state", tc.command)
+		}
+	}
+	m.runAnything = nil
+	if !m.RunActionWithArg("gradle.executeTask", map[string]any{
+		"projectKey": "gradle:tools::app",
+	}) || m.maven.gradleSel.project == nil || m.maven.gradleSel.project.Path != ":app" {
+		t.Fatal("gradle.executeTask ignored projectKey")
+	}
+	if m.runAnything == nil || len(m.runAnything.rows) == 0 {
+		t.Fatal("gradle.executeTask did not open Run Anything for the selected project")
+	}
+	for _, id := range []string{
+		"maven.cancelReload", "maven.expandAll", "maven.collapseAll",
+		"gradle.cancelReload", "gradle.expandAll", "gradle.collapseAll",
+	} {
+		if !hiddenActionIDs[id] {
+			t.Errorf("%s is not hidden from the command palette", id)
+		}
+	}
+
+	m.maven.syncing = true
+	m.maven.syncTool = "maven"
+	m.maven.request = 77
+	cancelled := make(chan uint32, 1)
+	m.invokeHook = func(_ context.Context, command string, args any) (json.RawMessage, error) {
+		if command == "cancel_request" {
+			cancelled <- args.(map[string]any)["id"].(uint32)
+		}
+		return nil, nil
+	}
+	if !m.RunCommand("maven.cancelReload") {
+		t.Fatal("maven.cancelReload is unavailable")
+	}
+	if m.maven.syncing || m.maven.request != 0 {
+		t.Fatal("maven.cancelReload kept a live sync state")
+	}
+	select {
+	case id := <-cancelled:
+		if id != 77 {
+			t.Fatalf("cancel_request id = %d, want 77", id)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("maven.cancelReload did not send cancel_request")
+	}
+	m.maven.syncing = true
+	m.maven.syncTool = "gradle"
+	m.maven.request = 88
+	if !m.RunCommand("maven.cancelReload") || !m.maven.syncing || m.maven.request != 88 {
+		t.Fatal("maven.cancelReload canceled a Gradle sync")
+	}
+	if !m.RunCommand("gradle.cancelReload") {
+		t.Fatal("gradle.cancelReload is unavailable")
+	}
+	if m.maven.syncing || m.maven.request != 0 || m.maven.syncTool != "" {
+		t.Fatal("gradle.cancelReload kept a live sync state")
+	}
+	select {
+	case id := <-cancelled:
+		if id != 88 {
+			t.Fatalf("Gradle cancel_request id = %d, want 88", id)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("gradle.cancelReload did not send cancel_request")
+	}
+
+	for _, tc := range []struct {
+		command string
+		want    string
+		window  string
+	}{
+		{"maven.executeGoal", "mvn ", "maven"},
+		{"gradle.executeTask", "gradle ", "gradle"},
+	} {
+		m.runAnything = nil
+		if !m.RunCommand(tc.command) {
+			t.Fatalf("%s is unavailable", tc.command)
+		}
+		if m.runAnything == nil || m.runAnything.query != tc.want || m.maven.activeTool != tc.window {
+			t.Fatalf("%s opened query=%#v tool=%q", tc.command, m.runAnything, m.maven.activeTool)
+		}
+		if len(m.runAnything.rows) == 0 {
+			t.Fatalf("%s did not refresh Run Anything rows", tc.command)
+		}
+	}
+
+	if !m.RunCommand("maven.settings") || !m.settingsOpen || m.settingsPage != settingsPageMaven {
+		t.Fatal("maven.settings did not open the Maven settings page")
+	}
+
+	if !m.RunCommand("maven.analyzeDependencies") {
+		t.Fatal("maven.analyzeDependencies is unavailable")
+	}
+	if m.maven.analyzer == nil || !m.maven.analyzer.open {
+		t.Fatal("maven.analyzeDependencies did not open analyzer state")
+	}
+	m.maven.analyzer = nil
+	m.maven.model.Maven.Projects = append(m.maven.model.Maven.Projects, mavenProject{
+		Pom: "app/pom.xml", ArtifactID: "app",
+	})
+	if !m.RunActionWithArg("maven.analyzeDependencies", map[string]any{"pom": "app/pom.xml"}) ||
+		m.maven.analyzer == nil || m.maven.analyzer.module != "mvn:app/pom.xml" {
+		t.Fatal("maven.analyzeDependencies ignored its POM argument")
+	}
+	m.maven.analyzer = nil
+	if !m.RunActionWithArg("gradle.analyzeDependencies", map[string]any{
+		"buildDir": "tools", "gradlePath": ":app",
+	}) || m.maven.analyzer == nil || m.maven.analyzer.module != "gradle:tools\x00:app" {
+		t.Fatal("gradle.analyzeDependencies ignored its build/project argument")
 	}
 }

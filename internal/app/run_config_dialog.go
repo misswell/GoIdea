@@ -156,6 +156,25 @@ func (m *Model) OpenRunConfigs() {
 	m.invalidate()
 }
 
+// OpenRunConfigsFor is run.editConfigs with an optional configuration id.
+func (m *Model) OpenRunConfigsFor(arg any) {
+	m.OpenRunConfigs()
+	id, _ := arg.(string)
+	if strings.TrimSpace(id) == "" || m.runCfgDlg == nil {
+		return
+	}
+	for i, cfg := range m.runCfgDlg.items {
+		if cfg != nil && cfg.ID == id {
+			m.runCfgDlg.sel = i
+			m.runCfgDlg.loadForm()
+			m.invalidate()
+			return
+		}
+	}
+	m.status = "Run configuration not found: " + id
+	m.invalidate()
+}
+
 // loadRunTemplates reads the per-type defaults shown by "Edit configuration
 // templates…" and used by Add New Configuration.
 func (m *Model) loadRunTemplates(d *runConfigDlg) {

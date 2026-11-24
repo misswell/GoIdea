@@ -50,6 +50,78 @@ func init() {
 			a.RunWithArg = func(m *Model, arg any) { m.runBuildArtifactsAction(arg) }
 		case "build.stop":
 			a.When = func(m *Model) bool { return m.build.busy }
+		case "maven.addProjects", "maven.importExternal":
+			a.When = func(m *Model) bool { return m.Root() != "" && !m.showingWelcome }
+		case "maven.reload", "maven.generateSources", "maven.executeGoal", "maven.settings":
+			a.When = mavenBuildToolAvailable
+		case "maven.cancelReload":
+			a.When = mavenBuildToolAvailable
+			hiddenActionIDs[c.id] = true
+		case "maven.toggleOffline":
+			a.When = mavenBuildToolAvailable
+			a.Toggled = func(m *Model) bool { return m.maven.offline }
+		case "maven.toggleSkipTests":
+			a.When = mavenBuildToolAvailable
+			a.Toggled = func(m *Model) bool { return m.maven.skipTests }
+		case "maven.expandAll", "maven.collapseAll":
+			a.When = mavenBuildToolAvailable
+			hiddenActionIDs[c.id] = true
+		case "maven.unlinkProjects":
+			a.When = mavenBuildToolAvailable
+			hiddenActionIDs[c.id] = true
+		case "maven.analyzeDependencies", "gradle.analyzeDependencies":
+			a.When = func(m *Model) bool {
+				return mavenBuildToolAvailable(m) || gradleBuildToolAvailable(m)
+			}
+			a.RunWithArg = func(m *Model, arg any) { m.OpenBuildDependencyAnalyzer(arg) }
+		case "gradle.linkProjects":
+			a.When = gradleBuildToolAvailable
+		case "gradle.reload", "gradle.executeTask":
+			a.When = gradleBuildToolAvailable
+			if c.id == "gradle.reload" {
+				a.RunWithArg = func(m *Model, arg any) {
+					if buildDir, ok := buildToolArgValue(arg, "buildDir"); ok {
+						m.SyncGradleBuild(buildDir)
+						return
+					}
+					m.ReloadGradle()
+				}
+			}
+		case "gradle.cancelReload":
+			a.When = gradleBuildToolAvailable
+			hiddenActionIDs[c.id] = true
+		case "gradle.toggleOffline":
+			a.When = gradleBuildToolAvailable
+			a.Toggled = func(m *Model) bool { return m.maven.gradleOffline }
+		case "gradle.toggleSkipTests":
+			a.When = gradleBuildToolAvailable
+			a.Toggled = func(m *Model) bool { return m.maven.gradleSkipTests }
+		case "gradle.expandAll", "gradle.collapseAll", "gradle.unlinkProjects":
+			a.When = gradleBuildToolAvailable
+			hiddenActionIDs[c.id] = true
+		case "run.debug":
+			a.When = func(m *Model) bool { return m.Root() != "" && !m.showingWelcome }
+			a.RunWithArg = func(m *Model, arg any) { m.DebugConfiguration(arg) }
+		case "run.chooseConfig":
+			a.When = func(m *Model) bool { return m.Root() != "" && !m.showingWelcome }
+			a.RunWithArg = func(m *Model, arg any) {
+				if arg == "select" {
+					m.OpenRunChooser("select")
+					return
+				}
+				m.OpenRunChooser("run")
+			}
+		case "run.editConfigs":
+			a.When = func(m *Model) bool { return m.Root() != "" && !m.showingWelcome }
+			a.RunWithArg = func(m *Model, arg any) { m.OpenRunConfigsFor(arg) }
+		case "run.runContext", "run.debugContext":
+			a.When = func(m *Model) bool { return m.Root() != "" && !m.showingWelcome }
+			a.RunWithArg = func(m *Model, arg any) {
+				m.RunContextConfigurationFor(arg, c.id == "run.debugContext")
+			}
+		case "run.stop":
+			a.When = func(m *Model) bool { return m.Root() != "" && !m.showingWelcome }
+			a.RunWithArg = func(m *Model, arg any) { m.StopProcess(arg) }
 		case "edit.undo":
 			a.When = func(m *Model) bool {
 				return m.projectTreeFocus || m.activeEditorAvailable() || m.activeNotebook()
@@ -248,4 +320,12 @@ func init() {
 		_ = registerAction(a)
 	}
 	registerFileTypeActions()
+}
+
+func mavenBuildToolAvailable(m *Model) bool {
+	return m != nil && m.Root() != "" && !m.showingWelcome && m.maven.model.Maven != nil
+}
+
+func gradleBuildToolAvailable(m *Model) bool {
+	return m != nil && m.Root() != "" && !m.showingWelcome && len(m.maven.model.Gradle) > 0
 }

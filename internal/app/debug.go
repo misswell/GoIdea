@@ -789,6 +789,27 @@ func (m *Model) Debug() {
 	m.DebugRunConfig(cfg)
 }
 
+// DebugConfiguration is OpenIDEA's run.debugConfig/debug.startConfig action:
+// an explicit configuration starts without changing the user's selection.
+func (m *Model) DebugConfiguration(arg any) {
+	if arg == nil {
+		m.Debug()
+		return
+	}
+	if id, ok := arg.(string); ok && strings.TrimSpace(id) != "" {
+		if m.run.loaded && m.runChooserByID(id) == nil {
+			m.notifyInfo("run-config", "Run configuration not found", id)
+			return
+		}
+		m.selectRunConfig(id)
+		m.Debug()
+		return
+	}
+	if cfg, _, ok := runConfigFromActionArg(arg); ok {
+		m.DebugRunConfig(&cfg)
+	}
+}
+
 // DebugRunConfig starts a java-debug session for an arbitrary run
 // configuration, the port of upstream javaLaunchConfig: JVM applications go
 // through the shared PrepareJavaLaunch, a kind GoIDEA cannot debug is
@@ -1488,6 +1509,17 @@ func (m *Model) acceptDebugEvent(session uint32, raw json.RawMessage) {
 		return
 	}
 	if m.debug.retiredSessions[session] {
+		if session == m.debug.retiredSession && e.Kind == "output" {
+			text := strings.TrimSuffix(stripANSI(e.Output), "\n")
+			if text != "" {
+				kind := e.Category
+				if kind == "" {
+					kind = "console"
+				}
+				m.debug.appendOutput(text, kind)
+				m.invalidate()
+			}
+		}
 		return
 	}
 	d := &m.debug
@@ -1541,6 +1573,17 @@ func (m *Model) acceptDebugEvent(session uint32, raw json.RawMessage) {
 		return
 	}
 	if session == d.retiredSession {
+		if e.Kind == "output" {
+			text := strings.TrimSuffix(stripANSI(e.Output), "\n")
+			if text != "" {
+				kind := e.Category
+				if kind == "" {
+					kind = "console"
+				}
+				d.appendOutput(text, kind)
+				m.invalidate()
+			}
+		}
 		return
 	}
 	if d.active == 0 {

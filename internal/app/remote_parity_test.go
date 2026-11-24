@@ -74,10 +74,21 @@ func TestDockerDaemonURLIsLocalMatchesOpenIDEA(t *testing.T) {
 }
 
 func TestRemoteServerDownloadsUseThePinnedForkRelease(t *testing.T) {
-	got := remoteServerReleaseBaseURL("0.1.52")
-	want := "https://github.com/misswell/openidea/releases/download/v0.1.52"
+	got := remoteServerReleaseBaseURL("0.1.54")
+	want := "https://github.com/misswell/openidea/releases/download/v0.1.54"
 	if got != want {
 		t.Fatalf("remote server base URL = %q, want %q", got, want)
+	}
+}
+
+func TestRemoteBackendUsesThePinnedServerVersion(t *testing.T) {
+	m := &Model{}
+	backend := m.newRemoteBackend(
+		openidea.RemoteTarget{Kind: openidea.RemoteTargetSSH, Config: "test"},
+		openidea.SSHConfiguration{},
+	)
+	if backend.serverVersion != "0.1.54" {
+		t.Fatalf("remote backend version = %q, want 0.1.54", backend.serverVersion)
 	}
 }
 

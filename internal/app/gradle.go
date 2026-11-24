@@ -391,7 +391,7 @@ func (m *Model) gradlePanel(c *ui.Context, p *ui.Theme) {
 func (m *Model) gradleToolbar(c *ui.Context, p *ui.Theme) {
 	ui.Row(c).Height(32).Padding(0, 6).Gap(2).AlignItems(ui.Center).Children(func() {
 		if m.maven.syncing {
-			m.mavenAction(c, p, "gradle:reload", "run/stop", "Stop", func() { m.CancelBuildToolReload() })
+			m.mavenAction(c, p, "gradle:reload", "run/stop", "Stop", func() { m.CancelBuildToolReload("gradle") })
 		} else if m.maven.loading {
 			m.mavenActionDisabled(c, p, "gradle:reload", "general/refresh", "Loading Gradle Projects", false)
 		} else {

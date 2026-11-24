@@ -126,7 +126,7 @@ func (m *Model) dependencyAnalyzerToolbar(c *ui.Context, p *ui.Theme, a *buildDe
 			}
 		} else if m.maven.syncing {
 			m.mavenAction(c, p, "buildTool:analyzer:refresh", "run/stop", "Stop", func() {
-				m.CancelBuildToolReload()
+				m.CancelBuildToolReload(m.maven.syncTool)
 			})
 		} else {
 			m.mavenAction(c, p, "buildTool:analyzer:refresh", "general/refresh", "Reload All Maven Projects", func() {

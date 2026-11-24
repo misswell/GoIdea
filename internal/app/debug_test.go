@@ -158,6 +158,18 @@ func TestDebugTerminationClearsStartingState(t *testing.T) {
 	}
 }
 
+func TestDebugPrintsOutputThatArrivesAfterTermination(t *testing.T) {
+	m := &Model{ctx: context.Background()}
+	m.debug.starting = true
+	m.acceptDebugEvent(17, json.RawMessage(`{"kind":"terminated"}`))
+	m.acceptDebugEvent(17, json.RawMessage(
+		`{"kind":"output","category":"stdout","output":"Hello, HotSwap!\n"}`,
+	))
+	if !strings.Contains(m.debug.text(), "Hello, HotSwap!") {
+		t.Fatalf("late output was dropped: %q", m.debug.text())
+	}
+}
+
 func TestJavaDebugProjectBusy(t *testing.T) {
 	server := func(status string, languages ...string) lspServerState {
 		return lspServerState{Status: status, Languages: languages}
