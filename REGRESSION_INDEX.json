@@ -2686,7 +2686,7 @@
   },
   {
    "id": "hotswap.reloaded",
-   "label": "the changed class was compiled and reloaded into the session",
+   "label": "the changed classes were compiled and reloaded into the session",
    "feature": "HotSwap: java_build_workspace + debug_redefine_classes",
    "area": "debugger",
    "gate": "release",

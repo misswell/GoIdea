@@ -28,6 +28,19 @@ func (m *Model) SmokeHotSwap(ctx context.Context) (map[string]any, error) {
 	if root == "" {
 		return out, errors.New("没有打开项目")
 	}
+	trustCtx, trustCancel := context.WithTimeout(ctx, 30*time.Second)
+	_, err := m.mgr.Invoke(trustCtx, Window, "project_trust_set", map[string]any{
+		"path": root, "trusted": true, "folder": false,
+	})
+	trustCancel()
+	if err != nil {
+		return out, fmt.Errorf("trust HotSwap project: %w", err)
+	}
+	m.post(func() {
+		m.run.trusted = true
+		m.run.pendingTrust = false
+		m.trustAsk = false
+	})
 	greeter := root + "/src/main/java/com/example/Greeter.java"
 	// The Greeter document joins the tabs, so the edit below reaches jdtls
 	// through the document bridge the way a user's typing does.

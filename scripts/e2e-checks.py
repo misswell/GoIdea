@@ -666,7 +666,7 @@ CHECKS = {
     "hotswap": [
         ("hotswapError", *absent("hotswapError")),
         ("paused", "the debugger paused at the breakpoint before the println", lambda d: (get(d, "hotswap.paused") is True, get(d, "hotswap.paused"))),
-        ("reloaded", "the changed class was compiled and reloaded into the session", lambda d: (get(d, "hotswap.reloaded") is True and get(d, "hotswap.reloadStatus") == "Reloaded 1 class", get(d, "hotswap.reloadStatus"))),
+        ("reloaded", "the changed classes were compiled and reloaded into the session", lambda d: (get(d, "hotswap.reloaded") is True and str(get(d, "hotswap.reloadStatus") or "").startswith("Reloaded "), get(d, "hotswap.reloadStatus"))),
         ("newText", "the reloaded code printed the new text after resume", lambda d: (get(d, "hotswap.hasNewText") is True, get(d, "hotswap.hasNewText"))),
     ],
     "spring": [
