@@ -3,7 +3,7 @@
 The GitHub release notes, which **Help › What's New** shows, come from the
 `## <version>` section here. Every release needs one, or its build fails.
 
-## Unreleased
+## 0.1.39
 
 - Settings import/export and JetBrains IDE imports now use real backend RPCs.
 - Build tool actions honor module targets, reload arguments and Maven/Gradle cancellation.
