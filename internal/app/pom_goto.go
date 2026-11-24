@@ -91,7 +91,7 @@ func pomGotoEligible(text string, at int) bool {
 // and selects it. It reports whether it took the request; false leaves the
 // position to the language server.
 func (m *Model) pomGotoDeclaration(t *Tab, off int) bool {
-	if m.mgr == nil || m.ctx == nil || !m.tabOpen(t) {
+	if (m.mgr == nil && m.invokeHook == nil) || m.ctx == nil || !m.tabOpen(t) {
 		return false
 	}
 	text := t.doc.Buffer().Snapshot().String()
@@ -106,7 +106,7 @@ func (m *Model) pomGotoDeclaration(t *Tab, off int) bool {
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, lspTimeout)
 		defer cancel()
-		raw, err := m.mgr.Invoke(ctx, Window, "maven_goto_declaration", map[string]any{
+		raw, err := m.invoke(ctx, "maven_goto_declaration", map[string]any{
 			"pom": pom, "pos": lspPos(pos),
 		})
 		var target *pomGoto
@@ -125,7 +125,7 @@ func (m *Model) pomGotoDeclaration(t *Tab, off int) bool {
 			switch {
 			case err != nil:
 				m.status = "Navigation failed: " + err.Error()
-			case target == nil:
+			case target == nil || strings.TrimSpace(target.Path) == "":
 				m.status = "No declaration found"
 			default:
 				m.revealRange(target.Path,

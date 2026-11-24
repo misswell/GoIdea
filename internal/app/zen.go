@@ -147,7 +147,7 @@ func (m *Model) zenEditor(c *ui.Context, p *ui.Theme, oi oiColors) {
 			if dropped := m.takeEditorDroppedFiles(view); len(dropped) > 0 {
 				m.openPaths(dropped)
 			}
-			m.coverageGutterTooltip(c, view, t)
+			m.editorGutterTooltip(c, view, t)
 		})
 	})
 }

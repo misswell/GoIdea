@@ -370,7 +370,7 @@ func (m *Model) problemsStatus(c *ui.Context, p *ui.Theme) {
 func (m *Model) problemsPanel(c *ui.Context, p *ui.Theme) {
 	errors, warnings, infos := m.problemCounts()
 	groups := m.problemList()
-	col := ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Background(p.Surface).
+	col := ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Background(m.toolWindowBackground(p)).
 		BorderWidth(1, 0, 0, 0).BorderColor(p.Border).
 		Focusable().AutoFocus().HandleInput(m.handleProblemsInput)
 	col.Children(func() {

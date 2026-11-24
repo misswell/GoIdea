@@ -1,6 +1,15 @@
 package app
 
-import "testing"
+import (
+	"path/filepath"
+	"slices"
+	"testing"
+
+	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/editor"
+
+	"mayoi/internal/docbridge"
+)
 
 func TestEditorPathFlavours(t *testing.T) {
 	got := editorPathFlavours("/work/demo", "/work/demo/src/Main.java", 7)
@@ -55,5 +64,92 @@ func TestTabPathFlavoursCopyInsideAndOutsideTheProject(t *testing.T) {
 		if outside[0].value != "/elsewhere/Lib.java" || outside[1].value != "Lib.java" {
 			t.Errorf("root %q: flavours = %+v", root, outside)
 		}
+	}
+}
+
+func TestEditorContextMenuOffersCompareEntryPoints(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "src", "Main.java")
+	doc := docbridge.Virtual(path, "class Main {}\n")
+	tab := &Tab{doc: doc, state: &editor.State{
+		Buffer: doc.Buffer(),
+		Label:  "Main.java",
+	}}
+	m := &Model{tabs: []*Tab{tab}, active: 0}
+	tab.state.ContextMenu = func(menu *ui.Menu) {
+		m.editorMenu(menu, tab)
+	}
+	tester := ui.NewTester(func(c *ui.Context) {
+		editor.View(c, tab.state).Fill()
+	}, 800, 400)
+	tester.Frame()
+	if err := tester.RightClick("Main.java"); err != nil {
+		t.Fatal(err)
+	}
+	menu := tester.Menu()
+	for _, label := range []string{"Compare With…", "Compare with Clipboard"} {
+		found := false
+		for _, item := range menu {
+			if item == label {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("editor context menu %v misses %q", menu, label)
+		}
+	}
+}
+
+func TestHTMLEditorContextMenuOffersBrowserPreview(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "web", "index.html")
+	doc := docbridge.Virtual(path, "<html></html>\n")
+	tab := &Tab{doc: doc, state: &editor.State{
+		Buffer: doc.Buffer(),
+		Label:  "index.html",
+	}}
+	m := &Model{tabs: []*Tab{tab}, active: 0}
+	tab.state.ContextMenu = func(menu *ui.Menu) {
+		m.editorMenu(menu, tab)
+	}
+	tester := ui.NewTester(func(c *ui.Context) {
+		editor.View(c, tab.state).Fill()
+	}, 800, 400)
+	tester.Frame()
+	if err := tester.RightClick("index.html"); err != nil {
+		t.Fatal(err)
+	}
+	menu := tester.Menu()
+	if !slices.Contains(menu, "Browser") {
+		t.Fatalf("HTML editor context menu %v misses Browser", menu)
+	}
+}
+
+func TestMainMenuAndTabOpenInOfferBrowserPreview(t *testing.T) {
+	found := false
+	walkMenu(mainMenuGroups(), func(entry menuEntry) {
+		if entry.label == "Built-in Preview" && entry.command == "web.togglePreview" {
+			found = true
+		}
+	})
+	if !found {
+		t.Fatal("main menu is missing Built-in Preview")
+	}
+
+	path := filepath.Join(t.TempDir(), "index.html")
+	m := &Model{}
+	tester := ui.NewTester(func(c *ui.Context) {
+		ui.Button(c, "Open In").Menu(func(menu *ui.Menu) {
+			m.tabOpenInMenu(menu, path)
+		})
+	}, 360, 120)
+	tester.Frame()
+	if err := tester.Click("Open In"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tester.ChooseMenuItem("Open In", "Browser", "Built-in Preview"); err != nil {
+		t.Fatalf("tab Open In›Browser lacks Built-in Preview: %v", err)
+	}
+	if !m.remote.webPreviews[path] {
+		t.Fatal("tab Open In›Browser did not toggle Built-in Preview")
 	}
 }

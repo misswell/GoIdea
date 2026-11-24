@@ -2,6 +2,7 @@ package openidea
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -24,7 +25,8 @@ type State struct {
 // crashes: calls wait for a restart, and OnRestart reopens the projects and
 // documents the UI had.
 type Manager struct {
-	cfg LaunchConfig
+	cfg      LaunchConfig
+	localCfg LaunchConfig
 
 	mu       sync.Mutex
 	srv      *Server
@@ -54,6 +56,7 @@ func NewManager(cfg LaunchConfig) *Manager {
 	}
 	return &Manager{
 		cfg:      cfg,
+		localCfg: cfg,
 		notify:   make(chan Notification, 8192),
 		status:   make(chan State, 16),
 		closedCh: make(chan struct{}),
@@ -176,7 +179,7 @@ func (m *Manager) Ensure(ctx context.Context) (*Server, error) {
 		m.setPhase("starting")
 		s, launchErr := Launch(ctx, m.cfg)
 		if launchErr == nil {
-			if !m.adopt(s) {
+			if !m.adopt(s, true) {
 				return nil, ErrClosed
 			}
 			return s, nil
@@ -204,7 +207,7 @@ func (m *Manager) Ensure(ctx context.Context) (*Server, error) {
 // adopt makes s the manager's server. A launch that finishes after Close is
 // closed again here instead of being adopted, so shutdown cannot leave a
 // backend running that nothing will stop.
-func (m *Manager) adopt(s *Server) bool {
+func (m *Manager) adopt(s *Server, allowRestore bool) bool {
 	m.mu.Lock()
 	if m.closed {
 		m.mu.Unlock()
@@ -222,7 +225,7 @@ func (m *Manager) adopt(s *Server) bool {
 	m.started = true
 	m.state = State{Running: true, Info: s.Info(), Restarts: m.restarts, Phase: "running"}
 	var restore func(context.Context) error
-	if wasRestart {
+	if wasRestart && allowRestore {
 		restore = m.onRestart
 	}
 	m.mu.Unlock()
@@ -328,6 +331,15 @@ func (m *Manager) Invoke(ctx context.Context, window, cmd string, args any) ([]b
 	// every refusal into an empty result far from the cause. Closed needs no
 	// special case either: callers decide whether replay is safe.
 	return raw, err
+}
+
+// InvokeInto runs a backend command and decodes its result into out.
+func (m *Manager) InvokeInto(ctx context.Context, window, cmd string, args, out any) error {
+	raw, err := m.Invoke(ctx, window, cmd, args)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(raw, out)
 }
 
 // Close shuts the server down and stops restarts.

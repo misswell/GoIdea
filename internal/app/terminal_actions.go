@@ -68,6 +68,9 @@ func terminalCompatibilityActionList() []*Action {
 		action("terminal.splitAndMoveDown", "Split and Move Down", func(m *Model, arg any) {
 			m.splitTerminalAction(arg, "down", true)
 		}),
+		action("terminal.sampleTui", "Stream Sample TUI", func(m *Model, arg any) {
+			m.RunTerminalSampleTUI(arg)
+		}),
 	}
 }
 

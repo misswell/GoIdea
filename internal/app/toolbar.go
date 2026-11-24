@@ -164,7 +164,7 @@ func (m *Model) RestoreDefaultToolbar() { m.saveToolbarLayout(nil) }
 func (m *Model) saveToolbarLayout(layout *toolbarLayout) {
 	m.prefs.MainToolbar = layout
 	if m.cfg.SettingsPath != "" {
-		_ = m.prefs.Save(m.cfg.SettingsPath)
+		_ = m.savePreferences()
 	}
 	m.invalidate()
 }

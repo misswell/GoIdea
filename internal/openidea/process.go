@@ -14,6 +14,9 @@ import (
 
 // LaunchConfig describes one openidea-server process.
 type LaunchConfig struct {
+	// Launcher starts a transport other than a local process, such as an SSH
+	// exec channel, WSL or docker exec. When nil, ServerPath is launched.
+	Launcher TransportLauncher
 	// ServerPath is the openidea-server binary; it is run with --stdio.
 	ServerPath string
 	// Home becomes OPENIDEA_SERVER_HOME, the server's data root. GoIDEA keeps
@@ -42,10 +45,11 @@ type LaunchConfig struct {
 type Server struct {
 	cfg  LaunchConfig
 	cmd  *exec.Cmd
+	tr   Transport
 	conn *Conn
 
 	stdin  io.WriteCloser
-	stderr io.ReadCloser
+	stderr io.Reader
 
 	info     ServerInfo
 	report   Report
@@ -59,9 +63,6 @@ type Server struct {
 // Launch starts openidea-server, checks its protocol version, and fetches the
 // commands it actually supports.
 func Launch(ctx context.Context, cfg LaunchConfig) (*Server, error) {
-	if cfg.ServerPath == "" {
-		return nil, errors.New("goidea: no server path")
-	}
 	if cfg.Protocol == 0 {
 		cfg.Protocol = 2
 	}
@@ -70,6 +71,42 @@ func Launch(ctx context.Context, cfg LaunchConfig) (*Server, error) {
 	}
 	if cfg.Log == nil {
 		cfg.Log = os.Stderr
+	}
+	if cfg.Launcher != nil {
+		tr, err := cfg.Launcher(ctx, cfg)
+		if err != nil {
+			return nil, err
+		}
+		if tr == nil || tr.Stdin() == nil || tr.Stdout() == nil {
+			if tr != nil {
+				_ = tr.Close()
+			}
+			return nil, errors.New("goidea: remote transport has no stdin/stdout")
+		}
+		s := &Server{
+			cfg:    cfg,
+			tr:     tr,
+			stdin:  tr.Stdin(),
+			stderr: tr.Stderr(),
+			waitCh: make(chan error, 1),
+			done:   make(chan struct{}),
+		}
+		if cfg.Log != nil && s.stderr != nil {
+			go func() { _, _ = io.Copy(cfg.Log, s.stderr) }()
+		}
+		go func() {
+			s.waitCh <- tr.Wait()
+			close(s.done)
+		}()
+		s.conn = NewConn(tr.Stdout(), s.stdin, Options{QueueSize: cfg.QueueSize, Handler: cfg.Handler})
+		if err := s.initialize(ctx); err != nil {
+			s.kill()
+			return nil, err
+		}
+		return s, nil
+	}
+	if cfg.ServerPath == "" {
+		return nil, errors.New("goidea: no server path")
 	}
 	report, err := Preflight(cfg)
 	if err != nil {
@@ -119,37 +156,40 @@ func Launch(ctx context.Context, cfg LaunchConfig) (*Server, error) {
 	}()
 
 	s.conn = NewConn(stdout, stdin, Options{QueueSize: cfg.QueueSize, Handler: cfg.Handler})
+	if err := s.initialize(ctx); err != nil {
+		s.kill()
+		return nil, err
+	}
+	s.report = report
+	return s, nil
+}
 
+func (s *Server) initialize(ctx context.Context) error {
+	cfg := s.cfg
 	startCtx, cancel := context.WithTimeout(ctx, cfg.StartupTimeout)
 	defer cancel()
 	raw, err := s.conn.Call(startCtx, "initialize", map[string]any{"version": cfg.Protocol})
 	if err != nil {
-		s.kill()
-		return nil, fmt.Errorf("goidea: initialize: %w", err)
+		return fmt.Errorf("goidea: initialize: %w", err)
 	}
 	var info ServerInfo
 	if err := json.Unmarshal(raw, &info); err != nil {
-		s.kill()
-		return nil, fmt.Errorf("goidea: initialize reply: %w", err)
+		return fmt.Errorf("goidea: initialize reply: %w", err)
 	}
 	if info.Protocol != cfg.Protocol {
-		s.kill()
-		return nil, fmt.Errorf("goidea: server speaks protocol %d, need %d", info.Protocol, cfg.Protocol)
+		return fmt.Errorf("goidea: server speaks protocol %d, need %d", info.Protocol, cfg.Protocol)
 	}
 	cmdsRaw, err := s.conn.Call(startCtx, "commands", nil)
 	if err != nil {
-		s.kill()
-		return nil, fmt.Errorf("goidea: commands: %w", err)
+		return fmt.Errorf("goidea: commands: %w", err)
 	}
 	var commands []string
 	if err := json.Unmarshal(cmdsRaw, &commands); err != nil {
-		s.kill()
-		return nil, fmt.Errorf("goidea: commands reply: %w", err)
+		return fmt.Errorf("goidea: commands reply: %w", err)
 	}
 	s.info = info
-	s.report = report
 	s.commands = commands
-	return s, nil
+	return nil
 }
 
 // Conn returns the JSON-RPC connection.
@@ -162,7 +202,15 @@ func (s *Server) Info() ServerInfo { return s.info }
 func (s *Server) Report() Report { return s.report }
 
 // PID is the server process id, for logs and crash-recovery tests.
-func (s *Server) PID() int { return s.cmd.Process.Pid }
+func (s *Server) PID() int {
+	if s.cmd != nil && s.cmd.Process != nil {
+		return s.cmd.Process.Pid
+	}
+	if s.tr != nil {
+		return s.tr.PID()
+	}
+	return 0
+}
 
 // Commands returns the command names this server supports. Features must be
 // gated on this list: a command is not guaranteed to exist in every version.
@@ -225,13 +273,21 @@ func (s *Server) Close() error {
 			return
 		case <-time.After(3 * time.Second):
 		}
-		_ = terminateGroup(s.cmd)
+		if s.cmd != nil {
+			_ = terminateGroup(s.cmd)
+		} else if s.tr != nil {
+			_ = s.tr.Close()
+		}
 		select {
 		case err = <-s.waitCh:
 			return
 		case <-time.After(2 * time.Second):
 		}
-		_ = killGroup(s.cmd)
+		if s.cmd != nil {
+			_ = killGroup(s.cmd)
+		} else if s.tr != nil {
+			_ = s.tr.Close()
+		}
 		err = <-s.waitCh
 	})
 	return err
@@ -239,9 +295,17 @@ func (s *Server) Close() error {
 
 // kill is Close without waiting: used when startup fails.
 func (s *Server) kill() {
-	_ = s.conn.Close()
-	_ = s.stdin.Close()
-	_ = killGroup(s.cmd)
+	if s.conn != nil {
+		_ = s.conn.Close()
+	}
+	if s.stdin != nil {
+		_ = s.stdin.Close()
+	}
+	if s.cmd != nil {
+		_ = killGroup(s.cmd)
+	} else if s.tr != nil {
+		_ = s.tr.Close()
+	}
 	select {
 	case <-s.waitCh:
 	case <-time.After(2 * time.Second):

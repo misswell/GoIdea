@@ -148,11 +148,11 @@ func TestNavigationActionsHaveOpenIDEAIdentityAndBindings(t *testing.T) {
 		title    string
 		bindings []string
 	}{
-		"navigate.back":             {"Back", []string{"Cmd+[", "Cmd+Alt+Left"}},
-		"navigate.forward":          {"Forward", []string{"Cmd+]", "Cmd+Alt+Right"}},
-		"navigate.lastEditLocation": {"Last Edit Location", []string{"Cmd+Shift+Backspace"}},
+		"navigate.back":             {"Back", []string{"Cmd+[", "Alt+Cmd+Left", "Button4", "SwipeRight"}},
+		"navigate.forward":          {"Forward", []string{"Cmd+]", "Alt+Cmd+Right", "Button5", "SwipeLeft"}},
+		"navigate.lastEditLocation": {"Last Edit Location", []string{"Shift+Cmd+Backspace"}},
 		"navigate.nextEditLocation": {"Next Edit Location", nil},
-		"editor.copyReference":      {"Copy Reference", []string{"Cmd+Alt+Shift+C"}},
+		"editor.copyReference":      {"Copy Reference", []string{"Alt+Shift+Cmd+C"}},
 		"editor.addOrRemoveCaret":   {"Add or Remove Caret", []string{"Alt+Shift+Button1"}},
 		"editor.copyPath":           {"Absolute Path", nil},
 	}

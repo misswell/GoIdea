@@ -85,7 +85,11 @@ func buildToolArgString(arg any, key string) string {
 // OpenBuildToolExecute is Execute Maven Goal / Execute Gradle Task: the same
 // Run Anything popup, prefilled with the selected build tool.
 func (m *Model) OpenBuildToolExecute(tool string) {
-	m.ShowMaven()
+	if strings.TrimSpace(tool) == "gradle" {
+		m.ShowGradle()
+	} else {
+		m.ShowMaven()
+	}
 	m.OpenRunAnything()
 	if m.runAnything == nil {
 		return
@@ -98,22 +102,93 @@ func (m *Model) OpenBuildToolExecute(tool string) {
 	m.invalidate()
 }
 
-// GenerateMavenSources runs generate-sources on the selected module (or the
-// root project), preserving the window's offline, test and profile switches.
+// GenerateMavenSources runs generate-sources for one POM when the action names
+// it, or for every non-aggregated Maven project, then reloads on any success.
+// This is upstream store.ts generateSources, including its sequential run
+// behavior and cancellation semantics.
 func (m *Model) GenerateMavenSources(pom string) {
-	var project *mavenProject
+	projects := make([]mavenProject, 0, len(m.maven.model.MavenProjects()))
 	if strings.TrimSpace(pom) != "" {
-		project = m.mavenProjectByPom(pom)
+		if project := m.mavenProjectByPom(strings.TrimSpace(pom)); project != nil {
+			projects = append(projects, *project)
+		}
+	} else {
+		for _, project := range m.maven.model.MavenProjects() {
+			if !project.Aggregated {
+				projects = append(projects, project)
+			}
+		}
 	}
-	if project == nil {
-		project = m.mavenRootProject()
-	}
-	if project == nil {
+	if len(projects) == 0 {
 		m.status = "No Maven project is available"
 		m.invalidate()
 		return
 	}
-	m.runMavenGoal(project, []string{"generate-sources"})
+	m.runMavenGenerateSources(projects, 0, false)
+}
+
+func (m *Model) runMavenGenerateSources(
+	projects []mavenProject,
+	next int,
+	anySucceeded bool,
+) {
+	if next >= len(projects) {
+		if anySucceeded {
+			m.SyncMaven()
+		}
+		return
+	}
+	if !m.run.trusted {
+		m.run.pendingTrust = true
+		m.trustAsk = true
+		m.invalidate()
+		return
+	}
+	if m.run.busy || m.run.running {
+		m.status = "A run is already in progress"
+		m.invalidate()
+		return
+	}
+
+	project := &projects[next]
+	config, name := m.mavenGoalRunConfig(project, []string{"generate-sources"})
+	raw, err := json.Marshal(config)
+	if err != nil {
+		m.status = "Could not start Maven Generate Sources: " + err.Error()
+		m.invalidate()
+		return
+	}
+	if len(projects) > 1 {
+		m.status = fmt.Sprintf(
+			"Running generate-sources for %s (%d/%d)",
+			mavenProjectName(*project),
+			next+1,
+			len(projects),
+		)
+	} else {
+		m.status = "Running generate-sources"
+	}
+	m.beginRunPlugin(config.ID, func(code *int32, stopped bool) {
+		if stopped || code == nil {
+			return
+		}
+		m.runMavenGenerateSources(projects, next+1, anySucceeded || *code == 0)
+	})
+	if !m.startRunWith(raw, name) {
+		m.cancelRunPlugin()
+		m.status = "Maven Generate Sources did not start"
+		m.invalidate()
+	}
+}
+
+func mavenProjectName(project mavenProject) string {
+	if project.DisplayName != "" {
+		return project.DisplayName
+	}
+	if project.ArtifactID != "" {
+		return project.ArtifactID
+	}
+	return project.Pom
 }
 
 // AddMavenProjects links one or more pom.xml files. Paths inside the project

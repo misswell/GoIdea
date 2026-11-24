@@ -11,6 +11,8 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
+
+	"mayoi/internal/highlight"
 )
 
 const (
@@ -68,6 +70,7 @@ type recentNavPopup struct {
 	err           string
 	now           time.Time
 	scroll        ui.ScrollState
+	snippets      map[string][]highlight.Line
 }
 
 // recentSwitcherItem is one editor row in OpenIDEA's Ctrl+Tab switcher.
@@ -393,6 +396,7 @@ func (m *Model) refreshRecentNavigation(reset bool) {
 				p.places = append(p.places, place)
 			}
 		}
+		m.prepareRecentLocationOutlines(p)
 	} else {
 		if p.switcher {
 			p.switcherItems = m.recentSwitcherItems(q)
@@ -440,6 +444,56 @@ func (m *Model) refreshRecentNavigation(reset bool) {
 	p.index = clampSymbolSel(p.index, p.count())
 	p.normalizeRecentFileSelection()
 	m.invalidate()
+}
+
+// prepareRecentLocationOutlines loads breadcrumbs for files still open in an
+// editor. The returned lines of an outline are cached on the tab, so opening
+// the popup repeatedly does not issue another backend call.
+func (m *Model) prepareRecentLocationOutlines(p *recentNavPopup) {
+	if m.ctx == nil || (m.mgr == nil && m.invokeHook == nil) {
+		return
+	}
+	wanted := make(map[string]bool, len(p.places))
+	for _, place := range p.places {
+		wanted[realPath(place.path)] = true
+	}
+	for _, t := range m.allTabs() {
+		if t == nil || t.doc == nil || t.kind != "" || t.outlineLoading ||
+			!wanted[realPath(t.doc.Path())] {
+			continue
+		}
+		version := t.doc.Buffer().Version()
+		if t.outlineDoc == t.doc.ID() && t.outlineVersion == version {
+			continue
+		}
+		m.kickOutline(t, version)
+	}
+}
+
+// recentLocationBreadcrumb returns the declaration chain containing line in
+// an open document, as OpenIDEA's recent-location chooser shows above each
+// snippet.
+func (m *Model) recentLocationBreadcrumb(path string, line int) string {
+	key := realPath(path)
+	for _, t := range m.allTabs() {
+		if t == nil || t.doc == nil || t.kind != "" || realPath(t.doc.Path()) != key {
+			continue
+		}
+		chain := outlinePath(t.outline, line)
+		names := make([]string, 0, len(chain))
+		for _, item := range chain {
+			name := item.Name
+			switch item.Kind {
+			case "function", "method", "constructor":
+				if !strings.HasSuffix(name, ")") {
+					name += "()"
+				}
+			}
+			names = append(names, name)
+		}
+		return strings.Join(names, " > ")
+	}
+	return ""
 }
 
 // openRecentSwitcherPaths returns the file rows of recentSwitcherItems.

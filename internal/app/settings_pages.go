@@ -8,7 +8,7 @@ package app
 import (
 	"fmt"
 	"math"
-	"path/filepath"
+	"os"
 	"slices"
 	"sort"
 	"strings"
@@ -16,6 +16,7 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/editor"
 )
 
 // settingsPageBody draws the selected node: a group folder's description and
@@ -32,16 +33,38 @@ func (m *Model) settingsPageBody(c *ui.Context, p *ui.Theme, oi oiColors, node s
 		m.settingsEditorAppearanceBody(c, oi)
 	case "general":
 		m.settingsGeneralBody(c, oi)
+	case "nativeSettings":
+		m.settingsNativeBody(c, oi, node.page.id)
+	case "pythonOverview":
+		m.settingsNativeBody(c, oi, node.page.id)
+	case "gutterIcons":
+		m.nativeGutterBody(c, oi)
 	case "breadcrumbs":
 		m.settingsBreadcrumbsBody(c, oi)
 	case "editorTabs":
 		m.settingsEditorTabsBody(c, oi)
 	case "codeFolding":
-		m.settingsCodeFoldingBody(c)
+		m.settingsCodeFoldingBody(c, oi)
+	case "vim":
+		m.settingsVimBody(c, oi)
+	case "liveTemplates":
+		m.settingsLiveTemplatesBody(c, oi)
+	case "postfixCompletion":
+		m.settingsPostfixBody(c, oi)
+	case "fileTemplates":
+		m.settingsFileTemplatesBody(c, oi)
 	case "inlayHints":
 		m.settingsInlayHintsBody(c, oi)
 	case "editorFont":
 		m.settingsFontBody(c, oi)
+	case "fileTypes":
+		m.settingsFileTypesBody(c, oi)
+	case "inspections":
+		m.settingsInspectionsBody(c, oi)
+	case "naturalLanguages":
+		m.settingsNaturalLanguagesBody(c, oi)
+	case "spelling":
+		m.settingsSpellingBody(c, oi)
 	case "dateFormats":
 		m.settingsDateFormatsBody(c, oi)
 	case "system":
@@ -52,6 +75,8 @@ func (m *Model) settingsPageBody(c *ui.Context, p *ui.Theme, oi oiColors, node s
 		m.settingsTodoBody(c, oi)
 	case "notifications":
 		m.settingsNotificationsBody(c, oi)
+	case "actionsOnSave":
+		m.settingsNativeBody(c, oi, node.page.id)
 	case "agents":
 		m.settingsAgentsBody(c, oi)
 	case "agentPolicy":
@@ -62,14 +87,32 @@ func (m *Model) settingsPageBody(c *ui.Context, p *ui.Theme, oi oiColors, node s
 		m.settingsAgentRegistryBody(c, oi)
 	case "java":
 		m.settingsJavaBody(c, p, oi)
+	case "prettier", "oxfmt", "ruff":
+		m.settingsFormatterBody(c, oi, node.page.id)
 	case "languageServers":
 		m.settingsLanguageServersBody(c, p, oi)
 	case "issueNavigation":
 		m.settingsIssueNavigationBody(c, oi)
+	case "vcsOverview":
+		m.settingsVCSOverviewBody(c, oi)
+	case "vcsMappings":
+		m.settingsVCSMappingsBody(c, oi)
+	case "vcsLog":
+		m.settingsVCSLogBody(c, oi)
+	case "vcsGitHub":
+		m.settingsVCSGitHubBody(c, oi)
 	case "updates":
 		m.settingsUpdatesBody(c, oi)
 	case "projectTrust":
 		m.settingsProjectTrustBody(c, oi)
+	case "externalTools":
+		m.settingsExternalToolsBody(c, oi)
+	case "runTargets":
+		m.settingsRunTargetsBody(c, oi)
+	case "deployment":
+		m.settingsDeploymentBody(c, oi)
+	case "ssh":
+		m.settingsSSHBody(c, oi)
 	}
 }
 
@@ -81,11 +124,38 @@ func (m *Model) settingsSystemBody(c *ui.Context, oi oiColors) {
 		m.settingsDraft.reopenLast = reopen
 		m.invalidate()
 	}
+	ui.Row(c).MinHeight(32).Gap(12).AlignItems(ui.Center).Children(func() {
+		settingsFormLabel(c, oi, "Open project in", 220)
+		ui.Row(c).Gap(14).AlignItems(ui.Center).Children(func() {
+			for _, choice := range []struct {
+				id    string
+				label string
+			}{
+				{"new", "New window"},
+				{"same", "Current window"},
+				{"ask", "Ask"},
+			} {
+				if ui.Radio(c, &m.settingsDraft.openProjectIn, choice.id, choice.label).Changed() {
+					m.invalidate()
+				}
+			}
+		})
+	})
+	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+		settingsFormLabel(c, oi, "Default directory", 220)
+		input := ui.TextInput(c, &m.settingsDraft.defaultProjectDirectory).Grow(1).MaxWidth(420)
+		if input.Changed() {
+			m.invalidate()
+		}
+		ui.Button(c, "Browse…").OnClick(func() { m.chooseDefaultProjectDirectory() })
+	})
+	ui.Text(c, `This directory is preselected in "Open…" and "New Window" dialogs.`).
+		FontSize(11).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
 
 	settingsSectionTitle(c, oi, "Caches")
 	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
-		settingsFormLabel(c, oi, "Local data directory", 220)
-		path := filepath.Dir(m.cfg.Home)
+		settingsFormLabel(c, oi, "Current location", 220)
+		path := m.goideaDataDir()
 		ui.Text(c, path).FontSize(12).Font("monospace").TextColor(oi.text).
 			SingleLine().Ellipsis("…").Grow(1)
 		ui.Button(c, "Show in Finder").OnClick(func() {
@@ -94,7 +164,110 @@ func (m *Model) settingsSystemBody(c *ui.Context, oi oiColors) {
 			}
 		})
 	})
-	ui.Text(c, "Tool downloads, language-server data, logs and settings are kept here.").
+	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+		settingsFormLabel(c, oi, "Local data directory", 220)
+		in := ui.TextInput(c, &m.settingsDraft.localDataDir).Grow(1).MaxWidth(420).
+			Disabled(m.localDataDirLocked())
+		if in.Changed() {
+			m.invalidate()
+		}
+		ui.Button(c, "Browse…").Disabled(m.localDataDirLocked()).
+			OnClick(m.chooseLocalDataDir)
+		ui.Button(c, "Use default").Disabled(m.localDataDirLocked()).OnClick(func() {
+			m.settingsDraft.localDataDir = ""
+			m.invalidate()
+		})
+	})
+	move := m.settingsDraft.localDataMove
+	if ui.Checkbox(c, &move, "Copy existing data to the new location").
+		Disabled(m.localDataDirLocked()).Changed() {
+		m.settingsDraft.localDataMove = move
+		m.invalidate()
+	}
+	ui.Text(c, "Tool downloads, language-server data, logs and settings are kept here; Apply restarts GoIDEA.").
+		FontSize(11).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
+	if os.Getenv("GOIDEA_DATA_DIR") != "" {
+		ui.Text(c, "GOIDEA_DATA_DIR is set and takes precedence.").
+			FontSize(11).TextColor(oi.warning).SingleLine()
+	} else if m.cfg.LocalDataDirConfigPath == "" {
+		ui.Text(c, "This launch cannot persist a local data directory change.").
+			FontSize(11).TextColor(oi.warning).SingleLine()
+	}
+
+	settingsSectionTitle(c, oi, "Autosave")
+	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+		saveOnIdle := m.settingsDraft.saveOnIdle
+		if ui.Checkbox(c, &saveOnIdle, "Save files if the IDE is idle for").Changed() {
+			m.settingsDraft.saveOnIdle = saveOnIdle
+			m.invalidate()
+		}
+		seconds := float64(m.settingsDraft.idleSeconds)
+		field := ui.NumberInput(c, &seconds, 1, 3600, 1).Width(92)
+		field.Disabled(!m.settingsDraft.saveOnIdle)
+		if field.Changed() {
+			m.settingsDraft.idleSeconds = int(seconds)
+			m.invalidate()
+		}
+		ui.Text(c, "seconds").FontSize(12).TextColor(oi.textMuted)
+	})
+	autoSave := m.settingsDraft.autoSave
+	if ui.Checkbox(c, &autoSave,
+		"Save files when switching to a different application or a built-in terminal").Changed() {
+		m.settingsDraft.autoSave = autoSave
+		m.invalidate()
+	}
+	syncOnFocus := m.settingsDraft.syncOnFocus
+	if ui.Checkbox(c, &syncOnFocus,
+		"Synchronize external changes when switching to the IDE window").Changed() {
+		m.settingsDraft.syncOnFocus = syncOnFocus
+		m.invalidate()
+	}
+
+	settingsSectionTitle(c, oi, "Local History")
+	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+		settingsFormLabel(c, oi, "Keep local history for", 220)
+		days := float64(m.settingsDraft.localHistoryDays)
+		field := ui.NumberInput(c, &days, 1, 365, 1).Width(92)
+		if field.Changed() {
+			m.settingsDraft.localHistoryDays = int(days)
+			m.invalidate()
+		}
+		ui.Text(c, "working days").FontSize(12).TextColor(oi.textMuted)
+	})
+	ui.Text(c, "Days on which files changed; older revisions are removed when a project opens.").
+		FontSize(11).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
+	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+		settingsFormLabel(c, oi, "Maximum local history size per project", 220)
+		size := float64(m.settingsDraft.localHistoryMaxMB)
+		field := ui.NumberInput(c, &size, 16, 16384, 64).Width(100)
+		if field.Changed() {
+			m.settingsDraft.localHistoryMaxMB = int(size)
+			m.invalidate()
+		}
+		ui.Text(c, "MB").FontSize(12).TextColor(oi.textMuted)
+	})
+
+	settingsSectionTitle(c, oi, "Exit")
+	confirmExit := m.settingsDraft.confirmExit
+	if ui.Checkbox(c, &confirmExit, "Confirm before exiting the IDE").Changed() {
+		m.settingsDraft.confirmExit = confirmExit
+		m.invalidate()
+	}
+	closeWithoutWelcome := m.settingsDraft.closeWithoutWelcome
+	if ui.Checkbox(c, &closeWithoutWelcome,
+		"Close the window instead of showing the Welcome screen").Changed() {
+		m.settingsDraft.closeWithoutWelcome = closeWithoutWelcome
+		m.invalidate()
+	}
+	ui.Text(c, "When this is the only window, closing a project or file closes the window. On macOS, the app stays in the Dock.").
+		FontSize(11).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
+	closeTabsWithWindow := m.settingsDraft.closeTabsWithWindow
+	if ui.Checkbox(c, &closeTabsWithWindow,
+		"Close all editor tabs when the window closes").Changed() {
+		m.settingsDraft.closeTabsWithWindow = closeTabsWithWindow
+		m.invalidate()
+	}
+	ui.Text(c, "Files left open are not restored the next time the project opens.").
 		FontSize(11).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
 }
 
@@ -401,8 +574,8 @@ func settingsFormLabelDim(c *ui.Context, oi oiColors, label string, width float3
 		SingleLine().Ellipsis("…")
 }
 
-// settingsAppearanceBody is Appearance's Theme row: the theme select and the
-// Sync with OS switch, which follows the system's appearance when it is on.
+// settingsAppearanceBody is Appearance's theme, accessibility, UI and tool
+// window choices. It stages the same switches View › Appearance changes.
 func (m *Model) settingsAppearanceBody(c *ui.Context, oi oiColors) {
 	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Theme:", 220)
@@ -423,6 +596,323 @@ func (m *Model) settingsAppearanceBody(c *ui.Context, oi oiColors) {
 			} else {
 				m.settingsSetTheme("light")
 			}
+		}
+		gear := ui.ButtonBase(c.Key("settings:appearance:preferred-themes")).
+			Size(24, 24).Radius(6).AlignItems(ui.Center).Justify(ui.Center).
+			Cursor(ui.CursorPointer).
+			Tooltip("Preferred themes for light and dark OS mode").
+			Disabled(!sync)
+		if gear.Hovered() && sync {
+			gear.Background(oi.hoverTint)
+		}
+		gear.Children(func() {
+			oiIconEl(c, "general/settings", 16, oi, oi.icon)
+		})
+		if !sync {
+			m.settingsThemePrefs = false
+			return
+		}
+		ui.PopoverBase(c, gear, &m.settingsThemePrefs, func(panel ui.Element) {
+			panel.Width(470).Padding(10).Gap(6).Background(oi.popup).
+				BorderWidth(1).BorderColor(oi.borderStrong).Radius(8).
+				Shadow(0, 10, 28, 0, ui.RGBA(0, 0, 0, 0.3))
+			panel.Children(func() {
+				m.settingsPreferredThemeRow(
+					c, oi, false, "Preferred theme for light OS mode",
+				)
+				m.settingsPreferredThemeRow(
+					c, oi, true, "Preferred theme for dark OS mode",
+				)
+			})
+		})
+	})
+	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+		settingsFormLabel(c, oi, "Accent color:", 220)
+		label := accentLabelOf(m.settingsDraft.accent)
+		labels := make([]string, 0, len(accentChoices))
+		for _, choice := range accentChoices {
+			labels = append(labels, choice.label)
+		}
+		if ui.Select(c, &label, labels).Changed() {
+			m.settingsDraft.accent = accentIDOf(label)
+			m.settingsPreview()
+		}
+	})
+	ui.Row(c).Height(8)
+
+	settingsSectionTitle(c, oi, "Accessibility")
+	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+		settingsFormLabel(c, oi, "Zoom:", 220)
+		labels := make([]string, 0, len(ideZoomSteps))
+		for _, zoom := range ideZoomSteps {
+			labels = append(labels, fmt.Sprintf("%d%%", zoom))
+		}
+		shown := fmt.Sprintf("%d%%", m.settingsDraft.ideZoom)
+		if ui.Select(c, &shown, labels).Changed() {
+			var zoom int
+			if _, err := fmt.Sscanf(shown, "%d%%", &zoom); err == nil {
+				m.settingsDraft.ideZoom = zoom
+				m.invalidate()
+			}
+		}
+	})
+	customFont := m.settingsDraft.useCustomFont
+	if ui.Checkbox(c, &customFont, "Use custom font").Changed() {
+		m.settingsDraft.useCustomFont = customFont
+		m.settingsPreview()
+	}
+	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+		settingsFormLabelDim(c, oi, "UI font:", 220)
+		shown := uiFontFamilyOr(m.settingsDraft.uiFontFamily)
+		choices := settingsUIFontChoices(shown)
+		if ui.Select(c, &shown, choices).Grow(1).Disabled(!customFont).Changed() {
+			m.settingsDraft.uiFontFamily = shown
+			m.settingsPreview()
+		}
+	})
+	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+		settingsFormLabelDim(c, oi, "Fallback font:", 220)
+		shown := m.settingsDraft.uiFontFallback
+		if shown == "" {
+			shown = "(None)"
+		}
+		choices := append([]string{"(None)"}, settingsUIFontChoices(shown)...)
+		if ui.Select(c, &shown, choices).Grow(1).Disabled(!customFont).Changed() {
+			if shown == "(None)" {
+				shown = ""
+			}
+			m.settingsDraft.uiFontFallback = shown
+			m.settingsPreview()
+		}
+	})
+	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+		settingsFormLabelDim(c, oi, "Size:", 220)
+		size := float64(m.settingsDraft.uiFontSize)
+		if ui.NumberInput(c, &size, 10, 18, 1).Width(100).Disabled(!customFont).Changed() {
+			m.settingsDraft.uiFontSize = int(math.Round(size))
+			m.settingsPreview()
+		}
+		ui.Text(c, "px").FontSize(12).TextColor(oi.textMuted).SingleLine()
+	})
+	contrast := m.settingsDraft.contrastScrollbars
+	if ui.Checkbox(c, &contrast, "Use contrast scrollbars").Changed() {
+		m.settingsDraft.contrastScrollbars = contrast
+		m.settingsPreview()
+	}
+	redGreen := m.settingsDraft.redGreenVision
+	if ui.Checkbox(c, &redGreen, "Adjust colors for red-green vision deficiency").Changed() {
+		m.settingsDraft.redGreenVision = redGreen
+		m.settingsPreview()
+	}
+	ui.Row(c).Height(8)
+
+	settingsSectionTitle(c, oi, "UI Options")
+	showToolbar := m.settingsDraft.showMainToolbar
+	if ui.Checkbox(c, &showToolbar, "Show main toolbar").Changed() {
+		m.settingsDraft.showMainToolbar = showToolbar
+		m.invalidate()
+	}
+	showStatus := m.settingsDraft.showStatusBar
+	if ui.Checkbox(c, &showStatus, "Show status bar").Changed() {
+		m.settingsDraft.showStatusBar = showStatus
+		m.invalidate()
+	}
+	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+		settingsFormLabel(c, oi, "Navigation bar:", 220)
+		shown := navigationBarLabel(m.settingsDraft.navigationBar)
+		if ui.Select(c, &shown, []string{"Status Bar", "Top", "Don't Show"}).Changed() {
+			m.settingsDraft.navigationBar = navigationBarValue(shown)
+			m.invalidate()
+		}
+	})
+	compact := m.settingsDraft.compactMode
+	if ui.Checkbox(c, &compact, "Compact Mode").Changed() {
+		m.settingsDraft.compactMode = compact
+		m.invalidate()
+	}
+	fullPath := m.settingsDraft.fullPathInTitle
+	if ui.Checkbox(c, &fullPath, "Always show full path in window header").Changed() {
+		m.settingsDraft.fullPathInTitle = fullPath
+	}
+	projectColors := m.settingsDraft.projectColorsInToolbar
+	if ui.Checkbox(c, &projectColors, "Use project colors in main toolbar").Changed() {
+		m.settingsDraft.projectColorsInToolbar = projectColors
+	}
+	differentToolWindowBackground := m.settingsDraft.differentToolWindowBackground
+	if ui.Checkbox(c, &differentToolWindowBackground, "Different tool window background").Changed() {
+		m.settingsDraft.differentToolWindowBackground = differentToolWindowBackground
+		m.invalidate()
+	}
+	altDnd := m.settingsDraft.dndWithAltOnly
+	if ui.Checkbox(c, &altDnd, "Drag-and-drop with Alt pressed only").Changed() {
+		m.settingsDraft.dndWithAltOnly = altDnd
+	}
+	smallIndents := m.settingsDraft.smallTreeIndents
+	if ui.Checkbox(c, &smallIndents, "Use smaller indents in trees").Changed() {
+		m.settingsDraft.smallTreeIndents = smallIndents
+	}
+	menuIcons := m.settingsDraft.menuIcons
+	if ui.Checkbox(c, &menuIcons, "Display icons in menu items").Changed() {
+		m.settingsDraft.menuIcons = menuIcons
+	}
+	mainMenuAlt := m.settingsDraft.mainMenuAlt
+	if ui.Checkbox(c, &mainMenuAlt, "Open main menu with a lone Alt press").Changed() {
+		m.settingsDraft.mainMenuAlt = mainMenuAlt
+	}
+	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+		settingsFormLabel(c, oi, "Main menu:", 220)
+		shown := mainMenuChoiceLabel(m.settingsDraft.mainMenuStyle)
+		if ui.Select(c, &shown, []string{
+			"Hamburger button", "Merged with main toolbar", "Separate toolbar",
+		}).Grow(1).Changed() {
+			m.settingsDraft.mainMenuStyle = mainMenuStyleValue(shown)
+		}
+	})
+	ui.Row(c).Height(8)
+
+	settingsSectionTitle(c, oi, "Antialiasing")
+	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+		settingsFormLabel(c, oi, "IDE:", 220)
+		shown := antialiasingLabel(m.settingsDraft.ideAntialiasing)
+		if ui.Select(c, &shown, antialiasingLabels).Width(180).Changed() {
+			m.settingsDraft.ideAntialiasing = antialiasingValue(shown)
+		}
+	})
+	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+		settingsFormLabel(c, oi, "Editor:", 220)
+		shown := antialiasingLabel(m.settingsDraft.editorAntialiasing)
+		if ui.Select(c, &shown, antialiasingLabels).Width(180).Changed() {
+			m.settingsDraft.editorAntialiasing = antialiasingValue(shown)
+		}
+	})
+	ui.Row(c).Height(8)
+
+	settingsSectionTitle(c, oi, "Tool Windows")
+	showBars := m.settingsDraft.showToolWindowBars
+	if ui.Checkbox(c, &showBars, "Show tool window bars").Changed() {
+		m.settingsDraft.showToolWindowBars = showBars
+		m.invalidate()
+	}
+	showNames := m.settingsDraft.showToolWindowNames
+	if ui.Checkbox(c, &showNames, "Show tool window names").Changed() {
+		m.settingsDraft.showToolWindowNames = showNames
+		m.invalidate()
+	}
+	showBadges := m.settingsDraft.showToolWindowBadges
+	if ui.Checkbox(c, &showBadges, "Show tool window badges").Changed() {
+		m.settingsDraft.showToolWindowBadges = showBadges
+		m.invalidate()
+	}
+	widescreen := m.settingsDraft.widescreenToolWindows
+	if ui.Checkbox(c, &widescreen, "Widescreen tool window layout").Changed() {
+		m.settingsDraft.widescreenToolWindows = widescreen
+		m.invalidate()
+	}
+}
+
+var antialiasingLabels = []string{"Subpixel", "Greyscale", "No antialiasing"}
+
+func antialiasingLabel(mode string) string {
+	switch antialiasingOrDefault(mode) {
+	case "subpixel":
+		return "Subpixel"
+	case "none":
+		return "No antialiasing"
+	default:
+		return "Greyscale"
+	}
+}
+
+func antialiasingValue(label string) string {
+	switch label {
+	case "Subpixel":
+		return "subpixel"
+	case "No antialiasing":
+		return "none"
+	default:
+		return "greyscale"
+	}
+}
+
+func mainMenuChoiceLabel(style string) string {
+	switch mainMenuStyleOrDefault(style) {
+	case "merged":
+		return "Merged with main toolbar"
+	case "toolbar":
+		return "Separate toolbar"
+	default:
+		return "Hamburger button"
+	}
+}
+
+func mainMenuStyleValue(label string) string {
+	switch label {
+	case "Merged with main toolbar":
+		return "merged"
+	case "Separate toolbar":
+		return "toolbar"
+	default:
+		return "hamburger"
+	}
+}
+
+func settingsUIFontChoices(current string) []string {
+	seen := map[string]bool{oiFontUI: true}
+	if current = strings.TrimSpace(current); current != "" && current != "(None)" {
+		seen[current] = true
+	}
+	for _, family := range ui.FontFamilies() {
+		if name := strings.TrimSpace(family.Name); name != "" {
+			seen[name] = true
+		}
+	}
+	choices := make([]string, 0, len(seen))
+	for family := range seen {
+		choices = append(choices, family)
+	}
+	sort.Strings(choices)
+	return choices
+}
+
+func navigationBarLabel(position string) string {
+	switch position {
+	case "top":
+		return "Top"
+	case "hidden":
+		return "Don't Show"
+	default:
+		return "Status Bar"
+	}
+}
+
+func navigationBarValue(label string) string {
+	switch label {
+	case "Top":
+		return "top"
+	case "Don't Show":
+		return "hidden"
+	default:
+		return "statusBar"
+	}
+}
+
+// settingsPreferredThemeRow is one concrete-theme chooser in the preferred
+// themes popover opened from Sync with OS.
+func (m *Model) settingsPreferredThemeRow(
+	c *ui.Context, oi oiColors, dark bool, label string,
+) {
+	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+		settingsFormLabel(c, oi, label+":", 300)
+		name := m.settingsDraft.preferredLightTheme
+		if dark {
+			name = m.settingsDraft.preferredDarkTheme
+		}
+		shown := "Light"
+		if name == "dark" {
+			shown = "Dark"
+		}
+		if ui.Select(c, &shown, []string{"Light", "Dark"}).Width(120).Changed() {
+			m.settingsSetPreferredTheme(dark, strings.ToLower(shown))
 		}
 	})
 }
@@ -551,10 +1041,8 @@ func fontWeightValue(label string) int {
 	return 400
 }
 
-// settingsGeneralBody is Editor › General: the Soft Wraps section with its
-// file patterns, then Virtual Space and Save Files, in general.tsx's order.
-// The Markdown Images, Mouse Control and Scrolling sections name features this
-// build does not carry, so they are not drawn.
+// settingsGeneralBody is Editor › General: Markdown Images, Mouse Control,
+// Scrolling, Soft Wraps, Virtual Space and Save Files in general.tsx's order.
 func (m *Model) settingsGeneralBody(c *ui.Context, oi oiColors) {
 	settingsSectionTitle(c, oi, "Markdown Images")
 	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
@@ -588,6 +1076,17 @@ func (m *Model) settingsGeneralBody(c *ui.Context, oi oiColors) {
 	}
 	ui.Row(c).Height(10)
 
+	settingsSectionTitle(c, oi, "Scrolling")
+	caretScroll := m.settingsDraft.caretScroll
+	ui.RadioGroup(c, func() {
+		ui.Radio(c, &caretScroll, "center", "Keep caret line centered")
+		ui.Radio(c, &caretScroll, "minimize", "Move caret line to minimize scrolling")
+	})
+	if caretScroll != m.settingsDraft.caretScroll {
+		m.settingsSetCaretScroll(caretScroll)
+	}
+	ui.Row(c).Height(10)
+
 	settingsSectionTitle(c, oi, "Soft Wraps")
 	wrap := m.settingsDraft.softWrap
 	if ui.Checkbox(c, &wrap, "Soft-wrap files").Changed() {
@@ -603,6 +1102,10 @@ func (m *Model) settingsGeneralBody(c *ui.Context, oi oiColors) {
 	})
 	ui.Text(c, "Use ; to separate patterns. * matches every file.").
 		FontSize(12).TextColor(oi.textMuted).PaddingStart(20).SingleLine().Ellipsis("…")
+	wrapIndent := m.settingsDraft.softWrapIndent
+	ui.Checkbox(c, &wrapIndent, "Use original line's indent for wrapped parts").
+		PaddingStart(20).Disabled(true)
+	settingsUnavailableNote(c, oi, "MyGo always preserves the original line's indent when it wraps.")
 	ui.Row(c).Height(10)
 	settingsSectionTitle(c, oi, "Virtual Space")
 	end := m.settingsDraft.scrollPastEnd
@@ -660,37 +1163,127 @@ func settingsSectionTitle(c *ui.Context, oi oiColors, title string) {
 	ui.Text(c, title).FontSize(12).TextColor(oi.textStrong).Padding(0, 0, 6, 0).SingleLine()
 }
 
+func settingsUnavailableNote(c *ui.Context, oi oiColors, text string) {
+	ui.Text(c, text).FontSize(11).TextColor(oi.textMuted).PaddingStart(20).
+		SingleLine().Ellipsis("…")
+}
+
 // settingsEditorAppearanceBody is Editor › General › Appearance: the caret,
 // gutter and whitespace switches, then the distraction free text width, in the
 // order general.tsx lists them.
 func (m *Model) settingsEditorAppearanceBody(c *ui.Context, oi oiColors) {
+	caretBlinking := m.settingsDraft.caretBlinking
+	caretPeriod := float64(m.settingsDraft.caretBlinkPeriod)
+	ui.Row(c).MinHeight(28).Gap(8).AlignItems(ui.Center).Children(func() {
+		check := ui.Checkbox(c, &caretBlinking, "Caret blinking (ms):").Disabled(true)
+		input := ui.NumberInput(c, &caretPeriod, minCaretBlinkPeriod, maxCaretBlinkPeriod, 50).
+			Width(92).
+			Disabled(true)
+		if check.Changed() {
+			m.settingsSetCaretBlinking(caretBlinking)
+		}
+		if input.Changed() {
+			m.settingsSetCaretBlinkPeriod(int(math.Round(caretPeriod)))
+		}
+	})
+	smoothBlink := m.settingsDraft.smoothCaretBlinking
+	if ui.Checkbox(c, &smoothBlink, "Use smooth caret blinking").Disabled(true).Changed() {
+		m.settingsSetSmoothCaretBlinking(smoothBlink)
+	}
 	blockCaret := m.settingsDraft.blockCaret
 	if ui.Checkbox(c, &blockCaret, "Use block caret").Changed() {
 		m.settingsSetBlockCaret(blockCaret)
 	}
-	lineNumbers := m.settingsDraft.lineNumbers
-	if ui.Checkbox(c, &lineNumbers, "Show line numbers").Changed() {
-		m.settingsSetLineNumbers(lineNumbers)
+	smoothMovement := m.settingsDraft.smoothCaretMovement
+	movementStyle := "Snappy"
+	if m.settingsDraft.caretMovementStyle == "gliding" {
+		movementStyle = "Gliding"
 	}
-	ui.Row(c).MinHeight(28).Gap(8).AlignItems(ui.Center).PaddingStart(20).Children(func() {
-		settingsFormLabel(c, oi, "Line numbers", 160)
-		shown := "Absolute"
-		if m.settingsDraft.lineNumberMode == "relative" {
-			shown = "Relative"
+	ui.Row(c).MinHeight(28).Gap(8).AlignItems(ui.Center).Children(func() {
+		check := ui.Checkbox(c, &smoothMovement, "Use smooth caret movement").Disabled(true)
+		sel := ui.Select(c, &movementStyle, []string{"Snappy", "Gliding"}).
+			Width(112).
+			Disabled(true)
+		if check.Changed() {
+			m.settingsSetSmoothCaretMovement(smoothMovement)
 		}
-		sel := ui.Select(c, &shown, []string{"Absolute", "Relative"}).
-			Disabled(!m.settingsDraft.lineNumbers)
+		if sel.Changed() {
+			m.settingsSetCaretMovementStyle(strings.ToLower(movementStyle))
+		}
+	})
+	settingsUnavailableNote(c, oi, "MyGo renders caret timing and motion from its native editor profile.")
+	hardWrapGuides := m.settingsDraft.hardWrapGuides
+	if ui.Checkbox(c, &hardWrapGuides, "Show hard wrap and visual guides (configured in Code Style options)").Changed() {
+		m.settingsSetHardWrapGuides(hardWrapGuides)
+	}
+	lineNumbers := m.settingsDraft.lineNumbers
+	lineNumberMode := "Absolute"
+	switch m.settingsDraft.lineNumberMode {
+	case "relative":
+		lineNumberMode = "Relative"
+	case "hybrid":
+		lineNumberMode = "Hybrid"
+	}
+	ui.Row(c).MinHeight(28).Gap(8).AlignItems(ui.Center).Children(func() {
+		check := ui.Checkbox(c, &lineNumbers, "Show line numbers")
+		shown := "Absolute"
+		shown = lineNumberMode
+		sel := ui.Select(c, &shown, []string{"Absolute", "Relative", "Hybrid"}).
+			Width(112).
+			Disabled(!lineNumbers)
+		if check.Changed() {
+			m.settingsSetLineNumbers(lineNumbers)
+		}
 		if sel.Changed() {
 			m.settingsSetLineNumberMode(strings.ToLower(shown))
 		}
 	})
+	methodSeparators := m.settingsDraft.methodSeparators
+	if ui.Checkbox(c, &methodSeparators, "Show method separators").Disabled(true).Changed() {
+		m.settingsSetMethodSeparators(methodSeparators)
+	}
+	settingsUnavailableNote(c, oi, "MyGo does not expose method-separator decoration ranges.")
 	showWhitespace := m.settingsDraft.showWhitespace
 	if ui.Checkbox(c, &showWhitespace, "Show whitespaces").Changed() {
 		m.settingsSetShowWhitespace(showWhitespace)
 	}
+	ui.Row(c).Gap(14).PaddingStart(20).Children(func() {
+		leading := m.settingsDraft.whitespaceLeading
+		inner := m.settingsDraft.whitespaceInner
+		trailing := m.settingsDraft.whitespaceTrailing
+		leadingCheck := ui.Checkbox(c, &leading, "Leading").Disabled(true)
+		innerCheck := ui.Checkbox(c, &inner, "Inner").Disabled(true)
+		trailingCheck := ui.Checkbox(c, &trailing, "Trailing").Disabled(!showWhitespace)
+		if leadingCheck.Changed() {
+			m.settingsSetWhitespaceParts(leading, inner, trailing)
+		}
+		if innerCheck.Changed() {
+			m.settingsSetWhitespaceParts(leading, inner, trailing)
+		}
+		if trailingCheck.Changed() {
+			m.settingsSetWhitespaceParts(leading, inner, trailing)
+		}
+	})
+	settingsUnavailableNote(c, oi, "MyGo exposes all, trailing or selection whitespace; leading and inner need finer spans.")
 	indentGuides := m.settingsDraft.indentGuides
 	if ui.Checkbox(c, &indentGuides, "Show indent guides").Changed() {
 		m.settingsSetIndentGuides(indentGuides)
+	}
+	rainbow := m.settingsDraft.rainbowIndentGuides
+	if ui.Checkbox(c, &rainbow, "Rainbow indent guides").
+		PaddingStart(20).
+		Disabled(true).
+		Changed() {
+		m.settingsSetRainbowIndentGuides(rainbow)
+	}
+	intentionBulb := m.settingsDraft.intentionBulb
+	if ui.Checkbox(c, &intentionBulb, "Show intention bulb").Disabled(true).Changed() {
+		m.settingsSetIntentionBulb(intentionBulb)
+	}
+	settingsUnavailableNote(c, oi, "Rainbow guide colors and the intention bulb need native editor decoration hooks.")
+	renderDocs := m.settingsDraft.renderDocComments
+	if ui.Checkbox(c, &renderDocs, "Render documentation comments").Changed() {
+		m.settingsSetRenderDocComments(renderDocs)
 	}
 	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Distraction free mode text width:", 260)
@@ -704,9 +1297,7 @@ func (m *Model) settingsEditorAppearanceBody(c *ui.Context, oi oiColors) {
 }
 
 // settingsBreadcrumbsBody is Editor › General › Breadcrumbs: the Show
-// breadcrumbs switch with its Top / Bottom placement radios, as general.tsx
-// draws them. The languages chooser below it lists language settings this
-// build does not carry, so it is not drawn.
+// breadcrumbs switch, Top / Bottom placement and MyGo's language chooser.
 func (m *Model) settingsBreadcrumbsBody(c *ui.Context, oi oiColors) {
 	show := m.settingsDraft.showBreadcrumbs
 	if ui.Checkbox(c, &show, "Show breadcrumbs:").Changed() {
@@ -729,17 +1320,20 @@ func (m *Model) settingsBreadcrumbsBody(c *ui.Context, oi oiColors) {
 			FontSize(12).TextColor(oi.textMuted).PaddingStart(20).SingleLine().Ellipsis("…")
 		return
 	}
-	ui.Row(c).Gap(14).PaddingStart(20).Children(func() {
-		for _, language := range languages {
-			language := language
-			on := !slices.Contains(m.settingsDraft.breadcrumbDisabled, language)
-			check := ui.Checkbox(c, &on, languageDisplayName(language)).
-				Disabled(!m.settingsDraft.showBreadcrumbs)
-			if check.Changed() {
-				m.settingsToggleBreadcrumbLanguage(language)
+	for i := 0; i < len(languages); i += 2 {
+		end := min(i+2, len(languages))
+		ui.Row(c).Gap(18).PaddingStart(20).Children(func() {
+			for _, language := range languages[i:end] {
+				language := language
+				on := !slices.Contains(m.settingsDraft.breadcrumbDisabled, language)
+				check := ui.Checkbox(c, &on, languageDisplayName(language)).
+					Disabled(!m.settingsDraft.showBreadcrumbs)
+				if check.Changed() {
+					m.settingsToggleBreadcrumbLanguage(language)
+				}
 			}
-		}
-	})
+		})
+	}
 }
 
 // settingsBreadcrumbLanguages lists the project's open languages plus any
@@ -747,6 +1341,14 @@ func (m *Model) settingsBreadcrumbsBody(c *ui.Context, oi oiColors) {
 // editable.
 func (m *Model) settingsBreadcrumbLanguages() []string {
 	var values []string
+	for _, language := range editor.Languages() {
+		id := strings.ToLower(strings.TrimSpace(language.Name))
+		switch id {
+		case "", "plaintext", "log", "diff":
+			continue
+		}
+		values = append(values, id)
+	}
 	for _, t := range m.allTabs() {
 		if t == nil || t.doc == nil {
 			continue
@@ -762,6 +1364,11 @@ func (m *Model) settingsBreadcrumbLanguages() []string {
 func languageDisplayName(language string) string {
 	if language == "" {
 		return ""
+	}
+	for _, known := range editor.Languages() {
+		if strings.EqualFold(known.Name, language) {
+			return known.Name
+		}
 	}
 	return strings.ToUpper(language[:1]) + language[1:]
 }
@@ -951,14 +1558,27 @@ func closePositionValue(label string) string {
 	return "right"
 }
 
-// settingsCodeFoldingBody is Code Folding's Show code folding outline switch.
-// The editor folds from the gutter only, so the Fold by default types are not
-// drawn.
-func (m *Model) settingsCodeFoldingBody(c *ui.Context) {
+// settingsCodeFoldingBody is Code Folding's outline and default-fold controls.
+// MyGo exposes a language's first import run for opening folds, but no public
+// syntax-tree range for file headers or documentation comments, so those two
+// choices remain visible and disabled with the actual renderer limitation.
+func (m *Model) settingsCodeFoldingBody(c *ui.Context, oi oiColors) {
 	folding := m.settingsDraft.showFolding
 	if ui.Checkbox(c, &folding, "Show code folding outline").Changed() {
 		m.settingsSetShowFolding(folding)
 	}
+	ui.Row(c).Height(10)
+	settingsSectionTitle(c, oi, "Fold by default")
+	fileHeader := true
+	ui.Checkbox(c, &fileHeader, "File header").Disabled(true).PaddingStart(20)
+	foldImports := m.settingsDraft.foldImports
+	if ui.Checkbox(c, &foldImports, "Imports").Disabled(!folding).PaddingStart(20).Changed() {
+		m.settingsSetFoldImports(foldImports)
+	}
+	docComments := false
+	ui.Checkbox(c, &docComments, "Documentation comments").Disabled(true).PaddingStart(20)
+	ui.Text(c, "File headers and documentation comments need syntax-tree fold ranges from MyGo.").
+		FontSize(11).TextColor(oi.textMuted).PaddingStart(20).SingleLine().Ellipsis("…")
 }
 
 // settingsInlayHintsBody is Editor › Inlay Hints › Code Vision. It mirrors
@@ -1033,13 +1653,27 @@ func codeVisionPositionValue(label string) string {
 func (m *Model) settingsKeymapBody(c *ui.Context, oi oiColors) {
 	ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 		ui.Text(c, "Keymap:").FontSize(12).TextColor(oi.text).SingleLine()
-		ui.Text(c, keymapPresetTitle).FontSize(12).TextColor(oi.textStrong).SingleLine()
+		labels := make([]string, 0, len(keymapPresetOrder))
+		for _, preset := range keymapPresetOrder {
+			labels = append(labels, preset.Title)
+		}
+		selected := keymapPresetForID(m.settingsDraft.keymapPreset).Title
+		sel := ui.Select(c, &selected, labels)
+		if sel.Changed() {
+			for _, preset := range keymapPresetOrder {
+				if preset.Title == selected {
+					m.settingsDraft.keymapPreset = preset.ID
+					break
+				}
+			}
+			m.invalidate()
+		}
 	})
 	ui.Row(c).Padding(0, 0, 6, 0).Children(func() {
 		ui.Text(c, "Choose Edit on an action and press its new key combination.").
 			FontSize(12).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
 	})
-	conflicts := keymapConflictsIn(m.settingsDraft.keymap)
+	conflicts := keymapConflictsIn(m.settingsDraft.keymapPreset, m.settingsDraft.keymap)
 	conflicted := map[string]bool{}
 	for _, c := range conflicts {
 		for _, id := range c.Actions {
@@ -1053,12 +1687,15 @@ func (m *Model) settingsKeymapBody(c *ui.Context, oi oiColors) {
 		})
 	}
 	reset := ui.Button(c, "Restore Default Keymap").OnClick(func() {
+		m.settingsDraft.keymapPreset = keymapPresetDefinitionsByOS()
 		m.settingsDraft.keymap = nil
 		m.invalidate()
 	})
 	_ = reset
 	for _, cmd := range commands() {
-		bindings := keymapBindingsIn(m.settingsDraft.keymap, cmd.id)
+		bindings := keymapBindingsIn(
+			m.settingsDraft.keymapPreset, m.settingsDraft.keymap, cmd.id,
+		)
 		if len(bindings) == 0 && cmd.shortcut == "" {
 			continue
 		}

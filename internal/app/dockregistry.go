@@ -9,6 +9,7 @@ import "github.com/egoist/mygo/ui"
 func init() {
 	registerToolWindow(&toolWindowSpec{
 		id: "agents", title: "Agents", icon: "toolwindows/agents", anchor: dockRight, order: 0, stripe: true,
+		badge: func(m *Model) int { return agentUnreadCount(&m.agents) },
 		open: func(m *Model) {
 			m.agents.visible = true
 			m.connectAgents(false)
@@ -22,14 +23,15 @@ func init() {
 		render: func(m *Model, c *ui.Context, p *ui.Theme, _ oiColors) { m.documentationPanel(c, p) },
 	})
 	registerToolWindow(&toolWindowSpec{
-		id: "coverage", title: "Coverage", icon: "toolwindows/coverage", anchor: dockRight, order: 70, stripe: true,
+		id: "coverage", title: "Coverage", icon: "toolwindows/coverage", anchor: dockRight, order: 30,
 		open:   func(m *Model) { m.coverage.open = true },
 		close:  func(m *Model) { m.coverage.open = false },
 		shown:  func(m *Model) bool { return m.coverage.open },
 		render: func(m *Model, c *ui.Context, p *ui.Theme, _ oiColors) { m.coveragePanel(c, p) },
 	})
 	registerToolWindow(&toolWindowSpec{
-		id: "problems", title: "Problems", icon: "toolwindows/problems", anchor: dockBottom, order: 60,
+		id: "problems", title: "Problems", icon: "toolwindows/problems", anchor: dockBottom, order: 30, stripe: true,
+		badge: func(m *Model) int { return m.buildErrorBadge() },
 		open:  func(m *Model) { m.problems.visible = true },
 		close: func(m *Model) { m.problems.visible = false },
 		shown: func(m *Model) bool { return m.problems.visible },
@@ -38,7 +40,8 @@ func init() {
 		},
 	})
 	registerToolWindow(&toolWindowSpec{
-		id: "todo", title: "TODO", icon: "toolwindows/todo", anchor: dockBottom, order: 70,
+		id: "todo", title: "TODO", icon: "toolwindows/todo", anchor: dockBottom, order: 40, stripe: true,
+		badge: func(m *Model) int { return m.todoCount() },
 		open: func(m *Model) {
 			m.todo.visible = true
 			if m.ctx == nil || m.mgr == nil {
@@ -58,7 +61,8 @@ func init() {
 		},
 	})
 	registerToolWindow(&toolWindowSpec{
-		id: "services", title: "Services", icon: "toolwindows/services", anchor: dockBottom, order: 80,
+		id: "services", title: "Services", icon: "toolwindows/services", anchor: dockBottom, order: 8,
+		badge: func(m *Model) int { return m.runningServiceCount() },
 		open:  func(m *Model) { m.services.visible = true; m.loadBuildModel() },
 		close: func(m *Model) { m.services.visible = false },
 		shown: func(m *Model) bool { return m.services.visible },
@@ -67,7 +71,18 @@ func init() {
 		},
 	})
 	registerToolWindow(&toolWindowSpec{
+		id: "graphql", title: "GraphQL", icon: "toolwindows/graphql", anchor: dockBottom, order: 4,
+		open: func(m *Model) {
+			m.ensureGraphQL()
+			m.ensureGraphQLDiscovered(nil)
+		},
+		render: func(m *Model, c *ui.Context, p *ui.Theme, _ oiColors) {
+			m.graphqlPanel(c, p)
+		},
+	})
+	registerToolWindow(&toolWindowSpec{
 		id: "run", title: "Run", icon: "toolwindows/run", anchor: dockBottom, order: 10,
+		badge: func(m *Model) int { return m.runningRunCount() },
 		open: func(m *Model) {
 			m.run.visible = true
 			if m.run.trusted && !m.run.loaded && m.ctx != nil && m.mgr != nil {
@@ -88,7 +103,27 @@ func init() {
 		},
 	})
 	registerToolWindow(&toolWindowSpec{
+		id: "profiler", title: "Profiler", icon: "toolwindows/profiler", anchor: dockBottom, order: 25,
+		render: func(m *Model, c *ui.Context, p *ui.Theme, oi oiColors) {
+			m.profilerPanel(c, p, oi)
+		},
+	})
+	registerToolWindow(&toolWindowSpec{
+		id: "logcat", title: "Logcat", icon: "toolwindows/logcat", anchor: dockBottom, order: 26,
+		open: func(m *Model) {
+			m.ensureLogcat()
+			if !m.logcat.devicesLoaded && !m.logcat.devicesLoading {
+				m.RefreshLogcatDevices()
+			}
+		},
+		close: func(m *Model) { m.StopLogcat() },
+		render: func(m *Model, c *ui.Context, p *ui.Theme, oi oiColors) {
+			m.logcatPanel(c, p, oi)
+		},
+	})
+	registerToolWindow(&toolWindowSpec{
 		id: "build", title: "Build", icon: "toolwindows/build", anchor: dockBottom, order: 30,
+		badge: func(m *Model) int { return m.buildErrorBadge() },
 		open:  func(m *Model) { m.build.visible = true },
 		close: func(m *Model) { m.build.visible = false },
 		shown: func(m *Model) bool { return m.build.visible },
@@ -97,7 +132,7 @@ func init() {
 		},
 	})
 	registerToolWindow(&toolWindowSpec{
-		id: "term", title: "Terminal", icon: "toolwindows/terminal", anchor: dockBottom, order: 40,
+		id: "term", title: "Terminal", icon: "toolwindows/terminal", anchor: dockBottom, order: 10, stripe: true,
 		open: func(m *Model) {
 			m.term.visible = true
 			if m.ctx == nil || m.mgr == nil {
@@ -112,7 +147,7 @@ func init() {
 		render: func(m *Model, c *ui.Context, p *ui.Theme, _ oiColors) { m.termPanel(c, p) },
 	})
 	registerToolWindow(&toolWindowSpec{
-		id: "log", title: "Git Log", icon: "toolwindows/vcs", anchor: dockBottom, order: 50,
+		id: "log", title: "Git Log", icon: "toolwindows/vcs", anchor: dockBottom, order: 5, stripe: true,
 		open: func(m *Model) {
 			m.log.visible = true
 			if m.Root() != "" && m.ctx != nil && m.mgr != nil {
@@ -124,14 +159,25 @@ func init() {
 		render: func(m *Model, c *ui.Context, p *ui.Theme, _ oiColors) { m.logPanel(c, p) },
 	})
 	registerToolWindow(&toolWindowSpec{
-		id: "maven", title: "Maven", icon: "toolwindows/maven", anchor: dockRight, order: 110, stripe: true,
+		id: "maven", title: "Maven", icon: "toolwindows/maven", anchor: dockRight, order: 10, stripe: true,
 		open:   func(m *Model) { m.maven.visible = true; m.loadBuildModel() },
 		close:  func(m *Model) { m.maven.visible = false },
 		shown:  func(m *Model) bool { return m.maven.visible },
 		render: func(m *Model, c *ui.Context, p *ui.Theme, _ oiColors) { m.mavenPanel(c, p) },
 	})
 	registerToolWindow(&toolWindowSpec{
-		id: "find", title: "Find", icon: "toolwindows/find", anchor: dockBottom, order: 90,
+		id: "gradle", title: "Gradle", icon: "toolwindows/gradle", anchor: dockRight, order: 11, stripe: true,
+		open: func(m *Model) {
+			m.maven.gradleVisible = true
+			m.maven.activeTool = "gradle"
+			m.loadBuildModel()
+		},
+		close:  func(m *Model) { m.maven.gradleVisible = false },
+		shown:  func(m *Model) bool { return m.maven.gradleVisible },
+		render: func(m *Model, c *ui.Context, p *ui.Theme, _ oiColors) { m.gradlePanel(c, p) },
+	})
+	registerToolWindow(&toolWindowSpec{
+		id: "find", title: "Find", icon: "toolwindows/find", anchor: dockBottom, order: 5,
 		open:  func(m *Model) { m.search.visible = true },
 		close: func(m *Model) { m.search.visible = false },
 		shown: func(m *Model) bool { return m.search.visible },
@@ -140,7 +186,7 @@ func init() {
 		},
 	})
 	registerToolWindow(&toolWindowSpec{
-		id: "usages", title: "Find Usages", icon: "actions/findEntireFile", anchor: dockBottom, order: 100,
+		id: "usages", title: "Find Usages", icon: "actions/findEntireFile", anchor: dockBottom, order: 35,
 		open:  func(m *Model) { m.usages.visible = true },
 		close: func(m *Model) { m.usages.visible = false },
 		shown: func(m *Model) bool { return m.usages.visible },
@@ -173,7 +219,8 @@ func init() {
 	})
 	registerToolWindow(&toolWindowSpec{
 		id: "notifications", title: "Notifications", icon: "toolwindows/notifications", anchor: dockRight, order: 10, stripe: true,
-		open: func(m *Model) { m.markNotificationsRead() },
+		badge: func(m *Model) int { return m.unreadNotifications() },
+		open:  func(m *Model) { m.markNotificationsRead() },
 		render: func(m *Model, c *ui.Context, p *ui.Theme, oi oiColors) {
 			m.notificationsView(c, p, oi)
 		},

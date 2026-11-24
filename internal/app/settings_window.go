@@ -40,21 +40,87 @@ const (
 	settingsPageBreadcrumbs      = "editor.general.breadcrumbs"
 	settingsPageEditorTabs       = "editor.general.editorTabs"
 	settingsPageCodeFolding      = "editor.general.codeFolding"
+	settingsPageLiveTemplates    = "editor.liveTemplates"
+	settingsPagePostfix          = "editor.general.postfixCompletion"
+	settingsPageFileTemplates    = "editor.fileTemplates"
+	settingsPageVim              = "editor.vim"
 	settingsPageSystem           = "general"
 	settingsPageDateFormats      = "general.dateFormats"
 	settingsPageInlayHints       = "editor.inlayHints"
 	settingsPageEditorFont       = "editor.font"
+	settingsPageFileTypes        = "editor.files"
+	settingsPageFileEncodings    = "editor.fileEncodings"
+	settingsPageInspections      = "editor.inspections"
+	settingsPageNaturalLanguages = "editor.naturalLanguages"
+	settingsPageSpelling         = "editor.naturalLanguages.spelling"
 	settingsPageTodo             = "editor.todo"
 	settingsPageNotifications    = "notifications"
 	settingsPageAgentRegistry    = "agents.list"
 	settingsPageAgentMCP         = "agents.mcpServers"
+	settingsPageAgentMCPServer   = "agents.mcpServer"
 	settingsPageAgentPolicy      = "agents.policy"
 	settingsPageAgents           = "agents.chat"
 	settingsPageJava             = "languages.java"
+	settingsPagePrettier         = "languages.prettier"
+	settingsPageOxfmt            = "languages.oxfmt"
+	settingsPageRuff             = "python.ruff"
 	settingsPageLanguageServers  = "languages.servers"
+	settingsPageCMake            = "build.cmake"
+	settingsPageCodeStyle        = "editor.codeStyle"
+	settingsPageCodeStyleOther   = "editor.codeStyle.other"
+	settingsPageColorScheme      = "editor.colorScheme"
+	settingsPageColorSchemeGen   = "editor.colorScheme.general"
+	settingsPageColorSchemeLang  = "editor.colorScheme.language-defaults"
+	settingsPageColorSchemeDebug = "editor.colorScheme.debugger"
+	settingsPageColorSchemeCons  = "editor.colorScheme.console-colors"
 	settingsPageIssueNavigation  = "vcs.issueNavigation"
 	settingsPageUpdates          = "general.updates"
 	settingsPageProjectTrust     = "projectTrust"
+	settingsPageExternalTools    = "tools.externalTools"
+	settingsPageSSH              = "tools.sshConfigurations"
+	settingsPageTerminal         = "tools.terminal"
+	settingsPageActionsOnSave    = "tools.actionsOnSave"
+	settingsPageVCS              = "vcs"
+	settingsPageVCSCommit        = "vcs.commit"
+	settingsPageVCSConfirmation  = "vcs.confirmation"
+	settingsPageVCSGit           = "vcs.git"
+	settingsPageVCSMappings      = "vcs.mappings"
+	settingsPageVCSShelf         = "vcs.shelf"
+	settingsPageVCSLog           = "vcs.log"
+	settingsPageVCSGitHub        = "vcs.github"
+	settingsPageBuildConsole     = "build.console"
+	settingsPageDebugger         = "build.debugger"
+	settingsPageDebuggerData     = "build.debugger.dataViews"
+	settingsPageDebuggerStepping = "build.debugger.stepping"
+	settingsPagePythonDebugger   = "build.pythonDebugger"
+	settingsPageRunDebug         = "build.run"
+	settingsPageRunTargets       = "build.runTargets"
+	settingsPageDeployment       = "build.deployment"
+	settingsPageLanguageRegion   = "general.language"
+	settingsPageHTTPProxy        = "general.httpProxy"
+	settingsPageAutoImport       = "editor.general.autoImport"
+	settingsPageCodeCompletion   = "editor.general.codeCompletion"
+	settingsPageGutterIcons      = "editor.general.gutterIcons"
+	settingsPageRichTextCopy     = "editor.general.richTextCopy"
+	settingsPageSmartKeys        = "editor.general.smartKeys"
+	settingsPageInlineCompletion = "editor.general.inlineCompletion"
+	settingsPageStickyLines      = "editor.general.stickyLines"
+	settingsPageCodeEditing      = "editor.codeEditing"
+	settingsPagePython           = "python"
+	settingsPagePythonDeps       = "python.interpreter"
+	settingsPagePythonInterpret  = "python.interpreters"
+	settingsPagePythonDocstrings = "python.docstrings"
+	settingsPageGo               = "languages.go"
+	settingsPageGoBuildTags      = "languages.go.buildTags"
+	settingsPageGoModules        = "languages.go.modules"
+	settingsPageNode             = "languages.node"
+	settingsPageMarkdown         = "languages.markdown"
+	settingsPagePHP              = "languages.php"
+	settingsPageRuby             = "languages.ruby"
+	settingsPageRust             = "languages.rust"
+	settingsPageTypeScript       = "languages.typescript"
+	settingsPageGradle           = "build.gradle"
+	settingsPageMaven            = "build.maven"
 )
 
 // settingsDraft is the value of each staged setting. The zero value follows
@@ -62,18 +128,76 @@ const (
 // free text width in columns. The appearance switches are the shown state, the
 // way the page reads, while the stored fields are the off switches.
 type settingsDraft struct {
-	theme          string
-	fontSize       float32
-	font           FontPrefs
-	dateFormat     DateFormatPrefs
-	reopenLast     bool
-	zenWidth       int
-	lineNumbers    bool
-	lineNumberMode string
-	blockCaret     bool
-	showWhitespace bool
-	indentGuides   bool
-	showFolding    bool
+	// newProjects is IDEA's Settings for New Projects mode. It edits the
+	// global layer on every page and never selects a project override.
+	newProjects                   bool
+	theme                         string
+	preferredLightTheme           string
+	preferredDarkTheme            string
+	accent                        string
+	ideZoom                       int
+	fontSize                      float32
+	font                          FontPrefs
+	useCustomFont                 bool
+	uiFontFamily                  string
+	uiFontFallback                string
+	uiFontSize                    int
+	contrastScrollbars            bool
+	redGreenVision                bool
+	differentToolWindowBackground bool
+	smallTreeIndents              bool
+	fullPathInTitle               bool
+	projectColorsInToolbar        bool
+	dndWithAltOnly                bool
+	menuIcons                     bool
+	mainMenuStyle                 string
+	mainMenuAlt                   bool
+	ideAntialiasing               string
+	editorAntialiasing            string
+	widescreenToolWindows         bool
+	dateFormat                    DateFormatPrefs
+	reopenLast                    bool
+	openProjectIn                 string
+	defaultProjectDirectory       string
+	autoSave                      bool
+	syncOnFocus                   bool
+	saveOnIdle                    bool
+	idleSeconds                   int
+	localHistoryDays              int
+	localHistoryMaxMB             int
+	localDataDir                  string
+	localDataMove                 bool
+	confirmExit                   bool
+	closeWithoutWelcome           bool
+	closeTabsWithWindow           bool
+	showToolWindowBadges          bool
+	showMainToolbar               bool
+	showToolWindowBars            bool
+	showToolWindowNames           bool
+	showStatusBar                 bool
+	compactMode                   bool
+	navigationBar                 string
+	zenWidth                      int
+	lineNumbers                   bool
+	lineNumberMode                string
+	caretBlinking                 bool
+	caretBlinkPeriod              int
+	smoothCaretBlinking           bool
+	blockCaret                    bool
+	smoothCaretMovement           bool
+	caretMovementStyle            string
+	hardWrapGuides                bool
+	methodSeparators              bool
+	showWhitespace                bool
+	whitespaceLeading             bool
+	whitespaceInner               bool
+	whitespaceTrailing            bool
+	indentGuides                  bool
+	rainbowIndentGuides           bool
+	intentionBulb                 bool
+	showFolding                   bool
+	foldImports                   bool
+	renderDocComments             bool
 	// showBreadcrumbs and breadcrumbPlacement are Breadcrumbs' switches, the
 	// placement "top" or "bottom" as the page's radios read.
 	showBreadcrumbs     bool
@@ -153,8 +277,42 @@ type settingsDraft struct {
 	updateWhatsNew    bool
 	updateSource      string
 	updateLastChecked int64
-	// keymap is the staged override map. A nil map means defaults.
-	keymap map[string][]string
+	// externalTools is the staged Tools › External Tools table.
+	externalTools []ExternalToolPrefs
+	// templates stages live, postfix and file templates. They persist in
+	// templates.json rather than the ordinary preferences file.
+	templates TemplatePrefs
+	// vimEnabled and vimHandlers stage Settings › Editor › Vim before Apply.
+	vimEnabled  bool
+	vimHandlers map[string]string
+	// keymapPreset and keymap are the staged preset and override map.
+	keymapPreset string
+	keymap       map[string][]string
+}
+
+func uiFontFamilyOr(family string) string {
+	if family = strings.TrimSpace(family); family != "" {
+		return family
+	}
+	return oiFontUI
+}
+
+func mainMenuStyleOrDefault(style string) string {
+	switch style {
+	case "merged", "toolbar":
+		return style
+	default:
+		return "hamburger"
+	}
+}
+
+func antialiasingOrDefault(mode string) string {
+	switch mode {
+	case "subpixel", "none":
+		return mode
+	default:
+		return "greyscale"
+	}
 }
 
 // notifyPrefs is the staged Notifications page as the preferences store it.
@@ -193,20 +351,41 @@ func (d settingsDraft) appearance() EditorAppearance {
 	if files == defaultSoftWrapFiles {
 		files = ""
 	}
+	blinkPeriod := d.caretBlinkPeriod
+	if blinkPeriod == defaultCaretBlinkPeriod {
+		blinkPeriod = 0
+	}
+	movement := d.caretMovementStyle
+	if movement == "snappy" {
+		movement = ""
+	}
 	lineNumberMode := ""
-	if d.lineNumberMode == "relative" {
-		lineNumberMode = "relative"
+	if d.lineNumberMode == "relative" || d.lineNumberMode == "hybrid" {
+		lineNumberMode = d.lineNumberMode
 	}
 	return EditorAppearance{
-		NoLineNumbers:  !d.lineNumbers,
-		LineNumberMode: lineNumberMode,
-		BlockCaret:     d.blockCaret,
-		ShowWhitespace: d.showWhitespace,
-		NoIndentGuides: !d.indentGuides,
-		NoFolding:      !d.showFolding,
-		SoftWrap:       d.softWrap,
-		SoftWrapFiles:  files,
-		ScrollPastEnd:  d.scrollPastEnd,
+		NoLineNumbers:        !d.lineNumbers,
+		LineNumberMode:       lineNumberMode,
+		BlockCaret:           d.blockCaret,
+		NoCaretBlinking:      !d.caretBlinking,
+		CaretBlinkPeriod:     blinkPeriod,
+		SmoothCaretBlink:     d.smoothCaretBlinking,
+		SmoothCaretMovement:  d.smoothCaretMovement,
+		CaretMovementStyle:   movement,
+		NoHardWrapGuides:     !d.hardWrapGuides,
+		MethodSeparators:     d.methodSeparators,
+		NoIntentionBulb:      !d.intentionBulb,
+		ShowWhitespace:       d.showWhitespace,
+		NoWhitespaceLeading:  !d.whitespaceLeading,
+		NoWhitespaceInner:    !d.whitespaceInner,
+		NoWhitespaceTrailing: !d.whitespaceTrailing,
+		RainbowIndentGuides:  d.rainbowIndentGuides,
+		NoIndentGuides:       !d.indentGuides,
+		NoFolding:            !d.showFolding,
+		NoFoldImports:        !d.foldImports,
+		SoftWrap:             d.softWrap,
+		SoftWrapFiles:        files,
+		ScrollPastEnd:        d.scrollPastEnd,
 	}
 }
 
@@ -430,7 +609,7 @@ type settingsPageSpec struct {
 // editor.general keeps its Appearance sub-page, and the group folders are
 // synthesized from these.
 func settingsPages() []settingsPageSpec {
-	return []settingsPageSpec{
+	pages := []settingsPageSpec{
 		{
 			id:    settingsPageAppearance,
 			title: "Appearance",
@@ -438,8 +617,32 @@ func settingsPages() []settingsPageSpec {
 			order: 0,
 			keywords: []string{
 				"theme", "colour", "color", "dark", "light", "zoom", "font", "compact",
+				"sync with os", "preferred theme", "preferred light theme",
+				"preferred dark theme", "tool window names", "stripe labels",
+				"custom ui font", "fallback font", "contrast scrollbars",
+				"red-green vision", "different tool window background",
+				"small tree indents", "full path", "project colors", "menu icons",
+				"antialiasing", "widescreen tool windows",
 			},
-			labels:  []string{"Theme", "Sync with OS", "Light", "Dark"},
+			labels: []string{
+				"Theme", "Sync with OS", "Light", "Dark",
+				"Preferred themes for light and dark OS mode",
+				"Preferred theme for light OS mode",
+				"Preferred theme for dark OS mode",
+				"Use custom font", "UI font:", "Fallback font:", "Size:",
+				"Use contrast scrollbars",
+				"Adjust colors for red-green vision deficiency",
+				"Always show full path in window header",
+				"Use project colors in main toolbar",
+				"Different tool window background",
+				"Drag-and-drop with Alt pressed only",
+				"Use smaller indents in trees", "Display icons in menu items",
+				"Open main menu with a lone Alt press", "Main menu:",
+				"Subpixel", "Greyscale", "No antialiasing",
+				"Show tool window names",
+				"Show tool window badges",
+				"Widescreen tool window layout",
+			},
 			section: "appearance",
 		},
 		{
@@ -449,10 +652,24 @@ func settingsPages() []settingsPageSpec {
 			order: 1,
 			keywords: []string{
 				"general", "startup", "exit", "quit", "autosave", "save",
-				"local history", "welcome", "editor tabs",
+				"local history", "welcome", "editor tabs", "new window",
+				"current window", "default directory", "idle", "working days",
 			},
 			labels: []string{
-				"Reopen projects on startup", "Local data directory", "Show in Finder",
+				"Reopen projects on startup", "Open project in", "New window",
+				"Current window", "Ask", "Default directory",
+				"This directory is preselected in Open and New Window dialogs.",
+				"Current location", "Local data directory", "Show in Finder",
+				"Browse…", "Use default", "Copy existing data to the new location",
+				"Save files if the IDE is idle for", "seconds",
+				"Save files when switching to a different application or a built-in terminal",
+				"Synchronize external changes when switching to the IDE window",
+				"Keep local history for", "working days",
+				"Maximum local history size per project", "MB",
+				"Confirm before exiting the IDE",
+				"Close the window instead of showing the Welcome screen",
+				"When this is the only window, closing a project or file closes the window. On macOS, the app stays in the Dock.",
+				"Close all editor tabs when the window closes",
 			},
 			section: "system",
 		},
@@ -520,11 +737,19 @@ func settingsPages() []settingsPageSpec {
 			group: "Editor",
 			order: 1,
 			keywords: []string{
-				"caret", "line numbers", "whitespace", "indent guides", "distraction free", "zen",
+				"caret", "blink", "smooth", "hard wrap", "guides", "line numbers", "hybrid",
+				"method separators", "whitespace", "leading", "inner", "trailing",
+				"indent guides", "rainbow", "intention bulb", "distraction free", "zen",
+				"documentation comments", "rendered docs",
 			},
 			labels: []string{
-				"Use block caret", "Show line numbers", "Absolute", "Relative",
-				"Show whitespaces", "Show indent guides",
+				"Caret blinking (ms):", "Use smooth caret blinking", "Use block caret",
+				"Use smooth caret movement", "Snappy", "Gliding",
+				"Show hard wrap and visual guides (configured in Code Style options)",
+				"Show line numbers", "Absolute", "Relative", "Hybrid", "Show method separators",
+				"Show whitespaces", "Leading", "Inner", "Trailing",
+				"Show indent guides", "Rainbow indent guides", "Show intention bulb",
+				"Render documentation comments",
 				"Distraction free mode text width:",
 			},
 			section: "editorAppearance",
@@ -549,7 +774,9 @@ func settingsPages() []settingsPageSpec {
 				"activate",
 			},
 			labels: []string{
-				"Tab placement", "Top", "Bottom", "None",
+				"Tab placement", "Top", "Bottom", "Left", "Right", "None",
+				"Show tabs in", "One row, and if tabs don't fit", "Scroll the tabs panel",
+				"Squeeze tabs", "Multiple rows", "Show file icon",
 				"Show pinned tabs in a separate row", "Show file extension",
 				"Show directory for non-unique file names", "Mark modified (*)",
 				"Show full path on mouse hover", "Close button position:", "Right", "Left",
@@ -570,8 +797,65 @@ func settingsPages() []settingsPageSpec {
 			keywords: []string{
 				"fold", "collapse",
 			},
-			labels:  []string{"Show code folding outline", "Fold by default:"},
+			labels: []string{
+				"Show code folding outline", "Fold by default", "File header", "Imports",
+				"Documentation comments",
+			},
 			section: "codeFolding",
+		},
+		{
+			id:    settingsPageVim,
+			title: "Vim",
+			group: "Editor",
+			order: 45,
+			keywords: []string{
+				"vim", "ideavim", "ideavimrc", "emulation", "shortcut conflicts", "handler",
+			},
+			labels: []string{
+				"Enable Vim emulation", "Vim rc file", "Configuration file", "Reload",
+				"mappings", "No Vim rc file found.",
+				"Supported: set options, map variants, let mapleader, source, and :action mappings.",
+				"Ignored lines", "Shortcut conflicts", "Shortcut", "IDE action",
+				"Vim", "Handler", "Reset to Defaults",
+			},
+			section: "vim",
+		},
+		{
+			id:       settingsPageLiveTemplates,
+			title:    "Live Templates",
+			group:    "Editor",
+			order:    46,
+			keywords: []string{"snippet", "abbreviation", "template", "surround", "variable"},
+			labels: []string{
+				"Enable Live Templates", "Case sensitive abbreviations", "Templates",
+				"Abbreviation", "Description", "Contexts", "Template Text",
+			},
+			section: "liveTemplates",
+		},
+		{
+			id:       settingsPagePostfix,
+			title:    "Postfix Completion",
+			group:    "Editor",
+			order:    47,
+			keywords: []string{"postfix", "dot", "completion", "if", "not", "return"},
+			labels:   []string{"Enable postfix completion", "Templates", "Postfix", "Description"},
+			section:  "postfixCompletion",
+		},
+		{
+			id:    settingsPageFileTemplates,
+			title: "File and Code Templates",
+			group: "Editor",
+			order: 48,
+			keywords: []string{
+				"file template", "code template", "include", "header", "class",
+				"scheme", "project scheme", "new file",
+			},
+			labels: []string{
+				"Scheme", "Settings for", "Default", "Project", "Files",
+				"Name", "Extension", "Default name", "Name style", "Package style",
+				"Kinds", "Template body", "Include name",
+			},
+			section: "fileTemplates",
 		},
 		{
 			id:    settingsPageInlayHints,
@@ -603,6 +887,67 @@ func settingsPages() []settingsPageSpec {
 			section: "editorFont",
 		},
 		{
+			id:    settingsPageFileTypes,
+			title: "File Types",
+			group: "Editor",
+			order: 29,
+			keywords: []string{
+				"file types", "patterns", "hashbangs", "associated applications",
+				"override file type", "file type override", "ignored files", "ignored names",
+				"exclude patterns", "excluded files", "open with", "extension", "file name",
+				"glob", "language",
+			},
+			labels: []string{
+				"Filter file types", "Recognized File Types", "File name patterns",
+				"Hashbang patterns", "Files opened in associated applications", "Override File Type",
+				"Revert", "Ignored Files and Folders", "Ignore files and folders", "Exclude patterns",
+				"Add", "Remove",
+			},
+			section: "fileTypes",
+		},
+		{
+			id:    settingsPageInspections,
+			title: "Inspections",
+			group: "Editor",
+			order: 25,
+			keywords: []string{
+				"inspection", "profile", "severity", "warning", "error", "typo",
+				"proofreading", "syntax", "dependency", "diagnostic", "copy profile",
+				"rename profile", "delete profile", "duplicate profile", "profile actions",
+			},
+			labels: []string{
+				"Profile", "Default", "Project Default", "Search inspections",
+				"Enabled", "Severity", "As reported", "Options", "Process code",
+				"Process literals", "Process comments", "Restore Defaults", "Profile Actions",
+				"Duplicate", "Copy to IDE", "Copy to Project", "Rename", "Delete",
+			},
+			section: "inspections",
+		},
+		{
+			id:       settingsPageNaturalLanguages,
+			title:    "Natural Languages",
+			group:    "Editor",
+			order:    26,
+			keywords: []string{"natural languages", "English", "grammar", "proofreading"},
+			labels:   []string{"English (USA, UK)", "Used by Proofreading › Typo"},
+			section:  "naturalLanguages",
+		},
+		{
+			id:    settingsPageSpelling,
+			title: "Spelling",
+			group: "Editor",
+			order: 1,
+			keywords: []string{
+				"spelling", "typo", "dictionary", "accepted words", "project dictionary",
+				"application dictionary", "custom dictionaries", "hunspell",
+			},
+			labels: []string{
+				"Accepted words", "Project dictionary", "Application dictionary",
+				"Custom dictionaries", "Dictionary files", "Add", "Remove",
+			},
+			section: "spelling",
+		},
+		{
 			id:    settingsPageTodo,
 			title: "TODO",
 			group: "Editor",
@@ -617,6 +962,30 @@ func settingsPages() []settingsPageSpec {
 			section: "todo",
 		},
 		{
+			id:    settingsPageExternalTools,
+			title: "External Tools",
+			group: "Tools",
+			order: 602,
+			keywords: []string{
+				"program", "arguments", "macro", "working directory", "command",
+			},
+			labels: []string{
+				"External Tools", "Tool Settings", "Program", "Arguments",
+				"Working directory", "Insert Macro…",
+				"Synchronize files after execution", "Open console for tool output",
+			},
+			section: "externalTools",
+		},
+		{
+			id:       settingsPageSSH,
+			title:    "SSH Configurations",
+			group:    "Tools",
+			order:    603,
+			keywords: []string{"ssh", "remote", "host", "server", "key pair", "private key", "agent"},
+			labels:   []string{"SSH Configurations", "Configure…", "Open SSH Configurations"},
+			section:  "ssh",
+		},
+		{
 			id:    settingsPageLanguageServers,
 			title: "Language Servers",
 			group: "Languages & Frameworks",
@@ -627,6 +996,27 @@ func settingsPages() []settingsPageSpec {
 			},
 			labels:  []string{"Language Servers", "Install", "Uninstall", "Reload"},
 			section: "languageServers",
+		},
+		{
+			id:       settingsPageRunTargets,
+			title:    "Run Targets",
+			group:    "Build, Execution, Deployment",
+			order:    364,
+			keywords: []string{"ssh", "remote", "target", "run on", "docker", "container"},
+			labels:   []string{"Run Targets", "Configure…", "Open Run Targets"},
+			section:  "runTargets",
+		},
+		{
+			id:    settingsPageDeployment,
+			title: "Deployment",
+			group: "Build, Execution, Deployment",
+			order: 365,
+			keywords: []string{
+				"local", "sftp", "ftp", "ssh", "server", "upload", "remote host",
+				"mappings", "deploy",
+			},
+			labels:  []string{"Deployment", "Deployment servers", "Configure…", "Open Deployment"},
+			section: "deployment",
 		},
 		{
 			id:    settingsPageIssueNavigation,
@@ -654,6 +1044,47 @@ func settingsPages() []settingsPageSpec {
 				"eclipse jdt", "shared jdtls", "linked builds", "server process",
 			},
 			section: "java",
+		},
+		{
+			id:    settingsPagePrettier,
+			title: "Prettier",
+			group: "Languages & Frameworks",
+			order: 4035,
+			keywords: []string{
+				"formatter", "prettier", "markdown", "yaml", "css", "format on save",
+			},
+			labels: []string{
+				"Prettier path", "Formatting provider", "Run on save", "Enabled languages",
+				"Automatic (language server first)", "Browse…",
+			},
+			section: "prettier",
+		},
+		{
+			id:       settingsPageOxfmt,
+			title:    "oxfmt",
+			group:    "Languages & Frameworks",
+			order:    4036,
+			keywords: []string{"formatter", "oxfmt", "oxc", ".oxfmtrc.json", "format on save"},
+			labels: []string{
+				"oxfmt path", "Formatting provider", "Run on save", "Enabled languages",
+				"Automatic (language server first)", "Browse…",
+			},
+			section: "oxfmt",
+		},
+		{
+			id:    settingsPageRuff,
+			title: "Ruff",
+			group: "Languages & Frameworks",
+			order: 4033,
+			keywords: []string{
+				"formatter", "ruff", "python", "configuration directory", "ruff.toml",
+				"format on save",
+			},
+			labels: []string{
+				"Ruff path", "Configuration directory", "Formatting provider", "Run on save",
+				"Enabled languages", "Automatic (language server first)", "Browse…",
+			},
+			section: "ruff",
 		},
 		{
 			id:    settingsPageUpdates,
@@ -751,6 +1182,9 @@ func settingsPages() []settingsPageSpec {
 			section: "agents",
 		},
 	}
+	pages = append(pages, vcsSettingsPages()...)
+	pages = append(pages, nativeSettingsPages()...)
+	return pages
 }
 
 // settingsPageByID finds a registered page.
@@ -768,9 +1202,10 @@ func settingsGroupKey(group string) string { return "group:" + group }
 
 // settingsGroupDescriptions are GROUP_DESCRIPTIONS from SettingsDialog.tsx.
 var settingsGroupDescriptions = map[string]string{
-	"Appearance & Behavior":  "Customize IDE appearance and behavior: change themes and font size, configure system settings and notifications.",
-	"Editor":                 "Configure code editing: completion, folding, tabs, fonts, colors, code style and inspections.",
-	"Languages & Frameworks": "Configure language servers, interpreters, SDKs and framework support.",
+	"Appearance & Behavior":        "Customize IDE appearance and behavior: change themes and font size, configure system settings and notifications.",
+	"Editor":                       "Configure code editing: completion, folding, tabs, fonts, colors, code style and inspections.",
+	"Languages & Frameworks":       "Configure language servers, interpreters, SDKs and framework support.",
+	"Build, Execution, Deployment": "Configure remote run targets and deployment servers.",
 }
 
 // settingsNode is one row of the page tree; page is nil on a group folder.
@@ -936,6 +1371,15 @@ func settingsPageTexts(p settingsPageSpec) []string {
 	texts := []string{p.title, p.group}
 	texts = append(texts, p.keywords...)
 	texts = append(texts, p.labels...)
+	if def, ok := nativeSettingsDefinition(p.id); ok {
+		for _, section := range def.sections {
+			texts = append(texts, section.title)
+			for _, field := range section.fields {
+				texts = append(texts, field.label)
+			}
+		}
+		texts = append(texts, def.note)
+	}
 	return texts
 }
 
@@ -1055,6 +1499,13 @@ func (m *Model) settingsSelectPage(key string) {
 	if key == settingsPageProjectTrust {
 		m.loadProjectTrust()
 	}
+	if key == settingsPageVim {
+		m.loadVimSettingsPage()
+	}
+	if key == settingsPageLiveTemplates || key == settingsPagePostfix || key == settingsPageFileTemplates {
+		m.loadTemplateSettingsPage(key)
+	}
+	m.loadBackendCatalogSettingsPage(key)
 	if m.settingsHistoryAt < 0 || m.settingsHistoryAt >= len(m.settingsHistory) {
 		m.settingsHistory = []string{key}
 		m.settingsHistoryAt = 0
@@ -1100,6 +1551,10 @@ func (m *Model) settingsStepHistory(delta int) {
 	if key == settingsPageProjectTrust {
 		m.loadProjectTrust()
 	}
+	if key == settingsPageVim {
+		m.loadVimSettingsPage()
+	}
+	m.loadBackendCatalogSettingsPage(key)
 	m.invalidate()
 }
 
@@ -1176,8 +1631,8 @@ func (m *Model) settingsDraftFromPrefs() settingsDraft {
 		placement = "bottom"
 	}
 	lineNumberMode := "absolute"
-	if m.prefs.Editor.LineNumberMode == "relative" {
-		lineNumberMode = "relative"
+	if m.prefs.Editor.LineNumberMode == "relative" || m.prefs.Editor.LineNumberMode == "hybrid" {
+		lineNumberMode = m.prefs.Editor.LineNumberMode
 	}
 	tabPlacement := "top"
 	switch m.prefs.Tabs.Placement {
@@ -1210,74 +1665,150 @@ func (m *Model) settingsDraftFromPrefs() settingsDraft {
 		updateLast = m.prefs.Updates.LastChecked
 	}
 	return settingsDraft{
-		theme:                     m.prefs.Theme,
-		fontSize:                  m.prefs.fontSize(),
-		font:                      m.prefs.Font,
-		dateFormat:                m.prefs.dateFormatPrefs(),
-		reopenLast:                m.prefs.Startup == "reopen",
-		zenWidth:                  m.prefs.zenWidth(),
-		lineNumbers:               !m.prefs.Editor.NoLineNumbers,
-		lineNumberMode:            lineNumberMode,
-		blockCaret:                m.prefs.Editor.BlockCaret,
-		showWhitespace:            m.prefs.Editor.ShowWhitespace,
-		indentGuides:              !m.prefs.Editor.NoIndentGuides,
-		showFolding:               !m.prefs.Editor.NoFolding,
-		showBreadcrumbs:           !m.prefs.Breadcrumbs.Hidden,
-		breadcrumbPlacement:       placement,
-		breadcrumbDisabled:        uniqueSortedStrings(m.prefs.Breadcrumbs.DisabledLanguages),
-		softWrap:                  m.prefs.Editor.SoftWrap,
-		softWrapFiles:             m.prefs.Editor.softWrapFiles(),
-		softWrapIndent:            m.prefs.General.softWrapIndent(),
-		scrollPastEnd:             m.prefs.Editor.ScrollPastEnd,
-		wheelZoom:                 m.prefs.General.WheelZoom,
-		dragAndDrop:               m.prefs.General.dragAndDrop(),
-		caretScroll:               normalizedCaretScroll(m.prefs.General.CaretScroll),
-		keepTrailingOnCaretLine:   m.prefs.General.keepTrailingOnCaretLine(),
-		reformatOnSave:            m.prefs.General.ReformatOnSave,
-		markdownImageFolder:       m.prefs.General.markdownImageFolder(),
-		markdownImageNamePattern:  m.prefs.General.markdownImageNamePattern(),
-		trimTrailing:              m.prefs.SaveFiles.TrimTrailing,
-		trimAllLines:              m.prefs.SaveFiles.TrimAllLines,
-		dropTrailingBlankLines:    m.prefs.SaveFiles.DropTrailingBlankLines,
-		ensureFinalNewline:        m.prefs.SaveFiles.EnsureFinalNewline,
-		tabPlacement:              tabPlacement,
-		pinnedSeparateRow:         m.prefs.Tabs.PinnedSeparateRow,
-		showExtension:             !m.prefs.Tabs.HideExtension,
-		showDirectoryForNonUnique: !m.prefs.Tabs.NoDirectoryForNonUnique,
-		markModified:              m.prefs.Tabs.MarkModified,
-		showFullPathOnHover:       !m.prefs.Tabs.HideFullPathOnHover,
-		closePosition:             closePosition,
-		sortAlphabetically:        m.prefs.Tabs.SortAlphabetically,
-		openAtEnd:                 m.prefs.Tabs.OpenAtEnd,
-		tabLimit:                  m.prefs.Tabs.limit(),
-		activateOnClose:           m.prefs.Tabs.activation(),
-		tabClosingPolicy:          m.prefs.Tabs.closingPolicy(),
-		noPreviewTab:              m.prefs.Tabs.NoPreviewTab,
-		multipleRows:              m.prefs.Tabs.MultipleRows,
-		squeezeTabs:               m.prefs.Tabs.SqueezeTabs,
-		showFileIcon:              !m.prefs.Tabs.HideFileIcon,
-		codeVisionUsages:          m.prefs.Inlay.CodeVisionUsages(),
-		codeVisionAuthor:          m.prefs.Inlay.CodeVisionAuthor(),
-		codeVisionNoUsages:        m.prefs.Inlay.CodeVisionNoUsages(),
-		codeVisionUsagesPosition:  usagesPosition,
-		codeVisionAuthorPosition:  authorPosition,
-		todoPatterns:              todoPatterns,
-		todoCaseSensitive:         todoCase,
-		todoCommentsOnly:          todoComments,
-		notifyBalloons:            m.prefs.Notify == nil || !m.prefs.Notify.NoBalloons,
-		notifySound:               m.prefs.Notify != nil && m.prefs.Notify.Sound,
-		notifyGroups:              m.prefs.notifyGroups(),
-		agents:                    m.agentPrefs(),
-		security:                  m.agentSecurityPrefs(),
-		issueLinks:                cloneIssueLinks(m.prefs.VCS.IssueNavigation),
-		issueSelected:             -1,
-		issueEditing:              -1,
-		updateAutoCheck:           updateAuto,
-		updateWhatsNew:            updateWhats,
-		updateSource:              updateSource,
-		updateLastChecked:         updateLast,
-		keymap:                    cloneKeymap(m.prefs.Keymap),
+		theme:                         m.prefs.Theme,
+		preferredLightTheme:           m.prefs.preferredThemeName(false),
+		preferredDarkTheme:            m.prefs.preferredThemeName(true),
+		accent:                        m.prefs.Accent,
+		ideZoom:                       m.ideZoomPercent(),
+		fontSize:                      m.prefs.fontSize(),
+		font:                          m.prefs.Font,
+		useCustomFont:                 m.prefs.Appearance.UseCustomFont,
+		uiFontFamily:                  uiFontFamilyOr(m.prefs.Appearance.UIFontFamily),
+		uiFontFallback:                m.prefs.Appearance.UIFontFallback,
+		uiFontSize:                    int(m.prefs.uiFontSize()),
+		contrastScrollbars:            m.prefs.Appearance.ContrastScrollbars,
+		redGreenVision:                m.prefs.Appearance.RedGreenVision,
+		differentToolWindowBackground: m.prefs.Appearance.DifferentToolWindowBackground,
+		smallTreeIndents:              m.prefs.Appearance.SmallTreeIndents,
+		fullPathInTitle:               m.prefs.Appearance.FullPathInTitle,
+		projectColorsInToolbar:        m.prefs.projectColorsInToolbar(),
+		dndWithAltOnly:                m.prefs.Appearance.DndWithAltOnly,
+		menuIcons:                     m.prefs.menuIconsVisible(),
+		mainMenuStyle:                 mainMenuStyleOrDefault(m.prefs.Appearance.MainMenuStyle),
+		mainMenuAlt:                   m.prefs.mainMenuAltFocuses(),
+		ideAntialiasing:               antialiasingOrDefault(m.prefs.Appearance.IDEAntialiasing),
+		editorAntialiasing:            antialiasingOrDefault(m.prefs.Appearance.EditorAntialiasing),
+		widescreenToolWindows:         m.prefs.Appearance.WidescreenToolWindows,
+		dateFormat:                    m.prefs.dateFormatPrefs(),
+		reopenLast:                    m.prefs.reopenLastProject(),
+		showToolWindowBadges:          m.prefs.toolWindowBadgesVisible(),
+		showMainToolbar:               !m.prefs.Appearance.HideMainToolbar,
+		showToolWindowBars:            !m.prefs.Appearance.HideToolWindowBars,
+		showToolWindowNames:           m.prefs.Appearance.ShowToolWindowNames,
+		showStatusBar:                 !m.prefs.Appearance.HideStatusBar,
+		compactMode:                   m.prefs.Appearance.CompactMode,
+		navigationBar:                 m.navigationBarPosition(),
+		zenWidth:                      m.prefs.zenWidth(),
+		lineNumbers:                   !m.prefs.Editor.NoLineNumbers,
+		lineNumberMode:                lineNumberMode,
+		caretBlinking:                 !m.prefs.Editor.NoCaretBlinking,
+		caretBlinkPeriod:              m.prefs.Editor.caretBlinkMillis(),
+		smoothCaretBlinking:           m.prefs.Editor.SmoothCaretBlink,
+		blockCaret:                    m.prefs.Editor.BlockCaret,
+		smoothCaretMovement:           m.prefs.Editor.SmoothCaretMovement,
+		caretMovementStyle:            m.prefs.Editor.caretMovement(),
+		hardWrapGuides:                !m.prefs.Editor.NoHardWrapGuides,
+		methodSeparators:              m.prefs.Editor.MethodSeparators,
+		showWhitespace:                m.prefs.Editor.ShowWhitespace,
+		whitespaceLeading:             !m.prefs.Editor.NoWhitespaceLeading,
+		whitespaceInner:               !m.prefs.Editor.NoWhitespaceInner,
+		whitespaceTrailing:            !m.prefs.Editor.NoWhitespaceTrailing,
+		indentGuides:                  !m.prefs.Editor.NoIndentGuides,
+		rainbowIndentGuides:           m.prefs.Editor.RainbowIndentGuides,
+		intentionBulb:                 !m.prefs.Editor.NoIntentionBulb,
+		showFolding:                   !m.prefs.Editor.NoFolding,
+		foldImports:                   !m.prefs.Editor.NoFoldImports,
+		renderDocComments:             m.prefs.Appearance.RenderDocComments,
+		showBreadcrumbs:               !m.prefs.Breadcrumbs.Hidden,
+		breadcrumbPlacement:           placement,
+		breadcrumbDisabled:            uniqueSortedStrings(m.prefs.Breadcrumbs.DisabledLanguages),
+		softWrap:                      m.prefs.Editor.SoftWrap,
+		softWrapFiles:                 m.prefs.Editor.softWrapFiles(),
+		softWrapIndent:                m.prefs.General.softWrapIndent(),
+		scrollPastEnd:                 m.prefs.Editor.ScrollPastEnd,
+		wheelZoom:                     m.prefs.General.WheelZoom,
+		dragAndDrop:                   m.prefs.General.dragAndDrop(),
+		caretScroll:                   normalizedCaretScroll(m.prefs.General.CaretScroll),
+		keepTrailingOnCaretLine:       m.prefs.General.keepTrailingOnCaretLine(),
+		reformatOnSave:                m.prefs.General.ReformatOnSave,
+		markdownImageFolder:           m.prefs.General.markdownImageFolder(),
+		markdownImageNamePattern:      m.prefs.General.markdownImageNamePattern(),
+		trimTrailing:                  m.prefs.SaveFiles.TrimTrailing,
+		trimAllLines:                  m.prefs.SaveFiles.TrimAllLines,
+		dropTrailingBlankLines:        m.prefs.SaveFiles.DropTrailingBlankLines,
+		ensureFinalNewline:            m.prefs.SaveFiles.EnsureFinalNewline,
+		tabPlacement:                  tabPlacement,
+		pinnedSeparateRow:             m.prefs.Tabs.PinnedSeparateRow,
+		showExtension:                 !m.prefs.Tabs.HideExtension,
+		showDirectoryForNonUnique:     !m.prefs.Tabs.NoDirectoryForNonUnique,
+		markModified:                  m.prefs.Tabs.MarkModified,
+		showFullPathOnHover:           !m.prefs.Tabs.HideFullPathOnHover,
+		closePosition:                 closePosition,
+		sortAlphabetically:            m.prefs.Tabs.SortAlphabetically,
+		openAtEnd:                     m.prefs.Tabs.OpenAtEnd,
+		tabLimit:                      m.prefs.Tabs.limit(),
+		activateOnClose:               m.prefs.Tabs.activation(),
+		tabClosingPolicy:              m.prefs.Tabs.closingPolicy(),
+		noPreviewTab:                  m.prefs.Tabs.NoPreviewTab,
+		multipleRows:                  m.prefs.Tabs.MultipleRows,
+		squeezeTabs:                   m.prefs.Tabs.SqueezeTabs,
+		showFileIcon:                  !m.prefs.Tabs.HideFileIcon,
+		codeVisionUsages:              m.prefs.Inlay.CodeVisionUsages(),
+		codeVisionAuthor:              m.prefs.Inlay.CodeVisionAuthor(),
+		codeVisionNoUsages:            m.prefs.Inlay.CodeVisionNoUsages(),
+		codeVisionUsagesPosition:      usagesPosition,
+		codeVisionAuthorPosition:      authorPosition,
+		todoPatterns:                  todoPatterns,
+		todoCaseSensitive:             todoCase,
+		todoCommentsOnly:              todoComments,
+		notifyBalloons:                m.prefs.Notify == nil || !m.prefs.Notify.NoBalloons,
+		notifySound:                   m.prefs.Notify != nil && m.prefs.Notify.Sound,
+		notifyGroups:                  m.prefs.notifyGroups(),
+		openProjectIn:                 m.prefs.System.openProjectIn(),
+		defaultProjectDirectory:       m.prefs.System.DefaultProjectDirectory,
+		autoSave:                      m.prefs.System.autoSave(),
+		syncOnFocus:                   m.prefs.System.syncOnFocus(),
+		saveOnIdle:                    m.prefs.System.SaveOnIdle,
+		idleSeconds:                   m.prefs.System.idleSeconds(),
+		localHistoryDays:              m.prefs.System.localHistoryDays(),
+		localHistoryMaxMB:             m.prefs.System.localHistoryMaxMB(),
+		localDataDir:                  m.customLocalDataDir(),
+		localDataMove:                 true,
+		confirmExit:                   m.prefs.System.confirmExit(),
+		closeWithoutWelcome:           m.prefs.System.CloseWithoutWelcome,
+		closeTabsWithWindow:           m.prefs.System.CloseTabsWithWindow,
+		agents:                        m.agentPrefs(),
+		security:                      m.agentSecurityPrefs(),
+		issueLinks:                    cloneIssueLinks(m.prefs.VCS.IssueNavigation),
+		issueSelected:                 -1,
+		issueEditing:                  -1,
+		updateAutoCheck:               updateAuto,
+		updateWhatsNew:                updateWhats,
+		updateSource:                  updateSource,
+		updateLastChecked:             updateLast,
+		externalTools:                 cloneExternalTools(m.prefs.ExternalTools),
+		templates:                     cloneTemplatePrefs(*m.templates()),
+		vimEnabled:                    m.prefs.Vim.Enabled,
+		vimHandlers:                   cloneVimHandlers(m.prefs.Vim.Handlers),
+		keymapPreset:                  m.keymapPresetID(),
+		keymap:                        cloneKeymap(m.prefs.Keymap),
 	}
+}
+
+func cloneExternalTools(tools []ExternalToolPrefs) []ExternalToolPrefs {
+	return append([]ExternalToolPrefs(nil), tools...)
+}
+
+func sameExternalTools(a, b []ExternalToolPrefs) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // settingsSetTheme stages the appearance and previews it in the window.
@@ -1291,6 +1822,27 @@ func (m *Model) settingsSetTheme(theme string) {
 		return
 	}
 	m.settingsDraft.theme = theme
+	if theme != "" {
+		m.settingsThemePrefs = false
+	}
+	m.settingsPreview()
+}
+
+// settingsSetPreferredTheme stages the theme used when Sync with OS resolves
+// to the light or dark system appearance.
+func (m *Model) settingsSetPreferredTheme(dark bool, theme string) {
+	theme = normalizedPreferredThemeName(theme, dark)
+	if dark {
+		if m.settingsDraft.preferredDarkTheme == theme {
+			return
+		}
+		m.settingsDraft.preferredDarkTheme = theme
+	} else {
+		if m.settingsDraft.preferredLightTheme == theme {
+			return
+		}
+		m.settingsDraft.preferredLightTheme = theme
+	}
 	m.settingsPreview()
 }
 
@@ -1383,13 +1935,41 @@ func (m *Model) settingsSetLineNumbers(on bool) {
 
 // settingsSetLineNumberMode stages Absolute or Relative line numbers.
 func (m *Model) settingsSetLineNumberMode(mode string) {
-	if mode != "relative" {
+	if mode != "relative" && mode != "hybrid" {
 		mode = "absolute"
 	}
 	if m.settingsDraft.lineNumberMode == mode {
 		return
 	}
 	m.settingsDraft.lineNumberMode = mode
+	m.settingsPreview()
+}
+
+// settingsSetCaretBlinking stages whether the caret blinks.
+func (m *Model) settingsSetCaretBlinking(on bool) {
+	if m.settingsDraft.caretBlinking == on {
+		return
+	}
+	m.settingsDraft.caretBlinking = on
+	m.settingsPreview()
+}
+
+// settingsSetCaretBlinkPeriod stages the visible blink interval.
+func (m *Model) settingsSetCaretBlinkPeriod(period int) {
+	period = max(minCaretBlinkPeriod, min(period, maxCaretBlinkPeriod))
+	if m.settingsDraft.caretBlinkPeriod == period {
+		return
+	}
+	m.settingsDraft.caretBlinkPeriod = period
+	m.settingsPreview()
+}
+
+// settingsSetSmoothCaretBlinking stages the smooth caret fade.
+func (m *Model) settingsSetSmoothCaretBlinking(on bool) {
+	if m.settingsDraft.smoothCaretBlinking == on {
+		return
+	}
+	m.settingsDraft.smoothCaretBlinking = on
 	m.settingsPreview()
 }
 
@@ -1402,12 +1982,75 @@ func (m *Model) settingsSetBlockCaret(on bool) {
 	m.settingsPreview()
 }
 
+// settingsSetSmoothCaretMovement stages animated caret movement.
+func (m *Model) settingsSetSmoothCaretMovement(on bool) {
+	if m.settingsDraft.smoothCaretMovement == on {
+		return
+	}
+	m.settingsDraft.smoothCaretMovement = on
+	m.settingsPreview()
+}
+
+// settingsSetCaretMovementStyle stages Snappy or Gliding caret movement.
+func (m *Model) settingsSetCaretMovementStyle(style string) {
+	if style != "gliding" {
+		style = "snappy"
+	}
+	if m.settingsDraft.caretMovementStyle == style {
+		return
+	}
+	m.settingsDraft.caretMovementStyle = style
+	m.settingsPreview()
+}
+
+// settingsSetHardWrapGuides stages the code-style margin guides.
+func (m *Model) settingsSetHardWrapGuides(on bool) {
+	if m.settingsDraft.hardWrapGuides == on {
+		return
+	}
+	m.settingsDraft.hardWrapGuides = on
+	m.settingsPreview()
+}
+
+// settingsSetMethodSeparators stages declaration separator guides.
+func (m *Model) settingsSetMethodSeparators(on bool) {
+	if m.settingsDraft.methodSeparators == on {
+		return
+	}
+	m.settingsDraft.methodSeparators = on
+	m.settingsPreview()
+}
+
 // settingsSetShowWhitespace stages the Show whitespaces switch.
 func (m *Model) settingsSetShowWhitespace(on bool) {
 	if m.settingsDraft.showWhitespace == on {
 		return
 	}
 	m.settingsDraft.showWhitespace = on
+	m.settingsPreview()
+}
+
+// settingsSetWhitespaceParts stages the leading, inner and trailing children
+// of Show whitespaces.
+func (m *Model) settingsSetWhitespaceParts(leading, inner, trailing bool) {
+	if m.settingsDraft.whitespaceLeading == leading &&
+		m.settingsDraft.whitespaceInner == inner &&
+		m.settingsDraft.whitespaceTrailing == trailing {
+		return
+	}
+	m.settingsDraft.whitespaceLeading = leading
+	m.settingsDraft.whitespaceInner = inner
+	m.settingsDraft.whitespaceTrailing = trailing
+	m.settingsPreview()
+}
+
+// settingsSetRenderDocComments stages the Editor Appearance switch that
+// renders documentation comments as prose.
+func (m *Model) settingsSetRenderDocComments(on bool) {
+	if m.settingsDraft.renderDocComments == on {
+		return
+	}
+	m.settingsDraft.renderDocComments = on
 	m.settingsPreview()
 }
 
@@ -1420,12 +2063,43 @@ func (m *Model) settingsSetIndentGuides(on bool) {
 	m.settingsPreview()
 }
 
+// settingsSetRainbowIndentGuides stages colored indentation guides.
+func (m *Model) settingsSetRainbowIndentGuides(on bool) {
+	if m.settingsDraft.rainbowIndentGuides == on {
+		return
+	}
+	m.settingsDraft.rainbowIndentGuides = on
+	m.settingsPreview()
+}
+
+// settingsSetIntentionBulb stages the editor's intention affordance.
+func (m *Model) settingsSetIntentionBulb(on bool) {
+	if m.settingsDraft.intentionBulb == on {
+		return
+	}
+	m.settingsDraft.intentionBulb = on
+	m.settingsPreview()
+}
+
 // settingsSetShowFolding stages the Show code folding outline switch.
 func (m *Model) settingsSetShowFolding(on bool) {
 	if m.settingsDraft.showFolding == on {
 		return
 	}
 	m.settingsDraft.showFolding = on
+	if on {
+		m.applyFoldingDefaultsToTabs(m.settingsDraft.appearance())
+	}
+	m.settingsPreview()
+}
+
+// settingsSetFoldImports stages OpenIDEA's Fold by default › Imports switch.
+func (m *Model) settingsSetFoldImports(on bool) {
+	if m.settingsDraft.foldImports == on {
+		return
+	}
+	m.settingsDraft.foldImports = on
+	m.applyFoldingDefaultsToTabs(m.settingsDraft.appearance())
 	m.settingsPreview()
 }
 
@@ -1847,7 +2521,21 @@ func (m *Model) settingsRestoreTodoPatterns() {
 // settingsPreview draws the staged theme, font, editor appearance,
 // breadcrumbs and tab strip in this window.
 func (m *Model) settingsPreview() {
-	m.theme = themeForName(m.settingsDraft.theme)
+	prefs := m.prefs
+	prefs.Theme = m.settingsDraft.theme
+	prefs.Accent = m.settingsDraft.accent
+	prefs.PreferredLightTheme = m.settingsDraft.preferredLightTheme
+	prefs.PreferredDarkTheme = m.settingsDraft.preferredDarkTheme
+	prefs.Appearance.UseCustomFont = m.settingsDraft.useCustomFont
+	prefs.Appearance.UIFontFamily = m.settingsDraft.uiFontFamily
+	prefs.Appearance.UIFontFallback = m.settingsDraft.uiFontFallback
+	prefs.Appearance.UIFontSize = m.settingsDraft.uiFontSize
+	prefs.Appearance.ContrastScrollbars = m.settingsDraft.contrastScrollbars
+	prefs.Appearance.RedGreenVision = m.settingsDraft.redGreenVision
+	m.theme = prefs.themeWithAccent()
+	if m.theme == nil {
+		m.theme = prefs.systemThemeWithAccent(m.systemDark)
+	}
 	m.applyEditorFontPrefs(m.settingsDraft.font, m.settingsDraft.fontSize)
 	m.applyAppearanceToTabs(m.settingsDraft.appearance())
 	m.crumbs = m.settingsDraft.breadcrumbs()
@@ -1859,15 +2547,26 @@ func (m *Model) settingsPreview() {
 // settingsPending reports staged settings that differ from the stored ones,
 // which enables Apply.
 func (m *Model) settingsPending() bool {
-	for _, key := range []string{
+	keys := []string{
 		settingsPageAppearance, settingsPageEditorFont, settingsPageEditorAppearance,
 		settingsPageBreadcrumbs, settingsPageCodeFolding, settingsPageGeneral,
 		settingsPageEditorTabs, settingsPageInlayHints, settingsPageTodo,
 		settingsPageSystem, settingsPageDateFormats,
 		settingsPageNotifications, settingsPageAgents, settingsPageAgentPolicy,
 		settingsPageJava, settingsPageLanguageServers, settingsPageIssueNavigation,
-		settingsPageUpdates, settingsPageKeymap,
-	} {
+		settingsPageUpdates, settingsPageExternalTools, settingsPageKeymap,
+		settingsPageFileTypes, settingsPageInspections, settingsPageSpelling,
+		settingsPagePrettier, settingsPageOxfmt, settingsPageRuff,
+		settingsPageVim, settingsPageLiveTemplates, settingsPagePostfix,
+		settingsPageFileTemplates,
+	}
+	for _, def := range nativeSettingsDefinitions() {
+		if def.page.section == "nativeSettings" || def.page.section == "gutterIcons" ||
+			def.page.section == "actionsOnSave" {
+			keys = append(keys, def.page.id)
+		}
+	}
+	for _, key := range keys {
 		if m.settingsDirtyPage(key) {
 			return true
 		}
@@ -1878,15 +2577,71 @@ func (m *Model) settingsPending() bool {
 // settingsDirtyPage reports a page whose staged choice differs from the
 // stored one; its title takes the accent and it offers Reset.
 func (m *Model) settingsDirtyPage(key string) bool {
+	if nativeSettingsPageLoadable(key) {
+		if m.nativeSettingsDirty(key) {
+			return true
+		}
+		return key == settingsPageActionsOnSave &&
+			m.settingsDraft.reformatOnSave != m.prefs.General.ReformatOnSave
+	}
 	switch key {
 	case settingsPageAppearance:
-		return m.settingsDraft.theme != m.prefs.Theme
+		return m.settingsDraft.theme != m.prefs.Theme ||
+			m.settingsDraft.preferredLightTheme != m.prefs.preferredThemeName(false) ||
+			m.settingsDraft.preferredDarkTheme != m.prefs.preferredThemeName(true) ||
+			m.settingsDraft.accent != m.prefs.Accent ||
+			m.settingsDraft.ideZoom != m.ideZoomPercent() ||
+			m.settingsDraft.useCustomFont != m.prefs.Appearance.UseCustomFont ||
+			m.settingsDraft.uiFontFamily != uiFontFamilyOr(m.prefs.Appearance.UIFontFamily) ||
+			m.settingsDraft.uiFontFallback != m.prefs.Appearance.UIFontFallback ||
+			m.settingsDraft.uiFontSize != int(m.prefs.uiFontSize()) ||
+			m.settingsDraft.contrastScrollbars != m.prefs.Appearance.ContrastScrollbars ||
+			m.settingsDraft.redGreenVision != m.prefs.Appearance.RedGreenVision ||
+			m.settingsDraft.differentToolWindowBackground != m.prefs.Appearance.DifferentToolWindowBackground ||
+			m.settingsDraft.smallTreeIndents != m.prefs.Appearance.SmallTreeIndents ||
+			m.settingsDraft.fullPathInTitle != m.prefs.Appearance.FullPathInTitle ||
+			m.settingsDraft.projectColorsInToolbar != m.prefs.projectColorsInToolbar() ||
+			m.settingsDraft.dndWithAltOnly != m.prefs.Appearance.DndWithAltOnly ||
+			m.settingsDraft.menuIcons != m.prefs.menuIconsVisible() ||
+			m.settingsDraft.mainMenuStyle != mainMenuStyleOrDefault(m.prefs.Appearance.MainMenuStyle) ||
+			m.settingsDraft.mainMenuAlt != m.prefs.mainMenuAltFocuses() ||
+			m.settingsDraft.ideAntialiasing != antialiasingOrDefault(m.prefs.Appearance.IDEAntialiasing) ||
+			m.settingsDraft.editorAntialiasing != antialiasingOrDefault(m.prefs.Appearance.EditorAntialiasing) ||
+			m.settingsDraft.showToolWindowBadges != m.prefs.toolWindowBadgesVisible() ||
+			m.settingsDraft.showMainToolbar != !m.prefs.Appearance.HideMainToolbar ||
+			m.settingsDraft.showToolWindowBars != !m.prefs.Appearance.HideToolWindowBars ||
+			m.settingsDraft.showToolWindowNames != m.prefs.Appearance.ShowToolWindowNames ||
+			m.settingsDraft.widescreenToolWindows != m.prefs.Appearance.WidescreenToolWindows ||
+			m.settingsDraft.showStatusBar != !m.prefs.Appearance.HideStatusBar ||
+			m.settingsDraft.compactMode != m.prefs.Appearance.CompactMode ||
+			m.settingsDraft.navigationBar != m.navigationBarPosition()
 	case settingsPageEditorFont:
 		return m.settingsDraft.fontSize != m.prefs.fontSize() || m.settingsDraft.font != m.prefs.Font
+	case settingsPageFileTypes:
+		return m.fileTypesDirty()
+	case settingsPageInspections:
+		return m.inspectionsDirty()
+	case settingsPageSpelling:
+		return m.spellingDirty()
+	case settingsPagePrettier, settingsPageOxfmt, settingsPageRuff:
+		return m.formatterPageDirty(key)
 	case settingsPageDateFormats:
 		return !sameDateFormatPrefs(m.settingsDraft.dateFormat, m.prefs.dateFormatPrefs())
 	case settingsPageSystem:
-		return m.settingsDraft.reopenLast != (m.prefs.Startup == "reopen")
+		return m.settingsDraft.reopenLast != m.prefs.reopenLastProject() ||
+			m.settingsDraft.openProjectIn != m.prefs.System.openProjectIn() ||
+			strings.TrimSpace(m.settingsDraft.defaultProjectDirectory) !=
+				strings.TrimSpace(m.prefs.System.DefaultProjectDirectory) ||
+			m.settingsDraft.autoSave != m.prefs.System.autoSave() ||
+			m.settingsDraft.syncOnFocus != m.prefs.System.syncOnFocus() ||
+			m.settingsDraft.saveOnIdle != m.prefs.System.SaveOnIdle ||
+			m.settingsDraft.idleSeconds != m.prefs.System.idleSeconds() ||
+			m.settingsDraft.localHistoryDays != m.prefs.System.localHistoryDays() ||
+			m.settingsDraft.localHistoryMaxMB != m.prefs.System.localHistoryMaxMB() ||
+			m.settingsDraft.confirmExit != m.prefs.System.confirmExit() ||
+			m.settingsDraft.closeWithoutWelcome != m.prefs.System.CloseWithoutWelcome ||
+			m.settingsDraft.closeTabsWithWindow != m.prefs.System.CloseTabsWithWindow ||
+			(!m.localDataDirLocked() && m.targetDataDir(m.settingsDraft.localDataDir) != m.goideaDataDir())
 	case settingsPageIssueNavigation:
 		return !sameIssueLinks(m.settingsDraft.issueLinks, m.prefs.VCS.IssueNavigation)
 	case settingsPageEditorAppearance:
@@ -1895,10 +2650,24 @@ func (m *Model) settingsDirtyPage(key string) bool {
 			a.NoLineNumbers != m.prefs.Editor.NoLineNumbers ||
 			a.LineNumberMode != m.prefs.Editor.LineNumberMode ||
 			a.BlockCaret != m.prefs.Editor.BlockCaret ||
+			a.NoCaretBlinking != m.prefs.Editor.NoCaretBlinking ||
+			a.caretBlinkMillis() != m.prefs.Editor.caretBlinkMillis() ||
+			a.SmoothCaretBlink != m.prefs.Editor.SmoothCaretBlink ||
+			a.SmoothCaretMovement != m.prefs.Editor.SmoothCaretMovement ||
+			a.caretMovement() != m.prefs.Editor.caretMovement() ||
+			a.NoHardWrapGuides != m.prefs.Editor.NoHardWrapGuides ||
+			a.MethodSeparators != m.prefs.Editor.MethodSeparators ||
+			a.NoIntentionBulb != m.prefs.Editor.NoIntentionBulb ||
 			a.ShowWhitespace != m.prefs.Editor.ShowWhitespace ||
-			a.NoIndentGuides != m.prefs.Editor.NoIndentGuides
+			a.NoWhitespaceLeading != m.prefs.Editor.NoWhitespaceLeading ||
+			a.NoWhitespaceInner != m.prefs.Editor.NoWhitespaceInner ||
+			a.NoWhitespaceTrailing != m.prefs.Editor.NoWhitespaceTrailing ||
+			a.NoIndentGuides != m.prefs.Editor.NoIndentGuides ||
+			a.RainbowIndentGuides != m.prefs.Editor.RainbowIndentGuides ||
+			m.settingsDraft.renderDocComments != m.prefs.Appearance.RenderDocComments
 	case settingsPageCodeFolding:
-		return !m.settingsDraft.showFolding != m.prefs.Editor.NoFolding
+		return !m.settingsDraft.showFolding != m.prefs.Editor.NoFolding ||
+			!m.settingsDraft.foldImports != m.prefs.Editor.NoFoldImports
 	case settingsPageBreadcrumbs:
 		return !sameBreadcrumbPrefs(m.settingsDraft.breadcrumbs(), m.prefs.Breadcrumbs)
 	case settingsPageGeneral:
@@ -1930,8 +2699,16 @@ func (m *Model) settingsDirtyPage(key string) bool {
 			m.settingsDraft.todoCommentsOnly != commentsOnly
 	case settingsPageUpdates:
 		return !sameUpdatePrefs(m.settingsDraft.updatePrefs(), m.prefs.Updates)
+	case settingsPageExternalTools:
+		return !sameExternalTools(m.settingsDraft.externalTools, m.prefs.ExternalTools)
+	case settingsPageVim:
+		return m.settingsDraft.vimEnabled != m.prefs.Vim.Enabled ||
+			!sameVimHandlers(m.settingsDraft.vimHandlers, m.prefs.Vim.Handlers)
+	case settingsPageLiveTemplates, settingsPagePostfix, settingsPageFileTemplates:
+		return m.templateSettingsDirty(key)
 	case settingsPageKeymap:
-		return !sameKeymaps(m.settingsDraft.keymap, m.prefs.Keymap)
+		return m.settingsDraft.keymapPreset != m.keymapPresetID() ||
+			!sameKeymaps(m.settingsDraft.keymap, m.prefs.Keymap)
 	}
 	return false
 }
@@ -1939,16 +2716,71 @@ func (m *Model) settingsDirtyPage(key string) bool {
 // settingsResetPage drops the current page's staged choices, as resetPage
 // does.
 func (m *Model) settingsResetPage() {
+	if nativeSettingsPageLoadable(m.settingsPage) {
+		m.resetNativeSettingsPage(m.settingsPage)
+		m.settingsPreview()
+		return
+	}
 	switch m.settingsPage {
 	case settingsPageAppearance:
 		m.settingsDraft.theme = ""
+		m.settingsDraft.preferredLightTheme = "light"
+		m.settingsDraft.preferredDarkTheme = "dark"
+		m.settingsDraft.accent = ""
+		m.settingsDraft.ideZoom = 100
+		m.settingsDraft.useCustomFont = false
+		m.settingsDraft.uiFontFamily = oiFontUI
+		m.settingsDraft.uiFontFallback = ""
+		m.settingsDraft.uiFontSize = 13
+		m.settingsDraft.contrastScrollbars = false
+		m.settingsDraft.redGreenVision = false
+		m.settingsDraft.differentToolWindowBackground = false
+		m.settingsDraft.smallTreeIndents = false
+		m.settingsDraft.fullPathInTitle = false
+		m.settingsDraft.projectColorsInToolbar = true
+		m.settingsDraft.dndWithAltOnly = false
+		m.settingsDraft.menuIcons = true
+		m.settingsDraft.mainMenuStyle = "hamburger"
+		m.settingsDraft.mainMenuAlt = true
+		m.settingsDraft.ideAntialiasing = "greyscale"
+		m.settingsDraft.editorAntialiasing = "greyscale"
+		m.settingsDraft.showMainToolbar = true
+		m.settingsDraft.showToolWindowBars = true
+		m.settingsDraft.showToolWindowNames = false
+		m.settingsDraft.widescreenToolWindows = false
+		m.settingsDraft.showStatusBar = true
+		m.settingsDraft.compactMode = false
+		m.settingsDraft.navigationBar = "statusBar"
+		m.settingsDraft.showToolWindowBadges = true
+		m.settingsThemePrefs = false
 	case settingsPageEditorFont:
 		m.settingsDraft.fontSize = defaultFontSize
 		m.settingsDraft.font = FontPrefs{}
+	case settingsPageFileTypes:
+		m.resetFileTypesDraft()
+	case settingsPageInspections:
+		m.resetInspectionsDraft()
+	case settingsPageSpelling:
+		m.resetSpellingDraft()
+	case settingsPagePrettier, settingsPageOxfmt, settingsPageRuff:
+		m.resetFormatterDraft()
 	case settingsPageDateFormats:
 		m.settingsDraft.dateFormat = defaultDateFormatPrefs()
 	case settingsPageSystem:
-		m.settingsDraft.reopenLast = false
+		m.settingsDraft.reopenLast = true
+		m.settingsDraft.openProjectIn = "ask"
+		m.settingsDraft.defaultProjectDirectory = ""
+		m.settingsDraft.autoSave = true
+		m.settingsDraft.syncOnFocus = true
+		m.settingsDraft.saveOnIdle = false
+		m.settingsDraft.idleSeconds = 15
+		m.settingsDraft.localHistoryDays = 5
+		m.settingsDraft.localHistoryMaxMB = 512
+		m.settingsDraft.localDataDir = ""
+		m.settingsDraft.localDataMove = true
+		m.settingsDraft.confirmExit = true
+		m.settingsDraft.closeWithoutWelcome = false
+		m.settingsDraft.closeTabsWithWindow = false
 	case settingsPageIssueNavigation:
 		m.settingsDraft.issueLinks = nil
 		m.settingsDraft.issueSelected = -1
@@ -1958,11 +2790,26 @@ func (m *Model) settingsResetPage() {
 		m.settingsDraft.zenWidth = defaultZenWidth
 		m.settingsDraft.lineNumbers = true
 		m.settingsDraft.lineNumberMode = "absolute"
+		m.settingsDraft.caretBlinking = true
+		m.settingsDraft.caretBlinkPeriod = defaultCaretBlinkPeriod
+		m.settingsDraft.smoothCaretBlinking = false
 		m.settingsDraft.blockCaret = false
+		m.settingsDraft.smoothCaretMovement = false
+		m.settingsDraft.caretMovementStyle = "snappy"
+		m.settingsDraft.hardWrapGuides = true
+		m.settingsDraft.methodSeparators = false
 		m.settingsDraft.showWhitespace = false
+		m.settingsDraft.whitespaceLeading = true
+		m.settingsDraft.whitespaceInner = true
+		m.settingsDraft.whitespaceTrailing = true
 		m.settingsDraft.indentGuides = true
+		m.settingsDraft.rainbowIndentGuides = false
+		m.settingsDraft.intentionBulb = true
+		m.settingsDraft.renderDocComments = false
 	case settingsPageCodeFolding:
 		m.settingsDraft.showFolding = true
+		m.settingsDraft.foldImports = true
+		m.applyFoldingDefaultsToTabs(m.settingsDraft.appearance())
 	case settingsPageBreadcrumbs:
 		m.settingsDraft.showBreadcrumbs = true
 		m.settingsDraft.breadcrumbPlacement = "top"
@@ -2030,7 +2877,18 @@ func (m *Model) settingsResetPage() {
 		m.settingsDraft.updateWhatsNew = true
 		m.settingsDraft.updateSource = "auto"
 		m.settingsDraft.updateLastChecked = 0
+	case settingsPageExternalTools:
+		m.settingsDraft.externalTools = cloneExternalTools(m.prefs.ExternalTools)
+		m.ensureExternalToolSelection()
+	case settingsPageVim:
+		m.settingsDraft.vimEnabled = false
+		m.settingsDraft.vimHandlers = nil
+		m.vim.rc = vimRcState{}
+		m.vim.rcLoaded = false
+	case settingsPageLiveTemplates, settingsPagePostfix, settingsPageFileTemplates:
+		m.resetTemplateSettingsPage(m.settingsPage)
 	case settingsPageKeymap:
+		m.settingsDraft.keymapPreset = keymapPresetDefinitionsByOS()
 		m.settingsDraft.keymap = nil
 	default:
 		return
@@ -2044,18 +2902,56 @@ func (m *Model) applySettings() {
 	if !m.applyPreferenceSettings() {
 		return
 	}
-	m.saveJavaSettingsThenLanguageServers(false)
+	m.saveBackendCatalogThenJava(false)
 }
 
 func (m *Model) applySettingsAndClose() {
 	if !m.applyPreferenceSettings() {
 		return
 	}
-	m.saveJavaSettingsThenLanguageServers(true)
+	m.saveBackendCatalogThenJava(true)
 }
 
 func (m *Model) applyPreferenceSettings() bool {
+	previousSystem := m.prefs.System
+	previousVim := m.prefs.Vim
 	m.prefs.Theme = m.settingsDraft.theme
+	m.prefs.PreferredLightTheme = storedPreferredThemeName(
+		m.settingsDraft.preferredLightTheme, false,
+	)
+	m.prefs.PreferredDarkTheme = storedPreferredThemeName(
+		m.settingsDraft.preferredDarkTheme, true,
+	)
+	m.prefs.Accent = m.settingsDraft.accent
+	m.prefs.Appearance.IDEZoom = m.settingsDraft.ideZoom
+	m.prefs.Appearance.UseCustomFont = m.settingsDraft.useCustomFont
+	m.prefs.Appearance.UIFontFamily = strings.TrimSpace(m.settingsDraft.uiFontFamily)
+	m.prefs.Appearance.UIFontFallback = strings.TrimSpace(m.settingsDraft.uiFontFallback)
+	m.prefs.Appearance.UIFontSize = max(10, min(m.settingsDraft.uiFontSize, 18))
+	m.prefs.Appearance.ContrastScrollbars = m.settingsDraft.contrastScrollbars
+	m.prefs.Appearance.RedGreenVision = m.settingsDraft.redGreenVision
+	m.prefs.Appearance.DifferentToolWindowBackground = m.settingsDraft.differentToolWindowBackground
+	m.prefs.Appearance.SmallTreeIndents = m.settingsDraft.smallTreeIndents
+	m.prefs.Appearance.FullPathInTitle = m.settingsDraft.fullPathInTitle
+	m.prefs.Appearance.DndWithAltOnly = m.settingsDraft.dndWithAltOnly
+	projectColors := m.settingsDraft.projectColorsInToolbar
+	m.prefs.Appearance.ProjectColorsInToolbar = &projectColors
+	menuIcons := m.settingsDraft.menuIcons
+	m.prefs.Appearance.MenuIcons = &menuIcons
+	m.prefs.Appearance.MainMenuStyle = m.settingsDraft.mainMenuStyle
+	mainMenuAlt := m.settingsDraft.mainMenuAlt
+	m.prefs.Appearance.MainMenuAlt = &mainMenuAlt
+	m.prefs.Appearance.IDEAntialiasing = m.settingsDraft.ideAntialiasing
+	m.prefs.Appearance.EditorAntialiasing = m.settingsDraft.editorAntialiasing
+	m.prefs.Appearance.HideMainToolbar = !m.settingsDraft.showMainToolbar
+	m.prefs.Appearance.HideToolWindowBars = !m.settingsDraft.showToolWindowBars
+	m.prefs.Appearance.ShowToolWindowNames = m.settingsDraft.showToolWindowNames
+	m.prefs.Appearance.WidescreenToolWindows = m.settingsDraft.widescreenToolWindows
+	m.prefs.Appearance.HideStatusBar = !m.settingsDraft.showStatusBar
+	m.prefs.Appearance.CompactMode = m.settingsDraft.compactMode
+	m.prefs.Appearance.NavigationBar = m.settingsDraft.navigationBar
+	showBadges := m.settingsDraft.showToolWindowBadges
+	m.prefs.Appearance.ShowToolWindowBadges = &showBadges
 	m.prefs.FontSize = m.settingsDraft.fontSize
 	m.prefs.Font = m.settingsDraft.font
 	m.prefs.DateFormat = m.settingsDraft.dateFormatPrefs()
@@ -2063,16 +2959,46 @@ func (m *Model) applyPreferenceSettings() bool {
 	if m.settingsDraft.reopenLast {
 		m.prefs.Startup = "reopen"
 	}
+	reopen := m.settingsDraft.reopenLast
+	autoSave := m.settingsDraft.autoSave
+	syncOnFocus := m.settingsDraft.syncOnFocus
+	confirmExit := m.settingsDraft.confirmExit
+	m.prefs.System = SystemPrefs{
+		ReopenLastProject:       &reopen,
+		OpenProjectIn:           m.settingsDraft.openProjectIn,
+		DefaultProjectDirectory: strings.TrimSpace(m.settingsDraft.defaultProjectDirectory),
+		AutoSave:                &autoSave,
+		SyncOnFocus:             &syncOnFocus,
+		SaveOnIdle:              m.settingsDraft.saveOnIdle,
+		IdleSeconds:             max(1, min(m.settingsDraft.idleSeconds, 3600)),
+		LocalHistoryDays:        max(1, min(m.settingsDraft.localHistoryDays, 365)),
+		LocalHistoryMaxMB:       max(16, min(m.settingsDraft.localHistoryMaxMB, 16384)),
+		ConfirmExit:             &confirmExit,
+		CloseWithoutWelcome:     m.settingsDraft.closeWithoutWelcome,
+		CloseTabsWithWindow:     m.settingsDraft.closeTabsWithWindow,
+	}
 	m.prefs.VCS.IssueNavigation = cloneIssueLinks(m.settingsDraft.issueLinks)
 	m.prefs.ZenWidth = m.settingsDraft.zenWidth
 	m.prefs.Editor = m.settingsDraft.appearance()
+	m.prefs.Appearance.RenderDocComments = m.settingsDraft.renderDocComments
 	m.prefs.General = m.settingsDraft.generalPrefs()
 	m.prefs.Inlay = m.settingsDraft.inlayPrefs()
 	m.prefs.Breadcrumbs = m.settingsDraft.breadcrumbs()
 	m.prefs.Tabs = m.settingsDraft.tabPrefs()
 	m.prefs.SaveFiles = m.settingsDraft.savePrefs()
 	m.prefs.Updates = m.settingsDraft.updatePrefs()
+	m.prefs.ExternalTools = cloneExternalTools(m.settingsDraft.externalTools)
+	m.prefs.Vim = VimPrefs{
+		Enabled:  m.settingsDraft.vimEnabled,
+		Handlers: cloneVimHandlers(m.settingsDraft.vimHandlers),
+	}
+	m.prefs.KeymapPreset = m.settingsDraft.keymapPreset
+	if _, ok := keymapPresetsByID[m.prefs.KeymapPreset]; !ok {
+		m.prefs.KeymapPreset = keymapPresetDefinitionsByOS()
+	}
 	m.prefs.Keymap = cloneKeymap(m.settingsDraft.keymap)
+	m.applyKeymapPreferences()
+	m.windowMenuChanged()
 	m.prefs.Todo = m.settingsDraft.todoPrefs()
 	m.prefs.Notify = m.settingsDraft.notifyPrefs()
 	agents := m.settingsDraft.agents.normalized()
@@ -2080,15 +3006,46 @@ func (m *Model) applyPreferenceSettings() bool {
 	security := m.settingsDraft.security.normalized()
 	m.prefs.AgentSecurity = &security
 	m.settingsErr = ""
-	if err := m.prefs.Save(m.settingsWritePath()); err != nil {
+	if err := m.savePreferences(); err != nil {
 		m.settingsErr = err.Error()
+		return false
 	}
+	if err := m.saveTemplates(m.settingsDraft.templates); err != nil {
+		m.settingsErr = "Could not save templates: " + err.Error()
+		return false
+	}
+	if !m.localDataDirLocked() && m.targetDataDir(m.settingsDraft.localDataDir) != m.goideaDataDir() {
+		if err := m.applyLocalDataDirectory(m.settingsDraft.localDataDir, m.settingsDraft.localDataMove); err != nil {
+			m.settingsErr = "Could not change the local data directory: " + err.Error()
+			return false
+		}
+	}
+	m.saveSystemSettingsBackend(previousSystem, m.prefs.System)
 	m.saveAgentSettingsBackend()
+	m.syncExternalToolActions()
 	m.applyPreferences()
+	if previousVim.Enabled && !m.prefs.Vim.Enabled {
+		m.vim.rcLoaded = false
+	}
 	m.applyTodoSettings()
 	m.settingsDraft = m.settingsDraftFromPrefs()
 	m.invalidate()
+	if m.restartPending && m.cfg.LocalDataDirConfigPath != "" {
+		m.post(m.finishQuitForSettingsRestart)
+	}
 	return m.settingsErr == ""
+}
+
+func (m *Model) finishQuitForSettingsRestart() {
+	if m == nil || !m.restartPending || m.quitting {
+		return
+	}
+	if m.workspaceHost != nil {
+		m.workspaceHost.RequestRelaunch()
+		return
+	}
+	m.quitting = true
+	m.finishQuit(true)
 }
 
 // settingsWritePath is the preferences file, or the one place a smoke run
@@ -2112,6 +3069,7 @@ func (m *Model) settingsDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	m.settingsKeymapRecorderDialog(c, p)
+	m.settingsInspectionProfileDialog(c, p)
 }
 
 // settingsSheet is the dialog: the title, the tree beside the page, and the
@@ -2157,9 +3115,13 @@ func (m *Model) settingsSideWidth() float32 {
 
 // settingsTitle is the dialog's title row.
 func (m *Model) settingsTitle(c *ui.Context, oi oiColors) {
+	title := "Settings"
+	if m.settingsDraft.newProjects {
+		title = "Settings for New Projects"
+	}
 	ui.Row(c).Height(settingsTitleHeight).Shrink(0).Padding(0, 16).
 		AlignItems(ui.Center).Children(func() {
-		ui.Text(c, "Settings").FontSize(13).Bold().TextColor(oi.textStrong).SingleLine()
+		ui.Text(c, title).FontSize(13).Bold().TextColor(oi.textStrong).SingleLine()
 	})
 }
 
@@ -2309,10 +3271,14 @@ func (m *Model) settingsFooter(c *ui.Context, p *ui.Theme, oi oiColors) {
 		} else if m.languageToolSettings.saving {
 			ui.Text(c, "Saving language servers…").FontSize(12).
 				TextColor(oi.textSubtle).SingleLine().Grow(1)
+		} else if m.settingsBackendCatalogSaving() {
+			ui.Text(c, "Saving settings…").FontSize(12).
+				TextColor(oi.textSubtle).SingleLine().Grow(1)
 		} else {
 			ui.Spacer(c)
 		}
-		saving := m.javaSettings.saving || m.languageToolSettings.saving
+		saving := m.javaSettings.saving || m.languageToolSettings.saving ||
+			m.settingsBackendCatalogSaving()
 		ui.Button(c, "Cancel").Disabled(saving).OnClick(m.closeSettings)
 		apply := ui.Button(c, "Apply").Disabled(saving || !m.settingsPending())
 		apply.OnClick(m.applySettings)

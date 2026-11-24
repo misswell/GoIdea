@@ -1,0 +1,1397 @@
+package openidea_test
+
+import (
+	"archive/tar"
+	"archive/zip"
+	"compress/bzip2"
+	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"io"
+	"io/fs"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"sort"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+
+	"mayoi/internal/adapter"
+	"mayoi/internal/openidea"
+)
+
+const (
+	acceptanceGradleVersion   = "8.10.2"
+	acceptancePrettierVersion = "3.10.1"
+	acceptanceOxfmtVersion    = "0.79.0"
+	acceptancePythonPackage   = "goidea-acceptance-package"
+	acceptanceRemovePackage   = "goidea-acceptance-remove"
+	acceptanceNoProxyHosts    = "pypi.org,files.pythonhosted.org,conda.anaconda.org,repo.anaconda.com"
+)
+
+type extendedAcceptanceTools struct {
+	work             string
+	bin              string
+	prettier         string
+	oxfmt            string
+	ruff             string
+	uv               string
+	poetry           string
+	conda            string
+	gradleHome       string
+	gradleArchive    string
+	gradleUserHome   string
+	poetryCache      string
+	poetryEnvs       string
+	uvCache          string
+	uvTools          string
+	uvToolBin        string
+	pythonInstallDir string
+	condaRoot        string
+	condaPackages    string
+	jdk11            string
+}
+
+// TestIntegrationExtendedToolchainAcceptance downloads formatter, Python and
+// Gradle executables into a temporary tree, then exercises the shipped backend
+// against them. It is opt-in because it needs network access and a JDK 11.
+// Set GOIDEA_EXTENDED_TOOLCHAIN_CACHE to reuse those downloads and tools
+// between runs.
+//
+//	GOIDEA_SERVER=$PWD/resources/openidea-server \
+//	GOIDEA_EXTENDED_TOOLCHAIN_ACCEPTANCE=1 \
+//	CGO_ENABLED=0 go test ./internal/openidea -run ExtendedToolchainAcceptance -v
+func TestIntegrationExtendedToolchainAcceptance(t *testing.T) {
+	if os.Getenv("GOIDEA_EXTENDED_TOOLCHAIN_ACCEPTANCE") != "1" {
+		t.Skip("GOIDEA_EXTENDED_TOOLCHAIN_ACCEPTANCE is not set")
+	}
+	if runtime.GOOS == "windows" {
+		t.Skip("the extended acceptance harness currently uses POSIX executable layouts")
+	}
+	tools := prepareExtendedAcceptanceTools(t)
+	configureExtendedAcceptanceEnvironment(t, tools)
+	m := launchForTest(t)
+
+	t.Run("real formatters and provider precedence", func(t *testing.T) {
+		runFormatterAcceptance(t, m, tools)
+	})
+	t.Run("isolated Python tools and package mutation", func(t *testing.T) {
+		runPythonToolAcceptance(t, m, tools)
+	})
+	t.Run("real Gradle wrapper and local distribution", func(t *testing.T) {
+		runGradleAcceptance(t, m, tools)
+	})
+
+	recordToolchainParityEvidence(t, map[string]any{
+		"extended":                true,
+		"formattersReal":          true,
+		"formatterPrettier":       true,
+		"formatterOxfmt":          true,
+		"formatterRuff":           true,
+		"formatterPrecedence":     true,
+		"pythonEnvironments":      true,
+		"pythonEnvironmentUv":     true,
+		"pythonEnvironmentPoetry": true,
+		"pythonEnvironmentConda":  true,
+		"pythonPackagesReal":      true,
+		"gradleWrapperReal":       true,
+		"gradleLocalReal":         true,
+		"gradleTestsReal":         true,
+		"gradleTestsTeamCity":     true,
+		"gradleTestsRerun":        true,
+		"gradleDaemonsStopped":    true,
+	})
+}
+
+func prepareExtendedAcceptanceTools(t *testing.T) extendedAcceptanceTools {
+	t.Helper()
+	work := acceptanceTempDir(t)
+	cacheRoot := strings.TrimSpace(os.Getenv("GOIDEA_EXTENDED_TOOLCHAIN_CACHE"))
+	if cacheRoot == "" {
+		cacheRoot = work
+	} else {
+		var err error
+		cacheRoot, err = filepath.Abs(cacheRoot)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(cacheRoot, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("extended acceptance cache: %s", cacheRoot)
+	}
+	tools := extendedAcceptanceTools{
+		work:             work,
+		bin:              filepath.Join(work, "bin"),
+		gradleUserHome:   filepath.Join(work, "gradle-user-home"),
+		poetryCache:      filepath.Join(work, "poetry-cache"),
+		poetryEnvs:       filepath.Join(work, "poetry-envs"),
+		uvCache:          filepath.Join(work, "uv-cache"),
+		uvTools:          filepath.Join(cacheRoot, "uv-tools"),
+		uvToolBin:        filepath.Join(cacheRoot, "uv-tool-bin"),
+		pythonInstallDir: filepath.Join(work, "uv-python"),
+		condaRoot:        filepath.Join(work, "micromamba"),
+		condaPackages:    filepath.Join(work, "conda-pkgs"),
+	}
+	for _, dir := range []string{
+		tools.bin, tools.gradleUserHome, tools.poetryCache, tools.poetryEnvs,
+		tools.uvCache, tools.uvTools, tools.uvToolBin, tools.pythonInstallDir,
+		tools.condaRoot, tools.condaPackages,
+	} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Fatalf("node is required: %v", err)
+	}
+	npm, err := exec.LookPath("npm")
+	if err != nil {
+		t.Fatalf("npm is required: %v", err)
+	}
+	npmRoot := filepath.Join(cacheRoot, "npm")
+	tools.prettier = filepath.Join(npmRoot, "node_modules", ".bin", "prettier")
+	tools.oxfmt = filepath.Join(npmRoot, "node_modules", ".bin", "oxfmt")
+	if !acceptanceFileExists(tools.prettier) || !acceptanceFileExists(tools.oxfmt) {
+		t.Logf("installing Prettier %s and oxfmt %s", acceptancePrettierVersion, acceptanceOxfmtVersion)
+		runAcceptanceCommand(t, work, map[string]string{
+			"npm_config_cache": filepath.Join(cacheRoot, "npm-cache"),
+			"NO_PROXY":         acceptanceNoProxyValue(),
+			"no_proxy":         acceptanceNoProxyValue(),
+		}, npm, "install", "--prefix", npmRoot, "--no-audit", "--no-fund",
+			"prettier@"+acceptancePrettierVersion, "oxfmt@"+acceptanceOxfmtVersion,
+		)
+	}
+	for _, path := range []string{tools.prettier, tools.oxfmt} {
+		if info, err := os.Stat(path); err != nil || info.IsDir() {
+			t.Fatalf("installed formatter %q: info=%v err=%v", path, info, err)
+		}
+	}
+
+	uv, err := exec.LookPath("uv")
+	if err != nil {
+		t.Fatalf("uv is required: %v", err)
+	}
+	tools.uv = filepath.Join(tools.bin, "uv")
+	if err := os.Symlink(uv, tools.uv); err != nil {
+		t.Fatal(err)
+	}
+	// uv honors these variables for tool environments and launchers, so the
+	// acceptance run never touches the user's ~/.local uv state.
+	uvEnv := map[string]string{
+		"UV_CACHE_DIR":          tools.uvCache,
+		"UV_TOOL_DIR":           tools.uvTools,
+		"UV_TOOL_BIN_DIR":       tools.uvToolBin,
+		"UV_PYTHON_INSTALL_DIR": tools.pythonInstallDir,
+		"NO_PROXY":              acceptanceNoProxyValue(),
+		"no_proxy":              acceptanceNoProxyValue(),
+	}
+	python3, err := exec.LookPath("python3")
+	if err != nil {
+		t.Fatalf("python3 is required: %v", err)
+	}
+	tools.poetry = filepath.Join(tools.uvToolBin, "poetry")
+	tools.ruff = filepath.Join(tools.uvToolBin, "ruff")
+	for _, tool := range []struct {
+		name string
+		path string
+	}{
+		{name: "Poetry", path: tools.poetry},
+		{name: "Ruff", path: tools.ruff},
+	} {
+		if acceptanceFileExists(tool.path) {
+			continue
+		}
+		t.Logf("installing %s with uv", tool.name)
+		runAcceptanceCommand(
+			t,
+			work,
+			uvEnv,
+			uv,
+			"tool", "install", "--python", python3, strings.ToLower(tool.name),
+		)
+	}
+	for _, path := range []string{tools.poetry, tools.ruff} {
+		if info, err := os.Stat(path); err != nil || info.IsDir() {
+			t.Fatalf("installed Python tool %q: info=%v err=%v", path, info, err)
+		}
+	}
+
+	mambaURL := acceptanceMicromambaURL()
+	archive := filepath.Join(cacheRoot, "micromamba-"+runtime.GOOS+"-"+runtime.GOARCH+".tar.bz2")
+	mamba := filepath.Join(cacheRoot, "micromamba-bin", "micromamba")
+	if !acceptanceFileExists(archive) {
+		downloadAcceptanceFile(t, mambaURL, archive)
+	}
+	if !acceptanceFileExists(mamba) {
+		t.Log("extracting micromamba")
+		extractMicromamba(t, archive, mamba)
+	}
+	tools.conda = filepath.Join(tools.bin, "conda")
+	if err := os.Symlink(mamba, tools.conda); err != nil {
+		t.Fatal(err)
+	}
+
+	tools.gradleArchive = filepath.Join(cacheRoot, "gradle-"+acceptanceGradleVersion+"-bin.zip")
+	tools.gradleHome = filepath.Join(cacheRoot, "gradle", "gradle-"+acceptanceGradleVersion)
+	if !acceptanceFileExists(tools.gradleArchive) {
+		downloadAcceptanceFile(t,
+			"https://services.gradle.org/distributions/gradle-"+acceptanceGradleVersion+"-bin.zip",
+			tools.gradleArchive,
+		)
+	}
+	if !acceptanceFileExists(filepath.Join(tools.gradleHome, "bin", "gradle")) {
+		t.Logf("extracting Gradle %s", acceptanceGradleVersion)
+		tools.gradleHome = extractGradle(t, tools.gradleArchive, filepath.Join(cacheRoot, "gradle"))
+	}
+	if info, err := os.Stat(filepath.Join(tools.gradleHome, "bin", "gradle")); err != nil || info.IsDir() {
+		t.Fatalf("Gradle launcher: info=%v err=%v", info, err)
+	}
+	tools.jdk11 = acceptanceJDK11(t)
+	return tools
+}
+
+func configureExtendedAcceptanceEnvironment(t *testing.T, tools extendedAcceptanceTools) {
+	t.Helper()
+	path := strings.Join([]string{tools.bin, tools.uvToolBin, os.Getenv("PATH")}, string(os.PathListSeparator))
+	for key, value := range map[string]string{
+		"PATH":                    path,
+		"JAVA_HOME":               tools.jdk11,
+		"GRADLE_USER_HOME":        tools.gradleUserHome,
+		"POETRY_CACHE_DIR":        tools.poetryCache,
+		"POETRY_VIRTUALENVS_PATH": tools.poetryEnvs,
+		"POETRY_CONFIG_DIR":       filepath.Join(tools.work, "poetry-config"),
+		"POETRY_DATA_DIR":         filepath.Join(tools.work, "poetry-data"),
+		"UV_CACHE_DIR":            tools.uvCache,
+		"UV_TOOL_DIR":             tools.uvTools,
+		"UV_TOOL_BIN_DIR":         tools.uvToolBin,
+		"UV_PYTHON_INSTALL_DIR":   tools.pythonInstallDir,
+		"XDG_CACHE_HOME":          filepath.Join(tools.work, "xdg-cache"),
+		"XDG_CONFIG_HOME":         filepath.Join(tools.work, "xdg-config"),
+		"XDG_DATA_HOME":           filepath.Join(tools.work, "xdg-data"),
+		"MAMBA_ROOT_PREFIX":       tools.condaRoot,
+		"CONDA_PKGS_DIRS":         tools.condaPackages,
+		"PIP_CACHE_DIR":           filepath.Join(tools.work, "pip-cache"),
+		// Keep the backend on this isolated search path instead of replacing it
+		// with the user's login-shell configuration.
+		"OPENIDEA_SKIP_SHELL_ENV": "1",
+		"NO_PROXY":                acceptanceNoProxyValue(),
+		"no_proxy":                acceptanceNoProxyValue(),
+	} {
+		t.Setenv(key, value)
+	}
+	for _, name := range []string{"conda", "poetry", "ruff"} {
+		if _, err := exec.LookPath(name); err != nil {
+			t.Fatalf("%s is not visible on the isolated acceptance PATH: %v", name, err)
+		}
+	}
+}
+
+func acceptanceNoProxyValue() string {
+	existing := strings.TrimSpace(os.Getenv("NO_PROXY"))
+	if existing == "" {
+		return acceptanceNoProxyHosts
+	}
+	return existing + "," + acceptanceNoProxyHosts
+}
+
+func runFormatterAcceptance(t *testing.T, m *openidea.Manager, tools extendedAcceptanceTools) {
+	t.Helper()
+	t.Log("running real formatter acceptance")
+	root := acceptanceTempDir(t)
+	writeAcceptanceFile(t, filepath.Join(root, "package.json"), `{"private":true}`)
+	tsPath := filepath.Join(root, "src", "example.ts")
+	tsInput := "const  value={a:1,b:2}\n"
+	writeAcceptanceFile(t, tsPath, tsInput)
+	pyPath := filepath.Join(root, "src", "example.py")
+	pyInput := "x=[ 1,2 ]\n"
+	writeAcceptanceFile(t, pyPath, pyInput)
+
+	const window = "extended-format"
+	openProject(t, m, window, root)
+	trustAcceptanceProject(t, m, window, root)
+	setAcceptanceSetting(t, m, window, "languages.prettier.path", tools.prettier)
+	setAcceptanceSetting(t, m, window, "languages.prettier.languages", []string{"typescript"})
+	setAcceptanceSetting(t, m, window, "languages.prettier.prefer", false)
+	setAcceptanceSetting(t, m, window, "languages.prettier.runOnSave", false)
+	setAcceptanceSetting(t, m, window, "languages.oxfmt.path", filepath.Join(tools.work, "missing-oxfmt"))
+	setAcceptanceSetting(t, m, window, "languages.oxfmt.prefer", false)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	docs := openidea.Docs{M: m, Window: window}
+	tsDoc, err := docs.DocOpen(ctx, window, tsPath)
+	if err != nil {
+		t.Fatalf("open TypeScript document: %v", err)
+	}
+	defer docs.DocClose(ctx, window, tsDoc.ID)
+	pyDoc, err := docs.DocOpen(ctx, window, pyPath)
+	if err != nil {
+		t.Fatalf("open Python document: %v", err)
+	}
+	defer docs.DocClose(ctx, window, pyDoc.ID)
+
+	prettierOutput := formatAcceptanceDocument(t, m, window, tsDoc.ID)
+	if prettierOutput == tsInput || !strings.Contains(prettierOutput, "const value = { a: 1, b: 2 };") {
+		t.Fatalf("Prettier output = %q", prettierOutput)
+	}
+
+	setAcceptanceSetting(t, m, window, "languages.prettier.path", filepath.Join(tools.work, "missing-prettier"))
+	setAcceptanceSetting(t, m, window, "languages.oxfmt.path", tools.oxfmt)
+	setAcceptanceSetting(t, m, window, "languages.oxfmt.languages", []string{"typescript"})
+	setAcceptanceSetting(t, m, window, "languages.oxfmt.prefer", true)
+	oxfmtOutput := formatAcceptanceDocument(t, m, window, tsDoc.ID)
+	if oxfmtOutput == tsInput || !strings.Contains(oxfmtOutput, "const value = { a: 1, b: 2 };") {
+		t.Fatalf("oxfmt output = %q", oxfmtOutput)
+	}
+
+	setAcceptanceSetting(t, m, window, "languages.ruff.path", tools.ruff)
+	setAcceptanceSetting(t, m, window, "languages.ruff.languages", []string{"python"})
+	setAcceptanceSetting(t, m, window, "languages.ruff.runOnSave", false)
+	ruffOutput := formatAcceptanceDocument(t, m, window, pyDoc.ID)
+	if ruffOutput == pyInput || !strings.Contains(ruffOutput, "x = [1, 2]") {
+		t.Fatalf("Ruff output = %q", ruffOutput)
+	}
+}
+
+func runPythonToolAcceptance(t *testing.T, m *openidea.Manager, tools extendedAcceptanceTools) {
+	t.Helper()
+	t.Log("running isolated uv, Poetry and Conda acceptance")
+	root := acceptanceTempDir(t)
+	writeAcceptanceFile(t, filepath.Join(root, "pyproject.toml"), `[tool.poetry]
+name = "goidea-toolchain-acceptance"
+version = "0.1.0"
+description = ""
+authors = ["GoIDEA <acceptance@example.invalid>"]
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.12"
+`)
+	const window = "extended-python"
+	openProject(t, m, window, root)
+	trustAcceptanceProject(t, m, window, root)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
+	defer cancel()
+	located, err := m.LocateTools(ctx, window, []string{"conda", "poetry", "ruff"}, root)
+	if err != nil {
+		t.Fatalf("locate isolated Python tools: %v", err)
+	}
+	for _, tool := range located.Tools {
+		if tool.Path == nil {
+			t.Fatalf("backend could not locate isolated %s on PATH: %+v", tool.Name, located)
+		}
+	}
+
+	basePath, err := exec.LookPath("python3")
+	if err != nil {
+		t.Fatal("python3 is required")
+	}
+	base, err := m.PythonInterpreter(ctx, window, basePath)
+	if err != nil || base == nil {
+		t.Fatalf("validate base Python: sdk=%+v err=%v", base, err)
+	}
+	packageV1 := writeAcceptanceWheel(
+		t, root, acceptancePythonPackage, "goidea_acceptance_package", "1.0.0",
+	)
+	packageV2 := writeAcceptanceWheel(
+		t, root, acceptancePythonPackage, "goidea_acceptance_package", "1.1.0",
+	)
+	removePackage := writeAcceptanceWheel(
+		t, root, acceptanceRemovePackage, "goidea_acceptance_remove", "1.0.0",
+	)
+	uvEnv := filepath.Join(root, ".uv-venv")
+	uvSDK, err := m.CreatePythonEnvironment(ctx, window, "uv", base.Path, uvEnv, 9101, 9102)
+	if err != nil {
+		t.Fatalf("create uv environment: %v", err)
+	}
+	assertAcceptanceInterpreter(t, uvSDK.Path, uvEnv)
+
+	packages, err := m.PythonPackages(ctx, window, uvSDK.Path, 9103)
+	if err != nil {
+		t.Fatalf("list uv packages: %v", err)
+	}
+	if len(packages) != 0 {
+		t.Fatalf("fresh uv environment packages = %+v", packages)
+	}
+	if err := m.PythonPip(ctx, window, uvSDK.Path, packageV1, false, false, 9104, 9105); err != nil {
+		t.Fatalf("install acceptance package 1.0.0: %v", err)
+	}
+	if err := m.PythonPip(ctx, window, uvSDK.Path, packageV2, false, true, 9106, 9107); err != nil {
+		t.Fatalf("upgrade acceptance package: %v", err)
+	}
+	packages, err = m.PythonPackages(ctx, window, uvSDK.Path, 9108)
+	if err != nil {
+		t.Fatalf("list upgraded uv packages: %v", err)
+	}
+	if version, ok := acceptancePackageVersion(packages, acceptancePythonPackage); !ok || version != "1.1.0" {
+		t.Fatalf("acceptance package after upgrade = %q present=%v (%+v)", version, ok, packages)
+	}
+	if err := m.PythonPip(ctx, window, uvSDK.Path, removePackage, false, false, 9109, 9110); err != nil {
+		t.Fatalf("install removable acceptance package: %v", err)
+	}
+	if err := m.PythonPip(ctx, window, uvSDK.Path, acceptanceRemovePackage, true, false, 9111, 9112); err != nil {
+		t.Fatalf("uninstall removable acceptance package: %v", err)
+	}
+	packages, err = m.PythonPackages(ctx, window, uvSDK.Path, 9113)
+	if err != nil {
+		t.Fatalf("list packages after uninstall: %v", err)
+	}
+	if _, ok := acceptancePackageVersion(packages, acceptanceRemovePackage); ok {
+		t.Fatalf("removable acceptance package remained after uninstall: %+v", packages)
+	}
+	if frozen := acceptanceFreeze(packages); frozen == "" ||
+		!strings.Contains(frozen, acceptancePythonPackage+"==1.1.0\n") {
+		t.Fatalf("frozen uv requirements = %q", frozen)
+	}
+
+	poetrySDK, err := m.CreatePythonEnvironment(
+		ctx, window, "poetry", base.Path, filepath.Join(root, ".poetry-hint"), 9114, 9115,
+	)
+	if err != nil {
+		t.Fatalf("create Poetry environment: %v", err)
+	}
+	assertAcceptanceInterpreter(t, poetrySDK.Path, tools.poetryEnvs)
+
+	condaEnv := filepath.Join(root, ".conda-env")
+	condaSDK, err := m.CreatePythonEnvironment(ctx, window, "conda", base.Path, condaEnv, 9116, 9117)
+	if err != nil {
+		t.Fatalf("create Conda environment: %v", err)
+	}
+	assertAcceptanceInterpreter(t, condaSDK.Path, condaEnv)
+	if info, err := os.Stat(filepath.Join(condaEnv, "conda-meta")); err != nil || !info.IsDir() {
+		t.Fatalf("Conda metadata: info=%v err=%v", info, err)
+	}
+}
+
+type acceptanceGradleBuild struct {
+	Dir       string            `json:"dir"`
+	Command   string            `json:"command"`
+	Env       map[string]string `json:"env"`
+	SyncError *string           `json:"syncError"`
+}
+
+type acceptanceGradleModel struct {
+	Gradle []acceptanceGradleBuild `json:"gradle"`
+}
+
+func runGradleAcceptance(t *testing.T, m *openidea.Manager, tools extendedAcceptanceTools) {
+	t.Helper()
+	t.Log("running real Gradle wrapper and local-distribution acceptance")
+	root := acceptanceTempDir(t)
+	canonicalRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeAcceptanceFile(t, filepath.Join(root, "settings.gradle"), "rootProject.name = 'goidea-gradle-acceptance'\n")
+	writeAcceptanceFile(t, filepath.Join(root, "build.gradle"), `
+plugins {
+    id 'java'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.12.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.12.2'
+}
+
+test {
+    useJUnitPlatform()
+}
+`)
+	writeAcceptanceFile(t, filepath.Join(
+		root, "src", "test", "java", "com", "example", "gradle", "PassingTests.java",
+	), `package com.example.gradle;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import org.junit.jupiter.api.Test;
+
+class PassingTests {
+    @Test
+    void adds() {
+        assertEquals(3, 1 + 2);
+    }
+
+    @Test
+    void subtracts() {
+        assertEquals(1, 3 - 2);
+    }
+}
+`)
+	writeAcceptanceFile(t, filepath.Join(
+		root, "src", "test", "java", "com", "example", "gradle", "FailingTests.java",
+	), `package com.example.gradle;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import org.junit.jupiter.api.Test;
+
+class FailingTests {
+    @Test
+    void failsOnPurpose() {
+        assertEquals(2, 1 + 2);
+    }
+}
+`)
+	distributionURL := "file://" + filepath.ToSlash(tools.gradleArchive)
+	runAcceptanceCommand(t, root, map[string]string{
+		"JAVA_HOME":        tools.jdk11,
+		"GRADLE_USER_HOME": tools.gradleUserHome,
+	}, filepath.Join(tools.gradleHome, "bin", "gradle"),
+		"wrapper", "--gradle-distribution-url", distributionURL,
+	)
+	wrapperProperties := filepath.Join(root, "gradle", "wrapper", "gradle-wrapper.properties")
+	rawProperties, err := os.ReadFile(wrapperProperties)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(string(rawProperties), "\n")
+	for i, line := range lines {
+		if strings.HasPrefix(line, "distributionUrl=") {
+			lines[i] = "distributionUrl=file\\:" + filepath.ToSlash(tools.gradleArchive)
+		}
+	}
+	if err := os.WriteFile(wrapperProperties, []byte(strings.Join(lines, "\n")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(filepath.Join(root, "gradlew"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	const window = "extended-gradle"
+	openProject(t, m, window, root)
+	trustAcceptanceProject(t, m, window, root)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
+	defer cancel()
+	setAcceptanceSetting(t, m, window, "languages.java.gradle.jvm", tools.jdk11)
+	setAcceptanceSetting(t, m, window, "languages.java.gradle.userHome", tools.gradleUserHome)
+	setAcceptanceSetting(t, m, window, "languages.java.gradle.distribution", "wrapper")
+
+	wrapper := syncAcceptanceGradle(t, m, window, 9201, 9202)
+	wantWrapper := filepath.Join(canonicalRoot, "gradlew")
+	if wrapper.Command != wantWrapper {
+		t.Fatalf("wrapper Gradle command = %q, want %q", wrapper.Command, wantWrapper)
+	}
+	assertAcceptanceGradleEnv(t, wrapper.Env, tools)
+	rawConfigs, err := m.Invoke(ctx, window, "run_configs", nil)
+	if err != nil {
+		t.Fatalf("wrapper run_configs: %v", err)
+	}
+	configs, err := openidea.DecodeRunConfigs(rawConfigs)
+	if err != nil {
+		t.Fatalf("decode wrapper run_configs: %v", err)
+	}
+	if !acceptanceHasGradleCommand(configs, "./gradlew") {
+		t.Fatalf("wrapper Gradle run configurations = %+v", configs)
+	}
+
+	setAcceptanceSetting(t, m, window, "languages.java.gradle.distribution", "local")
+	setAcceptanceSetting(t, m, window, "languages.java.gradle.home", tools.gradleHome)
+	local := syncAcceptanceGradle(t, m, window, 9203, 9204)
+	wantLocal := filepath.Join(tools.gradleHome, "bin", "gradle")
+	if local.Command != wantLocal {
+		t.Fatalf("local Gradle command = %q, want %q", local.Command, wantLocal)
+	}
+	assertAcceptanceGradleEnv(t, local.Env, tools)
+	runGradleTestAcceptance(t, m, tools, root, wantWrapper)
+}
+
+func syncAcceptanceGradle(
+	t *testing.T,
+	m *openidea.Manager,
+	window string,
+	request, channel uint32,
+) acceptanceGradleBuild {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	raw, err := m.Invoke(ctx, window, "build_sync", map[string]any{
+		"tool": "gradle", "buildDir": nil, "offline": true, "profiles": []string{},
+		"request": request, "onProgress": map[string]any{"$channel": channel},
+	})
+	if err != nil {
+		t.Fatalf("build_sync Gradle: %v", err)
+	}
+	var model acceptanceGradleModel
+	if err := json.Unmarshal(raw, &model); err != nil {
+		t.Fatalf("decode Gradle build model: %v", err)
+	}
+	if len(model.Gradle) != 1 {
+		t.Fatalf("Gradle models = %+v", model.Gradle)
+	}
+	gradle := model.Gradle[0]
+	if gradle.SyncError != nil && strings.TrimSpace(*gradle.SyncError) != "" {
+		t.Fatalf("Gradle sync failed: %s", *gradle.SyncError)
+	}
+	return gradle
+}
+
+func assertAcceptanceGradleEnv(t *testing.T, env map[string]string, tools extendedAcceptanceTools) {
+	t.Helper()
+	if got := env["JAVA_HOME"]; got != tools.jdk11 {
+		t.Fatalf("Gradle JAVA_HOME = %q, want %q", got, tools.jdk11)
+	}
+	if got := env["GRADLE_USER_HOME"]; got != tools.gradleUserHome {
+		t.Fatalf("Gradle GRADLE_USER_HOME = %q, want %q", got, tools.gradleUserHome)
+	}
+}
+
+func acceptanceHasGradleCommand(configs []openidea.RunConfig, command string) bool {
+	for _, config := range configs {
+		if config.Kind == "gradle" && config.Command == command {
+			return true
+		}
+	}
+	return false
+}
+
+type acceptanceGradleRun struct {
+	config  *openidea.RunConfig
+	exit    *int32
+	output  string
+	results *adapter.TestResults
+}
+
+func runGradleTestAcceptance(
+	t *testing.T,
+	m *openidea.Manager,
+	tools extendedAcceptanceTools,
+	root string,
+	wrapper string,
+) {
+	t.Helper()
+	t.Log("running real Gradle test reporting and rerun acceptance")
+	scriptText, err := os.ReadFile(filepath.Join("..", "app", "gradle_tests.gradle"))
+	if err != nil {
+		t.Fatalf("read the shipped Gradle test init script: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	raw, err := m.Invoke(ctx, "extended-gradle", "run_gradle_init_script", map[string]any{
+		"name": "goidea-gradle-tests",
+		"text": string(scriptText),
+	})
+	if err != nil {
+		t.Fatalf("write the Gradle test init script: %v", err)
+	}
+	var scriptPath string
+	if err := json.Unmarshal(raw, &scriptPath); err != nil {
+		t.Fatalf("decode the Gradle init-script path: %v", err)
+	}
+	if info, err := os.Stat(scriptPath); err != nil || info.IsDir() {
+		t.Fatalf("Gradle init script %q: info=%v err=%v", scriptPath, info, err)
+	}
+
+	registry := filepath.Join(tools.work, "gradle-daemon-registry")
+	args := []string{
+		"test",
+		"--no-daemon",
+		"--console=plain",
+		"--stacktrace",
+		"--init-script", scriptPath,
+		"-Dorg.gradle.daemon.registry.base=" + registry,
+	}
+	env := map[string]string{
+		"JAVA_HOME":        tools.jdk11,
+		"GRADLE_USER_HOME": tools.gradleUserHome,
+	}
+	first := startAcceptanceGradleRun(t, m, root, wrapper, args, env, "acceptance-gradle-tests", "Gradle Tests")
+	if first.exit == nil || *first.exit == 0 {
+		t.Fatalf("Gradle tests should fail, exit=%v\n%s", first.exit, acceptanceOutputTail(first.output))
+	}
+	counts := first.results.Counts()
+	if counts.Failed != 1 || counts.Passed != 2 || counts.Total != 3 {
+		t.Fatalf(
+			"Gradle TeamCity results = %+v, want 1 failed and 2 passed\n%s",
+			counts,
+			acceptanceOutputTail(first.output),
+		)
+	}
+	paths := adapter.FailedTestPaths(first.results)
+	if len(paths) != 1 ||
+		strings.Join(paths[0], ".") != "com.example.gradle.FailingTests.failsOnPurpose" {
+		t.Fatalf("Gradle failed test paths = %#v", paths)
+	}
+	failedNode := first.results.Node(paths[0])
+	if failedNode.Location == nil ||
+		!strings.HasSuffix(failedNode.Location.Path, "FailingTests.java") ||
+		failedNode.Location.Line == 0 {
+		t.Fatalf("Gradle failed test location = %+v", failedNode.Location)
+	}
+	rerun := adapter.RerunFailedConfig(first.config, paths)
+	if rerun == nil {
+		t.Fatal("Gradle failed-test rerun configuration was not derived")
+	}
+	hasFilter := false
+	for i, arg := range rerun.Args {
+		if arg == "--tests" && i+1 < len(rerun.Args) &&
+			rerun.Args[i+1] == "com.example.gradle.FailingTests.failsOnPurpose" {
+			hasFilter = true
+			break
+		}
+	}
+	if !hasFilter {
+		t.Fatalf("Gradle rerun args = %#v", rerun.Args)
+	}
+	second := startAcceptanceGradleRun(
+		t, m, root, rerun.Command, rerun.Args, rerun.Env,
+		"acceptance-gradle-tests-rerun", "Gradle Failed Tests",
+	)
+	if second.exit == nil || *second.exit == 0 {
+		t.Fatalf("Gradle rerun should fail, exit=%v\n%s", second.exit, acceptanceOutputTail(second.output))
+	}
+	rerunCounts := second.results.Counts()
+	if rerunCounts.Failed != 1 || rerunCounts.Passed != 0 || rerunCounts.Total != 1 {
+		t.Fatalf(
+			"Gradle rerun results = %+v, want only the failed test\n%s",
+			rerunCounts,
+			acceptanceOutputTail(second.output),
+		)
+	}
+	for _, output := range []string{first.output, second.output} {
+		if !strings.Contains(output, "##teamcity[testStarted") {
+			t.Fatalf("Gradle output lacked TeamCity test events\n%s", acceptanceOutputTail(output))
+		}
+	}
+	waitAcceptanceGradleStopped(t, tools, root, registry)
+}
+
+func startAcceptanceGradleRun(
+	t *testing.T,
+	m *openidea.Manager,
+	root, command string,
+	args []string,
+	env map[string]string,
+	id, name string,
+) acceptanceGradleRun {
+	t.Helper()
+	config := map[string]any{
+		"id":               id,
+		"name":             name,
+		"kind":             "gradle",
+		"command":          command,
+		"args":             args,
+		"cwd":              nil,
+		"env":              env,
+		"detected":         false,
+		"isTest":           true,
+		"debugAdapter":     nil,
+		"includeSystemEnv": true,
+	}
+	rawConfig, err := json.Marshal(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decodedConfig, err := openidea.DecodeRunConfig(rawConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	notifications, stop := m.Listen(8192)
+	defer stop()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	const channel = uint32(9317)
+	raw, err := m.Invoke(ctx, "extended-gradle", "run_start", map[string]any{
+		"config":   config,
+		"request":  nil,
+		"onOutput": map[string]any{"$channel": channel},
+	})
+	if err != nil {
+		t.Fatalf("run_start %s: %v", id, err)
+	}
+	var info openidea.RunInfo
+	if err := json.Unmarshal(raw, &info); err != nil {
+		t.Fatalf("decode %s RunInfo: %v", id, err)
+	}
+	if info.ID == 0 {
+		t.Fatalf("%s returned no run id", id)
+	}
+	t.Cleanup(func() {
+		stopCtx, stopCancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer stopCancel()
+		_, _ = m.Invoke(stopCtx, "extended-gradle", "run_stop", map[string]any{"id": info.ID})
+	})
+
+	parser := adapter.NewJvmParser()
+	stdout := adapter.NewTestStdoutBuffer()
+	results := adapter.NewTestResults()
+	var output strings.Builder
+	feed := func(text string) {
+		output.WriteString(text)
+		for _, line := range stdout.Feed(text) {
+			results.Apply(parser.Feed(line))
+		}
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			t.Fatalf(
+				"wait for Gradle run %d: %v\n%s",
+				info.ID,
+				ctx.Err(),
+				acceptanceOutputTail(output.String()),
+			)
+		case note := <-notifications:
+			switch note.Method {
+			case "channel":
+				var message openidea.ChannelMessage
+				if json.Unmarshal(note.Params, &message) != nil || message.ID != channel {
+					continue
+				}
+				var chunk openidea.OutputChunk
+				if json.Unmarshal(message.Data, &chunk) != nil {
+					continue
+				}
+				if chunk.Kind != "system" {
+					feed(chunk.Text)
+				}
+			case "event":
+				var event openidea.WindowEvent
+				if json.Unmarshal(note.Params, &event) != nil ||
+					openidea.EventType(event.Event) != "runExited" {
+					continue
+				}
+				var exited openidea.RunExitedEvent
+				if json.Unmarshal(event.Event, &exited) != nil || exited.Run != info.ID {
+					continue
+				}
+				for _, line := range stdout.End() {
+					results.Apply(parser.Feed(line))
+				}
+				return acceptanceGradleRun{
+					config: decodedConfig, exit: exited.Code,
+					output: output.String(), results: results,
+				}
+			}
+		}
+	}
+}
+
+func waitAcceptanceGradleStopped(
+	t *testing.T,
+	tools extendedAcceptanceTools,
+	root, registry string,
+) {
+	t.Helper()
+	deadline := time.Now().Add(30 * time.Second)
+	var last string
+	for time.Now().Before(deadline) {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		command := exec.CommandContext(
+			ctx,
+			filepath.Join(tools.gradleHome, "bin", "gradle"),
+			"-Dorg.gradle.daemon.registry.base="+registry,
+			"--status",
+		)
+		command.Dir = root
+		command.Env = acceptanceEnvironment(map[string]string{
+			"JAVA_HOME":        tools.jdk11,
+			"GRADLE_USER_HOME": tools.gradleUserHome,
+		})
+		output, err := command.CombinedOutput()
+		cancel()
+		last = strings.TrimSpace(string(output))
+		if err == nil && strings.Contains(strings.ToLower(last), "no gradle daemons are running") {
+			return
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	t.Fatalf("Gradle daemon still running after the acceptance run: %s", last)
+}
+
+func acceptanceOutputTail(output string) string {
+	const limit = 4000
+	if len(output) <= limit {
+		return output
+	}
+	return output[len(output)-limit:]
+}
+
+func formatAcceptanceDocument(t *testing.T, m *openidea.Manager, window string, doc uint32) string {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	raw, err := m.Invoke(ctx, window, "lsp_format", map[string]any{
+		"doc": doc, "range": nil,
+		"options": map[string]any{
+			"tabSize": 4, "insertSpaces": true, "onSave": false, "tool": nil,
+		},
+	})
+	if err != nil {
+		t.Fatalf("lsp_format document %d: %v", doc, err)
+	}
+	var edits []openidea.TextEdit
+	if err := json.Unmarshal(raw, &edits); err != nil {
+		t.Fatalf("decode format edits: %v", err)
+	}
+	snapshot, err := (openidea.Docs{M: m, Window: window}).DocSnapshot(ctx, window, doc)
+	if err != nil {
+		t.Fatalf("document snapshot: %v", err)
+	}
+	return applyAcceptanceTextEdits(t, snapshot.Text, edits)
+}
+
+func applyAcceptanceTextEdits(t *testing.T, text string, edits []openidea.TextEdit) string {
+	t.Helper()
+	type replacement struct {
+		start, end int
+		text       string
+	}
+	out := make([]replacement, 0, len(edits))
+	for _, edit := range edits {
+		start := acceptanceUTF16Offset(text, int(edit.Range.Start.Line), int(edit.Range.Start.Col))
+		end := acceptanceUTF16Offset(text, int(edit.Range.End.Line), int(edit.Range.End.Col))
+		if start < 0 || end < start || end > len(text) {
+			t.Fatalf("invalid text edit range %+v in %q", edit.Range, text)
+		}
+		out = append(out, replacement{start: start, end: end, text: edit.NewText})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].start > out[j].start })
+	for _, edit := range out {
+		text = text[:edit.start] + edit.text + text[edit.end:]
+	}
+	return text
+}
+
+func acceptanceUTF16Offset(text string, line, col int) int {
+	if line < 0 || col < 0 {
+		return -1
+	}
+	start := 0
+	for current := 0; current < line; current++ {
+		index := strings.IndexByte(text[start:], '\n')
+		if index < 0 {
+			return -1
+		}
+		start += index + 1
+	}
+	lineEnd := strings.IndexByte(text[start:], '\n')
+	if lineEnd < 0 {
+		lineEnd = len(text) - start
+	}
+	lineText := text[start : start+lineEnd]
+	units := 0
+	for index, r := range lineText {
+		if units >= col {
+			return start + index
+		}
+		units++
+		if r > 0xFFFF {
+			units++
+		}
+	}
+	if units == col {
+		return start + lineEnd
+	}
+	return -1
+}
+
+func writeAcceptanceFile(t *testing.T, path, text string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(text), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func trustAcceptanceProject(t *testing.T, m *openidea.Manager, window, root string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	if _, err := m.Invoke(ctx, window, "project_trust_set", map[string]any{
+		"path": root, "trusted": true, "folder": false,
+	}); err != nil {
+		t.Fatalf("trust project: %v", err)
+	}
+}
+
+func setAcceptanceSetting(t *testing.T, m *openidea.Manager, window, key string, value any) {
+	t.Helper()
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	if _, err := m.Invoke(ctx, window, "settings_set", map[string]any{
+		"scope": "project", "key": key, "value": string(encoded),
+	}); err != nil {
+		t.Fatalf("settings_set %s: %v", key, err)
+	}
+}
+
+func assertAcceptanceInterpreter(t *testing.T, path, root string) {
+	t.Helper()
+	if info, err := os.Stat(path); err != nil || info.IsDir() {
+		t.Fatalf("created interpreter %q: info=%v err=%v", path, info, err)
+	}
+	cleanPath := filepath.Clean(path)
+	cleanRoot := filepath.Clean(root)
+	if cleanPath != cleanRoot && !strings.HasPrefix(cleanPath, cleanRoot+string(filepath.Separator)) {
+		t.Fatalf("interpreter %q escaped isolated root %q", cleanPath, cleanRoot)
+	}
+}
+
+func writeAcceptanceWheel(t *testing.T, dir, distribution, module, version string) string {
+	t.Helper()
+	normalized := strings.ReplaceAll(distribution, "-", "_")
+	distInfo := normalized + "-" + version + ".dist-info"
+	files := map[string]string{
+		module + "/__init__.py": "__version__ = " + strconv.Quote(version) + "\n",
+		distInfo + "/METADATA": "Metadata-Version: 2.1\n" +
+			"Name: " + distribution + "\n" +
+			"Version: " + version + "\n" +
+			"Summary: GoIDEA toolchain acceptance fixture\n" +
+			"Requires-Python: >=3.8\n",
+		distInfo + "/WHEEL": "Wheel-Version: 1.0\n" +
+			"Generator: GoIDEA acceptance\n" +
+			"Root-Is-Purelib: true\n" +
+			"Tag: py3-none-any\n",
+		distInfo + "/top_level.txt": module + "\n",
+	}
+	names := make([]string, 0, len(files))
+	for name := range files {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	record := distInfo + "/RECORD"
+	var recordLines strings.Builder
+	for _, name := range names {
+		content := files[name]
+		sum := sha256.Sum256([]byte(content))
+		fmt.Fprintf(
+			&recordLines,
+			"%s,sha256=%s,%d\n",
+			name,
+			base64.RawURLEncoding.EncodeToString(sum[:]),
+			len(content),
+		)
+	}
+	recordLines.WriteString(record + ",,\n")
+	files[record] = recordLines.String()
+	names = append(names, record)
+	sort.Strings(names)
+
+	path := filepath.Join(dir, normalized+"-"+version+"-py3-none-any.whl")
+	file, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writer := zip.NewWriter(file)
+	for _, name := range names {
+		header := &zip.FileHeader{Name: name, Method: zip.Deflate}
+		header.SetMode(0o644)
+		entry, err := writer.CreateHeader(header)
+		if err != nil {
+			file.Close()
+			t.Fatal(err)
+		}
+		if _, err := io.WriteString(entry, files[name]); err != nil {
+			file.Close()
+			t.Fatal(err)
+		}
+	}
+	closeWriterErr := writer.Close()
+	closeFileErr := file.Close()
+	if closeWriterErr != nil {
+		t.Fatal(closeWriterErr)
+	}
+	if closeFileErr != nil {
+		t.Fatal(closeFileErr)
+	}
+	return path
+}
+
+func acceptancePackageVersion(packages []openidea.PythonPackage, name string) (string, bool) {
+	for _, pkg := range packages {
+		if strings.EqualFold(pkg.Name, name) {
+			return pkg.Version, true
+		}
+	}
+	return "", false
+}
+
+func acceptanceFreeze(packages []openidea.PythonPackage) string {
+	pins := make([]string, 0, len(packages))
+	for _, pkg := range packages {
+		if strings.TrimSpace(pkg.Name) != "" {
+			pins = append(pins, pkg.Name+"=="+pkg.Version)
+		}
+	}
+	sort.Slice(pins, func(i, j int) bool { return strings.ToLower(pins[i]) < strings.ToLower(pins[j]) })
+	if len(pins) == 0 {
+		return ""
+	}
+	return strings.Join(pins, "\n") + "\n"
+}
+
+func acceptanceMicromambaURL() string {
+	switch runtime.GOOS + "/" + runtime.GOARCH {
+	case "darwin/arm64":
+		return "https://micro.mamba.pm/api/micromamba/osx-arm64/latest"
+	case "darwin/amd64":
+		return "https://micro.mamba.pm/api/micromamba/osx-64/latest"
+	case "linux/amd64":
+		return "https://micro.mamba.pm/api/micromamba/linux-64/latest"
+	case "linux/arm64":
+		return "https://micro.mamba.pm/api/micromamba/linux-aarch64/latest"
+	}
+	return ""
+}
+
+func acceptanceTempDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	t.Cleanup(func() {
+		if err := makeAcceptanceTreeWritable(dir); err != nil {
+			t.Logf("prepare acceptance temporary directory for removal: %v", err)
+		}
+	})
+	return dir
+}
+
+func makeAcceptanceTreeWritable(root string) error {
+	return filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			if os.IsNotExist(walkErr) {
+				return nil
+			}
+			return walkErr
+		}
+		if entry.Type()&os.ModeSymlink != 0 {
+			return nil
+		}
+		info, err := entry.Info()
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
+		}
+		mode := info.Mode().Perm()
+		if entry.IsDir() {
+			mode |= 0o700
+		} else {
+			mode |= 0o600
+		}
+		if err := os.Chmod(path, mode); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		return nil
+	})
+}
+
+func acceptanceFileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
+}
+
+func downloadAcceptanceFile(t *testing.T, url, path string) {
+	t.Helper()
+	if url == "" {
+		t.Fatalf("no download URL for %s/%s", runtime.GOOS, runtime.GOARCH)
+	}
+	t.Logf("downloading %s", url)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("download %s: %v", url, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		t.Fatalf("download %s: HTTP %s", url, response.Status)
+	}
+	file, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, copyErr := io.Copy(file, response.Body)
+	closeErr := file.Close()
+	if copyErr != nil {
+		t.Fatalf("download %s: %v", url, copyErr)
+	}
+	if closeErr != nil {
+		t.Fatal(closeErr)
+	}
+}
+
+func extractMicromamba(t *testing.T, archive, target string) {
+	t.Helper()
+	file, err := os.Open(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	reader := tar.NewReader(bzip2.NewReader(file))
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for {
+		header, err := reader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("read micromamba archive: %v", err)
+		}
+		if filepath.Base(header.Name) != "micromamba" || header.FileInfo().IsDir() {
+			continue
+		}
+		out, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o755)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, copyErr := io.Copy(out, reader)
+		closeErr := out.Close()
+		if copyErr != nil {
+			t.Fatalf("extract micromamba: %v", copyErr)
+		}
+		if closeErr != nil {
+			t.Fatal(closeErr)
+		}
+		return
+	}
+	t.Fatal("micromamba archive did not contain the executable")
+}
+
+func extractGradle(t *testing.T, archive, destination string) string {
+	t.Helper()
+	reader, err := zip.OpenReader(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+	if err := os.MkdirAll(destination, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	root := ""
+	for _, entry := range reader.File {
+		first := strings.SplitN(filepath.ToSlash(entry.Name), "/", 2)[0]
+		if root == "" {
+			root = first
+		}
+		target := filepath.Join(destination, filepath.FromSlash(entry.Name))
+		if !strings.HasPrefix(target, destination+string(filepath.Separator)) {
+			t.Fatalf("Gradle archive path escaped destination: %s", entry.Name)
+		}
+		if entry.FileInfo().IsDir() {
+			if err := os.MkdirAll(target, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		source, err := entry.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		mode := entry.Mode()
+		if mode == 0 {
+			mode = 0o644
+		}
+		out, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode.Perm())
+		if err != nil {
+			source.Close()
+			t.Fatal(err)
+		}
+		_, copyErr := io.Copy(out, source)
+		sourceErr := source.Close()
+		closeErr := out.Close()
+		if copyErr != nil {
+			t.Fatal(copyErr)
+		}
+		if sourceErr != nil {
+			t.Fatal(sourceErr)
+		}
+		if closeErr != nil {
+			t.Fatal(closeErr)
+		}
+	}
+	return filepath.Join(destination, root)
+}
+
+func runAcceptanceCommand(
+	t *testing.T,
+	dir string,
+	overrides map[string]string,
+	name string,
+	args ...string,
+) string {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	command := exec.CommandContext(ctx, name, args...)
+	command.Dir = dir
+	command.Env = acceptanceEnvironment(overrides)
+	output, err := command.CombinedOutput()
+	text := strings.TrimSpace(string(output))
+	if err != nil {
+		t.Fatalf("%s %s failed: %v\n%s", name, strings.Join(args, " "), err, text)
+	}
+	return text
+}
+
+func acceptanceEnvironment(overrides map[string]string) []string {
+	values := map[string]string{}
+	for _, entry := range os.Environ() {
+		key, value, ok := strings.Cut(entry, "=")
+		if ok {
+			values[key] = value
+		}
+	}
+	for key, value := range overrides {
+		values[key] = value
+	}
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	out := make([]string, 0, len(keys))
+	for _, key := range keys {
+		out = append(out, key+"="+values[key])
+	}
+	return out
+}
+
+func acceptanceJDK11(t *testing.T) string {
+	t.Helper()
+	if configured := strings.TrimSpace(os.Getenv("GOIDEA_ACCEPTANCE_JDK11")); configured != "" {
+		if info, err := os.Stat(filepath.Join(configured, "bin", "java")); err == nil && !info.IsDir() {
+			return configured
+		}
+		t.Fatalf("GOIDEA_ACCEPTANCE_JDK11 does not contain bin/java: %s", configured)
+	}
+	if runtime.GOOS == "darwin" {
+		output, err := exec.Command("/usr/libexec/java_home", "-v", "11").Output()
+		if err == nil {
+			path := strings.TrimSpace(string(output))
+			if path != "" {
+				return path
+			}
+		}
+	}
+	t.Fatal("JDK 11 is required; set GOIDEA_ACCEPTANCE_JDK11")
+	return ""
+}

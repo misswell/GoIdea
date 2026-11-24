@@ -8,20 +8,27 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo/ui"
+
+	"mayoi/internal/openidea"
 )
 
 // Session is what GoIDEA restores at the next start: the project folder, the
 // files that had tabs, the one that was showing, and its bookmarks.
 type Session struct {
-	Root      string     `json:"root,omitempty"`
-	Files     []string   `json:"files,omitempty"`
-	Focus     string     `json:"focus,omitempty"`
-	Bookmarks []Bookmark `json:"bookmarks,omitempty"`
+	Root      string                  `json:"root,omitempty"`
+	Remote    *openidea.RemoteSession `json:"remote,omitempty"`
+	Files     []string                `json:"files,omitempty"`
+	Focus     string                  `json:"focus,omitempty"`
+	Bookmarks []Bookmark              `json:"bookmarks,omitempty"`
 	// Pinned are the open files whose tabs were pinned, which OpenIDEA keeps
 	// at the left of the strip across starts.
 	Pinned []string `json:"pinned,omitempty"`
+	// PreviewFiles are the editor tabs that were still previews. OpenIDEA
+	// restores that mode, so the next result click still replaces the same tab.
+	PreviewFiles []string `json:"previewFiles,omitempty"`
 	// AgentTasks and AgentHome restore the virtual Agent pages that OpenIDEA
 	// keeps as ordinary editor tabs. Missing tasks are removed after the
 	// backend reports the project's task list.
@@ -36,6 +43,8 @@ type Session struct {
 	SplitActive int      `json:"splitActive,omitempty"`
 	SplitDown   bool     `json:"splitDown,omitempty"`
 	SplitFirst  bool     `json:"splitFirst,omitempty"`
+	// SplitPreviewFiles keep the second group's preview mode independently.
+	SplitPreviewFiles []string `json:"splitPreviewFiles,omitempty"`
 	// PathBookmarks are the files marked with Toggle File Bookmark.
 	PathBookmarks []PathBookmark `json:"pathBookmarks,omitempty"`
 	// BookmarkLists are the named groups the tool window shows, and DefaultList
@@ -70,6 +79,9 @@ type Session struct {
 	// SearchHistory is Search Everywhere's recent queries, most recent first,
 	// as OpenIDEA keeps the search history across starts.
 	SearchHistory []string `json:"searchHistory,omitempty"`
+	// LogcatHistory is the Logcat filter menu's recent expressions, newest
+	// first, shared across projects like OpenIDEA's local-storage history.
+	LogcatHistory []string `json:"logcatHistory,omitempty"`
 	// SearchScopes are the named file-pattern scopes Find in Files offers.
 	SearchScopes []SearchScope `json:"searchScopes,omitempty"`
 	// Notifications is the notification center's logged history. Runtime
@@ -122,8 +134,20 @@ func normalizeRecentProjects(list []RecentProject) []RecentProject {
 		if p.Path == "" || seen[p.Path] {
 			continue
 		}
-		if st, err := os.Stat(p.Path); err != nil || !st.IsDir() {
-			continue
+		remote := strings.HasPrefix(p.Path, "ssh://") ||
+			strings.HasPrefix(p.Path, "wsl://") ||
+			strings.HasPrefix(p.Path, "devcontainer://")
+		if !remote {
+			if st, err := os.Stat(p.Path); err != nil || !st.IsDir() {
+				continue
+			}
+		}
+		if remote && p.Name == "" {
+			name := path.Base(strings.TrimRight(p.Path, "/"))
+			if name == "." || name == "/" || name == "" {
+				continue
+			}
+			p.Name = name
 		}
 		seen[p.Path] = true
 		if p.Name == "" {
@@ -201,6 +225,12 @@ func (l Layout) clone() Layout {
 			d.Hidden = map[string]string{}
 			for k, v := range l.Dock.Hidden {
 				d.Hidden[k] = v
+			}
+		}
+		if l.Dock.StripeButtons != nil {
+			d.StripeButtons = make(map[string]bool, len(l.Dock.StripeButtons))
+			for id, visible := range l.Dock.StripeButtons {
+				d.StripeButtons[id] = visible
 			}
 		}
 		out.Dock = &d
@@ -465,8 +495,10 @@ func (s Session) Save(path string) error {
 // zero value is the default: follow the system's appearance and the editor's
 // own font size.
 type Preferences struct {
-	Theme    string  `json:"theme,omitempty"`
-	FontSize float32 `json:"fontSize,omitempty"`
+	Theme               string  `json:"theme,omitempty"`
+	PreferredLightTheme string  `json:"preferredLightTheme,omitempty"`
+	PreferredDarkTheme  string  `json:"preferredDarkTheme,omitempty"`
+	FontSize            float32 `json:"fontSize,omitempty"`
 	// DateFormat is Settings › System Settings › Date Formats. Nil keeps
 	// OpenIDEA's system-format, pretty-formatting defaults.
 	DateFormat *DateFormatPrefs `json:"dateFormat,omitempty"`
@@ -485,9 +517,17 @@ type Preferences struct {
 	// Editor are Settings › Editor › Appearance, whose toggles are on by
 	// default; the inverse names keep the zero value meaning that.
 	Editor EditorAppearance `json:"editor,omitempty"`
+	// EditorScheme keeps the color-scheme choices used outside the Settings
+	// dialog. Backend editor.* values and GoIDEA's local preferences are
+	// updated together when one of the scheme actions runs.
+	EditorScheme EditorSchemePrefs `json:"editorScheme,omitempty"`
 	// Inlay are Settings › Editor › Inlay Hints: Code Vision's usages,
 	// author and "no usages" choices. OpenIDEA shows all three by default.
 	Inlay InlayPrefs `json:"inlay,omitempty"`
+	// Debugger are the native editor and data-view choices from Settings ›
+	// Build, Execution, Deployment › Debugger. Inverse names keep the zero
+	// value equal to OpenIDEA's defaults.
+	Debugger DebuggerPrefs `json:"debugger,omitempty"`
 	// Usages are Find Usages' local view choices. Both read and write access
 	// filters start on, the popup preview starts off and the tool-window
 	// source preview starts on, as OpenIDEA stores them.
@@ -496,6 +536,10 @@ type Preferences struct {
 	// value matches OpenIDEA: severity order on, source preview and
 	// autoscroll off.
 	Problems ProblemsPrefs `json:"problems,omitempty"`
+	// Analysis keeps the Analysis tool windows' local options and templates.
+	// Pointer-free inverse booleans preserve OpenIDEA's default-on choices in
+	// settings files written before these windows existed.
+	Analysis AnalysisPrefs `json:"analysis,omitempty"`
 	// Hierarchy is the Hierarchy tool window's AutoScroll to Source choice.
 	Hierarchy HierarchyPrefs `json:"hierarchy,omitempty"`
 	// Breadcrumbs are Settings › Editor › Breadcrumbs: shown above the editor
@@ -504,6 +548,13 @@ type Preferences struct {
 	// General are Settings › Editor › General behavior choices that the native
 	// editor can honor.
 	General GeneralPrefs `json:"general,omitempty"`
+	// Vim is Settings › Editor › Vim. Enabled applies to every native editor,
+	// and Handlers records only conflict overrides from IdeaVim's defaults.
+	Vim VimPrefs `json:"vim,omitempty"`
+	// System are Settings › Appearance & Behavior › System Settings. Pointer
+	// defaults preserve OpenIDEA's defaults for settings files created before
+	// these options existed.
+	System SystemPrefs `json:"system,omitempty"`
 	// Tabs are Settings › Editor › Editor Tabs: how the strip shows, orders
 	// and limits tabs, as editor.tabs.* stores them.
 	Tabs TabPrefs `json:"tabs,omitempty"`
@@ -522,6 +573,12 @@ type Preferences struct {
 	Notify *NotifyPrefs `json:"notifications,omitempty"`
 	// Run are the run flow's stored choices; nil keeps OpenIDEA's defaults.
 	Run *RunPrefs `json:"run,omitempty"`
+	// Services keeps the run configuration types, hidden configurations and
+	// display order chosen in the Services tool window, per project.
+	Services ServicesPrefs `json:"services,omitempty"`
+	// ExternalTools is Settings › Tools › External Tools. Each enabled tool is
+	// also an action and can be a before-launch task.
+	ExternalTools []ExternalToolPrefs `json:"externalTools,omitempty"`
 	// Agents are Settings › Agents › Chat, shared by the New Agent Task page
 	// and agent conversations.
 	Agents *AgentPrefs `json:"agents,omitempty"`
@@ -534,6 +591,12 @@ type Preferences struct {
 	// Updates are Help › Check for Updates' settings, nil until changed: the
 	// automatic check and the What's New page stay on, as app.update.* does.
 	Updates *UpdatePrefs `json:"updates,omitempty"`
+	// HTTP keeps the HTTP Client environment selected for each request file,
+	// as OpenIDEA stores openidea.httpClient.environments.
+	HTTP HTTPPrefs `json:"http,omitempty"`
+	// GraphQL keeps the environment values entered for each graphql-config,
+	// as OpenIDEA stores openidea.graphql.environment outside project files.
+	GraphQL GraphQLPrefs `json:"graphql,omitempty"`
 	// ScratchRecent are the languages New Scratch File lists first, most
 	// recent first.
 	ScratchRecent []string `json:"scratchRecent,omitempty"`
@@ -542,13 +605,21 @@ type Preferences struct {
 	// show the Welcome screen.
 	Accent  string `json:"accent,omitempty"`
 	Startup string `json:"startup,omitempty"`
-	// Keymap maps an action id to the user's bindings, replacing the default
-	// ones; an empty list removes the shortcut. Nil means every default.
+	// KeymapPreset is one of OpenIDEA's six preset ids. Empty or unknown uses
+	// IntelliJ macOS on macOS and IntelliJ Windows on other systems.
+	KeymapPreset string `json:"keymapPreset,omitempty"`
+	// Keymap maps an action id to the user's bindings, replacing the selected
+	// preset's defaults; an empty list removes the shortcut.
 	Keymap map[string][]string `json:"keymap,omitempty"`
+	// Macros keeps Edit › Macros' last recording and every named macro.
+	Macros MacroPrefs `json:"macros,omitempty"`
 	// MainToolbar is the title bar's saved layout, nil for the default one.
 	MainToolbar *toolbarLayout `json:"mainToolbar,omitempty"`
 	// SearchFilters is Search Everywhere's funnel, kept across starts.
 	SearchFilters *seFilters `json:"searchFilters,omitempty"`
+	// SearchFieldHistory is the Find window's recent multi-line queries, newest
+	// first, as OpenIDEA keeps the search-field history.
+	SearchFieldHistory []string `json:"searchFieldHistory,omitempty"`
 	// Plugins are each plugin's settings, by name, under the same "plugins"
 	// key Mayoi uses; a plugin's "enabled" lives there.
 	Plugins map[string]json.RawMessage `json:"plugins,omitempty"`
@@ -556,6 +627,137 @@ type Preferences struct {
 	// branch/commit bookmarks. Repository-scoped map keys contain the root and
 	// the branch or commit id.
 	VCS VCSPrefs `json:"vcs,omitempty"`
+}
+
+// HTTPPrefs is the HTTP Client's local view state.
+type HTTPPrefs struct {
+	Environments map[string]string `json:"environments,omitempty"`
+}
+
+// GraphQLPrefs is the GraphQL Environment Variables dialog's local storage.
+type GraphQLPrefs struct {
+	Environment map[string]map[string]string `json:"environment,omitempty"`
+}
+
+// SystemPrefs is Settings › Appearance & Behavior › System Settings.
+type SystemPrefs struct {
+	ReopenLastProject       *bool  `json:"reopenLastProject,omitempty"`
+	OpenProjectIn           string `json:"openProjectIn,omitempty"`
+	DefaultProjectDirectory string `json:"defaultProjectDirectory,omitempty"`
+	AutoSave                *bool  `json:"autoSave,omitempty"`
+	SyncOnFocus             *bool  `json:"syncOnFocus,omitempty"`
+	SaveOnIdle              bool   `json:"saveOnIdle,omitempty"`
+	IdleSeconds             int    `json:"idleSeconds,omitempty"`
+	LocalHistoryDays        int    `json:"localHistoryDays,omitempty"`
+	LocalHistoryMaxMB       int    `json:"localHistoryMaxMB,omitempty"`
+	ConfirmExit             *bool  `json:"confirmExit,omitempty"`
+	CloseWithoutWelcome     bool   `json:"closeWithoutWelcome,omitempty"`
+	CloseTabsWithWindow     bool   `json:"closeTabsWithWindow,omitempty"`
+}
+
+// reopenLastProject resolves the legacy Startup preference and OpenIDEA's
+// default. An explicit System Settings choice wins.
+func (p Preferences) reopenLastProject() bool {
+	if p.System.ReopenLastProject != nil {
+		return *p.System.ReopenLastProject
+	}
+	switch p.Startup {
+	case "reopen":
+		return true
+	case "welcome":
+		return false
+	default:
+		return true
+	}
+}
+
+func (p SystemPrefs) openProjectIn() string {
+	switch p.OpenProjectIn {
+	case "new", "same":
+		return p.OpenProjectIn
+	default:
+		return "ask"
+	}
+}
+
+func (p SystemPrefs) autoSave() bool {
+	return prefBool(p.AutoSave, true)
+}
+
+func (p SystemPrefs) syncOnFocus() bool {
+	return prefBool(p.SyncOnFocus, true)
+}
+
+func (p SystemPrefs) idleSeconds() int {
+	if p.IdleSeconds == 0 {
+		return 15
+	}
+	return max(1, min(p.IdleSeconds, 3600))
+}
+
+func (p SystemPrefs) localHistoryDays() int {
+	if p.LocalHistoryDays == 0 {
+		return 5
+	}
+	return max(1, min(p.LocalHistoryDays, 365))
+}
+
+func (p SystemPrefs) localHistoryMaxMB() int {
+	if p.LocalHistoryMaxMB == 0 {
+		return 512
+	}
+	return max(16, min(p.LocalHistoryMaxMB, 16384))
+}
+
+func (p SystemPrefs) confirmExit() bool {
+	return prefBool(p.ConfirmExit, true)
+}
+
+func (p SystemPrefs) defaultProjectDirectory() string {
+	dir := strings.TrimSpace(p.DefaultProjectDirectory)
+	if dir == "" {
+		return ""
+	}
+	info, err := os.Stat(dir)
+	if err != nil || !info.IsDir() {
+		return ""
+	}
+	return dir
+}
+
+// ServicesPrefs mirrors OpenIDEA's per-project Services stores. The project
+// key is the normalized root, so changing project cannot carry one project's
+// types, hidden configurations or order into another.
+type ServicesPrefs struct {
+	Projects map[string]ServiceProjectPrefs `json:"projects,omitempty"`
+	// Docker keeps the Docker provider's global View Options. Nil switches
+	// retain OpenIDEA's defaults, where stopped containers and untagged images
+	// are visible.
+	Docker DockerFilterPrefs `json:"docker,omitempty"`
+}
+
+// DockerFilterPrefs is OpenIDEA's Docker Services View Options. The pointers
+// preserve the default-on behavior for settings files written before these
+// filters existed.
+type DockerFilterPrefs struct {
+	ShowStoppedContainers *bool `json:"showStoppedContainers,omitempty"`
+	ShowUntaggedImages    *bool `json:"showUntaggedImages,omitempty"`
+}
+
+func (p DockerFilterPrefs) showStoppedContainers() bool {
+	return prefBool(p.ShowStoppedContainers, true)
+}
+
+func (p DockerFilterPrefs) showUntaggedImages() bool {
+	return prefBool(p.ShowUntaggedImages, true)
+}
+
+// ServiceProjectPrefs is one project's persisted Services state.
+type ServiceProjectPrefs struct {
+	Types            []string            `json:"types,omitempty"`
+	Hidden           map[string][]string `json:"hidden,omitempty"`
+	Order            map[string][]string `json:"order,omitempty"`
+	ComposeOverrides map[string]string   `json:"composeFileOverrides,omitempty"`
 }
 
 // UsagesPrefs mirrors OpenIDEA's persistent usage-preview and access-filter
@@ -589,6 +791,83 @@ type ProblemsPrefs struct {
 // SortBySeverity reports whether errors precede warnings and information.
 func (p ProblemsPrefs) SortBySeverity() bool { return !p.NoSeveritySort }
 
+// AnalysisPrefs keeps local state for Inspection Results, Locate Duplicates,
+// Search / Replace Structurally and Code Cleanup.
+type AnalysisPrefs struct {
+	Inspection InspectionViewPrefs  `json:"inspection,omitempty"`
+	Duplicates DuplicateSearchPrefs `json:"duplicates,omitempty"`
+	Structural StructuralFormPrefs  `json:"structural,omitempty"`
+	Cleanup    CodeCleanupPrefs     `json:"cleanup,omitempty"`
+}
+
+// InspectionViewPrefs are the Inspection Results view options. Grouping by
+// inspection and no autoscroll are OpenIDEA's defaults.
+type InspectionViewPrefs struct {
+	GroupBySeverity bool `json:"groupBySeverity,omitempty"`
+	Autoscroll      bool `json:"autoscroll,omitempty"`
+}
+
+// DuplicateSearchPrefs persists Locate Duplicates' options. Anonymization is
+// on by default, so the stored flags name the explicit opt-outs.
+type DuplicateSearchPrefs struct {
+	MinTokens              int  `json:"minTokens,omitempty"`
+	NoAnonymizeIdentifiers bool `json:"noAnonymizeIdentifiers,omitempty"`
+	NoAnonymizeLiterals    bool `json:"noAnonymizeLiterals,omitempty"`
+}
+
+func (p DuplicateSearchPrefs) minTokens() int {
+	if p.MinTokens == 0 {
+		return 60
+	}
+	return max(10, min(p.MinTokens, 10_000))
+}
+
+func (p DuplicateSearchPrefs) anonymizeIdentifiers() bool {
+	return !p.NoAnonymizeIdentifiers
+}
+
+func (p DuplicateSearchPrefs) anonymizeLiterals() bool {
+	return !p.NoAnonymizeLiterals
+}
+
+// StructuralFormPrefs is the last validated Search / Replace Structurally
+// form. Scope is intentionally local to one run.
+type StructuralFormPrefs struct {
+	Pattern     string `json:"pattern,omitempty"`
+	Replacement string `json:"replacement,omitempty"`
+	Language    string `json:"language,omitempty"`
+}
+
+// CodeCleanupPrefs persists the cleanup steps. Before the first change all
+// steps are on; Configured distinguishes that default from three explicit
+// opt-outs.
+type CodeCleanupPrefs struct {
+	Configured        bool `json:"configured,omitempty"`
+	NoFixAll          bool `json:"noFixAll,omitempty"`
+	NoOptimizeImports bool `json:"noOptimizeImports,omitempty"`
+	NoReformat        bool `json:"noReformat,omitempty"`
+}
+
+func (p CodeCleanupPrefs) options() analysisCleanupOptions {
+	if !p.Configured {
+		return analysisCleanupOptions{fixAll: true, optimizeImports: true, reformat: true}
+	}
+	return analysisCleanupOptions{
+		fixAll:          !p.NoFixAll,
+		optimizeImports: !p.NoOptimizeImports,
+		reformat:        !p.NoReformat,
+	}
+}
+
+func (p *AnalysisPrefs) setCleanupOptions(options analysisCleanupOptions) {
+	p.Cleanup = CodeCleanupPrefs{
+		Configured:        true,
+		NoFixAll:          !options.fixAll,
+		NoOptimizeImports: !options.optimizeImports,
+		NoReformat:        !options.reformat,
+	}
+}
+
 // HierarchyPrefs mirrors OpenIDEA's persistent hierarchy options.
 type HierarchyPrefs struct {
 	Autoscroll bool `json:"autoscroll,omitempty"`
@@ -602,6 +881,32 @@ type AppearancePrefs struct {
 	HideMainToolbar    bool `json:"hideMainToolbar,omitempty"`
 	HideToolWindowBars bool `json:"hideToolWindowBars,omitempty"`
 	HideStatusBar      bool `json:"hideStatusBar,omitempty"`
+	// UseCustomFont and the UI font fields mirror OpenIDEA's Accessibility
+	// controls. Their zero values keep the bundled UI font and 13 DIP size.
+	UseCustomFont                 bool   `json:"useCustomFont,omitempty"`
+	UIFontFamily                  string `json:"uiFontFamily,omitempty"`
+	UIFontFallback                string `json:"uiFontFallback,omitempty"`
+	UIFontSize                    int    `json:"uiFontSize,omitempty"`
+	ContrastScrollbars            bool   `json:"contrastScrollbars,omitempty"`
+	RedGreenVision                bool   `json:"redGreenVision,omitempty"`
+	DifferentToolWindowBackground bool   `json:"differentToolWindowBackground,omitempty"`
+	SmallTreeIndents              bool   `json:"smallTreeIndents,omitempty"`
+	FullPathInTitle               bool   `json:"fullPathInTitle,omitempty"`
+	DndWithAltOnly                bool   `json:"dndWithAltOnly,omitempty"`
+	// ProjectColorsInToolbar and MenuIcons default on, so pointer values keep
+	// settings files written before these controls existed compatible.
+	ProjectColorsInToolbar *bool  `json:"projectColorsInToolbar,omitempty"`
+	MenuIcons              *bool  `json:"menuIcons,omitempty"`
+	MainMenuStyle          string `json:"mainMenuStyle,omitempty"`
+	MainMenuAlt            *bool  `json:"mainMenuAlt,omitempty"`
+	IDEAntialiasing        string `json:"ideAntialiasing,omitempty"`
+	EditorAntialiasing     string `json:"editorAntialiasing,omitempty"`
+	// ShowToolWindowNames puts IDEA's labels under the stripe icons.
+	ShowToolWindowNames bool `json:"showToolWindowNames,omitempty"`
+	// ShowToolWindowBadges is OpenIDEA's Appearance › Tool Windows option.
+	// Nil keeps the upstream default, on, for settings written before it.
+	ShowToolWindowBadges  *bool `json:"showToolWindowBadges,omitempty"`
+	WidescreenToolWindows bool  `json:"widescreenToolWindows,omitempty"`
 	// RenderDocComments draws documentation comments as rendered prose. A
 	// tab's View › Active Editor override replaces this setting.
 	RenderDocComments bool `json:"renderDocComments,omitempty"`
@@ -613,16 +918,70 @@ type AppearancePrefs struct {
 	StatusBarWidgets map[string]bool `json:"statusBarWidgets,omitempty"`
 }
 
+func (p Preferences) toolWindowBadgesVisible() bool {
+	return p.Appearance.ShowToolWindowBadges == nil || *p.Appearance.ShowToolWindowBadges
+}
+
+func (p Preferences) projectColorsInToolbar() bool {
+	return prefBool(p.Appearance.ProjectColorsInToolbar, true)
+}
+
+func (p Preferences) menuIconsVisible() bool {
+	return prefBool(p.Appearance.MenuIcons, true)
+}
+
+func (p Preferences) mainMenuAltFocuses() bool {
+	return prefBool(p.Appearance.MainMenuAlt, true)
+}
+
+// uiFont is the family list used by every MyGo widget when custom UI font is
+// enabled. OpenIDEA falls back to Inter and a 13 DIP base size.
+func (p Preferences) uiFont() string {
+	if !p.Appearance.UseCustomFont {
+		return oiFontUI
+	}
+	primary := strings.TrimSpace(p.Appearance.UIFontFamily)
+	if primary == "" {
+		primary = oiFontUI
+	}
+	if fallback := strings.TrimSpace(p.Appearance.UIFontFallback); fallback != "" && fallback != primary {
+		return primary + ", " + fallback
+	}
+	return primary
+}
+
+func (p Preferences) uiFontSize() float32 {
+	if !p.Appearance.UseCustomFont {
+		return 13
+	}
+	size := p.Appearance.UIFontSize
+	if size == 0 {
+		return 13
+	}
+	return float32(max(10, min(size, 18)))
+}
+
 // VCSPrefs is state that OpenIDEA keeps in its VCS stores and client settings.
 type VCSPrefs struct {
 	Diff             DiffPrefs         `json:"diff,omitempty"`
 	Merge            MergePrefs        `json:"merge,omitempty"`
+	GitHub           GitHubPrefs       `json:"github,omitempty"`
 	FavoriteBranches map[string]bool   `json:"favoriteBranches,omitempty"`
 	CommitBookmarks  map[string]string `json:"commitBookmarks,omitempty"`
-	Log              LogPrefs          `json:"log,omitempty"`
+	// CommitDrafts keeps the message left in the Commit field per project,
+	// as OpenIDEA's browser storage keys a draft by the repository root.
+	CommitDrafts map[string]string `json:"commitDrafts,omitempty"`
+	// CommitMessages keeps the twenty most recent messages per repository.
+	CommitMessages map[string][]string `json:"commitMessages,omitempty"`
+	Log            LogPrefs            `json:"log,omitempty"`
 	// IssueNavigation turns issue ids in commit messages into links in Git
 	// Log, commit details and the blame popup.
 	IssueNavigation []IssueLinkPrefs `json:"issueNavigation,omitempty"`
+}
+
+// GitHubPrefs mirrors the Version Control › GitHub client options.
+type GitHubPrefs struct {
+	AutoMarkViewed bool `json:"autoMarkViewed,omitempty"`
 }
 
 // IssueLinkPrefs is one Settings › Version Control › Issue Navigation row.
@@ -846,11 +1205,42 @@ func (p ProjectTreePrefs) searchesUsagesOnDelete() bool {
 	return boolPreference(p.SafeDelete, true)
 }
 
-// RunPrefs carry the choices OpenIDEA keeps under run.*. ConfirmRerun is nil
-// for OpenIDEA's default (ask before stopping a running process); false
-// records the confirm dialog's "Do not ask again".
+// RunPrefs carry legacy choices and the project-scoped chooser state. The four
+// runtime fields remain as a migration fallback when the backend's current
+// project settings have not loaded yet.
 type RunPrefs struct {
-	ConfirmRerun *bool `json:"confirmRerun,omitempty"`
+	ConfirmRerun       *bool `json:"confirmRerun,omitempty"`
+	ConfirmTerminate   *bool `json:"confirmTerminate,omitempty"`
+	ShowOnStart        *bool `json:"showOnStart,omitempty"`
+	TerminationTimeout *int  `json:"terminationTimeoutMs,omitempty"`
+	// Pinned and Recent are the pre-project-scoped layout. They are read once
+	// for migration into Projects and are no longer written.
+	Pinned   []string                    `json:"pinned,omitempty"`
+	Recent   []string                    `json:"recent,omitempty"`
+	Projects map[string]*RunProjectPrefs `json:"projects,omitempty"`
+}
+
+// RunProjectPrefs is OpenIDEA's per-project chooser state. OpenIDEA stores
+// these keys in localStorage under the project root.
+type RunProjectPrefs struct {
+	Pinned    []string             `json:"pinned,omitempty"`
+	Recent    []string             `json:"recent,omitempty"`
+	Temporary []openidea.RunConfig `json:"temporary,omitempty"`
+	Selected  string               `json:"selected,omitempty"`
+}
+
+// ExternalToolPrefs mirrors OpenIDEA's Tools › External Tools entry.
+type ExternalToolPrefs struct {
+	ID               string `json:"id,omitempty"`
+	Name             string `json:"name,omitempty"`
+	Description      string `json:"description,omitempty"`
+	Group            string `json:"group,omitempty"`
+	Enabled          bool   `json:"enabled,omitempty"`
+	Program          string `json:"program,omitempty"`
+	Arguments        string `json:"arguments,omitempty"`
+	WorkingDirectory string `json:"workingDirectory,omitempty"`
+	SynchronizeAfter bool   `json:"synchronizeAfter,omitempty"`
+	OpenConsole      bool   `json:"openConsole,omitempty"`
 }
 
 // AgentPrefs is Settings › Agents › Chat. The inverted switches keep the zero
@@ -979,12 +1369,63 @@ func (p AgentPrefs) thinking() string {
 }
 
 // confirmRerunEnabled reports whether starting a configuration that already
-// runs asks before stopping it; OpenIDEA's run.confirmRerun defaults to on.
+// runs asks before stopping it. The current project's applied backend value
+// wins over the legacy preferences fallback.
 func (m *Model) confirmRerunEnabled() bool {
+	if settings := m.run.runSettings; settings.loaded && settings.root == m.Root() {
+		return settings.confirmRerun
+	}
 	if p := m.prefs.Run; p != nil && p.ConfirmRerun != nil {
 		return *p.ConfirmRerun
 	}
 	return true
+}
+
+func (m *Model) confirmTerminateEnabled() bool {
+	if settings := m.run.runSettings; settings.loaded && settings.root == m.Root() {
+		return settings.confirmTerminate
+	}
+	if p := m.prefs.Run; p != nil && p.ConfirmTerminate != nil {
+		return *p.ConfirmTerminate
+	}
+	return true
+}
+
+func (m *Model) showRunOnStart() bool {
+	if settings := m.run.runSettings; settings.loaded && settings.root == m.Root() {
+		return settings.showOnStart
+	}
+	if p := m.prefs.Run; p != nil && p.ShowOnStart != nil {
+		return *p.ShowOnStart
+	}
+	return true
+}
+
+func (m *Model) runTerminationTimeout() time.Duration {
+	if settings := m.run.runSettings; settings.loaded && settings.root == m.Root() {
+		return settings.terminationTimeout
+	}
+	if p := m.prefs.Run; p != nil && p.TerminationTimeout != nil {
+		return time.Duration(*p.TerminationTimeout) * time.Millisecond
+	}
+	return 3 * time.Second
+}
+
+// showRunWindow follows OpenIDEA's start order: an explicit false wins,
+// then the configuration's focus/open choices, then the global setting.
+func (m *Model) showRunWindow(config *openidea.RunConfig, requested bool) bool {
+	if !requested {
+		return false
+	}
+	if config != nil {
+		if config.FocusToolWindow {
+			return true
+		}
+		if config.OpenToolWindow != nil {
+			return *config.OpenToolWindow
+		}
+	}
+	return m.showRunOnStart()
 }
 
 // EditorAppearance is what Settings › Editor › Appearance, Breadcrumbs,
@@ -993,19 +1434,74 @@ func (m *Model) confirmRerunEnabled() bool {
 // so the zero value is IDEA's default look.
 type EditorAppearance struct {
 	NoLineNumbers bool `json:"noLineNumbers,omitempty"`
-	// LineNumberMode is "absolute" or "relative"; empty is absolute.
+	// LineNumberMode is "absolute", "relative" or "hybrid"; empty is absolute.
 	LineNumberMode string `json:"lineNumberMode,omitempty"`
 	ShowWhitespace bool   `json:"showWhitespace,omitempty"`
 	NoIndentGuides bool   `json:"noIndentGuides,omitempty"`
 	NoFolding      bool   `json:"noFolding,omitempty"`
+	// FoldImports folds the first import run when an editor opens, as
+	// editor.folding.imports does. The default is on, so the stored field is
+	// the off switch.
+	NoFoldImports bool `json:"noFoldImports,omitempty"`
 	// BlockCaret draws the carets as blocks over the next character rather
 	// than bars before it, as editor.appearance.blockCaret does.
 	BlockCaret bool `json:"blockCaret,omitempty"`
+	// CaretBlinking is on by default. These inverse fields preserve older
+	// preference files while exposing the complete editor.appearance.* shape.
+	NoCaretBlinking     bool `json:"noCaretBlinking,omitempty"`
+	CaretBlinkPeriod    int  `json:"caretBlinkPeriod,omitempty"`
+	SmoothCaretBlink    bool `json:"smoothCaretBlinking,omitempty"`
+	SmoothCaretMovement bool `json:"smoothCaretMovement,omitempty"`
+	// CaretMovementStyle is "snappy" or "gliding"; empty is snappy.
+	CaretMovementStyle string `json:"caretMovementStyle,omitempty"`
+	// HardWrap guides and an intention bulb are on by default.
+	NoHardWrapGuides    bool `json:"noHardWrapGuides,omitempty"`
+	MethodSeparators    bool `json:"methodSeparators,omitempty"`
+	NoIntentionBulb     bool `json:"noIntentionBulb,omitempty"`
+	RainbowIndentGuides bool `json:"rainbowIndentGuides,omitempty"`
+	// The whitespace children are on by default when whitespace is shown.
+	NoWhitespaceLeading  bool `json:"noWhitespaceLeading,omitempty"`
+	NoWhitespaceInner    bool `json:"noWhitespaceInner,omitempty"`
+	NoWhitespaceTrailing bool `json:"noWhitespaceTrailing,omitempty"`
 	// SoftWrap wraps the files SoftWrapFiles matches, and ScrollPastEnd
 	// scrolls past the last line; OpenIDEA defaults both off.
 	SoftWrap      bool   `json:"softWrap,omitempty"`
 	SoftWrapFiles string `json:"softWrapFiles,omitempty"`
 	ScrollPastEnd bool   `json:"scrollPastEnd,omitempty"`
+}
+
+const (
+	defaultCaretBlinkPeriod = 500
+	minCaretBlinkPeriod     = 100
+	maxCaretBlinkPeriod     = 2000
+	defaultHardWrapColumn   = 120
+)
+
+// caretBlinkMillis returns the visible blink interval, normalizing preference
+// files that predate the field or were edited by hand.
+func (a EditorAppearance) caretBlinkMillis() int {
+	if a.CaretBlinkPeriod < minCaretBlinkPeriod || a.CaretBlinkPeriod > maxCaretBlinkPeriod {
+		return defaultCaretBlinkPeriod
+	}
+	return a.CaretBlinkPeriod
+}
+
+// caretMovement returns the validated movement style used by the smooth
+// caret option.
+func (a EditorAppearance) caretMovement() string {
+	if a.CaretMovementStyle == "gliding" {
+		return "gliding"
+	}
+	return "snappy"
+}
+
+// wrapGuides returns the hard-wrap guide and any future visual guides. MyGo
+// currently takes guide columns directly on its editor state.
+func (a EditorAppearance) wrapGuides() []int {
+	if a.NoHardWrapGuides {
+		return nil
+	}
+	return []int{defaultHardWrapColumn}
 }
 
 // FontPrefs is Settings › Editor › Font. Family empty is the bundled
@@ -1073,9 +1569,11 @@ type GeneralPrefs struct {
 	WheelZoom                 bool   `json:"wheelZoom,omitempty"`
 	NoDragAndDrop             bool   `json:"noDragAndDrop,omitempty"`
 	CaretScroll               string `json:"caretScroll,omitempty"`
+	PowerSaveMode             bool   `json:"powerSaveMode,omitempty"`
 	NoSoftWrapIndent          bool   `json:"noSoftWrapIndent,omitempty"`
 	NoKeepTrailingOnCaretLine bool   `json:"noKeepTrailingOnCaretLine,omitempty"`
 	ReformatOnSave            bool   `json:"reformatOnSave,omitempty"`
+	MarkdownMode              string `json:"markdownMode,omitempty"`
 	MarkdownImageFolder       string `json:"markdownImageFolder,omitempty"`
 	MarkdownImageNamePattern  string `json:"markdownImageNamePattern,omitempty"`
 }
@@ -1100,6 +1598,15 @@ func (p GeneralPrefs) markdownImageNamePattern() string {
 	return strings.TrimSpace(p.MarkdownImageNamePattern)
 }
 
+func (p GeneralPrefs) markdownMode() markdownMode {
+	switch markdownMode(strings.TrimSpace(p.MarkdownMode)) {
+	case markdownEditorOnly, markdownEditorPreview, markdownPreviewOnly:
+		return markdownMode(strings.TrimSpace(p.MarkdownMode))
+	default:
+		return markdownEditorPreview
+	}
+}
+
 // InlayPrefs is Settings › Editor › Inlay Hints. The inverse names keep the
 // zero value at OpenIDEA's defaults: usage counts, their "no usages" result
 // and the code author are shown, and each metric sits at the declaration.
@@ -1109,6 +1616,64 @@ type InlayPrefs struct {
 	HideCodeVisionNoUses bool   `json:"hideCodeVisionNoUsages,omitempty"`
 	UsagesPosition       string `json:"codeVisionUsagesPosition,omitempty"`
 	AuthorPosition       string `json:"codeVisionAuthorPosition,omitempty"`
+}
+
+// DebuggerPrefs are the debugger choices the native frontend consumes.
+type DebuggerPrefs struct {
+	NoShowOnBreakpoint        bool `json:"noShowOnBreakpoint,omitempty"`
+	FocusAppOnBreakpoint      bool `json:"focusAppOnBreakpoint,omitempty"`
+	HideOnTermination         bool `json:"hideOnTermination,omitempty"`
+	BreakpointsAnyFile        bool `json:"breakpointsAnyFile,omitempty"`
+	NoRunToCursorInlay        bool `json:"noRunToCursorInlay,omitempty"`
+	NoInlineValues            bool `json:"noInlineValues,omitempty"`
+	SortValues                bool `json:"sortValues,omitempty"`
+	NoValueTooltip            bool `json:"noValueTooltip,omitempty"`
+	NoValueTooltipOnSelection bool `json:"noValueTooltipOnSelection,omitempty"`
+	ValueTooltipDelay         *int `json:"valueTooltipDelay,omitempty"`
+	NoSkipLibraryCode         bool `json:"noSkipLibraryCode,omitempty"`
+	NoPythonAttachSubprocess  bool `json:"noPythonAttachSubprocess,omitempty"`
+	PythonGevent              bool `json:"pythonGevent,omitempty"`
+}
+
+func (p DebuggerPrefs) ShowOnBreakpoint() bool { return !p.NoShowOnBreakpoint }
+
+func (p DebuggerPrefs) RunToCursorInlay() bool { return !p.NoRunToCursorInlay }
+
+func (p DebuggerPrefs) InlineValues() bool { return !p.NoInlineValues }
+
+func (p DebuggerPrefs) ValueTooltip() bool { return !p.NoValueTooltip }
+
+func (p DebuggerPrefs) ValueTooltipOnSelection() bool {
+	return !p.NoValueTooltipOnSelection
+}
+
+func (p DebuggerPrefs) TooltipDelay() int {
+	if p.ValueTooltipDelay == nil {
+		return 700
+	}
+	return *p.ValueTooltipDelay
+}
+
+func debuggerPrefsEqual(a, b DebuggerPrefs) bool {
+	return a.NoShowOnBreakpoint == b.NoShowOnBreakpoint &&
+		a.FocusAppOnBreakpoint == b.FocusAppOnBreakpoint &&
+		a.HideOnTermination == b.HideOnTermination &&
+		a.BreakpointsAnyFile == b.BreakpointsAnyFile &&
+		a.NoRunToCursorInlay == b.NoRunToCursorInlay &&
+		a.NoInlineValues == b.NoInlineValues &&
+		a.SortValues == b.SortValues &&
+		a.NoValueTooltip == b.NoValueTooltip &&
+		a.NoValueTooltipOnSelection == b.NoValueTooltipOnSelection &&
+		a.TooltipDelay() == b.TooltipDelay() &&
+		a.NoSkipLibraryCode == b.NoSkipLibraryCode &&
+		a.NoPythonAttachSubprocess == b.NoPythonAttachSubprocess &&
+		a.PythonGevent == b.PythonGevent
+}
+
+func (p DebuggerPrefs) SkipLibraryCode() bool { return !p.NoSkipLibraryCode }
+
+func (p DebuggerPrefs) PythonAttachSubprocess() bool {
+	return !p.NoPythonAttachSubprocess
 }
 
 // CodeVisionUsages reports whether usage counts are drawn.
@@ -1318,6 +1883,45 @@ func (p Preferences) themePreference() *ui.Theme {
 	return themeForName(p.Theme)
 }
 
+// preferredTheme resolves the concrete theme used for an operating-system
+// appearance. OpenIDEA stores a separate preferred theme for light and dark
+// mode, with light and dark as their defaults.
+func (p Preferences) preferredTheme(dark bool) *ui.Theme {
+	return themeForName(p.preferredThemeName(dark))
+}
+
+// preferredThemeName resolves one operating-system appearance to a concrete
+// built-in theme. Light and dark are OpenIDEA's defaults.
+func (p Preferences) preferredThemeName(dark bool) string {
+	name := p.PreferredLightTheme
+	if dark {
+		name = p.PreferredDarkTheme
+	}
+	return normalizedPreferredThemeName(name, dark)
+}
+
+// normalizedPreferredThemeName accepts only concrete themes and falls back to
+// the matching OpenIDEA default for an absent or obsolete value.
+func normalizedPreferredThemeName(name string, dark bool) string {
+	if name == "light" || name == "dark" {
+		return name
+	}
+	if dark {
+		return "dark"
+	}
+	return "light"
+}
+
+// storedPreferredThemeName omits the default from JSON while preserving a
+// deliberate cross-appearance choice.
+func storedPreferredThemeName(name string, dark bool) string {
+	name = normalizedPreferredThemeName(name, dark)
+	if dark && name == "dark" || !dark && name == "light" {
+		return ""
+	}
+	return name
+}
+
 // themeWithAccent is the chosen appearance with the accent the user picked;
 // nil still follows the system's appearance, with the accent applied by the
 // same override when the window draws.
@@ -1326,11 +1930,34 @@ func (p Preferences) themeWithAccent() *ui.Theme {
 	if t == nil {
 		return nil
 	}
+	return p.accentedTheme(t)
+}
+
+// systemThemeWithAccent is themeWithAccent for Sync with OS, using the
+// preferred theme for the operating system's current mode.
+func (p Preferences) systemThemeWithAccent(dark bool) *ui.Theme {
+	return p.accentedTheme(p.preferredTheme(dark))
+}
+
+func (p Preferences) accentedTheme(t *ui.Theme) *ui.Theme {
+	t.Font = p.uiFont()
+	t.FontSize = p.uiFontSize()
 	if c, ok := accentColorOf(p.Accent, t.Dark); ok {
 		t.Accent = c
 		t.AccentHover = c.Mix(t.Text, 0.14)
 		t.AccentPressed = c.Mix(ui.Hex("#000000"), 0.2)
 		t.Focus = c
+	}
+	if p.Appearance.ContrastScrollbars {
+		t.Scrollbar = t.Scrollbar.Mix(t.Text, 0.55)
+		t.ScrollbarWidth = 12
+	}
+	if p.Appearance.RedGreenVision {
+		// Keep errors distinguishable from successful changes for common
+		// protanopia and deuteranopia without changing the rest of the theme.
+		t.Danger = ui.Hex("#d98500")
+		t.Success = ui.Hex("#3977d4")
+		t.Warning = ui.Hex("#b96a00")
 	}
 	return t
 }

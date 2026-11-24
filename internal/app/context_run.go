@@ -1,13 +1,16 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"path"
+	"path/filepath"
 	"regexp"
 	goruntime "runtime"
 	"sort"
 	"strings"
+	"time"
 
 	"mayoi/internal/adapter"
 	"mayoi/internal/openidea"
@@ -41,15 +44,26 @@ func (m *Model) RunContextConfiguration() {
 // RunContextConfigurationWithCoverage runs run.coverageContext: the same
 // context configuration through the coverage executor.
 func (m *Model) RunContextConfigurationWithCoverage() {
-	m.requestContextRun(true)
+	m.requestContextExecution(true, "")
+}
+
+// RunContextConfigurationWithProfiler runs run.profileContext: the active
+// file's temporary configuration through the CPU profiler.
+func (m *Model) RunContextConfigurationWithProfiler() {
+	m.requestContextExecution(false, openidea.ProfileCPU)
 }
 
 func (m *Model) requestContextRun(coverage bool) {
+	m.requestContextExecution(coverage, "")
+}
+
+func (m *Model) requestContextExecution(coverage bool, profile openidea.ProfileMode) {
 	if m.Root() == "" || m.ctx == nil {
 		return
 	}
 	m.run.pendingContext = true
 	m.run.pendingContextCoverage = coverage
+	m.run.pendingContextProfile = profile
 	m.run.pendingDebugContext = false
 	m.DockShow("run")
 	if !m.run.trusted {
@@ -69,13 +83,19 @@ func (m *Model) requestContextRun(coverage bool) {
 
 func (m *Model) startContextRun() {
 	coverage := m.run.pendingContextCoverage
+	profile := m.run.pendingContextProfile
 	m.run.pendingContext = false
 	m.run.pendingContextCoverage = false
+	m.run.pendingContextProfile = ""
 	cfg, err := m.contextRunConfig()
 	if err != nil {
 		m.run.err = err.Error()
 		m.notifyInfo("run-context", "Nothing to run here", err.Error())
 		m.invalidate()
+		return
+	}
+	cfg = m.adoptRunTemporary(*cfg)
+	if cfg == nil {
 		return
 	}
 	raw, err := json.Marshal(cfg)
@@ -87,6 +107,10 @@ func (m *Model) startContextRun() {
 	}
 	if coverage {
 		m.startRunWithCoverage(raw, cfg.Name, &coverageExecution{name: cfg.Name, root: m.Root()})
+		return
+	}
+	if profile != "" {
+		m.prepareProfilerConfig(cfg, profile)
 		return
 	}
 	m.startRunWith(raw, cfg.Name)
@@ -101,6 +125,10 @@ func (m *Model) startContextDebug() {
 		m.invalidate()
 		return
 	}
+	cfg = m.adoptRunTemporary(*cfg)
+	if cfg == nil {
+		return
+	}
 	m.DebugRunConfig(cfg)
 }
 
@@ -112,7 +140,66 @@ func (m *Model) contextRunConfig() (*openidea.RunConfig, error) {
 	if tab == nil || tab.doc == nil {
 		return nil, errors.New("Open a source file first")
 	}
-	return contextRunConfigFor(m.Root(), tab.doc.Path(), tab.doc.Text(), m.run.configs)
+	cfg, err := contextRunConfigFor(m.Root(), tab.doc.Path(), tab.doc.Text(), m.run.configs)
+	if err != nil {
+		return nil, err
+	}
+	_ = m.resolveContextRunTool(cfg, tab.doc.Path())
+	return cfg, nil
+}
+
+// resolveContextRunTool replaces a bare context command with the executable
+// OpenIDEA would use. PHP comes from the configured interpreter when set;
+// node, npx and the other script runtimes come from the project-aware tool
+// lookup, which prefers node_modules/.bin before the search path.
+func (m *Model) resolveContextRunTool(cfg *openidea.RunConfig, near string) error {
+	if cfg == nil || strings.TrimSpace(cfg.Command) == "" {
+		return nil
+	}
+	name := strings.TrimSpace(cfg.Command)
+	if strings.ContainsAny(name, `/\`) {
+		return nil
+	}
+	if m.mgr == nil && m.invokeHook == nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(modelContext(m), 15*time.Second)
+	defer cancel()
+	if strings.EqualFold(name, "php") {
+		raw, err := m.invoke(ctx, "sdk_php_effective", nil)
+		var effective *string
+		if err == nil {
+			err = json.Unmarshal(raw, &effective)
+		}
+		if err == nil && effective != nil && strings.TrimSpace(*effective) != "" {
+			cfg.Command = strings.TrimSpace(*effective)
+			return nil
+		}
+	}
+	if near != "" {
+		near = filepath.Dir(near)
+	}
+	raw, err := m.invoke(ctx, "sdk_locate_tools", map[string]any{
+		"names": []string{name},
+		"near":  near,
+	})
+	if err != nil {
+		return err
+	}
+	var located openidea.LocatedTools
+	if err := json.Unmarshal(raw, &located); err != nil {
+		return err
+	}
+	for _, tool := range located.Tools {
+		if !strings.EqualFold(tool.Name, name) || tool.Path == nil {
+			continue
+		}
+		if path := strings.TrimSpace(*tool.Path); path != "" {
+			cfg.Command = path
+		}
+		break
+	}
+	return nil
 }
 
 type contextFileRole string
@@ -179,7 +266,7 @@ func contextRoleFor(rel, text string, windows, django bool) contextFileRole {
 		strings.HasSuffix(lower, ".sh"), strings.HasSuffix(lower, ".bash"),
 		strings.HasSuffix(lower, ".zsh"), strings.HasSuffix(lower, ".js"),
 		strings.HasSuffix(lower, ".mjs"), strings.HasSuffix(lower, ".cjs"),
-		strings.HasSuffix(lower, ".ts"):
+		strings.HasSuffix(lower, ".ts"), strings.HasSuffix(lower, ".php"):
 		return contextRoleScript
 	case windows && (strings.HasSuffix(lower, ".bat") || strings.HasSuffix(lower, ".cmd")):
 		return contextRoleScript
@@ -537,6 +624,11 @@ func contextScriptConfig(rel string, configs []openidea.RunConfig, text string) 
 		base.Command = "npx"
 		base.Args = []string{"tsx", rel}
 		base.DebugAdapter = stringPtr("js-debug")
+	case strings.HasSuffix(lower, ".php"):
+		base.Kind = "php"
+		base.Command = "php"
+		base.Args = []string{rel}
+		base.DebugAdapter = stringPtr("php-debug")
 	case strings.HasSuffix(lower, ".zsh"):
 		base.Command = "zsh"
 		base.Args = []string{rel}
@@ -797,6 +889,7 @@ func (m *Model) DebugContext() {
 	}
 	m.run.pendingDebugContext = true
 	m.run.pendingContext = false
+	m.run.pendingContextProfile = ""
 	m.DockShow("debug")
 	if !m.run.trusted {
 		m.run.pendingTrust = true

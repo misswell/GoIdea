@@ -18,8 +18,36 @@ func TestDocumentLanguageCoverage(t *testing.T) {
 	}{
 		{"src/main/java/com/example/App.java", "Java"},
 		{"src/main/kotlin/App.kt", "Kotlin"},
+		{"src/main.c", "C"},
+		{"src/main.cpp", "C++"},
+		{"src/App.scala", "Scala"},
+		{"src/App.swift", "Swift"},
+		{"src/App.dart", "Dart"},
+		{"src/App.cs", "C#"},
+		{"src/app.js", "JavaScript"},
+		{"src/app.tsx", "TypeScript"},
+		{"config/settings.json", "JSON"},
+		{"src/app.py", "Python"},
+		{"src/lib.rs", "Rust"},
+		{"scripts/build.sh", "Shell"},
+		{"src/query.sql", "SQL"},
+		{"src/analysis.r", "R"},
+		{"src/main.lua", "Lua"},
+		{"src/index.php", "PHP"},
+		{"src/site.css", "CSS"},
+		{"src/index.html", "HTML"},
+		{"src/service.xml", "XML"},
+		{"README.md", "Markdown"},
+		{"fix.patch", "Diff"},
+		{"Dockerfile", "Dockerfile"},
+		{"Makefile", "Makefile"},
+		{"src/service.proto", "Protobuf"},
+		{"src/query.graphql", "GraphQL"},
+		{"src/main.zig", "Zig"},
 		{"build.gradle", ""},
 		{"src/main/resources/application.yaml", "YAML"},
+		{"Cargo.toml", "TOML"},
+		{"src/index.rb", "Ruby"},
 	}
 	for _, c := range cases {
 		doc := newDocument(nil, "w", openidea.DocInfo{Path: c.path, Text: "class A {}\n", Version: 1})
@@ -34,8 +62,9 @@ func TestDocumentLanguageCoverage(t *testing.T) {
 			t.Errorf("%s: language %v, want %s", c.path, lang, c.want)
 			continue
 		}
-		if lang.LineComment == "" {
-			t.Errorf("%s: no line comment", c.path)
+		if lang.Tokenizer == nil && lang.Highlighter == nil &&
+			lang.LineComment == "" && lang.BlockComment == [2]string{} {
+			t.Errorf("%s: language has no editor behavior", c.path)
 		}
 	}
 }

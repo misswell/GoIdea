@@ -4,10 +4,13 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
+
+	"mayoi/internal/openidea"
 )
 
 func TestLoadPreferencesDefaults(t *testing.T) {
@@ -20,6 +23,30 @@ func TestLoadPreferencesDefaults(t *testing.T) {
 	}
 	if p := LoadPreferences(bad); !reflect.DeepEqual(p, Preferences{}) {
 		t.Fatalf("broken file = %+v, want defaults", p)
+	}
+}
+
+func TestRunWindowVisibilityFollowsConfigurationAndGlobalSetting(t *testing.T) {
+	off, on := false, true
+	m := &Model{}
+	if !m.showRunWindow(nil, true) || m.showRunWindow(nil, false) {
+		t.Fatal("default Run window visibility did not follow the requested start")
+	}
+	m.prefs.Run = &RunPrefs{ShowOnStart: &off}
+	if m.showRunWindow(nil, true) {
+		t.Fatal("run.showOnStart=false still revealed Run")
+	}
+	if !m.showRunWindow(&openidea.RunConfig{FocusToolWindow: true}, true) {
+		t.Fatal("a focused configuration did not reveal Run")
+	}
+	if !m.showRunWindow(&openidea.RunConfig{OpenToolWindow: &on}, true) {
+		t.Fatal("a configuration set to open Run did not reveal it")
+	}
+	if m.showRunWindow(&openidea.RunConfig{OpenToolWindow: &off}, true) {
+		t.Fatal("a configuration set to keep Run closed revealed it")
+	}
+	if m.showRunWindow(&openidea.RunConfig{FocusToolWindow: true}, false) {
+		t.Fatal("an explicit show=false did not keep Run hidden")
 	}
 }
 
@@ -209,26 +236,43 @@ func TestSettingsTreeNestsAndGroups(t *testing.T) {
 	}
 	want := []string{
 		"Appearance & Behavior", "Version Control", "Keymap", "Editor",
-		"Languages & Frameworks", "Agents", "Security",
+		"Build, Execution, Deployment", "Languages & Frameworks", "Agents", "Security", "Tools",
 	}
 	if !reflect.DeepEqual(roots, want) {
 		t.Fatalf("roots = %v, want %v", roots, want)
 	}
 	editor, ok := settingsFindNode(tree, settingsGroupKey("Editor"))
-	if !ok || len(editor.children) != 4 {
-		t.Fatalf("Editor folder = %+v, want General, Font, Inlay Hints and TODO", editor)
+	if !ok || len(editor.children) != 14 {
+		t.Fatalf("Editor folder = %+v, want General, Code Editing, Font, Color Scheme, Code Style, Inspections, Natural Languages, File Encodings, File Types, Inlay Hints, TODO, Vim, Live Templates and File and Code Templates", editor)
 	}
 	general := editor.children[0]
-	if general.key != settingsPageGeneral || editor.children[1].key != settingsPageEditorFont ||
-		editor.children[2].key != settingsPageInlayHints || editor.children[3].key != settingsPageTodo {
-		t.Fatalf("Editor children = %q, %q, %q, %q", general.key, editor.children[1].key,
-			editor.children[2].key, editor.children[3].key)
+	if general.key != settingsPageGeneral || editor.children[1].key != settingsPageCodeEditing ||
+		editor.children[2].key != settingsPageEditorFont ||
+		editor.children[3].key != settingsPageColorScheme ||
+		editor.children[4].key != settingsPageCodeStyle ||
+		editor.children[5].key != settingsPageInspections ||
+		editor.children[6].key != settingsPageNaturalLanguages ||
+		editor.children[7].key != settingsPageFileEncodings ||
+		editor.children[8].key != settingsPageFileTypes ||
+		editor.children[9].key != settingsPageInlayHints || editor.children[10].key != settingsPageTodo ||
+		editor.children[11].key != settingsPageVim ||
+		editor.children[12].key != settingsPageLiveTemplates ||
+		editor.children[13].key != settingsPageFileTemplates {
+		t.Fatalf("Editor children = %+v", editor.children)
 	}
-	if len(general.children) != 4 ||
-		general.children[0].key != settingsPageEditorAppearance ||
-		general.children[1].key != settingsPageBreadcrumbs ||
-		general.children[2].key != settingsPageCodeFolding ||
-		general.children[3].key != settingsPageEditorTabs {
+	if len(general.children) != 12 ||
+		general.children[0].key != settingsPageAutoImport ||
+		general.children[1].key != settingsPageEditorAppearance ||
+		general.children[2].key != settingsPageBreadcrumbs ||
+		general.children[3].key != settingsPageCodeCompletion ||
+		general.children[4].key != settingsPageCodeFolding ||
+		general.children[5].key != settingsPageEditorTabs ||
+		general.children[6].key != settingsPageGutterIcons ||
+		general.children[7].key != settingsPageInlineCompletion ||
+		general.children[8].key != settingsPageRichTextCopy ||
+		general.children[9].key != settingsPageSmartKeys ||
+		general.children[10].key != settingsPageStickyLines ||
+		general.children[11].key != settingsPagePostfix {
 		t.Fatalf("General children = %+v", general.children)
 	}
 	if got := settingsBreadcrumb(tree, settingsPageEditorTabs); !reflect.DeepEqual(got,
@@ -306,10 +350,15 @@ func TestSettingsCollapseHidesChildren(t *testing.T) {
 	m := &Model{}
 	m.OpenSettingsPage(settingsPageAppearance)
 	open := len(m.settingsVisibleRows())
+	editor, ok := settingsFindNode(settingsTree(), settingsGroupKey("Editor"))
+	if !ok {
+		t.Fatal("Editor group missing")
+	}
+	hidden := len(settingsFlattenAll(editor.children))
 	m.settingsToggleNode(settingsGroupKey("Editor"))
 	closed := len(m.settingsVisibleRows())
-	if closed != open-8 {
-		t.Fatalf("rows open %d, closed %d, want eight fewer", open, closed)
+	if closed != open-hidden {
+		t.Fatalf("rows open %d, closed %d, want %d fewer", open, closed, hidden)
 	}
 	if m.settingsNormalizeKey("no.such.page") != "" {
 		t.Fatalf("unknown key normalized to a row")
@@ -585,6 +634,34 @@ func TestSettingsCodeFoldingStagesAndApplies(t *testing.T) {
 	}
 }
 
+func TestSettingsFoldImportsOpensEditorsAndUnfoldsWhenDisabled(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	buffer := editor.NewBuffer("package demo\n\nimport (\n\t\"fmt\"\n)\n\nfunc main() { fmt.Println() }\n")
+	buffer.SetLanguage(editor.LanguageFor("main.go"))
+	tab := &Tab{state: &editor.State{Buffer: buffer}}
+	m := &Model{cfg: Config{SettingsPath: path}, tabs: []*Tab{tab}}
+	m.applyPreferences()
+
+	if !slices.Contains(tab.state.Folded(), 2) {
+		t.Fatalf("default import fold = %v, want line 2", tab.state.Folded())
+	}
+	m.OpenSettingsPage(settingsPageCodeFolding)
+	m.settingsSetFoldImports(false)
+	if slices.Contains(tab.state.Folded(), 2) {
+		t.Fatalf("staged import-off kept folds %v", tab.state.Folded())
+	}
+	m.applySettings()
+	if stored := LoadPreferences(path); !stored.Editor.NoFoldImports {
+		t.Fatalf("stored import folding = %+v", stored.Editor)
+	}
+
+	m.settingsSelectPage(settingsPageCodeFolding)
+	m.settingsResetPage()
+	if !m.settingsDraft.foldImports || !slices.Contains(tab.state.Folded(), 2) {
+		t.Fatalf("reset import folding = draft %v folds %v", m.settingsDraft.foldImports, tab.state.Folded())
+	}
+}
+
 func TestSettingsBreadcrumbsStagePlacement(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")
 	m := &Model{cfg: Config{SettingsPath: path}}
@@ -610,10 +687,15 @@ func TestSettingsBreadcrumbsStagePlacement(t *testing.T) {
 	}
 
 	m.OpenSettingsPage(settingsPageBreadcrumbs)
+	if languages := m.settingsBreadcrumbLanguages(); !slices.Contains(languages, "go") ||
+		!slices.Contains(languages, "javascript") {
+		t.Fatalf("MyGo language catalog missing from Breadcrumbs: %v", languages)
+	}
 	m.settingsSetShowBreadcrumbs(false)
 	m.settingsSetBreadcrumbPlacement("bottom")
+	m.settingsToggleBreadcrumbLanguage("go")
 	m.applySettings()
-	want := BreadcrumbPrefs{Hidden: true, Placement: "bottom"}
+	want := BreadcrumbPrefs{Hidden: true, Placement: "bottom", DisabledLanguages: []string{"go"}}
 	stored := LoadPreferences(path).Breadcrumbs
 	if !sameBreadcrumbPrefs(m.prefs.Breadcrumbs, want) || !sameBreadcrumbPrefs(stored, want) {
 		t.Fatalf("stored breadcrumbs = %+v / %+v", m.prefs.Breadcrumbs, stored)
@@ -631,6 +713,26 @@ func TestSettingsBreadcrumbsStagePlacement(t *testing.T) {
 	m.settingsSetBreadcrumbPlacement("left")
 	if m.settingsDraft.breadcrumbPlacement != "top" {
 		t.Fatalf("an unknown placement was staged")
+	}
+}
+
+func TestSettingsUpdatesStageSourceAndPersist(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	m := &Model{cfg: Config{SettingsPath: path}}
+	m.OpenSettingsPage(settingsPageUpdates)
+	m.settingsDraft.updateSource = "cnb"
+	m.settingsDraft.updateAutoCheck = false
+	m.settingsDraft.updateWhatsNew = false
+	if !m.settingsDirtyPage(settingsPageUpdates) || !m.settingsPending() {
+		t.Fatal("Updates choices were not staged")
+	}
+	m.applySettings()
+	stored := LoadPreferences(path).Updates
+	if stored == nil || stored.Source != "cnb" || !stored.NoAutoCheck || !stored.NoWhatsNew {
+		t.Fatalf("stored Updates = %+v", stored)
+	}
+	if _, err := m.updateFeedForSource(); err == nil {
+		t.Fatal("the unconfigured CNB source silently selected another feed")
 	}
 }
 
@@ -860,18 +962,21 @@ func TestSettingsSystemReopenProjectStagesAndApplies(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")
 	m := &Model{cfg: Config{SettingsPath: path}}
 	m.OpenSettingsPage(settingsPageSystem)
-	m.settingsDraft.reopenLast = true
+	if !m.settingsDraft.reopenLast {
+		t.Fatal("System Settings did not start at OpenIDEA's reopen default")
+	}
+	m.settingsDraft.reopenLast = false
 	if !m.settingsDirtyPage(settingsPageSystem) || !m.settingsPending() {
 		t.Fatal("System Settings reopen choice was not staged")
 	}
 	m.applySettings()
-	if got := LoadPreferences(path).Startup; got != "reopen" {
+	if got := LoadPreferences(path).Startup; got != "welcome" {
 		t.Fatalf("stored startup = %q", got)
 	}
 	m.settingsSelectPage(settingsPageSystem)
 	m.settingsResetPage()
-	if m.settingsDraft.reopenLast {
-		t.Fatal("reset System Settings still reopens the last project")
+	if !m.settingsDraft.reopenLast {
+		t.Fatal("reset System Settings did not restore the reopen default")
 	}
 }
 

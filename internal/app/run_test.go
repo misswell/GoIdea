@@ -70,10 +70,10 @@ func TestAcceptChunkIgnoresOtherChannels(t *testing.T) {
 	}
 }
 
-func TestPickRunConfigSkipsTests(t *testing.T) {
+func TestPickRunConfigUsesOpenIDEAOrdering(t *testing.T) {
 	configs := []openidea.RunConfig{{Name: "mvn test", IsTest: true}, {Name: "mvn package"}}
-	if got := pickRunConfig(configs); got != 1 {
-		t.Fatalf("picked %d", got)
+	if got := pickRunConfig(configs); got != 0 {
+		t.Fatalf("picked %d, want the test over the build-only task", got)
 	}
 	if got := pickRunConfig(nil); got != 0 {
 		t.Fatalf("empty picked %d", got)
@@ -96,5 +96,24 @@ func TestPickRunConfigPrefersTheApplication(t *testing.T) {
 	}
 	if got := pickRunConfig(gradle); got != 1 {
 		t.Fatalf("picked %d, want the application", got)
+	}
+}
+
+func TestPickRunConfigFollowsOpenIDEADefaultScoring(t *testing.T) {
+	configs := []openidea.RunConfig{
+		{Name: "package", Kind: "maven"},
+		{Name: "preview", Kind: "maven"},
+		{Name: "spring-boot:run", Kind: "maven"},
+		{Name: "Boot", Kind: "spring-boot"},
+		{Name: "test", Kind: "junit", IsTest: true},
+	}
+	if got := pickRunConfig(configs); got != 3 {
+		t.Fatalf("picked %d, want the Spring Boot configuration", got)
+	}
+	if got := pickRunConfig(configs[:3]); got != 2 {
+		t.Fatalf("picked %d, want the explicit spring-boot:run target", got)
+	}
+	if got := pickRunConfig(configs[:2]); got != 1 {
+		t.Fatalf("picked %d, want the ordinary configuration over a build", got)
 	}
 }

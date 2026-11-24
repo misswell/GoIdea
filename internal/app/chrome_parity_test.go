@@ -23,7 +23,7 @@ func chromeIconNames() []string {
 		// status
 		"status/error", "status/info", "status/success", "status/warning",
 		// build tools
-		"build/dependencyAnalyzer", "build/taskGroup", "build/toggleOfflineMode",
+		"build/dependencyAnalyzer", "build/gradleLoadChanges", "build/taskGroup", "build/toggleOfflineMode",
 		"externalSystem/task", "maven/mavenGoal", "maven/mavenLoadChanges",
 		"maven/mavenModule", "maven/mavenPlugin", "maven/mavenPluginGoal",
 		"maven/mavenProfiles", "maven/mavenProject", "nodes/generatedSource",
@@ -32,7 +32,7 @@ func chromeIconNames() []string {
 		"nodes/sourceRoot", "fileTypes/gradle", "fileTypes/java",
 		"fileTypes/unknown",
 		// tool windows
-		"toolwindows/notifications", "toolwindows/terminal",
+		"toolwindows/gradle", "toolwindows/notifications", "toolwindows/terminal",
 	}
 }
 

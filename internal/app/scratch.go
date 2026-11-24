@@ -3,8 +3,7 @@ package app
 // Scratch Files (Cmd+Shift+N) after OpenIDEA's feature: throwaway files of a
 // chosen language in <data>/scratches, outside any project, openable like a
 // normal document. The chooser lists recently used languages first and filters
-// by name, fuzzy prefix or extension. The "Scratches" project view root is not
-// ported yet.
+// by name, fuzzy prefix or extension.
 
 import (
 	"context"
@@ -43,11 +42,44 @@ type scratchChooser struct {
 	active    int
 }
 
-// OpenScratchChooser is File › New Scratch File…: the chooser lists the
-// languages this editor can highlight.
+// OpenScratchChooser is File › New Scratch File…: the chooser reads the
+// backend language registry, including OpenIDEA's per-language scratch
+// templates, and keeps the local lexer list visible while it loads.
 func (m *Model) OpenScratchChooser() {
-	m.scratch = &scratchChooser{open: true, languages: scratchLanguagesLocal()}
+	v := &scratchChooser{
+		open:      true,
+		loading:   m.mgr != nil || m.invokeHook != nil,
+		languages: scratchLanguagesLocal(),
+	}
+	m.scratch = v
 	m.invalidate()
+	if !v.loading {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(modelContext(m), 20*time.Second)
+		defer cancel()
+		languages, err := m.toolLanguages(ctx)
+		var scratchLanguages []scratchLanguage
+		if err == nil {
+			scratchLanguages = scratchLanguagesFromBackend(languages)
+		}
+		m.post(func() {
+			if m.scratch != v {
+				return
+			}
+			v.loading = false
+			if err != nil {
+				if len(v.languages) == 0 {
+					v.err = "Could not read languages: " + err.Error()
+				}
+			} else if len(scratchLanguages) > 0 {
+				v.languages = scratchLanguages
+				v.active = 0
+			}
+			m.invalidate()
+		})
+	}()
 }
 
 // closeScratchChooser drops the popup without creating anything.
@@ -93,6 +125,34 @@ func scratchExtension(patterns []string) string {
 		return ext
 	}
 	return ""
+}
+
+// scratchLanguagesFromBackend maps the backend's UI language catalog to the
+// chooser rows. The registry is authoritative for ids and templates, just as
+// OpenIDEA's `languages()` command is.
+func scratchLanguagesFromBackend(languages []openIDEALanguageInfo) []scratchLanguage {
+	out := make([]scratchLanguage, 0, len(languages))
+	for _, language := range languages {
+		ext := ""
+		for _, extension := range language.Extensions {
+			if ext = strings.TrimPrefix(strings.TrimSpace(extension), "."); ext != "" {
+				break
+			}
+		}
+		if language.ID == "" || language.Name == "" || ext == "" {
+			continue
+		}
+		out = append(out, scratchLanguage{
+			id:       language.ID,
+			name:     language.Name,
+			ext:      ext,
+			template: language.ScratchTemplate,
+		})
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		return strings.ToLower(out[i].name) < strings.ToLower(out[j].name)
+	})
+	return out
 }
 
 // scratchRows is the chooser's list: recently used languages first when the
@@ -370,8 +430,8 @@ func (m *Model) scratchChooserDialog(c *ui.Context, p *ui.Theme) {
 	}
 }
 
-// SmokeScratch opens the chooser, picks the first language, and checks the
-// scratch file it writes opens as a document in the data directory.
+// SmokeScratch opens the chooser, selects Java when the backend registry
+// provides it, and checks the backend template, caret and opened document.
 func (m *Model) SmokeScratch(ctx context.Context) (map[string]any, error) {
 	out := map[string]any{}
 	var origPath string
@@ -409,17 +469,34 @@ func (m *Model) SmokeScratch(ctx context.Context) (map[string]any, error) {
 		case <-time.After(150 * time.Millisecond):
 		}
 	}
-	var id string
+	var selected scratchLanguage
 	m.post(func() {
-		if rows := m.scratchRows(); len(rows) > 0 {
-			id = rows[0].id
+		if m.scratch == nil {
+			return
+		}
+		for _, language := range m.scratch.languages {
+			if language.id == "java" {
+				selected = language
+				break
+			}
+		}
+		if selected.id == "" && len(m.scratch.languages) > 0 {
+			selected = m.scratch.languages[0]
 		}
 	})
-	if id == "" {
+	if selected.id == "" {
 		out["error"] = "No language is available"
 		return out, nil
 	}
-	m.post(func() { m.CreateScratchLanguage(id) })
+	out["language"] = selected.id
+	out["extension"] = selected.ext
+	out["template"] = selected.template != ""
+	expectedText, expectedLine, expectedCol := scratchContent(selected.template)
+	expectedCaret := strings.Index(selected.template, "$END$")
+	if expectedCaret < 0 {
+		expectedCaret = 0
+	}
+	m.post(func() { m.CreateScratchLanguage(selected.id) })
 	dir, _ := m.scratchDir()
 	wantDir := realPath(dir)
 	deadline = time.Now().Add(60 * time.Second)
@@ -435,6 +512,11 @@ func (m *Model) SmokeScratch(ctx context.Context) (map[string]any, error) {
 			out["name"] = filepath.Base(path)
 			out["opened"] = true
 			out["inScratchDir"] = true
+			if raw, err := os.ReadFile(path); err == nil {
+				out["templateUsed"] = string(raw) == expectedText
+			}
+			out["line"] = expectedLine
+			out["column"] = expectedCol
 			break
 		}
 		if time.Now().After(deadline) {
@@ -449,6 +531,28 @@ func (m *Model) SmokeScratch(ctx context.Context) (map[string]any, error) {
 		case <-ctx.Done():
 			return out, ctx.Err()
 		case <-time.After(150 * time.Millisecond):
+		}
+	}
+	if out["opened"] == true {
+		deadline = time.Now().Add(5 * time.Second)
+		for {
+			var caret int
+			m.post(func() {
+				if t := m.tab(); t != nil {
+					caret = t.state.Selection().Head
+				}
+			})
+			out["caret"] = caret
+			out["caretExpected"] = expectedCaret
+			out["caretUsed"] = caret == expectedCaret
+			if caret == expectedCaret || time.Now().After(deadline) {
+				break
+			}
+			select {
+			case <-ctx.Done():
+				return out, ctx.Err()
+			case <-time.After(100 * time.Millisecond):
+			}
 		}
 	}
 	// Put the active tab back, so the phases after this one see the file the

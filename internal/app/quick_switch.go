@@ -25,7 +25,7 @@ func quickSwitchMenuEntries(m *Model) []menuEntry {
 			},
 		),
 		submenu("Keymap",
-			menuEntry{label: keymapPresetTitle, check: func(*Model) bool { return true }},
+			keymapPresetMenuEntries()...,
 		),
 		submenu("View Mode",
 			menuEntry{label: zenTitle(m), command: "editor.toggleZen"},

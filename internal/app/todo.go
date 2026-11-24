@@ -217,7 +217,7 @@ func (m *Model) refreshTodoHighlights(now time.Time, p *ui.Theme) {
 		}
 		t.todoSeen = v
 		t.todoDark = p.Dark
-		t.state.TextBackgrounds = m.todoMarksOf(t, p)
+		t.state.TextBackgrounds = m.composeTextBackgrounds(t, m.todoMarksOf(t, p))
 	}
 }
 
@@ -835,7 +835,7 @@ func (m *Model) todoTone(keyword string, p *ui.Theme) ui.Color {
 // filters and the actions, then the TODO items grouped by file.
 func (m *Model) todoPanel(c *ui.Context, p *ui.Theme) {
 	groups := m.todoGroups()
-	col := ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Background(p.Surface).
+	col := ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Background(m.toolWindowBackground(p)).
 		BorderWidth(1, 0, 0, 0).BorderColor(p.Border)
 	col.Children(func() {
 		ui.Row(c).Height(30).Padding(0, 8).Gap(10).AlignItems(ui.Center).

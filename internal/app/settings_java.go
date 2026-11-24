@@ -50,7 +50,7 @@ var javaLanguageLevels = []string{
 func (m *Model) LoadJavaSettings() {
 	state := &m.javaSettings
 	scope := "global"
-	if m.Root() != "" {
+	if m.Root() != "" && !m.settingsDraft.newProjects {
 		scope = "project"
 	}
 	state.loading = true
@@ -213,6 +213,10 @@ func (m *Model) saveJavaSettingsThenLanguageServers(closeAfter bool) {
 			m.settingsErr = ""
 			m.status = "Java settings updated"
 			m.LoadJavaTools()
+			if m.run.trusted {
+				m.loadRunConfigs()
+				m.RefreshExternalLibraries()
+			}
 			m.saveLanguageServerSettings(closeAfter)
 		})
 	}()

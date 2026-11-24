@@ -25,28 +25,52 @@ func init() {
 		switch c.id {
 		case "file.openPaths":
 			a.RunWithArg = func(m *Model, arg any) { m.openPaths(stringPaths(arg)) }
+		case "file.newScratchFile":
+			a.When = func(m *Model) bool { return m.Root() != "" && !m.showingWelcome }
 		case "file.openProjectPath":
 			a.RunWithArg = func(m *Model, arg any) { m.openProjectPath(projectPathArg(arg)) }
 		case "file.openRecentProject":
 			a.RunWithArg = func(m *Model, arg any) { m.openProjectPath(projectPathArg(arg)) }
 		case "build.compileFile":
 			a.When = func(m *Model) bool {
-				t := m.tab()
-				return t != nil && t.kind == "" && t.doc != nil && m.canCompileFile(t.doc.Path())
+				return m.Root() != "" && !m.showingWelcome
 			}
+			a.RunWithArg = func(m *Model, arg any) { m.runCompileFileAction(arg) }
+		case "build.buildProject":
+			a.When = buildActionAvailable
+			a.RunWithArg = func(m *Model, arg any) { m.runBuildProjectAction(arg) }
+		case "build.buildModule":
+			a.When = buildActionAvailable
+			a.RunWithArg = func(m *Model, arg any) { m.runBuildModuleAction(arg) }
+		case "build.rebuildProject":
+			a.When = buildActionAvailable
+			a.RunWithArg = func(m *Model, arg any) { m.runRebuildProjectAction(arg) }
+		case "build.buildArtifacts":
+			a.When = buildActionAvailable
+			a.RunWithArg = func(m *Model, arg any) { m.runBuildArtifactsAction(arg) }
+		case "build.stop":
+			a.When = func(m *Model) bool { return m.build.busy }
 		case "edit.undo":
 			a.When = func(m *Model) bool {
-				return m.projectTreeFocus || m.activeEditorAvailable()
+				return m.projectTreeFocus || m.activeEditorAvailable() || m.activeNotebook()
 			}
 			a.Enabled = func(m *Model) bool {
 				if m.projectTreeFocus {
 					return m.treeLastMove != nil
 				}
+				if m.activeNotebook() {
+					return m.activeNotebookCanUndo()
+				}
 				return m.activeEditorCanUndo()
 			}
 		case "edit.redo":
-			a.When = func(m *Model) bool { return m.activeEditorAvailable() }
-			a.Enabled = func(m *Model) bool { return m.activeEditorCanRedo() }
+			a.When = func(m *Model) bool { return m.activeEditorAvailable() || m.activeNotebook() }
+			a.Enabled = func(m *Model) bool {
+				if m.activeNotebook() {
+					return m.activeNotebookCanRedo()
+				}
+				return m.activeEditorCanRedo()
+			}
 		case "edit.copy", "edit.selectAll":
 			a.When = func(m *Model) bool {
 				return (m.projectTreeFocus && m.tree != nil) || m.activeEditorAvailable()
@@ -57,6 +81,23 @@ func init() {
 			}
 		case "editor.addOrRemoveCaret", "editor.copyPath", "editor.copyReference":
 			a.When = func(m *Model) bool { return m.activeEditorAvailable() }
+		case "code.pasteFromHistory", "editor.inlineCompletion.trigger":
+			a.When = func(m *Model) bool { return m.activeEditorEditable() }
+			a.KeyWhen = func(m *Model) bool { return m.activeEditorEditable() }
+		case "editor.toggleColumnSelection":
+			a.When = func(m *Model) bool { return m.activeEditorAvailable() }
+			a.KeyWhen = func(m *Model) bool { return m.activeEditorAvailable() }
+			a.Toggled = func(m *Model) bool { return m.columnSelectionEnabled() }
+		case "editor.toggleSemanticHighlighting":
+			a.Toggled = func(m *Model) bool { return m.prefs.EditorScheme.SemanticHighlighting }
+		case "editor.toggleRainbowBrackets":
+			a.Toggled = func(m *Model) bool { return m.prefs.EditorScheme.RainbowBrackets }
+		case "editor.colorScheme.import":
+			a.RunWithArg = func(m *Model, arg any) { m.ImportColorScheme(arg) }
+		case "editor.colorScheme.export":
+			a.RunWithArg = func(m *Model, arg any) { m.ExportColorScheme(arg) }
+		case "editor.colorScheme.delete":
+			a.RunWithArg = func(m *Model, arg any) { m.DeleteColorScheme(arg) }
 		case "editor.nextTab", "editor.prevTab":
 			a.When = func(m *Model) bool { return len(m.tabs) > 1 }
 		case "editor.toggleSoftWrap":
@@ -73,6 +114,14 @@ func init() {
 			a.Toggled = func(m *Model) bool { return !m.prefs.Appearance.HideToolWindowBars }
 		case "view.toggleStatusBar":
 			a.Toggled = func(m *Model) bool { return !m.prefs.Appearance.HideStatusBar }
+		case "debug.reloadChangedClasses":
+			a.RunWithArg = func(m *Model, arg any) {
+				if configID := hotSwapConfigIDArg(arg); configID != "" {
+					m.HotSwapReloadForConfigAsync(configID)
+					return
+				}
+				m.HotSwapReload()
+			}
 		case "view.navigationBarTop":
 			a.Toggled = func(m *Model) bool { return m.navigationBarPosition() == "top" }
 			a.When = func(m *Model) bool { return m.Root() != "" && !m.showingWelcome }
@@ -116,6 +165,29 @@ func init() {
 			a.When = func(m *Model) bool {
 				return m.Root() != "" && !m.showingWelcome && m.tab() != nil
 			}
+		case "http.runRequest", "http.copyAsCurl", "http.addPublicEnvironment",
+			"http.addPrivateEnvironment", "http.runAll":
+			a.When = func(m *Model) bool { return m.activeHTTPRequestEditor() }
+			a.KeyWhen = func(m *Model) bool { return m.activeHTTPRequestEditor() }
+		case "http.newRequest":
+			a.When = func(m *Model) bool { return m.Root() != "" && !m.showingWelcome }
+		case "http.showToolWindow":
+			a.When = func(m *Model) bool { return m.Root() != "" && !m.showingWelcome }
+		case "http.generateSpringRequest", "http.generateSpringControllerRequests":
+			a.When = func(m *Model) bool { return m.activeSpringEditor() }
+		case "graphql.showToolWindow", "graphql.addConfiguration", "graphql.editConfiguration",
+			"graphql.restartDiscovery":
+			a.When = func(m *Model) bool { return m.Root() != "" && !m.showingWelcome }
+		case "graphql.runQuery", "graphql.introspect":
+			a.When = func(m *Model) bool { return m.activeGraphQLEditor() }
+			a.KeyWhen = func(m *Model) bool { return m.activeGraphQLEditor() }
+			a.Enabled = func(m *Model) bool { return m.graphql.running == nil }
+		case "view.profiler", "run.profile", "run.profileAllocations", "run.profileLiveObjects":
+			a.When = func(m *Model) bool { return m.Root() != "" && !m.showingWelcome }
+		case "run.profileContext":
+			a.When = func(m *Model) bool {
+				return m.Root() != "" && !m.showingWelcome && m.tab() != nil
+			}
 		case "layout.save", "layout.restore", "layout.restoreDefault":
 			a.When = func(m *Model) bool { return m.Root() != "" && !m.showingWelcome }
 		case "layout.rename", "layout.delete":
@@ -123,9 +195,26 @@ func init() {
 				return m.Root() != "" && !m.showingWelcome && len(m.namedLayouts) > 0
 			}
 		}
+		if _, editorCommand := keymapEditorCommands[c.id]; editorCommand &&
+			a.KeyWhen == nil &&
+			!strings.HasPrefix(c.id, "edit.") &&
+			!strings.HasPrefix(c.id, "find.") {
+			a.KeyWhen = func(m *Model) bool { return m.activeEditorFocused() }
+		}
 		if c.id == "layout.restore" {
 			a.RunWithArg = func(m *Model, arg any) {
 				m.OpenRestoreToolWindowLayout(arg)
+			}
+		}
+		if c.id == "http.newRequest" {
+			a.RunWithArg = func(m *Model, arg any) {
+				dir, _ := arg.(string)
+				m.NewHTTPRequest(dir)
+			}
+		}
+		if c.id == "http.openEndpoint" {
+			a.RunWithArg = func(m *Model, arg any) {
+				m.OpenHTTPEndpoint(arg)
 			}
 		}
 		if key, ok := strings.CutPrefix(c.id, "project.option."); ok {
@@ -150,9 +239,13 @@ func init() {
 		parityWindowActionState(a)
 		parityToolActionState(a)
 		parityRunActionState(a)
+		serviceActionState(a)
+		dockerActionState(a)
+		macroActionState(a)
 		coverageActionState(a)
 		downloadJDKActionState(a)
 		workspaceActionState(a)
 		_ = registerAction(a)
 	}
+	registerFileTypeActions()
 }

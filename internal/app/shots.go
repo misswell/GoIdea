@@ -234,6 +234,17 @@ func (m *Model) SmokeShots(ctx context.Context, dir string) (map[string]any, err
 
 	// The Services tool window over the detected build system.
 	m.post(func() { m.ShowServices() })
+	wait(func() bool {
+		return (!m.run.loading && m.run.loaded) && !m.services.docker.loading
+	}, 90*time.Second)
+	m.post(func() {
+		for _, cfg := range m.run.configs {
+			m.addServiceType(cfg.Kind)
+		}
+		if len(m.run.configs) > 0 {
+			m.services.selected = serviceConfigKey(m.run.configs[0].ID)
+		}
+	})
 	shot("services")
 	m.post(func() { m.CloseServices() })
 

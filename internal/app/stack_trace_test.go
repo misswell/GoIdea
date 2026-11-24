@@ -3,6 +3,8 @@ package app
 import (
 	"strings"
 	"testing"
+
+	"github.com/egoist/mygo/ui"
 )
 
 func TestStackTraceNormalizeAndTitle(t *testing.T) {
@@ -47,6 +49,48 @@ func TestStackTraceLocations(t *testing.T) {
 	}
 	if len(traceLinks(strings.Repeat("x", 4001))) != 0 {
 		t.Fatal("oversized line must not be parsed")
+	}
+}
+
+func TestStackTraceURLsAndFilesShareTheConsoleParser(t *testing.T) {
+	line := `Failed at https://example.test/build?job=7).`
+	links := traceLinks(line)
+	if len(links) != 1 || links[0].url != "https://example.test/build?job=7" {
+		t.Fatalf("URL links = %+v", links)
+	}
+	if countStackFrames(line) != 0 {
+		t.Fatal("a URL-only line counted as a stack frame")
+	}
+
+	links = traceLinks(`See https://example.test/docs for src/main.go:15:3`)
+	if len(links) != 2 || links[0].url == "" || links[1].location.Path != "src/main.go" ||
+		links[1].location.Line != 15 || links[1].location.Col != 3 {
+		t.Fatalf("mixed links = %+v", links)
+	}
+	if countStackFrames(`See https://example.test/docs for src/main.go:15:3`) != 1 {
+		t.Fatal("the file in a mixed line was not counted as one frame")
+	}
+}
+
+func TestRunOutputRendersURLsAsNativeLinks(t *testing.T) {
+	m := &Model{}
+	output := []outputLine{
+		{kind: "stdout", text: "server ready"},
+		{kind: "stdout", text: "see https://example.test/app"},
+		{kind: "stderr", text: "at src/main.go:8:2"},
+	}
+	tt := ui.NewTester(func(c *ui.Context) {
+		m.renderRunOutput(c, c.Theme(), output)
+	}, 800, 200)
+	tt.Frame()
+	if !tt.HasText("server ready") || !tt.HasText("https://example.test/app") {
+		t.Fatalf("console text = %q", tt.Texts())
+	}
+	if err := tt.Click("https://example.test/app"); err != nil {
+		t.Fatal(err)
+	}
+	if got := tt.OpenedURLs(); len(got) != 1 || got[0] != "https://example.test/app" {
+		t.Fatalf("opened URLs = %v", got)
 	}
 }
 

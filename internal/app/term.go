@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
 	"mayoi/internal/openidea"
@@ -18,9 +19,9 @@ import (
 // TermPane is the integrated terminal: one tab per PTY session that
 // openidea-server owns, whose output arrives on a streaming channel. A pane may
 // split into a second tab group, as OpenIDEA splits its terminal; each group
-// keeps its own tabs and active one. It renders the text stream (ANSI colours
-// removed); full-screen TUI programs are beyond a text pane, and say so rather
-// than showing garbage.
+// keeps its own tabs and active one. It renders the text stream with the ANSI
+// cursor and alternate-screen operations used by command-line and full-screen
+// programs.
 type TermPane struct {
 	visible bool
 	groups  []termGroup
@@ -31,12 +32,18 @@ type TermPane struct {
 	input  string
 	err    string
 	rename *termRenameState
+
+	// cols and rows are the last measured terminal size. New tabs start at
+	// this size so a pane does not jump when the first child repaints.
+	cols int
+	rows int
 }
 
 // termGroup is one pane's tabs: the primary group is 0, the split group 1.
 type termGroup struct {
 	tabs   []termSession
 	active int
+	focus  ui.Handle
 }
 
 // termSession is one terminal tab: its PTY, shell and scrollback.
@@ -55,6 +62,47 @@ type termSession struct {
 	truncated bool
 	ended     bool
 	exitCode  *int32
+
+	// Full-screen programs draw into a cell grid instead of appending to the
+	// shell's scrollback. The primary buffer is restored when they leave the
+	// alternate screen, as an xterm does.
+	alternate        bool
+	primaryLines     []string
+	primaryTruncated bool
+	terminalCols     int
+	terminalRows     int
+	screenCells      [][]terminalCell
+	screenRow        int
+	screenCol        int
+	savedRow         int
+	savedCol         int
+	escapeTail       string
+	terminalTitle    string
+	cursorHidden     bool
+
+	mouseMode      int
+	mouseSGR       bool
+	mousePixels    bool
+	bracketedPaste bool
+	focusReporting bool
+	focusKnown     bool
+	focused        bool
+
+	activeHyperlink   string
+	hyperlinks        []terminalHyperlink
+	primaryHyperlinks []terminalHyperlink
+
+	copiedSelection string
+	optionMetaKey   ui.Key
+
+	desiredCols int
+	desiredRows int
+	ptyCols     int
+	ptyRows     int
+	resizeGen   uint64
+	resizing    bool
+	writeQueue  []byte
+	writing     bool
 
 	// scroll, finding and find stay with this tab when another tab becomes
 	// active. findAt is the line the find bar last jumped to, -1 when the query
@@ -249,10 +297,19 @@ func (p *TermPane) total() int {
 // maxTermLines bounds the scrollback each tab keeps.
 const maxTermLines = 4000
 
+// maxTerminalInputQueue bounds writes waiting for one slow PTY. A terminal
+// must either apply backpressure or report that input is not moving.
+const maxTerminalInputQueue = 1 << 20
+
 func (m *Model) resetTerm() { m.term = TermPane{}; m.termShell = nil }
 
 // ShowTerm toggles the terminal; opening it starts a shell on first use.
-func (m *Model) ShowTerm() { m.dockActivate("term") }
+func (m *Model) ShowTerm() {
+	if !m.term.visible {
+		m.autoSaveOnSwitch()
+	}
+	m.dockActivate("term")
+}
 
 // SpawnTerm starts the user's login shell in a tab, when the active one has no
 // shell left to use.
@@ -266,7 +323,7 @@ func (m *Model) SpawnTerm() {
 	if s := m.term.current(); s != nil && (s.starting || s.id != 0) {
 		return
 	}
-	m.spawnTermSession(root, root, m.term.active)
+	m.spawnTermSession(root, m.terminalStartDirectory(root), m.term.active)
 }
 
 // OpenTermTab opens one more shell tab in the active group, as OpenIDEA's New
@@ -284,10 +341,11 @@ func (m *Model) OpenTermTabIn(g int) {
 		return
 	}
 	if !m.term.visible {
+		m.autoSaveOnSwitch()
 		m.term.visible = true
 		m.occupyBottom("term")
 	}
-	m.spawnTermSession(root, root, g)
+	m.spawnTermSession(root, m.terminalStartDirectory(root), g)
 }
 
 // OpenTerminalAt opens a tab whose shell starts in dir, as OpenIDEA's Open in
@@ -300,6 +358,7 @@ func (m *Model) OpenTerminalAt(dir string) {
 		return
 	}
 	if !m.term.visible {
+		m.autoSaveOnSwitch()
 		m.term.visible = true
 		m.occupyBottom("term")
 	}
@@ -331,7 +390,7 @@ func (m *Model) SplitTerm(axis string) {
 		return
 	}
 	m.term.split = axis
-	m.spawnTermSession(root, root, 1)
+	m.spawnTermSession(root, m.terminalStartDirectory(root), 1)
 }
 
 // UnsplitTerm merges the split group's tabs into the primary group, keeping
@@ -366,28 +425,50 @@ func (m *Model) spawnTermSessionShell(root, cwd string, g int, shell string) {
 // spawnTermProcess opens one PTY tab. program is empty for the user's login
 // shell, and name overrides the tab title until the backend reports one.
 func (m *Model) spawnTermProcess(root, cwd string, g int, program string, args []string, name string) {
+	opts := m.terminalSpawnOptions(program, args)
+	opts["cwd"] = cwd
+	if name == "" {
+		name = m.terminalDefaultTabName()
+	}
+	m.spawnTerminalRequest(root, cwd, g, name, func(ctx context.Context, channel uint32) (json.RawMessage, error) {
+		return m.mgr.Invoke(ctx, Window, "term_spawn", map[string]any{
+			"options":  opts,
+			"onOutput": map[string]any{"$channel": channel},
+		})
+	})
+}
+
+// spawnTerminalRequest owns the native terminal tab and its cleanup while a
+// backend-specific start command creates the PTY.
+func (m *Model) spawnTerminalRequest(
+	root string,
+	cwd string,
+	g int,
+	name string,
+	spawn func(context.Context, uint32) (json.RawMessage, error),
+) {
 	ch := m.nextChannel()
 	s := m.term.add(g)
 	s.starting = true
 	s.channel = ch
 	s.cwd = cwd
 	s.shell = name
+	s.terminalCols = max(m.term.cols, 2)
+	s.terminalRows = max(m.term.rows, 1)
+	if m.term.cols <= 0 {
+		s.terminalCols = defaultTerminalCols
+	}
+	if m.term.rows <= 0 {
+		s.terminalRows = defaultTerminalRows
+	}
+	s.desiredCols, s.desiredRows = s.terminalCols, s.terminalRows
+	s.ptyCols, s.ptyRows = s.desiredCols, s.desiredRows
 	m.term.err = ""
 	m.invalidate()
-	opts := map[string]any{
-		"cwd": cwd, "args": append([]string{}, args...), "env": map[string]string{},
-		"cols": 100, "rows": 30, "shellIntegration": true,
-	}
-	if program != "" {
-		opts["shell"] = program
-	}
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 		defer cancel()
-		raw, err := m.mgr.Invoke(ctx, Window, "term_spawn", map[string]any{
-			"options":  opts,
-			"onOutput": map[string]any{"$channel": ch},
-		})
+		raw, err := spawn(ctx, ch)
 		var info openidea.TerminalInfo
 		if err == nil {
 			err = json.Unmarshal(raw, &info)
@@ -431,24 +512,80 @@ func (m *Model) spawnTermProcess(root, cwd string, g int, program string, args [
 func (m *Model) SubmitTermInput() {
 	line := m.term.input
 	s := m.term.current()
-	if s == nil || s.id == 0 {
+	if s == nil || s.id == 0 || !m.queueTerminalInput(s, line+"\r") {
 		return
 	}
 	m.term.input = ""
-	id := s.id
 	m.invalidate()
+}
+
+// queueTerminalInput serializes writes for one PTY. At most one RPC is in
+// flight, so key repeat and paste cannot flood the backend with goroutines or
+// overtake one another.
+func (m *Model) queueTerminalInput(s *termSession, text string) bool {
+	if s == nil || s.id == 0 || text == "" {
+		return false
+	}
+	if len(s.writeQueue)+len(text) > maxTerminalInputQueue {
+		m.term.err = "Terminal input is paused because the shell is not accepting writes"
+		m.invalidate()
+		return false
+	}
+	s.writeQueue = append(s.writeQueue, text...)
+	m.flushTerminalInput(s)
+	return true
+}
+
+func (m *Model) flushTerminalInput(s *termSession) {
+	if s == nil || s.id == 0 || s.writing || len(s.writeQueue) == 0 {
+		return
+	}
+	if m.mgr == nil && m.invokeHook == nil {
+		return
+	}
+	const maxWrite = 64 << 10
+	count := min(len(s.writeQueue), maxWrite)
+	if count < len(s.writeQueue) {
+		count = utf8RuneBoundary(s.writeQueue, count)
+	}
+	data := string(s.writeQueue[:count])
+	s.writeQueue = append(s.writeQueue[:0], s.writeQueue[count:]...)
+	id, channel := s.id, s.channel
+	s.writing = true
+	base := m.ctx
+	if base == nil {
+		base = context.Background()
+	}
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, 10*time.Second)
+		ctx, cancel := context.WithTimeout(base, 10*time.Second)
 		defer cancel()
-		if _, err := m.mgr.Invoke(ctx, Window, "term_write", map[string]any{
-			"id": id, "data": line + "\r",
-		}); err != nil {
-			m.post(func() {
+		_, err := m.invoke(ctx, "term_write", map[string]any{
+			"id": id, "data": data,
+		})
+		m.post(func() {
+			session := m.term.byChannel(channel)
+			if session == nil || session.id != id {
+				return
+			}
+			session.writing = false
+			if err != nil {
 				m.term.err = "Writing to the terminal failed: " + err.Error()
-				m.invalidate()
-			})
-		}
+			} else {
+				m.flushTerminalInput(session)
+			}
+			m.invalidate()
+		})
 	}()
+}
+
+func utf8RuneBoundary(data []byte, at int) int {
+	if at <= 0 || at >= len(data) {
+		return at
+	}
+	for at > 0 && data[at]&0xc0 == 0x80 {
+		at--
+	}
+	return at
 }
 
 // KillTerm ends the active shell; the tab keeps its output as a record.
@@ -485,6 +622,57 @@ func (m *Model) killTerminalSession(id uint32, report bool) {
 	}()
 }
 
+// requestTerminalResize applies the session's latest measured size to its PTY.
+// The call is asynchronous because the backend owns every terminal write.
+func (m *Model) requestTerminalResize(s *termSession) {
+	if s == nil || s.id == 0 || s.resizing {
+		return
+	}
+	cols, rows := s.desiredCols, s.desiredRows
+	if cols <= 0 {
+		cols = max(s.terminalCols, defaultTerminalCols)
+	}
+	if rows <= 0 {
+		rows = max(s.terminalRows, defaultTerminalRows)
+	}
+	if s.ptyCols == cols && s.ptyRows == rows {
+		return
+	}
+	if m.mgr == nil && m.invokeHook == nil {
+		s.applyTerminalSize(cols, rows)
+		s.ptyCols, s.ptyRows = cols, rows
+		return
+	}
+	id, channel, generation := s.id, s.channel, s.resizeGen
+	s.resizing = true
+	m.term.cols, m.term.rows = cols, rows
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, 10*time.Second)
+		defer cancel()
+		_, err := m.invoke(ctx, "term_resize", map[string]any{
+			"id": id, "cols": cols, "rows": rows,
+		})
+		m.post(func() {
+			s := m.term.byChannel(channel)
+			if s == nil || s.id != id {
+				return
+			}
+			s.resizing = false
+			if err != nil {
+				m.term.err = "Resizing the terminal failed: " + err.Error()
+			} else {
+				s.ptyCols, s.ptyRows = cols, rows
+				s.applyTerminalSize(cols, rows)
+				if s.resizeGen != generation ||
+					s.desiredCols != cols || s.desiredRows != rows {
+					m.requestTerminalResize(s)
+				}
+			}
+			m.invalidate()
+		})
+	}()
+}
+
 // CloseTermTab ends a tab's shell and drops the tab; closing a split group's
 // last tab merges the split away, and closing every tab hides the window, as
 // OpenIDEA's Close Terminal Session does.
@@ -497,6 +685,16 @@ func (m *Model) CloseTermTab(g, ti int) {
 		return
 	}
 	m.killTerminalSession(tabs[ti].id, false)
+	m.dropTermTab(g, ti)
+}
+
+func (m *Model) dropTermTab(g, ti int) {
+	if g < 0 || g >= len(m.term.groups) {
+		return
+	}
+	if ti < 0 || ti >= len(m.term.groups[g].tabs) {
+		return
+	}
 	m.term.remove(g, ti)
 	if m.term.total() == 0 {
 		if dockSpec("term") != nil {
@@ -650,28 +848,10 @@ func termHits(lines []string, q string) []int {
 	return hits
 }
 
-// write appends terminal output, honoring the line discipline a text pane can:
-// newlines start lines, a carriage return rewrites the current one (progress
-// bars), and everything else appends. ANSI colour codes are dropped.
+// write appends terminal output and applies the cursor and alternate-screen
+// operations used by progress displays and full-screen programs.
 func (p *termSession) write(text string) {
-	text = strings.ReplaceAll(stripANSI(text), "\r\n", "\n")
-	if len(p.lines) == 0 {
-		p.lines = []string{""}
-	}
-	for _, r := range text {
-		switch r {
-		case '\n':
-			p.lines = append(p.lines, "")
-		case '\r':
-			p.lines[len(p.lines)-1] = ""
-		default:
-			p.lines[len(p.lines)-1] += string(r)
-		}
-	}
-	if over := len(p.lines) - maxTermLines; over > 0 {
-		p.lines = append(p.lines[:0], p.lines[over:]...)
-		p.truncated = true
-	}
+	p.writeTerminal(text)
 }
 
 func (m *Model) acceptTermChunk(ch uint32, data json.RawMessage) {
@@ -685,6 +865,9 @@ func (m *Model) acceptTermChunk(ch uint32, data json.RawMessage) {
 	s := m.term.byChannel(ch)
 	if s == nil {
 		return
+	}
+	if strings.Contains(text, "\a") && m.terminalPlaysBell() {
+		mygo.Shell.Beep()
 	}
 	s.write(text)
 	// A pane that showed the end follows new output; one scrolled up keeps
@@ -700,6 +883,16 @@ func (m *Model) acceptTermExit(id uint32, code *int32) {
 	if s == nil {
 		return
 	}
+	if m.terminalClosesOnExit() {
+		for gi := range m.term.groups {
+			for ti := range m.term.groups[gi].tabs {
+				if m.term.groups[gi].tabs[ti].id == id {
+					m.dropTermTab(gi, ti)
+					return
+				}
+			}
+		}
+	}
 	s.id = 0
 	s.pid = nil
 	s.ended = true
@@ -712,6 +905,13 @@ func (m *Model) acceptTermExit(id uint32, code *int32) {
 // every shell: the offscreen check of the terminal path.
 func (m *Model) SmokeTerm(ctx context.Context) (map[string]any, error) {
 	out := map[string]any{"shell": ""}
+	initialCols, initialRows := defaultTerminalCols, defaultTerminalRows
+	if m.term.cols > 0 {
+		initialCols = m.term.cols
+	}
+	if m.term.rows > 0 {
+		initialRows = m.term.rows
+	}
 	root := m.Root()
 	if root == "" {
 		return out, errors.New("No project is open")
@@ -746,12 +946,15 @@ func (m *Model) SmokeTerm(ctx context.Context) (map[string]any, error) {
 		s := m.term.add(0)
 		s.starting = true
 		s.channel = ch
+		s.terminalCols, s.terminalRows = initialCols, initialRows
+		s.desiredCols, s.desiredRows = initialCols, initialRows
+		s.ptyCols, s.ptyRows = initialCols, initialRows
 		m.DockShow("term")
 		m.invalidate()
 	})
 	spawnOpts := map[string]any{
 		"cwd": root, "args": []string{}, "env": map[string]string{},
-		"cols": 100, "rows": 30, "shellIntegration": false,
+		"cols": initialCols, "rows": initialRows, "shellIntegration": false,
 	}
 	if chosen != "" {
 		spawnOpts["shell"] = chosen
@@ -779,6 +982,8 @@ func (m *Model) SmokeTerm(ctx context.Context) (map[string]any, error) {
 		s.id = info.ID
 		s.pid = info.PID
 		s.shell = info.Title
+		s.terminalCols, s.terminalRows = initialCols, initialRows
+		s.ptyCols, s.ptyRows = initialCols, initialRows
 		m.invalidate()
 	})
 	if _, err := m.mgr.Invoke(ctx, Window, "term_write", map[string]any{
@@ -808,6 +1013,100 @@ func (m *Model) SmokeTerm(ctx context.Context) (map[string]any, error) {
 			return out, ctx.Err()
 		case <-time.After(150 * time.Millisecond):
 		}
+	}
+	// Resizing the real PTY changes stty's rows and columns. The unique
+	// markers keep prompt text from looking like a successful size.
+	sizeCommand := "printf 'GOIDEA_SIZE=%s\\n' \"$(stty size)\"\r"
+	if _, err := m.mgr.Invoke(ctx, Window, "term_write", map[string]any{
+		"id": info.ID, "data": sizeCommand,
+	}); err != nil {
+		return out, err
+	}
+	expectedInitial := fmt.Sprintf("GOIDEA_SIZE=%d %d", initialRows, initialCols)
+	_, initialSizeOK, err := m.waitTermSmokeText(
+		ctx, ch, expectedInitial, 10*time.Second,
+	)
+	if err != nil {
+		return out, err
+	}
+	out["initialSize"] = expectedInitial
+	out["initialSizeObserved"] = initialSizeOK
+	resizeCols, resizeRows := 42, 17
+	if _, err := m.mgr.Invoke(ctx, Window, "term_resize", map[string]any{
+		"id": info.ID, "cols": resizeCols, "rows": resizeRows,
+	}); err != nil {
+		return out, err
+	}
+	m.post(func() {
+		if session := m.term.byChannel(ch); session != nil {
+			session.applyTerminalSize(resizeCols, resizeRows)
+			session.ptyCols, session.ptyRows = resizeCols, resizeRows
+			session.desiredCols, session.desiredRows = resizeCols, resizeRows
+		}
+	})
+	if _, err := m.mgr.Invoke(ctx, Window, "term_write", map[string]any{
+		"id":   info.ID,
+		"data": "printf 'GOIDEA_SIZE_AFTER=%s\\n' \"$(stty size)\"\r",
+	}); err != nil {
+		return out, err
+	}
+	expectedResized := fmt.Sprintf("GOIDEA_SIZE_AFTER=%d %d", resizeRows, resizeCols)
+	_, resizedOK, err := m.waitTermSmokeText(
+		ctx, ch, expectedResized, 10*time.Second,
+	)
+	if err != nil {
+		return out, err
+	}
+	out["resizedSize"] = expectedResized
+	out["resize"] = resizedOK
+
+	// The full-screen fixture enters the alternate screen through the real
+	// PTY. Its final spinner proves repeated frame output reached the parser.
+	const tuiFrames = 12
+	var tui strings.Builder
+	tui.WriteString(sampleTUIStart)
+	for frame := 0; frame < tuiFrames; frame++ {
+		tui.WriteString(sampleTUIFrame(frame, resizeCols, resizeRows))
+	}
+	lastSpinner := []rune(sampleTUISpinner)[(tuiFrames-1)%len([]rune(sampleTUISpinner))]
+	if _, err := m.mgr.Invoke(ctx, Window, "term_write", map[string]any{
+		"id": info.ID, "data": "printf %s " + terminalShellQuote(tui.String()) + "\r",
+	}); err != nil {
+		return out, err
+	}
+	var alternate bool
+	var tuiText string
+	tuiDeadline := time.Now().Add(10 * time.Second)
+	for {
+		m.post(func() {
+			if session := m.term.byChannel(ch); session != nil {
+				alternate = session.alternate
+				tuiText = session.text()
+			}
+		})
+		if alternate &&
+			strings.Contains(tuiText, string(lastSpinner)+" Thinking") &&
+			strings.Contains(tuiText, "Enter:send") {
+			break
+		}
+		if time.Now().After(tuiDeadline) {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+	out["tuiFrames"] = tuiFrames
+	out["tuiAlternate"] = alternate
+	out["tuiComplete"] = alternate &&
+		strings.Contains(tuiText, string(lastSpinner)+" Thinking") &&
+		strings.Contains(tuiText, "Enter:send")
+	if _, err := m.mgr.Invoke(ctx, Window, "term_write", map[string]any{
+		"id": info.ID, "data": "printf %s " + terminalShellQuote(sampleTUIEnd) + "\r",
+	}); err != nil {
+		return out, err
 	}
 	// Find in Terminal marks the line that holds the query.
 	m.post(func() {
@@ -951,6 +1250,38 @@ func (m *Model) waitTermSplit(ctx context.Context, ch uint32) (int, bool) {
 		case <-time.After(100 * time.Millisecond):
 		}
 	}
+}
+
+func (m *Model) waitTermSmokeText(
+	ctx context.Context,
+	channel uint32,
+	marker string,
+	timeout time.Duration,
+) (string, bool, error) {
+	deadline := time.Now().Add(timeout)
+	var text string
+	for {
+		m.post(func() {
+			if session := m.term.byChannel(channel); session != nil {
+				text = session.text()
+			}
+		})
+		if strings.Contains(text, marker) {
+			return text, true, nil
+		}
+		if time.Now().After(deadline) {
+			return text, false, nil
+		}
+		select {
+		case <-ctx.Done():
+			return text, false, ctx.Err()
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+}
+
+func terminalShellQuote(text string) string {
+	return "'" + strings.ReplaceAll(text, "'", "'\\''") + "'"
 }
 
 // text is the scrollback, one line per entry.

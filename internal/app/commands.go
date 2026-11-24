@@ -7,6 +7,8 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
+
+	"mayoi/internal/openidea"
 )
 
 // appCommand is one entry of the command palette. keywords widen what the
@@ -41,6 +43,7 @@ func builtinCommands() []appCommand {
 		{"file.openRecentProject", "Open Recent Project", "File", "", "open recent project folder", func(*Model) {}},
 		{"file.openRecent", "Open Recent…", "File", "", "recent projects welcome", func(m *Model) { m.showRecentProjectsPopup() }},
 		{"welcome.recentProjects", "Recent Projects…", "File", "", "recent projects open folder", func(m *Model) { m.showRecentProjectsPopup() }},
+		{"file.projectStructure", "Project Structure…", "File", "Cmd+;", "project structure sdk jdk modules libraries facets artifacts sources dependencies", func(m *Model) { m.OpenProjectStructure("") }},
 		{"project.attach", "Attach Project…", "File", "", "attach project workspace linked folder", func(m *Model) { m.AttachProject() }},
 		{"project.detach", "Detach Project", "File", "", "detach remove project attachment workspace", func(*Model) {}},
 		{"workspace.create", "New Workspace…", "File", "", "new workspace linked projects", func(m *Model) { m.OpenNewWorkspace() }},
@@ -77,7 +80,41 @@ func builtinCommands() []appCommand {
 		{"agents.addAgent", "More Agents…", "Agents", "", "agent acp registry install update coding agent", func(m *Model) { m.OpenSettingsPage(settingsPageAgentRegistry) }},
 		{"agents.mcpServers", "External MCP Servers…", "Agents", "", "mcp model context protocol servers tools agent", func(m *Model) { m.OpenSettingsPage(settingsPageAgentMCP) }},
 		{"agents.openSampleConversations", "Open Sample Conversations", "Agents", "", "agent sample performance benchmark conversation", func(m *Model) { m.OpenAgentSampleConversations(2, 150) }},
+		{"http.newRequest", "New HTTP Request", "Tools", "", "new http request rest scratch curl", func(m *Model) { m.NewHTTPRequest("") }},
+		{"http.runRequest", "Run HTTP Request at Caret", "Tools", "Cmd+Enter", "send execute request http rest", func(m *Model) { m.RunHTTPRequestAtCaret() }},
+		{"http.copyAsCurl", "Convert to cURL and Copy", "Tools", "", "copy curl http request export", func(m *Model) { m.CopyHTTPRequestAsCurl() }},
+		{"http.openEndpoint", "Open in HTTP Client", "Tools", "", "spring endpoint route open generate http", func(m *Model) {}},
+		{"http.addPublicEnvironment", "Add Environment to Public File", "Tools", "", "http client environment env public", func(m *Model) { m.OpenHTTPEnvironmentFile(false) }},
+		{"http.addPrivateEnvironment", "Add Environment to Private File", "Tools", "", "http client environment env secrets private", func(m *Model) { m.OpenHTTPEnvironmentFile(true) }},
+		{"http.runAll", "Run All HTTP Requests in File", "Tools", "", "run all requests send http rest", func(m *Model) { m.RunAllHTTPRequests() }},
+		{"http.generateSpringRequest", "Generate Request in HTTP Client", "Tools", "", "spring request mapping rest endpoint http client", func(m *Model) { m.GenerateSpringRequest() }},
+		{"http.generateSpringControllerRequests", "Generate Requests for Controller", "Tools", "", "spring controller request mappings rest endpoints http client", func(m *Model) { m.GenerateSpringControllerRequests() }},
+		{"http.showToolWindow", "HTTP Client", "Tools", "", "http responses history environment rest", func(m *Model) { m.showHTTPClient() }},
+		{"graphql.showToolWindow", "GraphQL", "Tools", "", "schema endpoints graphql-config", func(m *Model) { m.ShowGraphQL() }},
+		{"view.profiler", "Profiler", "View", "", "profile flame graph call tree method list cpu memory", func(m *Model) { m.DockShow("profiler") }},
+		{"view.logcat", "Logcat", "Tools", "", "android adb device log stream filter pid tag level", func(m *Model) { m.OpenLogcat() }},
+		{"graphql.addConfiguration", "Add Schema Configuration", "Tools", "", "graphql graphql-config graphqlrc schema", func(m *Model) { m.AddGraphQLConfiguration() }},
+		{"graphql.editConfiguration", "Open Configuration File", "Tools", "", "graphql graphql-config graphqlrc settings", func(m *Model) { m.OpenGraphQLConfiguration() }},
+		{"graphql.introspect", "Rerun Introspection Query", "Tools", "", "graphql introspection schema endpoint download", func(m *Model) {
+			if tab := m.tab(); tab != nil && tab.doc != nil {
+				m.RerunGraphQLIntrospection(tab.doc.Path())
+			}
+		}},
+		{"graphql.restartDiscovery", "Restart Schema Discovery", "Tools", "", "graphql schema refresh reload", func(m *Model) { m.RestartGraphQLDiscovery() }},
+		{"graphql.runQuery", "Execute GraphQL", "Run", "Cmd+Enter", "graphql run execute query endpoint", func(m *Model) { m.RunGraphQLAtCaret() }},
 		{"run.coverage", "Run with Coverage", "Run", "", "test code coverage", func(m *Model) { m.RunWithCoverage() }},
+		{"run.profile", "Profile", "Run", "", "profiler flame graph cpu", func(m *Model) {
+			m.RunWithProfiler(openidea.ProfileCPU)
+		}},
+		{"run.profileAllocations", "Profile Allocations", "Run", "", "allocation memory async-profiler", func(m *Model) {
+			m.RunWithProfiler(openidea.ProfileAllocations)
+		}},
+		{"run.profileLiveObjects", "Profile Live Objects", "Run", "", "allocation live objects memory leak", func(m *Model) {
+			m.RunWithProfiler(openidea.ProfileLiveObjects)
+		}},
+		{"run.profileContext", "Profile Context Configuration", "Run", "", "profile active file context", func(m *Model) {
+			m.RunContextConfigurationWithProfiler()
+		}},
 		{"coverage.importReport", "Import a Coverage Report…", "Run", "", "coverage report lcov jacoco cobertura", func(m *Model) { m.ImportCoverageReport() }},
 		{"coverage.manageReports", "Manage Coverage Reports…", "Run", "", "coverage reports suites", func(m *Model) { m.ManageCoverageReports() }},
 		{"coverage.show", "Show Coverage", "Run", "", "coverage gutter", func(m *Model) { m.SetCoverageVisible(true) }},
@@ -93,14 +130,23 @@ func builtinCommands() []appCommand {
 				m.UndoLastProjectFileOperation()
 				return
 			}
+			if m.undoNotebook() {
+				return
+			}
 			m.runEditorCommand(editor.Undo)
 		}},
-		{"edit.redo", "Redo", "Edit", "Cmd+Shift+Z", "redo history", func(m *Model) { m.runEditorCommand(editor.Redo) }},
+		{"edit.redo", "Redo", "Edit", "Cmd+Shift+Z", "redo history", func(m *Model) {
+			if m.redoNotebook() {
+				return
+			}
+			m.runEditorCommand(editor.Redo)
+		}},
 		{"edit.cut", "Cut", "Edit", "Cmd+X", "cut selection clipboard", func(m *Model) {
 			if m.projectTreeFocus {
 				m.CutSelectedTreeEntry()
 				return
 			}
+			m.rememberActiveEditorClipboard()
 			m.runEditorCommand(editor.Cut)
 		}},
 		{"edit.copy", "Copy", "Edit", "Cmd+C", "copy selection clipboard", func(m *Model) {
@@ -108,6 +154,7 @@ func builtinCommands() []appCommand {
 				m.CopySelectedTreeEntry()
 				return
 			}
+			m.rememberActiveEditorClipboard()
 			m.runEditorCommand(editor.Copy)
 		}},
 		{"edit.paste", "Paste", "Edit", "Cmd+V", "paste clipboard", func(m *Model) {
@@ -128,7 +175,20 @@ func builtinCommands() []appCommand {
 		{"editor.copyPathReference", "Copy Path/Reference…", "Edit", "Cmd+Shift+C", "copy absolute relative source line reference chooser", func(m *Model) { m.OpenCopyPathReferencePopup() }},
 		{"editor.copyPathWithLineNumber", "Copy Path with Line Number", "Edit", "", "copy relative path line number", func(m *Model) { m.CopyActiveEditorPathWithLineNumber() }},
 		{"editor.copyReference", "Copy Reference", "Edit", "Cmd+Alt+Shift+C", "fully qualified name fqn copy path", func(m *Model) { m.CopyActiveEditorReference() }},
+		{"macro.startRecording", "Start Macro Recording", "Edit", "", "macro record recording start", func(m *Model) { m.startMacroRecording() }},
+		{"macro.stopRecording", "Stop Macro Recording", "Edit", "", "macro record recording stop", func(m *Model) { m.stopMacroRecording() }},
+		{"macro.playBack", "Play Back Last Macro", "Edit", "", "macro replay playback last", func(m *Model) { m.playLastMacro() }},
+		{"macro.playSaved", "Play Saved Macros…", "Edit", "", "macro replay playback saved choose", func(m *Model) { m.openPlaySavedMacros() }},
+		{"macro.edit", "Edit Macros…", "Edit", "", "macro rename delete saved", func(m *Model) { m.openEditMacros() }},
 		{"editor.addOrRemoveCaret", "Add or Remove Caret", "Editor Actions", "Alt+Shift+Button1", "multiple cursor caret pointer", func(m *Model) {}},
+		{"code.pasteFromHistory", "Paste from History…", "Edit", "Cmd+Shift+V", "clipboard history paste multiple", func(m *Model) { m.OpenPasteFromHistory() }},
+		{"editor.toggleColumnSelection", "Column Selection Mode", "Edit", "Cmd+Shift+8", "block rectangular column selection", func(m *Model) { m.ToggleColumnSelection() }},
+		{"editor.toggleSemanticHighlighting", "Semantic Highlighting", "Editor", "", "rainbow variables identifiers color scheme", func(m *Model) { m.toggleSemanticHighlighting() }},
+		{"editor.toggleRainbowBrackets", "Rainbow Brackets", "Editor", "", "bracket pair colorization rainbow parentheses color scheme", func(m *Model) { m.toggleRainbowBrackets() }},
+		{"editor.colorScheme.import", "Import Scheme", "Editor", "", "icls xml color scheme import", func(m *Model) { m.ImportColorScheme(nil) }},
+		{"editor.colorScheme.export", "Export Scheme", "Editor", "", "icls color scheme export", func(m *Model) { m.ExportColorScheme(nil) }},
+		{"editor.colorScheme.delete", "Delete Scheme", "Editor", "", "icls custom color scheme delete", func(m *Model) { m.DeleteColorScheme(nil) }},
+		{"editor.inlineCompletion.trigger", "Call Inline Completion", "Code", "Alt+\\", "ghost text inline suggestion", func(m *Model) { m.TriggerInlineCompletion() }},
 		{"find.inFile", "Find", "Find", "Cmd+F", "find search editor current file", func(m *Model) { m.runEditorCommand(editor.Find) }},
 		{"find.replaceInFile", "Replace", "Find", "Cmd+R", "replace editor current file", func(m *Model) { m.runEditorCommand(editor.FindReplace) }},
 		{"find.next", "Find Next Occurrence", "Find", "Cmd+G", "find next search occurrence", func(m *Model) { m.runEditorCommand(editor.FindNext) }},
@@ -162,6 +222,7 @@ func builtinCommands() []appCommand {
 		{"editor.inlayHintsSettings", "Configure Code Vision…", "View", "", "code vision inlay hints usages author settings", func(m *Model) { m.OpenSettingsPage(settingsPageInlayHints) }},
 		{"view.notifications", "Notifications", "View", "", "notifications balloon history alerts unread", func(m *Model) { m.ToggleNotificationsWindow() }},
 		{"view.maven", "Maven", "View", "", "maven tool window modules reactor", func(m *Model) { m.ToggleMaven() }},
+		{"view.gradle", "Gradle", "View", "", "gradle tool window projects tasks subprojects", func(m *Model) { m.ToggleGradle() }},
 		{"view.services", "Services", "View", "", "services build maven gradle run tools", func(m *Model) { m.ToggleServices() }},
 		{"view.moveToolToRight", "Move Tool Window to Right", "View", "", "dock undock move tool window right", func(m *Model) { m.MoveToolToRight() }},
 		{"view.moveToolToBottom", "Move Tool Window to Bottom", "View", "", "dock undock move tool window bottom", func(m *Model) { m.MoveToolToBottom() }},
@@ -323,6 +384,7 @@ func builtinCommands() []appCommand {
 		{"debug.rerun", "Rerun Debug", "Run", "", "rerun debug session restart", func(m *Model) { m.DebugRerun() }},
 		{"debug.reloadChangedClasses", "Reload Changed Classes", "Run", "", "hotswap hot swap reload changed classes hot code replace", func(m *Model) { m.HotSwapReload() }},
 		{"debug.cancelHotSwap", "Cancel Hot Swap Build", "Run", "", "hotswap stop cancel compile build", func(m *Model) { m.CancelHotSwap() }},
+		{"debug.hotReload", "Hot Reload", "Run", "", "flutter dart reload sources application", func(m *Model) { m.DebugHotReload() }},
 		{"debug.hotRestart", "Hot Restart", "Run", "", "flutter dart restart application discard state", func(m *Model) { m.DebugHotRestart() }},
 		{"debug.stop", "Stop Debug Session", "Run", "", "debugger stop terminate", func(m *Model) { m.StopDebug() }},
 		{"debug.evaluate", "Evaluate Expression…", "Run", "", "evaluate expression watch debug", func(m *Model) { m.OpenDebugEvaluate() }},
@@ -383,10 +445,10 @@ func builtinCommands() []appCommand {
 		{"maven.settings", "Maven Settings…", "Build", "", "maven settings", func(m *Model) { m.OpenSettingsPage("languages.java") }},
 		{"gradle.reload", "Reload All Gradle Projects", "Build", "", "gradle reload sync projects", func(m *Model) { m.ReloadGradle() }},
 		{"gradle.cancelReload", "Stop Reloading Gradle Projects", "Build", "", "gradle cancel stop reload sync", func(m *Model) { m.CancelBuildToolReload() }},
-		{"gradle.expandAll", "Expand All", "Build", "", "gradle expand all dependencies", func(m *Model) { m.ExpandMavenAll() }},
-		{"gradle.collapseAll", "Collapse All", "Build", "", "gradle collapse all dependencies", func(m *Model) { m.CollapseMavenAll() }},
-		{"gradle.toggleOffline", "Toggle Offline Mode", "Build", "", "gradle offline mode", func(m *Model) { m.ToggleMavenOffline() }},
-		{"gradle.toggleSkipTests", "Toggle 'Skip Tests' Mode", "Build", "", "gradle skip tests mode", func(m *Model) { m.ToggleMavenSkipTests() }},
+		{"gradle.expandAll", "Expand All", "Build", "", "gradle expand all dependencies", func(m *Model) { m.ExpandGradleAll() }},
+		{"gradle.collapseAll", "Collapse All", "Build", "", "gradle collapse all dependencies", func(m *Model) { m.CollapseGradleAll() }},
+		{"gradle.toggleOffline", "Toggle Offline Mode", "Build", "", "gradle offline mode", func(m *Model) { m.ToggleGradleOffline() }},
+		{"gradle.toggleSkipTests", "Toggle 'Skip Tests' Mode", "Build", "", "gradle skip tests mode", func(m *Model) { m.ToggleGradleSkipTests() }},
 		{"gradle.analyzeDependencies", "Analyze Dependencies…", "Build", "", "gradle dependency analysis", func(m *Model) { m.AnalyzeBuildDependencies() }},
 		{"view.build", "Show Build Window", "View", "", "build output console", func(m *Model) { m.ShowBuild() }},
 		{"java.tools", "Install Java Language Services and Debugger", "Run", "", "java jdtls language server debugger install toolchain", func(m *Model) { m.InstallJavaToolchain() }},
@@ -421,7 +483,8 @@ func builtinCommands() []appCommand {
 		{"app.checkForUpdates", "Check for Updates…", "Help", "", "update upgrade version release", func(m *Model) { m.CheckForUpdates() }},
 		{"app.whatsNew", "What's New", "Help", "", "whats new release notes changelog update notes", func(m *Model) { m.OpenCurrentWhatsNew() }},
 	}, append(append(append(projectTreeCommands(), parityWindowCommands()...),
-		parityToolCommands()...), append(downloadJDKCommands(), parityRunCommands()...)...)...)
+		parityToolCommands()...), append(append(downloadJDKCommands(), parityRunCommands()...),
+		servicesCommands()...)...)...)
 }
 
 // Command returns the registry's command with id, the one entry the menu, the

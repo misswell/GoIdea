@@ -19,6 +19,10 @@ type treeTarget struct {
 	path string
 	dir  bool
 	root bool
+	// readOnly marks SDK and dependency rows contributed by External
+	// Libraries. Their files can be opened and inspected, but project file
+	// operations do not edit them.
+	readOnly bool
 	// git says the project's Git status loaded, which shows the Git submenu;
 	// kind is the change status of a file target, and rollback says its
 	// working-tree side can be discarded.
@@ -42,6 +46,13 @@ func (t treeTarget) folder() string {
 	return filepath.Dir(t.path)
 }
 
+func (m *Model) treeTargetFolder(target treeTarget) string {
+	if target.dir {
+		return target.path
+	}
+	return m.projectTreePathDir(target.path)
+}
+
 // selectedTreeEntry describes the project-view selection for commands that sit
 // only in the main menu or palette. The root is protected from rename exactly
 // as its context menu does.
@@ -53,12 +64,9 @@ func (m *Model) selectedTreeEntry() (treeTarget, bool) {
 	if selected == "" {
 		return treeTarget{}, false
 	}
-	info, err := os.Stat(selected)
-	if err != nil {
-		return treeTarget{}, false
-	}
 	return treeTarget{
-		path: selected, dir: info.IsDir(),
+		path: selected, dir: m.tree.IsDir(selected),
+		readOnly:             m.tree.ReadOnly(selected),
 		root:                 selected == m.Root() || m.workspaceContains(selected),
 		workspaceMember:      m.workspaceContains(selected),
 		workspaceCurrentRoot: workspacePathEqual(selected, m.Root()),
@@ -75,7 +83,7 @@ func (m *Model) selectedTreeTargets() []treeTarget {
 	seen := map[string]bool{}
 	targets := make([]treeTarget, 0, len(m.tree.SelectedPaths()))
 	for _, raw := range m.tree.SelectedPaths() {
-		path := filepath.Clean(raw)
+		path := m.projectTreePathClean(raw)
 		if path == "" || path == "." {
 			continue
 		}
@@ -87,12 +95,13 @@ func (m *Model) selectedTreeTargets() []treeTarget {
 			continue
 		}
 		seen[key] = true
-		info, err := os.Stat(path)
-		if err != nil {
+		readOnly := m.tree.ReadOnly(path)
+		if !m.tree.IsDir(path) && !m.projectTreeEntryKnown(path) && !readOnly {
 			continue
 		}
 		targets = append(targets, treeTarget{
-			path: path, dir: info.IsDir(),
+			path: path, dir: m.tree.IsDir(path),
+			readOnly:             readOnly,
 			root:                 path == m.Root() || m.workspaceContains(path),
 			workspaceMember:      m.workspaceContains(path),
 			workspaceCurrentRoot: workspacePathEqual(path, m.Root()),
@@ -127,6 +136,11 @@ func selectedTreeComparisonPaths(
 // file manager.
 func (m *Model) RevealSelectedInFinder() {
 	if target, ok := m.selectedTreeEntry(); ok {
+		if m.projectTreeUsesRemotePaths() {
+			m.status = "Reveal is unavailable for a remote project."
+			m.invalidate()
+			return
+		}
 		revealPath(target.path)
 	}
 }
@@ -152,7 +166,7 @@ func (m *Model) RenameSelectedTreeEntry() {
 func (m *Model) CopySelectedTreeElement() {
 	paths := m.selectedMutableTreePaths()
 	if len(paths) > 0 {
-		m.OpenFileCopyDialog(paths, filepath.Dir(paths[0]))
+		m.OpenFileCopyDialog(paths, m.projectTreePathDir(paths[0]))
 	}
 }
 
@@ -169,7 +183,7 @@ func (m *Model) DeleteSelectedTreeEntry() {
 // the file's parent folder.
 func (m *Model) OpenSelectedTreeInTerminal() {
 	if target, ok := m.selectedTreeEntry(); ok {
-		m.OpenTerminalAt(target.folder())
+		m.OpenTerminalAt(m.treeTargetFolder(target))
 	}
 }
 
@@ -252,14 +266,19 @@ const (
 	treeActDelete
 	treeActTerminal
 	treeActRevealFinder
+	treeActOpenInBrowser
+	treeActTogglePreview
 	treeActSendToAgent
 	treeActReformat
 	treeActOptimizeImports
+	treeActGoGenerateFile
+	treeActGoGeneratePackage
 	treeActShowHistory
 	treeActPutLabel
 	treeActCompareDirs
 	treeActCompareFiles
 	treeActCompareWith
+	treeActCompareClipboard
 	treeActReload
 	treeActGitCommit
 	treeActGitAdd
@@ -267,6 +286,9 @@ const (
 	treeActGitIgnoreLocal
 	treeActGitAnnotate
 	treeActGitDiff
+	treeActGitCompare
+	treeActGitCurrentRevision
+	treeActGitHistorySelection
 	treeActGitHistory
 	treeActGitRollback
 	treeActGitBranches
@@ -275,8 +297,13 @@ const (
 	treeActGitFetch
 	treeActGitMerge
 	treeActGitRebase
+	treeActGitCheckout
 	treeActGitNewBranch
 	treeActGitNewTag
+	treeActGitWorktrees
+	treeActGitNewWorktree
+	treeActGitRemotes
+	treeActGitResolveConflicts
 	treeActGitStash
 	treeActGitUnstash
 	treeActGitReset
@@ -312,6 +339,7 @@ func treeMenuItems(t treeTarget, clipboard bool, selection ...treeTarget) []tree
 	if count > 1 {
 		moveLabel, copyLabel = "Move…", "Copy…"
 	}
+	writable := !t.readOnly && count > 0
 	sep := treeMenuItem{Act: treeActSeparator}
 	items := make([]treeMenuItem, 0, 48)
 	if t.workspaceMember && !t.workspaceCurrentRoot {
@@ -326,36 +354,54 @@ func treeMenuItems(t treeTarget, clipboard bool, selection ...treeTarget) []tree
 	}
 	items = append(items,
 		treeMenuItem{Label: "New", Items: []treeMenuItem{
-			item(treeActNewFile, "File…", true),
-			item(treeActNewDir, "Directory…", true),
+			item(treeActNewFile, "File…", !t.readOnly),
+			item(treeActNewDir, "Directory…", !t.readOnly),
 		}},
 		sep,
-		item(treeActCut, "Cut", !t.root && count > 0),
+		item(treeActCut, "Cut", !t.root && writable),
 		item(treeActCopy, "Copy", !t.root && count > 0),
 		treeMenuItem{Label: "Copy Path/Reference", Items: []treeMenuItem{
 			item(treeActCopyPath, "Absolute Path", true),
 			item(treeActCopyPath, "File Name", true),
 			item(treeActCopyPath, "Path From Content Root", true),
 		}},
-		item(treeActPaste, "Paste", clipboard),
+		item(treeActPaste, "Paste", clipboard && !t.readOnly),
 		sep,
 		item(treeActJump, "Jump to Source", !t.dir),
 		item(treeActFindUsages, "Find Usages", !t.dir),
 		item(treeActFindInFolder, "Find in Folder…", t.dir),
 		sep,
 		treeMenuItem{Label: "Refactor", Items: []treeMenuItem{
-			item(treeActRename, "Rename…", !t.root && count == 1),
-			item(treeActMove, moveLabel, !t.root && count > 0),
-			item(treeActCopyElement, copyLabel, !t.root && count > 0),
+			item(treeActRename, "Rename…", !t.root && writable && count == 1),
+			item(treeActMove, moveLabel, !t.root && writable),
+			item(treeActCopyElement, copyLabel, !t.root && writable),
 		}},
-		item(treeActReformat, "Reformat Code", !t.dir),
-		item(treeActOptimizeImports, "Optimize Imports", !t.dir),
-		item(treeActDelete, "Delete…", !t.root),
+		item(treeActReformat, "Reformat Code", !t.dir && !t.readOnly),
+		item(treeActOptimizeImports, "Optimize Imports", !t.dir && !t.readOnly),
+	)
+	if count == 1 && !t.dir && !t.readOnly && strings.EqualFold(filepath.Ext(t.path), ".go") {
+		items = append(items, treeMenuItem{Label: "Go Generate", Items: []treeMenuItem{
+			item(treeActGoGenerateFile, "Go Generate File", true),
+			item(treeActGoGeneratePackage, "Go Generate Package", true),
+		}})
+	}
+	openInItems := []treeMenuItem{
+		item(treeActRevealFinder, "Reveal in Finder", true),
+		item(treeActTerminal, "Terminal", true),
+	}
+	if count == 1 && !t.dir && isWebPath(t.path) {
+		browserItems := []treeMenuItem{
+			item(treeActOpenInBrowser, "Default Browser", true),
+		}
+		if isHTMLPath(t.path) {
+			browserItems = append(browserItems, item(treeActTogglePreview, "Built-in Preview", true))
+		}
+		openInItems = append(openInItems, treeMenuItem{Label: "Browser", Items: browserItems})
+	}
+	items = append(items,
+		item(treeActDelete, "Delete…", !t.root && !t.readOnly),
 		sep,
-		treeMenuItem{Label: "Open In", Items: []treeMenuItem{
-			item(treeActRevealFinder, "Reveal in Finder", true),
-			item(treeActTerminal, "Terminal", true),
-		}},
+		treeMenuItem{Label: "Open In", Items: openInItems},
 		item(treeActSendToAgent, "Send to Agent", !t.root),
 		treeMenuItem{Label: "Local History", Items: []treeMenuItem{
 			item(treeActShowHistory, "Show History…", true),
@@ -365,6 +411,11 @@ func treeMenuItems(t treeTarget, clipboard bool, selection ...treeTarget) []tree
 	if t.git {
 		items = append(items, treeGitMenu(t))
 	}
+	if count == 1 && !t.dir && isWebPath(t.path) {
+		items = append(items,
+			item(treeActOpenInBrowser, "Open '"+filepath.Base(t.path)+"' in Browser", true),
+		)
+	}
 	switch treeComparisonAction(selection) {
 	case treeActCompareDirs:
 		items = append(items, item(treeActCompareDirs, "Compare Directories…", true))
@@ -372,6 +423,7 @@ func treeMenuItems(t treeTarget, clipboard bool, selection ...treeTarget) []tree
 		items = append(items, item(treeActCompareFiles, "Compare Files", true))
 	case treeActCompareWith:
 		items = append(items, item(treeActCompareWith, "Compare With…", true))
+		items = append(items, item(treeActCompareClipboard, "Compare with Clipboard", true))
 	}
 	return append(items, item(treeActReload, "Reload from Disk", true))
 }
@@ -407,7 +459,7 @@ func treeGitMenu(t treeTarget) treeMenuItem {
 	if t.dir {
 		commit = "Commit…"
 	}
-	return treeMenuItem{Label: "Git", Items: []treeMenuItem{
+	items := []treeMenuItem{
 		item(treeActGitCommit, commit, t.dir || t.kind != "conflicted"),
 		item(treeActGitAdd, "Add", t.kind == "untracked"),
 		{Label: "Add to .gitignore", Items: []treeMenuItem{
@@ -417,21 +469,41 @@ func treeGitMenu(t treeTarget) treeMenuItem {
 		{Act: treeActSeparator},
 		item(treeActGitAnnotate, "Annotate with Git Blame", !t.dir),
 		item(treeActGitDiff, "Show Diff", !t.dir),
-		item(treeActGitHistory, "Show History", true),
+		item(treeActGitCompare, "Compare with Branch or Revision…", true),
+	}
+	if !t.dir {
+		items = append(items,
+			item(treeActGitCompare, "Compare with Revision…", true),
+		)
+	}
+	items = append(items, item(treeActGitHistory, "Show History", true))
+	if !t.dir {
+		items = append(items,
+			item(treeActGitHistorySelection, "Show History for Selection", true),
+			item(treeActGitCurrentRevision, "Show Current Revision", true),
+		)
+	}
+	items = append(items,
 		item(treeActGitRollback, "Rollback…", t.rollback),
-		{Act: treeActSeparator},
+		treeMenuItem{Act: treeActSeparator},
 		item(treeActGitBranches, "Branches…", true),
-		item(treeActGitUpdate, "Update Project…", !t.root),
-		item(treeActGitPush, "Push…", !t.root),
-		item(treeActGitFetch, "Fetch", !t.root),
-		item(treeActGitMerge, "Merge…", !t.root),
-		item(treeActGitRebase, "Rebase…", !t.root),
-		item(treeActGitNewBranch, "New Branch…", !t.root),
-		item(treeActGitNewTag, "New Tag…", !t.root),
-		item(treeActGitStash, "Stash Changes…", !t.root),
-		item(treeActGitUnstash, "Unstash Changes…", !t.root),
-		item(treeActGitReset, "Reset HEAD…", !t.root),
-	}}
+		item(treeActGitUpdate, "Pull…", true),
+		item(treeActGitPush, "Push…", true),
+		item(treeActGitFetch, "Fetch", true),
+		item(treeActGitMerge, "Merge…", true),
+		item(treeActGitRebase, "Rebase…", true),
+		item(treeActGitCheckout, "Checkout Tag or Revision…", true),
+		item(treeActGitNewBranch, "New Branch…", true),
+		item(treeActGitNewTag, "New Tag…", true),
+		item(treeActGitWorktrees, "Worktrees…", true),
+		item(treeActGitNewWorktree, "New Worktree…", true),
+		item(treeActGitRemotes, "Manage Remotes…", true),
+		item(treeActGitResolveConflicts, "Resolve Conflicts…", true),
+		item(treeActGitStash, "Stash Changes…", true),
+		item(treeActGitUnstash, "Unstash Changes…", true),
+		item(treeActGitReset, "Reset HEAD…", true),
+	)
+	return treeMenuItem{Label: "Git", Items: items}
 }
 
 // treeMenuLabels flattens the menu to its labels, the separators dropped and
@@ -454,7 +526,16 @@ func treeMenuLabels(items []treeMenuItem) []string {
 // treeMenu draws target t's context menu.
 func (m *Model) treeMenu(c *ui.Context, menu *ui.Menu, t treeTarget) {
 	selection := m.selectedTreeTargets()
-	m.buildTreeMenu(c, menu, treeMenuItems(t, m.treeClip != nil, selection...), t)
+	items := treeMenuItems(t, m.treeClip != nil, selection...)
+	if len(selection) == 1 && !selection[0].dir {
+		m.buildTreeMenu(c, menu, items, t)
+		if len(m.fileTypeMenuLanguages()) > 0 {
+			menu.Separator()
+			m.fileTypeOverrideMenu(menu, selection[0].path)
+		}
+	} else {
+		m.buildTreeMenu(c, menu, items, t)
+	}
 	if !t.dir {
 		m.compileFileMenu(menu, t.path)
 	}
@@ -475,17 +556,18 @@ func (m *Model) buildTreeMenu(c *ui.Context, menu *ui.Menu, items []treeMenuItem
 }
 
 func (m *Model) runTreeAct(c *ui.Context, it treeMenuItem, t treeTarget) {
+	folder := m.treeTargetFolder(t)
 	switch {
 	case it.Act == treeActNewFile:
-		m.OpenProjectNew(t.folder())
+		m.OpenProjectNew(folder)
 	case it.Act == treeActNewDir:
-		m.OpenNewTreeEntry(t.folder(), true)
+		m.OpenNewTreeEntry(folder, true)
 	case it.Act == treeActCut:
 		m.CutSelectedTreeEntry()
 	case it.Act == treeActCopy:
 		m.CopySelectedTreeEntry()
 	case it.Act == treeActPaste:
-		m.PasteTreeEntry(t.folder())
+		m.PasteTreeEntry(folder)
 	case it.Act == treeActCopyPath:
 		m.CopyTreePath(c, t.path, it.Label)
 	case it.Act == treeActJump:
@@ -494,7 +576,7 @@ func (m *Model) runTreeAct(c *ui.Context, it treeMenuItem, t treeTarget) {
 	case it.Act == treeActFindUsages:
 		m.findUsagesOfTreeFile(t.path)
 	case it.Act == treeActFindInFolder:
-		m.ShowSearchInFolder(t.folder())
+		m.ShowSearchInFolder(folder)
 	case it.Act == treeActRename:
 		m.OpenFileRenameDialog(t.path)
 	case it.Act == treeActMove:
@@ -504,7 +586,7 @@ func (m *Model) runTreeAct(c *ui.Context, it treeMenuItem, t treeTarget) {
 		if len(paths) == 0 {
 			paths = []string{t.path}
 		}
-		m.OpenFileCopyDialog(paths, filepath.Dir(paths[0]))
+		m.OpenFileCopyDialog(paths, m.projectTreePathDir(paths[0]))
 	case it.Act == treeActDelete:
 		paths := m.selectedMutableTreePaths()
 		if len(paths) == 0 {
@@ -512,15 +594,23 @@ func (m *Model) runTreeAct(c *ui.Context, it treeMenuItem, t treeTarget) {
 		}
 		m.AskTreeDeletePaths(paths)
 	case it.Act == treeActTerminal:
-		m.OpenTerminalAt(t.folder())
+		m.OpenTerminalAt(folder)
 	case it.Act == treeActRevealFinder:
 		revealPath(t.path)
+	case it.Act == treeActOpenInBrowser:
+		m.OpenWebInBrowser(t.path)
+	case it.Act == treeActTogglePreview:
+		m.ToggleWebPreview(t.path)
 	case it.Act == treeActSendToAgent:
 		m.SendPathsToAgent([]string{t.path})
 	case it.Act == treeActReformat:
 		m.formatTreeFile(t.path)
 	case it.Act == treeActOptimizeImports:
 		m.optimizeImportsTreeFile(t.path)
+	case it.Act == treeActGoGenerateFile:
+		m.RunCommandWithArg("go.generate.file", map[string]any{"path": t.path})
+	case it.Act == treeActGoGeneratePackage:
+		m.RunCommandWithArg("go.generate.package", map[string]any{"path": t.path})
 	case it.Act == treeActShowHistory:
 		m.ShowHistory(t.path)
 	case it.Act == treeActPutLabel:
@@ -537,6 +627,8 @@ func (m *Model) runTreeAct(c *ui.Context, it treeMenuItem, t treeTarget) {
 		}
 	case it.Act == treeActCompareWith:
 		m.ComparePathWith(t.path)
+	case it.Act == treeActCompareClipboard:
+		m.ComparePathWithClipboard(t.path)
 	case it.Act == treeActReload:
 		m.ReloadPathFromDisk(t.path)
 	case it.Act == treeActGitCommit:
@@ -557,6 +649,12 @@ func (m *Model) runTreeAct(c *ui.Context, it treeMenuItem, t treeTarget) {
 		m.ShowAnnotate(t.path)
 	case it.Act == treeActGitDiff:
 		m.ShowDiff(t.path)
+	case it.Act == treeActGitCompare:
+		m.OpenCompareWithRevision(map[string]any{"path": t.path})
+	case it.Act == treeActGitCurrentRevision:
+		m.ShowCurrentRevision(map[string]any{"path": t.path})
+	case it.Act == treeActGitHistorySelection:
+		m.ShowHistoryForFile(map[string]any{"path": t.path})
 	case it.Act == treeActGitHistory:
 		m.ShowHistory(t.path)
 	case it.Act == treeActGitRollback:
@@ -575,10 +673,20 @@ func (m *Model) runTreeAct(c *ui.Context, it treeMenuItem, t treeTarget) {
 		m.OpenGitMerge()
 	case it.Act == treeActGitRebase:
 		m.OpenGitRebase()
+	case it.Act == treeActGitCheckout:
+		m.OpenCheckoutRevision("")
 	case it.Act == treeActGitNewBranch:
 		m.OpenNewGitBranch()
 	case it.Act == treeActGitNewTag:
 		m.OpenNewGitTag()
+	case it.Act == treeActGitWorktrees:
+		m.OpenVCSWorktrees()
+	case it.Act == treeActGitNewWorktree:
+		m.OpenNewVCSWorktree()
+	case it.Act == treeActGitRemotes:
+		m.OpenGitRemotes()
+	case it.Act == treeActGitResolveConflicts:
+		m.OpenResolveConflicts()
 	case it.Act == treeActGitStash:
 		m.OpenGitStash()
 	case it.Act == treeActGitUnstash:
@@ -629,6 +737,7 @@ type treeOpState struct {
 	// projectTemplate carries a file template from the chooser through the
 	// name prompt. projectTarget and projectPackage are the live preview.
 	projectTemplate     *projectNewTemplate
+	projectIncludes     map[string]string
 	projectKind         int
 	projectTarget       string
 	projectDir          string
@@ -659,7 +768,7 @@ func (m *Model) SetTreeClipPaths(paths []string, cut bool) {
 		word = "Cut "
 	}
 	if len(paths) == 1 {
-		m.status = word + filepath.Base(paths[0])
+		m.status = word + m.projectTreePathBase(paths[0])
 	} else {
 		m.status = fmt.Sprintf("%s %d items", strings.TrimSpace(word), len(paths))
 	}
@@ -685,15 +794,20 @@ func (m *Model) OpenTreeRename(path string) {
 	if path == "" || path == m.Root() {
 		return
 	}
-	info, err := os.Stat(path)
-	if err != nil {
+	if m.projectTreeUsesRemotePaths() {
+		if !m.projectTreeEntryKnown(path) {
+			m.status = "Rename failed: the remote entry is no longer available"
+			m.invalidate()
+			return
+		}
+	} else if _, err := os.Stat(path); err != nil {
 		m.status = "Rename failed: " + err.Error()
 		m.invalidate()
 		return
 	}
 	m.treeOp = &treeOpState{
-		kind: treeOpRename, path: path, dir: info.IsDir(),
-		name: filepath.Base(path), open: true,
+		kind: treeOpRename, path: path, dir: m.projectTreeIsDir(path),
+		name: m.projectTreePathBase(path), open: true,
 	}
 	m.invalidate()
 }
@@ -704,8 +818,13 @@ func (m *Model) OpenTreeCopy(path string) {
 	if path == "" || path == m.Root() {
 		return
 	}
-	_, err := os.Stat(path)
-	if err != nil {
+	if m.projectTreeUsesRemotePaths() {
+		if !m.projectTreeEntryKnown(path) {
+			m.status = "Copy failed: the remote entry is no longer available"
+			m.invalidate()
+			return
+		}
+	} else if _, err := os.Stat(path); err != nil {
 		m.status = "Copy failed: " + err.Error()
 		m.invalidate()
 		return
@@ -714,19 +833,17 @@ func (m *Model) OpenTreeCopy(path string) {
 	if len(paths) == 0 {
 		paths = []string{path}
 	}
-	m.OpenFileCopyDialog(paths, filepath.Dir(paths[0]))
+	m.OpenFileCopyDialog(paths, m.projectTreePathDir(paths[0]))
 }
 
 // uniqueTreeCopyName is OpenIDEA's Finder-style copy name:
 // Foo.kt, Foo copy.kt, Foo copy 2.kt.
 func (m *Model) uniqueTreeCopyName(dir, name string, isDir bool) string {
 	taken := map[string]bool{}
-	if entries, err := os.ReadDir(dir); err == nil {
-		for _, entry := range entries {
-			taken[keyForCaseInsensitiveFileSystem(entry.Name())] = true
-		}
+	for _, name := range m.projectTreeEntryNames(dir) {
+		taken[m.projectTreeNameKey(name)] = true
 	}
-	return uniqueTreeName(name, isDir, taken)
+	return uniqueTreeNameCase(name, isDir, taken, m.projectTreeCaseInsensitive())
 }
 
 // AskTreeDelete opens the confirmation that drops path.
@@ -747,9 +864,9 @@ func (m *Model) AskTreeDeletePaths(paths []string) {
 	dirs := make([]string, 0, len(paths))
 	files := make([]string, 0, len(paths))
 	for _, path := range paths {
-		if info, err := os.Stat(path); err == nil && info.IsDir() {
+		if m.projectTreeIsDir(path) {
 			dirs = append(dirs, path)
-		} else if err == nil {
+		} else if m.projectTreeEntryKnown(path) {
 			files = append(files, path)
 		}
 	}
@@ -811,13 +928,13 @@ func (m *Model) ConfirmTreeOp() {
 	}
 	from, to := v.path, ""
 	command := "fs_create_file"
-	args := map[string]any{"path": filepath.Join(v.path, name)}
+	args := map[string]any{"path": m.projectTreePathJoin(v.path, name)}
 	switch v.kind {
 	case treeOpNewDir:
 		command = "fs_create_dir"
 	case treeOpRename:
 		from = v.path
-		to = filepath.Join(filepath.Dir(v.path), name)
+		to = m.projectTreePathJoin(m.projectTreePathDir(v.path), name)
 		command = "fs_rename"
 		args = map[string]any{"from": from, "to": to}
 		if to == from {
@@ -826,7 +943,7 @@ func (m *Model) ConfirmTreeOp() {
 		}
 	case treeOpCopy:
 		from = v.path
-		to = filepath.Join(filepath.Dir(v.path), name)
+		to = m.projectTreePathJoin(m.projectTreePathDir(v.path), name)
 		command = "fs_copy"
 		args = map[string]any{"from": from, "to": to}
 	}
@@ -834,7 +951,7 @@ func (m *Model) ConfirmTreeOp() {
 	if target == "" {
 		target = to
 	}
-	if _, err := os.Stat(target); err == nil {
+	if m.projectTreeEntryKnown(target) {
 		v.err = "A file or directory with that name already exists"
 		m.invalidate()
 		return
@@ -853,7 +970,7 @@ func (m *Model) ConfirmTreeOp() {
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, time.Minute)
 		defer cancel()
-		_, err := m.mgr.Invoke(ctx, Window, command, args)
+		_, err := m.invoke(ctx, command, args)
 		m.post(func() {
 			v.busy = false
 			if m.Root() != root {
@@ -868,22 +985,24 @@ func (m *Model) ConfirmTreeOp() {
 			switch v.kind {
 			case treeOpNewFile:
 				m.status = "Created " + name
-				m.refreshTree(filepath.Dir(target))
+				m.refreshTree(m.projectTreePathDir(target))
+				m.notifyVCSFileOperation("created", []string{target})
 				m.openFile(target)
 			case treeOpNewDir:
 				m.status = "Created directory " + name
-				m.refreshTree(filepath.Dir(target))
+				m.refreshTree(m.projectTreePathDir(target))
 			case treeOpRename:
 				m.closedTreeTabs(from)
 				m.moveBookmarkPaths(from, to)
-				m.refreshTree(filepath.Dir(to))
+				m.refreshTree(m.projectTreePathDir(to))
 				m.status = "Renamed to " + name
 				if m.tree != nil {
 					m.tree.Select(to)
 				}
 			case treeOpCopy:
-				m.refreshTree(filepath.Dir(to))
-				m.status = "Copied " + filepath.Base(from) + " to " + name
+				m.refreshTree(m.projectTreePathDir(to))
+				m.status = "Copied " + m.projectTreePathBase(from) + " to " + name
+				m.notifyVCSFileOperation("created", []string{to})
 				if m.tree != nil {
 					m.tree.Select(to)
 				}
@@ -900,7 +1019,7 @@ func (m *Model) confirmProjectNewFile(v *treeOpState) {
 		m.invalidate()
 		return
 	}
-	if _, err := os.Stat(plan.path); err == nil {
+	if m.projectTreeEntryKnown(plan.path) {
 		v.err = "A file or directory with that name already exists"
 		m.invalidate()
 		return
@@ -911,7 +1030,9 @@ func (m *Model) confirmProjectNewFile(v *treeOpState) {
 		projectName = filepath.Base(root)
 	}
 	style, pkg := projectNewPackage(v.projectTemplate, v.projectKind, plan.directory, root)
-	text, caret := projectNewRenderedText(v.projectTemplate, v.projectKind, plan, pkg, projectName, root, time.Now())
+	text, caret := projectNewRenderedTextWithIncludes(
+		v.projectTemplate, v.projectKind, plan, pkg, projectName, root, time.Now(), v.projectIncludes,
+	)
 	line, col := projectNewCaretPosition(text, caret)
 	v.projectTarget = plan.path
 	v.projectDir = plan.directory
@@ -940,6 +1061,7 @@ func (m *Model) confirmProjectNewFile(v *treeOpState) {
 			m.treeOp = nil
 			m.status = "Created " + plan.fileName
 			m.refreshTree(plan.directory)
+			m.notifyVCSFileOperation("created", []string{plan.path})
 			m.openFileThen(plan.path, func(tab *Tab) {
 				tab.state.GoTo(editor.Pos{Line: line, Col: col})
 			})
@@ -951,9 +1073,21 @@ func (m *Model) confirmProjectNewFile(v *treeOpState) {
 // treeSelectionAfterDelete keeps the next surviving visible row, else the
 // previous one, as OpenIDEA's Project view does after Delete.
 func treeSelectionAfterDelete(rows []*treeNode, deleted []string) string {
+	return treeSelectionAfterDeleteWith(rows, deleted, underTreePath)
+}
+
+func (m *Model) treeSelectionAfterDelete(rows []*treeNode, deleted []string) string {
+	return treeSelectionAfterDeleteWith(rows, deleted, m.projectTreeUnderPath)
+}
+
+func treeSelectionAfterDeleteWith(
+	rows []*treeNode,
+	deleted []string,
+	under func(string, string) bool,
+) string {
 	gone := func(path string) bool {
 		for _, removed := range deleted {
-			if underTreePath(path, removed) {
+			if under(path, removed) {
 				return true
 			}
 		}
@@ -1017,7 +1151,7 @@ func (m *Model) performTreeDelete(v *treeOpState) {
 		}
 	}
 	rows := append([]*treeNode(nil), m.tree.Rows()...)
-	next := treeSelectionAfterDelete(rows, paths)
+	next := m.treeSelectionAfterDelete(rows, paths)
 	dirs := append([]string(nil), v.dirs...)
 	v.busy = true
 	v.err = ""
@@ -1032,7 +1166,7 @@ func (m *Model) performTreeDelete(v *treeOpState) {
 		for _, path := range paths {
 			_, err := m.invoke(ctx, "fs_delete", map[string]any{"path": path})
 			if err != nil {
-				failures = append(failures, filepath.Base(path)+": "+err.Error())
+				failures = append(failures, m.projectTreePathBase(path)+": "+err.Error())
 				continue
 			}
 			deleted = append(deleted, path)
@@ -1047,7 +1181,7 @@ func (m *Model) performTreeDelete(v *treeOpState) {
 				m.closedTreeTabs(path)
 				m.removeNavigationTree(path)
 				m.dropBookmarksUnder(path)
-				m.refreshTree(filepath.Dir(path))
+				m.refreshTree(m.projectTreePathDir(path))
 			}
 			if len(deleted) > 0 {
 				m.treeLastMove = &treeMoveRecord{
@@ -1055,16 +1189,17 @@ func (m *Model) performTreeDelete(v *treeOpState) {
 					DeletePaths: append([]string(nil), deleted...),
 					DeleteDirs:  append([]string(nil), dirs...),
 				}
+				m.notifyVCSFileOperation("deleted", deleted)
 			}
 			if m.tree != nil {
-				if next != "" && !underAnyTreePath(next, deleted) {
+				if next != "" && !m.underAnyTreePath(next, deleted) {
 					m.tree.Select(next)
 				} else if len(deleted) > 0 {
 					m.tree.Select("")
 				}
 			}
 			if len(deleted) == 1 {
-				m.status = "Deleted " + filepath.Base(deleted[0])
+				m.status = "Deleted " + m.projectTreePathBase(deleted[0])
 			} else if len(deleted) > 1 {
 				m.status = fmt.Sprintf("Deleted %d items", len(deleted))
 			} else {
@@ -1080,8 +1215,20 @@ func (m *Model) performTreeDelete(v *treeOpState) {
 }
 
 func underAnyTreePath(path string, roots []string) bool {
+	return underAnyTreePathWith(path, roots, underTreePath)
+}
+
+func (m *Model) underAnyTreePath(path string, roots []string) bool {
+	return underAnyTreePathWith(path, roots, m.projectTreeUnderPath)
+}
+
+func underAnyTreePathWith(
+	path string,
+	roots []string,
+	under func(string, string) bool,
+) bool {
 	for _, root := range roots {
-		if underTreePath(path, root) {
+		if under(path, root) {
 			return true
 		}
 	}
@@ -1103,7 +1250,7 @@ func (m *Model) PasteTreeEntry(dir string) {
 			internalPaths = []string{clip.path}
 		}
 	}
-	if len(external) > 0 && !sameTreeClipboardFiles(external, internalPaths) {
+	if len(external) > 0 && !m.sameTreeClipboardFiles(external, internalPaths) {
 		m.pasteExternalTreeFiles(external, dir)
 		return
 	}
@@ -1123,7 +1270,7 @@ func (m *Model) PasteTreeEntry(dir string) {
 	}
 	paths := make([]string, 0, len(internalPaths))
 	for _, path := range internalPaths {
-		if filepath.Dir(path) != filepath.Clean(dir) {
+		if m.projectTreePathDir(path) != m.projectTreePathClean(dir) {
 			paths = append(paths, path)
 		}
 	}
@@ -1136,6 +1283,10 @@ func (m *Model) PasteTreeEntry(dir string) {
 }
 
 func (m *Model) pasteExternalTreeFiles(paths []string, dir string) {
+	if m.projectTreeUsesRemotePaths() {
+		m.importLocalTreeFiles(paths, dir)
+		return
+	}
 	paths = m.mutableTreePaths(paths)
 	if len(paths) == 0 {
 		m.notifyInfo("project.paste", "No files on the clipboard", "")
@@ -1145,10 +1296,8 @@ func (m *Model) pasteExternalTreeFiles(paths []string, dir string) {
 		kind: "copy", path: paths[0], paths: paths, target: m.displayRefactorTarget(dir),
 	}
 	if len(paths) == 1 {
-		if info, err := os.Stat(paths[0]); err == nil {
-			d.dir = info.IsDir()
-		}
-		d.name = m.uniqueTreeCopyName(dir, filepath.Base(paths[0]), d.dir)
+		d.dir = m.projectTreeIsDir(paths[0])
+		d.name = m.uniqueTreeCopyName(dir, m.projectTreePathBase(paths[0]), d.dir)
 	}
 	copies, err := m.copyDialogPlan(d)
 	if err != nil {
@@ -1167,9 +1316,9 @@ func (m *Model) CopyTreePath(c *ui.Context, path, mode string) {
 	text := path
 	switch mode {
 	case "File Name":
-		text = filepath.Base(path)
+		text = m.projectTreePathBase(path)
 	case "Path From Content Root":
-		if rel, err := filepath.Rel(m.Root(), path); err == nil {
+		if rel, err := m.projectTreePathRelative(m.Root(), path); err == nil {
 			text = rel
 		}
 	}
@@ -1191,7 +1340,7 @@ func (m *Model) refreshTree(dir string) {
 func (m *Model) treeTabsUnder(path string) []*Tab {
 	var out []*Tab
 	for _, t := range m.tabs {
-		if underTreePath(t.doc.Path(), path) {
+		if m.projectTreeUnderPath(t.doc.Path(), path) {
 			out = append(out, t)
 		}
 	}
@@ -1202,7 +1351,7 @@ func (m *Model) treeTabsUnder(path string) []*Tab {
 func (m *Model) treeDirtyUnder(path string) string {
 	for _, t := range m.treeTabsUnder(path) {
 		if t.unsaved() {
-			return filepath.Base(t.doc.Path())
+			return m.projectTreePathBase(t.doc.Path())
 		}
 	}
 	return ""
@@ -1221,7 +1370,11 @@ func underTreePath(p, path string) bool {
 	if caseInsensitiveFileSystem() {
 		p, path = strings.ToLower(p), strings.ToLower(path)
 	}
-	return p == path || strings.HasPrefix(p, path+string(filepath.Separator))
+	separator := string(filepath.Separator)
+	if strings.HasPrefix(p, "/") || strings.HasPrefix(path, "/") {
+		separator = "/"
+	}
+	return p == path || strings.HasPrefix(p, path+separator)
 }
 
 // moveBookmarkPaths follows a rename, so bookmarks of the old path still
@@ -1231,10 +1384,10 @@ func (m *Model) moveBookmarkPaths(from, to string) {
 		return
 	}
 	follow := func(p string) string {
-		if p == from {
+		if m.projectTreeSamePath(p, from) {
 			return to
 		}
-		if strings.HasPrefix(p, from+string(filepath.Separator)) {
+		if m.projectTreeUnderPath(p, from) {
 			return to + p[len(from):]
 		}
 		return p
@@ -1262,13 +1415,13 @@ func (m *Model) moveBookmarkPaths(from, to string) {
 func (m *Model) dropBookmarksUnder(path string) {
 	marks := m.bookmarks[:0]
 	for _, b := range m.bookmarks {
-		if !underTreePath(b.Path, path) {
+		if !m.projectTreeUnderPath(b.Path, path) {
 			marks = append(marks, b)
 		}
 	}
 	paths := m.pathBookmarks[:0]
 	for _, pb := range m.pathBookmarks {
-		if !underTreePath(pb.Path, path) {
+		if !m.projectTreeUnderPath(pb.Path, path) {
 			paths = append(paths, pb)
 		}
 	}
@@ -1719,7 +1872,7 @@ func (m *Model) SmokeFiles(ctx context.Context) (map[string]any, error) {
 		m.closeHistory()
 		for i, t := range m.tabs {
 			if t == histTab {
-				m.dropTab(i)
+				m.removeTabNow(m.tabs[i])
 				break
 			}
 		}
@@ -1904,7 +2057,7 @@ func (m *Model) ReloadPathFromDisk(path string) {
 	}
 	dir := path
 	if !m.tree.IsDir(path) {
-		dir = filepath.Dir(path)
+		dir = m.projectTreePathDir(path)
 	}
 	m.tree.RefreshDir(dir)
 	m.status = "Reloaded from Disk"
@@ -1951,7 +2104,7 @@ func (m *Model) selectInProjectView(path string) {
 	m.leftHidden = false
 	m.tree.reveal(path)
 	m.tree.Select(path)
-	m.status = "Selected in the Project view: " + filepath.Base(path)
+	m.status = "Selected in the Project view: " + m.projectTreePathBase(path)
 	m.rememberLayout()
 	m.invalidate()
 }
@@ -1997,9 +2150,9 @@ func (m *Model) treeOpDialog(c *ui.Context, p *ui.Theme) {
 				if len(paths) == 1 {
 					if len(v.dirs) > 0 {
 						question = fmt.Sprintf("Delete '%s' and its contents?",
-							filepath.Base(paths[0]))
+							m.projectTreePathBase(paths[0]))
 					} else {
-						question = fmt.Sprintf("Delete '%s'?", filepath.Base(paths[0]))
+						question = fmt.Sprintf("Delete '%s'?", m.projectTreePathBase(paths[0]))
 					}
 				} else if len(v.dirs) > 0 {
 					question = fmt.Sprintf("Delete %d items (including folder contents)?",

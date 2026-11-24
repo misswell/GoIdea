@@ -1,0 +1,11 @@
+plugins {
+    id 'base'
+}
+
+tasks.register('verifyCatalog') {
+    doLast {
+        println "goidea-catalog-version=${publishedLibs.versions.kotlin.get()}"
+        println "goidea-catalog-library=${publishedLibs.kotlin.stdlib.get()}"
+        println "goidea-catalog-bundle-size=${publishedLibs.bundles.runtime.get().size()}"
+    }
+}

@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -147,11 +148,22 @@ func (m *Model) OpenFileRenameDialog(path string) {
 	if path == "" || path == m.Root() {
 		return
 	}
-	info, err := os.Stat(path)
-	if err != nil {
-		m.status = "Rename failed: " + err.Error()
-		m.invalidate()
-		return
+	dir := false
+	if m.projectTreeUsesRemotePaths() {
+		if !m.projectTreeEntryKnown(path) {
+			m.status = "Rename failed: the remote entry is no longer available"
+			m.invalidate()
+			return
+		}
+		dir = m.projectTreeIsDir(path)
+	} else {
+		info, err := os.Stat(path)
+		if err != nil {
+			m.status = "Rename failed: " + err.Error()
+			m.invalidate()
+			return
+		}
+		dir = info.IsDir()
 	}
 	stored := defaultFileRefactorPrefs("rename", m.prefs.ProjectTree)
 	m.fileRefactorPreview = nil
@@ -159,7 +171,7 @@ func (m *Model) OpenFileRenameDialog(path string) {
 	m.fileRefactor = &fileRefactorDialogState{
 		kind:            "rename",
 		path:            path,
-		dir:             info.IsDir(),
+		dir:             dir,
 		name:            filepath.Base(path),
 		references:      stored.referenceSearch(),
 		textOccurrences: stored.textSearch(),
@@ -184,14 +196,22 @@ func (m *Model) OpenFileMoveDialogFor(paths []string, targetFolder string, clear
 	if path == "" || path == m.Root() {
 		return
 	}
-	info, err := os.Stat(path)
-	if err != nil {
+	if targetFolder == "" {
+		targetFolder = m.projectTreePathDir(path)
+	}
+	dir := m.projectTreeIsDir(path)
+	if m.projectTreeUsesRemotePaths() {
+		if !m.projectTreeEntryKnown(path) {
+			m.status = "Move failed: the remote entry is no longer available"
+			m.invalidate()
+			return
+		}
+	} else if info, err := os.Stat(path); err != nil {
 		m.status = "Move failed: " + err.Error()
 		m.invalidate()
 		return
-	}
-	if targetFolder == "" {
-		targetFolder = filepath.Dir(path)
+	} else {
+		dir = info.IsDir()
 	}
 	stored := defaultFileRefactorPrefs("move", m.prefs.ProjectTree)
 	m.fileRefactorPreview = nil
@@ -200,7 +220,7 @@ func (m *Model) OpenFileMoveDialogFor(paths []string, targetFolder string, clear
 		kind:            "move",
 		path:            path,
 		paths:           paths,
-		dir:             info.IsDir(),
+		dir:             dir,
 		target:          m.displayRefactorTarget(targetFolder),
 		references:      stored.referenceSearch(),
 		textOccurrences: stored.textSearch(),
@@ -219,10 +239,12 @@ func (m *Model) OpenFileCopyDialog(paths []string, targetFolder string) {
 		return
 	}
 	if targetFolder == "" {
-		targetFolder = filepath.Dir(paths[0])
+		targetFolder = m.projectTreePathDir(paths[0])
 	}
 	dir := false
-	if len(paths) == 1 {
+	if len(paths) == 1 && m.projectTreeUsesRemotePaths() {
+		dir = m.projectTreeIsDir(paths[0])
+	} else if len(paths) == 1 {
 		if info, err := os.Stat(paths[0]); err == nil {
 			dir = info.IsDir()
 		}
@@ -234,7 +256,7 @@ func (m *Model) OpenFileCopyDialog(paths []string, targetFolder string) {
 		path:         paths[0],
 		paths:        append([]string(nil), paths...),
 		dir:          dir,
-		name:         m.uniqueTreeCopyName(targetFolder, filepath.Base(paths[0]), dir),
+		name:         m.uniqueTreeCopyName(targetFolder, m.projectTreePathBase(paths[0]), dir),
 		target:       m.displayRefactorTarget(targetFolder),
 		openInEditor: m.prefs.ProjectTree.CopyOpenEditor,
 	}
@@ -244,17 +266,23 @@ func (m *Model) OpenFileCopyDialog(paths []string, targetFolder string) {
 func (m *Model) displayRefactorTarget(path string) string {
 	root := m.Root()
 	if root != "" {
-		if rel, err := filepath.Rel(root, path); err == nil {
-			return filepath.ToSlash(rel)
+		if rel, err := m.projectTreePathRelative(root, path); err == nil {
+			return rel
 		}
 	}
-	return filepath.ToSlash(path)
+	return strings.ReplaceAll(m.projectTreePathClean(path), `\`, "/")
 }
 
 func (m *Model) resolveRefactorTarget(target string) string {
 	target = strings.TrimSpace(target)
 	if target == "" {
-		return filepath.Clean(m.Root())
+		return m.projectTreePathClean(m.Root())
+	}
+	if m.projectTreeUsesRemotePaths() {
+		if !path.IsAbs(target) {
+			target = m.projectTreePathJoin(m.Root(), target)
+		}
+		return m.projectTreePathClean(target)
 	}
 	if !filepath.IsAbs(target) {
 		target = filepath.Join(m.Root(), filepath.FromSlash(target))
@@ -311,19 +339,22 @@ func (m *Model) refactorRenameMove(d *fileRefactorDialogState) (treeFileMove, er
 	if errText := refactorNameError(d.name); errText != "" {
 		return treeFileMove{}, errors.New(errText)
 	}
-	to := filepath.Join(filepath.Dir(d.path), d.name)
-	if to == d.path {
+	parent := m.projectTreePathDir(d.path)
+	to := m.projectTreePathJoin(parent, d.name)
+	if m.projectTreeSamePath(to, d.path) {
 		return treeFileMove{}, errors.New("The name is unchanged")
 	}
-	entries, err := os.ReadDir(filepath.Dir(d.path))
-	if err != nil {
-		return treeFileMove{}, err
+	entries := m.projectTreeEntryNames(parent)
+	if len(entries) == 0 && !m.projectTreeUsesRemotePaths() {
+		if _, err := os.ReadDir(parent); err != nil {
+			return treeFileMove{}, err
+		}
 	}
 	for _, entry := range entries {
-		if entry.Name() == filepath.Base(d.path) {
+		if m.projectTreeNamesEqual(entry, m.projectTreePathBase(d.path)) {
 			continue
 		}
-		if sameFileName(entry.Name(), d.name) {
+		if m.projectTreeNamesEqual(entry, d.name) {
 			return treeFileMove{}, errors.New("A file or directory with that name already exists")
 		}
 	}
@@ -340,8 +371,7 @@ func (m *Model) refactorMoveTarget(d *fileRefactorDialogState) (treeFileMove, er
 
 func (m *Model) refactorMoveTargets(d *fileRefactorDialogState) ([]treeFileMove, error) {
 	destination := m.resolveRefactorTarget(d.target)
-	info, err := os.Stat(destination)
-	if err != nil || !info.IsDir() {
+	if !m.projectTreeIsDir(destination) {
 		return nil, errors.New("Choose an existing destination directory")
 	}
 	paths := d.paths
@@ -351,22 +381,22 @@ func (m *Model) refactorMoveTargets(d *fileRefactorDialogState) ([]treeFileMove,
 	moves := make([]treeFileMove, 0, len(paths))
 	destinations := map[string]bool{}
 	for _, path := range paths {
-		if info, err := os.Stat(path); err == nil && info.IsDir() &&
-			(destination == path ||
-				strings.HasPrefix(destination, path+string(filepath.Separator))) {
+		if m.projectTreeIsDir(path) &&
+			(m.projectTreeSamePath(destination, path) ||
+				m.projectTreeUnderPath(destination, path)) {
 			return nil, errors.New("Cannot move a directory into itself")
 		}
-		to := filepath.Join(destination, filepath.Base(path))
-		if to == path {
+		to := m.projectTreePathJoin(destination, m.projectTreePathBase(path))
+		if m.projectTreeSamePath(to, path) {
 			continue
 		}
-		key := keyForCaseInsensitiveFileSystem(to)
+		key := m.projectTreeNameKey(to)
 		if destinations[key] {
 			return nil, errors.New("Two selected items have the same name")
 		}
 		destinations[key] = true
-		if _, err := os.Stat(to); err == nil {
-			return nil, errors.New("The destination already has " + filepath.Base(to))
+		if m.projectTreeEntryKnown(to) {
+			return nil, errors.New("The destination already has " + m.projectTreePathBase(to))
 		}
 		moves = append(moves, treeFileMove{From: path, To: to})
 	}
@@ -377,8 +407,12 @@ func (m *Model) refactorMoveTargets(d *fileRefactorDialogState) ([]treeFileMove,
 }
 
 func uniqueTreeName(name string, isDir bool, taken map[string]bool) string {
+	return uniqueTreeNameCase(name, isDir, taken, caseInsensitiveFileSystem())
+}
+
+func uniqueTreeNameCase(name string, isDir bool, taken map[string]bool, caseInsensitive bool) string {
 	key := func(candidate string) string {
-		if caseInsensitiveFileSystem() {
+		if caseInsensitive {
 			return strings.ToLower(candidate)
 		}
 		return candidate
@@ -406,22 +440,23 @@ func uniqueTreeName(name string, isDir bool, taken map[string]bool) string {
 
 func (m *Model) copyDialogPlan(d *fileRefactorDialogState) ([]treeFileCopy, error) {
 	destination := m.resolveRefactorTarget(d.target)
-	info, err := os.Stat(destination)
-	if err != nil || !info.IsDir() {
+	if !m.projectTreeIsDir(destination) {
 		return nil, errors.New("Choose an existing destination directory")
 	}
 	paths := d.paths
 	if len(paths) == 0 {
 		paths = []string{d.path}
 	}
-	entries, err := os.ReadDir(destination)
-	if err != nil {
-		return nil, err
+	entries := m.projectTreeEntryNames(destination)
+	if len(entries) == 0 && !m.projectTreeUsesRemotePaths() {
+		if _, err := os.ReadDir(destination); err != nil {
+			return nil, err
+		}
 	}
-	key := keyForCaseInsensitiveFileSystem
+	key := m.projectTreeNameKey
 	taken := make(map[string]bool, len(entries)+len(paths))
 	for _, entry := range entries {
-		taken[key(entry.Name())] = true
+		taken[key(entry)] = true
 	}
 	name := strings.TrimSpace(d.name)
 	if len(paths) == 1 {
@@ -431,23 +466,29 @@ func (m *Model) copyDialogPlan(d *fileRefactorDialogState) ([]treeFileCopy, erro
 	}
 	copies := make([]treeFileCopy, 0, len(paths))
 	for _, source := range paths {
-		sourceInfo, err := os.Stat(source)
-		if err != nil {
-			return nil, err
+		sourceDir := m.projectTreeIsDir(source)
+		if !m.projectTreeUsesRemotePaths() {
+			if sourceInfo, err := os.Stat(source); err != nil {
+				return nil, err
+			} else {
+				sourceDir = sourceInfo.IsDir()
+			}
 		}
-		if sourceInfo.IsDir() && destination != filepath.Dir(source) &&
-			underTreePath(destination, source) {
+		if sourceDir && !m.projectTreeSamePath(destination, m.projectTreePathDir(source)) &&
+			m.projectTreeUnderPath(destination, source) {
 			return nil, errors.New("Cannot copy a directory into itself")
 		}
 		finalName := name
 		if len(paths) > 1 {
-			finalName = uniqueTreeName(filepath.Base(source), sourceInfo.IsDir(), taken)
+			finalName = uniqueTreeNameCase(
+				m.projectTreePathBase(source), sourceDir, taken, m.projectTreeCaseInsensitive(),
+			)
 		}
 		if len(paths) == 1 && taken[key(finalName)] {
 			return nil, errors.New("A file or directory named " + finalName + " already exists")
 		}
-		to := filepath.Join(destination, finalName)
-		if to == source {
+		to := m.projectTreePathJoin(destination, finalName)
+		if m.projectTreeSamePath(to, source) {
 			return nil, errors.New("The copy would replace the original")
 		}
 		copies = append(copies, treeFileCopy{From: source, To: to})
@@ -554,7 +595,7 @@ func (m *Model) ConfirmFileRefactor() {
 	} else {
 		label = "Rename"
 	}
-	title := describeFileRefactor(d.moves, label)
+	title := m.describeFileRefactor(d.moves, label)
 	m.status = "Looking for references…"
 	m.invalidate()
 
@@ -588,7 +629,7 @@ func (m *Model) ConfirmFileRefactor() {
 				active:         active,
 				warnings:       warnings,
 			}
-			if fileRefactorTouchesOtherFiles(edit, run.moves) {
+			if m.fileRefactorTouchesOtherFiles(edit, run.moves) {
 				m.showFileRefactorPreview(run)
 			} else {
 				m.applyPreparedFileRefactor(run, nil)
@@ -861,13 +902,25 @@ func mergeFileMoveEdits(lsp, text workspaceEdit) workspaceEdit {
 }
 
 func fileRefactorTouchesOtherFiles(edit workspaceEdit, moves []treeFileMove) bool {
+	return fileRefactorTouchesOtherFilesForPath(edit, moves, underTreePath)
+}
+
+func (m *Model) fileRefactorTouchesOtherFiles(edit workspaceEdit, moves []treeFileMove) bool {
+	return fileRefactorTouchesOtherFilesForPath(edit, moves, m.projectTreeUnderPath)
+}
+
+func fileRefactorTouchesOtherFilesForPath(
+	edit workspaceEdit,
+	moves []treeFileMove,
+	under func(string, string) bool,
+) bool {
 	for _, file := range edit.Files {
 		if file.Kind != "edit" || len(file.Edits) == 0 {
 			continue
 		}
 		insideMoved := false
 		for _, move := range moves {
-			if underTreePath(file.Path, move.From) {
+			if under(file.Path, move.From) {
 				insideMoved = true
 				break
 			}
@@ -880,8 +933,20 @@ func fileRefactorTouchesOtherFiles(edit workspaceEdit, moves []treeFileMove) boo
 }
 
 func movedFilePath(path string, moves []treeFileMove) string {
+	return movedFilePathForPath(path, moves, underTreePath)
+}
+
+func (m *Model) movedFilePath(path string, moves []treeFileMove) string {
+	return movedFilePathForPath(path, moves, m.projectTreeUnderPath)
+}
+
+func movedFilePathForPath(
+	path string,
+	moves []treeFileMove,
+	under func(string, string) bool,
+) string {
 	for _, move := range moves {
-		if underTreePath(path, move.From) {
+		if under(path, move.From) {
 			return move.To + path[len(move.From):]
 		}
 	}
@@ -889,14 +954,27 @@ func movedFilePath(path string, moves []treeFileMove) string {
 }
 
 func describeFileRefactor(moves []treeFileMove, kind string) string {
+	return describeFileRefactorWithPaths(moves, kind, filepath.Base, filepath.Dir)
+}
+
+func (m *Model) describeFileRefactor(moves []treeFileMove, kind string) string {
+	return describeFileRefactorWithPaths(moves, kind, m.projectTreePathBase, m.projectTreePathDir)
+}
+
+func describeFileRefactorWithPaths(
+	moves []treeFileMove,
+	kind string,
+	base func(string) string,
+	dir func(string) string,
+) string {
 	if len(moves) != 1 {
 		return fmt.Sprintf("%s %d items", kind, len(moves))
 	}
 	move := moves[0]
-	if kind == "rename" || filepath.Dir(move.From) == filepath.Dir(move.To) {
-		return fmt.Sprintf("Rename '%s' to '%s'", filepath.Base(move.From), filepath.Base(move.To))
+	if kind == "rename" || dir(move.From) == dir(move.To) {
+		return fmt.Sprintf("Rename '%s' to '%s'", base(move.From), base(move.To))
 	}
-	return fmt.Sprintf("Move '%s' to '%s'", filepath.Base(move.From), filepath.Dir(move.To))
+	return fmt.Sprintf("Move '%s' to '%s'", base(move.From), dir(move.To))
 }
 
 func (m *Model) showFileRefactorPreview(run fileRefactorRun) {
@@ -1147,7 +1225,7 @@ func (m *Model) finishPreparedFileRefactor(run fileRefactorRun, id uint32) {
 		m.openFile(path)
 	}
 	for _, path := range oldPaths {
-		if moved := movedFilePath(path, run.moves); moved != path {
+		if moved := m.movedFilePath(path, run.moves); moved != path {
 			reopen(moved)
 		}
 	}
@@ -1158,7 +1236,7 @@ func (m *Model) finishPreparedFileRefactor(run fileRefactorRun, id uint32) {
 			}
 		}
 	}
-	active := movedFilePath(run.active, run.moves)
+	active := m.movedFilePath(run.active, run.moves)
 	if active != "" {
 		if index := m.tabForPath(active); index >= 0 {
 			m.activate(index)

@@ -59,6 +59,11 @@ func (m *Model) QuickDefinition(kind string) {
 	if kind != "definition" && kind != "typeDefinition" {
 		return
 	}
+	if m.PowerSaveMode() {
+		m.status = "Power Save Mode is on: quick definition is off"
+		m.invalidate()
+		return
+	}
 	t := m.tab()
 	if t == nil || t.doc == nil || t.state == nil {
 		return
@@ -592,7 +597,7 @@ func (m *Model) openQuickDefinitionTarget(target quickDefinitionTarget) {
 			Buffer: doc.Buffer(), ReadOnly: true,
 			Font:       ui.Font{Family: oiFontMono, Size: m.prefs.fontSize()},
 			LineHeight: editorLineHeight(m.prefs.fontSize()),
-			Bindings:   intellijEditorBindings(),
+			Bindings:   m.editorBindings(),
 		},
 	}
 	m.noteTabUse(tab)

@@ -37,7 +37,7 @@ func (m *Model) refreshCodeVision(t *Tab, now time.Time, id uint32, first, last 
 	}
 	s := &t.inlay
 	prefs := m.prefs.Inlay
-	if !prefs.CodeVisionUsages() && !prefs.CodeVisionAuthor() {
+	if m.PowerSaveMode() || !prefs.CodeVisionUsages() && !prefs.CodeVisionAuthor() {
 		if len(s.vision) != 0 || s.visionLoading {
 			s.vision = nil
 			s.visionCount = 0

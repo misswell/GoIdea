@@ -32,9 +32,18 @@ type mavenDependency struct {
 	Version    string            `json:"version"`
 	Scope      string            `json:"scope"`
 	Type       string            `json:"type"`
+	Classifier *string           `json:"classifier"`
 	Optional   bool              `json:"optional"`
 	Omitted    *string           `json:"omitted"`
+	Conflict   *string           `json:"conflictWith"`
+	Managed    *string           `json:"managedFrom"`
 	Children   []mavenDependency `json:"children"`
+
+	// Gradle dependencies use these analyzer-only fields. They are filled from
+	// gradle_dependencies and are not part of build_model's Maven JSON.
+	Requested   *string `json:"-"`
+	Unresolved  bool    `json:"-"`
+	GradleBuild bool    `json:"-"`
 }
 
 type mavenPlugin struct {
@@ -61,6 +70,8 @@ type mavenProject struct {
 	Profiles     []string          `json:"profiles"`
 	JavaVersion  *uint32           `json:"javaVersion"`
 	Command      string            `json:"command"`
+	Options      []string          `json:"options"`
+	Env          map[string]string `json:"env"`
 	Dependencies []mavenDependency `json:"dependencies"`
 }
 
@@ -76,12 +87,6 @@ type mavenModel struct {
 	SyncedAt *float64       `json:"syncedAt"`
 	Stale    bool           `json:"stale"`
 	SyncErr  *string        `json:"syncError"`
-}
-
-type gradleModel struct {
-	Dir      string            `json:"dir"`
-	Projects []json.RawMessage `json:"projects"`
-	Error    string            `json:"error"`
 }
 
 type buildModel struct {
@@ -100,7 +105,11 @@ type mavenSelection struct {
 // mavenPane is the tool window's state.
 type mavenPane struct {
 	visible bool
-	loading bool
+	// gradleVisible is the peer Gradle tool window. Both share the build model
+	// and sync progress, but keep independent selection and tree expansion.
+	gradleVisible bool
+	activeTool    string
+	loading       bool
 
 	// syncing is Load Maven Changes in flight: its message and fraction.
 	syncing  bool
@@ -115,6 +124,10 @@ type mavenPane struct {
 	// offline and skipTests are the toolbar's two toggles.
 	offline   bool
 	skipTests bool
+	// Gradle has independent upstream settings. It must not inherit Maven's
+	// offline or skip-tests switches.
+	gradleOffline   bool
+	gradleSkipTests bool
 
 	err          string
 	model        buildModel
@@ -122,12 +135,21 @@ type mavenPane struct {
 	expandedInit bool
 	sel          mavenSelection
 	selKey       string
+	gradleSel    gradleSelection
+	gradleSelKey string
 	gen          uint64
+
+	analyzer      *buildDependencyAnalyzer
+	addDependency *addMavenDependencyDialog
 }
 
 // ShowMaven opens the Maven window and loads the build model.
 func (m *Model) ShowMaven() {
 	m.maven.visible = true
+	if m.maven.gradleVisible {
+		m.maven.gradleVisible = false
+	}
+	m.maven.activeTool = "maven"
 	m.DockShow("maven")
 	m.loadBuildModel()
 }
@@ -140,7 +162,7 @@ func (m *Model) ToggleMaven() { m.maven.visible = !m.maven.visible; m.DockToggle
 
 // loadBuildModel asks the backend for the reactor and Gradle builds.
 func (m *Model) loadBuildModel() {
-	if m.maven.loading || m.ctx == nil || m.mgr == nil || m.Root() == "" {
+	if m.maven.loading || m.ctx == nil || (m.mgr == nil && m.invokeHook == nil) || m.Root() == "" {
 		return
 	}
 	m.maven.loading = true
@@ -152,7 +174,7 @@ func (m *Model) loadBuildModel() {
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 60*time.Second)
 		defer cancel()
-		raw, err := m.mgr.Invoke(ctx, Window, "build_model", nil)
+		raw, err := m.invoke(ctx, "build_model", nil)
 		var model buildModel
 		if err == nil {
 			err = json.Unmarshal(raw, &model)
@@ -171,13 +193,41 @@ func (m *Model) loadBuildModel() {
 			if err != nil {
 				m.maven.err = "Could not read the build model: " + err.Error()
 			} else {
-				m.maven.model = model
-				m.mavenInitTree()
-				m.refreshReadiness()
+				m.applyBuildToolModel(model)
+				if m.maven.visible || m.maven.gradleVisible {
+					m.syncInitialBuildModels()
+				}
 			}
 			m.invalidate()
 		})
 	}()
+}
+
+// syncInitialBuildModels mirrors BuildToolView's first model load: a build
+// with no syncedAt is imported once through the real build_sync RPC. The
+// visible tool goes first; the other one follows after that sync returns.
+func (m *Model) syncInitialBuildModels() {
+	if m.maven.syncing || m.maven.loading || m.ctx == nil || (m.mgr == nil && m.invokeHook == nil) {
+		return
+	}
+	mavenUnsynced := m.maven.model.Maven != nil && m.maven.model.Maven.SyncedAt == nil
+	var gradleUnsynced []string
+	for _, build := range m.maven.model.Gradle {
+		if build.SyncedAt == nil {
+			gradleUnsynced = append(gradleUnsynced, build.Dir)
+		}
+	}
+	if m.maven.activeTool == "gradle" && len(gradleUnsynced) > 0 {
+		m.SyncGradleBuilds(gradleUnsynced)
+		return
+	}
+	if mavenUnsynced {
+		m.SyncMaven()
+		return
+	}
+	if len(gradleUnsynced) > 0 {
+		m.SyncGradleBuilds(gradleUnsynced)
+	}
 }
 
 // mavenInitTree expands the top-level projects once per model, as OpenIDEA's
@@ -207,7 +257,7 @@ func (m *Model) mavenInitTree() {
 // mavenProfilesList is the sync's -P list: the choices that differ from the
 // defaults, deactivated ones prefixed with "!".
 func (m *Model) mavenProfilesList() []string {
-	var out []string
+	out := []string{}
 	if m.maven.model.Maven == nil {
 		return out
 	}
@@ -243,7 +293,7 @@ func (m *Model) SetMavenProfile(p mavenProfile, on bool) {
 // SyncMaven is Load Maven Changes: build_sync with the current offline and
 // profile choices, streaming its progress into the banner.
 func (m *Model) SyncMaven() {
-	if m.maven.syncing || m.mgr == nil || m.ctx == nil || m.Root() == "" {
+	if m.maven.syncing || (m.mgr == nil && m.invokeHook == nil) || m.ctx == nil || m.Root() == "" {
 		return
 	}
 	m.maven.gen++
@@ -267,7 +317,11 @@ func (m *Model) SyncMaven() {
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 10*time.Minute)
 		defer cancel()
-		_, err := m.mgr.Invoke(ctx, Window, "build_sync", args)
+		raw, err := m.invoke(ctx, "build_sync", args)
+		var model buildModel
+		if err == nil {
+			err = json.Unmarshal(raw, &model)
+		}
 		m.post(func() {
 			if m.maven.channel != ch {
 				return
@@ -281,7 +335,9 @@ func (m *Model) SyncMaven() {
 				return
 			}
 			m.maven.loading = false
-			m.loadBuildModel()
+			m.applyBuildToolModel(model)
+			m.syncInitialBuildModels()
+			m.invalidate()
 		})
 	}()
 }
@@ -290,17 +346,36 @@ func (m *Model) SyncMaven() {
 // backend uses the same build_sync operation; each build directory is synced
 // with the tool's toolbar switches.
 func (m *Model) SyncGradle() {
-	if m.maven.syncing || m.mgr == nil || m.ctx == nil || m.Root() == "" {
-		return
-	}
 	var dirs []string
 	for _, build := range m.maven.model.Gradle {
-		if build.Dir != "" {
-			dirs = append(dirs, build.Dir)
-		}
+		dirs = append(dirs, build.Dir)
 	}
 	if len(dirs) == 0 {
 		return
+	}
+	m.SyncGradleBuilds(dirs)
+}
+
+// SyncGradleBuild reloads one linked build from the Gradle section's context
+// menu. An empty directory addresses the opened project's root build.
+func (m *Model) SyncGradleBuild(buildDir string) {
+	m.SyncGradleBuilds([]string{buildDir})
+}
+
+// SyncGradleBuilds re-reads the task model through build_sync. The backend
+// uses buildDir=null for the opened root build and a relative directory for an
+// independently linked one.
+func (m *Model) SyncGradleBuilds(dirs []string) {
+	if m.maven.syncing || (m.mgr == nil && m.invokeHook == nil) || m.ctx == nil || m.Root() == "" || len(dirs) == 0 {
+		return
+	}
+	unique := make([]string, 0, len(dirs))
+	seen := map[string]bool{}
+	for _, dir := range dirs {
+		if !seen[dir] {
+			seen[dir] = true
+			unique = append(unique, dir)
+		}
 	}
 	m.maven.gen++
 	req := m.nextRequest()
@@ -316,16 +391,25 @@ func (m *Model) SyncGradle() {
 		ctx, cancel := context.WithTimeout(m.ctx, 10*time.Minute)
 		defer cancel()
 		var first error
-		for _, dir := range dirs {
-			_, err := m.mgr.Invoke(ctx, Window, "build_sync", map[string]any{
+		var model buildModel
+		for _, dir := range unique {
+			var buildDir any
+			if dir != "" {
+				buildDir = dir
+			}
+			raw, err := m.invoke(ctx, "build_sync", map[string]any{
 				"tool":       "gradle",
-				"buildDir":   dir,
-				"offline":    m.maven.offline,
+				"buildDir":   buildDir,
+				"offline":    m.maven.gradleOffline,
 				"profiles":   []string{},
 				"request":    req,
 				"onProgress": map[string]any{"$channel": ch},
 			})
 			if err != nil {
+				first = err
+				break
+			}
+			if err := json.Unmarshal(raw, &model); err != nil {
 				first = err
 				break
 			}
@@ -343,7 +427,9 @@ func (m *Model) SyncGradle() {
 				return
 			}
 			m.maven.loading = false
-			m.loadBuildModel()
+			m.applyBuildToolModel(model)
+			m.syncInitialBuildModels()
+			m.invalidate()
 		})
 	}()
 }
@@ -365,7 +451,7 @@ func (m *Model) CancelBuildToolReload() {
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 10*time.Second)
 		defer cancel()
-		_, _ = m.mgr.Invoke(ctx, Window, "cancel_request", map[string]any{"id": request})
+		_, _ = m.invoke(ctx, "cancel_request", map[string]any{"id": request})
 	}()
 }
 
@@ -373,11 +459,19 @@ func (m *Model) CancelBuildToolReload() {
 func (m *Model) ReloadMaven()  { m.SyncMaven() }
 func (m *Model) ReloadGradle() { m.SyncGradle() }
 
-// AnalyzeBuildDependencies opens the dependency tree the backend already
-// loaded and expands its build-tool roots.
+// applyBuildToolModel installs a model returned by build_model/build_sync and
+// keeps the profiles and expansion state the two tool windows own.
+func (m *Model) applyBuildToolModel(model buildModel) {
+	m.maven.model = model
+	m.mavenInitTree()
+	m.refreshReadiness()
+}
+
+// AnalyzeBuildDependencies opens the native Dependency Analyzer for the active
+// tree selection, after OpenIDEA's maven.analyzeDependencies and
+// gradle.analyzeDependencies actions.
 func (m *Model) AnalyzeBuildDependencies() {
-	m.ShowMaven()
-	m.ExpandMavenAll()
+	m.OpenBuildDependencyAnalyzer(nil)
 }
 
 // acceptMavenEvent is one SyncProgress value of the sync channel.
@@ -408,6 +502,18 @@ func (m *Model) ToggleMavenSkipTests() {
 	m.invalidate()
 }
 
+// ToggleGradleOffline and ToggleGradleSkipTests are the Gradle window's own
+// switches, matching OpenIDEA's independent Gradle settings.
+func (m *Model) ToggleGradleOffline() {
+	m.maven.gradleOffline = !m.maven.gradleOffline
+	m.invalidate()
+}
+
+func (m *Model) ToggleGradleSkipTests() {
+	m.maven.gradleSkipTests = !m.maven.gradleSkipTests
+	m.invalidate()
+}
+
 // ExpandMavenAll opens every node of the tree.
 func (m *Model) ExpandMavenAll() {
 	if m.maven.expanded == nil {
@@ -427,9 +533,13 @@ func (m *Model) ExpandMavenAll() {
 	m.invalidate()
 }
 
-// CollapseMavenAll closes every node.
+// CollapseMavenAll closes Maven nodes without changing the Gradle tree.
 func (m *Model) CollapseMavenAll() {
-	m.maven.expanded = map[string]bool{}
+	for key := range m.maven.expanded {
+		if strings.HasPrefix(key, "mvn:") {
+			delete(m.maven.expanded, key)
+		}
+	}
 	m.invalidate()
 }
 
@@ -556,6 +666,7 @@ type mavenRow struct {
 	goal    string
 	config  *openidea.RunConfig
 	dep     *mavenDependency
+	direct  *mavenDependency
 	hasKids bool
 	checked bool
 	omitted bool
@@ -591,14 +702,6 @@ func (m *Model) mavenRootRows() []mavenRow {
 			}
 			rows = append(rows, m.mavenProjectRow(p, 0))
 		}
-	}
-	for i := range m.maven.model.Gradle {
-		g := &m.maven.model.Gradle[i]
-		label := g.Dir
-		if label == "" {
-			label = "Gradle build"
-		}
-		rows = append(rows, mavenRow{key: "gradle:" + g.Dir, kind: "gradle", label: label + " (Gradle)"})
 	}
 	return rows
 }
@@ -689,16 +792,15 @@ func (m *Model) mavenChildRows(r mavenRow) []mavenRow {
 		}
 		return out
 	case "dependencies":
-		return mavenDependencyRows(r.key, r.project.Dependencies, r.depth+1)
+		return mavenDependencyRows(r.key, r.project.Dependencies, r.depth+1, nil)
 	case "dependency":
 		if r.dep == nil {
 			return nil
 		}
-		return mavenDependencyRows(r.key, r.dep.Children, r.depth+1)
+		return mavenDependencyRows(r.key, r.dep.Children, r.depth+1, r.direct)
 	case "runConfigs":
 		var out []mavenRow
-		for i := range m.run.configs {
-			cfg := &m.run.configs[i]
+		for _, cfg := range m.mavenConfigsOf(*r.project) {
 			out = append(out, mavenRow{key: r.key + ":" + cfg.ID, kind: "runConfig", label: cfg.Name,
 				depth: r.depth + 1, project: r.project, config: cfg})
 		}
@@ -707,7 +809,12 @@ func (m *Model) mavenChildRows(r mavenRow) []mavenRow {
 	return nil
 }
 
-func mavenDependencyRows(parent string, deps []mavenDependency, depth int) []mavenRow {
+func mavenDependencyRows(
+	parent string,
+	deps []mavenDependency,
+	depth int,
+	direct *mavenDependency,
+) []mavenRow {
 	var out []mavenRow
 	for i := range deps {
 		d := &deps[i]
@@ -728,8 +835,13 @@ func mavenDependencyRows(parent string, deps []mavenDependency, depth int) []mav
 		} else if d.Optional {
 			detail = "(optional)"
 		}
+		root := direct
+		if root == nil {
+			root = d
+		}
 		out = append(out, mavenRow{key: fmt.Sprintf("%s/%d", parent, i), kind: "dependency",
-			label: label, detail: detail, depth: depth, dep: d, hasKids: len(d.Children) > 0})
+			label: label, detail: detail, depth: depth, dep: d, direct: root,
+			hasKids: len(d.Children) > 0})
 	}
 	return out
 }
@@ -738,12 +850,13 @@ func mavenDependencyRows(parent string, deps []mavenDependency, depth int) []mav
 
 // mavenPanel draws the toolbar, the banner and the tree.
 func (m *Model) mavenPanel(c *ui.Context, p *ui.Theme) {
-	ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Background(p.Surface).Children(func() {
+	ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Background(m.toolWindowBackground(p)).Children(func() {
 		m.mavenToolbar(c, p)
 		m.mavenBanner(c, p)
 		if m.maven.err != "" {
-			ui.Text(c, m.maven.err).FontSize(12).TextColor(p.Danger).Padding(4, 10).
-				SingleLine().Ellipsis("…")
+			m.buildToolErrorBanner(c, p, "maven:modelError", m.maven.err, func() {
+				m.loadBuildModel()
+			})
 		}
 		ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
 			ui.Column(c).Padding(0, 6).Children(func() {
@@ -757,10 +870,12 @@ func (m *Model) mavenPanel(c *ui.Context, p *ui.Theme) {
 // goal, offline, skip tests, expand and collapse.
 func (m *Model) mavenToolbar(c *ui.Context, p *ui.Theme) {
 	ui.Row(c).Height(32).Padding(0, 6).Gap(2).AlignItems(ui.Center).Children(func() {
-		if m.maven.loading || m.maven.syncing {
+		if m.maven.syncing {
 			m.mavenAction(c, p, "maven:reload", "run/stop", "Stop", func() { m.CancelBuildToolReload() })
+		} else if m.maven.loading {
+			m.mavenActionDisabled(c, p, "maven:reload", "general/refresh", "Loading Maven Projects", false)
 		} else {
-			m.mavenAction(c, p, "maven:reload", "general/refresh", "Reload Maven Projects", func() { m.loadBuildModel() })
+			m.mavenAction(c, p, "maven:reload", "general/refresh", "Reload All Maven Projects", func() { m.SyncMaven() })
 		}
 		m.mavenAction(c, p, "maven:sources", "nodes/generatedSource", "Generate Sources", func() {
 			if proj := m.mavenRootProject(); proj != nil {
@@ -871,6 +986,7 @@ func (m *Model) mavenBanner(c *ui.Context, p *ui.Theme) {
 			oiIconEl(c, "status/warning", 16, oi, oi.warning)
 			ui.Text(c, strings.SplitN(*mm.SyncErr, "\n", 2)[0]).FontSize(12).TextColor(oi.warning).
 				SingleLine().Grow(1).Ellipsis("…")
+			m.bannerButton(c, p, "maven:retry", "Refresh", func() { m.SyncMaven() })
 		})
 	}
 }
@@ -903,7 +1019,8 @@ func (m *Model) mavenTreeRows(c *ui.Context, p *ui.Theme, rows []mavenRow) {
 func (m *Model) mavenRow(c *ui.Context, p *ui.Theme, r mavenRow) {
 	oi := oiPaletteOf(p)
 	row := ui.Row(c.Key(r.key)).
-		Height(24).PaddingStart(4 + float32(r.depth)*20).PaddingEnd(8).Gap(4).Radius(5).
+		Height(24).PaddingStart(4 + float32(r.depth)*m.treeIndentWidth()).PaddingEnd(8).
+		Gap(4).Radius(5).
 		AlignItems(ui.Center).Cursor(ui.CursorPointer)
 	if m.maven.selKey == r.key {
 		row.Background(oi.selectedInactive)
@@ -962,6 +1079,13 @@ func (m *Model) mavenRow(c *ui.Context, p *ui.Theme, r mavenRow) {
 			m.maven.selKey = r.key
 			m.RunMavenSelection()
 		}
+	}
+	switch r.kind {
+	case "project", "phase", "goal", "runConfig", "dependencies", "dependency":
+		row.ContextMenu(func(menu *ui.Menu) {
+			m.selectMavenBuildRow(r)
+			m.mavenRowContextMenu(menu, r)
+		})
 	}
 }
 
@@ -1056,16 +1180,10 @@ func (m *Model) mavenConfigsOf(p mavenProject) []*openidea.RunConfig {
 	var out []*openidea.RunConfig
 	for i := range m.run.configs {
 		cfg := &m.run.configs[i]
-		if cfg.Kind != "maven" {
+		if cfg.Kind != "maven" || !m.mavenConfigBelongsTo(cfg, p) {
 			continue
 		}
-		cwd := ""
-		if cfg.Cwd != nil {
-			cwd = strings.TrimPrefix(*cfg.Cwd, "./")
-		}
-		if strings.Trim(cwd, "/") == strings.Trim(p.Dir, "/") || (cwd == "" && p.Dir == "") {
-			out = append(out, cfg)
-		}
+		out = append(out, cfg)
 	}
 	return out
 }

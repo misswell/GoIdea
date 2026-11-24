@@ -94,7 +94,11 @@ func (m *Model) agentImageStrip(c *ui.Context, oi oiColors, images []agentImage,
 // agentsRightView is the right-anchored Agents tool window: the same grouped
 // task list and task timeline OpenIDEA renders, drawn with MyGo controls.
 func (m *Model) agentsRightView(c *ui.Context, p *ui.Theme, oi oiColors) {
-	ui.Column(c).Grow(1).MinHeight(0).Background(oi.island).
+	background := oi.island
+	if m.prefs.Appearance.DifferentToolWindowBackground {
+		background = oi.elev
+	}
+	ui.Column(c).Grow(1).MinHeight(0).Background(background).
 		Radius(oiIslandRadius).Children(func() {
 		if m.agentSessionLocation() == "toolWindow" && m.agents.conversation {
 			m.agentsConversation(c, p, oi)

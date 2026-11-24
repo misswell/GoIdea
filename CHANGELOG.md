@@ -3,6 +3,203 @@
 The GitHub release notes, which **Help › What's New** shows, come from the
 `## <version>` section here. Every release needs one, or its build fails.
 
+## Unreleased
+
+- **Plugins** can import IntelliJ theme files and installed JetBrains IDE themes.
+- Plugin Services logs now find, clear, soft-wrap and toggle options from native actions.
+- Plugin content actions route to native editors or report when no editor is active.
+- **Auto Import** can add imports after paste automatically or ask which imports to add.
+- Terminal mouse modes now match xterm tracking rules for resets, releases and alternate screens.
+- **Debug › Rerun** waits for the active session to stop before restarting it.
+- **Code Completion** shows parameter information after typing a call delimiter.
+- **Git** merge, rebase, push, fetch and update now cover every project repository.
+- **Commit** can commit changes across every project repository in one action.
+- **Commit** can include individual hunks while leaving other changes unstaged.
+- Rollback safely handles staged renames, additions, folders and nested repositories.
+- **Undo Commit** blocks unsafe history rewrites and explains the reason.
+- Deleting a branch held by a linked worktree offers safe cleanup and explicit force removal.
+- **Commit** remembers 20 recent messages and can reuse them from a native history menu.
+- **Amend** loads the previous message and restores the untouched draft when unchecked.
+- **Commit** pre-fills Git merge/cherry-pick/revert messages and configured commit templates.
+- The **Changes** context menu can move changed files to the Trash after confirmation.
+- **Git Log** filters commits by author, message, branches, paths and dates.
+- Rejected pushes offer **Merge**, **Rebase**, remembered auto-update and bounded retry.
+- Git file creation and deletion confirmations support Ask, silent update and never modes.
+- **Settings › Version Control › Git** can show inline blame for the current line.
+- Gradle tests show structured results and can rerun only the failed tests.
+- Published Gradle catalogs provide library, version and bundle navigation and completion.
+- Generated Gradle catalog TOML files now navigate `version.ref` and bundle members.
+- Editing a Gradle catalog or settings file refreshes catalog navigation immediately.
+- **File › Workspace** switches to the created workspace after a completed run.
+- Generate Maven Sources applies to a selected POM or every non-aggregated project.
+- POM completion replaces the complete existing coordinate or version value.
+- Build actions honor module, artifact, before-launch and CMake targets.
+- **Before launch** build tasks wait for success, and failure or **Stop Build** cancels the launch.
+- Failed hidden builds open the Build window while successful hidden builds stay hidden.
+- **Settings › Build Tools › CMake** edits every native profile and its build options.
+- **Settings › Editor › Code Style** exposes indentation, wrapping, marks and language overrides.
+- **Settings › Editor › Color Scheme** adds scheme, semantic highlight and rainbow bracket controls.
+- **Color Scheme** can import, export and delete `.icls` files with native file dialogs.
+- **Semantic Highlighting** tints language-server locals; **Rainbow Brackets** colors nesting depth.
+- Formatting honors **Do not format**, **@formatter:off** and **@formatter:on** markers.
+- **Plugins** logs support native find, soft-wrap, error filtering and clear actions.
+- Common IntelliJ macOS shortcuts now reach declaration, usage, completion and refactoring actions.
+- **Alt+Shift+Enter**, **Cmd+P** and **Ctrl+Shift+P** open Quick Fix, Parameter Info and Type Info.
+- **Generate…**, **Implement Methods…** and **Override Methods…** show native choosers.
+- **Refactor This…** orders refactorings and adds **Rename…** and **Safe Delete…**.
+- **Cmd+Shift+F7** highlights usages, with **Ctrl+Alt+Up/Down** to navigate them.
+- **Cmd+8** opens or closes the **Services** tool window.
+- **GitHub Pull Requests** opens in the left tool window with current-branch **Review Mode**.
+- Pull request diffs switch between review and normal views with line and multiline comments.
+- Review comments can be navigated and submitted as Approve, Request Changes or Comment.
+- Review threads can be resolved or reopened from the diff or thread list.
+- Pull request title, description and base branch are editable, and timeline comments can be added.
+- **GitHub Pull Requests** 可通过原生表单创建 PR、更新分支并在浏览器打开。
+- **.NET** tool window discovers projects and solutions and exposes build, restore and clean.
+- The **.NET** tool window lists NuGet packages, searches versions and changes dependencies.
+- **.NET** tests can be discovered, run individually and shown from TRX reports.
+- 关闭项目、退出或切换远程环境前，若仍有运行任务会先请求确认。
+- **Run** 设置现在按项目加载、保存，并支持项目级“不要再次询问”。
+- **File › Export Settings…** and **Import Settings…** save settings and templates.
+- **File › Import Settings from JetBrains IDE…** previews supported editor options.
+- **File › Rename Project…** and **Settings for New Projects…** use native flows.
+- **File › Power Save Mode** pauses completion, documentation, usage highlights and inline hints.
+- **Find** fields grow across lines, retain recent searches and can scroll to results while typing.
+- **Window** can move tabs between native editor groups, merge groups and cycle their focus.
+- **File › Open Project in New Window** opens a separate project with its own backend.
+- **Window › New Window** creates an empty native window, and window commands cycle projects.
+- Projects can open in a new window, the current window or after an **Ask** choice.
+- The terminal now renders cursor-addressed full-screen TUI output and restores shell scrollback on exit.
+- Terminal keys, mouse reporting, paste, resize and full-screen TUI input now work with the shell.
+- Vim mode adds search, substitute, named registers, macros, marks and Visual Block edits.
+- Markdown files support **Editor Only**, **Editor and Preview**, and **Preview Only** layouts.
+- HTML files with Django template tags show a banner that can set the Django Template file type.
+- Image files open in a native viewer with zoom, actual size, fit and chessboard controls.
+- Binary and very large files open in a virtualized, read-only native hex viewer.
+- **Plugins** can install a local folder, update Git plugins and reload all plugins.
+- Plugin commands now use OpenIDEA's `plugin.<pluginId>.<commandId>` action ids.
+- **Plugins** can color and describe text in editors.
+- Plugin gutter dots open their target or a target chooser for multiple matches.
+- Indexed plugin markers follow edits, refresh on index changes and request up to 64 files.
+- **File › Project Structure** 新增七分区原生对话框，可编辑模块、依赖、库、Facet、Artifact 和 SDK。
+- **Project View** 新增 **External Libraries**，可展开 SDK、依赖和归档内容。
+- **Code › Analyze Code** 的 Inspection Results 可筛选、导出并跳转检查问题。
+- **Code › Analyze Code** 可查找重复代码，并浏览每个重复片段。
+- **Find** 支持结构搜索、模板校验和按匹配项预览替换。
+- **Code › Analyze Code** 的 Code Cleanup 可批量应用语言服务器修复并保存。
+- **Recent Locations** 会为代码片段显示语法高亮和当前文件的符号路径。
+- **File Structure** 可从实时大纲筛选符号并直接打开其声明。
+- **Copy Path/Reference** 在光标处显示原生路径与引用选择器。
+- **Debug** 可并行运行多个 Java 会话，并分别保留变量、控制台、能力状态与消息路由。
+- **Debug** 冷启动会等待 Java 导入并重试暂态取消，不再偶发停在 `cancelled`。
+- **Debug › Memory** 可浏览 JVM 实例、字段和引用者，并在恢复运行后丢弃旧回复。
+- **Debug › Heap** 可管理多个快照、查看类与支配对象、追踪 GC Root 路径并比较快照。
+- **Debug › Evaluate Expression…** 会在独立原生对话框中按选中帧求值，并可把表达式加入 Watches。
+- **Debug** 的 Dart/Flutter 会话新增独立 Hot Reload 与 Hot Restart，不再误走 Java HotSwap。
+- **Debug › View Breakpoints…** 可为行、方法和字段断点编辑启用状态、条件、命中次数与日志消息。
+- **Debug › Reset Frame** 可从选中帧重置，并在后端或栈帧不支持时显示真实原因。
+- **Debug › Reload Changed Classes** 可按会话编译、取消和重载，外部构建完成可直接应用。
+- **Debug › Attach** 支持 Java、Node.js、Python、Go、Native 进程和远端调试配置。
+- **Debug** 会自动打开被调试 JVM 的附加监听，让暂停中的新 JDK 可直接捕获 Heap。
+- Maven 与 Gradle 运行配置可通过真实 JDWP 调试委托启动，并可取消等待中的调试。
+- **Settings › Editor › File Types** 可覆盖单个文件类型，并维护忽略名称与排除模式。
+- **Project View** 现在按忽略名称隐藏文件，并可按排除模式隐藏或变暗文件与目录。
+- **Project View** 与编辑器标签菜单可直接覆盖或恢复单文件类型，新打开的文件立即生效。
+- **File › New Scratch File…** 使用 OpenIDEA 后端语言和模板，并把临时文件列在 **Scratches** 下。
+- **Project View** 的 **New** 弹层新增 **Scratch File**，可快速选择临时文件语言。
+- 从 Find、TODO 等结果跳转到符号链接路径时，光标会落在目标行列。
+- **Settings › Editor › Inspections** 可复制、重命名和删除 IDE 或项目检查配置。
+- **Settings › Editor › Spelling** 可维护项目与应用接受词以及自定义词典。
+- **Settings › Editor › General** 新增 Auto Import、Code Completion、Gutter Icons、Inline Completion、Smart Keys 与 Sticky Lines 原生页。
+- **Settings › Editor** 新增 Rich-Text Copy 与 Code Editing 原生设置页。
+- Code Completion, inline completion, Markdown and terminal settings now take effect.
+- **Settings › Editor › General** applies gutter visibility changes immediately.
+- Gutter switches hide run actions, bookmark dots and color previews by group.
+- Code Completion honors single-result, special-key, parentheses and docs settings.
+- **Smart Keys** honors pairs, selections, indentation, doc stubs and unindent options.
+- **Smart Keys** paste honors block or line reformatting and string escaping.
+- **Gutter Icons** filters run, bookmark, color and inheritance marker groups.
+- **Auto Import** adds one unambiguous fix and optimizes changed imports after typing pauses.
+- **File and Code Templates** resets affect only the active default or project scope.
+- **Tools › Actions on Save** runs Optimize Imports and Code Cleanup before formatting.
+- **Agents › IDE MCP Server** 可立即启停 HTTP 与 Stdio 服务并生成客户端配置。
+- MCP 工具执行前显示原生确认框，可允许、拒绝或全部拒绝。
+- MCP 工具可打开文件、启动 Agent，并同步编辑器、选区与 Problems 状态。
+- **Settings › Editor › File Encodings** sets file, properties and UTF-8 BOM policies.
+- **Settings › Editor › File Encodings** can toggle transparent native-to-ascii conversion.
+- Standalone files use **Settings › Editor › File Encodings** and keep their encoding when saved.
+- Encoded project files with a configured fallback open in the editor instead of the hex viewer.
+- New UTF-8 files follow the **Create UTF-8 files** BOM policy.
+- **Settings › Appearance & Behavior / Tools** 新增 Language and Region、HTTP Proxy、Terminal 与 Actions on Save 原生设置。
+- **Settings › Languages & Frameworks** 新增 Python、Go、Node.js、Markdown、PHP、Ruby、Rust 与 TypeScript 原生设置页。
+- **Settings › Languages & Frameworks** 会检测已安装的语言 SDK，并用原生选择器和浏览按钮填写工具链路径。
+- **Settings › Languages & Frameworks** 新增 Gradle 与 Maven 页面，可设置运行工具、JVM、用户目录、配置文件和构建参数。
+- **Settings › Languages & Frameworks › Python** 会列出项目虚拟环境与自定义解释器，并可创建 venv、uv、Poetry 或 Conda 环境。
+- **Python › Dependencies** lists, installs, upgrades, removes and freezes packages.
+- **All Interpreters** includes interpreters from trusted recent projects.
+- The status bar can switch the Python interpreter and open interpreter settings.
+- The status bar can switch a PHP file's language level or follow the linked project.
+- **PHP** settings show effective interpreter, Xdebug and language-level status.
+- **Gradle** settings use the selected wrapper or installation for real project sync.
+- 更新语言 SDK、Java、Maven 或 Gradle 设置后，会立即刷新运行配置与 External Libraries。
+- **Settings › Languages & Frameworks** 新增 Prettier、oxfmt 和 Ruff 原生设置页。
+- 外部格式化器支持路径、语言、优先提供程序和保存时运行配置。
+- **Settings › Deployment** 与 **Run Targets** 可直达现有原生远端配置编辑器。
+- **Settings › Tools › SSH Configurations** 可直达现有原生 SSH 连接编辑器。
+- **Settings › Editor › General** 可把粘贴或拖入的图片保存到 Markdown 项目的图片目录。
+- **Settings › Editor › Breadcrumbs** 可按 MyGo 支持的全部语言启用或隐藏面包屑。
+- **Settings › Editor › Code Folding** 可在打开文件时自动折叠首个 import 区。
+- 反编译类文件可 **Download Sources** 下载 Maven 源码，并跳转到源码位置。
+- 反编译类文件可通过 **Choose Sources…** 选择本地 jar 或 zip 源码包。
+- 源码下载栏支持取消、错误提示、迟到回复保护与 **Sources not found** 状态。
+- 左右标签栏现在可直接拖动排序，拖到编辑器边缘可建立新分组。
+- 预览标签会随会话恢复，不再在重启后变成普通标签。
+- **Settings › System Settings** 可迁移并切换本地数据目录，应用后自动重启。
+- **Tools › GraphQL** 原生工具窗口可发现 schema、运行查询并查看结果。
+- GraphQL 端点与变量支持环境变量、取消请求和失败重试。
+- GraphQL 错误提示提供 **Retry** 与 **Show error**，未发送查询文字显示为柔和背景。
+- GraphQL 可从端点生成可撤销的 schema，并在编辑器行内运行 introspection。
+- GraphQL 配置和未保存的 schema 变更会防抖重新校验。
+- **HTTP Client** 支持环境变量请求、响应与历史、取消、Run All 和 cURL 导出。
+- **Maven** 工具窗口新增依赖分析、跳转、添加和排除操作。
+- **Gradle** 工具窗口新增项目、任务、运行配置和依赖分析。
+- **Database** 查询结果可导出为 CSV、TSV、JSON、SQL、Markdown 或 One-Row。
+- 导出对话框提供预览、复制、文件写入、列头、行号和转置选项。
+- **Database** 数据页可内联编辑、添加和删除行，并通过一个事务提交到数据库。
+- 可编辑单元格提供多行与 JSON 编辑器，以及 Boolean、NULL 和 DEFAULT 操作。
+- 未提交的表格修改会在翻页、过滤、排序或关闭前阻止丢失。
+- **Services** 新增 Docker 连接、容器、Compose、镜像、卷和网络的原生操作面板。
+- **Services** 的 Services、Database 与 HTTP Client 切换时保留各自状态。
+- **Deployment** 可在本地文件系统目标上上传、比较、下载和远程删除文件。
+- 远端 WSL、Dev Container、端口转发与插件文件读取使用统一原生流程。
+- Docker 操作支持日志跟随、事件刷新、inspect、stats、终端、pull 和 registry login。
+- **Diff/Compare** 使用可编辑原生双栏，支持同步滚动、变更高亮和接受/拒绝。
+- 项目树、编辑器和标签页可直接比较文件、目录或剪贴板内容。
+- **Find** and **Replace** work in editable Diff panes, including Undo.
+- Read-only revision panes support **Find**, and diffs have overview markers.
+- Merge overview markers update as sides are accepted, ignored or edited.
+- **Run/Debug Configurations** 新增类型模板、分组新建菜单，并保留检测与临时配置状态。
+- **Run/Debug Configurations** 新增类型与文件夹树，可折叠、新建、重命名、删除和拖动配置。
+- **Run/Debug Configurations** 可编辑 Maven/Gradle 任务、包装器、VM 参数与激活 profile。
+- **Run/Debug Configurations** 可编辑 Before launch 顺序和 Compound 成员，并校验缺失目标与循环。
+- **Run/Debug Configurations** 的 Run、Debug、OK、Apply 与 Cancel 可启动、保存、继续编辑或放弃。
+- **Run** 选择器可在运行与调试模式使用 Current File，并打开临时配置进行保存。
+- **Run** 选择器新增 Pinned、Recent、数字快捷键、F4 编辑、Delete 删除和活动会话操作。
+- **Run** 的 Pinned、Recent、临时配置和当前选择会按项目保存并在重启后恢复。
+- **Run** 最多保留五个临时配置，并按当前工具链刷新过期的派生字段。
+- **Run** 删除临时配置或源文件后会清除失效选择，不会误启动其他配置。
+- **Run** 未知测试工具也会用全部内置格式解析并汇总到结果树。
+- **Run** 普通运行配置不会再收到只用于测试结果的启动参数。
+- **Run** 插件测试配置通过 OpenIDEA 后端流式解析，并可按失败项重跑。
+- **Run** shows configurable numbers of finished and archived agent tabs.
+- **Run** keeps live agent tabs visible and removes the oldest archived tabs first.
+- **Run › Update Application** 可更新 Spring Boot 与 Tomcat，并重启全部活动运行、服务和调试会话。
+- **Run › Update Application** 可按运行配置在窗口失焦时自动更新资源或类。
+- **Editor** 可导航 Gradle 版本目录的版本、库、插件和 bundle 引用。
+- 状态栏可显示 GoIDEA 堆内存、GC 和 `openidea-server` 进程指标。
+- **Help › Clear Caches** 可释放未使用的 Go 内存并刷新性能数据。
+- **Help › Toggle Performance Overlay** 可查看原生渲染和后端连接指标。
+
 ## 0.1.34
 
 - **Run** 可显示 PHPUnit/Pest、Minitest、Django、unittest 和 .NET 测试树。

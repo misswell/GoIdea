@@ -12,7 +12,6 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/egoist/mygo"
 	"mayoi/internal/openidea"
 )
 
@@ -191,7 +190,7 @@ func (m *Model) copyReferenceText(text string) {
 	if text == "" {
 		return
 	}
-	mygo.Clipboard.WriteText(text)
+	clipboardWriteText(text)
 	m.status = "Copied reference: " + text
 	m.invalidate()
 }

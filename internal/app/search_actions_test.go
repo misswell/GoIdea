@@ -80,6 +80,54 @@ func TestRunSearchSendsFullOpenIDEAQuery(t *testing.T) {
 	}
 }
 
+func TestRerunSearchActionRepeatsTheCurrentQuery(t *testing.T) {
+	started := make(chan map[string]any, 1)
+	posted := make(chan struct{}, 1)
+	m := &Model{
+		ctx: context.Background(),
+		postHook: func(fn func()) {
+			fn()
+			posted <- struct{}{}
+		},
+		invokeHook: func(_ context.Context, command string, input any) (json.RawMessage, error) {
+			switch command {
+			case "search_validate":
+				return nil, nil
+			case "search_start":
+				started <- input.(map[string]any)["query"].(map[string]any)
+				return nil, nil
+			default:
+				return nil, fmt.Errorf("unexpected command %s", command)
+			}
+		},
+	}
+	m.setRoot(t.TempDir())
+	m.search.query = "  Order  "
+	m.search.caseSensitive = true
+	if !m.RunAction("find.rerun") {
+		t.Fatal("find.rerun is not registered")
+	}
+	select {
+	case query := <-started:
+		if query["pattern"] != "Order" || query["caseSensitive"] != true {
+			t.Fatalf("rerun query = %#v", query)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("find.rerun did not start a search")
+	}
+	select {
+	case <-posted:
+	case <-time.After(time.Second):
+		t.Fatal("rerun search did not finish its request")
+	}
+	m.acceptSearchEvent(json.RawMessage(
+		`{"type":"done","summary":{"files":1,"matches":2,"elapsedMs":3}}`,
+	))
+	if m.search.running || !m.search.done {
+		t.Fatalf("rerun state = %+v", m.search)
+	}
+}
+
 func TestEmptySearchMasksEncodeAsArrays(t *testing.T) {
 	if searchMaskList("") == nil {
 		t.Fatal("empty include/exclude masks encode as null instead of []")

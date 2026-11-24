@@ -288,7 +288,7 @@ func init() {
 	add("vcs.log.squashInto", "Squash Into…", "Git Log", "squash local changes", true,
 		func(m *Model, arg any) { m.PrepareFixupArg(arg, "squash") })
 	add("vcs.log.pushUpToHere", "Push All up to Here…", "Git Log", "push history", true,
-		func(m *Model, _ any) { m.OpenGitPush() })
+		func(m *Model, _ any) { m.OpenGitPushAtSelectedCommit() })
 	add("vcs.log.rebaseOntoCommit", "Rebase Current Branch onto Selected Commit", "Git Log", "rebase", true,
 		func(m *Model, arg any) { m.RebaseOntoCommitArg(arg) })
 	add("vcs.log.interactiveRebase", "Interactively Rebase from Here…", "Git Log", "rebase squash fixup reword", true,
@@ -321,9 +321,13 @@ func (m *Model) RefreshAfterVCSCommand() {
 	m.RefreshVCS()
 	m.RefreshBranch()
 	m.refreshOpenBlame()
-	if m.log.loaded || m.log.visible {
+	if m.log.loaded || m.log.visible || m.currentVCSContent() == vcsContentLog {
 		m.RefreshLog()
 	}
+	if m.currentVCSContent() == vcsContentWorktrees {
+		m.refreshVCSWorktrees(m.vcs.current)
+	}
+	m.refreshLoadedVCSContentPages()
 	m.status = "Refreshing VCS status"
 	m.invalidate()
 }
@@ -434,8 +438,7 @@ func (m *Model) ToggleCommitAmend() {
 		m.OpenCommit()
 	}
 	if m.commit != nil {
-		m.commit.amend = !m.commit.amend
-		m.invalidate()
+		m.setCommitAmend(!m.commit.amend)
 	}
 }
 
@@ -446,16 +449,12 @@ func (m *Model) OpenCommitMessageHistory() {
 	if m.commit == nil {
 		return
 	}
-	items := make([]vcsMoreItem, 0, len(m.log.commits))
-	for _, commit := range m.log.commits {
-		message := commit.Message
-		if strings.TrimSpace(message) == "" {
-			message = commit.Summary
-		}
+	history := m.commitMessageHistory(m.commit.repo)
+	items := make([]vcsMoreItem, 0, len(history))
+	for i, message := range history {
 		items = append(items, vcsMoreItem{
-			ID: commit.ID, Label: message,
-			Detail: commit.ShortID + " · " + commit.Author + " · " +
-				logTime(m.prefs.dateFormatPrefs(), m.systemRegion, commit.TimeMs),
+			ID: fmt.Sprintf("message-%d", i), Label: message,
+			Detail: firstLine(message),
 		})
 	}
 	m.openVCSMore(vcsMoreMessage, "commit.message", "Commit Message History",
@@ -527,11 +526,12 @@ func (m *Model) loadVCSWorktrees() {
 	state := &m.vcsMore
 	state.kind, state.loading, state.err = vcsMoreWorktrees, true, ""
 	root := m.Root()
+	repoArg := m.vcsRepositoryArg()
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, time.Minute)
 		defer cancel()
-		raw, err := m.mgr.Invoke(ctx, Window, "vcs_worktrees", map[string]any{"repo": nil})
+		raw, err := m.invoke(ctx, "vcs_worktrees", map[string]any{"repo": repoArg})
 		var worktrees []openidea.Worktree
 		if err == nil {
 			err = json.Unmarshal(raw, &worktrees)
@@ -574,13 +574,15 @@ func (m *Model) submitNewWorktree() {
 	if branch != "" {
 		newBranch = branch
 	}
+	repoArg := m.vcsRepositoryArg()
+	repoRoot := m.vcs.current
 	state.busy, state.err = true, ""
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 3*time.Minute)
 		defer cancel()
-		_, err := m.mgr.Invoke(ctx, Window, "vcs_add_worktree", map[string]any{
-			"repo": nil, "path": path, "commitish": commitish, "newBranch": newBranch,
+		_, err := m.invoke(ctx, "vcs_add_worktree", map[string]any{
+			"repo": repoArg, "path": path, "commitish": commitish, "newBranch": newBranch,
 		})
 		m.post(func() {
 			m.vcsMore.busy = false
@@ -590,6 +592,7 @@ func (m *Model) submitNewWorktree() {
 				return
 			}
 			m.status = "Created worktree " + path
+			m.refreshVCSWorktrees(repoRoot)
 			m.OpenVCSWorktrees()
 		})
 	}()
@@ -667,12 +670,14 @@ func (m *Model) AskRemoveSelectedVCSWorktree() {
 }
 
 func (m *Model) removeVCSWorktree(path string) {
+	repoArg := m.vcsRepositoryArg()
+	repoRoot := m.vcs.current
 	m.vcsMore.busy = true
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 2*time.Minute)
 		defer cancel()
-		_, err := m.mgr.Invoke(ctx, Window, "vcs_remove_worktree", map[string]any{
-			"repo": nil, "path": path, "force": false,
+		_, err := m.invoke(ctx, "vcs_remove_worktree", map[string]any{
+			"repo": repoArg, "path": path, "force": false,
 		})
 		m.post(func() {
 			if err != nil {
@@ -683,6 +688,7 @@ func (m *Model) removeVCSWorktree(path string) {
 				return
 			}
 			m.status = "Removed worktree " + path
+			m.refreshVCSWorktrees(repoRoot)
 			m.OpenVCSWorktrees()
 		})
 	}()
@@ -729,13 +735,15 @@ func (m *Model) ChooseMoveVCSWorktree() {
 }
 
 func (m *Model) moveVCSWorktree(from, to string) {
+	repoArg := m.vcsRepositoryArg()
+	repoRoot := m.vcs.current
 	m.vcsMore.busy, m.vcsMore.err = true, ""
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 2*time.Minute)
 		defer cancel()
-		_, err := m.mgr.Invoke(ctx, Window, "vcs_move_worktree", map[string]any{
-			"repo": nil, "path": from, "to": to,
+		_, err := m.invoke(ctx, "vcs_move_worktree", map[string]any{
+			"repo": repoArg, "path": from, "to": to,
 		})
 		m.post(func() {
 			m.vcsMore.busy = false
@@ -746,6 +754,7 @@ func (m *Model) moveVCSWorktree(from, to string) {
 				return
 			}
 			m.status = "Moved worktree to " + to
+			m.refreshVCSWorktrees(repoRoot)
 			m.OpenVCSWorktrees()
 		})
 	}()
@@ -843,12 +852,24 @@ func (m *Model) selectedShelf(arg any) (shelvedChangeList, string, bool) {
 				return shelf, shelfTargetPath(arg), true
 			}
 		}
+		if m.vcs.shelf != nil {
+			for _, shelf := range m.vcs.shelf.shelves {
+				if shelf.ID == id {
+					return shelf, shelfTargetPath(arg), true
+				}
+			}
+		}
 		return shelvedChangeList{ID: id}, shelfTargetPath(arg), true
 	}
-	if m.vcsMore.choice < 0 || m.vcsMore.choice >= len(m.vcsMore.shelves) {
-		return shelvedChangeList{}, "", false
+	if m.vcsMore.open && m.vcsMore.choice >= 0 && m.vcsMore.choice < len(m.vcsMore.shelves) {
+		return m.vcsMore.shelves[m.vcsMore.choice], "", true
 	}
-	return m.vcsMore.shelves[m.vcsMore.choice], "", true
+	if m.vcs.shelf != nil {
+		if shelf, ok := m.selectedVCSShelf(); ok {
+			return shelf, "", true
+		}
+	}
+	return shelvedChangeList{}, "", false
 }
 
 func shelfTargetID(arg any) string {
@@ -883,7 +904,7 @@ func (m *Model) UnshelveArg(arg any) {
 		m.OpenVCSShelf()
 		return
 	}
-	m.unshelve(shelf.ID, path, true)
+	m.unshelve(shelf.ID, path, m.vcsShelfRemoveApplied())
 }
 
 func (m *Model) unshelve(id, path string, remove bool) {
@@ -918,7 +939,7 @@ func (m *Model) unshelve(id, path string, remove bool) {
 				m.status = fmt.Sprintf("Unshelved with %d conflicts", len(outcome.Conflicts))
 			}
 			m.RefreshAfterVCSCommand()
-			m.LoadVCSShelf()
+			m.finishVCSShelfMutation()
 		})
 	}()
 }
@@ -957,7 +978,7 @@ func (m *Model) deleteShelf(id, path string) {
 				return
 			}
 			m.status = "Deleted shelved changes"
-			m.OpenVCSShelf()
+			m.finishVCSShelfMutation()
 		})
 	}()
 }
@@ -999,7 +1020,7 @@ func (m *Model) submitShelfRename() {
 				return
 			}
 			m.status = "Renamed shelved changes"
-			m.OpenVCSShelf()
+			m.finishVCSShelfMutation()
 		})
 	}()
 }
@@ -1156,11 +1177,12 @@ func (m *Model) CreatePatchForPaths(arg any) {
 		m.invalidate()
 		return
 	}
+	repoArg := m.vcsRepositoryArgForPath(paths[0])
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, time.Minute)
 		defer cancel()
-		raw, err := m.mgr.Invoke(ctx, Window, "vcs_create_patch", map[string]any{
-			"repo": nil,
+		raw, err := m.invoke(ctx, "vcs_create_patch", map[string]any{
+			"repo": repoArg,
 			"source": map[string]any{
 				"from": "changes", "paths": paths, "reverse": false,
 			},
@@ -1211,6 +1233,7 @@ func (m *Model) savePatch(patch, suggested string) {
 				m.status = "Could not save the patch: " + err.Error()
 			} else {
 				m.status = "Saved patch " + path
+				m.afterPatchSaved(path)
 			}
 			m.invalidate()
 		})
@@ -1266,12 +1289,13 @@ func (m *Model) previewPatch(patch, name string) {
 		"Review the files before applying "+name+".")
 	m.vcsMore.loading = true
 	m.vcsMore.patch = patch
+	repoArg := m.vcsRepositoryArg()
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, time.Minute)
 		defer cancel()
-		raw, err := m.mgr.Invoke(ctx, Window, "vcs_patch_preview", map[string]any{
-			"repo": nil, "patch": patch,
+		raw, err := m.invoke(ctx, "vcs_patch_preview", map[string]any{
+			"repo": repoArg, "patch": patch,
 		})
 		var files []patchPreviewFile
 		if err == nil {
@@ -1311,12 +1335,13 @@ func (m *Model) applyPatch() {
 		return
 	}
 	m.vcsMore.busy, m.vcsMore.err = true, ""
+	repoArg := m.vcsRepositoryArg()
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 5*time.Minute)
 		defer cancel()
-		raw, err := m.mgr.Invoke(ctx, Window, "vcs_apply_patch", map[string]any{
-			"repo": nil, "patch": patch,
+		raw, err := m.invoke(ctx, "vcs_apply_patch", map[string]any{
+			"repo": repoArg, "patch": patch,
 		})
 		var outcome patchApplyOutcome
 		if err == nil {
@@ -1359,6 +1384,7 @@ func (m *Model) ImportShelfPatches(arg any) {
 		}()
 		return
 	}
+	repoArg := m.vcsRepositoryArg()
 	m.vcsMore.busy = true
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 5*time.Minute)
@@ -1370,8 +1396,8 @@ func (m *Model) ImportShelfPatches(arg any) {
 				err = readErr
 				break
 			}
-			_, err = m.mgr.Invoke(ctx, Window, "vcs_shelf_import", map[string]any{
-				"repo": nil, "name": strings.TrimSuffix(filepath.Base(path), filepath.Ext(path)),
+			_, err = m.invoke(ctx, "vcs_shelf_import", map[string]any{
+				"repo": repoArg, "name": strings.TrimSuffix(filepath.Base(path), filepath.Ext(path)),
 				"patch": string(data),
 			})
 			if err != nil {
@@ -1386,7 +1412,7 @@ func (m *Model) ImportShelfPatches(arg any) {
 				return
 			}
 			m.status = "Imported " + count(len(paths), "patch", "patches")
-			m.OpenVCSShelf()
+			m.finishVCSShelfMutation()
 		})
 	}()
 }
@@ -2019,19 +2045,49 @@ func (m *Model) StepConflict(delta int) {
 }
 
 func (m *Model) ShowLogWithArg(arg any) {
-	path, branch := "", ""
+	path, branch, repoRoot := "", "", ""
 	switch value := arg.(type) {
 	case string:
 		path = value
 	case map[string]any:
 		path, _ = value["path"].(string)
 		branch, _ = value["branch"].(string)
+		repoRoot, _ = value["repo"].(string)
 	}
+	if repoRoot == "" {
+		if path != "" {
+			repoRoot = vcsRepositoryContainingPath(realPath(path), m.vcs.repositories)
+		} else {
+			repoRoot = m.vcs.current
+		}
+	}
+	if repoRoot != "" && vcsRepositoryKey(m.log.repo) != vcsRepositoryKey(repoRoot) {
+		if oldRoot := vcsRepositoryKey(m.log.repo); oldRoot != "" {
+			m.rememberVCSLog(oldRoot)
+		}
+		visible := m.log.visible
+		m.log = LogPane{}
+		if parked, ok := m.vcs.logs[vcsRepositoryKey(repoRoot)]; ok {
+			m.log = parked
+		}
+		m.log.repo = repoRoot
+		m.log.visible = visible
+	}
+	m.vcs.logGeneration++
+	m.log.loading = false
+	m.log.detailing = false
+	m.log.aggregate = false
 	m.log.path, m.log.branch = path, branch
 	if branch != "" {
 		m.log.path = ""
 	}
+	if path == "" && branch == "" {
+		m.enableVCSAggregateLog(repoRoot)
+	}
 	m.DockShow("log")
+	if repoRoot != "" {
+		m.ensureVCSLogForRepository(repoRoot)
+	}
 }
 
 func (m *Model) ShowHistoryForFile(arg any) {
@@ -2141,12 +2197,13 @@ func (m *Model) ShowCurrentRevision(arg any) {
 	m.openVCSMore(vcsMoreMessage, "current.revision", "Current Revision",
 		"Recent commits that changed "+filepath.Base(path)+".")
 	m.vcsMore.loading = true
+	repoArg := m.vcsRepositoryArgForPath(path)
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, time.Minute)
 		defer cancel()
-		raw, err := m.mgr.Invoke(ctx, Window, "vcs_log", map[string]any{
-			"repo": nil,
+		raw, err := m.invoke(ctx, "vcs_log", map[string]any{
+			"repo": repoArg,
 			"query": map[string]any{
 				"branch": nil, "path": path, "author": nil, "text": nil,
 				"skip": 0, "limit": 20,
@@ -2190,11 +2247,15 @@ func (m *Model) submitCheckout() {
 		return
 	}
 	m.vcsMore.busy, m.vcsMore.err = true, ""
+	repoArg := m.vcsRepositoryArg()
+	if m.vcsMore.input3 != "" {
+		repoArg = vcsRepositoryArgFor(m.vcsMore.input3)
+	}
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 5*time.Minute)
 		defer cancel()
-		_, err := m.mgr.Invoke(ctx, Window, "vcs_checkout", map[string]any{
-			"repo": nil, "branch": revision, "create": false,
+		_, err := m.invoke(ctx, "vcs_checkout", map[string]any{
+			"repo": repoArg, "branch": revision, "create": false,
 			"options": map[string]any{"mode": "normal"},
 		})
 		m.post(func() {
@@ -2357,7 +2418,7 @@ func (m *Model) openRevisionFileDiff(item vcsMoreItem) {
 }
 
 func (m *Model) selectedLogCommitArg(arg any) *openidea.Commit {
-	id := ""
+	id, repository := "", ""
 	switch value := arg.(type) {
 	case string:
 		id = value
@@ -2367,12 +2428,15 @@ func (m *Model) selectedLogCommitArg(arg any) *openidea.Commit {
 		} else if valueID, ok := value["revision"].(string); ok {
 			id = valueID
 		}
+		repository, _ = value["repo"].(string)
 	}
 	if id == "" && m.log.selected >= 0 && m.log.selected < len(m.log.commits) {
 		return &m.log.commits[m.log.selected]
 	}
 	for i := range m.log.commits {
-		if m.log.commits[i].ID == id || m.log.commits[i].ShortID == id {
+		if (m.log.commits[i].ID == id || m.log.commits[i].ShortID == id) &&
+			(repository == "" || i >= len(m.log.commitRepos) ||
+				vcsRepositoryKey(m.log.commitRepos[i]) == vcsRepositoryKey(repository)) {
 			return &m.log.commits[i]
 		}
 	}
@@ -2380,6 +2444,31 @@ func (m *Model) selectedLogCommitArg(arg any) *openidea.Commit {
 		return &openidea.Commit{ID: id, ShortID: shortID(id)}
 	}
 	return nil
+}
+
+func logCommitArgParts(arg any) (id, repository string) {
+	switch value := arg.(type) {
+	case string:
+		return value, ""
+	case map[string]any:
+		id, _ = value["id"].(string)
+		if id == "" {
+			id, _ = value["revision"].(string)
+		}
+		repository, _ = value["repo"].(string)
+	}
+	return id, vcsRepositoryKey(repository)
+}
+
+func (m *Model) logRepositoryForCommitArg(arg any) string {
+	_, repository := logCommitArgParts(arg)
+	if repository != "" {
+		return repository
+	}
+	if m.log.detailRepo != "" {
+		return vcsRepositoryKey(m.log.detailRepo)
+	}
+	return m.gitLogRepositoryRoot()
 }
 
 func (m *Model) CopyRevisionArg(arg any) {
@@ -2401,11 +2490,12 @@ func (m *Model) CreatePatchForCommits(arg any) {
 		m.invalidate()
 		return
 	}
+	repoArg := vcsRepositoryArgFor(m.logRepositoryForCommitArg(arg))
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, time.Minute)
 		defer cancel()
-		raw, err := m.mgr.Invoke(ctx, Window, "vcs_create_patch", map[string]any{
-			"repo": nil,
+		raw, err := m.invoke(ctx, "vcs_create_patch", map[string]any{
+			"repo": repoArg,
 			"source": map[string]any{
 				"from": "commits", "commits": []string{commit.ID}, "reverse": false,
 			},
@@ -2433,7 +2523,7 @@ func (m *Model) CheckoutCommitArg(arg any) {
 	m.vcsMore = vcsMoreState{
 		open: true, kind: vcsMorePrompt, action: vcsMoreActionCheckout,
 		title: "Checkout Revision", hint: "Check out " + commit.ShortID + " with a detached HEAD.",
-		input: commit.ID,
+		input: commit.ID, input3: m.logRepositoryForCommitArg(arg),
 	}
 	m.invalidate()
 }
@@ -2445,11 +2535,13 @@ func (m *Model) CompareCommitWithLocal(arg any) {
 		m.invalidate()
 		return
 	}
+	repo := m.logRepositoryForCommitArg(arg)
+	repoArg := vcsRepositoryArgFor(repo)
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 2*time.Minute)
 		defer cancel()
-		raw, err := m.mgr.Invoke(ctx, Window, "vcs_diff_with_worktree", map[string]any{
-			"repo": nil, "rev": commit.ID,
+		raw, err := m.invoke(ctx, "vcs_diff_with_worktree", map[string]any{
+			"repo": repoArg, "rev": commit.ID,
 		})
 		var files []openidea.RevisionChange
 		if err == nil {
@@ -2469,7 +2561,7 @@ func (m *Model) CompareCommitWithLocal(arg any) {
 			for _, file := range files {
 				path := file.Path
 				if !filepath.IsAbs(path) {
-					path = filepath.Join(m.Root(), path)
+					path = filepath.Join(repo, path)
 				}
 				m.vcsMore.items = append(m.vcsMore.items, vcsMoreItem{
 					Path: path, Revision: commit.ID, Label: filepath.Base(path),
@@ -2505,11 +2597,16 @@ func (m *Model) CompareRevisionsArg(arg any) {
 }
 
 func (m *Model) compareRevisions(from, to string) {
+	repo := m.vcsRepositoryRoot()
+	if repo == "" {
+		repo = m.gitLogRepositoryRoot()
+	}
+	repoArg := vcsRepositoryArgFor(repo)
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 2*time.Minute)
 		defer cancel()
-		raw, err := m.mgr.Invoke(ctx, Window, "vcs_diff_revisions", map[string]any{
-			"repo": nil, "from": from, "to": to,
+		raw, err := m.invoke(ctx, "vcs_diff_revisions", map[string]any{
+			"repo": repoArg, "from": from, "to": to,
 		})
 		var files []openidea.RevisionChange
 		if err == nil {
@@ -2529,7 +2626,7 @@ func (m *Model) compareRevisions(from, to string) {
 			for _, file := range files {
 				path := file.Path
 				if !filepath.IsAbs(path) {
-					path = filepath.Join(m.Root(), path)
+					path = filepath.Join(repo, path)
 				}
 				m.vcsMore.items = append(m.vcsMore.items, vcsMoreItem{
 					Path: path, Revision: from, After: to, Label: filepath.Base(path),
@@ -2546,13 +2643,8 @@ func (m *Model) ResetToCommitArg(arg any) {
 	if commit == nil {
 		return
 	}
-	for i := range m.log.commits {
-		if m.log.commits[i].ID == commit.ID {
-			m.log.selected = i
-			break
-		}
-	}
-	m.OpenGitReset()
+	m.selectLogCommitTarget(arg)
+	m.openVCSOperationAt(vcsOpReset, m.logRepositoryForCommitArg(arg))
 }
 
 func (m *Model) UndoCommitArg(arg any) {
@@ -2560,21 +2652,63 @@ func (m *Model) UndoCommitArg(arg any) {
 	if commit == nil {
 		return
 	}
-	m.vcsMore = vcsMoreState{
-		open: true, kind: vcsMoreConfirm, action: "commit.undo",
-		title: "Undo Commit", hint: "Move HEAD to the parent and keep this commit's changes staged?",
-		input: commit.ID,
-	}
+	selected := *commit
+	repository := m.logRepositoryForCommitArg(arg)
+	root := m.Root()
+	m.status = "Checking whether commit " + shortID(selected.ID) + " can be undone…"
 	m.invalidate()
+	go func() {
+		ctx, cancel := context.WithTimeout(m.mergeContext(), time.Minute)
+		defer cancel()
+		info, err := m.undoCommitBranchInfo(ctx, repository)
+		m.post(func() {
+			if m.Root() != root {
+				return
+			}
+			if err != nil {
+				problem := "The branch state could not be read: " + err.Error()
+				m.status = "Cannot undo commit: " + problem
+				m.notifyError("vcs.undo."+selected.ID, "Cannot undo commit", problem)
+				m.invalidate()
+				return
+			}
+			problem := undoCommitProblem(selected, info)
+			if problem == "" {
+				problem = undoCommitPushedProtectedProblem(info, m.vcsProtectedBranch)
+			}
+			if problem != "" {
+				m.status = "Cannot undo commit: " + problem
+				m.notifyError("vcs.undo."+selected.ID, "Cannot undo commit", problem)
+				m.invalidate()
+				return
+			}
+			hint := "Move HEAD to the parent and keep this commit's changes staged?"
+			if undoCommitHeadPushed(info) {
+				hint = "This commit is already on " + strings.TrimSpace(valueOrEmpty(info.Upstream)) +
+					". Undo rewrites local history and may require a force push.\n" + hint
+			}
+			m.vcsMore = vcsMoreState{
+				open: true, kind: vcsMoreConfirm, action: "commit.undo",
+				title: "Undo Commit", hint: hint,
+				input: selected.ID, input3: repository,
+			}
+			m.status = ""
+			m.invalidate()
+		})
+	}()
 }
 
-func (m *Model) undoCommit(id string) {
+func (m *Model) undoCommit(id, repository string) {
+	if repository == "" {
+		repository = m.gitLogRepositoryRoot()
+	}
+	repoArg := vcsRepositoryArgFor(repository)
 	m.vcsMore.busy = true
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 2*time.Minute)
 		defer cancel()
-		raw, err := m.mgr.Invoke(ctx, Window, "vcs_undo_commit", map[string]any{
-			"repo": nil, "commit": id,
+		raw, err := m.invoke(ctx, "vcs_undo_commit", map[string]any{
+			"repo": repoArg, "commit": id,
 		})
 		var message string
 		if err == nil {
@@ -2589,6 +2723,9 @@ func (m *Model) undoCommit(id string) {
 			}
 			if m.commit != nil && message != "" {
 				m.commit.message = message
+			}
+			if message != "" && repository != "" {
+				m.keepCommitDraft(repository, message)
 			}
 			m.status = "Undid commit " + shortID(id)
 			m.closeVCSMore()
@@ -2605,7 +2742,7 @@ func (m *Model) EditCommitMessageArg(arg any) {
 	m.vcsMore = vcsMoreState{
 		open: true, kind: vcsMorePrompt, action: vcsMoreActionReword,
 		title: "Edit Commit Message", hint: "Reword " + commit.ShortID + " and its descendants.",
-		input: commit.Message, input2: commit.ID,
+		input: commit.Message, input2: commit.ID, input3: m.logRepositoryForCommitArg(arg),
 	}
 	if m.vcsMore.input == "" {
 		m.vcsMore.input = commit.Summary
@@ -2613,13 +2750,17 @@ func (m *Model) EditCommitMessageArg(arg any) {
 	m.invalidate()
 }
 
-func (m *Model) rewordCommit(id, message string) {
+func (m *Model) rewordCommit(id, message, repository string) {
+	if repository == "" {
+		repository = m.gitLogRepositoryRoot()
+	}
+	repoArg := vcsRepositoryArgFor(repository)
 	m.vcsMore.busy = true
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 2*time.Minute)
 		defer cancel()
-		_, err := m.mgr.Invoke(ctx, Window, "vcs_reword", map[string]any{
-			"repo": nil, "commit": id, "message": message,
+		_, err := m.invoke(ctx, "vcs_reword", map[string]any{
+			"repo": repoArg, "commit": id, "message": message,
 		})
 		m.post(func() {
 			m.vcsMore.busy = false
@@ -2644,7 +2785,7 @@ func (m *Model) DropCommitArg(arg any) {
 		open: true, kind: vcsMoreConfirm, action: "commit.drop",
 		title: "Drop Commit",
 		hint:  "Remove " + commit.ShortID + " “" + commit.Summary + "” from this branch?",
-		input: commit.ID,
+		input: commit.ID, input3: m.logRepositoryForCommitArg(arg),
 	}
 	m.invalidate()
 }
@@ -2658,7 +2799,7 @@ func (m *Model) SquashCommitArg(arg any) {
 		open: true, kind: vcsMoreConfirm, action: "commit.squash",
 		title: "Squash Commits",
 		hint:  "Meld " + commit.ShortID + " into the preceding commit?",
-		input: commit.ID,
+		input: commit.ID, input3: m.logRepositoryForCommitArg(arg),
 	}
 	m.invalidate()
 }
@@ -2668,10 +2809,13 @@ func (m *Model) PrepareFixupArg(arg any, kind string) {
 	if commit == nil {
 		return
 	}
+	m.selectLogCommitTarget(arg)
 	m.OpenCommit()
 	if m.commit == nil {
 		return
 	}
+	m.commit.allRepositories = false
+	m.commit.repo = m.logRepositoryForCommitArg(arg)
 	m.commit.message = kind + "! " + commit.Summary
 	for _, file := range m.vcs.files {
 		fileKind := effectiveVCSKind(file)
@@ -2681,15 +2825,19 @@ func (m *Model) PrepareFixupArg(arg any, kind string) {
 	m.invalidate()
 }
 
-func (m *Model) runRebasePlan(targetID, targetAction, title string) {
+func (m *Model) runRebasePlan(targetID, targetAction, title, repository string) {
 	root := m.Root()
+	if repository == "" {
+		repository = m.gitLogRepositoryRoot()
+	}
+	repoArg := vcsRepositoryArgFor(repository)
 	m.vcsMore.busy, m.vcsMore.err = true, ""
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 2*time.Minute)
 		defer cancel()
-		raw, err := m.mgr.Invoke(ctx, Window, "vcs_log", map[string]any{
-			"repo": nil,
+		raw, err := m.invoke(ctx, "vcs_log", map[string]any{
+			"repo": repoArg,
 			"query": map[string]any{
 				"branch": "HEAD", "path": nil, "author": nil, "text": nil,
 				"range": targetID + "^..HEAD", "skip": 0, "limit": 1000,
@@ -2725,7 +2873,7 @@ func (m *Model) runRebasePlan(targetID, targetAction, title string) {
 			m.vcsOps = VCSOperationPane{
 				kind: "operation", open: true, title: title,
 			}
-			m.runVCSGitOperation(title, map[string]any{
+			m.runVCSGitOperationAt(repoArg, title, map[string]any{
 				"op": "interactiveRebase", "base": base, "entries": entries,
 			})
 		})
@@ -2737,6 +2885,7 @@ func (m *Model) RebaseOntoCommitArg(arg any) {
 	if commit == nil {
 		return
 	}
+	repoArg := vcsRepositoryArgFor(m.logRepositoryForCommitArg(arg))
 	m.vcsOps = VCSOperationPane{
 		kind: "operation", open: true, title: "Rebase onto " + commit.ShortID,
 	}
@@ -2744,8 +2893,8 @@ func (m *Model) RebaseOntoCommitArg(arg any) {
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 10*time.Minute)
 		defer cancel()
-		_, err := m.mgr.Invoke(ctx, Window, "vcs_rebase_with", map[string]any{
-			"repo": nil, "upstream": commit.ID, "options": map[string]any{},
+		_, err := m.invoke(ctx, "vcs_rebase_with", map[string]any{
+			"repo": repoArg, "upstream": commit.ID, "options": map[string]any{},
 		})
 		m.post(func() {
 			m.vcsOps.busy = false
@@ -2766,8 +2915,10 @@ func (m *Model) GoToLogParent() {
 	if commit == nil || len(commit.Parents) == 0 {
 		return
 	}
+	repo := m.logCommitRepository(m.log.selected)
 	for i := range m.log.commits {
-		if m.log.commits[i].ID == commit.Parents[0] {
+		if vcsRepositoryKey(m.logCommitRepository(i)) == vcsRepositoryKey(repo) &&
+			m.log.commits[i].ID == commit.Parents[0] {
 			m.selectCommit(i)
 			return
 		}
@@ -2781,7 +2932,11 @@ func (m *Model) GoToLogChild() {
 	if commit == nil {
 		return
 	}
+	repo := m.logCommitRepository(m.log.selected)
 	for i := range m.log.commits {
+		if vcsRepositoryKey(m.logCommitRepository(i)) != vcsRepositoryKey(repo) {
+			continue
+		}
 		for _, parent := range m.log.commits[i].Parents {
 			if parent == commit.ID {
 				m.selectCommit(i)
@@ -2798,8 +2953,10 @@ func (m *Model) NewBranchAtCommit(arg any) {
 	if commit == nil {
 		return
 	}
-	m.selectLogCommitByID(commit.ID)
-	m.OpenNewGitBranch()
+	m.selectLogCommitTarget(arg)
+	repo := m.logRepositoryForCommitArg(arg)
+	m.openVCSOperationAt(vcsOpNewBranch, repo)
+	m.vcsOps.preferredStart = commit.ID
 }
 
 func (m *Model) NewTagAtCommit(arg any) {
@@ -2807,17 +2964,31 @@ func (m *Model) NewTagAtCommit(arg any) {
 	if commit == nil {
 		return
 	}
-	m.selectLogCommitByID(commit.ID)
-	m.OpenNewGitTag()
+	m.selectLogCommitTarget(arg)
+	repo := m.logRepositoryForCommitArg(arg)
+	m.openVCSOperationAt(vcsOpNewTag, repo)
+	m.vcsOps.choices = []vcsOperationChoice{{
+		label: commit.ShortID + " " + commit.Summary,
+		value: commit.ID,
+	}}
+	m.vcsOps.sel = 0
 }
 
-func (m *Model) selectLogCommitByID(id string) {
+func (m *Model) selectLogCommitTarget(arg any) bool {
+	id, repository := logCommitArgParts(arg)
+	if id == "" {
+		return m.log.selected >= 0 && m.log.selected < len(m.log.commits)
+	}
 	for i := range m.log.commits {
-		if m.log.commits[i].ID == id {
+		if (m.log.commits[i].ID == id || m.log.commits[i].ShortID == id) &&
+			(repository == "" || i >= len(m.log.commitRepos) ||
+				vcsRepositoryKey(m.log.commitRepos[i]) == repository) {
 			m.log.selected = i
-			return
+			m.log.detailRepo = m.logCommitRepository(i)
+			return true
 		}
 	}
+	return false
 }
 
 func (m *Model) OpenCommitInBrowser(arg any) {
@@ -2825,11 +2996,12 @@ func (m *Model) OpenCommitInBrowser(arg any) {
 	if commit == nil {
 		return
 	}
+	repoArg := vcsRepositoryArgFor(m.logRepositoryForCommitArg(arg))
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, time.Minute)
 		defer cancel()
-		raw, err := m.mgr.Invoke(ctx, Window, "vcs_config_get", map[string]any{
-			"repo": nil, "key": "remote.origin.url",
+		raw, err := m.invoke(ctx, "vcs_config_get", map[string]any{
+			"repo": repoArg, "key": "remote.origin.url",
 		})
 		var remote *string
 		if err == nil {

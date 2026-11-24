@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/editor"
 
 	"mayoi/internal/textdiff"
 )
@@ -200,30 +201,96 @@ func (m *Model) RestoreHistoryEntry() {
 	}
 	h.confirmRestore, h.busy = false, true
 	m.invalidate()
+	var restoredDoc historyRestoreDocument
+	var beforeText string
+	var beforeVersion uint64
+	if m.reg != nil {
+		restoredDoc = m.reg.Get(e.Path)
+		if restoredDoc != nil {
+			beforeText = restoredDoc.Text()
+			beforeVersion = restoredDoc.Buffer().Version()
+		}
+	}
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, time.Minute)
 		defer cancel()
 		_, err := m.invoke(ctx, "history_restore", map[string]any{
 			"path": e.Path, "id": e.ID,
 		})
+		var restoredText string
+		var syncErr error
+		if err == nil && restoredDoc != nil {
+			var raw json.RawMessage
+			raw, syncErr = m.invoke(ctx, "fs_read_text", map[string]any{"path": e.Path})
+			if syncErr == nil {
+				syncErr = json.Unmarshal(raw, &restoredText)
+			}
+			if syncErr == nil {
+				syncErr = replaceHistoryDocumentText(
+					ctx, restoredDoc, beforeVersion, beforeText, restoredText,
+				)
+			}
+		}
 		m.post(func() {
-			if m.history != h {
-				return
-			}
-			h.busy = false
 			if err != nil {
-				h.err = "Restoring failed: " + err.Error()
-				m.invalidate()
+				if m.history == h {
+					h.busy = false
+					h.err = "Restoring failed: " + err.Error()
+					m.invalidate()
+				}
 				return
 			}
-			h.err = ""
+			if syncErr == nil {
+				for _, tab := range m.allTabs() {
+					if restoredDoc != nil && tab.doc == restoredDoc {
+						tab.seen = restoredDoc.Buffer().Version()
+						tab.noteDisk()
+					}
+				}
+			}
 			m.refreshTree(filepath.Dir(e.Path))
-			m.status = "Restored " + filepath.Base(e.Path) + " to the " +
-				historyTime(m.prefs.dateFormatPrefs(), m.systemRegion, e.Ms) + " version"
+			if syncErr == nil {
+				m.status = "Restored " + filepath.Base(e.Path) + " to the " +
+					historyTime(m.prefs.dateFormatPrefs(), m.systemRegion, e.Ms) + " version"
+			} else {
+				m.banner = "The restored file changed while open; the editor's current text was kept"
+			}
+			if m.history == h {
+				h.busy = false
+				if syncErr != nil {
+					h.err = "The file was restored, but its open editor could not be refreshed: " + syncErr.Error()
+				} else {
+					h.err = ""
+				}
+				m.loadHistory(h)
+			}
 			m.invalidate()
-			m.loadHistory(h)
 		})
 	}()
+}
+
+type historyRestoreDocument interface {
+	Text() string
+	Buffer() *editor.Buffer
+	ApplyEditsIfVersion(context.Context, uint64, ...editor.Edit) error
+}
+
+// replaceHistoryDocumentText mirrors OpenIDEA's in-place history restore for
+// an editor document owned by GoIDEA. The version guard keeps text typed while
+// the backend restore was running from being silently replaced.
+func replaceHistoryDocumentText(
+	ctx context.Context,
+	doc historyRestoreDocument,
+	expectedVersion uint64,
+	beforeText string,
+	restoredText string,
+) error {
+	if doc == nil {
+		return nil
+	}
+	return doc.ApplyEditsIfVersion(ctx, expectedVersion, editor.Edit{
+		Start: 0, End: len(beforeText), Text: restoredText,
+	})
 }
 
 // ConfirmHistoryLabel records a label for the whole project.

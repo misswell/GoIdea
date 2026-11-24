@@ -87,7 +87,7 @@ func TestProjectNewPopupRendersOpenIDEAFilterAndActions(t *testing.T) {
 	}, 900, 640)
 	tester.Frame()
 	for _, want := range []string{
-		"File", "Directory", "Python File", "Stylesheet", "HTTP Request", "From Template…",
+		"File", "Directory", "Scratch File", "Python File", "Stylesheet", "HTTP Request", "From Template…",
 	} {
 		if !tester.HasText(want) {
 			t.Errorf("New popup lacks %q: %q", want, tester.Texts())
@@ -137,6 +137,22 @@ func TestProjectNewPopupRendersOpenIDEAFilterAndActions(t *testing.T) {
 		m.treeOp.path != root {
 		t.Fatalf("Directory action = popup %+v, treeOp %+v", m.projectNew, m.treeOp)
 	}
+	m.CloseTreeOp()
+	m.OpenProjectNew(root)
+	var scratch projectNewMatch
+	for _, match := range m.projectNew.matches {
+		if match.entry.action == "scratch" {
+			scratch = match
+			break
+		}
+	}
+	if scratch.entry.label != "Scratch File" {
+		t.Fatalf("missing Scratch File row: %+v", projectNewMatchLabels(m.projectNew.matches))
+	}
+	m.chooseProjectNewMatch(scratch)
+	if m.projectNew != nil || m.scratch == nil || m.scratch.languages == nil {
+		t.Fatalf("Scratch action did not open the chooser: popup %+v chooser %+v", m.projectNew, m.scratch)
+	}
 }
 
 func projectNewMatchLabels(matches []projectNewMatch) []string {
@@ -169,8 +185,8 @@ func TestProjectNewPopupSeparatesTemplatesFromActions(t *testing.T) {
 	if len(m.projectNew.matches) < 4 {
 		t.Fatalf("New entries = %v", projectNewMatchLabels(m.projectNew.matches))
 	}
-	if m.projectNew.matches[2].entry.action != "template" || !m.projectNew.matches[2].entry.separator {
-		t.Fatalf("template separator row = %+v", m.projectNew.matches[2])
+	if m.projectNew.matches[3].entry.action != "template" || !m.projectNew.matches[3].entry.separator {
+		t.Fatalf("template separator row = %+v", m.projectNew.matches[3])
 	}
 	last := m.projectNew.matches[len(m.projectNew.matches)-1]
 	if last.entry.action != "fromTemplate" || !last.entry.separator {

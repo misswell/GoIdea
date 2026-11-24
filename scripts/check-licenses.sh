@@ -42,7 +42,10 @@ for m in $mods; do
   if [[ -z "$license" ]]; then
     echo "  unknown license: $m (no LICENSE file in $dir)"; fail=1; continue
   fi
-  if ! head -40 "$license" | grep -Eq "$allowed"; then
+  # Read the head fully before matching: grep exits at its first match,
+  # which would otherwise make head fail with SIGPIPE under pipefail.
+  license_head="$(head -40 "$license")"
+  if ! grep -Eq "$allowed" <<<"$license_head"; then
     echo "  disallowed license: $m ($(basename "$license"))"; fail=1; continue
   fi
   listed="$path"

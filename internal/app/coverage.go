@@ -338,28 +338,28 @@ func coverageLinePriority(line coverageLine) int {
 // coverageGutterTooltip shows the same title as OpenIDEA's coverage gutter
 // marker when the pointer rests over the gutter's marker for a covered line.
 func (m *Model) coverageGutterTooltip(c *ui.Context, view ui.Element, t *Tab) {
+	view.Tooltip(m.coverageGutterTitle(c, view, t))
+}
+
+func (m *Model) coverageGutterTitle(c *ui.Context, view ui.Element, t *Tab) string {
 	if t == nil || t.state == nil || !m.coverage.visible || m.coverage.activeSuite() == nil {
-		view.Tooltip("")
-		return
+		return ""
 	}
 	x, y, over := view.PointerPosition()
 	if !over || x < 0 || x > coverageGutterWidth(c, t.state) {
-		view.Tooltip("")
-		return
+		return ""
 	}
 	line := coverageLineAtY(t.state, y)
 	if line < 0 {
-		view.Tooltip("")
-		return
+		return ""
 	}
 	for _, coverage := range m.coverageLinesForTab(t) {
 		if coverage.Line == line {
 			_, title := coverageLineState(coverage, oiPaletteOf(m.theme))
-			view.Tooltip(title)
-			return
+			return title
 		}
 	}
-	view.Tooltip("")
+	return ""
 }
 
 func coverageGutterWidth(c *ui.Context, state *editor.State) float32 {

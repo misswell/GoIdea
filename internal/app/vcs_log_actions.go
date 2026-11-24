@@ -119,12 +119,22 @@ func init() {
 func (m *Model) gitLogRepositoryRoot() string {
 	root := m.log.repo
 	if root == "" {
+		root = m.vcsRepositoryRoot()
+	}
+	if root == "" {
 		root = m.Root()
 	}
 	if root == "" {
 		return ""
 	}
 	return filepath.Clean(root)
+}
+
+func (m *Model) gitLogRepositoryArg() any {
+	if m.log.repo != "" {
+		return m.log.repo
+	}
+	return m.vcsRepositoryArg()
 }
 
 // gitLogScopedKey keeps branch and commit bookmarks from colliding when
@@ -181,7 +191,13 @@ func (m *Model) selectedCommitBookmarkKey(commit *openidea.Commit) string {
 	if commit == nil {
 		return ""
 	}
-	root := m.gitLogRepositoryRoot()
+	root := m.log.detailRepo
+	if root == "" && m.log.selected >= 0 {
+		root = m.logCommitRepository(m.log.selected)
+	}
+	if root == "" {
+		root = m.gitLogRepositoryRoot()
+	}
 	if root == "" {
 		return ""
 	}
@@ -316,23 +332,20 @@ func (m *Model) ToggleGitLogBranches() {
 }
 
 func (m *Model) loadGitLogBranches() {
-	root, repo := m.Root(), m.log.repo
+	root, repo := m.Root(), m.gitLogRepositoryRoot()
+	repoArg := m.gitLogRepositoryArg()
 	m.log.branchesLoading, m.log.branchesErr = true, ""
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, time.Minute)
 		defer cancel()
-		var repoArg any
-		if repo != "" {
-			repoArg = repo
-		}
 		raw, err := m.mgr.Invoke(ctx, Window, "vcs_branches", map[string]any{"repo": repoArg})
 		var branches []openidea.Branch
 		if err == nil {
 			err = json.Unmarshal(raw, &branches)
 		}
 		m.post(func() {
-			if m.Root() != root || m.log.repo != repo {
+			if m.Root() != root || m.gitLogRepositoryRoot() != repo {
 				return
 			}
 			m.log.branchesLoading = false
@@ -441,15 +454,12 @@ func (m *Model) deleteGitLogBranch(name string) {
 	if name == "" {
 		return
 	}
+	repoArg := m.gitLogRepositoryArg()
 	m.vcsMore.busy, m.vcsMore.err = true, ""
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 2*time.Minute)
 		defer cancel()
-		var repoArg any
-		if m.log.repo != "" {
-			repoArg = m.log.repo
-		}
 		_, err := m.mgr.Invoke(ctx, Window, "vcs_delete_branch", map[string]any{
 			"repo": repoArg, "branch": name,
 		})
@@ -560,10 +570,10 @@ func (m *Model) gitLogBookmarksMenu(menu *ui.Menu) {
 	}
 }
 
-func (m *Model) gitLogCommitMenu(menu *ui.Menu, id string) {
-	m.selectLogCommitByID(id)
+func (m *Model) gitLogCommitMenu(menu *ui.Menu, arg any) {
+	m.selectLogCommitTarget(arg)
 	if menu.Item("Copy Revision Number").Chosen() {
-		m.CopyRevisionArg(id)
+		m.CopyRevisionArg(arg)
 	}
 	bookmarkLabel := "Bookmark Commit"
 	selected := m.selectedLogCommitArg(nil)
@@ -574,45 +584,45 @@ func (m *Model) gitLogCommitMenu(menu *ui.Menu, id string) {
 		m.ToggleCommitBookmark(nil)
 	}
 	if menu.Item("Create Patch…").Chosen() {
-		m.CreatePatchForCommits(id)
+		m.CreatePatchForCommits(arg)
 	}
 	if menu.Item("Checkout Revision").Chosen() {
-		m.CheckoutCommitArg(id)
+		m.CheckoutCommitArg(arg)
 	}
 	if menu.Item("Compare with Local").Chosen() {
-		m.CompareCommitWithLocal(id)
+		m.CompareCommitWithLocal(arg)
 	}
 	if menu.Item("Revert Commit").Chosen() {
 		m.RevertSelectedCommit()
 	}
 	menu.Separator()
 	if menu.Item("Reset Current Branch to Here…").Chosen() {
-		m.ResetToCommitArg(id)
+		m.ResetToCommitArg(arg)
 	}
 	if menu.Item("Undo Commit…").Chosen() {
-		m.UndoCommitArg(id)
+		m.UndoCommitArg(arg)
 	}
 	if menu.Item("Edit Commit Message…").Chosen() {
-		m.EditCommitMessageArg(id)
+		m.EditCommitMessageArg(arg)
 	}
 	if menu.Item("Drop Commit").Chosen() {
-		m.DropCommitArg(id)
+		m.DropCommitArg(arg)
 	}
 	if menu.Item("Squash Commits…").Chosen() {
-		m.SquashCommitArg(id)
+		m.SquashCommitArg(arg)
 	}
 	if menu.Item("Interactively Rebase from Here…").Chosen() {
-		m.OpenInteractiveRebase(id)
+		m.OpenInteractiveRebase(arg)
 	}
 	menu.Separator()
 	if menu.Item("New Branch…").Chosen() {
-		m.NewBranchAtCommit(id)
+		m.NewBranchAtCommit(arg)
 	}
 	if menu.Item("New Tag…").Chosen() {
-		m.NewTagAtCommit(id)
+		m.NewTagAtCommit(arg)
 	}
 	if menu.Item("View in Browser").Chosen() {
-		m.OpenCommitInBrowser(id)
+		m.OpenCommitInBrowser(arg)
 	}
 }
 
@@ -678,7 +688,10 @@ func (m *Model) selectedLogChangeTarget(arg any) (logChangeTarget, bool) {
 	}
 	change := m.log.changes[index]
 	commit := m.log.commits[m.log.selected]
-	root := m.log.repo
+	root := m.log.detailRepo
+	if root == "" {
+		root = m.logCommitRepository(m.log.selected)
+	}
 	if root == "" {
 		root = m.Root()
 	}
@@ -896,16 +909,20 @@ func (m *Model) AskRevertLogChange(arg any) {
 	m.vcsMore.input = target.commit.ID + "\x00" + target.path
 	if target.change.OldPath != nil {
 		m.vcsMore.input += "\x00" + *target.change.OldPath
+	} else {
+		m.vcsMore.input += "\x00"
 	}
+	m.vcsMore.input += "\x00" + target.root
 }
 
-func (m *Model) revertSelectedLogChange(commitID, path, oldPath string) {
+func (m *Model) revertSelectedLogChange(commitID, path, oldPath, repository string) {
 	if commitID == "" || path == "" {
 		return
 	}
 	m.vcsMore.busy, m.vcsMore.err = true, ""
 	m.invalidate()
 	tabs := append([]*Tab(nil), m.tabs...)
+	repoArg := vcsRepositoryArgFor(repository)
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 2*time.Minute)
 		defer cancel()
@@ -916,10 +933,6 @@ func (m *Model) revertSelectedLogChange(commitID, path, oldPath string) {
 				m.invalidate()
 			})
 			return
-		}
-		var repoArg any
-		if m.log.repo != "" {
-			repoArg = m.log.repo
 		}
 		raw, err := m.mgr.Invoke(ctx, Window, "vcs_create_patch", map[string]any{
 			"repo": repoArg,
@@ -1079,11 +1092,8 @@ func (m *Model) goToGitLogRef(revision string) {
 }
 
 func (m *Model) loadGitLogAtRef(revision string) {
-	root, repo := m.Root(), m.log.repo
-	var repoArg any
-	if repo != "" {
-		repoArg = repo
-	}
+	root, repo := m.Root(), m.gitLogRepositoryRoot()
+	repoArg := m.gitLogRepositoryArg()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, time.Minute)
 		defer cancel()
@@ -1099,7 +1109,7 @@ func (m *Model) loadGitLogAtRef(revision string) {
 			err = json.Unmarshal(raw, &commits)
 		}
 		m.post(func() {
-			if m.Root() != root || m.log.repo != repo {
+			if m.Root() != root || m.gitLogRepositoryRoot() != repo {
 				return
 			}
 			if err != nil || len(commits) == 0 {
@@ -1160,25 +1170,39 @@ func (m *Model) OpenPathOnGitRemote(arg any) {
 		m.invalidate()
 		return
 	}
-	root := m.Root()
+	path = realPath(path)
+	root := vcsRepositoryContainingPath(path, m.vcs.repositories)
+	if root == "" {
+		root = m.vcsRepositoryRoot()
+	}
+	if root == "" {
+		m.status = "This file has no Git repository"
+		m.invalidate()
+		return
+	}
 	rel, err := filepath.Rel(root, path)
-	if err != nil || strings.HasPrefix(rel, "..") {
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		m.status = "This file is outside the Git repository"
 		m.invalidate()
 		return
 	}
+	repoArg := vcsRepositoryArgFor(root)
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, time.Minute)
 		defer cancel()
 		remoteName := "origin"
-		info, infoErr := m.branchInfo(ctx)
+		var info openidea.BranchInfo
+		infoRaw, infoErr := m.invoke(ctx, "vcs_branch_info", map[string]any{"repo": repoArg})
+		if infoErr == nil {
+			infoErr = json.Unmarshal(infoRaw, &info)
+		}
 		if infoErr == nil && info.Upstream != nil {
 			if slash := strings.IndexByte(*info.Upstream, '/'); slash > 0 {
 				remoteName = (*info.Upstream)[:slash]
 			}
 		}
-		raw, err := m.mgr.Invoke(ctx, Window, "vcs_config_get", map[string]any{
-			"repo": nil, "key": "remote." + remoteName + ".url",
+		raw, err := m.invoke(ctx, "vcs_config_get", map[string]any{
+			"repo": repoArg, "key": "remote." + remoteName + ".url",
 		})
 		var remote *string
 		if err == nil {

@@ -3,12 +3,14 @@ package app
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/editor"
 
 	"mayoi/internal/docbridge"
 	"mayoi/internal/openidea"
@@ -242,6 +244,40 @@ func TestPreviewTabPromotesAndIsNotPinned(t *testing.T) {
 	}
 }
 
+func TestPreviewTabStateSurvivesSessionSaveAndRestore(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "README.md")
+	if err := os.WriteFile(path, []byte("# Notes\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	backend := &fileActionBackend{info: openidea.DocInfo{
+		ID: 71, Path: path, Text: "# Notes\n", Version: 1,
+		Encoding: "UTF-8", LineEnding: "LF", URI: "file://" + path,
+	}}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	registry := docbridge.NewRegistry(backend, Window)
+	doc, err := registry.Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	preview := &Tab{doc: doc, state: &editor.State{Buffer: doc.Buffer()}, preview: true}
+	m := &Model{cfg: Config{SessionPath: filepath.Join(dir, "session.json")},
+		tabs: []*Tab{preview}, active: 0}
+	session, ok := m.sessionSnapshot()
+	if !ok || !reflect.DeepEqual(session.PreviewFiles, []string{path}) {
+		t.Fatalf("preview session = %+v", session.PreviewFiles)
+	}
+	if err := session.Save(m.cfg.SessionPath); err != nil {
+		t.Fatal(err)
+	}
+	restored := []*Tab{{doc: doc}}
+	restorePreviewFlags(restored, nil, map[string]bool{path: true})
+	if !restored[0].preview {
+		t.Fatal("a saved preview tab reopened as a regular tab")
+	}
+}
+
 func TestTabLimitCandidatesKeepPinnedActiveAndUnsaved(t *testing.T) {
 	pinned := &Tab{pinned: true, used: 1}
 	saved := &Tab{used: 3}
@@ -253,6 +289,22 @@ func TestTabLimitCandidatesKeepPinnedActiveAndUnsaved(t *testing.T) {
 	wantOrder(t, tabLimitCandidates(tabs, 2, unsaved), saved, older)
 	if got := tabLimitCandidates(strip(pinned, active), 1, func(*Tab) bool { return false }); len(got) != 0 {
 		t.Fatalf("nothing closeable = %d tabs", len(got))
+	}
+}
+
+func TestTabLimitClosingPoliciesChooseDifferentSafeCandidates(t *testing.T) {
+	edited := &Tab{used: 1, edited: time.Now().Add(-time.Minute)}
+	untouched := &Tab{used: 2}
+	active := &Tab{used: 3}
+	tabs := strip(edited, untouched, active)
+	unsaved := func(*Tab) bool { return false }
+	lru := tabLimitCandidatesWithPolicy(tabs, 2, unsaved, "lru")
+	unchanged := tabLimitCandidatesWithPolicy(tabs, 2, unsaved, "unchanged")
+	if len(lru) < 1 || lru[0] != edited {
+		t.Fatalf("LRU candidates = %v, want edited first", lru)
+	}
+	if len(unchanged) < 1 || unchanged[0] != untouched {
+		t.Fatalf("unchanged candidates = %v, want never-edited first", unchanged)
 	}
 }
 
@@ -396,6 +448,20 @@ func TestTabOrderSplicesTheLiftedTabIntoItsDrop(t *testing.T) {
 	wantPlaces(t, tabOrder(3, 2, 0, true), 2, 0, 1)
 	wantPlaces(t, tabOrder(3, 0, 3, true), 1, 2, 0)
 	wantPlaces(t, tabOrder(3, 1, 2, false), 0, 1, 2)
+}
+
+func TestReorderTabsInRangeKeepsAVerticalStripDragInsideItsRow(t *testing.T) {
+	a, b, c, d, e := &Tab{}, &Tab{}, &Tab{}, &Tab{}, &Tab{}
+	tabs, active := reorderTabsInRange(strip(a, b, c, d, e), 3, 3, 1, 1, 3)
+	wantOrder(t, tabs, a, d, b, c, e)
+	if active != 1 {
+		t.Fatalf("active = %d, want 1", active)
+	}
+	unchanged, active := reorderTabsInRange(strip(a, b, c, d), 0, 3, 0, 0, 2)
+	wantOrder(t, unchanged, a, b, c, d)
+	if active != 0 {
+		t.Fatalf("cross-row active = %d", active)
+	}
 }
 
 func TestReorderTabsMovesTheTabAndFollowsTheActiveOne(t *testing.T) {

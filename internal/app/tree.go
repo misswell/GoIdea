@@ -2,6 +2,7 @@ package app
 
 import (
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -34,6 +35,12 @@ type treeNode struct {
 	group    bool
 	readOnly bool
 	detail   string
+	// icon overrides the file/folder icon for a contributed row. external
+	// marks a library tree row whose directories come from fs_read_dir, and
+	// children are prebuilt contributed children such as SDK groups.
+	icon     string
+	external bool
+	children []*treeNode
 	// excluded marks build output and tool folders the tree shows shaded,
 	// as OpenIDEA shades target/build; module marks a Maven or Gradle module
 	// folder, whose name is bold.
@@ -114,13 +121,16 @@ type Tree struct {
 
 	// mode is OpenIDEA's Project View pane. Flat modes list editor paths
 	// rather than the workspace, and Scratches is a contributed root.
-	mode         string
-	options      treeOptions
-	openFiles    []string
-	changedFiles []string
-	scratchRoot  string
-	extraTrees   map[string]*workspace.Tree
-	virtualDirs  map[string]bool
+	mode                string
+	options             treeOptions
+	fileIgnores         []string
+	fileExcludes        workspace.Globs
+	fileExcludePatterns []string
+	openFiles           []string
+	changedFiles        []string
+	scratchRoot         string
+	extraTrees          map[string]*workspace.Tree
+	virtualDirs         map[string]bool
 	// projectRoots is a workspace manifest's top-level projects. multiRoot
 	// distinguishes an empty workspace from an ordinary single-folder
 	// project, which keeps its primary root visible.
@@ -134,6 +144,27 @@ type Tree struct {
 	outlines map[string][]openidea.OutlineItem
 	// expandedChanged persists a project's expanded folders.
 	expandedChanged func([]string)
+
+	// remoteLoader reads one folder through fs_read_dir instead of the local
+	// workspace. Remote entries arrive off the main thread, so SSH and WSL
+	// paths never pass through os.Stat.
+	remoteLoader  func(dir string, done func([]openidea.RemoteDirectoryEntry, error))
+	remoteEntries map[string][]openidea.RemoteDirectoryEntry
+	remoteLoading map[string]bool
+	remoteErrs    map[string]string
+	remoteClosed  bool
+
+	// externalRoot is OpenIDEA's External Libraries contribution. Its group
+	// nodes come from sdk_project_libraries, while roots and nested entries
+	// are read through the backend VFS so archives do not touch the host.
+	externalRoot    *treeNode
+	externalLoader  func(string, func([]openidea.RemoteDirectoryEntry, error))
+	externalEntries map[string][]openidea.RemoteDirectoryEntry
+	externalLoading map[string]bool
+	externalErrs    map[string]string
+	externalDirs    map[string]bool
+	externalVersion map[string]uint64
+	externalClosed  bool
 }
 
 // NewTree returns the tree of the folder root, with the root open. post runs a
@@ -141,16 +172,27 @@ type Tree struct {
 // again after files change on disk.
 func NewTree(root string, post func(func()), changed func()) *Tree {
 	t := &Tree{
-		post:        post,
-		changed:     changed,
-		open:        map[string]bool{},
-		sels:        map[string]bool{},
-		mode:        "project",
-		options:     defaultTreeOptions(),
-		collapsed:   map[string]bool{},
-		outlines:    map[string][]openidea.OutlineItem{},
-		extraTrees:  map[string]*workspace.Tree{},
-		virtualDirs: map[string]bool{},
+		post:                post,
+		changed:             changed,
+		open:                map[string]bool{},
+		sels:                map[string]bool{},
+		mode:                "project",
+		options:             defaultTreeOptions(),
+		fileIgnores:         cloneStrings(defaultIgnoredNames),
+		fileExcludes:        workspace.ParseGlobs(strings.Join(defaultFileExcludes, ",")),
+		fileExcludePatterns: cloneStrings(defaultFileExcludes),
+		collapsed:           map[string]bool{},
+		outlines:            map[string][]openidea.OutlineItem{},
+		extraTrees:          map[string]*workspace.Tree{},
+		virtualDirs:         map[string]bool{},
+		remoteEntries:       map[string][]openidea.RemoteDirectoryEntry{},
+		remoteLoading:       map[string]bool{},
+		remoteErrs:          map[string]string{},
+		externalEntries:     map[string][]openidea.RemoteDirectoryEntry{},
+		externalLoading:     map[string]bool{},
+		externalErrs:        map[string]string{},
+		externalDirs:        map[string]bool{},
+		externalVersion:     map[string]uint64{},
 	}
 	if root == "" || post == nil {
 		return t
@@ -169,6 +211,7 @@ func NewTree(root string, post func(func()), changed func()) *Tree {
 			}
 		})
 	})
+	t.ws.IncludeHidden = true
 	t.ws.OnChange = t.workspaceChanged
 	t.ws.Load(root)
 	t.rebuild()
@@ -190,6 +233,11 @@ func (t *Tree) workspaceChanged(changed, removed []string) {
 
 // Close stops the tree watching the folder.
 func (t *Tree) Close() {
+	t.remoteClosed = true
+	t.externalClosed = true
+	for filePath := range t.externalVersion {
+		t.externalVersion[filePath]++
+	}
 	if t.ws != nil {
 		t.ws.Close()
 		t.ws = nil
@@ -214,7 +262,7 @@ func (t *Tree) addExtraTree(root string) {
 		})
 	})
 	tree.OnChange = t.workspaceChanged
-	tree.IncludeHidden = t.options.showHidden
+	tree.IncludeHidden = true
 	t.extraTrees[root] = tree
 	tree.Load(root)
 }
@@ -230,6 +278,14 @@ func (t *Tree) workspaceFor(path string) *workspace.Tree {
 }
 
 func (t *Tree) rootForPath(path string) string {
+	if t.remoteLoader != nil {
+		root := t.remoteRoot()
+		path = filepath.Clean(path)
+		if root != "" && (path == root || strings.HasPrefix(path, root+"/")) {
+			return root
+		}
+		return ""
+	}
 	path = filepath.Clean(path)
 	if t.ws != nil {
 		root := filepath.Clean(t.ws.Root)
@@ -247,8 +303,34 @@ func (t *Tree) rootForPath(path string) string {
 
 func (t *Tree) isDir(path string) bool {
 	path = filepath.Clean(path)
+	if t.externalDirs[path] {
+		return true
+	}
+	if entries, ok := t.externalEntries[path]; ok {
+		return entries != nil || t.externalLoading[path]
+	}
+	for _, entries := range t.externalEntries {
+		for _, entry := range entries {
+			if entry.Path == path {
+				return entry.IsDir
+			}
+		}
+	}
 	if t.virtualDirs[path] {
 		return true
+	}
+	if t.remoteLoader != nil {
+		if entries, ok := t.remoteEntries[path]; ok {
+			return entries != nil || t.remoteLoading[path]
+		}
+		for _, entries := range t.remoteEntries {
+			for _, entry := range entries {
+				if entry.Path == path {
+					return entry.IsDir
+				}
+			}
+		}
+		return path == t.remoteRoot()
 	}
 	if tree := t.workspaceFor(path); tree != nil && tree.IsDir(path) {
 		return true
@@ -298,14 +380,30 @@ func (t *Tree) SetOptions(options treeOptions) {
 	t.options = options
 	if hiddenChanged {
 		if t.ws != nil {
-			t.ws.IncludeHidden = options.showHidden
+			t.ws.IncludeHidden = true
 			t.ws.Refresh()
 		}
 		for _, tree := range t.extraTrees {
-			tree.IncludeHidden = options.showHidden
+			tree.IncludeHidden = true
 			tree.Refresh()
 		}
 	}
+	t.rebuild()
+}
+
+// SetFileFilters applies files.ignoredNames and files.exclude to the Project
+// View. Ignored names follow Show Hidden Files; exclude patterns follow Show
+// Excluded Files and dim their rows while that option is on.
+func (t *Tree) SetFileFilters(ignoredNames, exclude []string) {
+	ignoredNames = cloneStrings(ignoredNames)
+	exclude = cloneStrings(exclude)
+	if sameStrings(t.fileIgnores, ignoredNames) &&
+		sameStrings(t.fileExcludePatterns, exclude) {
+		return
+	}
+	t.fileIgnores = ignoredNames
+	t.fileExcludes = workspace.ParseGlobs(strings.Join(exclude, ","))
+	t.fileExcludePatterns = exclude
 	t.rebuild()
 }
 
@@ -470,19 +568,34 @@ func equalProjectTreePaths(left, right []string) bool {
 
 // Refresh rereads the open folders, as a new or renamed entry asks.
 func (t *Tree) Refresh() {
-	if t.ws == nil {
+	if t.remoteLoader != nil {
+		t.refreshRemote("")
 		return
 	}
-	t.ws.Refresh()
+	if t.ws == nil && t.externalRoot == nil {
+		return
+	}
+	if t.ws != nil {
+		t.ws.Refresh()
+	}
 	for _, tree := range t.extraTrees {
 		tree.Refresh()
 	}
+	t.refreshExternal("")
 	t.rebuild()
 }
 
 // RefreshDir rereads dir and the folders below it the tree read, as Reload
 // from Disk does for the selected folder.
 func (t *Tree) RefreshDir(dir string) {
+	if t.remoteLoader != nil {
+		t.refreshRemote(dir)
+		return
+	}
+	if t.isExternalTreePath(dir) {
+		t.refreshExternal(dir)
+		return
+	}
 	tree := t.workspaceFor(dir)
 	if tree == nil {
 		return
@@ -497,6 +610,34 @@ func (t *Tree) Rows() []*treeNode { return t.rows }
 // Toggle opens or closes the folder at path.
 func (t *Tree) Toggle(path string) {
 	isDir := t.isDir(path)
+	if t.isExternalTreePath(path) && isDir {
+		t.expandAll = ""
+		t.open[path] = !t.open[path]
+		if t.open[path] {
+			delete(t.collapsed, path)
+			if t.externalNeedsLoad(path) {
+				t.loadExternal(path)
+			}
+		} else {
+			t.collapsed[path] = true
+		}
+		t.rebuild()
+		t.expansionChanged()
+		return
+	}
+	if t.remoteLoader != nil && isDir {
+		t.expandAll = ""
+		t.open[path] = !t.open[path]
+		if t.open[path] {
+			delete(t.collapsed, path)
+			t.loadRemote(path)
+		} else {
+			t.collapsed[path] = true
+		}
+		t.rebuild()
+		t.expansionChanged()
+		return
+	}
 	if t.options.showMembers && !isDir {
 		if t.open[path] {
 			delete(t.open, path)
@@ -554,6 +695,32 @@ func (t *Tree) ToggleMember(path string, line, col int, name string) {
 // first opens, so the pass carries on through the reads' own rebuilds until
 // nothing below dir is left closed.
 func (t *Tree) ExpandAll(dir string) {
+	if t.isExternalTreePath(dir) {
+		if dir == "" {
+			return
+		}
+		t.open[dir] = true
+		delete(t.collapsed, dir)
+		if t.externalNeedsLoad(dir) {
+			t.loadExternal(dir)
+		}
+		t.expandAll = dir
+		t.rebuild()
+		t.expansionChanged()
+		return
+	}
+	if t.remoteLoader != nil {
+		if dir == "" {
+			return
+		}
+		t.open[dir] = true
+		delete(t.collapsed, dir)
+		t.loadRemote(dir)
+		t.expandAll = dir
+		t.rebuild()
+		t.expansionChanged()
+		return
+	}
 	tree := t.workspaceFor(dir)
 	if tree == nil || dir == "" {
 		return
@@ -569,7 +736,7 @@ func (t *Tree) ExpandAll(dir string) {
 // CollapseAll closes every folder but the root, as OpenIDEA's Collapse All
 // does.
 func (t *Tree) CollapseAll() {
-	if t.ws == nil || t.root == nil {
+	if t.root == nil || (t.ws == nil && t.remoteLoader == nil && t.externalRoot == nil) {
 		return
 	}
 	t.expandAll = ""
@@ -794,8 +961,25 @@ func (t *Tree) IsDir(path string) bool {
 	return t.isDir(path)
 }
 
+// ReadOnly reports whether path is a contributed SDK or library row.
+func (t *Tree) ReadOnly(path string) bool {
+	for _, row := range t.rows {
+		if row.path == path {
+			return row.readOnly
+		}
+	}
+	return t.isExternalTreePath(path)
+}
+
 // reveal opens the folders leading to path, as a file opened from elsewhere.
 func (t *Tree) reveal(path string) {
+	if t.remoteLoader != nil {
+		t.revealRemote(path)
+		return
+	}
+	if t.revealExternal(path) {
+		return
+	}
 	if t.ws == nil || t.root == nil || path == "" {
 		return
 	}
@@ -832,8 +1016,16 @@ func (t *Tree) rebuild() {
 	if t.root == nil {
 		return
 	}
+	if t.remoteLoader != nil {
+		t.rebuildRemote()
+		return
+	}
 	if t.expandAll != "" {
-		t.openUnder(t.expandAll)
+		if t.isExternalTreePath(t.expandAll) {
+			t.openExternalUnder(t.expandAll)
+		} else {
+			t.openUnder(t.expandAll)
+		}
 	}
 	switch t.Mode() {
 	case "openFiles":
@@ -854,6 +1046,9 @@ func (t *Tree) rebuild() {
 		} else {
 			t.walk(t.root, t.ws)
 		}
+		if t.Mode() == "project" && t.externalRoot != nil {
+			t.walkExternal(t.externalRoot)
+		}
 		// Project includes contributed roots, while Project Files is the
 		// workspace alone, as OpenIDEA's two panes.
 		if t.Mode() == "project" && t.scratchRoot != "" {
@@ -861,8 +1056,14 @@ func (t *Tree) rebuild() {
 			t.walk(root, t.workspaceFor(t.scratchRoot))
 		}
 	}
-	if t.expandAll != "" && t.expandSettled(t.expandAll) {
-		t.expandAll = ""
+	if t.expandAll != "" {
+		if t.isExternalTreePath(t.expandAll) {
+			if t.externalExpandSettled(t.expandAll) {
+				t.expandAll = ""
+			}
+		} else if t.expandSettled(t.expandAll) {
+			t.expandAll = ""
+		}
 	}
 	if len(t.sels) > 0 {
 		visible := make(map[string]bool, len(t.rows))
@@ -928,7 +1129,7 @@ func (t *Tree) walk(n *treeNode, tree *workspace.Tree) {
 		}
 		child := &treeNode{
 			path: leaf, name: leafName, dir: dir, depth: n.depth + 1,
-			expanded: t.open[leaf], excluded: dir && excludedDir(name),
+			expanded: t.open[leaf], excluded: t.pathExcluded(leaf) || dir && excludedDir(name),
 			module:     dir && tree.IsDir(leaf) && t.isModule(tree, leaf),
 			packageDir: pkg,
 		}
@@ -949,6 +1150,9 @@ func (t *Tree) sortedNormalChildren(tree *workspace.Tree, dir string) []string {
 }
 
 func (t *Tree) entryVisible(path, name string, dir bool) bool {
+	if ignoredFileName(name, t.fileIgnores) {
+		return t.options.showHidden
+	}
 	if hiddenName(name, t.options.showHidden) {
 		return false
 	}
@@ -964,7 +1168,38 @@ func (t *Tree) entryVisible(path, name string, dir bool) bool {
 			return false
 		}
 	}
+	if t.pathExcluded(path) && !t.options.showExcluded {
+		return false
+	}
 	return true
+}
+
+func ignoredFileName(name string, patterns []string) bool {
+	for _, raw := range patterns {
+		pattern := strings.TrimSpace(raw)
+		if pattern == "" || strings.Contains(pattern, "/") {
+			continue
+		}
+		if match, err := path.Match(pattern, name); err == nil && match {
+			return true
+		}
+	}
+	return false
+}
+
+func (t *Tree) pathExcluded(value string) bool {
+	if len(t.fileExcludes) == 0 {
+		return false
+	}
+	root := t.rootForPath(value)
+	if root == "" {
+		return false
+	}
+	rel, err := filepath.Rel(root, value)
+	if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
+		return false
+	}
+	return t.fileExcludes.Match(filepath.ToSlash(rel))
 }
 
 func unityGeneratedDir(name string) bool {
@@ -1277,6 +1512,10 @@ func equalOutlineItems(left, right []openidea.OutlineItem) bool {
 // next read of one of them widens the tree. It stops once nothing below dir
 // is left closed.
 func (t *Tree) openUnder(dir string) {
+	if t.remoteLoader != nil {
+		t.openRemoteUnder(dir)
+		return
+	}
 	tree := t.workspaceFor(dir)
 	if tree == nil || !t.open[dir] || tree.Loading(dir) || !tree.Loaded(dir) {
 		return
@@ -1295,6 +1534,9 @@ func (t *Tree) openUnder(dir string) {
 
 // expandSettled reports whether every folder below dir is open and read.
 func (t *Tree) expandSettled(dir string) bool {
+	if t.remoteLoader != nil {
+		return t.remoteExpandSettled(dir)
+	}
 	tree := t.workspaceFor(dir)
 	if tree == nil || !t.open[dir] || tree.Loading(dir) || !tree.Loaded(dir) {
 		return false

@@ -3,7 +3,7 @@
 
 Usage: e2e-checks.py <phase> <smoke.json> [<smoke.json> ...]
        e2e-checks.py --list
-Phases: agents | base | vcsoperations | tools | debugimport | fresh | lsp | debug | hotswap | spring | rerunfail | gorerun | cargorun | pyrerun | jsrerun | readiness | negjdtls | runswitch | runkill | dbgcfg | attach
+Phases: agents | featureparity | toolchains | extendedToolchains | windows | base | libraries | projectstructure | filetypes | vcsoperations | tools | debugimport | fresh | lsp | analysis | debug | hotswap | spring | rerunfail | gorerun | cargorun | pyrerun | jsrerun | profiler | profilerallocations | profilerlive | readiness | negjdtls | runswitch | runkill | dbgcfg | attach
 Every check has an id. REGRESSION_INDEX.json names the same ids, and --list
 lets scripts/check-regression-index.py prove the two never drift apart, so a
 check cannot be deleted without the index noticing. Every failed assertion is
@@ -11,6 +11,7 @@ printed and the exit status is 1, so a gate never passes on a partial build.
 """
 
 import json
+import os
 import sys
 
 def get(data, dotted, default=None):
@@ -42,12 +43,276 @@ def absent(key, where=""):
     return f"{where}{key} is absent", lambda d: (key not in d, d.get(key))
 
 
+def process_gone(pid):
+    if not isinstance(pid, int) or pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return True
+    except PermissionError:
+        return False
+    return False
+
+
 CHECKS = {
+    "windows": [
+        ("windowsError", *absent("windowsError")),
+        ("two", "two native project windows were live together", lambda d: (get(d, "beforeClose.windows") == 2, get(d, "beforeClose"))),
+        ("newWindow", "window.new created a third Welcome window with its own backend", lambda d: (
+            get(d, "newWindow.windows") == 3
+            and get(d, "newWindow.root") == ""
+            and get(d, "newWindow.backend") is True
+            and (get(d, "newWindow.pid") or 0) > 0,
+            get(d, "newWindow"),
+        )),
+        ("windowNext", "window.next focused another native project window", lambda d: (get(d, "windowNext") is True, get(d, "windowNext"))),
+        ("distinctProjects", "the windows opened different project roots", lambda d: (get(d, "distinctRoots") is True, get(d, "beforeClose"))),
+        ("distinctBackends", "each project window owned a different openidea-server process", lambda d: (get(d, "distinctBackends") is True, get(d, "beforeClose"))),
+        ("isolatedClose", "closing one window stopped only its backend and left its sibling healthy", lambda d: (get(d, "onlyClosedWindowStopped") is True, {"before": get(d, "beforeClose"), "after": get(d, "afterClose")})),
+        ("noServers", "all backend processes were gone after the smoke process exited", lambda d: (all(process_gone(pid) for pid in (get(d, "windowPIDs") or [])), get(d, "windowPIDs"))),
+    ],
     "agents": [
         ("agentsError", *absent("agentsError")),
         ("subscribed", "agent_subscribe returned an initial task array", lambda d: (get(d, "agents.subscribed") is True and isinstance(get(d, "agents.tasks"), int), get(d, "agents"))),
         ("providers", "agent_providers returned the provider catalog", lambda d: ((get(d, "agents.providers") or 0) > 0 and get(d, "agents.providerIDs") != [], get(d, "agents"))),
         ("external", "agent_external_sessions returned a decoded session array", lambda d: (get(d, "agents.externalParsed") is True and isinstance(get(d, "agents.external"), int), get(d, "agents"))),
+    ],
+    "featureparity": [
+        ("graphqlRoundTrip", "the real backend sent GraphQL and returned the endpoint response", lambda d: (
+            get(d, "featureParity.graphqlRoundTrip") is True,
+            get(d, "featureParity"),
+        )),
+        ("httpClientRoundTrip", "the real backend expanded an environment request and returned its response", lambda d: (
+            get(d, "featureParity.httpClientRoundTrip") is True,
+            get(d, "featureParity"),
+        )),
+        ("deploymentLocalRoundTrip", "deployment upload, compare, download and delete used a real local target", lambda d: (
+            get(d, "featureParity.deploymentLocalRoundTrip") is True,
+            get(d, "featureParity"),
+        )),
+        ("gradleVersionCatalogPublication", "Gradle 8.10.2 published and loaded a version catalog through the real backend", lambda d: (
+            get(d, "featureParity.gradleVersionCatalogPublication") is True,
+            get(d, "featureParity"),
+        )),
+    ],
+    "toolchains": [
+        ("rpc", "all shipped language SDK and Python environment RPCs are registered", lambda d: (
+            get(d, "toolchains.rpcCommands") == 9,
+            get(d, "toolchains"),
+        )),
+        ("sdkKinds", "ten language SDK detector kinds completed against the real backend", lambda d: (
+            get(d, "toolchains.sdkKinds") == 10,
+            get(d, "toolchains"),
+        )),
+        ("python", "Python validation, virtualenv creation and effective interpreter lookup passed", lambda d: (
+            get(d, "toolchains.python") is True,
+            get(d, "toolchains"),
+        )),
+        ("runConfig", "the selected virtualenv became the generated Python run command", lambda d: (
+            get(d, "toolchains.runConfig") is True,
+            get(d, "toolchains"),
+        )),
+        ("tools", "tool location and PHP detector payloads decoded from the real backend", lambda d: (
+            get(d, "toolchains.tools") is True,
+            get(d, "toolchains"),
+        )),
+        ("php", "the real Composer project supplied an automatic PHP language level", lambda d: (
+            get(d, "toolchains.php") is True,
+            get(d, "toolchains"),
+        )),
+    ],
+    "extendedToolchains": [
+        ("formatters", "real Prettier, oxfmt and Ruff formatting passed", lambda d: (
+            get(d, "toolchains.extended") is True
+            and get(d, "toolchains.formatterPrettier") is True
+            and get(d, "toolchains.formatterOxfmt") is True
+            and get(d, "toolchains.formatterRuff") is True
+            and get(d, "toolchains.formatterPrecedence") is True,
+            get(d, "toolchains"),
+        )),
+        ("pythonEnvironments", "real uv, Poetry and Conda environment creation passed", lambda d: (
+            get(d, "toolchains.extended") is True
+            and get(d, "toolchains.pythonEnvironmentUv") is True
+            and get(d, "toolchains.pythonEnvironmentPoetry") is True
+            and get(d, "toolchains.pythonEnvironmentConda") is True,
+            get(d, "toolchains"),
+        )),
+        ("pythonPackages", "real uv package install, upgrade, list, uninstall and freeze passed", lambda d: (
+            get(d, "toolchains.extended") is True
+            and get(d, "toolchains.pythonPackagesReal") is True,
+            get(d, "toolchains"),
+        )),
+        ("gradle", "real Gradle wrapper and local-distribution sync passed", lambda d: (
+            get(d, "toolchains.extended") is True
+            and get(d, "toolchains.gradleWrapperReal") is True
+            and get(d, "toolchains.gradleLocalReal") is True,
+            get(d, "toolchains"),
+        )),
+        ("gradleTestResults", "real Gradle tests produced one failure and two passes", lambda d: (
+            get(d, "toolchains.extended") is True
+            and get(d, "toolchains.gradleTestsReal") is True,
+            get(d, "toolchains"),
+        )),
+        ("gradleTeamCity", "Gradle init-script emitted TeamCity test events", lambda d: (
+            get(d, "toolchains.extended") is True
+            and get(d, "toolchains.gradleTestsTeamCity") is True,
+            get(d, "toolchains"),
+        )),
+        ("gradleRerun", "Gradle reran only the failed test through --tests", lambda d: (
+            get(d, "toolchains.extended") is True
+            and get(d, "toolchains.gradleTestsRerun") is True,
+            get(d, "toolchains"),
+        )),
+        ("gradleDaemons", "Gradle daemons stopped after the test runs", lambda d: (
+            get(d, "toolchains.extended") is True
+            and get(d, "toolchains.gradleDaemonsStopped") is True,
+            get(d, "toolchains"),
+        )),
+    ],
+    "libraries": [
+        ("librariesError", *absent("librariesError")),
+        ("groups", "sdk_project_libraries returned SDK or dependency groups with roots", lambda d: (
+            (get(d, "libraries.groups") or 0) > 0
+            and bool(get(d, "libraries.kinds"))
+            and bool(get(d, "libraries.roots")),
+            {k: get(d, "libraries." + k) for k in ("groups", "kinds", "roots")},
+        )),
+        ("tree", "the native Project View expanded External Libraries and rendered rows", lambda d: (
+            get(d, "libraries.expanded") is True
+            and (get(d, "libraries.rows") or []) != [],
+            {k: get(d, "libraries." + k) for k in ("expanded", "rows")},
+        )),
+        ("archive", "an SDK or dependency archive was browsed through fs_read_dir", lambda d: (
+            (get(d, "libraries.archiveRoot") or "").endswith("!")
+            and (get(d, "libraries.archiveEntries") or 0) > 0,
+            {k: get(d, "libraries." + k) for k in ("archiveRoot", "archiveEntries")},
+        )),
+        ("readOnly", "library files stayed read-only and the reload action is available", lambda d: (
+            get(d, "libraries.readOnly") is True
+            and get(d, "libraries.action") is True,
+            {k: get(d, "libraries." + k) for k in ("readOnly", "action")},
+        )),
+    ],
+    "projectstructure": [
+        ("projectStructureError", *absent("projectStructureError")),
+        ("dialog", "the native Project Structure dialog opened with all seven sections", lambda d: (
+            get(d, "projectStructure.open") is True
+            and get(d, "projectStructure.sections")
+            == ["project", "modules", "dependencies", "libraries", "facets", "artifacts", "sdks"]
+            and get(d, "projectStructure.menu") is True,
+            get(d, "projectStructure"),
+        )),
+        ("backend", "Project Structure loaded modules, SDKs and resolved libraries from the real backend", lambda d: (
+            (get(d, "projectStructure.modules") or 0) > 0
+            and "jdk" in (get(d, "projectStructure.sdkKinds") or [])
+            and get(d, "projectStructure.libraryGroups") is not None,
+            {k: get(d, "projectStructure." + k) for k in ("modules", "sdkKinds", "libraryGroups")},
+        )),
+        ("persistence", "Project Structure saved and restored compiler output through settings_set", lambda d: (
+            get(d, "projectStructure.saved") == ".goidea-project-structure-smoke"
+            and get(d, "projectStructure.restored") is not None,
+            {k: get(d, "projectStructure." + k) for k in ("saved", "restored")},
+        )),
+    ],
+    "filetypes": [
+        ("fileTypesError", *absent("fileTypesError")),
+        ("backend", "the pinned backend returned languages and a native menu", lambda d: (
+            (get(d, "fileTypes.languages") or 0) > 0
+            and (get(d, "fileTypes.menuLanguage") or 0) > 0,
+            {k: get(d, "fileTypes." + k) for k in ("languages", "menuLanguage")},
+        )),
+        ("override", "Override File Type changed the active editor to a backend language", lambda d: (
+            bool(get(d, "fileTypes.override"))
+            and bool(get(d, "fileTypes.language"))
+            and get(d, "fileTypes.persisted") is True,
+            get(d, "fileTypes"),
+        )),
+        ("restore", "Revert File Type Override removed the exact-path setting from project settings", lambda d: (
+            get(d, "fileTypes.restored") is True,
+            {"restored": get(d, "fileTypes.restored"), "original": get(d, "fileTypes.original")},
+        )),
+        ("ignored", "files.ignoredNames hid a matching file in the native Project View", lambda d: (
+            get(d, "fileTypes.ignoredHidden") is True,
+            get(d, "fileTypes.ignoredHidden"),
+        )),
+        ("excluded", "files.exclude dimmed and then hid a matching Project View folder", lambda d: (
+            get(d, "fileTypes.excludedDimmed") is True
+            and get(d, "fileTypes.excludedHidden") is True,
+            {
+                "dimmed": get(d, "fileTypes.excludedDimmed"),
+                "hidden": get(d, "fileTypes.excludedHidden"),
+            },
+        )),
+        ("filtersRestored", "the project's File Types filters were restored after the smoke", lambda d: (
+            get(d, "fileTypes.filtersRestored") is True,
+            get(d, "fileTypes.filtersRestored"),
+        )),
+    ],
+    "profiler": [
+        ("profilerError", *absent("profilerError")),
+        ("run", "Run with Profiler launched and collected a real Node.js CPU profile", lambda d: (
+            get(d, "profiler.mode") == "cpu"
+            and get(d, "profiler.unit") in ("ms", "samples")
+            and (get(d, "profiler.total") or 0) > 0
+            and get(d, "profiler.profiler") in ("node --cpu-prof", "node"),
+            get(d, "profiler"),
+        )),
+        ("graph", "the profile carried a flame graph, call tree and method list", lambda d: (
+            (get(d, "profiler.frames") or 0) >= 2
+            and (get(d, "profiler.nodes") or 0) >= 2
+            and (get(d, "profiler.methods") or 0) >= 1,
+            {k: get(d, "profiler." + k) for k in ("frames", "nodes", "methods")},
+        )),
+        ("window", "the native Profiler window showed the snapshot after the run ended", lambda d: (
+            get(d, "profiler.window") is True
+            and get(d, "profiler.runFinished") is True
+            and get(d, "profiler.snapshots") == 1,
+            {k: get(d, "profiler." + k) for k in ("window", "runFinished", "snapshots")},
+        )),
+    ],
+    "profilerallocations": [
+        ("profilerError", *absent("profilerError")),
+        ("run", "Run with Profiler collected a real JVM allocation profile", lambda d: (
+            get(d, "profiler.mode") == "allocations"
+            and get(d, "profiler.unit") == "bytes"
+            and get(d, "profiler.profiler") == "async-profiler"
+            and (get(d, "profiler.total") or 0) > 0,
+            get(d, "profiler"),
+        )),
+        ("graph", "the allocation profile carried native flame, call-tree and method views", lambda d: (
+            (get(d, "profiler.frames") or 0) >= 2
+            and (get(d, "profiler.nodes") or 0) >= 2
+            and (get(d, "profiler.methods") or 0) >= 1,
+            {k: get(d, "profiler." + k) for k in ("frames", "nodes", "methods")},
+        )),
+        ("window", "the native Profiler window showed the completed allocation run", lambda d: (
+            get(d, "profiler.window") is True
+            and get(d, "profiler.runFinished") is True
+            and get(d, "profiler.snapshots") == 1,
+            {k: get(d, "profiler." + k) for k in ("window", "runFinished", "snapshots")},
+        )),
+    ],
+    "profilerlive": [
+        ("profilerError", *absent("profilerError")),
+        ("run", "Run with Profiler collected a real JVM live-object profile", lambda d: (
+            get(d, "profiler.mode") == "liveObjects"
+            and get(d, "profiler.unit") == "samples"
+            and get(d, "profiler.profiler") == "async-profiler"
+            and (get(d, "profiler.total") or 0) > 0,
+            get(d, "profiler"),
+        )),
+        ("gc", "GC completed before the run was stopped and the profile was collected", lambda d: (
+            get(d, "profiler.stopRequested") is True
+            and get(d, "profiler.notice") == "",
+            {k: get(d, "profiler." + k) for k in ("stopRequested", "notice")},
+        )),
+        ("window", "the native Profiler window showed the completed live-object run", lambda d: (
+            get(d, "profiler.window") is True
+            and get(d, "profiler.runFinished") is True
+            and get(d, "profiler.snapshots") == 1,
+            {k: get(d, "profiler." + k) for k in ("window", "runFinished", "snapshots")},
+        )),
     ],
     "shots": [
         ("count", "every visual-regression state was rendered in both themes", lambda d: (len(get(d, "shots") or {}) >= 2 * len(SHOT_STATES), len(get(d, "shots") or {}))),
@@ -65,6 +330,22 @@ CHECKS = {
     ],
     "base": [
         ("backend", "backend is up", lambda d: (d.get("backend") is True, d.get("backend"))),
+        ("mcp.editors", "open editors reached the real MCP host", lambda d: (
+            not d.get("mcpError") and get(d, "mcp.editors") is True,
+            d.get("mcpError") or get(d, "mcp"),
+        )),
+        ("mcp.focused", "the focused editor and UTF-16 selection reached the real MCP host", lambda d: (
+            not d.get("mcpError") and get(d, "mcp.focused") is True,
+            d.get("mcpError") or get(d, "mcp"),
+        )),
+        ("mcp.problems", "Problems reset reached the real MCP host", lambda d: (
+            not d.get("mcpError") and get(d, "mcp.problems") is True,
+            d.get("mcpError") or get(d, "mcp"),
+        )),
+        ("mcp.removed", "a removed Problems file reached the real MCP host", lambda d: (
+            not d.get("mcpError") and get(d, "mcp.removed") is True,
+            d.get("mcpError") or get(d, "mcp"),
+        )),
         ("coverage.report", "Coverage imports LCOV and opens marked source", lambda d: (
             not d.get("coverageError")
             and all(get(d, "coverage." + key) is True for key in ("open", "visible", "managed", "opened"))
@@ -99,6 +380,50 @@ CHECKS = {
         ("settings.opened", "settings sheet opened", lambda d: (get(d, "settings.opened") is True, get(d, "settings.opened"))),
         ("settings.closed", "settings sheet closed", lambda d: (get(d, "settings.closed") is True, get(d, "settings.closed"))),
         ("settings.theme", "theme choice reached the disk", lambda d: (get(d, "settings.storedTheme") == "dark", get(d, "settings.storedTheme"))),
+        ("keymaps.six", "the six OpenIDEA keymaps are present in pinned menu order", lambda d: (
+            get(d, "keymaps.ids") == [
+                "intellij-macos", "intellij-windows", "vscode-macos",
+                "vscode-windows", "eclipse-macos", "eclipse-windows",
+            ]
+            and get(d, "keymaps.titles") == [
+                "macOS", "Windows", "VS Code (macOS)", "VS Code (Windows)",
+                "Eclipse (macOS)", "Eclipse",
+            ]
+            and get(d, "keymaps.default") == "intellij-macos",
+            get(d, "keymaps"),
+        )),
+        ("keymaps.generated", "Eclipse inheritance, removals and VS Code Windows translation match the pinned sources", lambda d: (
+            get(d, "keymaps.setAll") is True
+            and get(d, "keymaps.persisted") is True
+            and get(d, "keymaps.eclipseInherited") is True
+            and get(d, "keymaps.eclipseRemoved") is True
+            and get(d, "keymaps.vscodeConverted") is True
+            and get(d, "keymaps.noMixedModifiers") is True,
+            get(d, "keymaps"),
+        )),
+        ("keymaps.dispatch", "representative editor meanings, context conflicts and chords dispatch through the real shortcut path", lambda d: (
+            get(d, "keymaps.editorDelete") == {
+                "intellijMac": "a\nc\n",
+                "intellijWindows": "a\nc\n",
+                "eclipseMac": "a\nc\n",
+            }
+            and get(d, "keymaps.duplicateLine") == "a\nb\nb\nc\n"
+            and get(d, "keymaps.selectNextOccurrence") is True
+            and get(d, "keymaps.columnSelection") is True
+            and get(d, "keymaps.chord") is True
+            and get(d, "keymaps.chordParses") is True,
+            get(d, "keymaps"),
+        )),
+        ("keymaps.surfaces", "Settings, gear, Quick Switch and native menus follow the selected keymap", lambda d: (
+            get(d, "keymaps.gear") is True
+            and get(d, "keymaps.quickSwitch") is True
+            and get(d, "keymaps.settings") is True
+            and get(d, "keymaps.nativeMenus") == {
+                "intellijMac": "Cmd+S",
+                "intellijWindows": "Ctrl+S",
+            },
+            get(d, "keymaps"),
+        )),
         ("watch.reloaded", "external edit was reloaded", lambda d: (get(d, "watch.reloaded") is True, get(d, "watch.reloaded"))),
         ("watch.reloadAll", "Reload All from Disk reread the clean buffer, and restoring it kept the file", lambda d: (get(d, "watch.reloadAll") is True and get(d, "watch.reloadAllRestored") is True, {"reloadAll": get(d, "watch.reloadAll"), "restored": get(d, "watch.reloadAllRestored")})),
         ("vcs.changes", "Git status reports the change", lambda d: ((d.get("vcsChanges") or 0) >= 1, d.get("vcsChanges"))),
@@ -138,6 +463,8 @@ CHECKS = {
         ("dock.pinned", "a pinned window kept its slot while another took the split", lambda d: (get(d, "dock.pinnedRight") is True and get(d, "dock.pinnedSplit") is True, {"right": get(d, "dock.pinnedRight"), "split": get(d, "dock.pinnedSplit")})),
         ("dock.rendered", "the moved windows rendered their headers", lambda d: (get(d, "dock.problemsRendered") is True and get(d, "dock.todoRendered") is True, {"problems": get(d, "dock.problemsRendered"), "todo": get(d, "dock.todoRendered")})),
         ("scratch.languages", "the scratch chooser listed the backend's languages", lambda d: ((get(d, "scratch.languages") or 0) >= 1, get(d, "scratch.languages"))),
+        ("scratch.backendTemplate", "Java used the OpenIDEA backend scratch template", lambda d: (get(d, "scratch.language") == "java" and get(d, "scratch.template") is True and get(d, "scratch.templateUsed") is True, {"language": get(d, "scratch.language"), "template": get(d, "scratch.template"), "used": get(d, "scratch.templateUsed")})),
+        ("scratch.caret", "the backend template's $END$ placed the scratch caret", lambda d: (get(d, "scratch.caretUsed") is True and get(d, "scratch.caret") == get(d, "scratch.caretExpected"), {"caret": get(d, "scratch.caret"), "expected": get(d, "scratch.caretExpected")})),
         ("scratch.opened", "a scratch file was written in the data directory and opened", lambda d: (get(d, "scratch.opened") is True and get(d, "scratch.inScratchDir") is True and (get(d, "scratch.name") or "").startswith("scratch"), {"opened": get(d, "scratch.opened"), "inDir": get(d, "scratch.inScratchDir"), "name": get(d, "scratch.name")})),
         ("scratchError", *absent("scratchError")),
         ("term.output", "a real shell ran echo in the terminal", lambda d: ("GOIDEA_TERM_OK" in (get(d, "term.output") or ""), (get(d, "term.output") or "")[-300:])),
@@ -193,6 +520,45 @@ CHECKS = {
         ("workspace.managed", "Manage Workspace renamed the container and linked a third project", lambda d: (get(d, "workspace.managed") is True and get(d, "workspace.renamed") == "Smoke Workspace Managed", get(d, "workspace"))),
         ("workspace.removed", "Remove from Workspace kept the container and unlinked one project", lambda d: (get(d, "workspace.removed") is True, get(d, "workspace.removed"))),
         ("workspaceError", *absent("workspaceError")),
+    ],
+    "database": [
+        ("databaseError", *absent("databaseError")),
+        ("connected", "a throwaway SQLite source connected and listed schemas", lambda d: (
+            get(d, "database.connected") is True
+            and (get(d, "database.schemas") or 0) >= 1
+            and bool(get(d, "database.schema")),
+            {k: get(d, "database." + k) for k in ("connected", "schemas", "schema")},
+        )),
+        ("query", "the real database sheet executed DDL, INSERT and SELECT", lambda d: (
+            (get(d, "database.statements") or 0) >= 3
+            and get(d, "database.columns") == 2
+            and get(d, "database.rows") == 2
+            and get(d, "database.firstRow") == "1,Ada",
+            {k: get(d, "database." + k) for k in ("statements", "columns", "rows", "firstRow")},
+        )),
+        ("table", "people opened as an editable table with its primary key", lambda d: (
+            get(d, "database.people") is True
+            and get(d, "database.tableRows") == 2
+            and get(d, "database.tableColumns") == 2
+            and get(d, "database.tablePrimaryKeys") == 1,
+            {k: get(d, "database." + k) for k in ("people", "tableRows", "tableColumns", "tablePrimaryKeys")},
+        )),
+        ("edit", "an inline cell edit reached db_apply_edits and was read back", lambda d: (
+            get(d, "database.tableEdited") is True
+            and get(d, "database.tableEditedValue") == "Ada Lovelace"
+            and not get(d, "database.tableEditError"),
+            {k: get(d, "database." + k) for k in ("tableEdited", "tableEditedValue", "tableEditError")},
+        )),
+        ("metadata", "the table page returned its DDL, history and real execution plan", lambda d: (
+            get(d, "database.tableDDL") is True
+            and (get(d, "database.history") or 0) >= 1
+            and (get(d, "database.planNodes") or 0) >= 1,
+            {k: get(d, "database." + k) for k in ("tableDDL", "history", "planNodes")},
+        )),
+        ("closed", "the database tool window closed cleanly", lambda d: (
+            get(d, "database.tableClosed") is True and get(d, "database.closed") is True,
+            {k: get(d, "database." + k) for k in ("tableClosed", "closed")},
+        )),
     ],
     "vcsoperations": [
         ("vcsOperationsError", *absent("vcsOperationsError")),
@@ -329,6 +695,88 @@ CHECKS = {
         ("noBusyError", "a normal jdtls busy state was not shown as a failed import", lambda d: (get(d, "debugImport.debugErr") in (None, ""), get(d, "debugImport.debugErr"))),
         ("stopped", "Stop canceled the pending import-time launch", lambda d: (get(d, "debugImport.stopped") is True and (get(d, "debugImport.sessionAfterStop") or 0) == 0, {"stopped": get(d, "debugImport.stopped"), "session": get(d, "debugImport.sessionAfterStop")})),
     ],
+    "analysis": [
+        ("analysisError", *absent("analysisError")),
+        ("inspection.stream", "Inspect Code streamed real file and project JDT diagnostics", lambda d: (
+            (get(d, "analysis.inspection.rawFiles") or 0) > 0
+            and (get(d, "analysis.inspection.problems") or 0) > 0
+            and (get(d, "analysis.inspection.projectProblems") or 0) > 0,
+            get(d, "analysis.inspection"),
+        )),
+        ("inspection.grouping", "Inspection Results grouped real problems by severity", lambda d: (
+            bool(get(d, "analysis.inspection.severityGroups")),
+            get(d, "analysis.inspection.severityGroups"),
+        )),
+        ("inspection.filter", "the severity filter hid problems from other severities", lambda d: (
+            (get(d, "analysis.inspection.filteredProblems") or 0) > 0
+            and get(d, "analysis.inspection.filterHiddenOtherSeverity") is True,
+            get(d, "analysis.inspection"),
+        )),
+        ("inspection.navigation", "selecting a problem navigated the native editor to its line", lambda d: (
+            (get(d, "analysis.inspection.navigationPath") or "").endswith("AnalysisSmoke.java")
+            and (get(d, "analysis.inspection.navigationLine") or 0) > 0,
+            {
+                "path": get(d, "analysis.inspection.navigationPath"),
+                "line": get(d, "analysis.inspection.navigationLine"),
+            },
+        )),
+        ("inspection.cancel", "Stop canceled the live inspection request and returned the window to idle", lambda d: (
+            get(d, "analysis.inspection.cancelIssued") is True
+            and get(d, "analysis.inspection.cancelRunning") is False
+            and get(d, "analysis.inspection.cancelRequest") == 0,
+            get(d, "analysis.inspection"),
+        )),
+        ("duplicates", "Locate Duplicates found real repeated code with navigable fragments", lambda d: (
+            (get(d, "analysis.duplicates.groups") or 0) > 0
+            and (get(d, "analysis.duplicates.fragments") or 0) >= 2
+            and (get(d, "analysis.duplicates.selected") or 0) >= 0,
+            get(d, "analysis.duplicates"),
+        )),
+        ("structural.search", "Structural Search loaded real languages and found Java syntax-tree matches", lambda d: (
+            (get(d, "analysis.structural.languages") or 0) > 0
+            and get(d, "analysis.structural.javaLanguage") is True
+            and (get(d, "analysis.structural.searchMatches") or 0) > 0
+            and (get(d, "analysis.structural.searchFiles") or 0) > 0,
+            get(d, "analysis.structural"),
+        )),
+        ("structural.usages", "structural results transferred to native Find Usages", lambda d: (
+            get(d, "analysis.structural.findUsages") is True,
+            get(d, "analysis.structural.findUsages"),
+        )),
+        ("structural.preview", "Replace Structurally prepared workspace edits and preconditions", lambda d: (
+            (get(d, "analysis.structural.previewCount") or 0) > 0,
+            get(d, "analysis.structural.previewCount"),
+        )),
+        ("structural.stale", "an edit after the preview made replacement fail with a stale-file error", lambda d: (
+            get(d, "analysis.structural.staleRejected") is True,
+            get(d, "analysis.structural.staleError"),
+        )),
+        ("structural.apply", "the replacement applied real syntax-tree edits to the open document", lambda d: (
+            get(d, "analysis.structural.applied") is True
+            and (get(d, "analysis.structural.applyCount") or 0) > 0,
+            get(d, "analysis.structural"),
+        )),
+        ("structural.undo", "the applied structural edit was undone through the native refactor history", lambda d: (
+            get(d, "analysis.structural.undone") is True,
+            get(d, "analysis.structural.undone"),
+        )),
+        ("cleanup.process", "Code Cleanup processed the real language-server file and saved it", lambda d: (
+            get(d, "analysis.cleanup.processed") == 1
+            and get(d, "analysis.cleanup.changed") is True
+            and get(d, "analysis.cleanup.formatted") is True,
+            get(d, "analysis.cleanup"),
+        )),
+        ("cleanup.close", "Code Cleanup closed the tab it opened after saving", lambda d: (
+            get(d, "analysis.cleanup.tabClosed") is True,
+            get(d, "analysis.cleanup.tabClosed"),
+        )),
+        ("cleanup.fileAction", "Code Cleanup in File cleaned, saved and closed its tab", lambda d: (
+            get(d, "analysis.cleanupFile.changed") is True
+            and get(d, "analysis.cleanupFile.formatted") is True
+            and get(d, "analysis.cleanupFile.tabClosed") is True,
+            get(d, "analysis.cleanupFile"),
+        )),
+    ],
     "lsp": [
         ("lspError", *absent("lspError")),
         ("jdtls.ready", "jdtls is ready", lambda d: (any(s.get("name") == "jdtls" and s.get("status") == "ready" for s in (get(d, "lsp.servers") or [])), get(d, "lsp.servers"))),
@@ -387,6 +835,12 @@ CHECKS = {
         ("watch", "watch expression evaluated", lambda d: (get(d, "debug.watch") == "4", get(d, "debug.watch"))),
         ("consoleEval", "the Debug Console evaluated an expression in the selected frame", lambda d: (get(d, "debug.consoleEval") is True, get(d, "debug.consoleEval"))),
         ("memoryRows", "the Memory tab read live JVM classes", lambda d: ((get(d, "debug.memoryRows") or 0) > 0 and not get(d, "debug.memoryError"), {"rows": get(d, "debug.memoryRows"), "error": get(d, "debug.memoryError")})),
+        ("memory.instances", "the Memory tab read live JVM instances", lambda d: ((get(d, "debug.memoryInstances") or 0) > 0 and not get(d, "debug.memoryInspectionError"), {"instances": get(d, "debug.memoryInstances"), "error": get(d, "debug.memoryInspectionError")})),
+        ("memory.fields", "the Memory tab read object fields", lambda d: (get(d, "debug.memoryFieldsLoaded") is True and not get(d, "debug.memoryFieldsError"), {"loaded": get(d, "debug.memoryFieldsLoaded"), "error": get(d, "debug.memoryFieldsError")})),
+        ("memory.referrers", "the Memory tab read object referrers", lambda d: (get(d, "debug.memoryReferrersLoaded") is True and not get(d, "debug.memoryReferrersError"), {"loaded": get(d, "debug.memoryReferrersLoaded"), "error": get(d, "debug.memoryReferrersError")})),
+        ("heap.capture", "the Heap tab captured a live JVM snapshot", lambda d: (get(d, "debug.heapStatus") == "ready" and (get(d, "debug.heapSnapshot") or 0) > 0 and not get(d, "debug.heapError"), {"status": get(d, "debug.heapStatus"), "snapshot": get(d, "debug.heapSnapshot"), "error": get(d, "debug.heapError")})),
+        ("heap.classes", "the Heap tab read the snapshot class table", lambda d: ((get(d, "debug.heapClasses") or 0) > 0 and not get(d, "debug.heapClassesError"), {"classes": get(d, "debug.heapClasses"), "error": get(d, "debug.heapClassesError")})),
+        ("heap.close", "the Heap tab closed its snapshot and released the channel", lambda d: (not get(d, "debug.heapCloseError"), get(d, "debug.heapCloseError"))),
         ("runToCursor", "Run to Cursor paused at the caret line", lambda d: (get(d, "debug.runToPaused") is True, [get(d, "debug.runToLine"), get(d, "debug.frameLine")])),
         ("step.paused", "step over paused again", lambda d: (get(d, "debug.afterStepPaused") is True, get(d, "debug.afterStepPaused"))),
         ("step.line", "step moved to the next line", lambda d: ((get(d, "debug.afterStepLine") or 0) > (get(d, "debug.frameLine") or 0), [get(d, "debug.frameLine"), get(d, "debug.afterStepLine")])),

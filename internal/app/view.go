@@ -124,11 +124,30 @@ func (m *Model) rowChip(c *ui.Context, p *ui.Theme, key, label string) bool {
 func (m *Model) searchRows(c *ui.Context, p *ui.Theme) {
 	s := &m.search
 	ui.Row(c).Padding(6, 8).Children(func() {
-		in := ui.TextInput(c, &s.query).Grow(1).
-			Placeholder("Search text or pattern")
-		if in.Submitted() {
+		in := ui.TextArea(c, &s.query).Grow(1).Lines(1, 6).
+			Placeholder("Search text or pattern").AutoFocus()
+		in.OnChange(m.searchQueryChanged)
+		in.OnShortcut(ui.Cmd|ui.Shift, ui.KeyEnter, func() {
+			m.AddNewLineToFindField()
+		})
+		in.OnShortcut(ui.Ctrl|ui.Shift, ui.KeyEnter, func() {
+			m.AddNewLineToFindField()
+		})
+		in.OnTextKey(func(k ui.TextKey) bool {
+			if k.Key != ui.KeyEnter {
+				return false
+			}
+			if k.Mods == ui.Cmd|ui.Shift || k.Mods == ui.Ctrl|ui.Shift {
+				k.SetText(k.Text() + "\n")
+				m.searchQueryChanged()
+				return true
+			}
+			if k.Mods&ui.Alt != 0 {
+				return false
+			}
 			m.RunSearch()
-		}
+			return true
+		})
 	})
 	if s.replaceMode {
 		ui.Row(c).Padding(0, 8).Children(func() {
@@ -166,6 +185,12 @@ func (m *Model) searchRows(c *ui.Context, p *ui.Theme) {
 			s.options = !s.options
 			m.invalidate()
 		})
+		ui.Button(c, "Recent Searches").OnClick(m.ToggleRecentSearchFields)
+		scrollLabel := "Scroll to Results"
+		if !m.FindScrollToResults() {
+			scrollLabel = "Scrolling Off"
+		}
+		ui.Button(c, scrollLabel).OnClick(m.ToggleFindScrollToResults)
 		ui.Spacer(c)
 		text := s.summary
 		if s.running {
@@ -178,6 +203,30 @@ func (m *Model) searchRows(c *ui.Context, p *ui.Theme) {
 			ui.Text(c, text).FontSize(12).TextColor(p.TextMuted).SingleLine().Ellipsis("…")
 		}
 	})
+	if s.historyOpen {
+		ui.Column(c).Padding(4, 28, 6, 8).Gap(2).Children(func() {
+			ui.Text(c, "Recent searches").FontSize(11).TextColor(p.TextMuted).SingleLine()
+			if len(s.history) == 0 {
+				ui.Text(c, "No recent searches").FontSize(12).TextColor(p.TextMuted).SingleLine()
+				return
+			}
+			for i, query := range s.history {
+				i, query := i, query
+				label := strings.ReplaceAll(strings.ReplaceAll(query, "\r", ""), "\n", " ↵ ")
+				row := ui.Row(c.Key(fmt.Sprintf("find:recent:%d", i))).Height(24).
+					Padding(0, 6).AlignItems(ui.Center)
+				if row.Hovered() {
+					row.Background(oiPaletteOf(p).hoverTint)
+				}
+				row.Children(func() {
+					ui.Text(c, label).FontSize(12).TextColor(p.Text).SingleLine().Ellipsis("…")
+				})
+				if row.Clicked() {
+					m.UseRecentSearchField(i)
+				}
+			}
+		})
+	}
 	ui.Row(c).Padding(0, 8).Gap(12).AlignItems(ui.Center).Children(func() {
 		ui.Checkbox(c, &s.isRegex, "Regex")
 		ui.Checkbox(c, &s.caseSensitive, "Match case")
@@ -286,6 +335,10 @@ func (m *Model) searchRows(c *ui.Context, p *ui.Theme) {
 				PaddingEnd(8).Gap(6).AlignItems(ui.Center)
 			if fi == s.selectedFile && mi == s.selectedMatch {
 				r.Background(p.Selection)
+				if s.scrollSelected {
+					r.ScrollIntoView()
+					s.scrollSelected = false
+				}
 			} else if r.Hovered() {
 				r.Background(oi.hoverTint)
 			}
@@ -317,7 +370,8 @@ func (m *Model) treeRow(c *ui.Context, p *ui.Theme, row *treeNode) {
 		key = fmt.Sprintf("tree-member:%s:%d:%d:%s", row.path, row.line, row.col, row.name)
 	}
 	r := ui.Row(c.Key(key)).Height(24).
-		PaddingStart(4 + float32(row.depth)*20).PaddingEnd(8).Gap(5).Radius(5).AlignItems(ui.Center)
+		PaddingStart(4 + float32(row.depth)*m.treeIndentWidth()).PaddingEnd(8).Gap(5).
+		Radius(5).AlignItems(ui.Center)
 	if r.FocusWithin() {
 		m.projectTreeFocus = true
 	}
@@ -364,7 +418,7 @@ func (m *Model) treeRow(c *ui.Context, p *ui.Theme, row *treeNode) {
 	oi := oiPaletteOf(p)
 	selected := !row.member && m.tree.sels[row.path]
 	dropTarget := m.treeDrag != nil && m.treeDrag.active && row.dir &&
-		sameTreePath(m.treeDrag.targetPath, row.path)
+		m.projectTreeSamePath(m.treeDrag.targetPath, row.path)
 	if dropTarget {
 		r.Background(p.Accent.Alpha(0.16))
 	} else if r.FileDragOver() {
@@ -435,6 +489,8 @@ func (m *Model) treeRow(c *ui.Context, p *ui.Theme, row *treeNode) {
 			} else {
 				oiIconEl(c, "nodes/method", 16, oi, oi.textMuted)
 			}
+		case row.icon != "":
+			oiIconEl(c, row.icon, 16, oi, oi.textSubtle)
 		case row.path == m.Root() || row.module:
 			folderIconEl(c, oi, "module", 16, oi.textSubtle)
 		case row.packageDir:
@@ -449,6 +505,8 @@ func (m *Model) treeRow(c *ui.Context, p *ui.Theme, row *treeNode) {
 		tone := p.Text
 		if row.excluded {
 			tone = oi.ignored
+		} else if kind := m.projectTreeVCSKind(row.path, row.dir); kind != "" {
+			tone = vcsTreeStatusColor(p, oi, kind)
 		}
 		// No ellipsis: a name wider than the island keeps its whole text and
 		// scrolls with the tree, as OpenIDEA's rows do.
@@ -590,6 +648,27 @@ func (m *Model) editorArea(c *ui.Context, p *ui.Theme, g groupView) {
 		m.agentHomePage(c, p, oiPaletteOf(p))
 		return
 	}
+	if t.kind == tabKindNotebook {
+		m.notebookPage(c, p, t)
+		return
+	}
+	if t.kind == tabKindImageViewer {
+		m.imageViewerPage(c, p, oiPaletteOf(p), t)
+		return
+	}
+	if t.kind == tabKindHexViewer {
+		m.hexViewerPage(c, p, oiPaletteOf(p), t)
+		return
+	}
+	markdownMode := m.markdownModeFor(t)
+	if markdownMode == markdownPreviewOnly {
+		key := "markdown:preview:" + t.doc.Path()
+		if g.ref == groupSplit {
+			key += ":split"
+		}
+		m.markdownPreviewPage(c, p, t, key)
+		return
+	}
 	key := "editor:" + t.doc.Path()
 	if g.ref == groupSplit {
 		key += ":split"
@@ -609,21 +688,29 @@ func (m *Model) editorArea(c *ui.Context, p *ui.Theme, g groupView) {
 		if t.blame != nil {
 			m.refreshTabBlame(t)
 		}
-		ui.Row(c).Grow(1).MinHeight(0).MinWidth(0).AlignItems(ui.Stretch).Children(func() {
+		m.djangoTemplateBanner(c, p, t)
+		m.httpEditorToolbar(c, p, t)
+		m.graphqlEditorToolbar(c, p, t)
+		editorRow := ui.Row(c).Grow(1).MinHeight(0).MinWidth(0).AlignItems(ui.Stretch)
+		editorRow.Children(func() {
 			if t.blame != nil {
 				m.blameGutter(c, p, t)
 			}
-			view := editor.View(c, t.state).Grow(1).MinHeight(0)
+			view := editor.View(c, t.state).Grow(1).MinHeight(0).OnPaste(func(text string) bool {
+				return m.editorPaste(t, text)
+			})
+			t.editorFocused = view.Focused() || view.FocusWithin()
 			m.applyDeferredCaretCenter(t)
 			if dropped := m.takeEditorDroppedFiles(view); len(dropped) > 0 {
 				m.openPaths(dropped)
 			}
-			m.coverageGutterTooltip(c, view, t)
+			m.editorGutterTooltip(c, view, t)
 			m.usagePopupAnchor = editorCaretAnchor(view.Bounds(), t.state, m.editorFontSize())
-			if view.Focused() || view.FocusWithin() {
+			if t.editorFocused {
 				m.projectTreeFocus = false
 			}
 			m.positionDocumentation(t, view)
+			m.templateChooserDialog(c, p)
 			// A click in the unfocused pane takes the keyboard back to the main
 			// group, whose commands act on m.tabs; applyTab always runs before the
 			// next frame, so the queued swap lands between frames.
@@ -633,6 +720,17 @@ func (m *Model) editorArea(c *ui.Context, p *ui.Theme, g groupView) {
 				view.Focus()
 			case !g.focused && view.Focused():
 				m.focusQueued = true
+			}
+			if m.gutterGroupEnabled("run") {
+				m.dockerGutter(c, p, t, editorRow, view)
+				m.httpGutter(c, p, t, editorRow, view)
+				m.graphqlGutter(c, p, t, editorRow, view)
+				m.pluginEndpointGutter(c, p, t, editorRow, view)
+				m.springGutter(c, p, t, editorRow, view)
+			}
+			if markdownMode == markdownEditorPreview {
+				ui.Row(c).Width(1).Shrink(0).Background(p.Border)
+				m.markdownPreviewPage(c, p, t, "markdown:split:"+t.doc.Path())
 			}
 		})
 		if showBreadcrumbs && !top {
@@ -694,32 +792,60 @@ func (m *Model) runPanel(c *ui.Context, p *ui.Theme) {
 	if !m.run.visible {
 		return
 	}
-	col := ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Background(p.Surface).
+	col := ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Background(m.toolWindowBackground(p)).
 		BorderWidth(1, 0, 0, 0).BorderColor(p.Border)
 	col.Children(func() {
+		if m.run.viewChild != nil {
+			m.runViewedServicePanel(c, p)
+			return
+		}
 		if m.renderStackTraces(c, p) {
 			return
 		}
 		m.runHeader(c, p)
-		if m.run.err != "" {
+		m.runAgentTabs(c, p)
+		m.runChildTabs(c, p)
+		err := m.run.err
+		if agent := m.activeAgentRun(); agent != nil {
+			err = agent.err
+		}
+		if err != "" {
 			ui.Row(c).Height(24).Padding(0, 10).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, m.run.err).FontSize(12).TextColor(p.Warning).SingleLine().Ellipsis("…")
+				ui.Text(c, err).FontSize(12).TextColor(p.Warning).SingleLine().Ellipsis("…")
 			})
 		}
 		// The test results tree, above the console like upstream RunView's
 		// test tree: status mark, name and duration per node, and a failed
 		// node's details render under the tree when selected.
-		if tree := m.run.treeLines(); len(tree) > 0 {
+		activeChild := m.activeChild()
+		tree := m.run.treeLines()
+		selTest := m.run.selTest
+		var tests *adapter.TestResults
+		if m.activeAgentRun() != nil {
+			tree = nil
+			tests = nil
+		} else if activeChild != nil {
+			tree = childTreeLines(activeChild)
+			selTest = activeChild.selTest
+			tests = activeChild.tests
+		} else {
+			tests = m.run.tests
+		}
+		if len(tree) > 0 {
 			ui.Scroll(c).Height(150).Children(func() {
 				ui.Column(c).Padding(4, 10).Children(func() {
 					for i, line := range tree {
 						i, line := i, line
 						row := ui.Row(c.Key(fmt.Sprintf("testtree:%d", i))).Height(20).Padding(0, 4).Gap(6).AlignItems(ui.Center)
-						if line.id == m.run.selTest {
+						if line.id == selTest {
 							row.Background(p.SurfaceHover)
 						}
 						row.OnClick(func() {
-							m.run.selTest = line.id
+							if activeChild != nil {
+								activeChild.selTest = line.id
+							} else {
+								m.run.selTest = line.id
+							}
 							m.invalidate()
 						})
 						// A double click jumps to the test's source position,
@@ -733,7 +859,7 @@ func (m *Model) runPanel(c *ui.Context, p *ui.Theme) {
 					}
 				})
 			})
-			if node := m.run.tests.Get(m.run.selTest); node != nil && len(node.Output) > 0 {
+			if node := tests.Get(selTest); node != nil && len(node.Output) > 0 {
 				ui.Row(c).Padding(4, 10).Children(func() {
 					ui.Text(c, adapter.NodeOutputText(node)).FontSize(12).TextColor(p.TextMuted)
 				})
@@ -752,16 +878,26 @@ func (m *Model) runPanel(c *ui.Context, p *ui.Theme) {
 					})
 					return
 				}
-				if len(m.run.output) == 0 {
+				output := m.run.output
+				truncated := m.run.truncated
+				if activeChild != nil {
+					output = activeChild.output
+					truncated = activeChild.truncated
+				}
+				if agent := m.activeAgentRun(); agent != nil {
+					output = agent.output
+					truncated = agent.truncated
+				}
+				if len(output) == 0 {
 					ui.Text(c, "No output yet. Press Run to start.").
 						FontSize(12).TextColor(p.TextMuted)
 					return
 				}
-				if m.run.truncated {
+				if truncated {
 					ui.Text(c, "(Output truncated: earlier lines were omitted)").
 						FontSize(12).TextColor(p.TextMuted)
 				}
-				ui.Text(c, m.run.renderText()).FontSize(12).TextColor(p.Text)
+				m.renderRunOutput(c, p, output)
 			})
 		})
 	})
@@ -769,7 +905,7 @@ func (m *Model) runPanel(c *ui.Context, p *ui.Theme) {
 
 func (m *Model) buildPanel(c *ui.Context, p *ui.Theme) {
 	b := &m.build
-	col := ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Background(p.Surface).
+	col := ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Background(m.toolWindowBackground(p)).
 		BorderWidth(1, 0, 0, 0).BorderColor(p.Border)
 	col.Children(func() {
 		m.buildHeader(c, p)
@@ -797,7 +933,7 @@ func (m *Model) buildPanel(c *ui.Context, p *ui.Theme) {
 					ui.Text(c, "(Output truncated: earlier lines were omitted)").
 						FontSize(12).TextColor(p.TextMuted)
 				}
-				ui.Text(c, b.renderText()).FontSize(12).TextColor(p.Text)
+				m.renderRunOutput(c, p, b.output)
 			})
 		})
 	})
@@ -854,6 +990,10 @@ func (m *Model) buildSummaryText() string {
 }
 
 func (m *Model) runHeader(c *ui.Context, p *ui.Theme) {
+	if agent := m.activeAgentRun(); agent != nil {
+		m.runAgentHeader(c, p, agent)
+		return
+	}
 	ui.Row(c).Height(30).Padding(0, 8).Gap(8).AlignItems(ui.Center).
 		BorderWidth(0, 0, 1, 0).BorderColor(p.Border).Children(func() {
 		ui.Text(c, "Run").FontSize(12).Bold().TextColor(p.Text)
@@ -904,12 +1044,66 @@ func (p *RunPane) renderText() string {
 	return b.String()
 }
 
+// renderRunOutput draws console output through one tightly grouped RichText.
+// Compiler paths and stack frames jump to source, URLs use the system browser,
+// and large outputs without links stay one text node rather than thousands.
+func (m *Model) renderRunOutput(c *ui.Context, p *ui.Theme, output []outputLine) {
+	text := ui.RichText(c).Font(oiFontMono).FontSize(12).TextColor(p.Text).Selectable()
+	text.Children(func() {
+		var plain strings.Builder
+		flush := func() {
+			if plain.Len() == 0 {
+				return
+			}
+			ui.Text(c, plain.String()).FontSize(12)
+			plain.Reset()
+		}
+		for i, entry := range output {
+			line := entry.text
+			if line == "" {
+				line = " "
+			}
+			links := traceLinks(line)
+			if len(links) == 0 {
+				plain.WriteString(line)
+				if i+1 < len(output) {
+					plain.WriteByte('\n')
+				}
+				continue
+			}
+			pos := 0
+			for _, link := range links {
+				if link.start > pos {
+					plain.WriteString(line[pos:link.start])
+					flush()
+				}
+				label := line[link.start:link.end]
+				if link.url != "" {
+					ui.Link(c, label, link.url).FontSize(12)
+				} else {
+					link := link
+					ui.Text(c, label).FontSize(12).TextColor(p.Accent).
+						Cursor(ui.CursorPointer).OnClick(func() { m.openTraceLink(link, c) })
+				}
+				pos = link.end
+			}
+			if pos < len(line) {
+				plain.WriteString(line[pos:])
+			}
+			if i+1 < len(output) {
+				plain.WriteByte('\n')
+			}
+		}
+		flush()
+	})
+}
+
 // termPanel is the integrated terminal. With one group it shows that group's
 // tabs, scrollback and input line; a split shows two groups, side by side for
 // Split Right or stacked for Split Down, as OpenIDEA splits its terminal.
 func (m *Model) termPanel(c *ui.Context, p *ui.Theme) {
 	t := &m.term
-	col := ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Background(p.Surface).
+	col := ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Background(m.toolWindowBackground(p)).
 		BorderWidth(1, 0, 0, 0).BorderColor(p.Border)
 	// Find in Terminal, bounded to the focus: Cmd+F in the editor stays the
 	// editor's.
@@ -954,7 +1148,7 @@ func (m *Model) termPanel(c *ui.Context, p *ui.Theme) {
 			ui.Row(c).Height(30).Shrink(0).Padding(3, 8).Gap(6).AlignItems(ui.Center).
 				BorderWidth(0, 0, 1, 0).BorderColor(p.Border).Children(func() {
 				ui.Text(c, "Find").FontSize(12).TextColor(p.TextMuted)
-				in := ui.TextInput(c, &s.find).Grow(1)
+				in := ui.TextInput(c, &s.find).Grow(1).AutoFocus()
 				if in.Submitted() {
 					m.FindTermStep(1)
 				}
@@ -1031,17 +1225,56 @@ func (m *Model) termPaneBody(c *ui.Context, p *ui.Theme, g int) {
 				ui.Button(c, "+").OnClick(func() { m.OpenTermTabIn(g) })
 			}
 		})
-		// The scrollback is one text row per line, so find can mark the lines it
-		// matched and scroll the chosen one into view.
+		// The scrollback is one selectable text row per terminal line. Input is
+		// handled by the grid itself so navigation keys and full-screen programs
+		// share the same PTY path as typed text.
 		s := gr.tab()
 		scroll := ui.Scroll(c).Grow(1).MinHeight(0)
 		if s != nil {
 			scroll.TrackScroll(&s.scroll)
 		}
+		metrics := m.terminalMetrics()
+		if s != nil {
+			m.reconcileTerminalViewport(s, scroll.Bounds().W, scroll.Bounds().H, metrics)
+		}
 		scroll.Children(func() {
-			ui.Column(c).Padding(8, 10).Children(func() {
+			grid := ui.Column(c).Padding(terminalPadY, terminalPadX).
+				Bind(&gr.focus).Focusable().FocusRing(false).Selectable().
+				CopyData(terminalCopyData)
+			if s != nil {
+				grid.HandleInput(func(ev ui.InputEvent) bool {
+					return m.handleTerminalInput(g, s, ev, metrics.cellWidth, metrics.cellHeight)
+				})
+				caretRow, caretCol := 0, 0
+				if s.alternate {
+					caretRow, caretCol = s.screenRow, s.screenCol
+				} else if len(s.lines) > 0 {
+					caretRow = len(s.lines) - 1
+					caretCol = terminalTextCellWidth(s.lines[caretRow])
+				}
+				grid.TextCaret(ui.Rect{
+					X: terminalPadX + float32(caretCol)*metrics.cellWidth,
+					Y: terminalPadY + float32(caretRow)*metrics.cellHeight,
+					W: metrics.cellWidth, H: metrics.cellHeight,
+				})
+			}
+			if (t.active == g || len(t.groups) == 1) &&
+				(s == nil || !s.finding) {
+				grid.AutoFocus()
+			}
+			if s != nil {
+				m.reportTerminalFocus(s, grid.Focused())
+			}
+			cursorVisible := s != nil && s.alternate && !s.cursorHidden
+			if cursorVisible && m.terminalCursorBlink() {
+				cursorVisible = grid.Loop(
+					fmt.Sprintf("term-cursor:%d", s.channel),
+					terminalCursorBlink, ui.Linear,
+				) < 0.5
+			}
+			grid.Children(func() {
 				if s == nil || len(s.lines) == 0 {
-					hint := "The terminal's output appears here. Enter sends the line."
+					hint := "The terminal's output appears here."
 					if s == nil || (s.id == 0 && !s.starting) {
 						hint = "Press New to open a login shell."
 					}
@@ -1064,7 +1297,20 @@ func (m *Model) termPaneBody(c *ui.Context, p *ui.Theme, g int) {
 					if text == "" {
 						text = " "
 					}
-					row := ui.Text(c, text).FontSize(13).Font("monospace").TextColor(p.Text).
+					cursorCol := -1
+					if cursorVisible && i == s.screenRow {
+						cursorCol = s.screenCol
+					}
+					spans := terminalLineSpans(
+						text, s.hyperlinks, i, m.terminalHighlightHyperlinks(),
+						p.Text, p.Accent, p.Accent, p.Background, metrics.spacing,
+						metrics.font, cursorCol, m.terminalCursorShape(), cursorCol >= 0,
+					)
+					row := ui.RichText(c, spans...).
+						Font(metrics.font.Family).FontSize(metrics.font.Size).
+						LetterSpacing(metrics.spacing).SingleLine().
+						FixedLineHeight(metrics.cellHeight).
+						Height(metrics.cellHeight).TextColor(p.Text).
 						Key(fmt.Sprintf("termLine:%d:%d", s.channel, i))
 					if hits[i] {
 						if i == s.findAt {
@@ -1079,17 +1325,10 @@ func (m *Model) termPaneBody(c *ui.Context, p *ui.Theme, g int) {
 				}
 				s.reveal = false
 			})
+			if s != nil {
+				m.updateTerminalCopyOnSelection(s, grid.SelectedTexts())
+			}
 		})
-		if t.active == g || len(t.groups) == 1 {
-			ui.Row(c).Height(30).Shrink(0).Padding(3, 8).Gap(6).AlignItems(ui.Center).
-				BorderWidth(1, 0, 0, 0).BorderColor(p.Border).Children(func() {
-				ui.Text(c, "❯").FontSize(12).TextColor(p.Accent)
-				in := ui.TextInput(c, &t.input).Grow(1)
-				if in.Submitted() {
-					m.SubmitTermInput()
-				}
-			})
-		}
 	})
 }
 
@@ -1132,7 +1371,10 @@ func (m *Model) debugFrames(c *ui.Context, p *ui.Theme) {
 						m.SelectFrame(i)
 						m.DebugJumpToSource()
 					}
-					if menu.Item("Reset Frame").Chosen() {
+					item := menu.Item("Reset Frame")
+					reason := m.debugResetFrameDisabledReasonAt(i)
+					item.Disabled(reason != "")
+					if reason == "" && item.Chosen() {
 						d.selFrame = i
 						m.DebugResetFrame()
 					}
@@ -1190,8 +1432,8 @@ func (m *Model) debugVars(c *ui.Context, p *ui.Theme) {
 				})
 				return
 			}
-			for i, v := range d.vars {
-				i, v := i, v
+			for _, i := range sortedDebugVariableIndexes(d.vars, m.prefs.Debugger.SortValues) {
+				i, v := i, d.vars[i]
 				row := ui.Row(c.Key(fmt.Sprintf("dvar:%d", i))).Height(24).Padding(0, 8).
 					Gap(6).AlignItems(ui.Center)
 				if i == d.selVar {
@@ -1296,11 +1538,13 @@ func (m *Model) toolPanel(c *ui.Context, p *ui.Theme, name string) {
 		m.usagesPanel(c, p)
 	case "services":
 		m.servicesPanel(c, p)
+	case "graphql":
+		m.graphqlPanel(c, p)
 	}
 }
 
 func (m *Model) searchPanel(c *ui.Context, p *ui.Theme) {
-	col := ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Background(p.Surface).
+	col := ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Background(m.toolWindowBackground(p)).
 		BorderWidth(1, 0, 0, 0).BorderColor(p.Border)
 	col.Children(func() {
 		ui.Scroll(c).Grow(1).Children(func() { m.searchRows(c, p) })
@@ -1308,7 +1552,7 @@ func (m *Model) searchPanel(c *ui.Context, p *ui.Theme) {
 }
 
 func (m *Model) usagesPanel(c *ui.Context, p *ui.Theme) {
-	col := ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Background(p.Surface).
+	col := ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Background(m.toolWindowBackground(p)).
 		BorderWidth(1, 0, 0, 0).BorderColor(p.Border).
 		Focusable().AutoFocus().HandleInput(m.handleUsagesInput)
 	col.Children(func() {

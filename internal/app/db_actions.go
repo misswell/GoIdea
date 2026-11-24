@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -31,6 +32,21 @@ func init() {
 	}
 	projectOpen := func(m *Model) bool { return m.Root() != "" }
 	databaseOpen := func(m *Model) bool { return m.db != nil && m.db.open }
+	tableEditorOpen := func(m *Model) bool { return m.dbTable != nil }
+	tableEditorEditable := func(m *Model) bool {
+		editable, _ := dbTableEditability(m.dbTable)
+		return editable
+	}
+	tableEditorDirty := func(m *Model) bool {
+		return dbTableHasChanges(m.dbTable) && !m.dbTable.submitting
+	}
+	selectedEditableCell := func(m *Model) bool {
+		s := m.dbTable
+		return s != nil && dbTableEditableCell(s, s.selectedRow, s.selectedCol)
+	}
+	valueEditorOpen := func(m *Model) bool {
+		return m.dbTable != nil && m.dbTable.valueOpen
+	}
 	specs := []spec{
 		{"db.pluginConnect", "Connect Plugin Data Source", "database plugin source connect", func(m *Model, a any) { m.DBConnectAction(a) }, projectOpen, nil, nil},
 		{"db.showToolWindow", "Database", "data sources sql tables", func(m *Model, _ any) { m.OpenDatabase() }, projectOpen, nil, nil},
@@ -38,9 +54,11 @@ func init() {
 		{"db.openConsole", "Query Console", "database sql console", func(m *Model, a any) { m.DBOpenConsole(a) }, projectOpen, nil, nil},
 		{"db.execute", "Execute SQL Statement", "run query statement", func(m *Model, _ any) { m.DBExecuteAction() }, projectOpen, nil, nil},
 		{"db.executeScript", "Execute SQL Script", "run all whole file statements", func(m *Model, _ any) { m.DBExecuteScriptAction() }, projectOpen, nil, nil},
-		{"db.goToColumn", "Go to Column", "table editor file structure columns", func(m *Model, _ any) { m.DBGoToColumn() }, projectOpen, nil, nil},
-		{"db.submitChanges", "Submit", "table editor apply changes commit", func(m *Model, _ any) { m.DBSubmitChanges() }, projectOpen, nil, nil},
-		{"db.revertChanges", "Revert", "table editor discard changes undo", func(m *Model, _ any) { m.DBRevertChanges() }, projectOpen, nil, nil},
+		{"db.goToColumn", "Go to Column", "table editor file structure columns", func(m *Model, _ any) { m.DBGoToColumn() }, tableEditorOpen, nil, nil},
+		{"db.submitChanges", "Submit", "table editor apply changes commit", func(m *Model, _ any) { m.DBSubmitChanges() }, tableEditorOpen, func(m *Model) bool {
+			return tableEditorEditable(m) && tableEditorDirty(m)
+		}, nil},
+		{"db.revertChanges", "Revert", "table editor discard changes undo", func(m *Model, _ any) { m.DBRevertChanges() }, tableEditorOpen, tableEditorDirty, nil},
 		{"db.explainPlan", "Explain Plan", "query plan explain sql", func(m *Model, _ any) { m.DBExplainAction() }, projectOpen, nil, nil},
 		{"db.queryHistory", "Browse Query History", "database sql history", func(m *Model, _ any) { m.DBHistoryAction() }, projectOpen, nil, nil},
 		{"db.properties", "Data Source Properties…", "connection settings", func(m *Model, a any) { m.DBProperties(a) }, projectOpen, nil, nil},
@@ -74,14 +92,31 @@ func init() {
 		{"db.closeOtherResultTabs", "Close Other Result Tabs", "close others", func(m *Model, a any) { m.DBCloseOtherResultsAction(a) }, databaseOpen, nil, nil},
 		{"db.closeAllResultTabs", "Close All Result Tabs", "close all", func(m *Model, _ any) { m.DBCloseAllResultsAction() }, databaseOpen, nil, nil},
 		{"db.renameResultTab", "Rename Result Tab…", "rename result", func(m *Model, a any) { m.DBRenameResultAction(a) }, databaseOpen, nil, nil},
+		{"db.exportData", "Export Data…", "csv tsv json sql markdown clipboard file", func(m *Model, a any) { m.DBExportAction(a) }, databaseOpen, dbExportResultEnabled, nil},
 		{"db.nextResultTab", "Select Next Result Tab", "next result", func(m *Model, _ any) { m.StepDBResult(1) }, databaseOpen, nil, nil},
 		{"db.previousResultTab", "Select Previous Result Tab", "previous result", func(m *Model, _ any) { m.StepDBResult(-1) }, databaseOpen, nil, nil},
-		{"db.toggleBooleanCell", "Toggle Boolean Value", "table editor boolean", func(m *Model, _ any) { m.DBToggleBooleanCell() }, databaseOpen, nil, nil},
-		{"db.setCellNull", "Set NULL", "table editor null", func(m *Model, _ any) { m.DBSetCellNull() }, databaseOpen, nil, nil},
-		{"db.setCellDefault", "Set DEFAULT", "table editor default", func(m *Model, _ any) { m.DBSetCellDefault() }, databaseOpen, nil, nil},
-		{"db.findInValue", "Find in Value…", "value editor text search", func(m *Model, _ any) { m.DBFindInValue() }, databaseOpen, nil, nil},
-		{"db.reformatValue", "Reformat Value", "json format pretty", func(m *Model, _ any) { m.DBReformatValue() }, databaseOpen, nil, nil},
-		{"db.openValueWindow", "Open Value in Editor", "value editor window", func(m *Model, _ any) { m.DBOpenValueWindow() }, databaseOpen, nil, nil},
+		{"db.toggleBooleanCell", "Toggle Boolean Value", "table editor boolean", func(m *Model, _ any) { m.DBToggleBooleanCell() }, tableEditorOpen, func(m *Model) bool {
+			return selectedEditableCell(m) &&
+				dbIsBooleanType(dbTableColumnType(m.dbTable, m.dbTable.selectedCol), m.dbTable.driver)
+		}, nil},
+		{"db.setCellNull", "Set NULL", "table editor null", func(m *Model, _ any) { m.DBSetCellNull() }, tableEditorOpen, func(m *Model) bool {
+			return selectedEditableCell(m) && dbTableColumnNullable(m.dbTable, m.dbTable.selectedCol)
+		}, nil},
+		{"db.setCellDefault", "Set DEFAULT", "table editor default", func(m *Model, _ any) { m.DBSetCellDefault() }, tableEditorOpen, func(m *Model) bool {
+			if !selectedEditableCell(m) {
+				return false
+			}
+			if _, inserted := dbTableInserted(m.dbTable, m.dbTable.selectedRow); inserted {
+				return true
+			}
+			_, ok := dbTableDefaultValue(m.dbTable, m.dbTable.selectedCol)
+			return ok
+		}, nil},
+		{"db.findInValue", "Find in Value…", "value editor text search", func(m *Model, _ any) { m.DBFindInValue() }, valueEditorOpen, nil, nil},
+		{"db.reformatValue", "Reformat Value", "json format pretty", func(m *Model, _ any) { m.DBReformatValue() }, valueEditorOpen, func(m *Model) bool {
+			return m.dbTable != nil && !m.dbTable.valueRO
+		}, nil},
+		{"db.openValueWindow", "Open Value in Editor", "value editor window", func(m *Model, _ any) { m.DBOpenValueWindow() }, tableEditorOpen, nil, nil},
 	}
 	for _, s := range specs {
 		s := s
@@ -431,12 +466,12 @@ func (m *Model) ExecuteDBSQLTab(tab *Tab, whole bool) {
 			title := filepath.Base(path)
 			switch {
 			case err != nil:
-				v.addDBResult(title, nil, "Execution failed: "+err.Error())
+				v.addDBResult(title, target, nil, "Execution failed: "+err.Error())
 				v.outLog = append(v.outLog, "Execution failed: "+err.Error())
 			case len(statements) == 0:
-				v.addDBResult(title, nil, "There is no statement to execute")
+				v.addDBResult(title, target, nil, "There is no statement to execute")
 			default:
-				v.addDBResult(title, outcomes, "")
+				v.addDBResult(title, target, outcomes, "")
 				for _, outcome := range outcomes {
 					v.outLog = append(v.outLog, oneLine(outcome.Statement.Text)+" · "+dbOutcomeSummary(outcome))
 					if outcome.Error != "" {
@@ -975,65 +1010,36 @@ func (m *Model) dbTableActionTarget() (dbTableSheet, dbActionTarget, bool) {
 
 func (m *Model) dbSetSelectedCell(value *string) {
 	s := m.dbTable
-	if s == nil || s.selectedRow < 0 || s.selectedRow >= len(s.page.Result.Rows) || s.selectedCol < 0 {
+	if s == nil || !dbTableEditableCell(s, s.selectedRow, s.selectedCol) {
 		return
 	}
-	key := fmt.Sprintf("%d:%d", s.selectedRow, s.selectedCol)
-	s.pending[key] = value
+	dbTableSetCellValue(s, s.selectedRow, s.selectedCol, value)
 	m.invalidate()
 }
 
 func (m *Model) DBSetCellNull() {
-	m.dbSetSelectedCell(nil)
+	if s := m.dbTable; s != nil {
+		dbTableSetCellNull(s)
+		m.invalidate()
+	}
 }
 
 func (m *Model) DBSetCellDefault() {
-	marker := "DEFAULT"
-	m.dbSetSelectedCell(&marker)
+	if s := m.dbTable; s != nil {
+		dbTableSetCellDefault(s)
+		m.invalidate()
+	}
 }
 
 func (m *Model) DBToggleBooleanCell() {
-	s := m.dbTable
-	if s == nil || s.selectedRow < 0 || s.selectedRow >= len(s.page.Result.Rows) ||
-		s.selectedCol < 0 || s.selectedCol >= len(s.page.Result.Columns) {
-		return
+	if s := m.dbTable; s != nil {
+		dbTableToggleBoolean(s)
+		m.invalidate()
 	}
-	col := s.page.Result.Columns[s.selectedCol]
-	kind := strings.ToLower(col.TypeName)
-	if !strings.Contains(kind, "bool") {
-		return
-	}
-	var next string
-	if s.selectedCol < len(s.page.Result.Rows[s.selectedRow]) {
-		cell := s.page.Result.Rows[s.selectedRow][s.selectedCol]
-		if cell != nil && (strings.EqualFold(*cell, "true") || *cell == "1") {
-			next = "false"
-		} else {
-			next = "true"
-		}
-	} else {
-		next = "true"
-	}
-	m.dbSetSelectedCell(&next)
 }
 
 func (m *Model) dbSelectedValue() (string, bool) {
-	s := m.dbTable
-	if s == nil || s.selectedRow < 0 || s.selectedRow >= len(s.page.Result.Rows) || s.selectedCol < 0 {
-		return "", false
-	}
-	key := fmt.Sprintf("%d:%d", s.selectedRow, s.selectedCol)
-	if value, ok := s.pending[key]; ok && value != nil {
-		return *value, true
-	}
-	if s.selectedCol >= len(s.page.Result.Rows[s.selectedRow]) {
-		return "", false
-	}
-	value := s.page.Result.Rows[s.selectedRow][s.selectedCol]
-	if value == nil {
-		return "", false
-	}
-	return *value, true
+	return dbTableSelectedValue(m.dbTable)
 }
 
 func (m *Model) DBOpenValueWindow() {
@@ -1045,6 +1051,11 @@ func (m *Model) DBOpenValueWindow() {
 	s.valueText = text
 	s.valueOpen = true
 	s.valueFind = ""
+	editable, _ := dbTableEditability(s)
+	s.valueRO = !editable || !dbTableEditableCell(s, s.selectedRow, s.selectedCol)
+	if s.editing {
+		dbTableCancelCellEdit(s)
+	}
 	m.invalidate()
 }
 
@@ -1074,8 +1085,12 @@ func (m *Model) DBReformatValue() {
 	}
 	if s.valueOpen {
 		s.valueText = text
+		m.invalidate()
+		return
 	}
-	m.dbSetSelectedCell(&text)
+	if !s.valueRO && dbTableEditableCell(s, s.selectedRow, s.selectedCol) {
+		dbTableSetCellValue(s, s.selectedRow, s.selectedCol, &text)
+	}
 }
 
 func (m *Model) DBGoToColumn() {
@@ -1092,6 +1107,15 @@ func (m *Model) DBSubmitChanges() {
 	s := m.dbTable
 	if s == nil || s.submitting {
 		return
+	}
+	editable, reason := dbTableEditability(s)
+	if !editable {
+		s.err = reason
+		m.invalidate()
+		return
+	}
+	if s.editing {
+		dbTableCommitCellEdit(s)
 	}
 	edits, err := dbBuildRowEdits(s)
 	if err != nil {
@@ -1116,9 +1140,7 @@ func (m *Model) DBSubmitChanges() {
 			if err != nil {
 				s.err = "Could not submit changes: " + err.Error()
 			} else {
-				s.pending = map[string]*string{}
-				s.deletes = map[int]bool{}
-				s.inserts = nil
+				dbTableDiscardChanges(s)
 				if changed != nil {
 					if m.db != nil {
 						m.db.outLog = append(m.db.outLog, fmt.Sprintf("%s changed", count(int(*changed), "row", "rows")))
@@ -1136,16 +1158,16 @@ func (m *Model) DBRevertChanges() {
 	if s == nil {
 		return
 	}
-	s.pending = map[string]*string{}
-	s.deletes = map[int]bool{}
-	s.inserts = nil
-	s.err = ""
+	dbTableDiscardChanges(s)
 	m.invalidate()
 }
 
 func dbBuildRowEdits(s *dbTableSheet) ([]openidea.DBRowEdit, error) {
 	if s == nil || len(s.page.Result.Columns) == 0 {
 		return nil, nil
+	}
+	if editable, reason := dbTableEditability(s); !editable && dbTableHasChanges(s) {
+		return nil, fmt.Errorf("%s", reason)
 	}
 	columns := make([]string, len(s.page.Result.Columns))
 	for i, column := range s.page.Result.Columns {
@@ -1184,13 +1206,8 @@ func dbBuildRowEdits(s *dbTableSheet) ([]openidea.DBRowEdit, error) {
 	}
 	byRow := map[int]map[string]*string{}
 	for key, value := range s.pending {
-		parts := strings.SplitN(key, ":", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		row, err := strconv.Atoi(parts[0])
-		col, err2 := strconv.Atoi(parts[1])
-		if err != nil || err2 != nil || col < 0 || col >= len(columns) {
+		row, col, ok := dbTableParseCellKey(key)
+		if !ok || col < 0 || col >= len(columns) {
 			continue
 		}
 		if byRow[row] == nil {
@@ -1198,8 +1215,14 @@ func dbBuildRowEdits(s *dbTableSheet) ([]openidea.DBRowEdit, error) {
 		}
 		byRow[row][columns[col]] = value
 	}
+	rows := make([]int, 0, len(byRow))
+	for row := range byRow {
+		rows = append(rows, row)
+	}
+	sort.Ints(rows)
 	out := []openidea.DBRowEdit{}
-	for row, values := range byRow {
+	for _, row := range rows {
+		values := byRow[row]
 		if s.deletes[row] || len(values) == 0 {
 			continue
 		}
@@ -1208,12 +1231,19 @@ func dbBuildRowEdits(s *dbTableSheet) ([]openidea.DBRowEdit, error) {
 			return nil, err
 		}
 		editValues := make([]openidea.DBCellValue, 0, len(values))
-		for column, value := range values {
-			editValues = append(editValues, openidea.DBCellValue{Column: column, Value: value})
+		for _, column := range columns {
+			if value, ok := values[column]; ok {
+				editValues = append(editValues, openidea.DBCellValue{Column: column, Value: value})
+			}
 		}
 		out = append(out, openidea.DBRowEdit{Kind: "update", Key: key, Values: editValues})
 	}
+	deletes := make([]int, 0, len(s.deletes))
 	for row := range s.deletes {
+		deletes = append(deletes, row)
+	}
+	sort.Ints(deletes)
+	for _, row := range deletes {
 		key, err := keyOf(row)
 		if err != nil {
 			return nil, err
@@ -1222,8 +1252,10 @@ func dbBuildRowEdits(s *dbTableSheet) ([]openidea.DBRowEdit, error) {
 	}
 	for _, values := range s.inserts {
 		editValues := make([]openidea.DBCellValue, 0, len(values))
-		for column, value := range values {
-			editValues = append(editValues, openidea.DBCellValue{Column: column, Value: value})
+		for _, column := range columns {
+			if value, ok := values[column]; ok {
+				editValues = append(editValues, openidea.DBCellValue{Column: column, Value: value})
+			}
 		}
 		out = append(out, openidea.DBRowEdit{Kind: "insert", Values: editValues})
 	}
@@ -1889,7 +1921,7 @@ func (m *Model) dbExecuteActionSQL(prompt *dbActionPrompt, texts []string) {
 					return
 				}
 			}
-			m.db.addDBResult(prompt.title, outcomes, "")
+			m.db.addDBResult(prompt.title, source, outcomes, "")
 			m.db.actionPrompt = nil
 			m.RefreshDBSources()
 			if schema != "" {
@@ -2025,8 +2057,11 @@ func (m *Model) dbValueEditorDialog(c *ui.Context, p *ui.Theme) {
 				if column != "" {
 					ui.Text(c, column).FontSize(12).TextColor(p.TextMuted).SingleLine()
 				}
+				if s.valueRO {
+					ui.Text(c, "Read-only").FontSize(12).TextColor(p.TextMuted).SingleLine()
+				}
 				ui.Spacer(c)
-				ui.Button(c, "Reformat").OnClick(func() { m.DBReformatValue() })
+				ui.Button(c, "Reformat").Disabled(s.valueRO).OnClick(func() { m.DBReformatValue() })
 				ui.Button(c, "Copy").OnClick(func() { mygo.Clipboard.WriteText(s.valueText) })
 			})
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
@@ -2037,10 +2072,15 @@ func (m *Model) dbValueEditorDialog(c *ui.Context, p *ui.Theme) {
 					ui.Text(c, fmt.Sprintf("%d matches", count)).FontSize(12).TextColor(p.TextMuted).SingleLine()
 				}
 			})
-			ui.TextArea(c, &s.valueText).Grow(1).MinHeight(0).Font("monospace").FontSize(12)
+			ui.TextArea(c, &s.valueText).Grow(1).MinHeight(0).Font("monospace").FontSize(12).
+				ReadOnly(s.valueRO)
 			ui.Row(c).Gap(8).Children(func() {
 				ui.Spacer(c)
 				ui.Button(c, "Cancel").OnClick(func() { s.valueOpen = false; m.invalidate() })
+				if s.valueRO {
+					ui.Button(c, "Close").OnClick(func() { s.valueOpen = false; m.invalidate() })
+					return
+				}
 				ui.Button(c, "Apply").OnClick(func() {
 					value := s.valueText
 					m.dbSetSelectedCell(&value)

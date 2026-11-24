@@ -1473,6 +1473,9 @@ func clampSel(sel, n int) int {
 // bookmarkMarks is a file's bookmarks as gutter dots. A line that already has a
 // breakpoint or Git mark keeps that color, so the gutter shows one dot per line.
 func (m *Model) bookmarkMarks(path string, taken map[int]bool) []editor.GutterMark {
+	if !m.gutterGroupEnabled("bookmarks") {
+		return nil
+	}
 	var marks []editor.GutterMark
 	for _, b := range m.bookmarks {
 		if b.Path != path || taken[b.Line] {

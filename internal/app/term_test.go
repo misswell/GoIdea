@@ -76,6 +76,13 @@ func TestTermSplitKeepsBothGroupsAndMergesBack(t *testing.T) {
 
 func TestTermChunksLandInTheirOwnTab(t *testing.T) {
 	var m Model
+	m.nativeSettings.pages = map[string]nativeSettingsPageState{
+		settingsPageTerminal: {
+			loaded:  true,
+			applied: map[string]any{"terminal.closeOnExit": false},
+			draft:   map[string]any{"terminal.closeOnExit": false},
+		},
+	}
 	m.term.add(0).channel = 3
 	m.term.add(0).channel = 4
 	m.acceptTermChunk(4, json.RawMessage(`"hi"`))
@@ -92,6 +99,17 @@ func TestTermChunksLandInTheirOwnTab(t *testing.T) {
 	s := &m.term.groups[0].tabs[1]
 	if s.id != 0 || s.pid != nil || !s.ended || s.exitCode == nil || *s.exitCode != 3 {
 		t.Fatalf("exit did not land: %+v", s)
+	}
+}
+
+func TestTermCloseOnExitDropsTheSessionTab(t *testing.T) {
+	var m Model
+	m.term.add(0).channel = 8
+	m.term.groups[0].tabs[0].id = 13
+	code := int32(0)
+	m.acceptTermExit(13, &code)
+	if m.term.total() != 0 {
+		t.Fatalf("close-on-exit left the terminal tab open: %+v", m.term.groups)
 	}
 }
 

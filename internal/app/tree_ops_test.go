@@ -70,6 +70,14 @@ func TestTreeMenuFollowsTheSelection(t *testing.T) {
 	if !menuItem(t, items, "Send to Agent").Enabled {
 		t.Fatal("a project file cannot be sent to an Agent")
 	}
+
+	html := treeTarget{path: "/p/web/index.html"}
+	items = treeMenuItems(html, false)
+	browser := menuItem(t, menuItem(t, items, "Open In").Items, "Browser")
+	if !menuItem(t, browser.Items, "Default Browser").Enabled ||
+		!menuItem(t, browser.Items, "Built-in Preview").Enabled {
+		t.Fatalf("HTML Open In›Browser = %+v", browser.Items)
+	}
 }
 
 func TestTreeMenuUsesTheMatchingComparisonAction(t *testing.T) {
@@ -94,8 +102,9 @@ func TestTreeMenuUsesTheMatchingComparisonAction(t *testing.T) {
 	if got := menuItem(t, items, "Compare Files"); !got.Enabled {
 		t.Fatalf("Compare Files is disabled: %+v", items)
 	}
-	if strings.Contains(strings.Join(treeMenuLabels(items), "|"), "Compare With…") {
-		t.Fatalf("two-file menu also shows Compare With…: %v", treeMenuLabels(items))
+	labels := strings.Join(treeMenuLabels(items), "|")
+	if strings.Contains(labels, "Compare With…") || strings.Contains(labels, "Compare with Clipboard") {
+		t.Fatalf("two-file menu also shows single-file comparison actions: %v", treeMenuLabels(items))
 	}
 
 	directories := []treeTarget{{path: left, dir: true}, {path: right, dir: true}}
@@ -108,13 +117,17 @@ func TestTreeMenuUsesTheMatchingComparisonAction(t *testing.T) {
 	if got := menuItem(t, items, "Compare With…"); !got.Enabled {
 		t.Fatalf("single-file comparison is disabled: %+v", items)
 	}
+	if got := menuItem(t, items, "Compare with Clipboard"); !got.Enabled {
+		t.Fatalf("single-file clipboard comparison is disabled: %+v", items)
+	}
 
 	mixed := []treeTarget{{path: first}, {path: right, dir: true}}
 	items = treeMenuItems(mixed[0], false, mixed...)
-	labels := strings.Join(treeMenuLabels(items), "|")
+	labels = strings.Join(treeMenuLabels(items), "|")
 	if strings.Contains(labels, "Compare Files") ||
 		strings.Contains(labels, "Compare Directories") ||
-		strings.Contains(labels, "Compare With…") {
+		strings.Contains(labels, "Compare With…") ||
+		strings.Contains(labels, "Compare with Clipboard") {
 		t.Fatalf("mixed selection received a comparison action: %v", labels)
 	}
 }
@@ -150,6 +163,21 @@ func TestTreeCompareFilesDispatchesBothSelectedPaths(t *testing.T) {
 	}
 	if m.diff == nil || m.diff.leftPath != realPath(first) || m.diff.rightPath != realPath(second) {
 		t.Fatalf("Compare Files dispatch = %+v", m.diff)
+	}
+}
+
+func TestTreeCompareWithDispatchesSingleDirectory(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "left")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	m := &Model{}
+	m.setRoot(root)
+	m.runTreeAct(nil, treeMenuItem{Act: treeActCompareWith}, treeTarget{path: dir, dir: true})
+	if m.dirCompare == nil || !m.dirCompare.open || !m.dirCompare.asking ||
+		m.dirCompare.left != realPath(dir) {
+		t.Fatalf("Compare With dispatch = %+v", m.dirCompare)
 	}
 }
 
@@ -196,6 +224,14 @@ func TestTreeGitSubmenuFollowsTheSelection(t *testing.T) {
 	if !menuItem(t, items, "Branches…").Enabled {
 		t.Fatal("the branches popup is disabled")
 	}
+	for _, label := range []string{
+		"Compare with Branch or Revision…", "Checkout Tag or Revision…",
+		"Worktrees…", "New Worktree…", "Manage Remotes…", "Resolve Conflicts…",
+	} {
+		if !menuItem(t, items, label).Enabled {
+			t.Fatalf("%s is disabled for a repository", label)
+		}
+	}
 
 	file := treeTarget{path: "/p/src/A.java", git: true, kind: "modified", rollback: true}
 	items = menuItem(t, treeMenuItems(file, false), "Git").Items
@@ -210,6 +246,11 @@ func TestTreeGitSubmenuFollowsTheSelection(t *testing.T) {
 	}
 	if !menuItem(t, items, "Rollback…").Enabled {
 		t.Fatal("a working-tree change cannot be rolled back")
+	}
+	if !menuItem(t, items, "Compare with Revision…").Enabled ||
+		!menuItem(t, items, "Show Current Revision").Enabled ||
+		!menuItem(t, items, "Show History for Selection").Enabled {
+		t.Fatal("a file is missing its revision and selection history actions")
 	}
 	untracked := treeTarget{path: "/p/src/New.java", git: true, kind: "untracked"}
 	items = menuItem(t, treeMenuItems(untracked, false), "Git").Items
@@ -271,12 +312,17 @@ func TestTreeDeleteUsesSelectionAndCreatesUndoRecord(t *testing.T) {
 			rows: []*treeNode{{path: first}, {path: second}},
 		},
 		invokeHook: func(_ context.Context, command string, input any) (json.RawMessage, error) {
-			if command != "fs_delete" {
+			switch command {
+			case "fs_delete":
+				args, _ := input.(map[string]any)
+				deleted = append(deleted, args["path"].(string))
+				return json.RawMessage(`null`), nil
+			case "vcs_status":
+				return json.RawMessage(`[]`), nil
+			default:
 				t.Fatalf("unexpected RPC %s", command)
 			}
-			args, _ := input.(map[string]any)
-			deleted = append(deleted, args["path"].(string))
-			return json.RawMessage(`null`), nil
+			return nil, nil
 		},
 		postHook: func(fn func()) {
 			fn()
@@ -436,10 +482,15 @@ func TestTreeSafeDeleteOffDeletesWithoutOpeningDocuments(t *testing.T) {
 		prefs: Preferences{ProjectTree: ProjectTreePrefs{SafeDelete: boolPointer(false)}},
 		tree:  &Tree{sel: path, sels: map[string]bool{path: true}},
 		invokeHook: func(_ context.Context, command string, _ any) (json.RawMessage, error) {
-			if command != "fs_delete" {
+			switch command {
+			case "fs_delete":
+				return json.RawMessage(`null`), nil
+			case "vcs_status":
+				return json.RawMessage(`[]`), nil
+			default:
 				t.Errorf("safe delete off called %s", command)
 			}
-			return json.RawMessage(`null`), nil
+			return nil, nil
 		},
 		postHook: func(fn func()) {
 			fn()

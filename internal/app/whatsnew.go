@@ -77,7 +77,7 @@ func (m *Model) newWhatsNewTab(version, notes string) *Tab {
 	doc := docbridge.Virtual("What's New", "")
 	t := &Tab{
 		doc:         doc,
-		state:       &editor.State{Buffer: doc.Buffer(), LineHeight: 1.65, Bindings: intellijEditorBindings(), ReadOnly: true},
+		state:       &editor.State{Buffer: doc.Buffer(), LineHeight: 1.65, Bindings: m.editorBindings(), ReadOnly: true},
 		kind:        tabKindWhatsNew,
 		pageVersion: version,
 		pageNotes:   notes,

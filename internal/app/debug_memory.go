@@ -51,6 +51,13 @@ func (m *Model) refreshDebugMemory() {
 		return
 	}
 	session := d.session
+	if !m.debugSessionSupports(session, func(caps openidea.DebugCapabilities) bool {
+		return caps.JVMMemory
+	}) {
+		d.memory.err = "JVM memory is unavailable for this debugger"
+		m.invalidate()
+		return
+	}
 	d.memory.loading = true
 	d.memory.err = ""
 	m.invalidate()
@@ -63,28 +70,31 @@ func (m *Model) refreshDebugMemory() {
 			err = json.Unmarshal(raw, &result)
 		}
 		m.post(func() {
-			if m.debug.session != session {
-				return
-			}
-			v := &m.debug.memory
-			v.loading = false
-			v.loaded = true
-			switch {
-			case err != nil:
-				v.err = err.Error()
-			case result.Status == "ready":
-				v.snapshot = result.Snapshot
-			case result.CanCountWhenPaused:
-				v.err = "Pause the program and refresh to count objects."
-			case result.Reason.Kind == "unsafeWhileSuspended":
-				v.err = "Resume the program and refresh to capture JVM memory."
-			case result.Reason.Kind == "programExited":
-				v.err = "The program exited before the snapshot completed."
-			case result.Reason.Kind == "timedOut":
-				v.err = "The JVM memory request timed out."
-			default:
-				v.err = "JVM memory is unavailable for this session."
-			}
+			m.updateDebugSession(session, func(state *debugSessionState) {
+				if state.session != session || state.ended {
+					return
+				}
+				v := &state.memory
+				v.loading = false
+				v.loaded = true
+				switch {
+				case err != nil:
+					v.err = err.Error()
+				case result.Status == "ready":
+					v.snapshot = result.Snapshot
+					v.err = ""
+				case result.CanCountWhenPaused:
+					v.err = "Pause the program and refresh to count objects."
+				case result.Reason.Kind == "unsafeWhileSuspended":
+					v.err = "Resume the program and refresh to capture JVM memory."
+				case result.Reason.Kind == "programExited":
+					v.err = "The program exited before the snapshot completed."
+				case result.Reason.Kind == "timedOut":
+					v.err = "The JVM memory request timed out."
+				default:
+					v.err = "JVM memory is unavailable for this session."
+				}
+			})
 			m.invalidate()
 		})
 	}()
@@ -103,6 +113,13 @@ func (m *Model) DebugShowMemoryInstances() {
 		m.invalidate()
 		return
 	}
+	if !m.debugSessionSupports(m.debug.session, func(caps openidea.DebugCapabilities) bool {
+		return caps.JVMInstances
+	}) {
+		m.debug.err = "Object inspection is unavailable for this debugger"
+		m.invalidate()
+		return
+	}
 	m.showDebugMemoryInstances(name)
 }
 
@@ -111,6 +128,13 @@ func (m *Model) DebugShowMemoryInstances() {
 func (m *Model) DebugShowMemoryReferrers() {
 	inspection := m.debug.memory.inspection
 	if inspection == nil || len(inspection.instances) == 0 || !m.debug.paused {
+		return
+	}
+	if !m.debugSessionSupports(inspection.session, func(caps openidea.DebugCapabilities) bool {
+		return caps.JVMInstances
+	}) {
+		m.debug.err = "Object inspection is unavailable for this debugger"
+		m.invalidate()
 		return
 	}
 	ref := inspection.lead
@@ -140,11 +164,13 @@ func (m *Model) DebugCloseMemoryInstances() {
 // It mirrors OpenIDEA's jumpToClass: query the outer class name, require the
 // package-qualified container, and reveal the declaration's exact position.
 func (m *Model) DebugMemoryJumpToSource(className string) {
+	session := m.debug.session
 	if className == "" {
 		className = m.debug.memory.selected
 	}
 	if className == "" && m.debug.memory.inspection != nil {
 		className = m.debug.memory.inspection.className
+		session = m.debug.memory.inspection.session
 	}
 	if className == "" {
 		return
@@ -173,6 +199,9 @@ func (m *Model) DebugMemoryJumpToSource(className string) {
 			err = json.Unmarshal(raw, &symbols)
 		}
 		m.post(func() {
+			if session != 0 && m.debug.session != session {
+				return
+			}
 			if err != nil {
 				m.status = "Could not find the source of " + className + "."
 				m.invalidate()
@@ -242,13 +271,18 @@ func (m *Model) debugMemory(c *ui.Context, p *ui.Theme, oi oiColors) {
 	ui.Column(c).Grow(1).MinHeight(0).MinWidth(0).Children(func() {
 		ui.Row(c).Height(34).Shrink(0).Padding(0, 8).Gap(6).AlignItems(ui.Center).Children(func() {
 			debugIcon(c, oi, "memory-refresh", "general/refresh", "Refresh Classes",
-				d.session != 0 && !d.ended && !d.starting && !v.loading, false, m.refreshDebugMemory)
+				d.session != 0 && !d.ended && !d.starting && !v.loading &&
+					m.debugSessionSupports(d.session, func(caps openidea.DebugCapabilities) bool {
+						return caps.JVMMemory
+					}), false, m.refreshDebugMemory)
 			if v.loading {
 				ui.Text(c, "Reading JVM memory…").TextColor(p.TextMuted)
 			}
 			ui.TextInput(c.Key("debug-memory-filter"), &v.filter).Grow(1).Placeholder("Filter classes")
 		})
 		switch {
+		case d.jvmBackend.Kind != "" && d.jvmBackend.Kind != "ready":
+			ui.Text(c, debugJVMBackendStatus(d.jvmBackend)).Padding(4, 10).TextColor(p.TextMuted)
 		case v.err != "":
 			ui.Text(c, v.err).Padding(4, 10).TextColor(p.TextMuted)
 		case d.starting:
@@ -303,7 +337,10 @@ func (m *Model) debugMemory(c *ui.Context, p *ui.Theme, oi oiColors) {
 							memoryRow(name, fmt.Sprint(row.Instances), delta, fmt.Sprint(row.Bytes), p.Text)
 						})
 						debugIcon(c, oi, "memory-instances:"+row.Name, "toolwindows/hierarchy",
-							"Show Instances", d.paused && !d.ended, false,
+							"Show Instances", d.paused && !d.ended &&
+								m.debugSessionSupports(d.session, func(caps openidea.DebugCapabilities) bool {
+									return caps.JVMInstances
+								}), false,
 							func() { m.showDebugMemoryInstances(row.Name) }).Label("Show Instances")
 					})
 					if item.RowDoubleClicked() && d.paused {
@@ -313,7 +350,10 @@ func (m *Model) debugMemory(c *ui.Context, p *ui.Theme, oi oiColors) {
 						v.selected = row.Name
 					}
 					item.Menu(func(menu *ui.Menu) {
-						if menu.Item("Show Instances").Disabled(!d.paused).Chosen() {
+						if menu.Item("Show Instances").Disabled(!d.paused ||
+							!m.debugSessionSupports(d.session, func(caps openidea.DebugCapabilities) bool {
+								return caps.JVMInstances
+							})).Chosen() {
 							m.showDebugMemoryInstances(row.Name)
 						}
 						if menu.Item("Jump to Source").Chosen() {

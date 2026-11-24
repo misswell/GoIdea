@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/egoist/mygo/ui/editor"
@@ -80,6 +81,28 @@ func TestLSPCompletions(t *testing.T) {
 	}
 	if items[1].Insert != "name" || items[1].Kind != editor.CompletionText {
 		t.Fatalf("second item = %+v", items[1])
+	}
+}
+
+func TestLSPCompletionsTrackResolveItems(t *testing.T) {
+	documentation := openidea.Markup{Kind: "markdown", Value: "**Returns** the value."}
+	source := openidea.CompletionItem{
+		Label:         "value",
+		InsertText:    "value()",
+		Documentation: &documentation,
+		Data:          json.RawMessage(`{"resolve":"value"}`),
+		Server:        17,
+	}
+	items, infos := lspCompletionItems([]openidea.CompletionItem{source})
+	if len(items) != 1 {
+		t.Fatalf("items = %+v", items)
+	}
+	info, ok := infos[completionTrackKey(items[0])]
+	if !ok || info.LSP == nil {
+		t.Fatalf("tracked completion = %+v, %v", info, ok)
+	}
+	if info.LSP.Server != 17 || string(info.LSP.Data) != `{"resolve":"value"}` {
+		t.Fatalf("resolve item = %+v", info.LSP)
 	}
 }
 

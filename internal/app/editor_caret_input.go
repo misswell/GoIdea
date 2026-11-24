@@ -21,6 +21,32 @@ func (m *Model) editorCaretInput(t *Tab, ev ui.InputEvent) bool {
 	if t == nil || t.state == nil {
 		return false
 	}
+	m.scheduleParameterInfoForInput(t, ev)
+	if autoImportInputMayEdit(ev) {
+		m.markAutoImportDirty(t)
+	}
+	if ev.Kind == ui.InputPointerDown || ev.Kind == ui.InputKeyDown {
+		m.cancelDebugSelectionHover(t)
+	}
+	m.recordMacroEditorInput(ev)
+	if m.vimInput(t, ev) {
+		return true
+	}
+	if m.completionInput(t, ev) {
+		return true
+	}
+	if m.tabTemplateInput(t, ev) {
+		return true
+	}
+	if m.columnInput(t, ev) {
+		return true
+	}
+	if m.inlineCompletionInput(t, ev) {
+		return true
+	}
+	if m.smartKeyInput(t, ev) {
+		return true
+	}
 	switch ev.Kind {
 	case ui.InputScroll:
 		zoomModifier := ev.Mods&ui.Cmd != 0 || ev.Mods&ui.Ctrl != 0
@@ -34,6 +60,25 @@ func (m *Model) editorCaretInput(t *Tab, ev ui.InputEvent) bool {
 		}
 		return true
 	case ui.InputKeyDown:
+		if ev.Mods&(ui.Cmd|ui.Ctrl) != 0 && ev.Key == ui.KeyV {
+			if m.pasteMarkdownImage(t) {
+				return true
+			}
+			if m.pasteHTTPRequest(t) {
+				return true
+			}
+		}
+		if ev.Mods&(ui.Cmd|ui.Ctrl) != 0 && (ev.Key == ui.KeyC || ev.Key == ui.KeyX) {
+			// Keyboard copy/cut may be handled by the app command rather than
+			// this editor callback. Recording here preserves the pre-cut text
+			// for either dispatch order; the history deduplicates a second call.
+			m.rememberActiveEditorClipboard()
+		}
+		if ev.Key == ui.KeyEnter && (ev.Mods == ui.Cmd || ev.Mods == ui.Ctrl) &&
+			t.doc != nil && isHTTPRequestFile(t.doc.Path()) {
+			m.RunHTTPRequestAtCaret()
+			return true
+		}
 		if m.prefs.General.CaretScroll == "center" && caretMovementKey(ev.Key) {
 			t.centerCaret = true
 			m.invalidate()
@@ -49,6 +94,10 @@ func (m *Model) editorCaretInput(t *Tab, ev ui.InputEvent) bool {
 			t.caret.moved = true
 		}
 	case ui.InputPointerUp:
+		if t.caret == nil {
+			m.scheduleDebugSelectionHover(t)
+		}
+		m.finishColumnPointerSelection(t)
 		click := t.caret
 		t.caret = nil
 		if click == nil || click.moved || len(click.before) == 0 {
@@ -79,8 +128,28 @@ func (m *Model) editorCaretInput(t *Tab, ev ui.InputEvent) bool {
 		// Let the editor clear its own gesture on pointer-up. It keeps the
 		// selections SetSelections installed.
 		return false
+	case ui.InputKeyUp:
+		m.scheduleDebugSelectionHover(t)
 	}
 	return false
+}
+
+func autoImportInputMayEdit(ev ui.InputEvent) bool {
+	switch ev.Kind {
+	case ui.InputText, ui.InputCompose, ui.InputCommand:
+		return ev.Text != ""
+	case ui.InputKeyDown:
+		if ev.Mods&(ui.Cmd|ui.Ctrl) != 0 {
+			switch ev.Key {
+			case ui.KeyV, ui.KeyX, ui.KeyZ:
+				return true
+			}
+		}
+		return ev.Mods == 0 &&
+			(ev.Key == ui.KeyBackspace || ev.Key == ui.KeyDelete || ev.Key == ui.KeyEnter)
+	default:
+		return false
+	}
 }
 
 // caretMovementKey reports keys that move the editor caret rather than edit
@@ -118,5 +187,9 @@ func (m *Model) takeEditorDroppedFiles(view ui.Element) []string {
 	if !m.prefs.General.dragAndDrop() {
 		return nil
 	}
-	return view.DroppedFiles()
+	dropped := view.DroppedFiles()
+	if m.dropMarkdownImages(m.tab(), dropped) {
+		return nil
+	}
+	return dropped
 }

@@ -169,6 +169,14 @@ func (m *Model) duplicateTab(t *Tab) *Tab {
 		return m.newAgentPageTab(t.kind, t.doc.Path(), t.pageTitle, t.agentTask)
 	case tabKindWhatsNew:
 		return m.newWhatsNewTab(t.pageVersion, t.pageNotes)
+	case tabKindDockerLog:
+		text := ""
+		if t.state != nil && t.state.Buffer != nil {
+			text = t.state.Buffer.Snapshot().String()
+		}
+		return m.newDockerLogTab(t.doc.Path(), t.pageTitle, text)
+	case tabKindNotebook:
+		return m.newNotebookTab(t.pagePath, t.pageTitle, t.preview)
 	}
 	doc, err := m.reg.Open(context.Background(), t.doc.Path())
 	if err != nil {

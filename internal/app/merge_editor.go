@@ -1146,27 +1146,39 @@ func (m *Model) drawMergePane(c *ui.Context, p *ui.Theme, state *mergeEditorStat
 			text = state.model.result
 			state.result = text
 		}
-		area := ui.TextArea(c.Key("merge-pane:"+string(pane)), &text).Height(500).
-			Font(oiFontMono).FontSize(12).ReadOnly(pane != mergePaneResult)
-		area.ContextMenu(func(menu *ui.Menu) { m.mergePaneMenu(menu, pane) })
-		if area.FocusWithin() {
-			state.pane = pane
-		}
-		start, end := area.TextSelection()
-		state.selection[pane] = [2]int{start, end}
-		if pending, ok := state.pendingSelect[pane]; ok {
-			area.SetTextSelection(pending[0], pending[1])
-			delete(state.pendingSelect, pane)
-		} else if caret, ok := state.pendingCaret[pane]; ok {
-			area.SetTextSelection(caret, caret)
-			delete(state.pendingCaret, pane)
-		}
-		if pane == mergePaneResult && text != state.model.result {
-			state.model.setResultText(text)
-			state.result = state.model.result
-			state.touched = true
-			state.status = mergeSummaryText(state.model)
-		}
+		ui.Row(c).Gap(2).Height(500).MinWidth(0).Children(func() {
+			area := ui.TextArea(c.Key("merge-pane:"+string(pane)), &text).
+				Grow(1).Basis(0).Height(500).MinWidth(0).
+				Font(oiFontMono).FontSize(12).ReadOnly(pane != mergePaneResult)
+			area.ContextMenu(func(menu *ui.Menu) { m.mergePaneMenu(menu, pane) })
+			if area.FocusWithin() {
+				state.pane = pane
+			}
+			start, end := area.TextSelection()
+			state.selection[pane] = [2]int{start, end}
+			if pending, ok := state.pendingSelect[pane]; ok {
+				area.SetTextSelection(pending[0], pending[1])
+				delete(state.pendingSelect, pane)
+			} else if caret, ok := state.pendingCaret[pane]; ok {
+				area.SetTextSelection(caret, caret)
+				delete(state.pendingCaret, pane)
+			}
+			if pane == mergePaneResult && text != state.model.result {
+				state.model.setResultText(text)
+				state.result = state.model.result
+				state.touched = true
+				state.status = mergeSummaryText(state.model)
+			}
+			overviewText := state.model.result
+			if pane == mergePaneYours {
+				overviewText = state.model.left
+			} else if pane == mergePaneTheirs {
+				overviewText = state.model.right
+			}
+			overviewLane(c, p, "merge-overview:"+string(pane),
+				"Merge overview "+string(pane), nil, overviewText,
+				mergeOverviewMarks(state.model, pane), 500)
+		})
 	})
 }
 

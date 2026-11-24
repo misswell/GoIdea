@@ -2,11 +2,14 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/editor"
 
 	"mayoi/internal/openidea"
 )
@@ -173,4 +176,169 @@ func TestDocumentationModifiedLinkOpensSource(t *testing.T) {
 	if m.documentation.popup != nil || m.tab().state.Cursor() != len("alpha\nb") {
 		t.Fatalf("modifier-click did not reveal the declaration; cursor = %d", m.tab().state.Cursor())
 	}
+}
+
+func TestQuickDocumentationForSelectedCompletionUsesInlineDocs(t *testing.T) {
+	item := editor.Completion{
+		Label: "sum", Detail: "(int a, int b)", Insert: "sum",
+		Documentation: "Returns the sum.",
+	}
+	m := selectedCompletionDocumentationModel(t, item, openidea.CompletionItem{
+		Label: "sum", InsertText: "sum", Server: 4,
+	})
+	m.invokeHook = func(context.Context, string, any) (json.RawMessage, error) {
+		t.Error("inline completion documentation should not resolve")
+		return nil, context.Canceled
+	}
+	m.QuickDocumentation()
+	entry := m.documentation.popup.current()
+	if entry == nil || !strings.Contains(documentationEntryText(entry), "Returns the sum.") {
+		t.Fatalf("completion documentation = %+v", entry)
+	}
+}
+
+func TestQuickDocumentationResolvesSelectedCompletion(t *testing.T) {
+	item := editor.Completion{Label: "sum", Detail: "(int a, int b)", Insert: "sum"}
+	source := openidea.CompletionItem{
+		Label: "sum", InsertText: "sum", Data: json.RawMessage(`{"resolve":"sum"}`), Server: 8,
+	}
+	m := selectedCompletionDocumentationModel(t, item, source)
+	posts := make(chan struct{}, 1)
+	m.postHook = func(fn func()) {
+		fn()
+		posts <- struct{}{}
+	}
+	m.invokeHook = func(_ context.Context, command string, input any) (json.RawMessage, error) {
+		if command != "lsp_resolve_completion" {
+			t.Errorf("command = %q", command)
+		}
+		args := input.(map[string]any)
+		tracked, ok := args["item"].(openidea.CompletionItem)
+		if !ok || tracked.Server != 8 || string(tracked.Data) != `{"resolve":"sum"}` {
+			t.Errorf("resolve item = %#v", args["item"])
+		}
+		documentation := openidea.Markup{Kind: "markdown", Value: "Resolved **sum** documentation."}
+		return json.Marshal(openidea.CompletionItem{
+			Label: "sum", InsertText: "sum", Documentation: &documentation,
+			Data: source.Data, Server: source.Server,
+		})
+	}
+	m.QuickDocumentation()
+	select {
+	case <-posts:
+	case <-time.After(2 * time.Second):
+		t.Fatal("completion documentation did not resolve")
+	}
+	entry := m.documentation.popup.current()
+	if entry == nil || !strings.Contains(documentationEntryText(entry), "Resolved sum documentation.") {
+		t.Fatalf("resolved completion documentation = %+v", entry)
+	}
+}
+
+func TestQuickDocumentationKeepsHoverWithoutSelectedCompletion(t *testing.T) {
+	item := editor.Completion{Label: "sum", Insert: "sum"}
+	m := selectedCompletionDocumentationModel(t, item, openidea.CompletionItem{
+		Label: "sum", InsertText: "sum", Server: 1,
+	})
+	m.tab().completion.open = false
+	posts := make(chan struct{}, 1)
+	m.postHook = func(fn func()) {
+		fn()
+		posts <- struct{}{}
+	}
+	m.invokeHook = func(_ context.Context, command string, _ any) (json.RawMessage, error) {
+		if command != "lsp_hover" {
+			t.Errorf("command = %q, want lsp_hover", command)
+		}
+		return json.Marshal(openidea.Hover{
+			Contents: openidea.Markup{Kind: "plaintext", Value: "Hover documentation"},
+		})
+	}
+	m.QuickDocumentation()
+	select {
+	case <-posts:
+	case <-time.After(2 * time.Second):
+		t.Fatal("hover documentation did not finish")
+	}
+	entry := m.documentation.popup.current()
+	if entry == nil || !strings.Contains(documentationEntryText(entry), "Hover documentation") {
+		t.Fatalf("hover documentation = %+v", entry)
+	}
+}
+
+func TestQuickDocumentationDropsStaleCompletionReply(t *testing.T) {
+	item := editor.Completion{Label: "sum", Insert: "sum"}
+	m := selectedCompletionDocumentationModel(t, item, openidea.CompletionItem{
+		Label: "sum", InsertText: "sum", Data: json.RawMessage(`{"resolve":"sum"}`), Server: 3,
+	})
+	started, release, posted := make(chan struct{}), make(chan struct{}), make(chan struct{}, 1)
+	m.postHook = func(fn func()) {
+		fn()
+		posted <- struct{}{}
+	}
+	m.invokeHook = func(context.Context, string, any) (json.RawMessage, error) {
+		close(started)
+		<-release
+		documentation := openidea.Markup{Kind: "plaintext", Value: "Stale documentation"}
+		return json.Marshal(openidea.CompletionItem{
+			Label: "sum", InsertText: "sum", Documentation: &documentation,
+		})
+	}
+	m.QuickDocumentation()
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("completion documentation did not start")
+	}
+	other := editor.Completion{Label: "other", Insert: "other"}
+	m.tab().completion.selected = &other
+	close(release)
+	select {
+	case <-posted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("stale completion documentation did not finish")
+	}
+	if m.documentation.popup != nil || m.documentation.request != 0 {
+		t.Fatalf("stale completion documentation was accepted: %+v", m.documentation)
+	}
+}
+
+func selectedCompletionDocumentationModel(
+	t *testing.T,
+	item editor.Completion,
+	source openidea.CompletionItem,
+) *Model {
+	t.Helper()
+	doc := fileActionDocument(t, true)
+	state := &editor.State{Buffer: doc.Buffer()}
+	state.Select(0, 0)
+	m := &Model{
+		ctx:  context.Background(),
+		tabs: []*Tab{{doc: doc, state: state}},
+	}
+	tab := m.tab()
+	tab.completion = completionTracking{
+		version:  doc.Buffer().Version(),
+		cursor:   state.Cursor(),
+		selected: &item,
+		infos: map[string]completionInfo{
+			completionTrackKey(item): {LSP: &source},
+		},
+		open: true,
+	}
+	return m
+}
+
+func documentationEntryText(entry *documentationEntry) string {
+	if entry == nil {
+		return ""
+	}
+	var text strings.Builder
+	for _, block := range entry.blocks {
+		for _, run := range block.runs {
+			text.WriteString(run.text)
+		}
+		text.WriteByte('\n')
+	}
+	return text.String()
 }

@@ -1,0 +1,38 @@
+plugins {
+    id 'version-catalog'
+    id 'maven-publish'
+}
+
+group = 'dev.goidea'
+version = '1.2.3'
+
+catalog {
+    versionCatalog {
+        version('kotlin', '2.2.0')
+        library(
+            'kotlin-stdlib',
+            'org.jetbrains.kotlin',
+            'kotlin-stdlib'
+        ).versionRef('kotlin')
+        library(
+            'jackson-kotlin',
+            'com.fasterxml.jackson.module',
+            'jackson-module-kotlin'
+        ).version('2.19.0')
+        bundle('runtime', ['kotlin-stdlib', 'jackson-kotlin'])
+    }
+}
+
+publishing {
+    publications {
+        catalog(MavenPublication) {
+            from components.versionCatalog
+        }
+    }
+    repositories {
+        maven {
+            name = 'acceptance'
+            url = uri(providers.gradleProperty('acceptanceRepository').get())
+        }
+    }
+}

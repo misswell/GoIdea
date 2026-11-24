@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -34,9 +35,15 @@ func (h *runCfgHook) hook(ctx context.Context, cmd string, args any) (json.RawMe
 		}
 		if len(h.saved) > 0 {
 			// The backend merges user configs over detected ones.
-			return json.Marshal([]map[string]any{h.saved[len(h.saved)-1][0], mvn})
+			items := append([]map[string]any(nil), h.saved[len(h.saved)-1]...)
+			items = append(items, mvn)
+			return json.Marshal(items)
 		}
 		return json.Marshal([]map[string]any{mvn})
+	case "run_templates", "plugin_run_targets":
+		return json.RawMessage(`[]`), nil
+	case "settings_get":
+		return json.RawMessage(`{"runTargets":[],"run":{}}`), nil
 	}
 	return json.Marshal(nil)
 }
@@ -57,6 +64,28 @@ func TestRunConfigDialogDrawsAsASheet(t *testing.T) {
 	// the same frame and Run › Edit Configurations… showed nothing.
 	if _, ok := tt.Find("Run/Debug Configurations"); !ok {
 		t.Fatalf("the Edit Configurations sheet was not drawn: %v", tt.Texts())
+	}
+}
+
+func TestRunConfigDialogCancelDoesNotMutateSavedConfigurations(t *testing.T) {
+	m := &Model{postHook: func(fn func()) { fn() }, ctx: context.Background()}
+	m.run.configs, _ = openidea.DecodeRunConfigs(mustJSON(t, []map[string]any{{
+		"id": "shell:run", "name": "run", "kind": "shell", "command": "echo",
+		"args": []string{"hello"}, "detected": false,
+		"beforeLaunch": []map[string]any{{"kind": "build"}},
+	}}))
+	m.OpenRunConfigs()
+	draft := m.runCfgDlg.items[0]
+	draft.Name = "changed"
+	draft.Command = "printf"
+	draft.Local = true
+	draft.BeforeLaunch = append(draft.BeforeLaunch, openidea.BeforeLaunchTask{Kind: "command", Target: "make"})
+	m.closeRunConfigs()
+
+	saved := m.run.configs[0]
+	if saved.Name != "run" || saved.Command != "echo" || saved.Local ||
+		len(saved.BeforeLaunch) != 1 || saved.BeforeLaunch[0].Kind != "build" {
+		t.Fatalf("Cancel leaked draft edits into the saved configurations: %+v", saved)
 	}
 }
 
@@ -118,6 +147,167 @@ func TestRunConfigDialogValidatesBeforeSaving(t *testing.T) {
 	}
 	if m.runCfgDlg == nil {
 		t.Fatalf("the dialog stays open")
+	}
+}
+
+func TestRunConfigDialogKeepsUntouchedDetectedConfigurationDetected(t *testing.T) {
+	hook := &runCfgHook{}
+	m := &Model{invokeHook: hook.hook, postHook: func(fn func()) { fn() }, ctx: context.Background()}
+	m.root = "/p"
+	m.run.configs, _ = openidea.DecodeRunConfigs(mustJSON(t, []map[string]any{{
+		"id": "maven:test", "name": "test", "kind": "maven", "command": "mvn",
+		"args": []string{"test"}, "detected": true,
+	}}))
+	m.OpenRunConfigs()
+	d := m.runCfgDlg
+	d.applyForm()
+	if !d.items[0].Detected {
+		t.Fatalf("applying the untouched form created a user override: %+v", d.items[0])
+	}
+	m.ApplyRunConfigs()
+	for _, call := range hook.calls {
+		if call == "run_save_configs" {
+			t.Fatalf("an unchanged detected configuration reached run_save_configs: %v", hook.calls)
+		}
+	}
+}
+
+func TestRunConfigDialogApplyPreservesAnUnchangedTemporaryConfiguration(t *testing.T) {
+	hook := &runCfgHook{}
+	m := &Model{invokeHook: hook.hook, postHook: func(fn func()) { fn() }, ctx: context.Background()}
+	m.root = "/p"
+	temp, err := openidea.DecodeRunConfig(mustJSON(t, map[string]any{
+		"id": "context:temp", "name": "current.go", "kind": "go",
+		"command": "go", "args": []string{"run", "current.go"},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.run.inline = temp
+	m.OpenRunConfigs()
+	d := m.runCfgDlg
+	m.AddRunConfig()
+	d.items[d.sel].Command = "echo"
+	d.items[d.sel].Name = "Persistent"
+	m.ApplyRunConfigs()
+	for i := 0; i < 100 && len(hook.saved) == 0; i++ {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if len(hook.saved) != 1 {
+		t.Fatalf("Apply persisted the new configuration: %v, errors: %v / %q", hook.saved, d.errs, d.saveErr)
+	}
+	for _, saved := range hook.saved[0] {
+		if saved["id"] == temp.ID {
+			t.Fatalf("an unchanged temporary configuration was saved: %v", saved)
+		}
+	}
+	if !d.temporary[temp.ID] || m.runTemporaryByID(temp.ID) == nil {
+		t.Fatalf("the untouched temporary configuration stayed temporary: temp=%+v saved=%v",
+			d.temporary, hook.saved)
+	}
+}
+
+func TestRunConfigDialogApplyPromotesAnEditedTemporaryConfiguration(t *testing.T) {
+	hook := &runCfgHook{}
+	m := &Model{invokeHook: hook.hook, postHook: func(fn func()) { fn() }, ctx: context.Background()}
+	m.root = "/p"
+	temp, err := openidea.DecodeRunConfig(mustJSON(t, map[string]any{
+		"id": "context:temp", "name": "current.go", "kind": "go",
+		"command": "go", "args": []string{"run", "current.go"},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.run.inline = temp
+	m.OpenRunConfigs()
+	d := m.runCfgDlg
+	d.name = "Saved current.go"
+	m.ApplyRunConfigs()
+	for i := 0; i < 100 && len(hook.saved) == 0; i++ {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if len(hook.saved) != 1 || len(hook.saved[0]) != 1 || hook.saved[0][0]["id"] != temp.ID {
+		t.Fatalf("the edited temporary configuration was not saved: %v, errors: %v / %q", hook.saved, d.errs, d.saveErr)
+	}
+	if d.temporary[temp.ID] || m.runTemporaryByID(temp.ID) != nil {
+		t.Fatalf("the saved configuration is no longer temporary")
+	}
+}
+
+func TestRunConfigDialogAppliesBuildToolForm(t *testing.T) {
+	hook := &runCfgHook{}
+	m := &Model{invokeHook: hook.hook, postHook: func(fn func()) { fn() }, ctx: context.Background()}
+	m.root = "/p"
+	m.run.configs, _ = openidea.DecodeRunConfigs(mustJSON(t, []map[string]any{{
+		"id": "gradle:assemble", "name": "assemble", "kind": "gradle",
+		"command": "./gradlew", "args": []string{"assemble"}, "detected": true,
+		"params": map[string]string{"tasks": "assemble", "wrapper": "true"},
+	}}))
+	m.OpenRunConfigs()
+	d := m.runCfgDlg
+	d.typeParams["tasks"] = "clean test"
+	d.typeParams["arguments"] = "-q"
+	d.typeParams["projectDir"] = "service"
+	d.typeParams["wrapper"] = "false"
+	d.typeParams["vmOptions"] = "-Xmx1g"
+	d.typeParams["activeProfiles"] = "dev"
+	d.applyForm()
+	cfg := d.items[0]
+	if cfg.Detected || cfg.Command != "gradle" ||
+		strings.Join(cfg.Args, "\x00") != "clean\x00test\x00-q" {
+		t.Fatalf("build tool command was not rebuilt: %+v", cfg)
+	}
+	if cfg.Cwd == nil || *cfg.Cwd != "service" ||
+		cfg.Params["vmOptions"] != "-Xmx1g" ||
+		cfg.Params["activeProfiles"] != "dev" {
+		t.Fatalf("build tool params were not retained: %+v", cfg)
+	}
+}
+
+func TestRunConfigTemplateStaysCleanUntilItsFieldsChange(t *testing.T) {
+	template, err := openidea.DecodeRunConfig(mustJSON(t, map[string]any{
+		"id": "template:maven", "name": "Maven", "kind": "maven",
+		"command": "mvn", "args": []string{"test"},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := &runConfigDlg{
+		templateMode:      true,
+		templateKind:      "maven",
+		templates:         []*openidea.RunConfig{template},
+		templatesBaseline: runTemplatesBaseline([]*openidea.RunConfig{template}),
+	}
+	d.loadTemplateForm()
+	d.applyTemplateForm()
+	if d.templatesDirty {
+		t.Fatal("an untouched template was marked dirty")
+	}
+	d.typeParams["tasks"] = "verify"
+	d.applyTemplateForm()
+	if !d.templatesDirty {
+		t.Fatal("an edited template was not marked dirty")
+	}
+	d.typeParams["tasks"] = "test"
+	d.applyTemplateForm()
+	if d.templatesDirty {
+		t.Fatal("changing a template back to its baseline stayed dirty")
+	}
+}
+
+func TestBeforeLaunchTaskEditingPreservesOrder(t *testing.T) {
+	cfg := &openidea.RunConfig{BeforeLaunch: []openidea.BeforeLaunchTask{
+		{Kind: "build"},
+		{Kind: "command", Target: "make"},
+		{Kind: "toolWindow", Target: "run"},
+	}}
+	moveBeforeLaunchTask(cfg, 2, -1)
+	if cfg.BeforeLaunch[1].Kind != "toolWindow" || cfg.BeforeLaunch[2].Target != "make" {
+		t.Fatalf("move did not preserve the edited order: %+v", cfg.BeforeLaunch)
+	}
+	removeBeforeLaunchTask(cfg, 1)
+	if len(cfg.BeforeLaunch) != 2 || cfg.BeforeLaunch[1].Kind != "command" {
+		t.Fatalf("remove changed the remaining tasks: %+v", cfg.BeforeLaunch)
 	}
 }
 

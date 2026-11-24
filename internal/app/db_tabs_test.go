@@ -10,8 +10,8 @@ import (
 func TestDBResultTabsCycleCloseAndCloseOthers(t *testing.T) {
 	m := &Model{db: &dbView{}}
 	v := m.db
-	v.addDBResult("two", nil, "")
-	v.addDBResult("one", nil, "boom")
+	v.addDBResult("two", "main", nil, "")
+	v.addDBResult("one", "main", nil, "boom")
 	if len(v.results) != 2 || v.results[0].title != "one" || v.results[1].title != "two" {
 		t.Fatalf("results = %+v", v.results)
 	}
@@ -42,7 +42,7 @@ func TestDBResultTabsCycleCloseAndCloseOthers(t *testing.T) {
 	if len(v.results) != 1 || v.results[0].title != "two" || v.active != 0 {
 		t.Fatalf("close: results=%+v active=%d", v.results, v.active)
 	}
-	v.addDBResult("three", nil, "")
+	v.addDBResult("three", "main", nil, "")
 	m.CloseOtherDBResults(0)
 	if len(v.results) != 1 || v.results[0].title != "three" {
 		t.Fatalf("close others: %+v", v.results)

@@ -1,7 +1,9 @@
 package app
 
 import (
+	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -15,14 +17,33 @@ func (m *Model) OpenSettings() { m.OpenSettingsPage(settingsPageAppearance) }
 // action takes the page in its argument. An id this build does not register
 // falls back to Appearance, which it always carries.
 func (m *Model) OpenSettingsPage(page string) {
+	m.openSettingsPage(page, false)
+}
+
+// OpenNewProjectsSettings opens IDEA's global-only "Settings for New
+// Projects" sheet. Java is the default page because its JDK is the first
+// choice a new project needs.
+func (m *Model) OpenNewProjectsSettings(page string) {
+	if strings.TrimSpace(page) == "" {
+		page = settingsPageJava
+	}
+	m.openSettingsPage(page, true)
+}
+
+func (m *Model) openSettingsPage(page string, newProjects bool) {
 	if _, ok := settingsPageByID(page); !ok {
 		page = settingsPageAppearance
 	}
 	if m.settingsOpen {
 		m.settingsSelectPage(page)
+		m.settingsDraft.newProjects = newProjects
 		if m.settingsPage == settingsPageLanguageServers {
 			m.loadLanguageServerSettings()
 		}
+		if m.settingsPage == settingsPageJava {
+			m.LoadJavaSettings()
+		}
+		m.loadBackendCatalogSettingsPage(m.settingsPage)
 		m.invalidate()
 		return
 	}
@@ -32,8 +53,12 @@ func (m *Model) OpenSettingsPage(page string) {
 	m.settingsErr = ""
 	m.settingsCollapsed = map[string]bool{}
 	m.settingsDraft = m.settingsDraftFromPrefs()
+	m.settingsDraft.newProjects = newProjects
 	m.settingsHistory = []string{page}
 	m.settingsHistoryAt = 0
+	if page == settingsPageExternalTools {
+		m.ensureExternalToolSelection()
+	}
 	m.LoadJavaTools()
 	if page == settingsPageJava {
 		m.javaSettings = javaSettingsState{}
@@ -48,6 +73,13 @@ func (m *Model) OpenSettingsPage(page string) {
 	if page == settingsPageProjectTrust {
 		m.loadProjectTrust()
 	}
+	if page == settingsPageVim {
+		m.loadVimSettingsPage()
+	}
+	if page == settingsPageLiveTemplates || page == settingsPagePostfix || page == settingsPageFileTemplates {
+		m.loadTemplateSettingsPage(page)
+	}
+	m.loadBackendCatalogSettingsPage(page)
 	m.invalidate()
 }
 
@@ -64,7 +96,7 @@ func settingsPageUsesAgentBackend(page string) bool {
 // closeSettings closes the dialog as Cancel does: the staged choices are
 // dropped and the stored ones go back on the window.
 func (m *Model) closeSettings() {
-	if m.languageToolSettings.saving {
+	if m.languageToolSettings.saving || m.settingsBackendCatalogSaving() {
 		return
 	}
 	if !m.settingsOpen {
@@ -75,9 +107,12 @@ func (m *Model) closeSettings() {
 	m.settingsQuery = ""
 	m.settingsCollapsed = nil
 	m.settingsErr = ""
+	m.settingsThemePrefs = false
 	m.applyPreferences()
 	m.resetJavaSettingsSession()
+	m.resetLanguageSDKSession()
 	m.resetLanguageServerSettingsSession()
+	m.resetBackendCatalogSettingsSession()
 	m.invalidate()
 }
 
@@ -122,6 +157,7 @@ func (m *Model) applyEditorFontPrefs(prefs FontPrefs, size float32) {
 // choices of Settings › Editor › Appearance.
 func (m *Model) applyEditorAppearance() {
 	m.applyAppearanceToTabs(m.prefs.Editor)
+	m.applyFoldingDefaultsToTabs(m.prefs.Editor)
 }
 
 // applyAppearanceToTabs is the same with an appearance the dialog stages.
@@ -142,11 +178,12 @@ func (m *Model) applyTabAppearance(t *Tab, a EditorAppearance) {
 	switch {
 	case a.NoLineNumbers || m.zen:
 		t.state.LineNumbers = editor.LineNumbersOff
-	case a.LineNumberMode == "relative":
+	case a.LineNumberMode == "relative" || a.LineNumberMode == "hybrid":
 		t.state.LineNumbers = editor.LineNumbersRelative
 	}
 	t.state.NoIndentGuides = a.NoIndentGuides
 	t.state.NoFolding = a.NoFolding || m.zen
+	t.state.WrapGuides = a.wrapGuides()
 	t.state.SoftWrap = a.SoftWrap
 	if t.doc != nil {
 		t.state.SoftWrap = a.WrapsFile(t.doc.Path())
@@ -157,10 +194,61 @@ func (m *Model) applyTabAppearance(t *Tab, a EditorAppearance) {
 	}
 	t.state.NoScrollPastEnd = !a.ScrollPastEnd
 	if a.ShowWhitespace {
-		t.state.Whitespace = editor.WhitespaceAll
+		switch {
+		case a.NoWhitespaceLeading && a.NoWhitespaceInner && a.NoWhitespaceTrailing:
+			t.state.Whitespace = editor.WhitespaceNone
+		case a.NoWhitespaceLeading && a.NoWhitespaceInner && !a.NoWhitespaceTrailing:
+			t.state.Whitespace = editor.WhitespaceTrailing
+		default:
+			// MyGo exposes all, boundary and trailing modes. Leading and inner
+			// remain visible independently in preferences; mixed selections use
+			// its nearest complete mode until the renderer exposes finer flags.
+			t.state.Whitespace = editor.WhitespaceAll
+		}
 	} else {
 		t.state.Whitespace = editor.WhitespaceSelection
 	}
+}
+
+// applyFoldingDefaultsToTabs applies the Code Folding page's default fold
+// types. MyGo exposes import folding but not syntax-tree comment/header ranges;
+// those controls are disabled in the page instead of claiming to work.
+func (m *Model) applyFoldingDefaultsToTabs(a EditorAppearance) {
+	for _, t := range m.allTabs() {
+		m.applyTabFoldingDefaults(t, a)
+	}
+}
+
+func (m *Model) applyTabFoldingDefaults(t *Tab, a EditorAppearance) {
+	if t == nil || t.state == nil || t.state.Buffer == nil || a.NoFolding {
+		return
+	}
+	if !a.NoFoldImports {
+		t.state.FoldImports()
+		return
+	}
+	if line := firstImportLine(t.state.Buffer); line >= 0 {
+		t.state.Unfold(line)
+	}
+}
+
+// firstImportLine is the first line the buffer's language recognizes as an
+// import. FoldImports only exposes the fold operation, so the off switch uses
+// the same language rule to unfold the range it previously folded.
+func firstImportLine(b *editor.Buffer) int {
+	if b == nil {
+		return -1
+	}
+	lang := b.Language()
+	if lang == nil || lang.Imports == nil {
+		return -1
+	}
+	for line := 0; line < b.LineCount(); line++ {
+		if lang.Imports.MatchString(b.Line(line)) {
+			return line
+		}
+	}
+	return -1
 }
 
 // SetThemePref stores the appearance choice and redraws the window in it at
@@ -254,19 +342,36 @@ func (m *Model) applyPreferences() {
 	m.tabPrefs = m.prefs.Tabs
 	m.applyEditorFont(m.prefs.fontSize())
 	m.applyEditorAppearance()
+	m.applyVimPreferences()
 	m.invalidateCodeVision()
 	m.sortTabsAlphabetically()
 }
 
-// savePreferences writes the settings; a failed write is reported rather than
-// silently keeping the choice only for this run.
-func (m *Model) savePreferences() {
+// savePreferences merges this window's changed settings into the latest file
+// and reports a failed write rather than keeping the choice only for this run.
+func (m *Model) savePreferences() error {
 	if m.cfg.SettingsPath == "" {
-		return
+		return nil
 	}
-	if err := m.prefs.Save(m.cfg.SettingsPath); err != nil {
+	current, err := json.Marshal(m.prefs)
+	if err != nil {
 		m.status = "Saving settings failed: " + err.Error()
+		return err
 	}
+	if len(m.settingsBaseline) == 0 {
+		disk, err := json.Marshal(LoadPreferences(m.cfg.SettingsPath))
+		if err != nil {
+			m.status = "Saving settings failed: " + err.Error()
+			return err
+		}
+		m.settingsBaseline = disk
+	}
+	if err := mergePreferencesFile(m.cfg.SettingsPath, m.settingsBaseline, current); err != nil {
+		m.status = "Saving settings failed: " + err.Error()
+		return err
+	}
+	m.settingsBaseline = append(m.settingsBaseline[:0], current...)
+	return nil
 }
 
 // SmokeSettings drives the settings sheet offscreen the way the dialog's
@@ -408,24 +513,29 @@ func (m *Model) SetAccentPref(id string) {
 }
 
 // SetStartupPref stores what a start shows: "" or "welcome" shows the Welcome
-// screen, "reopen" opens the last project.
+// screen, "reopen" opens the last project. System Settings stores the explicit
+// value while Startup remains readable by older session files and callers.
 func (m *Model) SetStartupPref(mode string) {
 	switch mode {
 	case "", "welcome", "reopen":
 	default:
 		return
 	}
-	if m.prefs.Startup == mode {
+	reopen := mode == "reopen"
+	if m.prefs.Startup == mode && m.prefs.System.ReopenLastProject != nil &&
+		*m.prefs.System.ReopenLastProject == reopen {
 		return
 	}
 	m.prefs.Startup = mode
+	m.prefs.System.ReopenLastProject = &reopen
 	m.savePreferences()
 	m.invalidate()
 }
 
-// startupReopensProject is the opt-in "Reopen last project on startup"; the
-// Welcome screen is what an untouched start shows.
-func (m *Model) startupReopensProject() bool { return m.prefs.Startup == "reopen" }
+// startupReopensProject is OpenIDEA's Reopen projects on startup option. Its
+// default is on.
+func (m *Model) startupReopensProject() bool { return m.prefs.reopenLastProject() }
 
-// keymapPreset is the keymap the build ships, shown in Appearance.
-func keymapPreset() string { return keymapPresetTitle }
+// keymapPreset is the host default preset title, kept for callers without a
+// Model. Window UI uses Model.keymapPresetTitle so a selection is shown.
+func keymapPreset() string { return keymapPresetForID(keymapPresetDefinitionsByOS()).Title }

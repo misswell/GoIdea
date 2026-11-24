@@ -49,6 +49,7 @@ func (m *Model) settingsRecordKeymapInput(ev ui.InputEvent) bool {
 	recorder.binding = binding
 	recorder.captureErr = ""
 	recorder.conflicts = keymapConflictsForBinding(
+		m.settingsDraft.keymapPreset,
 		m.settingsDraft.keymap,
 		recorder.actionID,
 		binding,
@@ -86,7 +87,11 @@ func (m *Model) settingsCloseKeymapRecorder() {
 // keymapConflictsForBinding lists actions already using binding in overrides.
 // The action being edited is omitted because its old binding is about to be
 // replaced.
-func keymapConflictsForBinding(overrides map[string][]string, actionID, binding string) []string {
+func keymapConflictsForBinding(
+	presetID string,
+	overrides map[string][]string,
+	actionID, binding string,
+) []string {
 	binding = keymapNormalize(binding)
 	actionID = canonicalActionID(actionID)
 	if binding == "" {
@@ -99,7 +104,7 @@ func keymapConflictsForBinding(overrides map[string][]string, actionID, binding 
 		if id == actionID || seen[id] {
 			continue
 		}
-		for _, current := range keymapBindingsIn(overrides, id) {
+		for _, current := range keymapBindingsIn(presetID, overrides, id) {
 			if current != binding {
 				continue
 			}

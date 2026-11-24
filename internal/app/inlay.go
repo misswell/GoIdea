@@ -23,6 +23,8 @@ type inlayState struct {
 	loaded      bool
 	count       int
 	hints       []editor.Inlay
+	// debug holds values for the selected paused frame.
+	debug []editor.Inlay
 
 	visionDocID   uint32
 	visionVersion uint64
@@ -41,6 +43,18 @@ type inlayState struct {
 	visionIncomplete  map[string]int
 	visionBlame       []openidea.BlameLine
 	visionBlameLoaded bool
+
+	inlineBlameDocID      uint32
+	inlineBlameVersion    uint64
+	inlineBlameLine       int
+	inlineBlameChanged    time.Time
+	inlineBlameRetry      time.Time
+	inlineBlameLoading    bool
+	inlineBlameLoaded     bool
+	inlineBlameLines      []openidea.BlameLine
+	inlineBlameInlay      editor.Inlay
+	inlineBlameHasLine    bool
+	inlineBlameGeneration uint64
 }
 
 type inlayHint struct {
@@ -75,6 +89,7 @@ func (m *Model) refreshInlays(t *Tab, now time.Time) {
 		s.retry = time.Time{}
 	}
 	m.refreshCodeVision(t, now, id, first, last, version)
+	m.refreshInlineBlame(t, now, id, version)
 	if s.loading || s.loaded || now.Before(s.retry) || now.Sub(s.changed) < 400*time.Millisecond || t.syncing || t.synced != version {
 		return
 	}
@@ -142,9 +157,13 @@ func mergedEditorInlays(s *inlayState) []editor.Inlay {
 	if s == nil {
 		return nil
 	}
-	out := make([]editor.Inlay, 0, len(s.hints)+len(s.vision))
+	out := make([]editor.Inlay, 0, len(s.hints)+len(s.vision)+len(s.debug)+1)
 	out = append(out, s.hints...)
 	out = append(out, s.vision...)
+	out = append(out, s.debug...)
+	if s.inlineBlameHasLine {
+		out = append(out, s.inlineBlameInlay)
+	}
 	sort.SliceStable(out, func(i, j int) bool {
 		return out[i].Offset < out[j].Offset
 	})

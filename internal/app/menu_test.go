@@ -23,6 +23,43 @@ func TestMainMenuCommandsResolve(t *testing.T) {
 	}
 }
 
+func TestMainMenuAcceleratorsFollowTheSelectedPreset(t *testing.T) {
+	m := &Model{}
+	m.prefs.KeymapPreset = "intellij-macos"
+	if got := m.MainMenu().ItemByID("menu.file.save").Accelerator; got != "Cmd+S" {
+		t.Fatalf("IntelliJ macOS Save accelerator = %q, want Cmd+S", got)
+	}
+	m.prefs.KeymapPreset = "intellij-windows"
+	if got := m.MainMenu().ItemByID("menu.file.save").Accelerator; got != "Ctrl+S" {
+		t.Fatalf("IntelliJ Windows Save accelerator = %q, want Ctrl+S", got)
+	}
+}
+
+func TestNativeMenuAcceleratorsSkipBindingsAMenuCannotRepresent(t *testing.T) {
+	m := &Model{}
+	m.prefs.KeymapPreset = "intellij-macos"
+	cases := []struct {
+		name    string
+		command string
+		want    string
+	}{
+		{name: "single stroke", command: "bookmarks.toggle", want: "F3"},
+		{name: "chord", command: "navigate.searchEverywhere", want: ""},
+		{name: "pointer", command: "editor.addOrRemoveCaret", want: ""},
+	}
+	for _, tc := range cases {
+		got := menuAccelerator(m, menuEntry{command: tc.command})
+		if got != tc.want {
+			t.Errorf("%s accelerator = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+
+	m.KeymapSetOverrides(map[string][]string{"file.save": nil})
+	if got := m.MainMenu().ItemByID("menu.file.save").Accelerator; got != "" {
+		t.Fatalf("removed Save binding left native accelerator %q", got)
+	}
+}
+
 func TestMainMenuFollowsOpenIDEAOrder(t *testing.T) {
 	want := []string{"File", "Edit", "View", "Navigate", "Code", "Refactor", "Build", "Run", "Git", "Tools", "Window", "Help"}
 	groups := mainMenuGroups()

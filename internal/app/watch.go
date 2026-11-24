@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -24,6 +25,14 @@ const maxReloadSize = 4 << 20
 // noteDisk records the file as the buffer last matched it.
 func (t *Tab) noteDisk() {
 	t.diskTime, t.diskSize = diskStamp(t.doc.Path())
+}
+
+func (m *Model) noteTabDisk(t *Tab) {
+	if m.tabUsesRemoteFile(t) {
+		t.diskTime, t.diskSize = time.Time{}, 0
+		return
+	}
+	t.noteDisk()
 }
 
 // changedOutside reports whether another program wrote the file since the
@@ -59,7 +68,8 @@ func (m *Model) watchFiles(now time.Time) {
 	}
 	m.watched = now
 	for _, t := range m.tabs {
-		if t.kind != "" || t.reloading || !t.changedOutside() {
+		if t.kind != "" || t.reloading || m.tabUsesRemoteFile(t) ||
+			!t.changedOutside() {
 			continue
 		}
 		if t.unsaved() || t.syncing {
@@ -82,7 +92,8 @@ func (m *Model) ReloadAllFromDisk() {
 			continue
 		}
 		if t.unsaved() {
-			m.banner = "Unsaved changes; not reloaded from disk: " + filepath.Base(t.doc.Path())
+			m.banner = "Unsaved changes; not reloaded from disk: " +
+				m.projectTreePathBase(t.doc.Path())
 			continue
 		}
 		m.reloadTab(t)
@@ -99,6 +110,10 @@ func (m *Model) ReloadAllFromDisk() {
 // reloadTab rereads a clean buffer from disk after an external rewrite.
 func (m *Model) reloadTab(t *Tab) {
 	path := t.doc.Path()
+	if m.tabUsesRemoteFile(t) {
+		m.reloadRemoteTab(t)
+		return
+	}
 	if fi, err := os.Stat(path); err != nil || fi.Size() > maxReloadSize {
 		t.noteDisk()
 		return
@@ -125,6 +140,54 @@ func (m *Model) reloadTab(t *Tab) {
 				m.banner = ""
 			}
 			m.status = "Reloaded " + filepath.Base(path)
+			m.invalidate()
+		})
+	}()
+}
+
+func (m *Model) tabUsesRemoteFile(t *Tab) bool {
+	if t == nil || t.doc == nil || !m.projectTreeUsesRemotePaths() {
+		return false
+	}
+	return m.projectTreeSamePath(m.Root(), t.doc.Path()) ||
+		m.projectTreeUnderPath(t.doc.Path(), m.Root())
+}
+
+func (m *Model) reloadRemoteTab(t *Tab) {
+	if t == nil || t.doc == nil || t.reloading {
+		return
+	}
+	path := t.doc.Path()
+	t.reloading = true
+	m.status = "Reloading " + m.projectTreePathBase(path) + " from the remote host…"
+	m.invalidate()
+	go func() {
+		ctx, cancel := context.WithTimeout(m.remoteBaseContext(), 15*time.Second)
+		defer cancel()
+		raw, err := m.invoke(ctx, "fs_read_text", map[string]any{"path": path})
+		var text string
+		if err == nil {
+			err = json.Unmarshal(raw, &text)
+		}
+		if err == nil && len(text) > maxReloadSize {
+			err = fmt.Errorf("the remote file is larger than %d bytes", maxReloadSize)
+		}
+		if err == nil {
+			err = t.doc.ApplyEdits(ctx, editor.Edit{
+				Start: 0, End: len(t.doc.Text()), Text: text,
+			})
+		}
+		m.post(func() {
+			t.reloading = false
+			if err != nil {
+				m.fail(path, err)
+				return
+			}
+			t.seen = t.doc.Buffer().Version()
+			if m.banner != "" && strings.Contains(m.banner, m.projectTreePathBase(path)) {
+				m.banner = ""
+			}
+			m.status = "Reloaded " + m.projectTreePathBase(path)
 			m.invalidate()
 		})
 	}()

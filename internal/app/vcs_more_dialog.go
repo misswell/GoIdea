@@ -50,6 +50,19 @@ func (m *Model) submitVCSMore() {
 		m.submitShelfRename()
 	case "shelf.delete":
 		m.deleteShelf(m.vcsMore.input, m.vcsMore.input2)
+	case "patch.saved":
+		path := m.vcsMore.input
+		remember := m.vcsMore.flag
+		m.closeVCSMore()
+		if remember {
+			m.rememberVCSSetting(settingsPageVCSConfirmation,
+				"vcs.confirmation.onPatchCreated", "reveal")
+		}
+		revealPath(path)
+	case "stash.drop":
+		m.dropVCSStash(m.vcsMore.input, m.vcsMore.input2)
+	case "tag.delete":
+		m.deleteVCSTag(m.vcsMore.input, m.vcsMore.input2)
 	case vcsMoreActionWorktreeAdd:
 		m.submitNewWorktree()
 	case "worktree.remove":
@@ -73,6 +86,8 @@ func (m *Model) submitVCSMore() {
 		if len(parts) == 2 {
 			m.getLogChangeFromRevision(parts[0], parts[1])
 		}
+	case "changes.deleteFiles":
+		m.deleteVCSFiles(strings.Split(m.vcsMore.input, "\x00"))
 	case "changes.revert":
 		parts := strings.Split(m.vcsMore.input, "\x00")
 		if len(parts) >= 2 {
@@ -80,14 +95,18 @@ func (m *Model) submitVCSMore() {
 			if len(parts) > 2 {
 				oldPath = parts[2]
 			}
-			m.revertSelectedLogChange(parts[0], parts[1], oldPath)
+			repository := ""
+			if len(parts) > 3 {
+				repository = parts[3]
+			}
+			m.revertSelectedLogChange(parts[0], parts[1], oldPath, repository)
 		}
 	case "log.goToRef":
 		revision := strings.TrimSpace(m.vcsMore.input)
 		m.closeVCSMore()
 		m.goToGitLogRef(revision)
 	case vcsMoreActionReword:
-		m.rewordCommit(m.vcsMore.input2, strings.TrimSpace(m.vcsMore.input))
+		m.rewordCommit(m.vcsMore.input2, strings.TrimSpace(m.vcsMore.input), m.vcsMore.input3)
 	case vcsMoreActionCheckout:
 		m.submitCheckout()
 	case "compare.revision":
@@ -97,11 +116,11 @@ func (m *Model) submitVCSMore() {
 	case "apply.patch":
 		m.applyPatch()
 	case "commit.undo":
-		m.undoCommit(m.vcsMore.input)
+		m.undoCommit(m.vcsMore.input, m.vcsMore.input3)
 	case "commit.drop":
-		m.runRebasePlan(m.vcsMore.input, "drop", "Drop Commit")
+		m.runRebasePlan(m.vcsMore.input, "drop", "Drop Commit", m.vcsMore.input3)
 	case "commit.squash":
-		m.runRebasePlan(m.vcsMore.input, "squash", "Squash Commits")
+		m.runRebasePlan(m.vcsMore.input, "squash", "Squash Commits", m.vcsMore.input3)
 	case "interactive.rebase":
 		m.submitInteractiveRebase()
 	}
@@ -158,6 +177,10 @@ func (m *Model) cancelVCSMore() {
 		return
 	}
 	if !m.vcsMore.busy {
+		if m.vcsMore.action == "patch.saved" && m.vcsMore.flag {
+			m.rememberVCSSetting(settingsPageVCSConfirmation,
+				"vcs.confirmation.onPatchCreated", "no")
+		}
 		m.closeVCSMore()
 	}
 }
@@ -175,6 +198,8 @@ func (m *Model) activateVCSMoreItem(index int) {
 		}
 		if m.commit != nil {
 			m.commit.message = item.Label
+			m.commit.problems = nil
+			m.commit.problemsOverride = false
 			m.commit.err = ""
 		}
 		m.closeVCSMore()
@@ -268,6 +293,8 @@ func (m *Model) vcsMorePrimaryLabel() string {
 		return "Rename"
 	case "shelf.delete", "changelist.delete", "worktree.remove":
 		return "Delete"
+	case "patch.saved":
+		return "Show"
 	case vcsMoreActionWorktreeAdd:
 		return "Create"
 	case vcsMoreActionWorktreeMove:
@@ -293,6 +320,9 @@ func (m *Model) vcsMorePrimaryLabel() string {
 	case "commit.squash":
 		return "Squash"
 	case "interactive.rebase":
+		if m.vcsMore.flag {
+			return "Drop Commits and Rebase"
+		}
 		return "Start Rebasing"
 	default:
 		return "OK"
@@ -615,7 +645,9 @@ func (m *Model) vcsMoreDialog(c *ui.Context, p *ui.Theme) {
 			case vcsMorePrompt:
 				m.drawVCSMorePrompt(c, p)
 			case vcsMoreConfirm:
-				if m.vcsMore.input != "" && m.vcsMore.action != "worktree.remove" {
+				if m.vcsMore.action == "patch.saved" {
+					ui.Checkbox(c, &m.vcsMore.flag, "Don't ask again")
+				} else if m.vcsMore.input != "" && m.vcsMore.action != "worktree.remove" {
 					ui.Text(c, shortID(m.vcsMore.input)).Font(oiFontMono).FontSize(12).TextColor(p.TextMuted)
 				}
 			case vcsMoreClone:

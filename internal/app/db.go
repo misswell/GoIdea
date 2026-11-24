@@ -55,6 +55,7 @@ type dbView struct {
 	sourceForm         *dbSourceForm
 	tableForm          *dbTableForm
 	importForm         *dbImportForm
+	exportDialog       *dbExportDialog
 	connectRemedy      *dbConnectRemedy
 	newMenu            *dbNewMenu
 
@@ -101,14 +102,17 @@ type dbActionPrompt struct {
 type dbResult struct {
 	id       int
 	title    string
+	source   string
 	outcomes []openidea.DBOutcome
 	err      string
 }
 
 // addDBResult puts a new result tab in front, caps the strip and selects it.
-func (v *dbView) addDBResult(title string, outcomes []openidea.DBOutcome, errText string) {
+func (v *dbView) addDBResult(title, source string, outcomes []openidea.DBOutcome, errText string) {
 	v.seq++
-	v.results = append([]dbResult{{id: v.seq, title: title, outcomes: outcomes, err: errText}}, v.results...)
+	v.results = append([]dbResult{{
+		id: v.seq, title: title, source: source, outcomes: outcomes, err: errText,
+	}}, v.results...)
 	if len(v.results) > 10 {
 		v.results = v.results[:10]
 	}
@@ -191,6 +195,7 @@ func (m *Model) closeDatabase() {
 	m.dbTable = nil
 	m.dbHist = nil
 	m.dbPlan = nil
+	m.db.exportDialog = nil
 	m.invalidate()
 }
 
@@ -572,13 +577,13 @@ func (m *Model) RunDB() {
 			}
 			switch {
 			case err != nil:
-				v.addDBResult(title, nil, "Execution failed: "+err.Error())
+				v.addDBResult(title, id, nil, "Execution failed: "+err.Error())
 				v.outLog = append(v.outLog, "Execution failed: "+err.Error())
 			case len(statements) == 0:
-				v.addDBResult(title, outcomes, "There is no statement to execute")
+				v.addDBResult(title, id, outcomes, "There is no statement to execute")
 				v.outLog = append(v.outLog, "There is no statement to execute")
 			default:
-				v.addDBResult(title, outcomes, "")
+				v.addDBResult(title, id, outcomes, "")
 				for _, o := range outcomes {
 					v.outLog = append(v.outLog, oneLine(o.Statement.Text)+" · "+dbOutcomeSummary(o))
 				}
@@ -961,7 +966,8 @@ func (m *Model) dbDialog(c *ui.Context, p *ui.Theme) {
 						ui.Text(c, "Cmd+Enter runs the statement; results show the first 50 rows").FontSize(12).
 							TextColor(p.TextMuted).SingleLine()
 					})
-					ui.Row(c).Gap(2).Children(func() {
+					_, exportable := m.dbExportDataForResult(v.active)
+					ui.Row(c).Gap(2).AlignItems(ui.Center).Children(func() {
 						for i := -1; i < len(v.results); i++ {
 							i := i
 							title := "Output"
@@ -1003,8 +1009,33 @@ func (m *Model) dbDialog(c *ui.Context, p *ui.Theme) {
 									if menu.Item("Previous Result").Chosen() {
 										m.StepDBResult(-1)
 									}
+									if _, ok := m.dbExportDataForResult(i); ok {
+										menu.Separator()
+										if menu.Item("Export Data…").Chosen() {
+											m.OpenDBExport(i)
+										}
+									}
 								})
 							}
+						}
+						ui.Spacer(c)
+						if exportable {
+							ui.MenuButton(c, "Export", func(menu *ui.Menu) {
+								index := v.active
+								if menu.Item("Export Data…").Chosen() {
+									m.OpenDBExport(index)
+								}
+								menu.Separator()
+								for _, format := range dbExportFormats {
+									format := format
+									if menu.Item("Copy as " + format.Label).Chosen() {
+										m.DBExportCopy(map[string]any{
+											"index":  index,
+											"format": format.ID,
+										})
+									}
+								}
+							})
 						}
 					})
 					if v.err != "" {
@@ -1254,6 +1285,72 @@ func (m *Model) SmokeDatabase(ctx context.Context) (map[string]any, error) {
 		if s.err != "" {
 			out["tableError"] = s.err
 		}
+		editRow, editCol := -1, -1
+		for row := range s.page.Result.Rows {
+			for col, column := range s.page.Result.Columns {
+				value := dbTableDisplayedCell(s, row, col)
+				if column.Name == "name" && value != nil && *value == "Ada" {
+					editRow, editCol = row, col
+					break
+				}
+			}
+			if editRow >= 0 {
+				break
+			}
+		}
+		if editRow < 0 {
+			out["tableEditError"] = "the smoke table did not contain people.name = Ada"
+			m.ToggleDBTableDDL()
+			return
+		}
+		m.DBStartCellEdit(editRow, editCol, false)
+		if !s.editing {
+			out["tableEditError"] = "a short text cell did not open the inline editor"
+			m.ToggleDBTableDDL()
+			return
+		}
+		s.editText = "Ada Lovelace"
+		m.DBCommitCellEdit()
+		m.DBSubmitChanges()
+	})
+	wait("tableEdit", func() bool {
+		s := m.dbTable
+		if s == nil || s.submitting || s.loading {
+			return false
+		}
+		if s.err != "" {
+			return true
+		}
+		for row := range s.page.Result.Rows {
+			for col, column := range s.page.Result.Columns {
+				if column.Name != "name" {
+					continue
+				}
+				value := dbTableDisplayedCell(s, row, col)
+				if value != nil && *value == "Ada Lovelace" {
+					return true
+				}
+			}
+		}
+		return false
+	})
+	mygo.RunOnMain(func() {
+		if s := m.dbTable; s != nil {
+			out["tableEdited"] = !dbTableHasChanges(s) && s.err == ""
+			for row := range s.page.Result.Rows {
+				for col, column := range s.page.Result.Columns {
+					if column.Name != "name" {
+						continue
+					}
+					if value := dbTableDisplayedCell(s, row, col); value != nil && *value == "Ada Lovelace" {
+						out["tableEditedValue"] = *value
+					}
+				}
+			}
+			if s.err != "" {
+				out["tableEditError"] = s.err
+			}
+		}
 		m.ToggleDBTableDDL()
 	})
 	wait("ddl", func() bool {
@@ -1318,6 +1415,8 @@ type dbTableSheet struct {
 	source      string
 	schema      string
 	table       string
+	driver      string
+	readOnly    bool
 	offset      int
 	limit       int
 	page        openidea.DBTablePage
@@ -1341,6 +1440,12 @@ type dbTableSheet struct {
 	valueOpen  bool
 	valueText  string
 	valueFind  string
+	valueRO    bool
+	editing    bool
+	editRow    int
+	editCol    int
+	editText   string
+	closeAsk   bool
 	submitting bool
 }
 
@@ -1352,8 +1457,11 @@ func (m *Model) OpenDBTable(schema, table string) {
 	if schema == "" {
 		schema = m.db.schema
 	}
+	source, _ := m.dbSourceByID(m.db.activeTarget())
 	m.dbTable = &dbTableSheet{
-		open: true, source: m.db.activeTarget(), schema: schema, table: table, limit: 100,
+		open: true, source: m.db.activeTarget(), schema: schema, table: table,
+		driver: source.Driver, readOnly: source.ReadOnly, limit: 100,
+		selectedRow: -1, selectedCol: -1, editRow: -1, editCol: -1,
 		pending: map[string]*string{}, deletes: map[int]bool{},
 	}
 	m.loadDBTablePage()
@@ -1411,6 +1519,9 @@ func (m *Model) loadDBTablePage() {
 func (m *Model) DBTableStepPage(delta int) {
 	s := m.dbTable
 	if s == nil || s.loading {
+		return
+	}
+	if !m.dbBlockTableNavigation("Changing the page") {
 		return
 	}
 	next := s.offset + delta*s.limit
@@ -1526,9 +1637,37 @@ func (m *Model) dbTableDialog(c *ui.Context, p *ui.Theme) {
 	if s == nil {
 		return
 	}
+	if s.closeAsk {
+		open := s.closeAsk
+		ui.Modal(c, &open, func() {
+			ui.Column(c).Width(430).Gap(10).Children(func() {
+				ui.Text(c, "Unsaved table changes").FontSize(13).Bold().TextColor(p.Text).SingleLine()
+				ui.Text(c, "Submit the row changes before closing, or discard them.").
+					FontSize(12).TextColor(p.TextMuted)
+				ui.Row(c).Gap(8).Children(func() {
+					ui.Spacer(c)
+					ui.Button(c, "Cancel").OnClick(func() { s.closeAsk = false; m.invalidate() })
+					ui.Button(c, "Discard").OnClick(func() { m.DBDiscardAndCloseTable() })
+					ui.Button(c, "Submit").Disabled(s.submitting || s.err != "").
+						OnClick(func() {
+							s.closeAsk = false
+							m.DBSubmitChanges()
+						})
+				})
+			})
+		})
+		if !open && m.dbTable == s {
+			s.closeAsk = false
+			m.invalidate()
+		}
+		return
+	}
+
+	editable, editNotice := dbTableEditability(s)
 	open := s.open
 	ui.Modal(c, &open, func() {
-		ui.Column(c).Width(860).Height(520).Gap(8).Children(func() {
+		content := ui.Column(c).Width(940).Height(600).Gap(8)
+		content.Children(func() {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "Table data: "+s.table).FontSize(13).Bold().TextColor(p.Text).SingleLine()
 				if s.loading {
@@ -1537,47 +1676,58 @@ func (m *Model) dbTableDialog(c *ui.Context, p *ui.Theme) {
 					ui.Text(c, dbTableRange(s)).FontSize(12).TextColor(p.TextMuted).SingleLine()
 				}
 				ui.Spacer(c)
-				ui.Button(c, "Refresh").OnClick(func() { m.loadDBTablePage() })
-				ui.Button(c, "Previous Page").Disabled(s.offset == 0 || s.loading).
+				ui.Button(c, "Refresh").Disabled(s.loading).
+					OnClick(func() { m.DBRefreshTablePage() })
+				ui.Button(c, "Previous").Disabled(s.offset == 0 || s.loading).
 					OnClick(func() { m.DBTableStepPage(-1) })
-				ui.Button(c, "Next Page").Disabled(!s.page.Result.HasMore || s.loading).
+				ui.Button(c, "Next").Disabled(!s.page.Result.HasMore || s.loading).
 					OnClick(func() { m.DBTableStepPage(1) })
+				pageSize := strconv.Itoa(s.limit)
+				if choice := ui.Select(c, &pageSize, []string{"50", "100", "200", "500"}).Width(76); choice.Changed() {
+					if m.dbBlockTableNavigation("Changing the page size") {
+						if size, err := strconv.Atoi(pageSize); err == nil {
+							s.limit = size
+							s.offset = 0
+							m.loadDBTablePage()
+						}
+					}
+				}
 				ui.Button(c, "Details").OnClick(func() { m.ToggleDBTableDetails() })
 				ui.Button(c, "DDL").OnClick(func() { m.ToggleDBTableDDL() })
 				ui.Button(c, "Go to Column").OnClick(func() { m.DBGoToColumn() })
-				ui.Button(c, "Submit").Disabled(s.submitting).OnClick(func() { m.DBSubmitChanges() })
-				ui.Button(c, "Revert").OnClick(func() { m.DBRevertChanges() })
-				ui.Button(c, "Close").OnClick(func() { m.closeDBTable() })
+				if editable {
+					ui.Button(c, "Add Row").OnClick(func() { m.DBAddTableRow() })
+					ui.Button(c, "Submit").Disabled(!dbTableHasChanges(s) || s.submitting).
+						OnClick(func() { m.DBSubmitChanges() })
+					ui.Button(c, "Revert").Disabled(!dbTableHasChanges(s)).
+						OnClick(func() { m.DBRevertChanges() })
+				}
+				ui.Button(c, "Close").OnClick(func() { m.DBCloseTable() })
 			})
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "Filter").FontSize(12).TextColor(p.TextMuted).SingleLine()
 				ui.TextArea(c, &s.filter).Height(28).SingleLine().Grow(1)
-				ui.Button(c, "Apply").OnClick(func() {
-					s.offset = 0
-					m.loadDBTablePage()
-				})
-				ui.Button(c, "Clear").OnClick(func() {
-					s.filter = ""
-					s.offset = 0
-					m.loadDBTablePage()
-				})
-				ui.Button(c, "Add Row").OnClick(func() {
-					s.inserts = append(s.inserts, map[string]*string{})
-					s.selectedRow = len(s.page.Result.Rows) + len(s.inserts) - 1
-					s.selectedCol = 0
-					m.invalidate()
-				})
-				ui.Button(c, "Delete Row").OnClick(func() {
-					if s.selectedRow >= 0 && s.selectedRow < len(s.page.Result.Rows) {
-						s.deletes[s.selectedRow] = !s.deletes[s.selectedRow]
-						m.invalidate()
+				ui.Button(c, "Apply").OnClick(func() { m.DBApplyTableFilter() })
+				ui.Button(c, "Clear").OnClick(func() { m.DBClearTableFilter() })
+				deleteLabel := "Delete Row"
+				if s.selectedRow >= 0 {
+					if inserted, ok := dbTableInserted(s, s.selectedRow); ok {
+						_ = inserted
+						deleteLabel = "Remove Added Row"
+					} else if s.deletes[s.selectedRow] {
+						deleteLabel = "Restore Row"
 					}
-				})
-				if len(s.pending) > 0 || len(s.deletes) > 0 || len(s.inserts) > 0 {
-					ui.Text(c, fmt.Sprintf("%d pending", len(s.pending)+len(s.deletes)+len(s.inserts))).
+				}
+				ui.Button(c, deleteLabel).Disabled(!editable || s.selectedRow < 0).
+					OnClick(func() { m.DBToggleDeletedTableRow() })
+				if pending := dbTablePendingCount(s); pending > 0 {
+					ui.Text(c, fmt.Sprintf("%d pending", pending)).
 						FontSize(12).TextColor(p.TextMuted).SingleLine()
 				}
 			})
+			if !editable && s.page.Result.Columns != nil {
+				ui.Text(c, editNotice).FontSize(12).TextColor(p.TextMuted).SingleLine().Ellipsis("…")
+			}
 			if s.err != "" {
 				ui.Text(c, s.err).FontSize(12).TextColor(p.Danger).SingleLine().Ellipsis("…")
 			}
@@ -1606,20 +1756,19 @@ func (m *Model) dbTableDialog(c *ui.Context, p *ui.Theme) {
 			}
 			ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
 				ui.Column(c).Children(func() {
-					ui.Row(c).Height(24).Children(func() {
-						ui.Text(c, "#").FontSize(12).Bold().TextColor(p.TextMuted).
-							Width(36).SingleLine()
-						for colIndex, col := range s.page.Result.Columns {
-							colIndex, col := colIndex, col
+					ui.Row(c).Height(26).Children(func() {
+						ui.Text(c, "#").FontSize(12).Bold().TextColor(p.TextMuted).Width(38).SingleLine()
+						for colIndex, column := range s.page.Result.Columns {
+							colIndex, column := colIndex, column
 							head := ui.ButtonBase(c.Key(fmt.Sprintf("dbtheader:%d", colIndex))).
-								Height(24).Width(160).AlignItems(ui.Center)
+								Height(26).Width(168).AlignItems(ui.Center)
 							if head.Hovered() {
 								head.Background(p.SurfaceHover)
 							}
 							head.Children(func() {
-								label := col.Name
+								label := column.Name
 								for _, key := range s.sort {
-									if key.Column == col.Name {
+									if key.Column == column.Name {
 										if key.Descending {
 											label += " ↓"
 										} else {
@@ -1630,121 +1779,138 @@ func (m *Model) dbTableDialog(c *ui.Context, p *ui.Theme) {
 								ui.Text(c, label).FontSize(12).Bold().TextColor(p.TextMuted).
 									SingleLine().Ellipsis("…")
 							})
-							head.OnClick(func() {
-								next := []openidea.DBSortKey{{Column: col.Name}}
-								for _, key := range s.sort {
-									if key.Column == col.Name {
-										next[0].Descending = !key.Descending
-									}
-								}
-								s.sort = next
-								s.offset = 0
-								m.loadDBTablePage()
-							})
+							head.OnClick(func() { m.DBSortTableColumn(colIndex) })
 						}
 					})
-					for rowIndex, row := range s.page.Result.Rows {
-						rowIndex, row := rowIndex, row
+					for rowIndex := 0; rowIndex < dbTableRowCount(s); rowIndex++ {
+						rowIndex := rowIndex
+						_, inserted := dbTableInserted(s, rowIndex)
+						deleted := !inserted && s.deletes[rowIndex]
 						ui.Row(c).Height(28).Children(func() {
-							ui.Text(c, strconv.Itoa(rowIndex+1)).FontSize(11).TextColor(p.TextMuted).
-								Width(36).SingleLine()
+							rowNumberText := strconv.Itoa(s.offset + rowIndex + 1)
+							tone := p.TextMuted
+							if inserted {
+								rowNumberText = "+"
+								tone = p.Accent
+							} else if deleted {
+								tone = p.Danger
+							}
+							number := ui.ButtonBase(c.Key(fmt.Sprintf("dbrow:%d", rowIndex))).
+								Height(28).Width(38).AlignItems(ui.Center)
+							if rowIndex == s.selectedRow {
+								number.Background(p.SurfaceHover)
+							}
+							number.Children(func() {
+								ui.Text(c, rowNumberText).FontSize(11).TextColor(tone).SingleLine()
+							})
+							number.OnClick(func() {
+								s.selectedRow = rowIndex
+								if s.selectedCol < 0 {
+									s.selectedCol = 0
+								}
+								m.invalidate()
+							})
+							if number.DoubleClicked() {
+								s.selectedRow = rowIndex
+								if len(s.page.Result.Columns) > 0 {
+									m.DBStartCellEdit(rowIndex, 0, false)
+								}
+							}
+							number.ContextMenu(func(menu *ui.Menu) {
+								label := "Delete Row"
+								if deleted {
+									label = "Restore Row"
+								}
+								if inserted {
+									label = "Remove Added Row"
+								}
+								if menu.Item(label).Disabled(!editable).Chosen() {
+									s.selectedRow = rowIndex
+									m.DBToggleDeletedTableRow()
+								}
+							})
 							for colIndex := range s.page.Result.Columns {
 								colIndex := colIndex
-								var cell *string
-								if colIndex < len(row) {
-									cell = row[colIndex]
-								}
+								cell := dbTableDisplayedCell(s, rowIndex, colIndex)
 								selected := rowIndex == s.selectedRow && colIndex == s.selectedCol
+								editing := s.editing && rowIndex == s.editRow && colIndex == s.editCol
 								key := fmt.Sprintf("%d:%d", rowIndex, colIndex)
-								edited := false
-								if value, ok := s.pending[key]; ok {
-									cell = value
-									edited = true
+								modified := false
+								if !inserted {
+									_, modified = s.pending[key]
+								} else if insertedIndex, ok := dbTableInserted(s, rowIndex); ok {
+									_, modified = s.inserts[insertedIndex][s.page.Result.Columns[colIndex].Name]
 								}
-								text, tone := "NULL", p.TextMuted
+								if editing {
+									area := ui.TextArea(c.Key("dbedit:"+key), &s.editText).
+										Height(28).Width(168).Font("monospace").FontSize(12).SingleLine()
+									area.OnChange(func() { m.invalidate() })
+									area.OnSubmit(func() { m.DBCommitCellEdit() })
+									continue
+								}
+								text := "<null>"
+								tone := p.TextMuted
 								if cell != nil {
 									text = *cell
 									tone = p.Text
-									if text == "DEFAULT" {
-										tone = p.TextMuted
-									}
 								}
+								cellButton := ui.ButtonBase(c.Key("dbcell:" + key)).Height(28).
+									Width(168).PaddingStart(4).AlignItems(ui.Center)
 								if selected {
-									value := text
-									area := ui.TextArea(c.Key("dbcell:"+key), &value).Height(28).Width(160).
-										Font("monospace").FontSize(12).SingleLine()
-									area.OnChange(func() {
-										if s.pending == nil {
-											s.pending = map[string]*string{}
-										}
-										next := value
-										s.pending[key] = &next
-										m.invalidate()
-									})
-								} else {
-									cellButton := ui.ButtonBase(c.Key("dbcell:" + key)).Height(28).
-										Width(160).PaddingStart(4).AlignItems(ui.Center)
-									if s.deletes[rowIndex] {
-										cellButton.Background(p.SurfaceHover)
-									}
-									cellButton.Children(func() {
-										ui.Text(c, text).FontSize(12).Font("monospace").TextColor(tone).
-											SingleLine().Ellipsis("…")
-									})
-									if edited {
-										cellButton.BorderWidth(0, 0, 1, 0).BorderColor(p.Accent)
-									}
-									cellButton.OnClick(func() {
-										s.selectedRow, s.selectedCol = rowIndex, colIndex
-										m.invalidate()
-									})
-									if cellButton.DoubleClicked() {
-										s.selectedRow, s.selectedCol = rowIndex, colIndex
-										m.DBOpenValueWindow()
-									}
-									cellButton.ContextMenu(func(menu *ui.Menu) {
-										if menu.Item("Edit Value…").Chosen() {
-											s.selectedRow, s.selectedCol = rowIndex, colIndex
-											m.DBOpenValueWindow()
-										}
-										if menu.Item("Set NULL").Chosen() {
-											s.selectedRow, s.selectedCol = rowIndex, colIndex
-											m.DBSetCellNull()
-										}
-										if menu.Item("Set DEFAULT").Chosen() {
-											s.selectedRow, s.selectedCol = rowIndex, colIndex
-											m.DBSetCellDefault()
-										}
-										if menu.Item("Toggle Boolean").Chosen() {
+									cellButton.Background(p.Selection)
+								} else if deleted {
+									cellButton.Background(p.SurfaceHover)
+								}
+								cellButton.Children(func() {
+									columnType := dbTableColumnType(s, colIndex)
+									if editable && !deleted && dbIsBooleanType(columnType, s.driver) {
+										values, _ := dbBooleanLiterals(s.driver)
+										checked := cell != nil && strings.EqualFold(*cell, values.trueValue)
+										if ui.CheckboxBase(c, &checked).Changed() {
 											s.selectedRow, s.selectedCol = rowIndex, colIndex
 											m.DBToggleBooleanCell()
 										}
-										if menu.Item("Reformat Value").Chosen() {
-											s.selectedRow, s.selectedCol = rowIndex, colIndex
-											m.DBReformatValue()
+										if cell == nil {
+											ui.Text(c, "<null>").FontSize(12).Font("monospace").
+												TextColor(p.TextMuted).SingleLine()
 										}
-									})
+									} else {
+										ui.Text(c, text).FontSize(12).Font("monospace").TextColor(tone).
+											SingleLine().Ellipsis("…")
+									}
+								})
+								if modified {
+									cellButton.BorderWidth(0, 0, 1, 0).BorderColor(p.Accent)
 								}
-							}
-						})
-					}
-					for insertIndex, values := range s.inserts {
-						insertIndex, values := insertIndex, values
-						rowNumber := len(s.page.Result.Rows) + insertIndex + 1
-						ui.Row(c).Height(28).Children(func() {
-							ui.Text(c, strconv.Itoa(rowNumber)).FontSize(11).TextColor(p.Accent).Width(36).SingleLine()
-							for colIndex, column := range s.page.Result.Columns {
-								colIndex, column := colIndex, column
-								value := ""
-								if current := values[column.Name]; current != nil {
-									value = *current
+								cellButton.OnClick(func() { m.DBSelectTableCell(rowIndex, colIndex) })
+								if cellButton.DoubleClicked() {
+									m.DBStartCellEdit(rowIndex, colIndex, false)
 								}
-								area := ui.TextArea(c.Key(fmt.Sprintf("dbinsert:%d:%d", insertIndex, colIndex)), &value).
-									Height(28).Width(160).Font("monospace").FontSize(12).SingleLine()
-								area.OnChange(func() {
-									next := value
-									values[column.Name] = &next
-									m.invalidate()
+								cellButton.ContextMenu(func(menu *ui.Menu) {
+									if menu.Item("Edit Cell").Disabled(!dbTableEditableCell(s, rowIndex, colIndex)).Chosen() {
+										m.DBStartCellEdit(rowIndex, colIndex, false)
+									}
+									if menu.Item("Open Value in Editor").Chosen() {
+										s.selectedRow, s.selectedCol = rowIndex, colIndex
+										m.DBOpenValueWindow()
+									}
+									if menu.Item("Set NULL").
+										Disabled(!editable || !dbTableColumnNullable(s, colIndex)).Chosen() {
+										s.selectedRow, s.selectedCol = rowIndex, colIndex
+										m.DBSetCellNull()
+									}
+									_, defaultOK := dbTableDefaultValue(s, colIndex)
+									_, isInserted := dbTableInserted(s, rowIndex)
+									if menu.Item("Set DEFAULT").
+										Disabled(!editable || (!isInserted && !defaultOK)).Chosen() {
+										s.selectedRow, s.selectedCol = rowIndex, colIndex
+										m.DBSetCellDefault()
+									}
+									if menu.Item("Toggle Boolean").
+										Disabled(!editable || !dbIsBooleanType(dbTableColumnType(s, colIndex), s.driver)).Chosen() {
+										s.selectedRow, s.selectedCol = rowIndex, colIndex
+										m.DBToggleBooleanCell()
+									}
 								})
 							}
 						})
@@ -1752,9 +1918,69 @@ func (m *Model) dbTableDialog(c *ui.Context, p *ui.Theme) {
 				})
 			})
 		})
+		content.OnShortcut(0, ui.KeyEscape, func() {
+			if s.editing {
+				m.DBCancelCellEdit()
+				return
+			}
+			if s.valueOpen {
+				s.valueOpen = false
+				m.invalidate()
+				return
+			}
+			m.DBCloseTable()
+		})
+		content.OnShortcut(0, ui.KeyUp, func() {
+			if !s.editing {
+				m.DBMoveTableCell(-1, 0)
+			}
+		})
+		content.OnShortcut(0, ui.KeyDown, func() {
+			if !s.editing {
+				m.DBMoveTableCell(1, 0)
+			}
+		})
+		content.OnShortcut(0, ui.KeyLeft, func() {
+			if !s.editing {
+				m.DBMoveTableCell(0, -1)
+			}
+		})
+		content.OnShortcut(0, ui.KeyRight, func() {
+			if !s.editing {
+				m.DBMoveTableCell(0, 1)
+			}
+		})
+		content.OnShortcut(0, ui.KeyEnter, func() {
+			if !s.editing {
+				m.DBStartCellEdit(s.selectedRow, s.selectedCol, false)
+			}
+		})
+		content.OnShortcut(ui.Shift, ui.KeyEnter, func() {
+			if !s.editing {
+				m.DBStartCellEdit(s.selectedRow, s.selectedCol, true)
+			}
+		})
+		content.OnShortcut(0, ui.KeyF2, func() {
+			if !s.editing {
+				m.DBStartCellEdit(s.selectedRow, s.selectedCol, false)
+			}
+		})
+		content.OnShortcut(0, ui.KeySpace, func() {
+			if !s.editing && editable {
+				m.DBToggleBooleanCell()
+			}
+		})
+		content.OnShortcut(ui.Cmd, ui.KeyEnter, func() { m.DBSubmitChanges() })
+		content.OnShortcut(ui.Ctrl, ui.KeyEnter, func() { m.DBSubmitChanges() })
+		content.OnShortcut(ui.Cmd|ui.Alt, ui.KeyZ, func() { m.DBRevertChanges() })
+		content.OnShortcut(ui.Ctrl|ui.Alt, ui.KeyZ, func() { m.DBRevertChanges() })
+		content.OnShortcut(ui.Cmd, ui.KeyBackspace, func() { m.DBSetCellNull() })
+		content.OnShortcut(ui.Ctrl, ui.KeyBackspace, func() { m.DBSetCellNull() })
+		content.OnShortcut(ui.Cmd|ui.Shift, ui.KeyBackspace, func() { m.DBSetCellDefault() })
+		content.OnShortcut(ui.Ctrl|ui.Shift, ui.KeyBackspace, func() { m.DBSetCellDefault() })
 	})
-	if !open && m.dbTable != nil {
-		m.closeDBTable()
+	if !open && m.dbTable == s {
+		m.DBCloseTable()
 	}
 }
 
@@ -1999,7 +2225,7 @@ func (m *Model) dbPlanDialog(c *ui.Context, p *ui.Theme) {
 					ui.Column(c).Padding(0, 6).Children(func() {
 						for _, r := range pl.rows {
 							n := pl.nodes[r.index]
-							ui.Row(c).Height(24).PaddingStart(4 + float32(r.depth)*20).
+							ui.Row(c).Height(24).PaddingStart(4 + float32(r.depth)*m.treeIndentWidth()).
 								PaddingEnd(8).Gap(4).AlignItems(ui.Center).Children(func() {
 								oiIconEl(c, "openidea/database/plan", 16, oiPaletteOf(p), p.TextMuted).
 									MarginEnd(2)

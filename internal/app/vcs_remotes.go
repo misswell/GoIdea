@@ -39,12 +39,13 @@ func (m *Model) OpenGitRemotes() {
 
 func (m *Model) loadGitRemotes(state *vcsRemotesPane) {
 	root := m.Root()
+	repoArg := m.vcsRepositoryArg()
 	state.loading = true
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 		defer cancel()
-		raw, err := m.mgr.Invoke(ctx, Window, "vcs_remotes", map[string]any{"repo": nil})
+		raw, err := m.mgr.Invoke(ctx, Window, "vcs_remotes", map[string]any{"repo": repoArg})
 		var items []openidea.Remote
 		if err == nil {
 			err = json.Unmarshal(raw, &items)
@@ -146,12 +147,13 @@ func (m *Model) submitGitRemote(state *vcsRemotesPane) {
 		}
 	}
 	root := m.Root()
+	repoArg := m.vcsRepositoryArg()
 	state.busy, state.err = true, ""
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 		defer cancel()
-		_, err := m.mgr.Invoke(ctx, Window, "vcs_edit_remote", map[string]any{"repo": nil, "edit": edit})
+		_, err := m.mgr.Invoke(ctx, Window, "vcs_edit_remote", map[string]any{"repo": repoArg, "edit": edit})
 		m.post(func() {
 			if m.Root() != root || m.vcsOps.remotes != state || !m.vcsOps.open {
 				return

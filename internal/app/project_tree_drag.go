@@ -63,8 +63,15 @@ func (m *Model) draggableTreePaths(source string) []string {
 		}
 	}
 	out := paths[:0]
+	remote := m.projectTreeUsesRemotePaths()
 	for _, path := range paths {
 		if readOnly[path] || path == m.Root() || m.workspaceContains(path) {
+			continue
+		}
+		if remote {
+			if m.projectTreeEntryKnown(path) {
+				out = append(out, path)
+			}
 			continue
 		}
 		if _, err := os.Stat(path); err == nil {
@@ -168,6 +175,22 @@ func treeDropPlan(paths []string, target string, copy bool) []string {
 	return out
 }
 
+func (m *Model) projectTreeDropPlan(paths []string, target string, copy bool) []string {
+	target = m.projectTreePathClean(target)
+	out := make([]string, 0, len(paths))
+	for _, path := range paths {
+		path = m.projectTreePathClean(path)
+		if m.projectTreeSamePath(target, path) || m.projectTreeUnderPath(target, path) {
+			continue
+		}
+		if !copy && m.projectTreeSamePath(m.projectTreePathDir(path), target) {
+			continue
+		}
+		out = append(out, path)
+	}
+	return out
+}
+
 func (m *Model) finishTreeDrag() {
 	d := m.treeDrag
 	m.treeDrag = nil
@@ -175,7 +198,7 @@ func (m *Model) finishTreeDrag() {
 		m.invalidate()
 		return
 	}
-	paths := treeDropPlan(d.paths, d.targetPath, d.copy)
+	paths := m.projectTreeDropPlan(d.paths, d.targetPath, d.copy)
 	if len(paths) == 0 {
 		m.invalidate()
 		return

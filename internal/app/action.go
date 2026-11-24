@@ -71,7 +71,6 @@ var actionAliases = map[string]string{
 	"debug.runToCursor":                   "run.runToCursor",
 	"debug.forceRunToCursor":              "run.forceRunToCursor",
 	"debug.showToolWindow":                "view.debug",
-	"debug.hotReload":                     "debug.reloadChangedClasses",
 	"run.stopProcess":                     "run.stop",
 	"run.debugConfig":                     "run.debug",
 	"run.run":                             "run.start",
@@ -85,6 +84,9 @@ var actionAliases = map[string]string{
 	"find.usages":                         "code.usages",
 	"find.showUsages":                     "code.showUsages",
 	"find.showUsageResults":               "code.showUsageResults",
+	"code.showIntentions":                 "code.intentions",
+	"code.reformat":                       "code.format",
+	"refactor.rename":                     "code.rename",
 	"editor.closeAllTabs":                 "editor.closeAll",
 	"editor.closeOtherTabs":               "editor.closeOthers",
 	"editor.closeTab":                     "file.close",
@@ -98,6 +100,20 @@ var actionAliases = map[string]string{
 	"toolwindow.hideActive":               "view.hideActive",
 	"toolwindow.jumpToLast":               "view.jumpLast",
 	"toolwindow.maximize":                 "view.maximize",
+	"toolwindow.project":                  "view.project",
+	"toolwindow.bookmarks":                "bookmarks.window",
+	"toolwindow.find":                     "view.find",
+	"toolwindow.run":                      "view.run",
+	"toolwindow.debug":                    "view.debug",
+	"toolwindow.problems":                 "view.problems",
+	"toolwindow.structure":                "view.structure",
+	"toolwindow.git":                      "vcs.show",
+	"toolwindow.commit":                   "view.commit",
+	"toolwindow.terminal":                 "view.terminal",
+	"toolwindow.resizeLeft":               "view.resizeLeft",
+	"toolwindow.resizeRight":              "view.resizeRight",
+	"toolwindow.resizeUp":                 "view.resizeUp",
+	"toolwindow.resizeDown":               "view.resizeDown",
 	"view.resetLayout":                    "layout.restoreDefault",
 	"terminal.clear":                      "term.clear",
 	"terminal.closeSession":               "term.close",
@@ -105,6 +121,10 @@ var actionAliases = map[string]string{
 	"terminal.new":                        "term.new",
 	"terminal.unsplit":                    "term.unsplit",
 	"services.show":                       "view.services",
+	"toolwindow.services":                 "view.services",
+	"services.addService":                 "run.services.addType",
+	"navigate.nextError":                  "problems.next",
+	"navigate.prevError":                  "problems.prev",
 	"build.maven":                         "view.maven",
 }
 
@@ -194,6 +214,7 @@ func (m *Model) RunActionWithArg(id string, arg any) bool {
 	} else {
 		return false
 	}
+	m.recordMacroAction(id, arg)
 	return true
 }
 

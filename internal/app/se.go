@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -39,6 +40,7 @@ const (
 	seClasses       seSection = "classes"
 	seFiles         seSection = "files"
 	seSymbols       seSection = "symbols"
+	seEndpoints     seSection = "endpoints"
 	seActions       seSection = "actions"
 	seText          seSection = "text"
 )
@@ -63,6 +65,7 @@ var seSectionTitles = map[seSection]string{
 	seClasses:       "Classes",
 	seFiles:         "Files",
 	seSymbols:       "Symbols",
+	seEndpoints:     "Endpoints",
 	seActions:       "Actions",
 	seText:          "Text",
 }
@@ -90,13 +93,20 @@ const (
 
 // seItem is one result row before it is drawn.
 type seItem struct {
-	kind   string // "file", "symbol", "action"
-	title  string
-	detail string
-	path   string
-	line   int
-	col    int
-	action string
+	kind    string // "file", "symbol", "endpoint", "text", "action", "setting", "history" or "command"
+	title   string
+	detail  string
+	path    string
+	line    int
+	col     int
+	action  string
+	setting string
+	command seTab
+	// disabled keeps a matching action visible while making it inert, as
+	// OpenIDEA does for unavailable actions.
+	disabled bool
+	// indices are rune offsets into title, matched by the query for emphasis.
+	indices []int
 	// symbol is the workspace symbol's kind, which picks its node icon.
 	symbol string
 }
@@ -115,23 +125,39 @@ type sePane struct {
 	query string
 	tab   seTab
 	sel   int
+	// selKey follows the chosen result while streamed sections reorder it.
+	selKey string
 	// extra widens a section past its first page, as the More rows do.
 	extra map[seSection]int
+	// location is the parsed `File.kt:42` part of the current query.
+	location seLocationQuery
 
 	files     []openidea.FileMatch
 	symbols   []openidea.WorkspaceSymbol
+	endpoints []openidea.PluginEndpoint
 	text      []openidea.FileMatches
 	textCount int
 
-	fileDone, symbolDone, textDone bool
-	textBusy                       bool
-	textTruncated                  bool
-	err                            string
+	fileDone, symbolDone, endpointDone, textDone bool
+	textBusy                                     bool
+	textTruncated                                bool
+	err                                          string
 
-	seq       int
-	fileReq   uint32
-	symbolReq uint32
-	textCh    uint32
+	plugins      []openidea.PluginInfo
+	pluginsBusy  bool
+	pluginsDone  bool
+	pluginsError string
+
+	languages      []openidea.LanguageInfo
+	languagesBusy  bool
+	languagesDone  bool
+	languagesError string
+
+	seq         int
+	fileReq     uint32
+	symbolReq   uint32
+	textCh      uint32
+	endpointSeq int
 
 	// filters is the funnel's state, and filterOpen whether its panel is up.
 	filters    seFilters
@@ -156,6 +182,8 @@ func (m *Model) openSearchEverywhereAt(tab seTab) {
 		m.se.query = t.state.SelectedText()
 	}
 	m.refreshSearchEverywhere()
+	m.loadSearchEverywhereLanguages()
+	m.loadSearchEverywherePlugins()
 	m.invalidate()
 }
 
@@ -188,8 +216,10 @@ func (m *Model) SetSearchEverywhereTab(tab seTab) {
 	}
 	m.se.tab = tab
 	m.se.sel = 0
+	m.se.selKey = ""
 	m.se.filterOpen = false
 	m.refreshSearchEverywhere()
+	m.loadSearchEverywhereLanguages()
 	m.invalidate()
 }
 
@@ -226,7 +256,7 @@ func sectionsFor(tab seTab, emptyQuery bool) []seSection {
 		}
 	}
 	if tab == seTabAll {
-		return []seSection{seClasses, seFiles, seSymbols, seActions, seText}
+		return []seSection{seClasses, seFiles, seSymbols, seEndpoints, seActions, seText}
 	}
 	return []seSection{seSection(tab)}
 }
@@ -242,48 +272,124 @@ func (s *sePane) seSectionLimit(section seSection) int {
 	return base + s.extra[section]
 }
 
+// loadSearchEverywhereLanguages loads the File Types definitions once for the
+// funnel. Their extensions are how Files, Classes and Symbols apply language
+// exclusions, matching OpenIDEA's extensionIndex.
+func (m *Model) loadSearchEverywhereLanguages() {
+	s := m.se
+	if s == nil || s.languagesBusy || s.languagesDone {
+		return
+	}
+	if m.mgr == nil || m.ctx == nil {
+		s.languagesDone = true
+		return
+	}
+	s.languagesBusy = true
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, seQueryTimeout)
+		defer cancel()
+		languages, err := m.mgr.ToolLanguages(ctx, Window)
+		m.post(func() {
+			if m.se != s {
+				return
+			}
+			s.languagesBusy = false
+			s.languagesDone = true
+			if err != nil {
+				if openidea.ErrorKind(err) != "cancelled" {
+					s.languagesError = "Loading file types failed: " + err.Error()
+				}
+				m.invalidate()
+				return
+			}
+			s.languages = languages
+			m.invalidate()
+		})
+	}()
+}
+
 // refreshSearchEverywhere restarts the lookups the tab needs.
 func (m *Model) refreshSearchEverywhere() {
 	s := m.se
 	if s == nil {
 		return
 	}
+	if parsed, ok := parseSECommand(s.query); ok {
+		if parsed.list {
+			s.seq++
+			s.files = nil
+			s.symbols = nil
+			s.endpoints = nil
+			s.text = nil
+			s.textCount = 0
+			s.textBusy = false
+			s.fileDone = true
+			s.symbolDone = true
+			s.endpointDone = true
+			s.textDone = true
+			s.textTruncated = false
+			s.err = ""
+			m.clampSESelection()
+			m.invalidate()
+			return
+		}
+		s.tab = parsed.tab
+		s.query = parsed.rest
+		s.extra = map[seSection]int{}
+		s.sel = 0
+		s.selKey = ""
+	}
 	s.seq++
 	seq := s.seq
 	s.files = nil
 	s.symbols = nil
+	s.endpoints = nil
 	s.text = nil
 	s.textCount = 0
 	s.textBusy = false
 	s.fileDone = false
 	s.symbolDone = false
+	s.endpointDone = false
 	s.textDone = false
 	s.textTruncated = false
 	s.err = ""
-	if s.sel >= len(m.seRows()) {
-		s.sel = 0
-	}
+	m.clampSESelection()
 	sections := sectionsFor(s.tab, s.seEmpty())
-	query := strings.TrimSpace(s.query)
-	wantsFiles, wantsSymbols, wantsText := false, false, false
+	rawQuery := strings.TrimSpace(s.query)
+	s.location = parseSELocationQuery(rawQuery, m.Root())
+	query := strings.TrimSpace(s.location.text)
+	wantsFiles, wantsSymbols, wantsEndpoints, wantsText := false, false, false, false
 	for _, sec := range sections {
 		switch sec {
 		case seRecentFiles, seFiles:
 			wantsFiles = true
 		case seClasses, seSymbols:
 			wantsSymbols = true
+		case seEndpoints:
+			wantsEndpoints = true
 		case seText:
 			wantsText = true
 		}
 	}
+	if wantsText && !seTextQueryReady(query) {
+		wantsText = false
+		s.textDone = true
+	}
 	if m.Root() == "" {
-		wantsFiles, wantsSymbols, wantsText = false, false, false
+		wantsFiles, wantsSymbols, wantsEndpoints, wantsText = false, false, false, false
+		s.fileDone = true
+		s.symbolDone = true
+		s.endpointDone = true
+		s.textDone = true
 	}
 	if wantsFiles {
 		m.seQueryFiles(seq, query)
 	}
 	if wantsSymbols {
 		m.seQuerySymbols(seq, query)
+	}
+	if wantsEndpoints {
+		m.seQueryEndpoints(seq, query)
 	}
 	if wantsText {
 		m.seQueryText(seq, query)
@@ -386,7 +492,7 @@ func (m *Model) seQueryText(seq int, query string) {
 			"request": ch,
 			"query": map[string]any{
 				"pattern": query, "isRegex": false, "caseSensitive": false,
-				"wholeWord": false, "include": []string{}, "exclude": []string{},
+				"wholeWord": false, "include": searchMaskList(s.filters.Text), "exclude": []string{},
 				"scope": map[string]any{"kind": "project"}, "maxMatches": 0,
 			},
 			"onEvent": map[string]any{"$channel": ch},
@@ -432,6 +538,7 @@ func (m *Model) acceptSearchEverywhereEvent(data json.RawMessage) {
 		s.textBusy = false
 		s.textDone = true
 	}
+	m.clampSESelection()
 	m.invalidate()
 }
 
@@ -442,16 +549,26 @@ func (m *Model) seActionItems(query string) []seItem {
 		if !commandMatches(cmd, query) {
 			continue
 		}
-		items = append(items, seItem{
-			kind:   "action",
-			title:  cmd.title,
-			detail: cmd.group,
-			action: cmd.id,
-		})
-		if len(items) >= seTabLimit {
-			break
+		enabled := m.ActionEnabled(cmd.id)
+		detail := cmd.group
+		if cmd.shortcut != "" {
+			detail += " · " + cmd.shortcut
 		}
+		items = append(items, seItem{
+			kind:     "action",
+			title:    cmd.title,
+			detail:   detail,
+			action:   cmd.id,
+			disabled: !enabled,
+			indices:  seMatchIndices(cmd.title, query),
+		})
 	}
+	sort.SliceStable(items, func(i, j int) bool {
+		if items[i].disabled != items[j].disabled {
+			return !items[i].disabled
+		}
+		return false
+	})
 	return items
 }
 
@@ -464,13 +581,67 @@ func (m *Model) seRecentActionItems() []seItem {
 			continue
 		}
 		items = append(items, seItem{
-			kind:   "action",
-			title:  cmd.title,
-			detail: cmd.group,
-			action: cmd.id,
+			kind:     "action",
+			title:    cmd.title,
+			detail:   cmd.group,
+			action:   cmd.id,
+			disabled: !m.ActionEnabled(cmd.id),
 		})
 	}
 	return items
+}
+
+// seSettingItems lists the settings pages whose title, group, keywords or
+// options match, as OpenIDEA merges settings into Find Action results.
+func (m *Model) seSettingItems(query string) []seItem {
+	terms := settingsQueryTerms(query)
+	if len(terms) == 0 {
+		return nil
+	}
+	var items []seItem
+	for _, page := range settingsPages() {
+		if !settingsMatches(settingsPageTexts(page), terms) {
+			continue
+		}
+		items = append(items, seItem{
+			kind:    "setting",
+			title:   page.title,
+			detail:  page.group,
+			setting: page.id,
+			indices: seMatchIndices(page.title, query),
+		})
+	}
+	sort.SliceStable(items, func(i, j int) bool {
+		left := strings.HasPrefix(strings.ToLower(items[i].title), strings.ToLower(strings.TrimSpace(query)))
+		right := strings.HasPrefix(strings.ToLower(items[j].title), strings.ToLower(strings.TrimSpace(query)))
+		return left && !right
+	})
+	return items
+}
+
+// seMatchIndices returns the rune offsets of a case-insensitive subsequence
+// match, which is how the chooser highlights a result title.
+func seMatchIndices(text, query string) []int {
+	query = strings.ToLower(strings.TrimSpace(query))
+	if query == "" {
+		return nil
+	}
+	want := []rune(query)
+	var out []int
+	at := 0
+	for i, r := range []rune(strings.ToLower(text)) {
+		if at >= len(want) {
+			break
+		}
+		if r == want[at] {
+			out = append(out, i)
+			at++
+		}
+	}
+	if at != len(want) {
+		return nil
+	}
+	return out
 }
 
 // isTypeKind reports whether a workspace symbol is a class-like declaration,
@@ -489,6 +660,14 @@ func (m *Model) seRows() []seRow {
 	if s == nil {
 		return nil
 	}
+	if parsed, ok := parseSECommand(s.query); ok && parsed.list {
+		rows := make([]seRow, 0, len(parsed.rows))
+		for _, item := range parsed.rows {
+			rows = append(rows, seRow{item: item})
+		}
+		return rows
+	}
+	query := strings.TrimSpace(parseSELocationQuery(strings.TrimSpace(s.query), m.Root()).text)
 	var rows []seRow
 	add := func(section seSection, items []seItem) {
 		if len(items) == 0 {
@@ -507,11 +686,23 @@ func (m *Model) seRows() []seRow {
 	fileItems := func() []seItem {
 		items := make([]seItem, 0, len(s.files))
 		for _, f := range s.files {
+			if s.tab != seTabAll && s.filters.languageExcluded(s.tab, f.Path, s.languages) {
+				continue
+			}
+			name := filepath.Base(f.RelPath)
+			indices := seFileMatchIndices(f.RelPath, name, f.Indices)
+			line, col := 0, 0
+			if parsed := parseSELocationQuery(strings.TrimSpace(s.query), m.Root()); parsed.has {
+				line, col = parsed.line, parsed.col
+			}
 			items = append(items, seItem{
-				kind:   "file",
-				title:  filepath.Base(f.Path),
-				detail: filepath.Dir(f.RelPath),
-				path:   f.Path,
+				kind:    "file",
+				title:   name,
+				detail:  filepath.Dir(f.RelPath),
+				path:    f.Path,
+				line:    line,
+				col:     col,
+				indices: indices,
 			})
 		}
 		return items
@@ -525,18 +716,22 @@ func (m *Model) seRows() []seRow {
 			if s.filters.kindExcluded(tab, sym.Kind) {
 				continue
 			}
+			if s.filters.languageExcluded(tab, sym.Location.Path, s.languages) {
+				continue
+			}
 			detail := filepath.Dir(sym.Location.Path)
 			if sym.Container != nil && *sym.Container != "" {
 				detail = *sym.Container + " · " + detail
 			}
 			items = append(items, seItem{
-				kind:   "symbol",
-				symbol: strings.ToLower(sym.Kind),
-				title:  sym.Name,
-				detail: detail,
-				path:   sym.Location.Path,
-				line:   int(sym.Location.Range.Start.Line),
-				col:    int(sym.Location.Range.Start.Col),
+				kind:    "symbol",
+				symbol:  strings.ToLower(sym.Kind),
+				title:   sym.Name,
+				detail:  detail,
+				path:    sym.Location.Path,
+				line:    int(sym.Location.Range.Start.Line),
+				col:     int(sym.Location.Range.Start.Col),
+				indices: seMatchIndices(sym.Name, query),
 			})
 		}
 		return items
@@ -588,8 +783,11 @@ func (m *Model) seRows() []seRow {
 			add(section, fileItems())
 		case seSymbols:
 			add(section, symbolItems(seTabSymbols, false))
+		case seEndpoints:
+			add(section, seEndpointItems(s.endpoints, strings.TrimSpace(s.query)))
 		case seActions:
-			add(section, m.seActionItems(strings.TrimSpace(s.query)))
+			items := append(m.seActionItems(query), m.seSettingItems(query)...)
+			add(section, items)
 		case seText:
 			add(section, textItems())
 		}
@@ -600,6 +798,28 @@ func (m *Model) seRows() []seRow {
 // seSelectable reports whether a row can take the selection.
 func seSelectable(r seRow) bool { return !r.header }
 
+func seRowKey(r seRow) string {
+	switch {
+	case r.header:
+		return "section:" + string(r.section)
+	case r.more:
+		return "more:" + string(r.section)
+	}
+	it := r.item
+	switch it.kind {
+	case "command":
+		return "command:" + string(it.command)
+	case "action":
+		return "action:" + it.action
+	case "setting":
+		return "setting:" + it.setting
+	case "history":
+		return "history:" + strings.ToLower(it.title)
+	default:
+		return fmt.Sprintf("%s:%s:%d:%d:%s", it.kind, it.path, it.line, it.col, it.title)
+	}
+}
+
 // stepSearchEverywhere moves the selection, skipping headers and stopping at
 // the ends.
 func (m *Model) stepSearchEverywhere(delta int) {
@@ -607,6 +827,7 @@ func (m *Model) stepSearchEverywhere(delta int) {
 	if s == nil {
 		return
 	}
+	m.clampSESelection()
 	rows := m.seRows()
 	i := s.sel + delta
 	for i >= 0 && i < len(rows) && !seSelectable(rows[i]) {
@@ -616,6 +837,7 @@ func (m *Model) stepSearchEverywhere(delta int) {
 		return
 	}
 	s.sel = i
+	s.selKey = seRowKey(rows[i])
 	m.invalidate()
 }
 
@@ -626,19 +848,43 @@ func (m *Model) clampSESelection() {
 		return
 	}
 	rows := m.seRows()
-	if s.sel >= len(rows) || (s.sel >= 0 && !seSelectable(rows[s.sel])) {
-		for i, r := range rows {
-			if seSelectable(r) {
+	if s.selKey != "" {
+		for i, row := range rows {
+			if seSelectable(row) && seRowKey(row) == s.selKey {
 				s.sel = i
 				return
 			}
 		}
+	}
+	if s.sel >= 0 && s.sel < len(rows) && seSelectable(rows[s.sel]) {
+		s.selKey = seRowKey(rows[s.sel])
+		return
+	}
+	if s.sel >= len(rows) || (s.sel >= 0 && !seSelectable(rows[s.sel])) {
+		for i, r := range rows {
+			if seSelectable(r) {
+				s.sel = i
+				s.selKey = seRowKey(r)
+				return
+			}
+		}
 		s.sel = -1
+		s.selKey = ""
 	}
 }
 
 // ActivateSearchEverywhere opens the chosen row or widens its section.
 func (m *Model) ActivateSearchEverywhere() {
+	m.activateSearchEverywhere(false)
+}
+
+// ActivateSearchEverywhereInOppositeGroup opens a file result in the other
+// editor group, as Shift+Enter does in OpenIDEA.
+func (m *Model) ActivateSearchEverywhereInOppositeGroup() {
+	m.activateSearchEverywhere(true)
+}
+
+func (m *Model) activateSearchEverywhere(side bool) {
 	s := m.se
 	if s == nil {
 		return
@@ -656,24 +902,44 @@ func (m *Model) ActivateSearchEverywhere() {
 			step = seMoreStepAll
 		}
 		s.extra[row.section] += step
+		s.selKey = seRowKey(row)
 		m.invalidate()
 		return
 	}
 	item := row.item
 	switch item.kind {
+	case "command":
+		s.tab = item.command
+		s.query = ""
+		s.sel = 0
+		s.selKey = ""
+		s.extra = map[seSection]int{}
+		s.filterOpen = false
+		m.refreshSearchEverywhere()
 	case "history":
 		s.query = item.title
 		s.sel = 0
+		s.selKey = ""
 		s.extra = map[seSection]int{}
 		m.refreshSearchEverywhere()
 	case "action":
+		if item.disabled {
+			return
+		}
 		m.rememberRecentAction(item.action)
 		m.CloseSearchEverywhere()
 		m.RunCommand(item.action)
-	case "file", "symbol", "text":
+	case "setting":
+		m.rememberSearchQuery(strings.TrimSpace(s.query))
+		m.CloseSearchEverywhere()
+		m.OpenSettingsPage(item.setting)
+	case "file", "symbol", "endpoint", "text":
 		m.rememberSearchQuery(strings.TrimSpace(s.query))
 		m.CloseSearchEverywhere()
 		m.revealAt(item.path, item.line, item.col)
+		if side {
+			m.OpenInOppositeGroup()
+		}
 	default:
 		m.invalidate()
 	}
@@ -852,6 +1118,8 @@ func (m *Model) seRowIcon(c *ui.Context, p *ui.Theme, it seItem) {
 	switch it.kind {
 	case "file":
 		fileIconEl(c, oi, it.path, 16, oi.textSubtle)
+	case "endpoint":
+		oiIconEl(c, "fileTypes/http", 16, oi, oi.textSubtle)
 	case "text":
 		oiIconEl(c, "openidea/nodes/textMatch", 16, oi, oi.textSubtle)
 	case "symbol":
@@ -944,13 +1212,15 @@ func (m *Model) SmokeSearchEverywhere(ctx context.Context, query string) map[str
 			m.se.query = query
 			m.refreshSearchEverywhere()
 		})
-		needFile, needSymbol, needText := false, false, false
+		needFile, needSymbol, needEndpoints, needText := false, false, false, false
 		for _, sec := range sectionsFor(tab, strings.TrimSpace(query) == "") {
 			switch sec {
 			case seRecentFiles, seFiles:
 				needFile = true
 			case seClasses, seSymbols:
 				needSymbol = true
+			case seEndpoints:
+				needEndpoints = true
 			case seText:
 				needText = true
 			}
@@ -963,6 +1233,7 @@ func (m *Model) SmokeSearchEverywhere(ctx context.Context, query string) map[str
 				done = s != nil &&
 					(!needFile || s.fileDone) &&
 					(!needSymbol || s.symbolDone) &&
+					(!needEndpoints || s.endpointDone) &&
 					(!needText || !s.textBusy) &&
 					m.seItemCount(m.seRows()) > 0
 			})
@@ -1006,6 +1277,7 @@ func (m *Model) SmokeSearchEverywhere(ctx context.Context, query string) map[str
 		out["classes"] = classes.items
 		out["files"] = files.items
 		out["symbols"] = symbols.items
+		out["endpoints"] = len(m.se.endpoints)
 		out["actions"] = actions.items
 		out["text"] = text.items
 		out["tab"] = string(m.se.tab)

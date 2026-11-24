@@ -7,7 +7,12 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/editor"
+
+	"mayoi/internal/highlight"
 )
+
+const recentLocationRowHeight float32 = 140
 
 func (m *Model) recentNavigationShortcuts(c *ui.Context) {
 	if c.Shortcut(ui.Cmd, ui.KeyE) {
@@ -69,7 +74,7 @@ func (m *Model) moveRecentNavigation(step int, page, extend bool) {
 	if !p.onTools {
 		height := float32(24)
 		if p.locations {
-			height = 84
+			height = recentLocationRowHeight
 		}
 		top := float32(p.index) * height
 		p.scroll.Y = min(max(p.scroll.Y, top+height-336), top)
@@ -386,7 +391,7 @@ func (m *Model) recentLocationRows(c *ui.Context, p *recentNavPopup, oi oiColors
 		}
 		for i, place := range p.places {
 			key := fmt.Sprintf("%s:%d", place.path, place.pos.Line)
-			row := recentNavigationRow(c, key, 84, oi, p.index == i)
+			row := recentNavigationRow(c, key, recentLocationRowHeight, oi, p.index == i)
 			row.OnClick(func() {
 				p.index = i
 				m.invalidate()
@@ -401,26 +406,167 @@ func (m *Model) recentLocationRows(c *ui.Context, p *recentNavPopup, oi oiColors
 						name := filepath.Base(place.path)
 						fileIconEl(c, oi, name, 14, oi.textMuted)
 						ui.Text(c, name).FontSize(13).SingleLine()
-						rel := projectRelative(m.Root(), place.path)
-						ui.Text(c, fmt.Sprintf("%s:%d", rel, place.pos.Line+1)).
-							Grow(1).FontSize(12).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
+						where := m.recentLocationBreadcrumb(place.path, place.pos.Line)
+						if where == "" {
+							where = fmt.Sprintf("%s:%d", projectRelative(m.Root(), place.path), place.pos.Line+1)
+						}
+						ui.Text(c, where).Grow(1).FontSize(12).TextColor(oi.textMuted).
+							SingleLine()
 						if place.changed {
 							ui.Text(c, "changed").FontSize(12).TextColor(oi.textMuted)
 						}
 						ui.Text(c, recentPlaceTime(place.at, p.now)).FontSize(12).TextColor(oi.textMuted)
 					})
-					for j, text := range place.lines {
+					lines := recentDedent(place.lines)
+					tokens := m.recentSnippetLines(p, place.path, lines)
+					codeTheme := editor.DefaultTheme(c.Theme())
+					spans := make([]ui.Span, 0, len(lines)*5)
+					for j, text := range lines {
 						line := place.firstLine + j
-						code := ui.Text(c, fmt.Sprintf("%4d  %s", line+1, strings.TrimRight(text, "\r\n"))).
-							Font(oiFontMono).FontSize(12).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
+						var background ui.Color
 						if line == place.pos.Line {
-							code.TextColor(oi.text)
+							background = oi.hoverTint
+						}
+						spans = append(spans, ui.Span{
+							Text: fmt.Sprintf("%4d  ", line+1), Color: oi.textFaint, Background: background,
+						})
+						var lineTokens []highlight.Token
+						if j < len(tokens) {
+							lineTokens = tokens[j].Tokens
+						}
+						lineSpans := recentSnippetSpans(text, lineTokens, codeTheme, oi.textMuted)
+						for i := range lineSpans {
+							lineSpans[i].Background = background
+						}
+						spans = append(spans, lineSpans...)
+						if j+1 < len(lines) {
+							spans = append(spans, ui.Span{Text: "\n", Background: background})
 						}
 					}
+					ui.RichText(c, spans...).Grow(1).MinWidth(0).
+						Font(oiFontMono).FontSize(12)
 				})
 			})
 		}
 	})
+}
+
+func (m *Model) recentSnippetLines(p *recentNavPopup, path string, lines []string) []highlight.Line {
+	if p.snippets == nil {
+		p.snippets = make(map[string][]highlight.Line)
+	}
+	text := strings.Join(lines, "\n")
+	key := realPath(path) + "\x00" + text
+	if cached, ok := p.snippets[key]; ok {
+		return cached
+	}
+	lexed := highlight.Lex(highlight.Lexer(path), text)
+	if len(p.snippets) >= 200 {
+		clear(p.snippets)
+	}
+	p.snippets[key] = lexed
+	return lexed
+}
+
+func recentDedent(lines []string) []string {
+	minimum := -1
+	for _, line := range lines {
+		trimmed := strings.TrimLeft(line, " \t")
+		if trimmed == "" {
+			continue
+		}
+		indent := len(line) - len(trimmed)
+		if minimum < 0 || indent < minimum {
+			minimum = indent
+		}
+	}
+	if minimum <= 0 {
+		return lines
+	}
+	out := make([]string, len(lines))
+	for i, line := range lines {
+		indent := min(minimum, len(line))
+		out[i] = line[indent:]
+	}
+	return out
+}
+
+func recentSnippetSpans(
+	text string,
+	tokens []highlight.Token,
+	theme *editor.Theme,
+	plain ui.Color,
+) []ui.Span {
+	runes := []rune(strings.TrimRight(text, "\r\n"))
+	if len(runes) == 0 {
+		return []ui.Span{{Text: " ", Color: plain}}
+	}
+	spans := make([]ui.Span, 0, len(tokens)*2+1)
+	cursor := 0
+	for _, token := range tokens {
+		start := max(0, min(token.Start, len(runes)))
+		end := max(start, min(token.End, len(runes)))
+		if start > cursor {
+			spans = append(spans, ui.Span{Text: string(runes[cursor:start]), Color: plain})
+		}
+		if end > start {
+			spans = append(spans, ui.Span{
+				Text:  string(runes[start:end]),
+				Color: theme.TokenColor(recentSnippetTokenKind(token.Kind)),
+			})
+		}
+		cursor = max(cursor, end)
+	}
+	if cursor < len(runes) {
+		spans = append(spans, ui.Span{Text: string(runes[cursor:]), Color: plain})
+	}
+	if len(spans) == 0 {
+		spans = append(spans, ui.Span{Text: string(runes), Color: plain})
+	}
+	return spans
+}
+
+func recentSnippetTokenKind(kind highlight.Kind) editor.TokenKind {
+	switch kind {
+	case highlight.Keyword:
+		return editor.TokenKeyword
+	case highlight.Type:
+		return editor.TokenType
+	case highlight.Function, highlight.Builtin:
+		return editor.TokenFunction
+	case highlight.String:
+		return editor.TokenString
+	case highlight.Number:
+		return editor.TokenNumber
+	case highlight.Comment:
+		return editor.TokenComment
+	case highlight.Operator:
+		return editor.TokenOperator
+	case highlight.Punctuation:
+		return editor.TokenPunctuation
+	case highlight.Constant:
+		return editor.TokenConstant
+	case highlight.Tag:
+		return editor.TokenTag
+	case highlight.Attribute:
+		return editor.TokenAttribute
+	case highlight.Variable:
+		return editor.TokenVariable
+	case highlight.Heading:
+		return editor.TokenHeading
+	case highlight.Deleted:
+		return editor.TokenDeleted
+	case highlight.Inserted:
+		return editor.TokenInserted
+	case highlight.Strong:
+		return editor.TokenStrong
+	case highlight.Emph:
+		return editor.TokenEmphasis
+	case highlight.Mark:
+		return editor.TokenMeta
+	default:
+		return editor.TokenText
+	}
 }
 
 func recentPlaceTime(at, now time.Time) string {

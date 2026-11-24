@@ -50,6 +50,12 @@ type SearchPane struct {
 	// selectedFile and selectedMatch choose one result for Replace.
 	selectedFile  int
 	selectedMatch int
+	// historyOpen shows the multi-line field's recent searches. The stored
+	// switch is inverse so the zero value keeps OpenIDEA's default enabled.
+	historyOpen       bool
+	noScrollToResults bool
+	scrollSelected    bool
+	history           []string
 
 	replaceChannel  uint32
 	replaceRequest  uint32
@@ -76,6 +82,9 @@ func (m *Model) resetSearch() { m.search = SearchPane{} }
 // ShowSearch opens OpenIDEA's Find window in the bottom side: Enter in the
 // query field runs it.
 func (m *Model) ShowSearch() {
+	if len(m.search.history) == 0 {
+		m.search.history = append([]string(nil), m.prefs.SearchFieldHistory...)
+	}
 	m.search.scopePath = ""
 	if m.search.scopeName == "" {
 		m.search.scopeName = "Project"
@@ -97,6 +106,9 @@ func (m *Model) ShowSearchInFolder(dir string) {
 // ShowFind opens Find in Files or Replace in Files. The argument accepts the
 // same query/directory/path fields as OpenIDEA's find.inPath action.
 func (m *Model) ShowFind(replace bool, arg any) {
+	if len(m.search.history) == 0 {
+		m.search.history = append([]string(nil), m.prefs.SearchFieldHistory...)
+	}
 	request := searchActionObject(arg)
 	if query, _ := request["query"].(string); query != "" {
 		m.search.query = query
@@ -132,6 +144,83 @@ func (m *Model) RerunSearch() {
 	m.RunSearch()
 }
 
+// AddNewLineToFindField implements find.field.newLine. A search field is
+// multi-line in OpenIDEA, so Enter runs the search and this action inserts a
+// line break without falling back to a shortcut for the surrounding editor.
+func (m *Model) AddNewLineToFindField() {
+	if m.Root() == "" {
+		return
+	}
+	m.search.query += "\n"
+	m.ShowSearch()
+	m.searchQueryChanged()
+	m.invalidate()
+}
+
+// ToggleRecentSearchFields opens the recent multi-line queries beside the
+// Find field. Selecting a row restores the exact query, including line breaks.
+func (m *Model) ToggleRecentSearchFields() {
+	if len(m.search.history) == 0 {
+		m.search.history = append([]string(nil), m.prefs.SearchFieldHistory...)
+	}
+	m.search.historyOpen = !m.search.historyOpen
+	m.invalidate()
+}
+
+// UseRecentSearchField restores one query from the Find field's history.
+func (m *Model) UseRecentSearchField(index int) {
+	s := &m.search
+	if index < 0 || index >= len(s.history) {
+		return
+	}
+	s.query = s.history[index]
+	s.historyOpen = false
+	m.searchQueryChanged()
+	m.invalidate()
+}
+
+// ToggleFindScrollToResults switches OpenIDEA's default-on preference that
+// follows the nearest result while the query changes.
+func (m *Model) ToggleFindScrollToResults() {
+	m.search.noScrollToResults = !m.search.noScrollToResults
+	if !m.search.noScrollToResults {
+		m.search.scrollSelected = len(m.search.files) > 0
+	}
+	m.invalidate()
+}
+
+// FindScrollToResults reports the visible checkmark for find.scrollToResults.
+func (m *Model) FindScrollToResults() bool {
+	return !m.search.noScrollToResults
+}
+
+// searchQueryChanged marks the selected hit for reveal on the next results
+// frame when Scroll to Results During Typing is on.
+func (m *Model) searchQueryChanged() {
+	if !m.search.noScrollToResults {
+		m.search.scrollSelected = true
+	}
+}
+
+// rememberSearchFieldQuery records the exact multi-line query, newest first.
+func (m *Model) rememberSearchFieldQuery(query string) {
+	query = strings.TrimRight(query, "\r\n")
+	if query == "" {
+		return
+	}
+	s := &m.search
+	out := []string{query}
+	for _, old := range s.history {
+		if old == query || len(out) >= 20 {
+			continue
+		}
+		out = append(out, old)
+	}
+	s.history = out
+	m.prefs.SearchFieldHistory = append([]string(nil), out...)
+	m.savePreferences()
+}
+
 // FindInFolderSelected scopes Find to the folder selected in the project view,
 // or to the project when the selection is not a folder.
 func (m *Model) FindInFolderSelected() {
@@ -161,6 +250,7 @@ func (m *Model) RunSearch() {
 		m.invalidate()
 		return
 	}
+	m.rememberSearchFieldQuery(pattern)
 	ch := m.nextChannel()
 	m.search.channel = ch
 	m.search.request = ch
@@ -170,6 +260,9 @@ func (m *Model) RunSearch() {
 	m.search.files = nil
 	m.search.matches = 0
 	m.search.truncated = false
+	m.search.selectedFile = 0
+	m.search.selectedMatch = 0
+	m.search.scrollSelected = !m.search.noScrollToResults
 	m.search.summary = ""
 	m.search.err = ""
 	m.invalidate()
@@ -546,6 +639,7 @@ func (m *Model) previewAt(path string, line, col int) {
 // revealTo opens path in a tab, preview or regular, and puts the caret where
 // the navigation points.
 func (m *Model) revealTo(path string, line, col int, preview bool) {
+	path = realPath(path)
 	m.recordNavigation(true)
 	m.reveal = &revealPos{path: path, line: line, col: col, endLine: -1, endCol: -1}
 	if preview {
@@ -561,6 +655,7 @@ func (m *Model) revealTo(path string, line, col int, preview bool) {
 // revealRange opens path in a regular tab and selects the declaration a
 // navigation points at, 0-based.
 func (m *Model) revealRange(path string, line, col, endLine, endCol int) {
+	path = realPath(path)
 	m.recordNavigation(true)
 	m.reveal = &revealPos{path: path, line: line, col: col, endLine: endLine, endCol: endCol}
 	m.openFile(path)

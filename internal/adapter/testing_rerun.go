@@ -335,7 +335,7 @@ func FrameworkFor(config *openidea.RunConfig) string {
 	if regexp.MustCompile(`\b(gradlew?|mvnw?)\b`).MatchString(cmd) {
 		return "jvm"
 	}
-	return ""
+	return "auto"
 }
 
 // RerunFailedConfig derives the configuration that runs only the failed
@@ -438,12 +438,12 @@ func RerunConfigWithArgsAndParams(
 	if err != nil {
 		return nil
 	}
+	env := map[string]string{}
 	if config.Env != nil {
-		env := map[string]string{}
 		for k, v := range config.Env {
 			env[k] = v
 		}
-		derived.Env = env
 	}
+	derived.Env = env
 	return derived
 }

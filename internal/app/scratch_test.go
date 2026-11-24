@@ -57,6 +57,55 @@ func TestScratchLanguagesLocal(t *testing.T) {
 	}
 }
 
+func TestScratchLanguagesFromBackend(t *testing.T) {
+	langs := scratchLanguagesFromBackend([]openIDEALanguageInfo{
+		{
+			ID:              "markdown",
+			Name:            "Markdown",
+			Extensions:      []string{" .md ", "markdown"},
+			ScratchTemplate: "# Scratch\n$END$\n",
+		},
+		{
+			ID:              "java",
+			Name:            "Java",
+			Extensions:      []string{".java", "jav"},
+			ScratchTemplate: "class Scratch {\n    $END$\n}\n",
+		},
+		{ID: "missing-name", Extensions: []string{"x"}},
+		{ID: "missing-extension", Name: "Missing Extension"},
+	})
+	if len(langs) != 2 {
+		t.Fatalf("languages = %+v, want Java and Markdown", langs)
+	}
+	if langs[0].id != "java" || langs[0].name != "Java" || langs[0].ext != "java" {
+		t.Fatalf("first language = %+v, want normalized Java", langs[0])
+	}
+	if langs[0].template != "class Scratch {\n    $END$\n}\n" {
+		t.Fatalf("Java template = %q", langs[0].template)
+	}
+	if langs[1].id != "markdown" || langs[1].ext != "md" {
+		t.Fatalf("second language = %+v, want Markdown with normalized .md", langs[1])
+	}
+	if langs[1].template != "# Scratch\n$END$\n" {
+		t.Fatalf("Markdown template = %q", langs[1].template)
+	}
+}
+
+func TestScratchActionRequiresAnOpenProject(t *testing.T) {
+	m := &Model{}
+	if m.ActionEnabled("file.newScratchFile") {
+		t.Fatal("New Scratch File was enabled on the Welcome screen")
+	}
+	m.setRoot(t.TempDir())
+	if !m.ActionEnabled("file.newScratchFile") {
+		t.Fatal("New Scratch File was disabled with a project open")
+	}
+	m.showingWelcome = true
+	if m.ActionEnabled("file.newScratchFile") {
+		t.Fatal("New Scratch File was enabled while Welcome covered the project")
+	}
+}
+
 func TestScratchRowsRecentAndFilter(t *testing.T) {
 	m := &Model{prefs: Preferences{ScratchRecent: []string{"md"}}}
 	m.scratch = &scratchChooser{languages: []scratchLanguage{

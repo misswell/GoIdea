@@ -118,10 +118,56 @@ type FsChangedEvent struct {
 	Removed  []string `json:"removed"`
 }
 
+// ProjectRootsChangedEvent reports build or project-structure changes that
+// can change the project's SDK and dependency roots.
+type ProjectRootsChangedEvent struct {
+	Root string `json:"root"`
+}
+
 // RunExitedEvent reports a run configuration's process ending.
 type RunExitedEvent struct {
 	Run  uint32 `json:"run"`
 	Code *int32 `json:"code"`
+}
+
+// McpRequestEvent is a window-bound request from the IDE's MCP server.
+type McpRequestEvent struct {
+	ID      uint32       `json:"id"`
+	Request McpUIRequest `json:"request"`
+}
+
+// McpRequestClosedEvent expires a request that no longer needs an answer.
+type McpRequestClosedEvent struct {
+	ID uint32 `json:"id"`
+}
+
+// McpUIRequest is one request the MCP server routes through the open window.
+// Type selects the fields that apply: confirm, openFile or agentRun.
+type McpUIRequest struct {
+	Type    string            `json:"type"`
+	Client  string            `json:"client"`
+	Tool    string            `json:"tool"`
+	Subject string            `json:"subject"`
+	Project string            `json:"project"`
+	Detail  string            `json:"detail"`
+	Path    string            `json:"path"`
+	Line    *int              `json:"line"`
+	Column  *int              `json:"column"`
+	Name    string            `json:"name"`
+	Command string            `json:"command"`
+	Cwd     string            `json:"cwd"`
+	Env     map[string]string `json:"env"`
+}
+
+// McpServerStatus is Agents › IDE MCP Server's live endpoint information.
+type McpServerStatus struct {
+	Running      bool     `json:"running"`
+	Error        string   `json:"error"`
+	Port         *uint16  `json:"port"`
+	Project      string   `json:"project"`
+	URL          string   `json:"url"`
+	Token        string   `json:"token"`
+	StdioCommand []string `json:"stdioCommand"`
 }
 
 // BuildEvent is one step of a build streamed on build_run's onEvent channel.
@@ -217,6 +263,15 @@ type OutputChunk struct {
 	Text string `json:"text"`
 }
 
+// BeforeLaunchTask is one OpenIDEA before-launch step. Kind is `run`, `build`,
+// `buildModule`, `buildArtifacts`, `dotnetBuild`, `tool`, `command`, or
+// `toolWindow`; Target is the configuration id, module, tool id, command line,
+// or tool-window id for the kinds that need one.
+type BeforeLaunchTask struct {
+	Kind   string `json:"kind"`
+	Target string `json:"target,omitempty"`
+}
+
 // RunConfig is a run configuration as run_configs returns it. Raw keeps the
 // whole object so run_start gets back every field, including the ones GoIDEA
 // does not model.
@@ -246,6 +301,23 @@ type RunConfig struct {
 	// AllowParallel lets Run on a running configuration start another
 	// instance instead of restarting it.
 	AllowParallel bool `json:"allowParallel,omitempty"`
+	// Folder groups configurations by kind in Run/Debug Configurations.
+	Folder *string `json:"folder"`
+	// Local stores the configuration in .openidea/run.local.toml.
+	Local bool `json:"local,omitempty"`
+	// IncludeSystemEnv is nil when absent (OpenIDEA defaults it to true).
+	IncludeSystemEnv *bool              `json:"includeSystemEnv"`
+	StdinFile        *string            `json:"stdinFile"`
+	OutputFile       *string            `json:"outputFile"`
+	BeforeLaunch     []BeforeLaunchTask `json:"beforeLaunch"`
+	Compound         []string           `json:"compound"`
+	ShowOnStdout     bool               `json:"showOnStdout,omitempty"`
+	ShowOnStderr     bool               `json:"showOnStderr,omitempty"`
+	OpenToolWindow   *bool              `json:"openToolWindow"`
+	FocusToolWindow  bool               `json:"focusToolWindow,omitempty"`
+	EmulateTerminal  bool               `json:"emulateTerminal,omitempty"`
+	StopCommand      *string            `json:"stopCommand"`
+	Target           *string            `json:"target"`
 
 	raw json.RawMessage
 }
@@ -457,25 +529,62 @@ type DebugEnvelope struct {
 	Event   json.RawMessage `json:"event"`
 }
 
+// DebugCapabilities is what one adapter session supports. GoIDEA uses it to
+// disable actions instead of discovering an unsupported request at runtime.
+type DebugCapabilities struct {
+	RestartFrame              bool `json:"restartFrame"`
+	StepInTargets             bool `json:"stepInTargets"`
+	FunctionBreakpoints       bool `json:"functionBreakpoints"`
+	DataBreakpoints           bool `json:"dataBreakpoints"`
+	SetValue                  bool `json:"setValue"`
+	ConditionalBreakpoints    bool `json:"conditionalBreakpoints"`
+	HitConditionalBreakpoints bool `json:"hitConditionalBreakpoints"`
+	LogPoints                 bool `json:"logPoints"`
+	HotCodeReplace            bool `json:"hotCodeReplace"`
+	JVMMemory                 bool `json:"jvmMemory"`
+	JVMInstances              bool `json:"jvmInstances"`
+	JVMHeap                   bool `json:"jvmHeap"`
+}
+
+// DebugSessionInfo is one live adapter session. Parent identifies an
+// adapter-started child session.
+type DebugSessionInfo struct {
+	ID      uint32  `json:"id"`
+	Name    string  `json:"name"`
+	Adapter string  `json:"adapter"`
+	Parent  *uint32 `json:"parent"`
+}
+
+// JvmBackendState reports whether the JVM object inspector is usable.
+type JvmBackendState struct {
+	Kind   string `json:"kind"`
+	Detail string `json:"detail"`
+}
+
 // DebugEvent is one DAP event, flattened. Kind selects the fields that are
 // meaningful: "stopped" has ThreadID/Reason/Description, "output" has
-// Category/Output, "exited" has Code.
+// Category/Output, "exited" has Code, and "started" has Parent/Adapter.
 type DebugEvent struct {
-	Kind              string `json:"kind"`
-	Name              string `json:"name"`
-	Adapter           string `json:"adapter"`
-	ThreadID          int64  `json:"threadId"`
-	AllThreadsStopped bool   `json:"allThreadsStopped"`
-	Reason            string `json:"reason"`
-	Description       string `json:"description"`
-	Category          string `json:"category"`
-	Output            string `json:"output"`
-	Path              string `json:"path"`
-	Code              *int32 `json:"code"`
-	Message           string `json:"message"`
+	Kind              string  `json:"kind"`
+	Name              string  `json:"name"`
+	Adapter           string  `json:"adapter"`
+	Parent            *uint32 `json:"parent"`
+	ThreadID          int64   `json:"threadId"`
+	AllThreadsStopped bool    `json:"allThreadsStopped"`
+	Reason            string  `json:"reason"`
+	Description       string  `json:"description"`
+	Category          string  `json:"category"`
+	Output            string  `json:"output"`
+	Path              string  `json:"path"`
+	Code              *int32  `json:"code"`
+	Message           string  `json:"message"`
 	// HotSwap ("Reload Changed Classes"): java-debug's `redefineClasses`
 	// request.
 	ChangeType string `json:"changeType"`
+	// Invalidated lists the adapter areas whose data is stale.
+	Areas []string `json:"areas"`
+	// JVMBackend is the state carried by a "jvmBackend" event.
+	JVMBackend *JvmBackendState `json:"state"`
 }
 
 // HotSwapResult is the reply to debug_redefine_classes: the classes reloaded
@@ -598,6 +707,22 @@ type LineHunk struct {
 	OldText  string `json:"oldText"`
 }
 
+// HunkRange identifies one LineHunk for a partial commit. The backend matches
+// these 0-based ranges against the current HEAD and on-disk text.
+type HunkRange struct {
+	Start    uint32 `json:"start"`
+	Lines    uint32 `json:"lines"`
+	OldStart uint32 `json:"oldStart"`
+	OldLines uint32 `json:"oldLines"`
+}
+
+// PartialCommitFile is one tracked text file whose selected hunks, rather than
+// its whole working-tree content, are committed.
+type PartialCommitFile struct {
+	Path  string      `json:"path"`
+	Hunks []HunkRange `json:"hunks"`
+}
+
 // FileStatus is one changed file of a Git repository: the two change kinds
 // are staged (index) and unstaged (working tree), either may be absent.
 type FileStatus struct {
@@ -620,15 +745,17 @@ type BlameLine struct {
 
 // CommitOptions is what vcs_commit does beyond the message: amend rewrites the
 // previous commit, signOff adds a Signed-off-by line, author overrides the
-// configured user, runHooks runs the Git hooks, stage commits files with their
-// working-tree content, and exclude keeps staged files out of the commit.
+// configured user, runHooks runs the Git hooks, partial commits only selected
+// hunks, stage commits files with their working-tree content, and exclude
+// keeps staged files out of the commit.
 type CommitOptions struct {
-	Amend    bool     `json:"amend"`
-	SignOff  bool     `json:"signOff"`
-	Author   *string  `json:"author"`
-	RunHooks bool     `json:"runHooks"`
-	Stage    []string `json:"stage,omitempty"`
-	Exclude  []string `json:"exclude,omitempty"`
+	Amend    bool                `json:"amend"`
+	SignOff  bool                `json:"signOff"`
+	Author   *string             `json:"author"`
+	RunHooks bool                `json:"runHooks"`
+	Partial  []PartialCommitFile `json:"partial,omitempty"`
+	Stage    []string            `json:"stage,omitempty"`
+	Exclude  []string            `json:"exclude,omitempty"`
 }
 
 // Commit is one row of vcs_log: the id and summary the log list shows, the
@@ -751,6 +878,28 @@ type Hover struct {
 	Range    *OutlineRange `json:"range"`
 }
 
+// Highlight is one document highlight: a usage's range and whether it reads,
+// writes or otherwise refers to the symbol.
+type Highlight struct {
+	Range OutlineRange `json:"range"`
+	Kind  string       `json:"kind"`
+}
+
+// Signature is one callable signature. Parameters are UTF-16 ranges within
+// Label, so the active argument can be emphasized without splitting a rune.
+type Signature struct {
+	Label         string      `json:"label"`
+	Documentation *Markup     `json:"documentation"`
+	Parameters    [][2]uint32 `json:"parameters"`
+}
+
+// SignatureHelp is lsp_signature_help's answer.
+type SignatureHelp struct {
+	Signatures      []Signature `json:"signatures"`
+	ActiveSignature uint32      `json:"activeSignature"`
+	ActiveParameter uint32      `json:"activeParameter"`
+}
+
 // CompletionList is lsp_completion's answer.
 type CompletionList struct {
 	Items        []CompletionItem `json:"items"`
@@ -760,15 +909,40 @@ type CompletionList struct {
 // CompletionItem is one suggestion of a completion list; only what the editor
 // shows is kept.
 type CompletionItem struct {
-	Label            string  `json:"label"`
-	LabelDetail      *string `json:"labelDetail"`
-	LabelDescription *string `json:"labelDescription"`
-	Detail           *string `json:"detail"`
-	Kind             *string `json:"kind"`
-	InsertText       string  `json:"insertText"`
-	IsSnippet        bool    `json:"isSnippet"`
-	FilterText       *string `json:"filterText"`
-	Documentation    *Markup `json:"documentation"`
+	Label            string          `json:"label"`
+	LabelDetail      *string         `json:"labelDetail"`
+	LabelDescription *string         `json:"labelDescription"`
+	Detail           *string         `json:"detail"`
+	Kind             *string         `json:"kind"`
+	InsertText       string          `json:"insertText"`
+	IsSnippet        bool            `json:"isSnippet"`
+	FilterText       *string         `json:"filterText"`
+	Documentation    *Markup         `json:"documentation"`
+	Data             json.RawMessage `json:"data"`
+	Server           uint32          `json:"server"`
+
+	// raw keeps fields this client does not model so completionItem/resolve can
+	// receive the backend's complete item unchanged.
+	raw json.RawMessage
+}
+
+func (c *CompletionItem) UnmarshalJSON(data []byte) error {
+	type completionItem CompletionItem
+	var decoded completionItem
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	*c = CompletionItem(decoded)
+	c.raw = append(c.raw[:0], data...)
+	return nil
+}
+
+func (c CompletionItem) MarshalJSON() ([]byte, error) {
+	if len(c.raw) > 0 {
+		return c.raw, nil
+	}
+	type completionItem CompletionItem
+	return json.Marshal(completionItem(c))
 }
 
 // Location is a place a language server points at: a file and a range of it.
@@ -791,12 +965,14 @@ type DiagnosticsEvent struct {
 // Diagnostic is a problem with a range of a file: 0-based lines and UTF-16
 // columns, as every backend range is.
 type Diagnostic struct {
-	Range    OutlineRange `json:"range"`
-	Severity string       `json:"severity"`
-	Message  string       `json:"message"`
-	Source   *string      `json:"source"`
-	Code     *string      `json:"code"`
-	Server   *string      `json:"server"`
+	Unnecessary bool         `json:"unnecessary"`
+	Deprecated  bool         `json:"deprecated"`
+	Range       OutlineRange `json:"range"`
+	Severity    string       `json:"severity"`
+	Message     string       `json:"message"`
+	Source      *string      `json:"source"`
+	Code        *string      `json:"code"`
+	Server      *string      `json:"server"`
 }
 
 // TextEdit replaces a range of a file's text, in UTF-16 coordinates.

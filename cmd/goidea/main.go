@@ -16,13 +16,16 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
-	"github.com/egoist/mygo/ui"
 
 	"mayoi/internal/app"
+	"mayoi/internal/openidea"
 )
 
 func main() {
 	started := time.Now()
+	if handleSSHAskpass() {
+		return
+	}
 	mygo.App.SetName("GoIDEA")
 	if handled, code := handleCommandLine(os.Args[1:], os.Stdout, os.Stderr, mygo.App.Version()); handled {
 		if code != 0 {
@@ -32,14 +35,27 @@ func main() {
 	}
 	startupDir, startupFiles, startupErrs := commandLineTargets(os.Args[1:])
 
-	// GOIDEA_DATA_DIR keeps a run's session, settings and server home apart
-	// from the user's: the E2E harness uses a temporary one.
-	if dir := os.Getenv("GOIDEA_DATA_DIR"); dir != "" {
-		mygo.App.SetPath(mygo.PathUserData, dir)
-	}
-	dataDir, err := mygo.App.Path(mygo.PathUserData)
+	defaultDataDir, err := mygo.App.Path(mygo.PathUserData)
 	if err != nil {
 		log.Fatalf("goidea: user data directory: %v", err)
+	}
+	localDataConfigPath, configErr := app.LocalDataDirConfigPath()
+	if configErr != nil {
+		localDataConfigPath = ""
+	}
+	dataDir := defaultDataDir
+	// GOIDEA_DATA_DIR keeps a run's session, settings and server home apart
+	// from the user's: the E2E harness uses a temporary one. Outside that test
+	// override, the stable bootstrap file selects a user-chosen location
+	// before mygo resolves data paths or the backend starts.
+	if dir := os.Getenv("GOIDEA_DATA_DIR"); dir != "" {
+		dataDir = filepath.Clean(dir)
+		mygo.App.SetPath(mygo.PathUserData, dataDir)
+	} else if custom, customErr := app.LoadCustomLocalDataDir(localDataConfigPath); customErr != nil {
+		startupErrs = append(startupErrs, fmt.Errorf("local data directory setting: %w", customErr))
+	} else if custom != "" {
+		dataDir = custom
+		mygo.App.SetPath(mygo.PathUserData, dataDir)
 	}
 	home := filepath.Join(dataDir, "openidea-server")
 	if err := os.MkdirAll(home, 0o755); err != nil {
@@ -50,76 +66,74 @@ func main() {
 	logFile := openLog(filepath.Join(dataDir, "openidea-server.log"))
 
 	cfg := app.Config{
-		ServerPath:       serverPath,
-		Home:             home,
-		SessionPath:      filepath.Join(dataDir, "session.json"),
-		SettingsPath:     filepath.Join(dataDir, "settings.json"),
-		Log:              logFile,
-		ServerMinVersion: serverMinVersion,
-		ServerSHA256:     serverChecksum(serverPath),
+		ServerPath:             serverPath,
+		Home:                   home,
+		SessionPath:            filepath.Join(dataDir, "session.json"),
+		SettingsPath:           filepath.Join(dataDir, "settings.json"),
+		DataDir:                dataDir,
+		DefaultDataDir:         defaultDataDir,
+		LocalDataDirConfigPath: localDataConfigPath,
+		Log:                    logFile,
+		ServerMinVersion:       serverMinVersion,
+		ServerSHA256:           serverChecksum(serverPath),
 	}
 	// File › Invalidate Caches… scheduled what the backend must forget; the
 	// caches go before the server starts and takes them into use.
 	app.ApplyPendingInvalidation(cfg)
-	model := app.New(cfg)
-	if serverErr != nil {
-		model.Notify(serverErr.Error())
-	}
-	for _, err := range startupErrs {
-		model.Notify(err.Error())
-	}
+	launchRoot := ""
+	launchFiles := []string(nil)
 	if dir := os.Getenv("GOIDEA_OPEN_PROJECT"); dir != "" {
-		model.OpenAtStartup(dir)
+		launchRoot = dir
 		if files := os.Getenv("GOIDEA_OPEN_FILES"); files != "" {
-			model.OpenFilesAtStartup(filepath.SplitList(files))
+			launchFiles = filepath.SplitList(files)
 		}
 	} else if startupDir != "" {
-		model.OpenAtStartup(startupDir)
-		model.OpenFilesAtStartup(startupFiles)
+		launchRoot = startupDir
+		launchFiles = startupFiles
 	} else if len(startupFiles) > 0 {
-		model.OpenFilesAtStartup(startupFiles)
+		launchFiles = startupFiles
 	}
 	headless := os.Getenv("GOIDEA_HEADLESS") == "1"
 	if headless {
 		// An accessory app has no Dock icon and takes no focus.
 		mygo.App.SetActivationPolicy(mygo.ActivationPolicyAccessory)
 	}
+	windows := newNativeWindowHost(cfg, headless, serverErr, startupErrs, started)
+	if launchRoot == "" && len(launchFiles) == 0 &&
+		app.ProjectWindowsRestoreEnabled(cfg.SettingsPath) {
+		workspace := app.LoadProjectWindowWorkspace(
+			app.ProjectWindowWorkspacePath(cfg.SessionPath),
+		)
+		windows.prepareWorkspaceRestore(workspace)
+	}
 
 	mygo.App.WhenReady(func() {
 		readyMs := time.Since(started).Milliseconds()
-		var firstFrame atomic.Int64
-		content := ui.View(func(c *ui.Context) {
-			if firstFrame.Load() == 0 {
-				firstFrame.CompareAndSwap(0, time.Since(started).Milliseconds())
-			}
-			model.View(c)
-		})
-		win := mygo.NewWindow(mygo.WindowOptions{
-			Title:     "GoIDEA",
-			Width:     1280,
-			Height:    820,
-			MinWidth:  900,
-			MinHeight: 560,
-			StateKey:  "main",
-			Hidden:    headless,
-			Content:   content,
-		})
-		model.Attach(win)
-		mygo.App.SetMenu(model.MainMenu())
-		model.Start()
+		first := windows.addInitialWindow(launchRoot, launchFiles)
+		if first == nil {
+			log.Fatal("goidea: could not create the main window")
+		}
+		if windows.restoring {
+			windows.restoreAdditionalWindows()
+		}
+		model := first.model
 		// Benchmark mode owns the window: the smoke driver would quit the app
 		// before an idle sample could be taken.
 		idle := benchIdle()
 		var backendReady atomic.Int64
 		if headless && idle == 0 {
-			go smoke(model)
+			if os.Getenv("GOIDEA_SMOKE_WINDOWS") == "1" {
+				go smokeProjectWindows(windows, started)
+			} else {
+				go smoke(model)
+			}
 		}
 		if idle > 0 {
 			go benchWaitBackend(model, started, &backendReady)
-			go benchWait(model, readyMs, &firstFrame, &backendReady, idle)
+			go benchWait(model, readyMs, &windows.firstFrame, &backendReady, idle)
 		}
 	})
-	mygo.App.OnBeforeQuit(model.RequestQuit)
+	mygo.App.OnBeforeQuit(windows.BeforeQuit)
 	if err := mygo.App.Run(); err != nil {
 		log.Fatal(err)
 	}
@@ -215,6 +229,15 @@ func smoke(m *app.Model) {
 		cancel()
 		fields["edited"] = edited
 		fields["undone"] = undone
+	}
+	if os.Getenv("GOIDEA_SMOKE_MCP") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
+		mcp, mcpErr := m.SmokeMCPReports(ctx)
+		cancel()
+		fields["mcp"] = mcp
+		if mcpErr != nil {
+			fields["mcpError"] = mcpErr.Error()
+		}
 	}
 	if os.Getenv("GOIDEA_SMOKE_RUN") == "1" && root != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
@@ -549,6 +572,15 @@ func smoke(m *app.Model) {
 			fields["lspError"] = lspErr.Error()
 		}
 	}
+	if os.Getenv("GOIDEA_SMOKE_ANALYSIS") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		analysis, analysisErr := m.SmokeAnalysis(ctx)
+		cancel()
+		fields["analysis"] = analysis
+		if analysisErr != nil {
+			fields["analysisError"] = analysisErr.Error()
+		}
+	}
 	if os.Getenv("GOIDEA_SMOKE_HIERARCHY") == "1" && root != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		hierarchy, hierarchyErr := m.SmokeHierarchy(ctx)
@@ -596,6 +628,9 @@ func smoke(m *app.Model) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		fields["newProject"] = m.SmokeNewProject(ctx)
 		cancel()
+	}
+	if os.Getenv("GOIDEA_SMOKE_KEYMAP") == "1" {
+		fields["keymaps"] = m.SmokeKeymaps()
 	}
 	if os.Getenv("GOIDEA_SMOKE_SETTINGS") == "1" {
 		fields["settings"] = m.SmokeSettings()
@@ -680,6 +715,46 @@ func smoke(m *app.Model) {
 		fields["coverage"] = coverage
 		if err != nil {
 			fields["coverageError"] = err.Error()
+		}
+	}
+	if os.Getenv("GOIDEA_SMOKE_LIBRARIES") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		libraries, err := m.SmokeExternalLibraries(ctx)
+		cancel()
+		fields["libraries"] = libraries
+		if err != nil {
+			fields["librariesError"] = err.Error()
+		}
+	}
+	if os.Getenv("GOIDEA_SMOKE_PROJECT_STRUCTURE") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+		structure, err := m.SmokeProjectStructure(ctx)
+		cancel()
+		fields["projectStructure"] = structure
+		if err != nil {
+			fields["projectStructureError"] = err.Error()
+		}
+	}
+	if os.Getenv("GOIDEA_SMOKE_FILE_TYPES") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		fileTypes, err := m.SmokeFileTypeOverride(ctx)
+		cancel()
+		fields["fileTypes"] = fileTypes
+		if err != nil {
+			fields["fileTypesError"] = err.Error()
+		}
+	}
+	if os.Getenv("GOIDEA_SMOKE_PROFILER") == "1" && root != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+		mode := openidea.ProfileMode(os.Getenv("GOIDEA_SMOKE_PROFILER_MODE"))
+		if mode == "" {
+			mode = openidea.ProfileCPU
+		}
+		profile, err := m.SmokeProfilerMode(ctx, mode)
+		cancel()
+		fields["profiler"] = profile
+		if err != nil {
+			fields["profilerError"] = err.Error()
 		}
 	}
 	// The commit goes last: the checks above read the working tree the project

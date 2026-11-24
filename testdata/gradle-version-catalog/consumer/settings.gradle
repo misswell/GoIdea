@@ -1,0 +1,19 @@
+rootProject.name = 'published-catalog-consumer'
+
+def catalogRepository = System.getenv('GOIDEA_CATALOG_REPOSITORY')
+if (!catalogRepository) {
+    throw new GradleException('GOIDEA_CATALOG_REPOSITORY is not set')
+}
+
+dependencyResolutionManagement {
+    repositories {
+        maven {
+            url = uri(catalogRepository)
+        }
+    }
+    versionCatalogs {
+        create('publishedLibs') {
+            from('dev.goidea:platform-catalog:1.2.3')
+        }
+    }
+}

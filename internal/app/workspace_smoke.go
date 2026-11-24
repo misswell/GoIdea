@@ -41,6 +41,12 @@ func (m *Model) SmokeWorkspace(ctx context.Context) (map[string]any, error) {
 	if err := m.saveOpenTabs(ctx, tabs); err != nil {
 		return out, fmt.Errorf("save before workspace smoke: %w", err)
 	}
+	// Earlier smoke phases may leave a warning related to their own files. It
+	// is not a workspace failure, and a real workspace error sets a fresh one.
+	m.post(func() {
+		m.banner = ""
+		m.bannerPath = ""
+	})
 	var dirty []string
 	m.post(func() { dirty = m.dirtyPaths() })
 	if len(dirty) > 0 {
@@ -171,6 +177,10 @@ func (m *Model) SmokeWorkspace(ctx context.Context) (map[string]any, error) {
 		projects: []string{root, linked}, selected: map[string]bool{},
 	}
 	m.post(func() {
+		// A smoke window cannot answer OpenIDEA's Ask new-window prompt. Use
+		// Current Window for the created workspace so the action path stays
+		// native and headless.
+		m.prefs.System.OpenProjectIn = "same"
 		m.workspaceDialog = created
 		m.saveWorkspaceDialog()
 	})

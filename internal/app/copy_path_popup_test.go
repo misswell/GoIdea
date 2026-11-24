@@ -1,6 +1,11 @@
 package app
 
-import "testing"
+import (
+	"path/filepath"
+	"testing"
+
+	"github.com/egoist/mygo/ui"
+)
 
 func TestCopyPathPopupRowsMatchOpenIDEAFlavours(t *testing.T) {
 	rows := copyPathPopupRows(
@@ -70,5 +75,42 @@ func TestCopyPathReferenceActionAndShortcutAreRegistered(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("Copy Path with Line Number is missing from the command registry")
+	}
+}
+
+func TestCopyPathReferencePopupChoosesNativeRowOffscreen(t *testing.T) {
+	originalClipboard := clipboardWriteText
+	t.Cleanup(func() { clipboardWriteText = originalClipboard })
+	copied := ""
+	clipboardWriteText = func(text string) { copied = text }
+
+	m := gotoLineTestModel("class Main {}", 0)
+	m.setRoot(filepath.Dir(m.tab().doc.Path()))
+	m.postHook = func(fn func()) { fn() }
+	if !m.RunCommand("editor.copyPathReference") {
+		t.Fatal("Copy Path/Reference action did not run")
+	}
+
+	tester := ui.NewTester(func(c *ui.Context) {
+		m.copyPathReferencePopup(c, c.Theme())
+	}, 760, 520)
+	tester.Frame()
+	for _, text := range []string{"Copy Path/Reference…", "Absolute Path", "File Name", "Reference"} {
+		if !tester.HasText(text) {
+			t.Fatalf("Copy Path popup lacks %q: %q", text, tester.Texts())
+		}
+	}
+	if err := tester.Click("File Name"); err != nil {
+		t.Fatal(err)
+	}
+	tester.Frame()
+	if m.copyPathPopup != nil {
+		t.Fatal("choosing a path row did not dismiss the popup")
+	}
+	if m.status != "Copied "+filepath.Base(m.tab().doc.Path()) {
+		t.Fatalf("copy status = %q", m.status)
+	}
+	if copied != filepath.Base(m.tab().doc.Path()) {
+		t.Fatalf("clipboard = %q", copied)
 	}
 }

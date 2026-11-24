@@ -448,7 +448,7 @@ func (m *Model) ApplyDBTableForm() {
 					return
 				}
 			}
-			m.db.addDBResult(title, outcomes, "")
+			m.db.addDBResult(title, form.source, outcomes, "")
 			m.db.tableForm = nil
 			m.loadDBTables(form.source, form.schema)
 			m.invalidate()

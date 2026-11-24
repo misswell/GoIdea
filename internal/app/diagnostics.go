@@ -22,6 +22,11 @@ func (m *Model) applyDiagnostics(ev openidea.DiagnosticsEvent) {
 	if ev.Path == "" {
 		return
 	}
+	m.mcpDiagnosticsChanged()
+	if m.applyNotebookDiagnostics(ev) {
+		m.invalidate()
+		return
+	}
 	key := realPath(ev.Path)
 	if m.diags == nil {
 		m.diags = make(map[string]map[string][]openidea.Diagnostic)
@@ -45,6 +50,8 @@ func (m *Model) applyDiagnostics(ev openidea.DiagnosticsEvent) {
 	for _, t := range m.tabs {
 		if realPath(t.doc.Path()) == key {
 			m.showDiagnostics(t)
+			m.autoImportPastePublished(t, ev)
+			m.scheduleAutoImport(t)
 		}
 	}
 	m.invalidate()
@@ -81,6 +88,7 @@ func (m *Model) showDiagnostics(t *Tab) {
 // clearDiagnostics drops what was stored for the previous project.
 func (m *Model) clearDiagnostics() {
 	clear(m.diags)
+	m.mcpDiagnosticsChanged()
 }
 
 // documentFor finds the open document an event path names. The backend

@@ -159,6 +159,10 @@ func TestHelpMenuFollowsOpenIDEA(t *testing.T) {
 		"What's New",
 		"Show Log in Finder",
 		"",
+		"Clear Caches",
+		"Show Memory Indicator Details",
+		"Toggle Performance Overlay (Dev)",
+		"",
 		"Check for Updates…",
 		"About GoIDEA",
 	}

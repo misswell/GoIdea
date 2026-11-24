@@ -156,7 +156,7 @@ func (m *Model) structureOutline() (string, []openidea.OutlineItem) {
 func (m *Model) structureRowsUI(c *ui.Context, p *ui.Theme) {
 	s := &m.structure
 	ui.Row(c).Padding(6, 8).Children(func() {
-		ui.TextInput(c, &s.filter).Grow(1)
+		ui.TextInput(c, &s.filter).Grow(1).Placeholder("Filter symbols")
 	})
 	path, items := m.structureOutline()
 	if path == "" {
@@ -226,6 +226,7 @@ func (m *Model) structureRowsUI(c *ui.Context, p *ui.Theme) {
 				ui.Text(c, symbolKindLabel(row.Kind)).FontSize(13).TextColor(oi.textSubtle).SingleLine()
 			})
 			if r.Clicked() {
+				m.structure.popup = false
 				m.revealAt(path, row.Line, row.Col)
 			}
 		}

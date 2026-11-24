@@ -3,7 +3,7 @@ package app
 // toolWindows lists the bottom tool windows in the order OpenIDEA registers
 // them. The shortcuts activate one of these and the Hide All action walks the
 // list, as toolwindows/store.ts does for its slots.
-var toolWindows = []string{"run", "debug", "build", "term", "log", "problems", "todo", "find", "usages", "services"}
+var toolWindows = []string{"run", "debug", "build", "term", "log", "graphql", "problems", "todo", "find", "usages", "services"}
 
 // toolVisible reports whether a tool window is showing. Registered windows
 // answer from the dock, which is the authority on their placement.
@@ -268,6 +268,15 @@ func (m *Model) applyLayoutSnapshot(l Layout) {
 				m.dock.viewModes = map[string]string{}
 			}
 			m.dock.viewModes[id] = mode
+		}
+		for id, visible := range l.Dock.StripeButtons {
+			if dockSpec(id) == nil {
+				continue
+			}
+			if m.dock.stripeButtons == nil {
+				m.dock.stripeButtons = map[string]bool{}
+			}
+			m.dock.stripeButtons[id] = visible
 		}
 	} else {
 		// Sessions from before the dock: split the old lists the way the

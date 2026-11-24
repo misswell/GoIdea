@@ -20,6 +20,22 @@ func TestIntellijEditorBindingsMatchOpenIDEA(t *testing.T) {
 		{Mods: ui.Cmd | ui.Shift, Key: ui.KeyUp, Command: editor.MoveLinesUp},
 		{Mods: ui.Cmd | ui.Shift, Key: ui.KeyDown, Command: editor.MoveLinesDown},
 		{Mods: ui.Ctrl | ui.Shift, Key: ui.KeyJ, Command: editor.JoinLines},
+		{Mods: ui.Ctrl, Key: ui.KeyG, Command: editor.SelectNext},
+		{Mods: ui.Ctrl | ui.Cmd, Key: ui.KeyG, Command: editor.SelectAllMatches},
+		{Mods: ui.Alt, Key: ui.KeyUp, Command: editor.SelectLarger},
+		{Mods: ui.Alt, Key: ui.KeyDown, Command: editor.SelectSmaller},
+		{Mods: ui.Cmd, Key: ui.KeyMinus, Command: editor.Fold},
+		{Mods: ui.Cmd, Key: ui.KeyEqual, Command: editor.Unfold},
+		{Mods: ui.Cmd | ui.Shift, Key: ui.KeyMinus, Command: editor.FoldAll},
+		{Mods: ui.Cmd | ui.Shift, Key: ui.KeyEqual, Command: editor.UnfoldAll},
+		{Mods: ui.Cmd | ui.Alt, Key: ui.KeyMinus, Command: editor.FoldRecursive},
+		{Mods: ui.Cmd | ui.Alt, Key: ui.KeyEqual, Command: editor.UnfoldRecursive},
+		{Mods: ui.Cmd, Key: ui.KeyPeriod, Command: editor.FoldSelection},
+		{Mods: ui.Cmd | ui.Shift, Key: ui.KeyPeriod, Command: editor.Fold},
+		{Mods: ui.Ctrl, Key: ui.KeyL, Command: editor.ScrollCursorCenter},
+		{Mods: ui.Ctrl, Key: ui.KeyM, Command: editor.MoveToBracket},
+		{Mods: ui.Shift, Key: ui.KeyEnter, Command: editor.NewlineBelow},
+		{Mods: ui.Cmd | ui.Alt, Key: ui.KeyEnter, Command: editor.NewlineAbove},
 		{Mods: ui.Cmd, Key: ui.KeyF, Command: editor.Find},
 		{Mods: ui.Cmd, Key: ui.KeyR, Command: editor.FindReplace},
 		{Mods: ui.Cmd, Key: ui.KeyG, Command: editor.FindNext},
@@ -181,7 +197,7 @@ func TestFileFindActionsKeepTheirOpenIDEAIdentity(t *testing.T) {
 		"find.inFile":        {"Find", []string{"Cmd+F"}},
 		"find.replaceInFile": {"Replace", []string{"Cmd+R"}},
 		"find.next":          {"Find Next Occurrence", []string{"Cmd+G"}},
-		"find.previous":      {"Find Previous Occurrence", []string{"Cmd+Shift+G"}},
+		"find.previous":      {"Find Previous Occurrence", []string{"Shift+Cmd+G"}},
 	}
 	m := &Model{}
 	for id, wantAction := range want {
@@ -328,11 +344,11 @@ func TestEditorTabActionsHaveOpenIDEAIdentityAndBindings(t *testing.T) {
 	}
 	m := &Model{}
 	if got := m.KeymapBindings("editor.nextTab"); len(got) != 2 ||
-		got[0] != "Ctrl+Right" || got[1] != "Cmd+Shift+]" {
+		got[0] != "Ctrl+Right" || got[1] != "Shift+Cmd+]" {
 		t.Fatalf("next tab bindings = %v", got)
 	}
 	if got := m.KeymapBindings("editor.prevTab"); len(got) != 2 ||
-		got[0] != "Ctrl+Left" || got[1] != "Cmd+Shift+[" {
+		got[0] != "Ctrl+Left" || got[1] != "Shift+Cmd+[" {
 		t.Fatalf("previous tab bindings = %v", got)
 	}
 }

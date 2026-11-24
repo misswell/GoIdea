@@ -19,7 +19,7 @@ func TestSectionsForMatchesOpenIDEA(t *testing.T) {
 		{seTabClasses, true, nil},
 		{seTabSymbols, true, nil},
 		{seTabText, true, nil},
-		{seTabAll, false, []seSection{seClasses, seFiles, seSymbols, seActions, seText}},
+		{seTabAll, false, []seSection{seClasses, seFiles, seSymbols, seEndpoints, seActions, seText}},
 		{seTabClasses, false, []seSection{seClasses}},
 		{seTabText, false, []seSection{seText}},
 	}

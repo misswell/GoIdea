@@ -3,15 +3,67 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/editor"
 
 	"mayoi/internal/textdiff"
 )
+
+type historyRestoreTestDocument struct {
+	buffer *editor.Buffer
+}
+
+func (d *historyRestoreTestDocument) Text() string { return d.buffer.String() }
+
+func (d *historyRestoreTestDocument) Buffer() *editor.Buffer { return d.buffer }
+
+func (d *historyRestoreTestDocument) ApplyEditsIfVersion(
+	_ context.Context,
+	expected uint64,
+	edits ...editor.Edit,
+) error {
+	if d.buffer.Version() != expected {
+		return errors.New("document changed")
+	}
+	d.buffer.Edit(edits...)
+	return nil
+}
+
+func TestHistoryRestoreReplacesTheOpenDocumentAtItsCapturedVersion(t *testing.T) {
+	doc := &historyRestoreTestDocument{buffer: editor.NewBuffer("before\n")}
+	before := doc.Text()
+	version := doc.Buffer().Version()
+	if err := replaceHistoryDocumentText(
+		context.Background(), doc, version, before, "restored\n",
+	); err != nil {
+		t.Fatal(err)
+	}
+	if got := doc.Text(); got != "restored\n" {
+		t.Fatalf("restored document = %q", got)
+	}
+}
+
+func TestHistoryRestoreKeepsEditorTextChangedDuringBackendRestore(t *testing.T) {
+	doc := &historyRestoreTestDocument{buffer: editor.NewBuffer("before\n")}
+	before := doc.Text()
+	version := doc.Buffer().Version()
+	doc.buffer.Edit(editor.Edit{Start: len(before) - 1, End: len(before) - 1, Text: "typed"})
+	changed := doc.Text()
+	if err := replaceHistoryDocumentText(
+		context.Background(), doc, version, before, "restored\n",
+	); err == nil {
+		t.Fatal("stale history restore replaced an editor that changed in flight")
+	}
+	if got := doc.Text(); got != changed {
+		t.Fatalf("editor after stale restore = %q, want %q", got, changed)
+	}
+}
 
 func TestRevisionRangeUsesTheOldestAndNewestSnapshotOfOneFile(t *testing.T) {
 	entries := []historyEntry{

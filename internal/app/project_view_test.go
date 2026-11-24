@@ -68,9 +68,14 @@ func TestProjectTreeViewOptionsFilterSortAndCompact(t *testing.T) {
 	}
 	for _, file := range []string{
 		filepath.Join(root, "alpha.txt"),
+		filepath.Join(root, "secret.cache"),
+		filepath.Join(root, "generated", "data.bin"),
 		filepath.Join(deep, "App.java"),
 		filepath.Join(root, "target", "Generated.java"),
 	} {
+		if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
+			t.Fatal(err)
+		}
 		if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -87,6 +92,16 @@ func TestProjectTreeViewOptionsFilterSortAndCompact(t *testing.T) {
 	if !hasRow(tree, filepath.Join(root, "target")) {
 		t.Fatal("excluded files were hidden by default")
 	}
+	tree.SetFileFilters([]string{"*.cache"}, []string{"**/generated"})
+	q.drain(t, "File Types filters", func() bool {
+		return !hasRow(tree, filepath.Join(root, "secret.cache")) &&
+			hasRow(tree, filepath.Join(root, "generated"))
+	})
+	for _, row := range tree.Rows() {
+		if row.path == filepath.Join(root, "generated") && !row.excluded {
+			t.Fatal("files.exclude did not dim the generated folder")
+		}
+	}
 
 	options := tree.options
 	options.showHidden = true
@@ -99,6 +114,15 @@ func TestProjectTreeViewOptionsFilterSortAndCompact(t *testing.T) {
 	}
 	if hasRow(tree, filepath.Join(root, "target")) {
 		t.Fatal("Show Excluded Files off left target in the tree")
+	}
+	if hasRow(tree, filepath.Join(root, "generated")) {
+		t.Fatal("Show Excluded Files off left a files.exclude match in the tree")
+	}
+	tree.SetFileFilters([]string{"*.cache"}, []string{"**/generated"})
+	tree.SetOptions(treeOptions{showHidden: true, showExcluded: false, compact: false, foldersFirst: true, sortBy: "name", showRootPaths: true})
+	q.drain(t, "the hidden File Types match", func() bool { return hasRow(tree, filepath.Join(root, "secret.cache")) })
+	if !hasRow(tree, filepath.Join(root, "secret.cache")) {
+		t.Fatal("Show Hidden Files did not reveal files.ignoredNames matches")
 	}
 
 	tree.reveal(filepath.Join(deep, "App.java"))

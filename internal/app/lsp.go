@@ -28,7 +28,28 @@ const lspBackoff = 5 * time.Second
 // The editor filters the list against what is typed meanwhile, so a reply that
 // arrives a keystroke late still helps.
 func (m *Model) requestCompletion(t *Tab, req editor.CompletionRequest) {
-	if !m.tabOpen(t) || time.Now().Before(t.compOff) {
+	if !m.tabOpen(t) {
+		return
+	}
+	if !req.Explicit && !m.completionAutoPopup() {
+		return
+	}
+	if m.requestPostfixCompletion(t, req) {
+		return
+	}
+	if m.requestComposeCompletion(t, req) {
+		return
+	}
+	if m.requestHTTPCompletion(t, req) {
+		return
+	}
+	if m.requestDependencyCompletion(t, req) {
+		return
+	}
+	if m.requestGradleVersionCatalogCompletion(t, req) {
+		return
+	}
+	if time.Now().Before(t.compOff) {
 		return
 	}
 	if isPomPath(t.doc.Path()) {
@@ -57,14 +78,14 @@ func (m *Model) requestCompletion(t *Tab, req editor.CompletionRequest) {
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, lspTimeout)
 		defer cancel()
-		raw, err := m.mgr.Invoke(ctx, Window, "lsp_completion", map[string]any{
+		raw, err := m.invoke(ctx, "lsp_completion", map[string]any{
 			"request": id, "doc": docID, "pos": lspPos(pos), "trigger": trigger,
 		})
 		var list openidea.CompletionList
 		if err == nil {
 			err = json.Unmarshal(raw, &list)
 		}
-		items := lspCompletions(list.Items)
+		items, infos := lspCompletionItems(list.Items)
 		m.post(func() {
 			if t.compReq == id {
 				t.compReq = 0
@@ -73,13 +94,13 @@ func (m *Model) requestCompletion(t *Tab, req editor.CompletionRequest) {
 				if k := openidea.ErrorKind(err); k == "unavailable" || k == "notFound" {
 					t.compOff = time.Now().Add(lspBackoff)
 				}
+				m.showCompletionResults(t, req, start, nil, nil)
 				return
 			}
-			if t.compGen != gen || !m.tabOpen(t) || len(items) == 0 {
+			if t.compGen != gen || !m.tabOpen(t) {
 				return
 			}
-			t.state.ShowCompletions(start, items)
-			m.invalidate()
+			m.showCompletionResults(t, req, start, items, infos)
 		})
 	}()
 }
@@ -137,6 +158,12 @@ func (m *Model) gotoDefinition(t *Tab, off int) {
 	if !m.tabOpen(t) {
 		return
 	}
+	if m.composeGotoDeclaration(t, off) {
+		return
+	}
+	if m.gradleVersionCatalogDefinition(t, off) {
+		return
+	}
 	if isPomPath(t.doc.Path()) && m.pomGotoDeclaration(t, off) {
 		return
 	}
@@ -164,7 +191,7 @@ func (m *Model) lspGoto(t *Tab, off int, kind string) {
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, lspTimeout)
 		defer cancel()
-		raw, err := m.mgr.Invoke(ctx, Window, "lsp_goto", map[string]any{
+		raw, err := m.invoke(ctx, "lsp_goto", map[string]any{
 			"doc": docID, "pos": lspPos(pos), "kind": kind,
 		})
 		var locs []openidea.Location
@@ -222,7 +249,13 @@ func lspPos(p openidea.OutlinePos) map[string]any {
 // lspCompletions converts language-server items to the editor's, stripping
 // snippet syntax the editor cannot expand.
 func lspCompletions(items []openidea.CompletionItem) []editor.Completion {
+	out, _ := lspCompletionItems(items)
+	return out
+}
+
+func lspCompletionItems(items []openidea.CompletionItem) ([]editor.Completion, map[string]completionInfo) {
 	out := make([]editor.Completion, 0, len(items))
+	infos := make(map[string]completionInfo)
 	for _, it := range items {
 		if it.Label == "" {
 			continue
@@ -252,8 +285,10 @@ func lspCompletions(items []openidea.CompletionItem) []editor.Completion {
 			c.Documentation = hoverText(*it.Documentation)
 		}
 		out = append(out, c)
+		source := it
+		infos[completionTrackKey(c)] = completionInfo{LSP: &source}
 	}
-	return out
+	return out, infos
 }
 
 // lspCompletionKind maps the protocol's completion kind to the editor's icon.

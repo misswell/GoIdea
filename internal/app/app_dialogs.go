@@ -165,7 +165,7 @@ func (m *Model) keymapReferenceSheet(c *ui.Context, p *ui.Theme) {
 			in := ui.TextInput(c, &m.keymapReference.query).Grow(1).
 				Placeholder("Filter shortcuts").AutoFocus()
 			in.OnChange(func() { m.invalidate() })
-			ui.Text(c, fmt.Sprintf("%s · %d shortcuts", keymapPreset(), count)).
+			ui.Text(c, fmt.Sprintf("%s · %d shortcuts", m.keymapPresetTitle(), count)).
 				FontSize(11).TextColor(oi.textMuted).SingleLine()
 		})
 		ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {

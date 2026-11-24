@@ -28,6 +28,14 @@ func TestMavenPanelDrawsModulesAndDependencies(t *testing.T) {
 }
 
 func TestMavenProfilesDiffFromTheDefaults(t *testing.T) {
+	empty := &Model{maven: mavenPane{model: buildModel{Maven: &mavenModel{}}}}
+	raw, err := json.Marshal(empty.mavenProfilesList())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw) != "[]" {
+		t.Fatalf("an empty profile list encoded as %s, want []", raw)
+	}
 	root := ""
 	m := &Model{}
 	m.maven = mavenPane{model: buildModel{Maven: &mavenModel{

@@ -52,6 +52,9 @@ type toolWindowSpec struct {
 	anchor dockSlot
 	order  int
 	stripe bool
+	// badge is OpenIDEA's useBadge: a positive count drawn on the stripe
+	// button, or zero for no badge.
+	badge func(m *Model) int
 	// open puts the window's content up (loading included); close takes it
 	// down but keeps its data, as a hidden terminal keeps its shell.
 	open   func(m *Model)
@@ -113,6 +116,9 @@ type dockState struct {
 	// viewModes is OpenIDEA v0.1.44's per-window View Mode other than Dock
 	// Pinned: "dockUnpinned" hides the window when focus moves away.
 	viewModes map[string]string
+	// stripeButtons overrides a contribution's default stripe membership.
+	// Opening an onUse window records true, while Hide records false.
+	stripeButtons map[string]bool
 }
 
 // dockSpec returns a registered window.
@@ -126,6 +132,100 @@ func (m *Model) dockWindowShown(id string) bool {
 	}
 	spec := dockSpec(id)
 	return spec != nil && (spec.shown == nil || spec.shown(m))
+}
+
+// toolWindowStripeDefault reports whether a window has a stripe button before
+// the user opens or hides it. OpenIDEA's onUse windows start without one.
+func toolWindowStripeDefault(id string) bool {
+	spec := dockSpec(id)
+	return spec != nil && spec.stripe
+}
+
+// toolWindowStripeVisible is OpenIDEA's hasStripeButton || isActive.
+func (m *Model) toolWindowStripeVisible(id string) bool {
+	if _, ok := m.dock.stripeButtons[id]; ok {
+		return m.dock.stripeButtons[id] || m.dockWindowShown(id)
+	}
+	return toolWindowStripeDefault(id) || m.dockWindowShown(id)
+}
+
+// rememberToolWindowStripe follows OpenIDEA: opening a tool window adds its
+// button to the stripe until the user removes it from the button's menu.
+func (m *Model) rememberToolWindowStripe(id string) {
+	if dockSpec(id) == nil || m.dock.stripeButtons[id] {
+		return
+	}
+	if m.dock.stripeButtons == nil {
+		m.dock.stripeButtons = map[string]bool{}
+	}
+	m.dock.stripeButtons[id] = true
+}
+
+// setToolWindowStripeVisible is the stripe button menu's Show/Hide choice.
+func (m *Model) setToolWindowStripeVisible(id string, visible bool) {
+	if dockSpec(id) == nil {
+		return
+	}
+	if m.dock.stripeButtons == nil {
+		m.dock.stripeButtons = map[string]bool{}
+	}
+	m.dock.stripeButtons[id] = visible
+	m.rememberLayout()
+	m.invalidate()
+}
+
+// HideToolWindowFromStripe matches OpenIDEA's stripe context menu Hide: the
+// window closes if shown and its button returns under "More Tool Windows".
+func (m *Model) HideToolWindowFromStripe(id string) {
+	if dockSpec(id) == nil {
+		return
+	}
+	if m.dockWindowShown(id) {
+		m.DockHide(id)
+	}
+	m.setToolWindowStripeVisible(id, false)
+}
+
+// toolWindowsForStripe returns the registered windows in one slot whose
+// buttons belong there now, ordered as OpenIDEA's contribution order.
+func (m *Model) toolWindowsForStripe(slot dockSlot) []string {
+	ids := make([]string, 0)
+	for _, id := range toolWindowOrder {
+		spec := dockSpec(id)
+		if spec == nil {
+			continue
+		}
+		at := spec.anchor
+		if current, ok := m.dockSlotOf(id); ok {
+			at = current
+		}
+		if at == slot && m.toolWindowStripeVisible(id) {
+			ids = append(ids, id)
+		}
+	}
+	sort.SliceStable(ids, func(i, j int) bool {
+		a, b := dockSpec(ids[i]), dockSpec(ids[j])
+		if a.order != b.order {
+			return a.order < b.order
+		}
+		return a.title < b.title
+	})
+	return ids
+}
+
+// toolWindowsWithoutStripeButton is OpenIDEA's More Tool Windows menu: every
+// registered window currently absent from its stripe.
+func (m *Model) toolWindowsWithoutStripeButton() []string {
+	ids := make([]string, 0)
+	for _, id := range toolWindowOrder {
+		if dockSpec(id) != nil && !m.toolWindowStripeVisible(id) {
+			ids = append(ids, id)
+		}
+	}
+	sort.SliceStable(ids, func(i, j int) bool {
+		return dockSpec(ids[i]).title < dockSpec(ids[j]).title
+	})
+	return ids
 }
 
 // dockSlotOf is the slot holding id, for registered windows only.
@@ -419,6 +519,7 @@ func (m *Model) DockShow(id string) {
 	if _, ok := m.dockSlotOf(id); ok {
 		m.dockOpenContent(id)
 		m.dockTouch(id)
+		m.rememberToolWindowStripe(id)
 		m.dockSyncMirrors()
 		m.rememberLayout()
 		m.invalidate()
@@ -435,6 +536,7 @@ func (m *Model) DockShow(id string) {
 	m.dockOpenContent(id)
 	m.dock.slots[target] = id
 	m.dockTouch(id)
+	m.rememberToolWindowStripe(id)
 	release()
 	m.dockSyncMirrors()
 	m.hideUnpinnedWindows(id)
@@ -510,6 +612,7 @@ func (m *Model) DockMove(id string, target dockSlot) {
 	}
 	m.dock.slots[target] = id
 	m.dockTouch(id)
+	m.rememberToolWindowStripe(id)
 	release()
 	m.dockSyncMirrors()
 	m.rememberLayout()
@@ -620,6 +723,9 @@ type DockLayout struct {
 	Max       bool              `json:"maximized,omitempty"`
 	// Pinned are the windows a Pin keeps in their slot.
 	Pinned []string `json:"pinned,omitempty"`
+	// StripeButtons overrides the default stripe membership of onUse
+	// windows. The missing key keeps the contribution's default.
+	StripeButtons map[string]bool `json:"stripeButtons,omitempty"`
 }
 
 const dockLayoutVersion = 2
@@ -665,8 +771,18 @@ func (m *Model) currentDockLayout() *DockLayout {
 			l.ViewModes[id] = mode
 		}
 	}
+	for id, visible := range m.dock.stripeButtons {
+		if dockSpec(id) == nil {
+			continue
+		}
+		if l.StripeButtons == nil {
+			l.StripeButtons = map[string]bool{}
+		}
+		l.StripeButtons[id] = visible
+	}
 	sort.Strings(l.Pinned)
-	if len(l.Slots) == 0 && len(l.Last) == 0 && !l.Max && len(l.Pinned) == 0 {
+	if len(l.Slots) == 0 && len(l.Last) == 0 && !l.Max && len(l.Pinned) == 0 &&
+		len(l.StripeButtons) == 0 {
 		l.Slots = map[string]string{}
 	}
 	return l
@@ -719,6 +835,15 @@ func (m *Model) applyDockLayout(d *DockLayout) {
 			m.dock.viewModes = map[string]string{}
 		}
 		m.dock.viewModes[id] = mode
+	}
+	for id, visible := range d.StripeButtons {
+		if dockSpec(id) == nil {
+			continue
+		}
+		if m.dock.stripeButtons == nil {
+			m.dock.stripeButtons = map[string]bool{}
+		}
+		m.dock.stripeButtons[id] = visible
 	}
 	for name, id := range d.Hidden {
 		s, ok := dockSlotOfName(name)

@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updated": "2026-11-21",
+ "updated": "2026-11-24",
  "about": "Every end-to-end regression check GoIDEA runs, the feature it protects, the doc that describes it, and the gate that must pass before code lands. scripts/check-regression-index.py keeps the ids in sync with scripts/e2e-checks.py, so a check cannot be dropped or renamed silently.",
  "gates": {
   "pr": {
@@ -37,6 +37,126 @@
  },
  "checks": [
   {
+   "id": "windows.windowsError",
+   "label": "windowsError is absent",
+   "feature": "Two native project windows complete the real backend smoke",
+   "area": "windows",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "windows.two",
+   "label": "two native project windows were live together",
+   "feature": "New project windows coexist in one application process",
+   "area": "windows",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "windows.newWindow",
+   "label": "window.new created a third Welcome window with its own backend",
+   "feature": "New Window opens an empty native window with an independent backend",
+   "area": "windows",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "windows.windowNext",
+   "label": "window.next focused another native project window",
+   "feature": "Next Window cycles native project windows",
+   "area": "windows",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "windows.distinctProjects",
+   "label": "the windows opened different project roots",
+   "feature": "Each native project window has its own project model",
+   "area": "windows",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "windows.distinctBackends",
+   "label": "each project window owned a different openidea-server process",
+   "feature": "Each native project window has its own backend server",
+   "area": "windows",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "windows.isolatedClose",
+   "label": "closing one window stopped only its backend and left its sibling healthy",
+   "feature": "Window close is isolated from sibling project backends",
+   "area": "windows",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "windows.noServers",
+   "label": "all backend processes were gone after the smoke process exited",
+   "feature": "Application exit leaves no openidea-server orphans",
+   "area": "windows",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "database.databaseError",
+   "label": "databaseError is absent",
+   "feature": "Database table editing completes against a real SQLite source",
+   "area": "database",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "database.connected",
+   "label": "a throwaway SQLite source connected and listed schemas",
+   "feature": "Database source connection and schema discovery",
+   "area": "database",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "database.query",
+   "label": "the real database sheet executed DDL, INSERT and SELECT",
+   "feature": "Database console executes a multi-statement script",
+   "area": "database",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "database.table",
+   "label": "people opened as an editable table with its primary key",
+   "feature": "Database data page exposes editable rows and primary key metadata",
+   "area": "database",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "database.edit",
+   "label": "an inline cell edit reached db_apply_edits and was read back",
+   "feature": "Database table editing commits row changes and reloads the page",
+   "area": "database",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "database.metadata",
+   "label": "the table page returned its DDL, history and real execution plan",
+   "feature": "Database table metadata, query history and execution plan",
+   "area": "database",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "database.closed",
+   "label": "the database tool window closed cleanly",
+   "feature": "Database sheet and table resources close cleanly",
+   "area": "database",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
    "id": "agents.agentsError",
    "label": "agentsError is absent",
    "feature": "Agents real host RPC smoke",
@@ -69,12 +189,412 @@
    "doc": "OPENIDEA_PARITY_MATRIX.md"
   },
   {
+   "id": "featureparity.graphqlRoundTrip",
+   "label": "the real backend sent GraphQL and returned the endpoint response",
+   "feature": "GraphQL query execution through the shipped backend",
+   "area": "graphql",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "featureparity.httpClientRoundTrip",
+   "label": "the real backend expanded an environment request and returned its response",
+   "feature": "HTTP Client request execution through the shipped backend",
+   "area": "http-client",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "featureparity.deploymentLocalRoundTrip",
+   "label": "deployment upload, compare, download and delete used a real local target",
+   "feature": "Deployment transfers through the shipped backend",
+   "area": "deployment",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "featureparity.gradleVersionCatalogPublication",
+   "label": "Gradle 8.10.2 published and loaded a version catalog through the real backend",
+   "feature": "Gradle published version catalogs support accessors, references, bundles and cache invalidation",
+   "area": "build-tools",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "toolchains.rpc",
+   "label": "all shipped language SDK and Python environment RPCs are registered",
+   "feature": "Language SDK and Python environment backend surface",
+   "area": "language-sdks",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "toolchains.sdkKinds",
+   "label": "ten language SDK detector kinds completed against the real backend",
+   "feature": "Python, PHP, Java, Go, Node, Ruby, Rust, TypeScript and package-manager detection",
+   "area": "language-sdks",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "toolchains.python",
+   "label": "Python validation, virtualenv creation and effective interpreter lookup passed",
+   "feature": "Python SDK validation, environment creation and project resolution",
+   "area": "language-sdks",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "toolchains.runConfig",
+   "label": "the selected virtualenv became the generated Python run command",
+   "feature": "Python interpreter settings drive generated run configurations",
+   "area": "language-sdks",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "toolchains.tools",
+   "label": "tool location and PHP detector payloads decoded from the real backend",
+   "feature": "SDK tool locations and PHP Xdebug discovery",
+   "area": "language-sdks",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "toolchains.php",
+   "label": "the real Composer project supplied an automatic PHP language level",
+   "feature": "PHP Composer project language-level detection",
+   "area": "language-sdks",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "extendedToolchains.formatters",
+   "label": "real Prettier, oxfmt and Ruff formatting passed",
+   "feature": "External formatters run against real pinned installations",
+   "area": "language-sdks",
+   "gate": "release",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "extendedToolchains.pythonEnvironments",
+   "label": "real uv, Poetry and Conda environment creation passed",
+   "feature": "Python environment creation supports isolated uv, Poetry and Conda tools",
+   "area": "language-sdks",
+   "gate": "release",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "extendedToolchains.pythonPackages",
+   "label": "real uv package install, upgrade, list, uninstall and freeze passed",
+   "feature": "Python package management mutates and freezes a real uv environment",
+   "area": "language-sdks",
+   "gate": "release",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "extendedToolchains.gradle",
+   "label": "real Gradle wrapper and local-distribution sync passed",
+   "feature": "Gradle settings drive wrapper and local-distribution builds",
+   "area": "language-sdks",
+   "gate": "release",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "extendedToolchains.gradleTestResults",
+   "label": "real Gradle tests produced one failure and two passes",
+   "feature": "Gradle tests report structured JUnit results",
+   "area": "testing",
+   "gate": "release",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "extendedToolchains.gradleTeamCity",
+   "label": "Gradle init-script emitted TeamCity test events",
+   "feature": "Gradle init-script supplies TeamCity test events",
+   "area": "testing",
+   "gate": "release",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "extendedToolchains.gradleRerun",
+   "label": "Gradle reran only the failed test through --tests",
+   "feature": "Rerun Failed Tests derives a Gradle --tests filter",
+   "area": "testing",
+   "gate": "release",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "extendedToolchains.gradleDaemons",
+   "label": "Gradle daemons stopped after the test runs",
+   "feature": "Gradle test acceptance leaves no daemon running",
+   "area": "testing",
+   "gate": "release",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "libraries.librariesError",
+   "label": "librariesError is absent",
+   "feature": "External Libraries discovery completes without an error",
+   "area": "project-tree",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "libraries.groups",
+   "label": "sdk_project_libraries returned SDK or dependency groups with roots",
+   "feature": "External Libraries consumes the real backend SDK and dependency model",
+   "area": "project-tree",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "libraries.tree",
+   "label": "the native Project View expanded External Libraries and rendered rows",
+   "feature": "External Libraries native Project View contribution",
+   "area": "project-tree",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "libraries.archive",
+   "label": "an SDK or dependency archive was browsed through fs_read_dir",
+   "feature": "External Libraries opens archive and folder roots through the backend VFS",
+   "area": "project-tree",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "libraries.readOnly",
+   "label": "library files stayed read-only and the reload action is available",
+   "feature": "External Libraries read-only source roots and reload workflow",
+   "area": "project-tree",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "projectstructure.projectStructureError",
+   "label": "projectStructureError is absent",
+   "feature": "Project Structure opens and saves without an error",
+   "area": "settings",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "projectstructure.dialog",
+   "label": "the native Project Structure dialog opened with all seven sections",
+   "feature": "Project Structure Project, Modules, Dependencies, Libraries, Facets, Artifacts and SDKs sections",
+   "area": "settings",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "projectstructure.backend",
+   "label": "Project Structure loaded modules, SDKs and resolved libraries from the real backend",
+   "feature": "Project Structure consumes project_roots, build_model, sdk_detect and sdk_project_libraries",
+   "area": "settings",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "projectstructure.persistence",
+   "label": "Project Structure saved and restored compiler output through settings_set",
+   "feature": "Project Structure stages and persists fields through settings_get and settings_set",
+   "area": "settings",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "filetypes.fileTypesError",
+   "label": "fileTypesError is absent",
+   "feature": "Exact-path File Type overrides complete without an error",
+   "area": "settings",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "filetypes.backend",
+   "label": "the pinned backend returned languages and a native menu",
+   "feature": "File Type menus consume the backend language registry",
+   "area": "settings",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "filetypes.override",
+   "label": "Override File Type changed the active editor to a backend language",
+   "feature": "Override File Type persists an exact-path language and updates the open editor",
+   "area": "settings",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "filetypes.restore",
+   "label": "Revert File Type Override removed the exact-path setting from project settings",
+   "feature": "Revert File Type Override removes an exact-path language from project settings",
+   "area": "settings",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "filetypes.ignored",
+   "label": "files.ignoredNames hid a matching file in the native Project View",
+   "feature": "File Types ignored names update the Project View",
+   "area": "settings",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "filetypes.excluded",
+   "label": "files.exclude dimmed and then hid a matching Project View folder",
+   "feature": "File Types exclude patterns update and dim the Project View",
+   "area": "settings",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "filetypes.filtersRestored",
+   "label": "the project's File Types filters were restored after the smoke",
+   "feature": "File Types filter smoke restores backend project state",
+   "area": "settings",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "profiler.profilerError",
+   "label": "profilerError is absent",
+   "feature": "Run with Profiler completes without an error",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "profiler.run",
+   "label": "Run with Profiler launched and collected a real Node.js CPU profile",
+   "feature": "Run with Profiler preparation, launch and collection over the real backend",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "profiler.graph",
+   "label": "the profile carried a flame graph, call tree and method list",
+   "feature": "Profiler converts sampled output into OpenIDEA's three native views",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "profiler.window",
+   "label": "the native Profiler window showed the snapshot after the run ended",
+   "feature": "Profiler snapshot tabs and tool window lifecycle",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "profilerallocations.profilerError",
+   "label": "profilerError is absent",
+   "feature": "JVM allocation profiling completes without an error",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "profilerallocations.run",
+   "label": "Run with Profiler collected a real JVM allocation profile",
+   "feature": "async-profiler allocation preparation and collection over the real backend",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "profilerallocations.graph",
+   "label": "the allocation profile carried native flame, call-tree and method views",
+   "feature": "Allocation profile conversion into OpenIDEA's native views",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "profilerallocations.window",
+   "label": "the native Profiler window showed the completed allocation run",
+   "feature": "Allocation profiler snapshot and tool-window lifecycle",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "profilerlive.profilerError",
+   "label": "profilerError is absent",
+   "feature": "JVM live-object profiling completes without an error",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "profilerlive.run",
+   "label": "Run with Profiler collected a real JVM live-object profile",
+   "feature": "async-profiler live-object preparation and collection over the real backend",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "profilerlive.gc",
+   "label": "GC completed before the run was stopped and the profile was collected",
+   "feature": "Live-object profiler GC-before-stop ordering against a real JVM",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "profilerlive.window",
+   "label": "the native Profiler window showed the completed live-object run",
+   "feature": "Live-object profiler snapshot and tool-window lifecycle",
+   "area": "build-run",
+   "gate": "main",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
    "id": "base.backend",
    "label": "backend is up",
    "feature": "Backend process and RPC handshake",
    "area": "openidea-rpc",
    "gate": "main",
    "doc": "RPC_PROTOCOL.md"
+  },
+  {
+   "id": "base.mcp.editors",
+   "label": "open editors reached the real MCP host",
+   "feature": "MCP open-editor snapshot reporting",
+   "area": "mcp",
+   "gate": "main",
+   "doc": "OPENIDEA_IPC.md"
+  },
+  {
+   "id": "base.mcp.focused",
+   "label": "the focused editor and UTF-16 selection reached the real MCP host",
+   "feature": "MCP focused-editor and selection snapshot reporting",
+   "area": "mcp",
+   "gate": "main",
+   "doc": "OPENIDEA_IPC.md"
+  },
+  {
+   "id": "base.mcp.problems",
+   "label": "Problems reset reached the real MCP host",
+   "feature": "MCP Problems snapshot reset reporting",
+   "area": "mcp",
+   "gate": "main",
+   "doc": "OPENIDEA_IPC.md"
+  },
+  {
+   "id": "base.mcp.removed",
+   "label": "a removed Problems file reached the real MCP host",
+   "feature": "MCP Problems removal reporting",
+   "area": "mcp",
+   "gate": "main",
+   "doc": "OPENIDEA_IPC.md"
   },
   {
    "id": "base.coverage.report",
@@ -421,6 +941,38 @@
    "doc": "README.md"
   },
   {
+   "id": "base.keymaps.six",
+   "label": "the six OpenIDEA keymaps are present in pinned menu order",
+   "feature": "Six OpenIDEA keymap presets and the operating-system default",
+   "area": "workbench",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "base.keymaps.generated",
+   "label": "Eclipse inheritance, removals and VS Code Windows translation match the pinned sources",
+   "feature": "Generated pinned keymaps with inheritance and OS translation",
+   "area": "workbench",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "base.keymaps.dispatch",
+   "label": "representative editor meanings, context conflicts and chords dispatch through the real shortcut path",
+   "feature": "Preset-aware shortcut dispatch and editor bindings",
+   "area": "editor",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "base.keymaps.surfaces",
+   "label": "Settings, gear, Quick Switch and native menus follow the selected keymap",
+   "feature": "Keymap selection across Settings, Quick Switch, gear and native menus",
+   "area": "workbench",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
    "id": "base.watch.reloaded",
    "label": "external edit was reloaded",
    "feature": "File watching inside the IDE",
@@ -739,6 +1291,22 @@
    "area": "workbench",
    "gate": "main",
    "doc": "README.md"
+  },
+  {
+   "id": "base.scratch.backendTemplate",
+   "label": "Java used the OpenIDEA backend scratch template",
+   "feature": "New Scratch File backend templates",
+   "area": "workbench",
+   "gate": "main",
+   "doc": "UPSTREAM_FEATURE_MATRIX.md"
+  },
+  {
+   "id": "base.scratch.caret",
+   "label": "the backend template's $END$ placed the scratch caret",
+   "feature": "New Scratch File template insertion point",
+   "area": "workbench",
+   "gate": "main",
+   "doc": "UPSTREAM_FEATURE_MATRIX.md"
   },
   {
    "id": "base.scratchError",
@@ -1813,6 +2381,134 @@
    "doc": "EDITOR.md"
   },
   {
+   "id": "analysis.analysisError",
+   "label": "analysisError is absent",
+   "feature": "The native analysis suite reports no error against real Java sources",
+   "area": "analysis",
+   "gate": "release",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "analysis.inspection.stream",
+   "label": "Inspect Code streamed real file and project JDT diagnostics",
+   "feature": "Inspect Code streams real language-server diagnostics",
+   "area": "analysis",
+   "gate": "release",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "analysis.inspection.grouping",
+   "label": "Inspection Results grouped real problems by severity",
+   "feature": "Inspection Results groups problems by severity",
+   "area": "analysis",
+   "gate": "release",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "analysis.inspection.filter",
+   "label": "the severity filter hid problems from other severities",
+   "feature": "Inspection Results filters problems by severity",
+   "area": "analysis",
+   "gate": "release",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "analysis.inspection.navigation",
+   "label": "selecting a problem navigated the native editor to its line",
+   "feature": "Inspection Results navigates to the selected problem",
+   "area": "analysis",
+   "gate": "release",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "analysis.inspection.cancel",
+   "label": "Stop canceled the live inspection request and returned the window to idle",
+   "feature": "Inspection Results cancels a live backend request",
+   "area": "analysis",
+   "gate": "release",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "analysis.duplicates",
+   "label": "Locate Duplicates found real repeated code with navigable fragments",
+   "feature": "Locate Duplicates finds and presents real clone groups",
+   "area": "analysis",
+   "gate": "release",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "analysis.structural.search",
+   "label": "Structural Search loaded real languages and found Java syntax-tree matches",
+   "feature": "Structural Search validates and streams real syntax-tree matches",
+   "area": "analysis",
+   "gate": "release",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "analysis.structural.usages",
+   "label": "structural results transferred to native Find Usages",
+   "feature": "Structural Search transfers results to Find Usages",
+   "area": "analysis",
+   "gate": "release",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "analysis.structural.preview",
+   "label": "Replace Structurally prepared workspace edits and preconditions",
+   "feature": "Replace Structurally prepares a bounded workspace edit",
+   "area": "analysis",
+   "gate": "release",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "analysis.structural.stale",
+   "label": "an edit after the preview made replacement fail with a stale-file error",
+   "feature": "Replace Structurally rejects stale preconditions",
+   "area": "analysis",
+   "gate": "release",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "analysis.structural.apply",
+   "label": "the replacement applied real syntax-tree edits to the open document",
+   "feature": "Replace Structurally applies real syntax-tree edits",
+   "area": "analysis",
+   "gate": "release",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "analysis.structural.undo",
+   "label": "the applied structural edit was undone through the native refactor history",
+   "feature": "Replace Structurally uses the native workspace-edit undo history",
+   "area": "analysis",
+   "gate": "release",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "analysis.cleanup.process",
+   "label": "Code Cleanup processed the real language-server file and saved it",
+   "feature": "Code Cleanup applies language-server actions and saves",
+   "area": "analysis",
+   "gate": "release",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "analysis.cleanup.close",
+   "label": "Code Cleanup closed the tab it opened after saving",
+   "feature": "Code Cleanup restores the editor tab set",
+   "area": "analysis",
+   "gate": "release",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "analysis.cleanup.fileAction",
+   "label": "Code Cleanup in File cleaned, saved and closed its tab",
+   "feature": "Code Cleanup in File runs the hidden editor action",
+   "area": "analysis",
+   "gate": "release",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
    "id": "debug.debugError",
    "label": "debugError is absent",
    "feature": "Debug session reports no error",
@@ -1872,6 +2568,54 @@
    "id": "debug.memoryRows",
    "label": "the Memory tab read live JVM classes",
    "feature": "JVM memory class list",
+   "area": "debugger",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "debug.memory.instances",
+   "label": "the Memory tab read live JVM instances",
+   "feature": "JVM memory instance list",
+   "area": "debugger",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "debug.memory.fields",
+   "label": "the Memory tab read object fields",
+   "feature": "JVM memory object fields",
+   "area": "debugger",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "debug.memory.referrers",
+   "label": "the Memory tab read object referrers",
+   "feature": "JVM memory object referrers",
+   "area": "debugger",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "debug.heap.capture",
+   "label": "the Heap tab captured a live JVM snapshot",
+   "feature": "JVM heap snapshot capture",
+   "area": "debugger",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "debug.heap.classes",
+   "label": "the Heap tab read the snapshot class table",
+   "feature": "JVM heap class statistics",
+   "area": "debugger",
+   "gate": "release",
+   "doc": "BUILD_AND_DEBUG.md"
+  },
+  {
+   "id": "debug.heap.close",
+   "label": "the Heap tab closed its snapshot and released the channel",
+   "feature": "JVM heap snapshot lifecycle",
    "area": "debugger",
    "gate": "release",
    "doc": "BUILD_AND_DEBUG.md"

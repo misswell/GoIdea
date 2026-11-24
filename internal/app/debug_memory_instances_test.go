@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+
+	"mayoi/internal/openidea"
 )
 
 func TestDebugMemoryInspectValueAndReference(t *testing.T) {
@@ -50,6 +52,7 @@ func TestDebugMemoryInspectDropsReplyAfterResume(t *testing.T) {
 	}
 	m.debug.session = 42
 	m.debug.paused = true
+	setTestDebugCapabilities(m, 42, openidea.DebugCapabilities{JVMInstances: true})
 	m.showDebugMemoryInstances("Test")
 	args := <-calls
 	if args["session"] != uint32(42) || args["className"] != "Test" || args["limit"] != debugMemoryInstanceLimit {
@@ -78,7 +81,7 @@ func TestDebugMemoryDisplayRowsBoundCyclesAndShowTruncation(t *testing.T) {
 	inspection := debugMemoryInspection{generation: 9, instances: []debugMemoryValue{value},
 		nodes: map[debugMemoryObjectRef]*debugMemoryNode{ref: node}}
 	rows := inspection.displayRows()
-	if len(rows) != 4 || rows[1].name != "self" || rows[2].text != "Referrers" || !strings.Contains(rows[3].text, "first") {
+	if len(rows) != 4 || rows[1].name != "self" || rows[2].text != "Referrers" || !strings.Contains(rows[3].text, "Show more") {
 		t.Fatalf("rows = %+v", rows)
 	}
 }
@@ -106,6 +109,7 @@ func TestDebugMemoryFieldsAndReferrersUseGeneration(t *testing.T) {
 		},
 	}
 	m.debug.session, m.debug.paused = 42, true
+	setTestDebugCapabilities(m, 42, openidea.DebugCapabilities{JVMInstances: true})
 	ref := debugMemoryObjectRef{Generation: 123, ID: 7}
 	node := &debugMemoryNode{ref: ref}
 	inspection := &debugMemoryInspection{session: 42, generation: 123, nodes: map[debugMemoryObjectRef]*debugMemoryNode{ref: node}}
@@ -139,6 +143,143 @@ func TestDebugMemoryFieldsAndReferrersUseGeneration(t *testing.T) {
 	}
 	if !node.referrersLoaded || len(node.referrers) != 1 || !node.referrersTruncated || node.referrers[0].Via[0] != "target" {
 		t.Fatalf("referrers = %+v", node)
+	}
+}
+
+func TestDebugMemoryReferrerReplyIsDroppedAfterResume(t *testing.T) {
+	respond := make(chan struct{})
+	callbacks := make(chan func(), 1)
+	m := &Model{
+		ctx:      context.Background(),
+		postHook: func(callback func()) { callbacks <- callback },
+		invokeHook: func(_ context.Context, command string, _ any) (json.RawMessage, error) {
+			if command != "debug_jvm_memory_referrers" {
+				return nil, fmt.Errorf("unexpected command %s", command)
+			}
+			<-respond
+			return json.RawMessage(`{
+				"status":"ready",
+				"referrers":[{"value":{"kind":"object","id":2,"typeName":"Holder"},"via":["stale"]}]
+			}`), nil
+		},
+	}
+	m.debug.session, m.debug.paused = 42, true
+	setTestDebugCapabilities(m, 42, openidea.DebugCapabilities{JVMInstances: true})
+	ref := debugMemoryObjectRef{Generation: 123, ID: 7}
+	node := &debugMemoryNode{ref: ref}
+	inspection := &debugMemoryInspection{
+		session: 42, generation: 123,
+		nodes: map[debugMemoryObjectRef]*debugMemoryNode{ref: node},
+	}
+	m.debug.memory.inspection = inspection
+	m.debug.rememberDebugSession()
+
+	m.debugMemoryLoadNode(inspection, node, true)
+	m.acceptDebugEvent(42, json.RawMessage(`{"kind":"continued"}`))
+	close(respond)
+	select {
+	case callback := <-callbacks:
+		callback()
+	case <-time.After(2 * time.Second):
+		t.Fatal("referrer reply did not complete")
+	}
+	if !inspection.outdated || len(node.referrers) != 0 || node.referrersLoading {
+		t.Fatalf("stale referrer reply was applied: outdated=%t node=%+v", inspection.outdated, node)
+	}
+}
+
+func TestDebugMemoryReferrersGrowUpToPinnedBackendLimit(t *testing.T) {
+	requests := make(chan int, 3)
+	callbacks := make(chan func(), 3)
+	m := &Model{
+		ctx:      context.Background(),
+		postHook: func(f func()) { callbacks <- f },
+		invokeHook: func(_ context.Context, command string, input any) (json.RawMessage, error) {
+			if command != "debug_jvm_memory_referrers" {
+				return nil, fmt.Errorf("unexpected command %s", command)
+			}
+			requests <- input.(map[string]any)["limit"].(int)
+			return json.RawMessage(`{"status":"ready","referrers":[],"truncated":true}`), nil
+		},
+	}
+	m.debug.session, m.debug.paused = 42, true
+	setTestDebugCapabilities(m, 42, openidea.DebugCapabilities{JVMInstances: true})
+	ref := debugMemoryObjectRef{Generation: 123, ID: 7}
+	node := &debugMemoryNode{ref: ref, showReferrers: true}
+	inspection := &debugMemoryInspection{
+		session: 42, generation: 123,
+		nodes: map[debugMemoryObjectRef]*debugMemoryNode{ref: node},
+	}
+	m.debug.memory.inspection = inspection
+
+	for _, want := range []uint32{50, 100, 200} {
+		node.referrersLimit = want
+		m.debugMemoryLoadNode(inspection, node, true)
+		select {
+		case got := <-requests:
+			if got != int(want) {
+				t.Fatalf("referrer limit = %d, want %d", got, want)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("referrer page was not requested")
+		}
+		select {
+		case callback := <-callbacks:
+			callback()
+		case <-time.After(time.Second):
+			t.Fatal("referrer page did not finish")
+		}
+	}
+}
+
+func TestDebugMemoryReferrerCancelReleasesPendingRequest(t *testing.T) {
+	started := make(chan struct{})
+	done := make(chan struct{})
+	posted := make(chan struct{}, 1)
+	m := &Model{
+		ctx: context.Background(),
+		postHook: func(f func()) {
+			f()
+			posted <- struct{}{}
+		},
+		invokeHook: func(ctx context.Context, command string, _ any) (json.RawMessage, error) {
+			if command != "debug_jvm_memory_referrers" {
+				return nil, fmt.Errorf("unexpected command %s", command)
+			}
+			close(started)
+			<-ctx.Done()
+			close(done)
+			return nil, ctx.Err()
+		},
+	}
+	m.debug.session, m.debug.paused = 42, true
+	setTestDebugCapabilities(m, 42, openidea.DebugCapabilities{JVMInstances: true})
+	ref := debugMemoryObjectRef{Generation: 123, ID: 7}
+	node := &debugMemoryNode{ref: ref, showReferrers: true}
+	inspection := &debugMemoryInspection{
+		session: 42, generation: 123,
+		nodes: map[debugMemoryObjectRef]*debugMemoryNode{ref: node},
+	}
+	m.debug.memory.inspection = inspection
+	m.debugMemoryLoadNode(inspection, node, true)
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("referrer request did not start")
+	}
+	m.cancelDebugMemoryNodeLoad(node, true)
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("cancelling referrers did not release the pending request")
+	}
+	select {
+	case <-posted:
+	case <-time.After(time.Second):
+		t.Fatal("cancelled referrer request did not publish its completion")
+	}
+	if node.referrersLoading || node.referrersCancel != nil {
+		t.Fatalf("cancelled referrer request stayed active: %+v", node)
 	}
 }
 
@@ -181,6 +322,7 @@ func TestDebugMemoryClassOpensInstances(t *testing.T) {
 	m.debug.session, m.debug.paused = 4, true
 	m.debug.memory.loaded = true
 	m.debug.memory.snapshot.Rows = []debugMemoryClass{{Name: "com.example.Widget", Instances: 1}}
+	setTestDebugCapabilities(m, 4, openidea.DebugCapabilities{JVMInstances: true})
 	tester := ui.NewTester(func(c *ui.Context) {
 		p := c.Theme()
 		m.debugMemory(c, p, oiPaletteOf(p))

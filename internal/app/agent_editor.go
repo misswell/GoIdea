@@ -71,7 +71,7 @@ func (m *Model) newAgentPageTab(kind, path, title, taskID string) *Tab {
 		doc: doc,
 		state: &editor.State{
 			Buffer: doc.Buffer(), LineHeight: 1.65,
-			Bindings: intellijEditorBindings(), ReadOnly: true,
+			Bindings: m.editorBindings(), ReadOnly: true,
 		},
 		kind:      kind,
 		pageTitle: title,
@@ -422,6 +422,8 @@ func (m *Model) agentEditorTitle(t *Tab) string {
 		return "Agent Task"
 	case tabKindAgentHome:
 		return "New Agent Task"
+	case tabKindDockerLog:
+		return t.pageTitle
 	default:
 		return ""
 	}

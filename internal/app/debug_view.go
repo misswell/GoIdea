@@ -37,23 +37,16 @@ type debugConsoleView struct {
 
 func (m *Model) debugPanel(c *ui.Context, p *ui.Theme) {
 	d, oi := &m.debug, oiPaletteOf(p)
+	background := oi.island
+	if m.prefs.Appearance.DifferentToolWindowBackground {
+		background = oi.elev
+	}
 	ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Radius(8).Clip().
-		Background(oi.island).Children(func() {
+		Background(background).Children(func() {
 		ui.Row(c).Height(36).Shrink(0).Padding(0, 10).Gap(12).AlignItems(ui.Center).
 			BorderWidth(0, 0, 1, 0).BorderColor(oi.border).Children(func() {
 			ui.Text(c, "Debug").FontSize(13).TextColor(oi.text)
-			if d.tabName != "" || d.session != 0 {
-				name := d.tabName
-				if name == "" {
-					name = d.config
-				}
-				ui.Row(c).Height(24).Padding(0, 5).Gap(6).Radius(5).
-					Background(oi.tabSelected).AlignItems(ui.Center).Children(func() {
-					oiIconEl(c, "run/debug", 16, oi, oi.success)
-					ui.Text(c, name).FontSize(13).TextColor(oi.text).SingleLine().Ellipsis("…")
-					debugIcon(c, oi, "close-session", "general/close", "Close Debug Session", true, false, m.closeDebugSession)
-				})
-			}
+			m.debugSessionTabs(c, p)
 			ui.Spacer(c)
 			debugIcon(c, oi, "hide", "general/hide", "Hide Debug", true, false, func() { m.DockHide("debug") })
 		})
@@ -63,7 +56,7 @@ func (m *Model) debugPanel(c *ui.Context, p *ui.Theme) {
 				ui.Button(c, "Close").OnClick(func() { d.err = ""; m.invalidate() })
 			})
 		}
-		if d.tabName == "" && d.session == 0 && !d.starting {
+		if len(d.debugSessionSummaries()) == 0 {
 			ui.Column(c).Grow(1).AlignItems(ui.Center).Justify(ui.Center).Gap(6).Children(func() {
 				ui.Text(c, "Not debugging").FontSize(13).TextColor(oi.textMuted)
 				ui.Button(c, "Start Debugging").OnClick(m.Debug)
@@ -84,6 +77,66 @@ func (m *Model) debugPanel(c *ui.Context, p *ui.Theme) {
 				m.debugVars(c, p)
 			})
 		}
+	})
+}
+
+// debugSessionTabs renders OpenIDEA's compact content tabs, one independent
+// console, thread list and lifecycle per adapter session.
+func (m *Model) debugSessionTabs(c *ui.Context, p *ui.Theme) {
+	summaries := m.debug.debugSessionSummaries()
+	if len(summaries) == 0 {
+		return
+	}
+	oi := oiPaletteOf(p)
+	ui.ScrollHorizontal(c).MinWidth(0).Shrink(1).Children(func() {
+		ui.Row(c).Height(26).Gap(2).AlignItems(ui.Center).Children(func() {
+			for i, summary := range summaries {
+				summary := summary
+				active := summary.id != 0 && summary.id == m.debug.active
+				if summary.id == 0 && m.debug.active == 0 && m.debug.starting {
+					active = true
+				}
+				tab := ui.Row(c.Key(fmt.Sprintf("debug-session-tab:%d:%d", summary.id, i))).
+					Height(24).Padding(0, 7).Gap(6).Radius(5).
+					AlignItems(ui.Center).Cursor(ui.CursorPointer).
+					Tooltip(summary.status)
+				if active {
+					tab.Background(p.SurfaceHover).BorderWidth(1, 1, 1, 1).
+						BorderColor(p.Border)
+				} else if tab.Hovered() {
+					tab.Background(p.SurfaceHover)
+				}
+				if summary.id != 0 && !m.debug.starting {
+					tab.OnClick(func() { m.selectDebugSession(summary.id) })
+				}
+				tab.Children(func() {
+					oiIconEl(c, "run/debug", 15, oi, p.Success)
+					ui.Text(c, summary.name).FontSize(12).TextColor(p.Text).
+						SingleLine().Ellipsis("…")
+					switch {
+					case summary.paused:
+						ui.Text(c, "Ⅱ").FontSize(10).Bold().TextColor(p.Success)
+					case summary.live:
+						ui.Text(c, "●").FontSize(9).TextColor(p.Success)
+					case summary.ended:
+						ui.Text(c, "■").FontSize(8).TextColor(p.TextMuted)
+					}
+					closeButton := ui.ButtonBase(c.Key(fmt.Sprintf("debug-session-close:%d:%d", summary.id, i))).
+						Size(17, 17).Justify(ui.Center).AlignItems(ui.Center).Radius(4).
+						Cursor(ui.CursorPointer)
+					if closeButton.Hovered() {
+						closeButton.Background(p.Surface)
+					}
+					closeButton.Tooltip("Close Debug Session")
+					closeButton.Children(func() {
+						ui.Text(c, "×").FontSize(12).TextColor(p.TextMuted)
+					})
+					if closeButton.Clicked() {
+						m.requestCloseDebugSessionTab(summary.id)
+					}
+				})
+			}
+		})
 	})
 }
 
@@ -112,10 +165,15 @@ func (m *Model) debugActions(c *ui.Context, oi oiColors) {
 	d := &m.debug
 	running := d.session != 0 && !d.ended
 	paused := running && d.paused
+	dart := running && !d.starting && d.adapter == "dart"
 	ui.Row(c).Height(34).Shrink(0).Padding(0, 5).Gap(3).AlignItems(ui.Center).
 		BorderWidth(0, 0, 1, 0).BorderColor(oi.border).Children(func() {
 		separator := func() { ui.Box(c).Size(1, 17).Shrink(0).Background(oi.border) }
 		debugIcon(c, oi, "rerun", "run/restartDebug", "Rerun Debug", len(d.lastRaw) > 0 && !d.starting, false, m.DebugRerun)
+		if dart {
+			debugIcon(c, oi, "hotReload", "general/hotReload", "Hot Reload", true, false, m.DebugHotReload)
+			debugIcon(c, oi, "hotRestart", "run/restartDebug", "Hot Restart", true, false, m.DebugHotRestart)
+		}
 		debugIcon(c, oi, "stop", "run/stop", "Stop", running || d.starting, false, m.StopDebug)
 		separator()
 		debugIcon(c, oi, "resume", "run/resume", "Resume Program", paused, false, m.DebugContinue)
@@ -129,21 +187,7 @@ func (m *Model) debugActions(c *ui.Context, oi oiColors) {
 		debugIcon(c, oi, "mute", "run/muteBreakpoints", "Mute Breakpoints", true, d.muted, m.ToggleBreakpointsMuted)
 		debugIcon(c, oi, "more", "general/moreVertical", "More Debug Actions", true, false, nil).
 			Menu(func(menu *ui.Menu) {
-				addMenuEntries(menu, m, []menuEntry{
-					action("Evaluate Expression…", "debug.evaluate", ""),
-					action("Show Execution Point", "debug.showExecutionPoint", ""),
-					action("Smart Step Into", "debug.smartStepInto", ""),
-					action("Reset Frame", "debug.resetFrame", ""),
-					action("Set Value…", "debug.setValue", ""),
-					action("Browse Console History", "debug.browseConsoleHistory", ""),
-					action("Force Step Into", "debug.forceStepInto", ""),
-					action("Force Step Over", "debug.forceStepOver", ""),
-					action("Reload Changed Classes", "debug.reloadChangedClasses", ""),
-					action("Cancel Hot Swap Build", "debug.cancelHotSwap", ""),
-					action("Capture Heap Snapshot", "debug.heap.capture", ""),
-					action("Open Heap Dump…", "debug.heap.open", ""),
-					action("Save Heap Dump As…", "debug.heap.saveDump", ""),
-				})
+				m.debugMoreMenu(menu)
 			})
 		separator()
 		for _, tab := range []struct {
@@ -169,16 +213,47 @@ func (m *Model) debugActions(c *ui.Context, oi oiColors) {
 	})
 }
 
-func (m *Model) closeDebugSession() {
+func (m *Model) debugMoreMenu(menu *ui.Menu) {
 	d := &m.debug
-	if d.starting || d.session != 0 && !d.ended {
-		m.StopDebug()
-		return
+	add := func(label, command string, enabled bool) {
+		item := menu.Item(label)
+		item.Disabled(!enabled)
+		if enabled && item.Chosen() {
+			m.RunCommand(command)
+		}
 	}
-	visible, bps, muted, watches := d.visible, d.bps, d.muted, d.watches
-	m.resetDebug()
-	m.debug.visible, m.debug.bps, m.debug.muted, m.debug.watches = visible, bps, muted, watches
-	m.invalidate()
+	add("Evaluate Expression…", "debug.evaluate", d.session != 0 && d.paused)
+	add("Show Execution Point", "debug.showExecutionPoint", d.session != 0 && d.paused)
+	add("Smart Step Into", "debug.smartStepInto",
+		d.paused && d.capsKnown && d.caps.StepInTargets)
+	add("Reset Frame", "debug.resetFrame", m.debugResetFrameDisabledReason() == "")
+	add("Set Value…", "debug.setValue",
+		d.paused && d.capsKnown && d.caps.SetValue && len(d.vars) > 0)
+	add("Browse Console History", "debug.browseConsoleHistory", len(d.console.history) > 0)
+	add("Force Step Into", "debug.forceStepInto", d.paused)
+	add("Force Step Over", "debug.forceStepOver", d.paused)
+	if m.debugDartSessionRunning() {
+		add("Hot Reload", "debug.hotReload", true)
+		add("Hot Restart", "debug.hotRestart", true)
+	}
+	canHotSwap := false
+	for _, id := range d.sessionOrder {
+		state := d.sessions[id]
+		if state != nil && state.session != 0 && !state.ended && state.capsKnown && state.caps.HotCodeReplace {
+			canHotSwap = true
+			break
+		}
+	}
+	add("Reload Changed Classes", "debug.reloadChangedClasses", canHotSwap && !d.reloading)
+	add("Cancel Hot Swap Build", "debug.cancelHotSwap", d.reloading && d.hotSwapRequest != 0)
+	add("Capture Heap Snapshot", "debug.heap.capture",
+		d.session != 0 && !d.ended && d.capsKnown && d.caps.JVMHeap && !d.heap.busy)
+	add("Open Heap Dump…", "debug.heap.open", !d.heap.busy)
+	add("Save Heap Dump As…", "debug.heap.saveDump", d.heap.info != nil && !d.heap.busy)
+}
+
+func (m *Model) closeDebugSession() {
+	m.requestCloseDebugSessionTab(m.debug.active)
 }
 
 func (m *Model) debugBreakpointMenu(menu *ui.Menu) {

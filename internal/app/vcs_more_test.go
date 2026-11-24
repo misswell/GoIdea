@@ -108,13 +108,14 @@ func TestVCSMoreActionsAndCloneOutput(t *testing.T) {
 }
 
 func TestCommitMessageHistoryWritesTheSelectedMessage(t *testing.T) {
+	root := "/project"
 	m := &Model{
 		commit: &commitState{checks: map[string]bool{}},
-		log: LogPane{commits: []openidea.Commit{{
-			ID: "abc", ShortID: "abc", Summary: "Fix timeout",
-			Message: "Fix timeout\n\nExplain the cause.", Author: "Ada",
+		prefs: Preferences{VCS: VCSPrefs{CommitMessages: map[string][]string{
+			root: {"Fix timeout\n\nExplain the cause."},
 		}}},
 	}
+	m.setRoot(root)
 	m.OpenCommitMessageHistory()
 	if m.vcsMore.kind != vcsMoreMessage || len(m.vcsMore.items) != 1 {
 		t.Fatalf("message history = %+v", m.vcsMore)

@@ -79,21 +79,271 @@ func (m *Model) RebuildProject() { m.startBuild("rebuild", nil) }
 // BuildArtifacts packages the active file's module, or the whole project.
 func (m *Model) BuildArtifacts() { m.startBuild("artifacts", m.activeFileOrNil()) }
 
+func buildActionAvailable(m *Model) bool {
+	return m.Root() != "" && !m.showingWelcome && !m.build.busy
+}
+
 func (m *Model) activeFileOrNil() *string {
 	t := m.tab()
-	if t == nil {
+	if t == nil || t.doc == nil {
 		return nil
 	}
 	path := t.doc.Path()
 	return &path
 }
 
+// buildActionOptions is OpenIDEA's action argument for the Build menu. A
+// project-view string is a module target, while the before-launch callers pass
+// {target, activate, wait}; CMake passes its detected build id too.
+type buildActionOptions struct {
+	Target   string
+	Activate bool
+	Wait     bool
+	CMake    *string
+}
+
+func buildActionOptionsFromArg(arg any) buildActionOptions {
+	options := buildActionOptions{Activate: true}
+	if target, ok := arg.(string); ok {
+		options.Target = strings.TrimSpace(target)
+		return options
+	}
+	if arg == nil {
+		return options
+	}
+
+	var object map[string]any
+	switch value := arg.(type) {
+	case map[string]any:
+		object = value
+	case map[string]string:
+		object = make(map[string]any, len(value))
+		for key, item := range value {
+			object[key] = item
+		}
+	case []byte:
+		if err := json.Unmarshal(value, &object); err != nil {
+			return options
+		}
+	case json.RawMessage:
+		if err := json.Unmarshal(value, &object); err != nil {
+			return options
+		}
+	default:
+		raw, err := json.Marshal(arg)
+		if err != nil || json.Unmarshal(raw, &object) != nil {
+			return options
+		}
+	}
+	if target, ok := object["target"].(string); ok {
+		options.Target = strings.TrimSpace(target)
+	}
+	if activate, ok := object["activate"].(bool); ok {
+		options.Activate = activate
+	}
+	if wait, ok := object["wait"].(bool); ok {
+		options.Wait = wait
+	}
+	if cmake, ok := object["cmake"].(string); ok && strings.TrimSpace(cmake) != "" {
+		cmake = strings.TrimSpace(cmake)
+		options.CMake = &cmake
+	}
+	return options
+}
+
+func (m *Model) buildTargetForAction(options buildActionOptions) *string {
+	if options.Target != "" {
+		target := options.Target
+		return &target
+	}
+	return m.activeFileOrNil()
+}
+
+func (m *Model) runBuildProjectAction(arg any) {
+	options := buildActionOptionsFromArg(arg)
+	m.startBuildOperation("build", nil, options.CMake, options.Activate)
+}
+
+func (m *Model) runBuildModuleAction(arg any) {
+	options := buildActionOptionsFromArg(arg)
+	m.startBuildOperation("build", m.buildTargetForAction(options), nil, options.Activate)
+}
+
+func (m *Model) runCompileFileAction(arg any) {
+	options := buildActionOptionsFromArg(arg)
+	target := m.buildTargetForAction(options)
+	if target == nil || !m.canCompileFile(*target) {
+		return
+	}
+	m.startBuildOperation("compileFile", target, nil, options.Activate)
+}
+
+func (m *Model) runRebuildProjectAction(arg any) {
+	options := buildActionOptionsFromArg(arg)
+	// Rebuild Project always activates the Build window upstream.
+	m.startBuildOperation("rebuild", nil, options.CMake, true)
+}
+
+func (m *Model) runBuildArtifactsAction(arg any) {
+	options := buildActionOptionsFromArg(arg)
+	m.startBuildOperation("artifacts", m.buildTargetForAction(options), nil, options.Activate)
+}
+
+// beforeLaunchBuildAction maps the persisted Before Launch task back to the
+// OpenIDEA action that owns it. All of these calls are awaitable, so the main
+// configuration waits for a successful result before it starts.
+func beforeLaunchBuildAction(
+	kind string,
+	file *string,
+	cmake *string,
+	activate bool,
+) (string, map[string]any, error) {
+	arg := map[string]any{"activate": activate, "wait": true}
+	switch kind {
+	case "build":
+		if cmake != nil {
+			arg["cmake"] = *cmake
+		}
+		if file != nil {
+			arg["target"] = *file
+			return "build.buildModule", arg, nil
+		}
+		return "build.buildProject", arg, nil
+	case "artifacts":
+		if file != nil {
+			arg["target"] = *file
+		}
+		return "build.buildArtifacts", arg, nil
+	default:
+		return "", nil, fmt.Errorf("Unknown Before launch build kind %q", kind)
+	}
+}
+
+type buildActionRun struct {
+	channel uint32
+	request uint32
+	taskID  string
+}
+
+// runBuildActionWait is the awaitable form of a build action. The regular
+// RunWithArg path stays asynchronous, while Before Launch uses this path only
+// when the action requested wait=true.
+func (m *Model) runBuildActionWait(ctx context.Context, id string, arg any) error {
+	options := buildActionOptionsFromArg(arg)
+	if !options.Wait {
+		return errors.New("Build action did not request a wait")
+	}
+
+	type startResult struct {
+		run buildActionRun
+		err error
+	}
+	started := make(chan startResult, 1)
+	m.post(func() {
+		select {
+		case <-ctx.Done():
+			started <- startResult{err: ctx.Err()}
+			return
+		default:
+		}
+		a, ok := actionGet(id)
+		if !ok {
+			started <- startResult{err: fmt.Errorf("Build action %q is not registered", id)}
+			return
+		}
+		if !a.usable(m) {
+			err := errors.New("Build did not start")
+			if m.build.busy {
+				err = errors.New("Another build is already running")
+			}
+			started <- startResult{err: err}
+			return
+		}
+		if !m.RunActionWithArg(id, arg) {
+			started <- startResult{err: errors.New("Build did not start")}
+			return
+		}
+		if !m.build.busy {
+			err := errors.New("Build did not start")
+			if m.build.err != "" {
+				err = errors.New(m.build.err)
+			}
+			started <- startResult{err: err}
+			return
+		}
+		started <- startResult{run: buildActionRun{
+			channel: m.build.channel,
+			request: m.build.request,
+			taskID:  m.build.taskID,
+		}}
+	})
+
+	var start startResult
+	select {
+	case start = <-started:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	if start.err != nil {
+		return start.err
+	}
+	return m.waitBuildAction(ctx, start.run)
+}
+
+func (m *Model) waitBuildAction(ctx context.Context, run buildActionRun) error {
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		var busy bool
+		var success *bool
+		var errText string
+		var current uint32
+		var errorCount uint32
+		m.post(func() {
+			busy = m.build.busy
+			success = m.build.success
+			errText = m.build.err
+			current = m.build.channel
+			errorCount = m.build.errors
+		})
+		if current != run.channel {
+			return errors.New("Build was replaced before it finished")
+		}
+		if !busy {
+			if errText != "" {
+				return errors.New(errText)
+			}
+			if success == nil {
+				return errors.New("Build did not return a result")
+			}
+			if !*success {
+				return fmt.Errorf("Build failed with %d error(s)", errorCount)
+			}
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			m.post(func() { m.cancelBuildRequest(run.request, run.channel, run.taskID) })
+			return ctx.Err()
+		case <-ticker.C:
+		}
+	}
+}
+
 // startBuild streams one build into the Build pane. The backend builds from
 // disk, so unsaved text is written first; a second build while one runs is
 // ignored, as the actions are disabled while building.
 func (m *Model) startBuild(kind string, file *string) {
-	m.build.visible = true
-	m.occupyBottom("build")
+	m.startBuildOperation(kind, file, nil, true)
+}
+
+// startBuildOperation is the shared build entry point. Before-launch builds
+// pass activate=false and, for a CMake target, the detected build id.
+func (m *Model) startBuildOperation(kind string, file *string, cmake *string, activate bool) {
+	if activate {
+		m.build.visible = true
+		m.occupyBottom("build")
+	}
 	if m.build.busy {
 		m.invalidate()
 		return
@@ -136,6 +386,9 @@ func (m *Model) startBuild(kind string, file *string) {
 	m.invalidate()
 
 	command, args := buildInvocation(kind, file, req, ch, clear)
+	if cmake != nil {
+		args["cmake"] = *cmake
+	}
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Minute)
 		defer cancel()
@@ -167,6 +420,7 @@ func (m *Model) startBuild(kind string, file *string) {
 			if err != nil {
 				m.build.err = "Build failed: " + err.Error()
 				m.status = "The build request failed"
+				m.DockShow("build")
 				m.notifyError("build", "Build failed", notifySuffix(err.Error()))
 				m.finishBuildTask(taskID, "Build request failed")
 				m.invalidate()
@@ -186,9 +440,12 @@ func (m *Model) startBuild(kind string, file *string) {
 			}
 			m.status = buildSummary(result)
 			m.finishBuildTask(taskID, buildSummary(result))
-			show := notifyAction{label: "Show Build Output", run: func(m *Model) { m.ShowBuild() }}
+			show := notifyAction{label: "Show Build Output", run: func(m *Model) { m.DockShow("build") }}
 			switch {
 			case !ok:
+				// A failed build reveals Output without taking the keyboard,
+				// including before-launch builds that passed activate=false.
+				m.DockShow("build")
 				m.notifyError("build", "Build failed", buildSummary(result), show)
 			case result.Warnings > 0:
 				m.notifyWarning("build", "Build finished with warnings", buildSummary(result), show)

@@ -12,7 +12,7 @@ func TestDatabaseActionsAreRegistered(t *testing.T) {
 		"db.closeAllResultTabs", "db.closeOtherResultTabs", "db.closeResultTab",
 		"db.collapseAll", "db.copyReference", "db.ddlToClipboard", "db.ddlToConsole",
 		"db.disconnect", "db.drop", "db.duplicateSource", "db.editData", "db.execute",
-		"db.executeScript", "db.explainPlan", "db.findInValue", "db.goToColumn",
+		"db.executeScript", "db.explainPlan", "db.exportData", "db.findInValue", "db.goToColumn",
 		"db.goToDdl", "db.goToReferencedTable", "db.importData", "db.introspect",
 		"db.jumpToConsole", "db.modifyTable", "db.new", "db.newColumn",
 		"db.newDataSource", "db.newTable", "db.openConsole", "db.openValueWindow",

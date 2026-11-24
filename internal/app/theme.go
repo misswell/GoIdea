@@ -133,6 +133,21 @@ func openideaColors(dark bool) oiColors {
 func oiPaletteOf(p *ui.Theme) oiColors {
 	dark := p != nil && p.Dark
 	oi := openideaColors(dark)
+	if p != nil {
+		// The accessibility palette and custom theme controls feed the same
+		// Islands tokens, so IDE widgets do not diverge from MyGo controls.
+		if p.Danger != (ui.Color{}) {
+			oi.danger = p.Danger
+			oi.vcsConflict = p.Danger
+		}
+		if p.Success != (ui.Color{}) {
+			oi.success = p.Success
+			oi.vcsAdded = p.Success
+		}
+		if p.Warning != (ui.Color{}) {
+			oi.warning = p.Warning
+		}
+	}
 	// The appearance setting's accent reaches the Islands tokens too, so the
 	// title bar, links and selection follow it as the CSS variables do.
 	if p != nil && p.Accent != (ui.Color{}) {
@@ -140,6 +155,25 @@ func oiPaletteOf(p *ui.Theme) oiColors {
 		oi.link = p.Accent
 	}
 	return oi
+}
+
+// toolWindowBackground is OpenIDEA's tool-window island fill. By default it
+// matches the editor island; the Appearance option switches it to the raised
+// surface color.
+func (m *Model) toolWindowBackground(p *ui.Theme) ui.Color {
+	if m.prefs.Appearance.DifferentToolWindowBackground {
+		return p.Surface
+	}
+	return p.Background
+}
+
+// treeIndentWidth is Settings › Appearance › UI Options › "Use smaller
+// indents in trees": OpenIDEA's default and compact distances per level.
+func (m *Model) treeIndentWidth() float32 {
+	if m.prefs.Appearance.SmallTreeIndents {
+		return 12
+	}
+	return 20
 }
 
 // openideaTheme is the palette OpenIDEA draws with: the dark workbench of a

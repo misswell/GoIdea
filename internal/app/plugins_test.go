@@ -1,11 +1,15 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"mayoi/internal/openidea"
 	"mayoi/internal/plugin"
 )
 
@@ -13,6 +17,9 @@ import (
 // and returns its folder.
 func pluginFixture(t *testing.T, settingsPath, name string) string {
 	t.Helper()
+	t.Cleanup(func() {
+		unregisterAction(pluginActionPrefix + name + ".run")
+	})
 	dir := filepath.Join(filepath.Dir(settingsPath), "plugins", name)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
@@ -25,7 +32,7 @@ func pluginFixture(t *testing.T, settingsPath, name string) string {
 		"author":      "Tester",
 		"contributes": map[string]any{
 			"commands": []map[string]any{{"id": name + ".run", "title": "Demo: Run"}},
-			"views":    []map[string]any{{"id": "demo.side", "title": "Demo View", "location": "sidebar"}},
+			"views":    []map[string]any{{"id": name + ".side", "title": "Demo View", "location": "sidebar"}},
 			"languages": []map[string]any{{
 				"id": "demo", "extensions": []string{".demo"},
 			}},
@@ -54,11 +61,17 @@ func TestPluginPageListsInstalledPlugins(t *testing.T) {
 			t.Fatalf("%q is not on the plugins page: %q", text, tt.Texts())
 		}
 	}
-	// The contributed command is a palette action, and the plugin's switch
-	// takes it out and puts it back.
-	id := pluginActionPrefix + "demo.run"
+	// The contributed command is a palette action under OpenIDEA's
+	// plugin.<pluginId>.<commandId> address, and the plugin's switch takes it
+	// out and puts it back. The old GoIDEA address remains callable for
+	// existing keymaps.
+	id := "plugin.demo.run"
+	legacyID := pluginActionPrefix + "demo.run"
 	if _, ok := Command(id); !ok {
 		t.Fatalf("the plugin command is not in the palette: %v", actionList())
+	}
+	if _, ok := Command(legacyID); !ok {
+		t.Fatalf("the legacy plugin command alias is not callable: %v", actionList())
 	}
 	if got := commandTitle(id); got != "Demo: Run" {
 		t.Fatalf("the action title is %q", got)
@@ -67,9 +80,65 @@ func TestPluginPageListsInstalledPlugins(t *testing.T) {
 	if _, ok := Command(id); ok {
 		t.Fatal("a disabled plugin's command stayed in the palette")
 	}
+	if _, ok := Command(legacyID); ok {
+		t.Fatal("a disabled plugin's legacy alias stayed callable")
+	}
 	m.setPluginEnabled("demo", true)
 	if _, ok := Command(id); !ok {
 		t.Fatal("re-enabling the plugin did not bring its command back")
+	}
+	if _, ok := Command(legacyID); !ok {
+		t.Fatal("re-enabling the plugin did not restore its legacy alias")
+	}
+}
+
+func TestPluginLogsCanFindWrapAndClear(t *testing.T) {
+	settingsPath := filepath.Join(t.TempDir(), "settings.json")
+	pluginFixture(t, settingsPath, "demo")
+	m := &Model{cfg: Config{SettingsPath: settingsPath}, welcomePage: "plugins"}
+	pg := m.pluginsPage()
+	p := pg.reg.Plugin("demo")
+	if p == nil {
+		t.Fatal("the fixture plugin is not loaded")
+	}
+	for i := 0; i < 8; i++ {
+		level := "info"
+		message := "log entry " + fmt.Sprint(i)
+		if i == 7 {
+			level = "error"
+			message = "needle"
+		}
+		pg.host.Logged(p, plugin.LogLine{Level: level, Message: message})
+	}
+
+	tt := welcomeTester(t, m, true)
+	if tt.HasText("info: log entry 0") {
+		t.Fatalf("the unwrapped log should show only the latest six lines: %q", tt.Texts())
+	}
+	if err := tt.Click("Soft-wrap"); err != nil {
+		t.Fatal(err)
+	}
+	if !pg.logWrap || !tt.HasText("info: log entry 0") {
+		t.Fatalf("Soft-wrap = %v, logs = %q", pg.logWrap, tt.Texts())
+	}
+
+	if err := tt.Click("Find in Logs"); err != nil {
+		t.Fatal(err)
+	}
+	pg.logQuery = "needle"
+	tt.Frame()
+	if !tt.HasText("error: needle") || tt.HasText("info: log entry 7") {
+		t.Fatalf("the native log query did not filter lines: %q", tt.Texts())
+	}
+
+	if err := tt.Click("Clear"); err != nil {
+		t.Fatal(err)
+	}
+	if got := pg.host.lines(p.Name); len(got) != 0 {
+		t.Fatalf("Clear left %d plugin log lines", len(got))
+	}
+	if !tt.HasText("No plugin log entries") {
+		t.Fatalf("the cleared log has no empty state: %q", tt.Texts())
 	}
 }
 
@@ -126,7 +195,7 @@ func TestPluginHostServesTheWorkspace(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "a.txt"), []byte("hi"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	m := &Model{}
+	m := &Model{postHook: func(fn func()) { fn() }}
 	m.setRoot(root)
 	h := &goideaPluginHost{m: m}
 	if v, err := h.Call(nil, "workspace.root", nil); err != nil || v != root {
@@ -146,11 +215,73 @@ func TestPluginHostServesTheWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := stat.(map[string]any)["type"]; got != "file" {
-		t.Fatalf("workspace.stat type = %v", got)
+	if got := stat.(map[string]any); got["isDir"] != false || got["size"] != int64(2) {
+		t.Fatalf("workspace.stat = %v", got)
 	}
-	if _, err := h.Call(nil, "editor.active", nil); err == nil {
+	if _, err := h.Call(nil, "editor.frobnicate", nil); err == nil {
 		t.Fatal("an unsupported API answered without an error")
+	}
+}
+
+func TestPluginHostReadsAndStatsRemoteWorkspaceThroughOpenIDEA(t *testing.T) {
+	root := "/srv/app"
+	var commands []string
+	m := &Model{
+		postHook: func(fn func()) { fn() },
+		invokeHook: func(_ context.Context, command string, input any) (json.RawMessage, error) {
+			commands = append(commands, command)
+			value := input.(map[string]any)["path"]
+			switch command {
+			case "plugin_workspace_read_text":
+				if value != root+"/src/a.txt" {
+					t.Fatalf("read path = %v", value)
+				}
+				return json.RawMessage(`"remote text"`), nil
+			case "plugin_workspace_stat":
+				if value == root+"/src" {
+					return json.RawMessage(`{"isDir":true,"size":0,"mtime":1000}`), nil
+				}
+				return json.RawMessage(`{"isDir":false,"size":123,"mtime":2000}`), nil
+			default:
+				t.Fatalf("unexpected command %q", command)
+				return nil, nil
+			}
+		},
+		remote: remoteDevelopmentState{
+			session: &openidea.RemoteSession{
+				Target: openidea.RemoteTarget{Kind: openidea.RemoteTargetSSH, Config: "dev-box"},
+				Root:   root,
+				OS:     "linux",
+			},
+		},
+	}
+	m.setRoot(root)
+	h := &goideaPluginHost{m: m}
+	if value, err := h.Call(nil, "workspace.isRemote", nil); err != nil || value != true {
+		t.Fatalf("workspace.isRemote = %v, %v", value, err)
+	}
+	if value, err := h.Call(nil, "workspace.readFile", json.RawMessage(`{"path":"src/a.txt"}`)); err != nil || value != "remote text" {
+		t.Fatalf("workspace.readFile = %v, %v", value, err)
+	}
+	if _, err := h.Call(nil, "workspace.readFile", json.RawMessage(`{"path":"../outside"}`)); err == nil {
+		t.Fatal("remote plugin read escaped the project")
+	}
+	fileStat, err := h.Call(nil, "workspace.stat", json.RawMessage(`{"path":"src/a.txt"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := fileStat.(map[string]any); got["isDir"] != false || got["size"] != int64(123) {
+		t.Fatalf("remote file stat = %+v", got)
+	}
+	dirStat, err := h.Call(nil, "workspace.stat", json.RawMessage(`{"path":"src"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := dirStat.(map[string]any); got["isDir"] != true || got["size"] != int64(0) {
+		t.Fatalf("remote directory stat = %+v", got)
+	}
+	if got := strings.Join(commands, ","); got != "plugin_workspace_read_text,plugin_workspace_stat,plugin_workspace_stat" {
+		t.Fatalf("remote plugin commands = %s", got)
 	}
 }
 
@@ -244,7 +375,11 @@ func TestPluginViewBecomesAToolWindow(t *testing.T) {
 	tree := `{"id":"demo.side","tree":{"type":"stack","children":[` +
 		`{"type":"text","text":"Plugin says hi"},` +
 		`{"type":"list","items":[{"label":"one","description":"d","onClick":{"$h":"h1"}}]},` +
-		`{"type":"button","label":"Run demo","onClick":{"$h":"h2"}}]}}`
+		`{"type":"button","label":"Run demo","onClick":{"$h":"h2"}},` +
+		`{"type":"input","value":"typed","placeholder":"Search plugins"},` +
+		`{"type":"select","value":"two","options":["one","two"]},` +
+		`{"type":"checkbox","label":"Enabled","checked":true},` +
+		`{"type":"progress","value":0.42}]}}`
 	if _, err := pg.host.Call(p, "views.render", json.RawMessage(tree)); err != nil {
 		t.Fatal(err)
 	}
@@ -259,12 +394,53 @@ func TestPluginViewBecomesAToolWindow(t *testing.T) {
 	if !tt.HasText("Run demo") {
 		t.Fatalf("the view button did not draw: %q", tt.Texts())
 	}
+	for _, text := range []string{"Enabled", "42%"} {
+		if !tt.HasText(text) {
+			t.Fatalf("%q did not draw in the plugin view: %q", text, tt.Texts())
+		}
+	}
+	m.DockHide(full)
+	m.postHook = func(fn func()) { fn() }
+	request := json.RawMessage(`{"id":"demo.side"}`)
+	if _, err := pg.host.Call(p, "views.reveal", request); err != nil {
+		t.Fatal(err)
+	}
+	if !m.dockWindowShown(full) {
+		t.Fatal("views.reveal did not show the contributed tool window")
+	}
+	if _, err := pg.host.Call(p, "views.reveal", json.RawMessage(`{"id":"missing"}`)); err == nil {
+		t.Fatal("views.reveal accepted a view the plugin does not contribute")
+	}
 	m.setPluginEnabled("demo", false)
 	if dockSpec(full) != nil {
 		t.Fatal("a disabled plugin kept its tool window")
 	}
 	if m.dockWindowShown(full) {
 		t.Fatal("a disabled plugin's view is still open")
+	}
+}
+
+func TestPluginViewFormStateIsKeptUntilThePluginRendersAgain(t *testing.T) {
+	host := &goideaPluginHost{}
+	key := pluginViewPrefix + "demo:side\x00/0"
+	checkboxKey := pluginViewPrefix + "demo:side\x00/1"
+	if got := host.viewTextValue(key, "initial"); got != "initial" {
+		t.Fatalf("initial input = %q", got)
+	}
+	host.setViewTextValue(key, "edited")
+	if got := host.viewTextValue(key, "ignored"); got != "edited" {
+		t.Fatalf("edited input = %q", got)
+	}
+	if got := host.viewCheckedValue(checkboxKey, true); !got {
+		t.Fatal("initial checkbox was false")
+	}
+	host.setViewCheckedValue(checkboxKey, false)
+	if got := host.viewCheckedValue(checkboxKey, true); got {
+		t.Fatal("checkbox edit was lost")
+	}
+	host.resetViewForm(pluginViewPrefix + "demo:side")
+	if got := host.viewTextValue(key, "rendered again"); got != "rendered again" {
+		t.Fatalf("input after render = %q", got)
 	}
 }
 

@@ -17,7 +17,7 @@ import (
 )
 
 func parityRunCommands() []appCommand {
-	return []appCommand{
+	commands := []appCommand{
 		{
 			"run.importVscodeLaunch",
 			"Import Run Configurations from .vscode/launch.json",
@@ -39,7 +39,15 @@ func parityRunCommands() []appCommand {
 			"create save run configuration launch",
 			func(m *Model) {},
 		},
+		{
+			"run.runConfig",
+			"Run Configuration",
+			"Run", "",
+			"run configuration launch temporary",
+			func(m *Model) {},
+		},
 	}
+	return append(commands, runDynamicCommands()...)
 }
 
 func parityRunActionState(a *Action) {
@@ -51,7 +59,135 @@ func parityRunActionState(a *Action) {
 			m.CreateRunConfiguration(arg)
 		}
 		a.When = func(m *Model) bool { return m.Root() != "" }
+	case "run.runConfig":
+		a.RunWithArg = func(m *Model, arg any) {
+			m.RunConfiguration(arg)
+		}
+		a.When = func(m *Model) bool { return m.Root() != "" }
+	case "go.generate.file", "go.generate.package":
+		scope := strings.TrimPrefix(a.ID, "go.generate.")
+		a.RunWithArg = func(m *Model, arg any) {
+			m.RunGoGenerate(scope, arg)
+		}
+		a.When = func(m *Model) bool { return m.Root() != "" }
+	case "php.composerInstall":
+		a.RunWithArg = func(m *Model, arg any) {
+			m.ComposerInstall(arg)
+		}
+		a.When = func(m *Model) bool { return m.Root() != "" }
+	case "run.modifyContext":
+		a.RunWithArg = func(m *Model, arg any) {
+			m.ModifyRunContext(arg)
+		}
+		a.When = func(m *Model) bool { return m.Root() != "" }
+	case "run.sampleOutput":
+		a.RunWithArg = func(m *Model, arg any) {
+			m.StreamSampleOutput(arg)
+		}
 	}
+}
+
+// RunConfiguration is OpenIDEA's hidden run.runConfig integration action. It
+// accepts a saved configuration id, a RunConfig argument, or
+// {"config": RunConfig, "temporary": true}. Temporary configurations live in
+// the Run widget for this project session and are never persisted.
+func (m *Model) RunConfiguration(arg any) {
+	if m.Root() == "" {
+		return
+	}
+	if id, ok := arg.(string); ok {
+		m.run.pendingInline = nil
+		m.run.inline = nil
+		if m.run.loaded {
+			if m.runChooserByID(id) != nil {
+				m.selectRunConfig(id)
+				m.run.pendingConfigID = ""
+				m.Run()
+				return
+			}
+			m.notifyInfo("run-config", "Run configuration not found", id)
+			return
+		}
+		m.run.pendingConfigID = id
+		m.Run()
+		return
+	}
+
+	cfg, temporary, ok := runConfigFromActionArg(arg)
+	if !ok {
+		return
+	}
+	m.run.pendingConfigID = ""
+	if temporary {
+		m.runTemporaryConfiguration(cfg)
+		return
+	}
+	if m.startRunWith(cfg.Raw(), cfg.Name) {
+		m.adoptRunTemporary(cfg)
+		m.invalidate()
+	}
+}
+
+func runConfigFromActionArg(arg any) (openidea.RunConfig, bool, bool) {
+	if arg == nil {
+		return openidea.RunConfig{}, false, false
+	}
+	if cfg, ok := arg.(openidea.RunConfig); ok {
+		return cfg, false, true
+	}
+	if cfg, ok := arg.(*openidea.RunConfig); ok && cfg != nil {
+		return *cfg, false, true
+	}
+
+	var wrapped struct {
+		Config    json.RawMessage `json:"config"`
+		Temporary bool            `json:"temporary"`
+	}
+	raw, err := json.Marshal(arg)
+	if err != nil {
+		return openidea.RunConfig{}, false, false
+	}
+	if err := json.Unmarshal(raw, &wrapped); err != nil || len(wrapped.Config) == 0 {
+		cfg, err := openidea.DecodeRunConfig(raw)
+		if err != nil || cfg == nil {
+			return openidea.RunConfig{}, false, false
+		}
+		return *cfg, false, true
+	}
+	cfg, err := openidea.DecodeRunConfig(wrapped.Config)
+	if err != nil || cfg == nil {
+		return openidea.RunConfig{}, false, false
+	}
+	return *cfg, wrapped.Temporary, true
+}
+
+func (m *Model) runTemporaryConfiguration(cfg openidea.RunConfig) {
+	selected := m.adoptRunTemporary(cfg)
+	if selected == nil {
+		return
+	}
+	m.run.visible = true
+	m.occupyBottom("run")
+	if m.run.busy {
+		m.invalidate()
+		return
+	}
+	if !m.run.trusted {
+		m.run.pendingTrust = true
+		m.trustAsk = true
+		m.trustFolder = false
+		m.status = "The project is not trusted: accept the prompt before running"
+		m.invalidate()
+		return
+	}
+	if !m.run.loaded {
+		m.run.pendingStart = true
+		m.loadRunConfigs()
+		m.invalidate()
+		return
+	}
+	m.run.pendingInline = nil
+	m.startRunWith(selected.Raw(), selected.Name)
 }
 
 // ImportRunConfigurations opens Run/Debug Configurations with the file's

@@ -32,8 +32,14 @@ type BranchPane struct {
 	sel      int
 	loading  bool
 	listing  bool
-	busy     bool
-	err      string
+	// branchesLoaded distinguishes an empty repository from a list that has not
+	// answered yet. The cancels stop work for a repository after its tab was
+	// left; generations still guard responses from transports that cannot cancel.
+	branchesLoaded bool
+	infoCancel     context.CancelFunc
+	listCancel     context.CancelFunc
+	busy           bool
+	err            string
 	// prompt is rename while the Branches popup asks for a new branch name.
 	// A remote delete uses it as its required destructive confirmation.
 	prompt       string
@@ -41,53 +47,144 @@ type BranchPane struct {
 	promptName   string
 	promptUnset  bool
 	promptErr    string
+	// refreshPending coalesces a refresh requested while branch_info is in
+	// flight instead of dropping it.
+	refreshPending bool
 }
 
-func (m *Model) resetBranch() { m.branch = BranchPane{} }
+func (m *Model) resetBranch() {
+	cancelVCSBranchPane(&m.branch)
+	m.branch = BranchPane{}
+}
+
+func (m *Model) vcsBranchPaneForRepository(root string) BranchPane {
+	root = vcsRepositoryKey(root)
+	if root == "" || root == vcsRepositoryKey(m.vcs.current) {
+		return m.branch
+	}
+	return m.vcs.branches[root]
+}
+
+func (m *Model) updateVCSBranchPane(root string, update func(*BranchPane)) {
+	root = vcsRepositoryKey(root)
+	if root == "" || root == vcsRepositoryKey(m.vcs.current) {
+		update(&m.branch)
+		m.invalidate()
+		return
+	}
+	if m.vcs.branches == nil {
+		m.vcs.branches = map[string]BranchPane{}
+	}
+	pane := m.vcs.branches[root]
+	update(&pane)
+	m.vcs.branches[root] = pane
+}
+
+func cancelVCSBranchPane(branch *BranchPane) {
+	if branch == nil {
+		return
+	}
+	if branch.infoCancel != nil {
+		branch.infoCancel()
+		branch.infoCancel = nil
+	}
+	if branch.listCancel != nil {
+		branch.listCancel()
+		branch.listCancel = nil
+	}
+	branch.loading = false
+	branch.listing = false
+}
+
+func (m *Model) nextVCSBranchInfoGeneration(root string) uint64 {
+	root = vcsRepositoryKey(root)
+	if m.vcs.branchInfoGenerations == nil {
+		m.vcs.branchInfoGenerations = map[string]uint64{}
+	}
+	m.vcs.branchInfoGenerations[root]++
+	return m.vcs.branchInfoGenerations[root]
+}
+
+func (m *Model) nextVCSBranchListGeneration(root string) uint64 {
+	root = vcsRepositoryKey(root)
+	if m.vcs.branchListGenerations == nil {
+		m.vcs.branchListGenerations = map[string]uint64{}
+	}
+	m.vcs.branchListGenerations[root]++
+	return m.vcs.branchListGenerations[root]
+}
 
 // RefreshBranch reloads the current branch in the background.
 func (m *Model) RefreshBranch() {
 	root := m.Root()
-	if root == "" || m.branch.loading {
+	repoRoot := m.vcsRepositoryRoot()
+	branch := m.vcsBranchPaneForRepository(repoRoot)
+	if root == "" {
 		return
 	}
-	m.branch.loading = true
-	m.invalidate()
+	if branch.loading {
+		m.updateVCSBranchPane(repoRoot, func(branch *BranchPane) {
+			branch.refreshPending = true
+		})
+		return
+	}
+	repoArg := m.vcsRepositoryArg()
+	generation := m.nextVCSBranchInfoGeneration(repoRoot)
+	ctx, cancel := context.WithTimeout(modelContext(m), 20*time.Second)
+	m.updateVCSBranchPane(repoRoot, func(branch *BranchPane) {
+		if branch.infoCancel != nil {
+			branch.infoCancel()
+		}
+		branch.infoCancel = cancel
+		branch.loading, branch.refreshPending = true, false
+	})
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, 20*time.Second)
 		defer cancel()
-		raw, err := m.invoke(ctx, "vcs_branch_info", map[string]any{"repo": nil})
+		raw, err := m.invoke(ctx, "vcs_branch_info", map[string]any{"repo": repoArg})
 		var info openidea.BranchInfo
 		if err == nil {
 			err = json.Unmarshal(raw, &info)
 		}
 		m.post(func() {
-			m.branch.loading = false
-			if m.Root() != root {
+			if m.Root() != root ||
+				m.vcs.branchInfoGenerations[repoRoot] != generation {
 				return
 			}
-			m.branch.loaded = true
-			if err != nil {
-				// A project without Git simply has no widget.
-				if branchErrorText(err) == "" {
-					m.branch.head = nil
-					m.branch.headCommit = nil
-					m.branch.upstream = nil
-					m.branch.ahead, m.branch.behind = 0, 0
-					m.branch.operation = nil
-				} else {
-					m.branch.err = branchErrorText(err)
+			m.updateVCSBranchPane(repoRoot, func(branch *BranchPane) {
+				branch.loading = false
+				branch.infoCancel = nil
+				branch.loaded = true
+				if err != nil {
+					// A project without Git simply has no widget.
+					if branchErrorText(err) == "" {
+						branch.head = nil
+						branch.headCommit = nil
+						branch.upstream = nil
+						branch.ahead, branch.behind = 0, 0
+						branch.operation = nil
+					} else {
+						branch.err = branchErrorText(err)
+					}
+					return
 				}
-				m.invalidate()
-				return
-			}
-			m.branch.err = ""
-			m.branch.head = info.Head
-			m.branch.headCommit = info.HeadCommit
-			m.branch.upstream = info.Upstream
-			m.branch.ahead, m.branch.behind = info.Ahead, info.Behind
-			m.branch.operation = info.Operation
+				branch.err = ""
+				branch.head = info.Head
+				branch.headCommit = info.HeadCommit
+				branch.upstream = info.Upstream
+				branch.ahead, branch.behind = info.Ahead, info.Behind
+				branch.operation = info.Operation
+			})
 			m.invalidate()
+			active := m.vcsBranchPaneForRepository(repoRoot)
+			if active.refreshPending {
+				m.updateVCSBranchPane(repoRoot, func(branch *BranchPane) {
+					branch.refreshPending = false
+				})
+				if repoRoot != "" &&
+					filepath.Clean(m.vcsRepositoryRoot()) == filepath.Clean(repoRoot) {
+					m.RefreshBranch()
+				}
+			}
 		})
 	}()
 }
@@ -188,43 +285,71 @@ func (m *Model) loadBranches() {
 	if root == "" || !m.branch.listing {
 		return
 	}
+	repoRoot := m.vcsRepositoryRoot()
+	repoArg := m.vcsRepositoryArg()
+	generation := m.nextVCSBranchListGeneration(repoRoot)
+	ctx, cancel := context.WithTimeout(modelContext(m), 30*time.Second)
+	m.updateVCSBranchPane(repoRoot, func(branch *BranchPane) {
+		if branch.listCancel != nil {
+			branch.listCancel()
+		}
+		branch.listCancel = cancel
+		branch.listing = true
+		branch.branchesLoaded = false
+	})
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 		defer cancel()
-		raw, err := m.invoke(ctx, "vcs_branches", map[string]any{"repo": nil})
+		raw, err := m.invoke(ctx, "vcs_branches", map[string]any{"repo": repoArg})
 		var branches []openidea.Branch
 		if err == nil {
 			err = json.Unmarshal(raw, &branches)
 		}
 		m.post(func() {
-			if m.Root() != root || !m.branch.listing {
+			if m.Root() != root ||
+				m.vcs.branchListGenerations[repoRoot] != generation {
 				return
 			}
-			m.branch.listing = false
-			if err != nil {
-				if branchErrorText(err) != "" {
-					m.branch.err = branchErrorText(err)
+			m.updateVCSBranchPane(repoRoot, func(branch *BranchPane) {
+				branch.listing = false
+				branch.listCancel = nil
+				if err != nil {
+					if branchErrorText(err) != "" {
+						branch.err = branchErrorText(err)
+					}
+					branch.branches = nil
+					return
 				}
-				m.branch.branches = nil
-				m.invalidate()
-				return
-			}
-			// Local branches first, as IDEA groups them.
-			sort.SliceStable(branches, func(i, j int) bool {
-				if branches[i].Remote != branches[j].Remote {
-					return !branches[i].Remote
-				}
-				return branches[i].Name < branches[j].Name
+				// Local branches first, as IDEA groups them.
+				sort.SliceStable(branches, func(i, j int) bool {
+					if branches[i].Remote != branches[j].Remote {
+						return !branches[i].Remote
+					}
+					return branches[i].Name < branches[j].Name
+				})
+				branch.branches = branches
+				branch.branchesLoaded = true
+				branch.sel = m.currentBranchRowFor(branch)
 			})
-			m.branch.branches = branches
-			m.branch.sel = m.currentBranchRow()
 			m.invalidate()
 		})
 	}()
 }
 
 func (m *Model) currentBranchRow() int {
-	rows := m.branchRows()
+	return m.currentBranchRowFor(&m.branch)
+}
+
+func (m *Model) currentBranchRowFor(branch *BranchPane) int {
+	query := strings.ToLower(strings.TrimSpace(branch.query))
+	rows := branch.branches
+	if query != "" {
+		rows = make([]openidea.Branch, 0, len(branch.branches))
+		for _, item := range branch.branches {
+			if strings.Contains(strings.ToLower(item.Name), query) {
+				rows = append(rows, item)
+			}
+		}
+	}
 	for i, b := range rows {
 		if b.Current {
 			return i
@@ -345,43 +470,50 @@ func (m *Model) branchRowMenu(menu *ui.Menu, branch openidea.Branch) {
 }
 
 func (m *Model) checkoutAndRebaseBranch(name, onto string) {
-	if name == "" || onto == "" || m.branch.busy {
+	repoRoot := m.vcsRepositoryRoot()
+	if name == "" || onto == "" || m.vcsBranchPaneForRepository(repoRoot).busy {
 		return
 	}
 	root := m.Root()
-	m.branch.busy = true
-	m.branch.err = ""
+	repoArg := m.vcsRepositoryArg()
+	m.updateVCSBranchPane(repoRoot, func(branch *BranchPane) {
+		branch.busy, branch.err = true, ""
+	})
 	m.status = "Checking out and rebasing " + name + " onto " + onto + "…"
 	m.invalidate()
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, 5*time.Minute)
+		ctx, cancel := context.WithTimeout(m.mergeContext(), 5*time.Minute)
 		defer cancel()
 		_, err := m.invoke(ctx, "vcs_checkout", map[string]any{
-			"repo": nil, "branch": name, "create": false,
+			"repo": repoArg, "branch": name, "create": false,
 			"options": map[string]any{"mode": "normal", "diverged": nil},
 		})
 		if err == nil {
 			_, err = m.invoke(ctx, "vcs_rebase_with", map[string]any{
-				"repo": nil, "upstream": onto,
+				"repo": repoArg, "upstream": onto,
 				"options": map[string]any{
 					"onto": nil, "rebaseMerges": false, "keepEmpty": false,
 				},
 			})
 		}
 		m.post(func() {
-			m.branch.busy = false
+			m.updateVCSBranchPane(repoRoot, func(branch *BranchPane) {
+				branch.busy = false
+			})
 			if m.Root() != root {
 				return
 			}
 			if err != nil {
-				m.branch.err = "Checkout and rebase failed: " + err.Error()
-				m.invalidate()
+				m.updateVCSBranchPane(repoRoot, func(branch *BranchPane) {
+					branch.err = "Checkout and rebase failed: " + err.Error()
+				})
 				return
 			}
-			m.closeBranches()
+			if vcsRepositoryKey(m.vcs.current) == vcsRepositoryKey(repoRoot) {
+				m.closeBranches()
+			}
 			m.status = "Checked out and rebased " + name + " onto " + onto
 			m.RefreshAfterVCSCommand()
-			m.status = "Checked out and rebased " + name + " onto " + onto
 		})
 	}()
 }
@@ -408,11 +540,16 @@ func (m *Model) pullRemoteBranchIntoCurrent(name string, rebase bool) {
 // for a branch selected in the Branches popup.
 func (m *Model) showDiffWithWorkingTreeRevision(revision, label string) {
 	root := m.Root()
+	repoRoot := m.vcsRepositoryRoot()
+	if repoRoot == "" {
+		repoRoot = filepath.Clean(root)
+	}
+	repoArg := vcsRepositoryArgFor(repoRoot)
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, 2*time.Minute)
+		ctx, cancel := context.WithTimeout(modelContext(m), 2*time.Minute)
 		defer cancel()
 		raw, err := m.invoke(ctx, "vcs_diff_with_worktree", map[string]any{
-			"repo": nil, "rev": revision,
+			"repo": repoArg, "rev": revision,
 		})
 		var files []openidea.RevisionChange
 		if err == nil {
@@ -420,6 +557,10 @@ func (m *Model) showDiffWithWorkingTreeRevision(revision, label string) {
 		}
 		m.post(func() {
 			if m.Root() != root {
+				return
+			}
+			if current := m.vcsRepositoryRoot(); current != "" &&
+				vcsRepositoryKey(current) != vcsRepositoryKey(repoRoot) {
 				return
 			}
 			if err != nil {
@@ -435,7 +576,7 @@ func (m *Model) showDiffWithWorkingTreeRevision(revision, label string) {
 			for _, file := range files {
 				path := file.Path
 				if !filepath.IsAbs(path) {
-					path = filepath.Join(root, path)
+					path = filepath.Join(repoRoot, path)
 				}
 				m.vcsMore.items = append(m.vcsMore.items, vcsMoreItem{
 					Path: path, Revision: revision, Label: filepath.Base(path),
@@ -448,20 +589,32 @@ func (m *Model) showDiffWithWorkingTreeRevision(revision, label string) {
 }
 
 func (m *Model) branchFavorite(name string) bool {
-	if name == "" || m.Root() == "" {
+	root := m.vcsBranchFavoriteRepositoryRoot()
+	if name == "" || root == "" {
 		return false
 	}
-	return m.prefs.VCS.FavoriteBranches[gitLogScopedKey(m.Root(), name)]
+	return m.prefs.VCS.FavoriteBranches[gitLogScopedKey(root, name)]
+}
+
+func (m *Model) vcsBranchFavoriteRepositoryRoot() string {
+	if root := m.vcsRepositoryRoot(); root != "" {
+		return root
+	}
+	if len(m.vcs.repositories) == 0 {
+		return vcsRepositoryKey(m.Root())
+	}
+	return ""
 }
 
 func (m *Model) toggleBranchFavorite(name string) {
-	if name == "" || m.Root() == "" {
+	root := m.vcsBranchFavoriteRepositoryRoot()
+	if name == "" || root == "" {
 		return
 	}
 	if m.prefs.VCS.FavoriteBranches == nil {
 		m.prefs.VCS.FavoriteBranches = map[string]bool{}
 	}
-	key := gitLogScopedKey(m.Root(), name)
+	key := gitLogScopedKey(root, name)
 	if m.prefs.VCS.FavoriteBranches[key] {
 		delete(m.prefs.VCS.FavoriteBranches, key)
 	} else {
@@ -544,6 +697,10 @@ func (m *Model) submitBranchPrompt() {
 		m.submitBranchRename()
 	case "delete-remote":
 		m.submitRemoteBranchDelete()
+	case "delete-worktree":
+		m.submitDeleteBranchWorktree(false)
+	case "force-worktree":
+		m.submitDeleteBranchWorktree(true)
 	}
 }
 
@@ -556,45 +713,58 @@ func (m *Model) submitBranchRename() {
 		return
 	}
 	root := m.Root()
+	repoRoot := m.vcsRepositoryRoot()
 	unsetUpstream := m.branch.promptUnset && branch.Upstream != nil
-	m.branch.busy, m.branch.promptErr = true, ""
+	repoArg := m.vcsRepositoryArg()
+	m.updateVCSBranchPane(repoRoot, func(branchPane *BranchPane) {
+		branchPane.busy, branchPane.promptErr = true, ""
+	})
 	m.invalidate()
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, 2*time.Minute)
+		ctx, cancel := context.WithTimeout(m.mergeContext(), 2*time.Minute)
 		defer cancel()
 		_, err := m.invoke(ctx, "vcs_rename_branch", map[string]any{
-			"repo": nil, "from": branch.Name, "to": name, "unsetUpstream": unsetUpstream,
+			"repo": repoArg, "from": branch.Name, "to": name, "unsetUpstream": unsetUpstream,
 		})
 		m.post(func() {
-			m.branch.busy = false
+			m.updateVCSBranchPane(repoRoot, func(branchPane *BranchPane) {
+				branchPane.busy = false
+			})
 			if m.Root() != root {
 				return
 			}
 			if err != nil {
-				m.branch.promptErr = "Could not rename the branch: " + err.Error()
-				m.invalidate()
+				m.updateVCSBranchPane(repoRoot, func(branchPane *BranchPane) {
+					branchPane.promptErr = "Could not rename the branch: " + err.Error()
+				})
 				return
 			}
-			m.cancelBranchPrompt()
-			m.closeBranches()
-			if m.branch.head != nil && *m.branch.head == branch.Name {
-				m.branch.head = &name
-				if unsetUpstream {
-					m.branch.upstream = nil
-				}
+			active := vcsRepositoryKey(m.vcs.current) == vcsRepositoryKey(repoRoot)
+			if active {
+				m.cancelBranchPrompt()
+				m.closeBranches()
 			}
-			for i := range m.branch.branches {
-				if !m.branch.branches[i].Remote && m.branch.branches[i].Name == branch.Name {
-					m.branch.branches[i].Name = name
+			m.updateVCSBranchPane(repoRoot, func(branchPane *BranchPane) {
+				if branchPane.head != nil && *branchPane.head == branch.Name {
+					branchPane.head = &name
 					if unsetUpstream {
-						m.branch.branches[i].Upstream = nil
+						branchPane.upstream = nil
 					}
 				}
-			}
+				for i := range branchPane.branches {
+					if !branchPane.branches[i].Remote && branchPane.branches[i].Name == branch.Name {
+						branchPane.branches[i].Name = name
+						if unsetUpstream {
+							branchPane.branches[i].Upstream = nil
+						}
+					}
+				}
+			})
 			m.status = "Renamed branch " + branch.Name + " to " + name
 			m.RefreshAfterVCSCommand()
-			m.status = "Renamed branch " + branch.Name + " to " + name
-			m.reloadBranchRows()
+			if active {
+				m.reloadBranchRows()
+			}
 		})
 	}()
 }
@@ -611,45 +781,165 @@ func (m *Model) submitRemoteBranchDelete() {
 }
 
 func (m *Model) deleteLocalBranch(branch openidea.Branch) {
-	if m.branch.busy || branch.Remote || branch.Current || branch.Name == "" {
+	repoRoot := m.vcsRepositoryRoot()
+	if m.vcsBranchPaneForRepository(repoRoot).busy ||
+		branch.Remote || branch.Current || branch.Name == "" {
 		return
 	}
 	root := m.Root()
-	m.branch.busy = true
-	m.branch.err = ""
+	repoArg := m.vcsRepositoryArg()
+	m.updateVCSBranchPane(repoRoot, func(pane *BranchPane) {
+		pane.busy, pane.err = true, ""
+	})
 	m.status = "Deleting branch " + branch.Name + "…"
 	m.invalidate()
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, 2*time.Minute)
+		ctx, cancel := context.WithTimeout(m.mergeContext(), 2*time.Minute)
 		defer cancel()
+		raw, worktreeErr := m.invoke(ctx, "vcs_worktrees", map[string]any{"repo": repoArg})
+		var worktrees []openidea.Worktree
+		if worktreeErr == nil {
+			worktreeErr = decodeOpenIDEAResponse(raw, &worktrees)
+		}
+		if worktreeErr == nil {
+			if holding, ok := branchHoldingWorktree(branch.Name, worktrees); ok &&
+				!worktreeContainsProject(holding.Path, root) {
+				m.post(func() {
+					m.updateVCSBranchPane(repoRoot, func(pane *BranchPane) {
+						pane.busy, pane.err = false, ""
+						pane.prompt = "delete-worktree"
+						pane.promptBranch = branch
+						pane.promptName = holding.Path
+						pane.promptErr = ""
+					})
+				})
+				return
+			}
+		}
 		raw, err := m.invoke(ctx, "vcs_delete_branch", map[string]any{
-			"repo": nil, "branch": branch.Name,
+			"repo": repoArg, "branch": branch.Name,
 		})
 		var deleted openidea.DeletedBranch
 		if err == nil {
 			err = json.Unmarshal(raw, &deleted)
 		}
 		m.post(func() {
-			m.branch.busy = false
+			m.updateVCSBranchPane(repoRoot, func(pane *BranchPane) {
+				pane.busy = false
+			})
 			if m.Root() != root {
 				return
 			}
 			if err != nil {
-				m.branch.err = "Could not delete the branch: " + err.Error()
-				m.invalidate()
+				m.updateVCSBranchPane(repoRoot, func(pane *BranchPane) {
+					pane.err = "Could not delete the branch: " + err.Error()
+				})
 				return
 			}
-			m.closeBranches()
-			m.reloadBranchRows()
+			active := vcsRepositoryKey(m.vcs.current) == vcsRepositoryKey(repoRoot)
+			if active {
+				m.closeBranches()
+				m.reloadBranchRows()
+			}
 			m.status = "Deleted branch " + branch.Name
 			m.RefreshAfterVCSCommand()
-			m.status = "Deleted branch " + branch.Name
-			m.showDeletedBranchNotification(root, deleted)
+			m.showDeletedBranchNotification(root, repoRoot, deleted)
 		})
 	}()
 }
 
-func (m *Model) showDeletedBranchNotification(root string, deleted openidea.DeletedBranch) {
+// branchHoldingWorktree finds the linked worktree that makes Git refuse to
+// delete a local branch. The main worktree is deliberately ignored so Git's
+// own refusal remains visible when it holds the branch.
+func branchHoldingWorktree(name string, worktrees []openidea.Worktree) (openidea.Worktree, bool) {
+	for _, worktree := range worktrees {
+		if worktree.Main || worktree.Branch == nil || *worktree.Branch != name {
+			continue
+		}
+		return worktree, true
+	}
+	return openidea.Worktree{}, false
+}
+
+// submitDeleteBranchWorktree removes the confirmed linked worktree without
+// force first. A failed removal opens an explicit Force Remove confirmation.
+// Branch deletion runs only after the worktree is gone.
+func (m *Model) submitDeleteBranchWorktree(force bool) {
+	if m.branch.busy {
+		return
+	}
+	branch := m.branch.promptBranch
+	path := m.branch.promptName
+	if branch.Name == "" || path == "" {
+		m.branch.promptErr = "The linked worktree is no longer selected"
+		m.invalidate()
+		return
+	}
+	if worktreeContainsProject(path, m.Root()) {
+		m.branch.promptErr = "This worktree contains the open project and cannot be removed"
+		m.invalidate()
+		return
+	}
+	root := m.Root()
+	repoRoot := m.vcsRepositoryRoot()
+	repoArg := m.vcsRepositoryArg()
+	m.updateVCSBranchPane(repoRoot, func(pane *BranchPane) {
+		pane.busy, pane.promptErr = true, ""
+	})
+	go func() {
+		ctx, cancel := context.WithTimeout(m.mergeContext(), 2*time.Minute)
+		defer cancel()
+		_, err := m.invoke(ctx, "vcs_remove_worktree", map[string]any{
+			"repo": repoArg, "path": path, "force": force,
+		})
+		if err != nil {
+			m.post(func() {
+				m.updateVCSBranchPane(repoRoot, func(pane *BranchPane) {
+					pane.busy = false
+					pane.prompt = "force-worktree"
+					pane.promptErr = "Could not remove the worktree: " + err.Error()
+				})
+			})
+			return
+		}
+		raw, err := m.invoke(ctx, "vcs_delete_branch", map[string]any{
+			"repo": repoArg, "branch": branch.Name,
+		})
+		var deleted openidea.DeletedBranch
+		if err == nil {
+			err = decodeOpenIDEAResponse(raw, &deleted)
+		}
+		m.post(func() {
+			m.updateVCSBranchPane(repoRoot, func(pane *BranchPane) {
+				pane.busy = false
+			})
+			if m.Root() != root {
+				return
+			}
+			if err != nil {
+				m.cancelBranchPrompt()
+				m.updateVCSBranchPane(repoRoot, func(pane *BranchPane) {
+					pane.err = "The worktree was removed, but the branch could not be deleted: " + err.Error()
+				})
+				return
+			}
+			m.cancelBranchPrompt()
+			active := vcsRepositoryKey(m.vcs.current) == vcsRepositoryKey(repoRoot)
+			if active {
+				m.closeBranches()
+				m.reloadBranchRows()
+			}
+			m.status = "Deleted worktree and branch " + branch.Name
+			m.RefreshAfterVCSCommand()
+			m.showDeletedBranchNotification(root, repoRoot, deleted)
+		})
+	}()
+}
+
+func (m *Model) showDeletedBranchNotification(
+	root, repoRoot string,
+	deleted openidea.DeletedBranch,
+) {
 	if deleted.Name == "" {
 		return
 	}
@@ -660,7 +950,7 @@ func (m *Model) showDeletedBranchNotification(root string, deleted openidea.Dele
 	actions := []notifyAction{{
 		label: "Restore",
 		run: func(m *Model) {
-			m.restoreDeletedBranch(root, deleted)
+			m.restoreDeletedBranch(root, repoRoot, deleted)
 		},
 	}}
 	if deleted.Unmerged && deleted.Tip != "" {
@@ -673,7 +963,7 @@ func (m *Model) showDeletedBranchNotification(root string, deleted openidea.Dele
 					m.invalidate()
 					return
 				}
-				m.ShowLog()
+				m.ShowLogWithArg(map[string]any{"repo": repoRoot})
 				m.goToGitLogRef(tip)
 			},
 		})
@@ -688,16 +978,20 @@ func (m *Model) showDeletedBranchNotification(root string, deleted openidea.Dele
 					m.invalidate()
 					return
 				}
-				m.runVCSRemote(vcsOpFetch, "Delete Remote Branch", map[string]any{
-					"op": "deleteBranch", "branch": upstream,
-				})
+				m.runVCSRemoteAt(vcsRepositoryArgFor(repoRoot), vcsOpFetch,
+					"Delete Remote Branch", map[string]any{
+						"op": "deleteBranch", "branch": upstream,
+					})
 			},
 		})
 	}
 	m.notifyInfo("vcs.deleted."+deleted.Name, "Deleted branch "+deleted.Name, body, actions...)
 }
 
-func (m *Model) restoreDeletedBranch(root string, deleted openidea.DeletedBranch) {
+func (m *Model) restoreDeletedBranch(
+	root, repoRoot string,
+	deleted openidea.DeletedBranch,
+) {
 	if m.Root() != root || deleted.Name == "" || deleted.Tip == "" {
 		m.status = "Reopen the branch's project before restoring it"
 		m.invalidate()
@@ -705,11 +999,12 @@ func (m *Model) restoreDeletedBranch(root string, deleted openidea.DeletedBranch
 	}
 	m.status = "Restoring branch " + deleted.Name + "…"
 	m.invalidate()
+	repoArg := vcsRepositoryArgFor(repoRoot)
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, 2*time.Minute)
+		ctx, cancel := context.WithTimeout(m.mergeContext(), 2*time.Minute)
 		defer cancel()
 		_, err := m.invoke(ctx, "vcs_restore_branch", map[string]any{
-			"repo": nil, "deleted": deleted,
+			"repo": repoArg, "deleted": deleted,
 		})
 		m.post(func() {
 			if m.Root() != root {
@@ -721,9 +1016,10 @@ func (m *Model) restoreDeletedBranch(root string, deleted openidea.DeletedBranch
 				return
 			}
 			m.status = "Restored branch " + deleted.Name
-			m.reloadBranchRows()
+			if vcsRepositoryKey(m.vcs.current) == vcsRepositoryKey(repoRoot) {
+				m.reloadBranchRows()
+			}
 			m.RefreshAfterVCSCommand()
-			m.status = "Restored branch " + deleted.Name
 		})
 	}()
 }
@@ -733,6 +1029,7 @@ func (m *Model) reloadBranchRows() {
 		return
 	}
 	m.branch.listing = true
+	m.branch.branchesLoaded = false
 	m.loadBranches()
 }
 
@@ -742,34 +1039,43 @@ func (m *Model) checkoutBranch(name string) {
 	if name == "" || m.Root() == "" {
 		return
 	}
-	if m.branch.head != nil && name == *m.branch.head {
+	repoRoot := m.vcsRepositoryRoot()
+	branch := m.vcsBranchPaneForRepository(repoRoot)
+	if branch.head != nil && name == *branch.head {
 		m.closeBranches()
 		return
 	}
-	if m.branch.busy {
+	if branch.busy {
 		return
 	}
-	m.branch.busy = true
-	m.branch.err = ""
+	m.updateVCSBranchPane(repoRoot, func(branch *BranchPane) {
+		branch.busy, branch.err = true, ""
+	})
 	m.status = "Switching to " + name + "…"
 	m.invalidate()
+	repoArg := m.vcsRepositoryArg()
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, 2*time.Minute)
+		ctx, cancel := context.WithTimeout(m.mergeContext(), 2*time.Minute)
 		defer cancel()
 		_, err := m.invoke(ctx, "vcs_checkout", map[string]any{
-			"repo": nil, "branch": name, "create": false, "options": nil,
+			"repo": repoArg, "branch": name, "create": false, "options": nil,
 		})
 		m.post(func() {
-			m.branch.busy = false
+			m.updateVCSBranchPane(repoRoot, func(branch *BranchPane) {
+				branch.busy = false
+			})
 			if m.Root() == "" {
 				return
 			}
 			if err != nil {
-				m.branch.err = "Switching branches failed: " + err.Error()
-				m.invalidate()
+				m.updateVCSBranchPane(repoRoot, func(branch *BranchPane) {
+					branch.err = "Switching branches failed: " + err.Error()
+				})
 				return
 			}
-			m.closeBranches()
+			if vcsRepositoryKey(m.vcs.current) == vcsRepositoryKey(repoRoot) {
+				m.closeBranches()
+			}
 			m.status = "Switched to " + name
 			m.RefreshBranch()
 			if m.vcs.loaded || m.vcs.loading {
@@ -836,7 +1142,7 @@ func (m *Model) SmokeBranch(ctx context.Context) (map[string]any, error) {
 
 func (m *Model) branchInfo(ctx context.Context) (openidea.BranchInfo, error) {
 	var info openidea.BranchInfo
-	raw, err := m.invoke(ctx, "vcs_branch_info", map[string]any{"repo": nil})
+	raw, err := m.invoke(ctx, "vcs_branch_info", map[string]any{"repo": m.vcsRepositoryArg()})
 	if err != nil {
 		return info, err
 	}
@@ -846,7 +1152,7 @@ func (m *Model) branchInfo(ctx context.Context) (openidea.BranchInfo, error) {
 
 func (m *Model) branchList(ctx context.Context) ([]openidea.Branch, error) {
 	var branches []openidea.Branch
-	raw, err := m.invoke(ctx, "vcs_branches", map[string]any{"repo": nil})
+	raw, err := m.invoke(ctx, "vcs_branches", map[string]any{"repo": m.vcsRepositoryArg()})
 	if err != nil {
 		return nil, err
 	}
@@ -1003,6 +1309,42 @@ func (m *Model) branchPromptDialog(c *ui.Context, p *ui.Theme) {
 				}
 				ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
 					if ui.Button(c, "Delete").Clicked() {
+						m.submitBranchPrompt()
+					}
+					if ui.Button(c, "Cancel").Clicked() {
+						m.cancelBranchPrompt()
+					}
+				})
+			case "delete-worktree":
+				branch := m.branch.promptBranch
+				ui.Text(c, "Delete Branch").FontSize(13).Bold().TextColor(p.Text)
+				ui.Text(c, fmt.Sprintf(
+					"Branch '%s' is checked out in the worktree at %s.\nDelete the worktree and the branch? Its folder is deleted.",
+					branch.Name, m.branch.promptName)).
+					FontSize(12).TextColor(p.Text)
+				if m.branch.promptErr != "" {
+					ui.Text(c, m.branch.promptErr).FontSize(12).TextColor(p.Danger)
+				}
+				ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
+					if ui.Button(c, "Delete").Disabled(m.branch.busy).Clicked() {
+						m.submitBranchPrompt()
+					}
+					if ui.Button(c, "Cancel").Clicked() {
+						m.cancelBranchPrompt()
+					}
+				})
+			case "force-worktree":
+				branch := m.branch.promptBranch
+				ui.Text(c, "Force Remove Worktree").FontSize(13).Bold().TextColor(p.Text)
+				ui.Text(c, fmt.Sprintf(
+					"Branch '%s' is still checked out at %s. Force removal discards that worktree's changes and deletes its folder.",
+					branch.Name, m.branch.promptName)).
+					FontSize(12).TextColor(p.Text)
+				if m.branch.promptErr != "" {
+					ui.Text(c, m.branch.promptErr).FontSize(12).TextColor(p.Danger)
+				}
+				ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
+					if ui.Button(c, "Force Remove").Disabled(m.branch.busy).Clicked() {
 						m.submitBranchPrompt()
 					}
 					if ui.Button(c, "Cancel").Clicked() {

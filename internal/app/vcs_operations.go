@@ -56,11 +56,17 @@ var vcsQuickItems = []vcsQuickItem{
 	{id: "vcs.fetch", title: "Fetch", detail: "Download remote refs"},
 	{id: "vcs.pull", title: "Pull…", detail: "Update the current branch"},
 	{id: "vcs.push", title: "Push…", detail: "Publish the current branch"},
+	{id: "vcs.manageRemotes", title: "Manage Remotes…", detail: "Edit remote repositories"},
+	{id: "vcs.compareWithBranch", title: "Compare with Branch or Revision…", detail: "Compare paths with a revision"},
 	{id: "vcs.merge", title: "Merge…", detail: "Merge a branch or tag"},
 	{id: "vcs.rebase", title: "Rebase…", detail: "Rebase onto a branch or tag"},
+	{id: "vcs.checkoutRevision", title: "Checkout Tag or Revision…", detail: "Check out a ref"},
+	{id: "vcs.worktrees", title: "Worktrees…", detail: "Open and manage worktrees"},
+	{id: "vcs.newWorktree", title: "New Worktree…", detail: "Create a linked worktree"},
 	{id: "vcs.stash", title: "Stash Changes…", detail: "Store local changes"},
 	{id: "vcs.unstash", title: "Unstash Changes…", detail: "Restore stashed changes"},
 	{id: "vcs.resetHead", title: "Reset HEAD…", detail: "Move the current branch"},
+	{id: "vcs.resolveConflicts", title: "Resolve Conflicts…", detail: "Resolve merge conflicts"},
 	{id: "vcs.log", title: "Show Git Log", detail: "Browse commits and changes"},
 }
 
@@ -73,6 +79,13 @@ type VCSOperationPane struct {
 	hint  string
 	label string
 	name  string
+	// allRepositories applies the operation to every repository in the project.
+	// Calls that name a repository keep their single-repository behaviour.
+	allRepositories bool
+	// repo is the repository this operation targets. Git Log actions can
+	// operate on a commit from another repository without changing the
+	// currently selected Git tool-window tab.
+	repo string
 
 	message          string
 	includeUntracked bool
@@ -92,9 +105,78 @@ type VCSOperationPane struct {
 	request uint32
 	channel uint32
 	remotes *vcsRemotesPane
+	// pushRejected is the native Merge/Rebase decision shown after a
+	// non-fast-forward Push, before retrying the same Push.
+	pushRejected *vcsPushRejectedState
+	// multiRepoRollback records a partially completed Merge or Rebase. Only
+	// repositories that completed successfully are eligible for Rollback.
+	multiRepoRollback *vcsMultiRepoRollbackState
 	// preferredStart is the branch/tag selected by a Git Log or Branches pane
 	// action before the shared revision chooser finishes loading.
 	preferredStart string
+}
+
+type vcsPushRejectedState struct {
+	repo     string
+	op       map[string]any
+	detail   string
+	errText  string
+	branch   string
+	merges   bool
+	lease    bool
+	remember bool
+	attempts int
+	busy     bool
+	err      string
+}
+
+type vcsRepoHeadChange struct {
+	root   string
+	before string
+	after  string
+}
+
+type vcsRepositoryFailure struct {
+	root string
+	err  error
+}
+
+type vcsMultiRepoHistoryResult struct {
+	completed []vcsRepoHeadChange
+	failures  []vcsRepositoryFailure
+	attempted []string
+}
+
+type vcsMultiRepoRollbackState struct {
+	kind        string
+	target      string
+	failureRoot string
+	failureText string
+	completed   []vcsRepoHeadChange
+	busy        bool
+	err         string
+}
+
+type vcsPushRepositoryPlan struct {
+	root        string
+	branch      string
+	remote      string
+	target      string
+	setUpstream bool
+	op          map[string]any
+}
+
+type vcsPushRepositoriesResult struct {
+	completed []vcsPushRepositoryPlan
+	failures  []vcsRepositoryFailure
+	attempted []string
+}
+
+type vcsRemoteRepositoriesResult struct {
+	completed []string
+	skipped   []string
+	failures  []vcsRepositoryFailure
+	attempted []string
 }
 
 func (m *Model) resetVCSOperations() { m.vcsOps = VCSOperationPane{} }
@@ -223,22 +305,22 @@ func (m *Model) OpenNewGitTag() {
 }
 
 func (m *Model) OpenGitMerge() {
-	m.openVCSOperation(vcsOpMerge)
+	m.openVCSOperationAllRepositories(vcsOpMerge)
 }
 
 // OpenGitMergeAt opens Merge with a branch selected in the Branches popup.
 func (m *Model) OpenGitMergeAt(ref string) {
-	m.openVCSOperation(vcsOpMerge)
+	m.openVCSOperationAllRepositories(vcsOpMerge)
 	m.vcsOps.preferredStart = ref
 }
 
 func (m *Model) OpenGitRebase() {
-	m.openVCSOperation(vcsOpRebase)
+	m.openVCSOperationAllRepositories(vcsOpRebase)
 }
 
 // OpenGitRebaseAt opens Rebase with a branch selected in the Branches popup.
 func (m *Model) OpenGitRebaseAt(ref string) {
-	m.openVCSOperation(vcsOpRebase)
+	m.openVCSOperationAllRepositories(vcsOpRebase)
 	m.vcsOps.preferredStart = ref
 }
 
@@ -251,28 +333,68 @@ func (m *Model) OpenGitUnstash() {
 }
 
 func (m *Model) GitFetch() {
-	m.runVCSRemote(vcsOpFetch, "Fetch", map[string]any{"op": "fetch"})
+	m.runVCSRemoteAll(vcsOpFetch, "Fetch", map[string]any{"op": "fetch"})
 }
 
 func (m *Model) OpenGitPull() {
-	m.openVCSOperation(vcsOpPull)
+	if !m.nativeRuntimeBool(settingsPageVCSConfirmation, "vcs.confirmation.showUpdateOptions") {
+		m.runVCSRemoteAll(vcsOpPull, "Update Project", map[string]any{
+			"op": "pull", "rebase": m.vcsGitUpdateMethod() == "rebase",
+		})
+		return
+	}
+	m.openVCSOperationAllRepositories(vcsOpPull)
 }
 
 func (m *Model) OpenGitPush() {
-	m.openVCSOperation(vcsOpPush)
+	m.openVCSOperationAllRepositories(vcsOpPush)
+}
+
+func (m *Model) OpenGitPushAtSelectedCommit() {
+	repo := m.gitLogRepositoryRoot()
+	if m.log.selected >= 0 && m.log.selected < len(m.log.commits) {
+		repo = m.logCommitRepository(m.log.selected)
+	}
+	m.openVCSOperationAt(vcsOpPush, repo)
 }
 
 func (m *Model) OpenGitReset() {
 	m.openVCSOperation(vcsOpReset)
 }
 
+func (m *Model) OpenGitResetAtSelectedCommit() {
+	repo := m.gitLogRepositoryRoot()
+	if m.log.selected >= 0 && m.log.selected < len(m.log.commits) {
+		repo = m.logCommitRepository(m.log.selected)
+	}
+	m.openVCSOperationAt(vcsOpReset, repo)
+}
+
 func (m *Model) openVCSOperation(kind string) {
+	m.openVCSOperationScoped(kind, m.vcsRepositoryRoot(), false)
+}
+
+func (m *Model) openVCSOperationAt(kind, repo string) {
+	m.openVCSOperationScoped(kind, repo, false)
+}
+
+func (m *Model) openVCSOperationAllRepositories(kind string) {
+	m.openVCSOperationScoped(kind, m.vcsRepositoryRoot(), true)
+}
+
+func (m *Model) openVCSOperationScoped(kind, repo string, allRepositories bool) {
 	if m.Root() == "" {
 		return
+	}
+	repo = vcsRepositoryKey(repo)
+	if repo == "" {
+		repo = m.vcsRepositoryRoot()
 	}
 	state := VCSOperationPane{
 		kind:             kind,
 		open:             true,
+		allRepositories:  allRepositories,
+		repo:             repo,
 		sel:              0,
 		includeUntracked: true,
 		keepIndex:        false,
@@ -287,14 +409,14 @@ func (m *Model) openVCSOperation(kind string) {
 		state.title = "Create New Tag"
 		state.hint = "Create a tag at the current revision."
 		state.label = "Tag name"
-		state.choices = []vcsOperationChoice{m.selectedCommitChoice()}
+		state.choices = []vcsOperationChoice{m.selectedCommitChoiceFor(repo)}
 	case vcsOpMerge:
 		state.title = "Merge"
-		state.hint = "Merge the selected branch or tag into the current branch."
+		state.hint = "Merge the selected branch or tag into every repository that has it."
 		m.loadVCSRevisionChoices(&state, "No branches or tags to merge")
 	case vcsOpRebase:
 		state.title = "Rebase"
-		state.hint = "Rebase the current branch onto the selected branch or tag."
+		state.hint = "Rebase every repository that has the selected branch or tag."
 		m.loadVCSRevisionChoices(&state, "No branches or tags to rebase onto")
 	case vcsOpStash:
 		state.title = "Stash Changes"
@@ -305,16 +427,17 @@ func (m *Model) openVCSOperation(kind string) {
 		state.hint = "Apply a stash and remove it from the stash list."
 		m.loadVCSStashes(&state)
 	case vcsOpPull:
-		state.title = "Pull"
-		state.hint = "Update the current branch from its configured upstream."
+		state.title = "Update Project"
+		state.hint = "Update the current branch in every repository from its configured upstream."
+		state.rebase = m.vcsGitUpdateMethod() == "rebase"
 	case vcsOpPush:
 		state.title = "Push"
-		state.hint = "Push the current branch to its upstream."
+		state.hint = "Push the current branch in every repository to its configured remote."
 	case vcsOpReset:
 		state.title = "Reset Current Branch"
 		state.hint = "Move the current branch to the selected revision."
 		state.label = "Mode"
-		state.choices = []vcsOperationChoice{m.selectedCommitChoice()}
+		state.choices = []vcsOperationChoice{m.selectedCommitChoiceFor(repo)}
 	}
 	m.vcsOps = state
 	m.invalidate()
@@ -329,28 +452,50 @@ func (m *Model) closeVCSOperation() {
 }
 
 func (m *Model) selectedCommitChoice() vcsOperationChoice {
-	if m.log.visible && m.log.selected >= 0 && m.log.selected < len(m.log.commits) {
+	return m.selectedCommitChoiceFor(m.vcsRepositoryRoot())
+}
+
+func (m *Model) selectedCommitChoiceFor(repo string) vcsOperationChoice {
+	repo = vcsRepositoryKey(repo)
+	if m.log.visible && m.log.selected >= 0 && m.log.selected < len(m.log.commits) &&
+		(repo == "" || vcsRepositoryKey(m.logCommitRepository(m.log.selected)) == repo) {
 		c := m.log.commits[m.log.selected]
 		return vcsOperationChoice{label: c.ShortID + " " + c.Summary, value: c.ID}
 	}
 	return vcsOperationChoice{label: "Current revision", value: "HEAD"}
 }
 
+func (m *Model) vcsOperationRepoArg(state *VCSOperationPane) any {
+	if state != nil && state.repo != "" {
+		return vcsRepositoryArgFor(state.repo)
+	}
+	return m.vcsRepositoryArg()
+}
+
 func (m *Model) loadVCSStartChoices(state *VCSOperationPane) {
 	state.loading = true
 	m.vcsOps = *state
 	root := m.Root()
+	repoArg := m.vcsOperationRepoArg(state)
+	repo := state.repo
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 		defer cancel()
-		branches, branchErr := m.branchList(ctx)
+		var branches []openidea.Branch
+		branchRaw, branchErr := m.invoke(ctx, "vcs_branches", map[string]any{"repo": repoArg})
+		if branchErr == nil {
+			branchErr = json.Unmarshal(branchRaw, &branches)
+		}
 		var tags []string
-		tagRaw, tagErr := m.invoke(ctx, "vcs_tags", map[string]any{"repo": nil})
+		tagRaw, tagErr := m.invoke(ctx, "vcs_tags", map[string]any{"repo": repoArg})
 		if tagErr == nil {
 			tagErr = json.Unmarshal(tagRaw, &tags)
 		}
 		m.post(func() {
 			if m.Root() != root || !m.vcsOps.open || m.vcsOps.kind != vcsOpNewBranch {
+				return
+			}
+			if repo != "" && vcsRepositoryKey(m.vcsOps.repo) != repo {
 				return
 			}
 			m.vcsOps.loading = false
@@ -377,17 +522,55 @@ func (m *Model) loadVCSRevisionChoices(state *VCSOperationPane, empty string) {
 	state.loading = true
 	m.vcsOps = *state
 	root := m.Root()
+	repoArg := m.vcsOperationRepoArg(state)
+	repo := state.repo
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 		defer cancel()
-		branches, branchErr := m.branchList(ctx)
+		if state.allRepositories {
+			choices, loadErr := m.loadVCSAllRevisionChoices(ctx)
+			m.post(func() {
+				if m.Root() != root || !m.vcsOps.open || m.vcsOps.kind != state.kind {
+					return
+				}
+				if repo != "" && vcsRepositoryKey(m.vcsOps.repo) != repo {
+					return
+				}
+				m.vcsOps.loading = false
+				if loadErr != nil {
+					m.vcsOps.err = "Could not read the revisions: " + loadErr.Error()
+				}
+				m.vcsOps.choices = choices
+				if m.vcsOps.preferredStart != "" {
+					for i, choice := range m.vcsOps.choices {
+						if choice.value == m.vcsOps.preferredStart {
+							m.vcsOps.sel = i
+							break
+						}
+					}
+				}
+				if len(m.vcsOps.choices) == 0 && m.vcsOps.err == "" {
+					m.vcsOps.err = empty
+				}
+				m.invalidate()
+			})
+			return
+		}
+		var branches []openidea.Branch
+		branchRaw, branchErr := m.invoke(ctx, "vcs_branches", map[string]any{"repo": repoArg})
+		if branchErr == nil {
+			branchErr = json.Unmarshal(branchRaw, &branches)
+		}
 		var tags []string
-		tagRaw, tagErr := m.invoke(ctx, "vcs_tags", map[string]any{"repo": nil})
+		tagRaw, tagErr := m.invoke(ctx, "vcs_tags", map[string]any{"repo": repoArg})
 		if tagErr == nil {
 			tagErr = json.Unmarshal(tagRaw, &tags)
 		}
 		m.post(func() {
 			if m.Root() != root || !m.vcsOps.open || m.vcsOps.kind != state.kind {
+				return
+			}
+			if repo != "" && vcsRepositoryKey(m.vcsOps.repo) != repo {
 				return
 			}
 			m.vcsOps.loading = false
@@ -413,6 +596,47 @@ func (m *Model) loadVCSRevisionChoices(state *VCSOperationPane, empty string) {
 	}()
 }
 
+func (m *Model) loadVCSAllRevisionChoices(ctx context.Context) ([]vcsOperationChoice, error) {
+	repositories, err := m.loadVCSRepositories(ctx)
+	if err != nil {
+		return nil, err
+	}
+	choices := make([]vcsOperationChoice, 0)
+	seen := make(map[string]struct{})
+	for _, repository := range repositories {
+		root := vcsRepositoryKey(repository.Root)
+		if root == "" {
+			continue
+		}
+		label := m.vcsOperationRepositoryLabel(root)
+		repoArg := vcsRepositoryArgFor(root)
+		branchRaw, err := m.invoke(ctx, "vcs_branches", map[string]any{"repo": repoArg})
+		if err != nil {
+			return nil, fmt.Errorf("could not read branches in %s: %w", label, err)
+		}
+		var branches []openidea.Branch
+		if err := json.Unmarshal(branchRaw, &branches); err != nil {
+			return nil, fmt.Errorf("could not read branches in %s: %w", label, err)
+		}
+		tagRaw, err := m.invoke(ctx, "vcs_tags", map[string]any{"repo": repoArg})
+		if err != nil {
+			return nil, fmt.Errorf("could not read tags in %s: %w", label, err)
+		}
+		var tags []string
+		if err := json.Unmarshal(tagRaw, &tags); err != nil {
+			return nil, fmt.Errorf("could not read tags in %s: %w", label, err)
+		}
+		for _, choice := range m.vcsRevisionChoices(branches, tags) {
+			if _, ok := seen[choice.value]; ok {
+				continue
+			}
+			seen[choice.value] = struct{}{}
+			choices = append(choices, choice)
+		}
+	}
+	return choices, nil
+}
+
 func (m *Model) vcsRevisionChoices(branches []openidea.Branch, tags []string) []vcsOperationChoice {
 	out := make([]vcsOperationChoice, 0, len(branches)+len(tags))
 	for _, b := range branches {
@@ -435,16 +659,21 @@ func (m *Model) loadVCSStashes(state *VCSOperationPane) {
 	state.loading = true
 	m.vcsOps = *state
 	root := m.Root()
+	repoArg := m.vcsOperationRepoArg(state)
+	repo := state.repo
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 		defer cancel()
-		raw, err := m.invoke(ctx, "vcs_stashes", map[string]any{"repo": nil})
+		raw, err := m.invoke(ctx, "vcs_stashes", map[string]any{"repo": repoArg})
 		var stashes []openidea.Stash
 		if err == nil {
 			err = json.Unmarshal(raw, &stashes)
 		}
 		m.post(func() {
 			if m.Root() != root || !m.vcsOps.open || m.vcsOps.kind != vcsOpUnstash {
+				return
+			}
+			if repo != "" && vcsRepositoryKey(m.vcsOps.repo) != repo {
 				return
 			}
 			m.vcsOps.loading = false
@@ -490,6 +719,7 @@ func (m *Model) submitVCSOperation() {
 	if !state.open || state.busy || state.loading {
 		return
 	}
+	repoArg := m.vcsOperationRepoArg(state)
 	switch state.kind {
 	case vcsOpNewBranch:
 		name := strings.TrimSpace(state.name)
@@ -503,7 +733,7 @@ func (m *Model) submitVCSOperation() {
 			start = state.choices[clampSymbolSel(state.sel, len(state.choices))].value
 		}
 		m.runVCSOperation("Create Branch", "vcs_create_branch", map[string]any{
-			"repo": nil, "name": name, "start": start, "checkout": true, "overwrite": nil,
+			"repo": repoArg, "name": name, "start": start, "checkout": true, "overwrite": nil,
 		})
 	case vcsOpNewTag:
 		name := strings.TrimSpace(state.name)
@@ -519,7 +749,7 @@ func (m *Model) submitVCSOperation() {
 			annotated = message
 		}
 		m.runVCSOperation("Create Tag", "vcs_create_tag", map[string]any{
-			"repo": nil, "name": name, "commit": commit, "message": annotated, "force": false,
+			"repo": repoArg, "name": name, "commit": commit, "message": annotated, "force": false,
 		})
 	case vcsOpMerge:
 		if len(state.choices) == 0 {
@@ -528,13 +758,7 @@ func (m *Model) submitVCSOperation() {
 			return
 		}
 		branch := state.choices[clampSymbolSel(state.sel, len(state.choices))].value
-		m.runVCSOperation("Merge", "vcs_merge_with", map[string]any{
-			"repo": nil, "branches": []string{branch},
-			"options": map[string]any{
-				"noFf": false, "ffOnly": false, "squash": false,
-				"noCommit": false, "message": nil,
-			},
-		})
+		m.runVCSMultiRepoHistoryOperation(state, branch)
 	case vcsOpRebase:
 		if len(state.choices) == 0 {
 			state.err = "Select a branch or tag to rebase onto"
@@ -542,10 +766,7 @@ func (m *Model) submitVCSOperation() {
 			return
 		}
 		upstream := state.choices[clampSymbolSel(state.sel, len(state.choices))].value
-		m.runVCSOperation("Rebase", "vcs_rebase_with", map[string]any{
-			"repo": nil, "upstream": upstream,
-			"options": map[string]any{"onto": nil, "rebaseMerges": false, "keepEmpty": false},
-		})
+		m.runVCSMultiRepoHistoryOperation(state, upstream)
 	case vcsOpStash:
 		message := strings.TrimSpace(state.message)
 		var stashMessage any
@@ -553,7 +774,7 @@ func (m *Model) submitVCSOperation() {
 			stashMessage = message
 		}
 		m.runVCSOperation("Stash", "vcs_stash_push", map[string]any{
-			"repo": nil, "message": stashMessage,
+			"repo": repoArg, "message": stashMessage,
 			"includeUntracked": state.includeUntracked, "keepIndex": state.keepIndex,
 		})
 	case vcsOpUnstash:
@@ -565,12 +786,26 @@ func (m *Model) submitVCSOperation() {
 		index := 0
 		_, _ = fmt.Sscan(state.choices[clampSymbolSel(state.sel, len(state.choices))].value, &index)
 		m.runVCSOperation("Apply Stash", "vcs_stash_apply", map[string]any{
-			"repo": nil, "index": index, "pop": true, "reinstateIndex": state.keepIndex, "branch": nil,
+			"repo": repoArg, "index": index, "pop": true, "reinstateIndex": state.keepIndex, "branch": nil,
 		})
 	case vcsOpPull:
-		m.runVCSRemote(vcsOpPull, "Pull", map[string]any{"op": "pull", "rebase": state.rebase})
+		op := map[string]any{"op": "pull", "rebase": state.rebase}
+		if state.allRepositories {
+			m.runVCSRemoteAll(vcsOpPull, "Update Project", op)
+		} else {
+			m.runVCSRemoteAt(repoArg, vcsOpPull, "Pull", op)
+		}
 	case vcsOpPush:
-		m.runVCSRemote(vcsOpPush, "Push", map[string]any{
+		if state.allRepositories {
+			m.runVCSMultiRepoPush("Push", state.force, state.setUpstream)
+			return
+		}
+		if state.force && m.vcsProtectedBranch(m.vcsCurrentBranch()) {
+			state.err = "Force push is not allowed to protected branches"
+			m.invalidate()
+			return
+		}
+		m.runVCSRemoteAt(repoArg, vcsOpPush, "Push", map[string]any{
 			"op": "push", "force_with_lease": state.force,
 			"set_upstream": state.setUpstream, "tags": nil,
 			"force": false, "no_verify": false,
@@ -584,7 +819,7 @@ func (m *Model) submitVCSOperation() {
 			m.invalidate()
 			return
 		}
-		m.runVCSGitOperation("Reset", map[string]any{
+		m.runVCSGitOperationAt(repoArg, "Reset", map[string]any{
 			"op": "reset", "commit": commit, "mode": mode,
 		})
 	}
@@ -619,7 +854,226 @@ func (m *Model) runVCSOperation(title, command string, args map[string]any) {
 	}()
 }
 
+func (m *Model) loadVCSRepositories(ctx context.Context) ([]vcsRepository, error) {
+	raw, err := m.invoke(ctx, "vcs_roots", nil)
+	if err != nil {
+		return nil, err
+	}
+	var repositories []vcsRepository
+	if err := json.Unmarshal(raw, &repositories); err != nil {
+		return nil, err
+	}
+	return repositories, nil
+}
+
+func (m *Model) vcsOperationRepositoryLabel(root string) string {
+	root = vcsRepositoryKey(root)
+	if root == "" {
+		return "repository"
+	}
+	return m.vcsRepositoryLabel(vcsRepository{Root: root})
+}
+
+func (m *Model) vcsRepositoryContainsTarget(ctx context.Context, root, target string) (bool, error) {
+	branchesRaw, err := m.invoke(ctx, "vcs_branches", map[string]any{
+		"repo": vcsRepositoryArgFor(root),
+	})
+	if err != nil {
+		return false, err
+	}
+	var branches []openidea.Branch
+	if err := json.Unmarshal(branchesRaw, &branches); err != nil {
+		return false, err
+	}
+	for _, branch := range branches {
+		if branch.Name == target {
+			return true, nil
+		}
+	}
+	tagsRaw, err := m.invoke(ctx, "vcs_tags", map[string]any{
+		"repo": vcsRepositoryArgFor(root),
+	})
+	if err != nil {
+		return false, err
+	}
+	var tags []string
+	if err := json.Unmarshal(tagsRaw, &tags); err != nil {
+		return false, err
+	}
+	for _, tag := range tags {
+		if tag == target {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (m *Model) vcsRepositoriesContainingTarget(
+	ctx context.Context,
+	repositories []vcsRepository,
+	target string,
+) ([]string, error) {
+	roots := make([]string, 0, len(repositories))
+	for _, repository := range repositories {
+		root := vcsRepositoryKey(repository.Root)
+		if root == "" {
+			continue
+		}
+		contains, err := m.vcsRepositoryContainsTarget(ctx, root, target)
+		if err != nil {
+			return nil, fmt.Errorf("could not inspect %s: %w", m.vcsOperationRepositoryLabel(root), err)
+		}
+		if contains {
+			roots = append(roots, root)
+		}
+	}
+	return roots, nil
+}
+
+func (m *Model) executeVCSMultiRepoHistory(
+	ctx context.Context,
+	kind, target string,
+	options map[string]any,
+) vcsMultiRepoHistoryResult {
+	repositories, err := m.loadVCSRepositories(ctx)
+	if err != nil {
+		return vcsMultiRepoHistoryResult{failures: []vcsRepositoryFailure{{err: err}}}
+	}
+	roots, err := m.vcsRepositoriesContainingTarget(ctx, repositories, target)
+	if err != nil {
+		return vcsMultiRepoHistoryResult{failures: []vcsRepositoryFailure{{err: err}}}
+	}
+	if len(roots) == 0 {
+		return vcsMultiRepoHistoryResult{failures: []vcsRepositoryFailure{{
+			err: fmt.Errorf("no repository contains %q", target),
+		}}}
+	}
+
+	var result vcsMultiRepoHistoryResult
+	for _, root := range roots {
+		result.attempted = append(result.attempted, root)
+		before, err := m.vcsRepositoryHeadCommit(ctx, root)
+		if err != nil {
+			result.failures = append(result.failures, vcsRepositoryFailure{root: root, err: err})
+			break
+		}
+		args := map[string]any{"repo": vcsRepositoryArgFor(root)}
+		command := "vcs_merge_with"
+		if kind == vcsOpRebase {
+			command = "vcs_rebase_with"
+			args["upstream"] = target
+		} else {
+			args["branches"] = []string{target}
+		}
+		args["options"] = cloneVCSOperation(options)
+		if _, err := m.invoke(ctx, command, args); err != nil {
+			result.failures = append(result.failures, vcsRepositoryFailure{root: root, err: err})
+			break
+		}
+		after, err := m.vcsRepositoryHeadCommit(ctx, root)
+		if err != nil {
+			result.failures = append(result.failures, vcsRepositoryFailure{root: root, err: err})
+			break
+		}
+		result.completed = append(result.completed, vcsRepoHeadChange{
+			root: root, before: before, after: after,
+		})
+	}
+	return result
+}
+
+func (m *Model) vcsRepositoryHeadCommit(ctx context.Context, root string) (string, error) {
+	raw, err := m.invoke(ctx, "vcs_branch_info", map[string]any{
+		"repo": vcsRepositoryArgFor(root),
+	})
+	if err != nil {
+		return "", err
+	}
+	var info openidea.BranchInfo
+	if err := json.Unmarshal(raw, &info); err != nil {
+		return "", err
+	}
+	if info.HeadCommit == nil || strings.TrimSpace(*info.HeadCommit) == "" {
+		return "", errors.New("the repository has no HEAD commit")
+	}
+	return strings.TrimSpace(*info.HeadCommit), nil
+}
+
+func (m *Model) runVCSMultiRepoHistoryOperation(state *VCSOperationPane, target string) {
+	kind := state.kind
+	title := "Merge"
+	commandOptions := map[string]any{
+		"noFf": false, "ffOnly": false, "squash": false,
+		"noCommit": false, "message": nil,
+	}
+	if kind == vcsOpRebase {
+		title = "Rebase"
+		commandOptions = map[string]any{
+			"onto": nil, "rebaseMerges": false, "keepEmpty": false,
+		}
+	}
+	state.busy = true
+	state.err = ""
+	state.output = nil
+	state.request = m.nextRequest()
+	root := m.Root()
+	request := state.request
+	m.invalidate()
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, 10*time.Minute)
+		defer cancel()
+		result := m.executeVCSMultiRepoHistory(ctx, kind, target, commandOptions)
+		m.post(func() {
+			if m.Root() != root || !m.vcsOps.open || m.vcsOps.kind != kind ||
+				m.vcsOps.request != request {
+				return
+			}
+			m.vcsOps.busy = false
+			if len(result.failures) == 0 {
+				m.status = fmt.Sprintf("%s completed in %d repositories", title, len(result.completed))
+				m.refreshAfterVCSWrite()
+				m.resetVCSOperations()
+				m.invalidate()
+				return
+			}
+			m.refreshAfterVCSWrite()
+			if len(result.completed) == 0 {
+				m.vcsOps.err = title + " failed: " + m.vcsRepositoryFailuresText(result.failures)
+				m.invalidate()
+				return
+			}
+			failure := result.failures[0]
+			m.vcsOps.err = ""
+			m.vcsOps.multiRepoRollback = &vcsMultiRepoRollbackState{
+				kind: kind, target: target,
+				failureRoot: failure.root, failureText: failure.err.Error(),
+				completed: append([]vcsRepoHeadChange(nil), result.completed...),
+			}
+			m.invalidate()
+		})
+	}()
+}
+
+func (m *Model) vcsRepositoryFailuresText(failures []vcsRepositoryFailure) string {
+	lines := make([]string, 0, len(failures))
+	for _, failure := range failures {
+		if failure.err == nil {
+			continue
+		}
+		if failure.root == "" {
+			lines = append(lines, failure.err.Error())
+			continue
+		}
+		lines = append(lines, m.vcsOperationRepositoryLabel(failure.root)+": "+failure.err.Error())
+	}
+	return strings.Join(lines, "\n")
+}
+
 func (m *Model) runVCSRemote(kind, title string, op map[string]any) {
+	m.runVCSRemoteAt(m.vcsRepositoryArg(), kind, title, op)
+}
+
+func (m *Model) runVCSRemoteAt(repoArg any, kind, title string, op map[string]any) {
 	if m.Root() == "" {
 		return
 	}
@@ -634,14 +1088,27 @@ func (m *Model) runVCSRemote(kind, title string, op map[string]any) {
 	state.channel = m.nextChannel()
 	root := m.Root()
 	request, channel := state.request, state.channel
+	repo := ""
+	if path, ok := repoArg.(string); ok {
+		repo = path
+	}
+	autoUpdateRejected := m.vcsGitBool("vcs.git.autoUpdateOnPushRejected")
+	updateMethod := m.vcsGitUpdateMethod()
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 10*time.Minute)
 		defer cancel()
-		_, err := m.invoke(ctx, "vcs_remote", map[string]any{
-			"repo": nil, "request": request, "op": op,
-			"onOutput": map[string]any{"$channel": channel},
-		})
+		err := m.invokeVCSRemoteAttempt(ctx, repoArg, channel, op)
+		deferred := false
+		if err != nil && kind == vcsOpPush {
+			err, deferred = m.handleRejectedPush(
+				ctx, root, request, channel, repo, title, op, err,
+				autoUpdateRejected, updateMethod,
+			)
+		}
+		if deferred {
+			return
+		}
 		m.post(func() {
 			if m.Root() != root || !m.vcsOps.open || m.vcsOps.kind != kind || m.vcsOps.request != request {
 				return
@@ -659,7 +1126,606 @@ func (m *Model) runVCSRemote(kind, title string, op map[string]any) {
 	}()
 }
 
+func (m *Model) runVCSRemoteAll(kind, title string, op map[string]any) {
+	if m.Root() == "" {
+		return
+	}
+	if !m.vcsOps.open || m.vcsOps.kind != kind {
+		m.vcsOps = VCSOperationPane{kind: kind, open: true, title: title}
+	}
+	state := &m.vcsOps
+	state.allRepositories = true
+	state.busy = true
+	state.err = ""
+	state.output = nil
+	state.request = m.nextRequest()
+	state.channel = m.nextChannel()
+	root := m.Root()
+	request, channel := state.request, state.channel
+	m.invalidate()
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, 10*time.Minute)
+		defer cancel()
+		repositories, err := m.loadVCSRepositories(ctx)
+		if err != nil {
+			m.post(func() {
+				if m.Root() != root || m.vcsOps.request != request || m.vcsOps.kind != kind {
+					return
+				}
+				m.vcsOps.busy = false
+				m.vcsOps.err = title + " failed: " + err.Error()
+				m.invalidate()
+			})
+			return
+		}
+		roots := vcsRepositoryRoots(repositories)
+		result := m.executeVCSRemoteRepositories(ctx, request, channel, kind, op, roots)
+		m.post(func() {
+			if m.Root() != root || m.vcsOps.request != request || m.vcsOps.kind != kind {
+				return
+			}
+			m.vcsOps.busy = false
+			for _, skipped := range result.skipped {
+				m.vcsOps.output = append(m.vcsOps.output,
+					"Skipped "+m.vcsOperationRepositoryLabel(skipped)+": no current branch or upstream")
+			}
+			if len(result.failures) > 0 {
+				prefix := title + " failed"
+				if len(result.completed) > 0 {
+					prefix = title + " partially failed"
+				}
+				m.vcsOps.err = prefix + ":\n" + m.vcsRepositoryFailuresText(result.failures)
+				m.refreshAfterVCSWrite()
+				m.invalidate()
+				return
+			}
+			switch kind {
+			case vcsOpFetch:
+				m.status = fmt.Sprintf("Fetched %d repositories", len(result.completed))
+			default:
+				m.status = fmt.Sprintf("Updated %d repositories", len(result.completed))
+			}
+			m.refreshAfterVCSWrite()
+			m.invalidate()
+		})
+	}()
+}
+
+func (m *Model) executeVCSRemoteRepositories(
+	ctx context.Context,
+	request, channel uint32,
+	kind string,
+	op map[string]any,
+	repositories []string,
+) vcsRemoteRepositoriesResult {
+	var result vcsRemoteRepositoriesResult
+	for _, root := range repositories {
+		root = vcsRepositoryKey(root)
+		if root == "" {
+			continue
+		}
+		result.attempted = append(result.attempted, root)
+		if kind == vcsOpPull {
+			raw, err := m.invoke(ctx, "vcs_branch_info", map[string]any{
+				"repo": vcsRepositoryArgFor(root),
+			})
+			if err != nil {
+				result.failures = append(result.failures,
+					vcsRepositoryFailure{root: root, err: err})
+				continue
+			}
+			var info openidea.BranchInfo
+			if err := json.Unmarshal(raw, &info); err != nil {
+				result.failures = append(result.failures,
+					vcsRepositoryFailure{root: root, err: err})
+				continue
+			}
+			if info.Head == nil || strings.TrimSpace(*info.Head) == "" ||
+				info.Upstream == nil || strings.TrimSpace(*info.Upstream) == "" {
+				result.skipped = append(result.skipped, root)
+				continue
+			}
+		}
+		if err := m.invokeVCSRemoteAttemptForRequest(
+			ctx, request, vcsRepositoryArgFor(root), channel, op,
+		); err != nil {
+			result.failures = append(result.failures,
+				vcsRepositoryFailure{root: root, err: err})
+			continue
+		}
+		result.completed = append(result.completed, root)
+	}
+	return result
+}
+
+func (m *Model) vcsPushPlanForRepository(
+	ctx context.Context,
+	root string,
+	forceWithLease, setUpstream bool,
+) (vcsPushRepositoryPlan, error) {
+	infoRaw, err := m.invoke(ctx, "vcs_branch_info", map[string]any{
+		"repo": vcsRepositoryArgFor(root),
+	})
+	if err != nil {
+		return vcsPushRepositoryPlan{}, err
+	}
+	var info openidea.BranchInfo
+	if err := json.Unmarshal(infoRaw, &info); err != nil {
+		return vcsPushRepositoryPlan{}, err
+	}
+	if info.Head == nil || strings.TrimSpace(*info.Head) == "" {
+		return vcsPushRepositoryPlan{}, errors.New("HEAD is detached")
+	}
+	remotesRaw, err := m.invoke(ctx, "vcs_remotes", map[string]any{
+		"repo": vcsRepositoryArgFor(root),
+	})
+	if err != nil {
+		return vcsPushRepositoryPlan{}, err
+	}
+	var remotes []openidea.Remote
+	if err := json.Unmarshal(remotesRaw, &remotes); err != nil {
+		return vcsPushRepositoryPlan{}, err
+	}
+	if len(remotes) == 0 {
+		return vcsPushRepositoryPlan{}, errors.New("no Git remote is configured")
+	}
+
+	upstream := ""
+	if info.Upstream != nil {
+		upstream = strings.TrimSpace(*info.Upstream)
+		upstream = strings.TrimPrefix(upstream, "refs/remotes/")
+	}
+	remote, target := "", ""
+	if upstream != "" {
+		for _, candidate := range remotes {
+			prefix := candidate.Name + "/"
+			if strings.HasPrefix(upstream, prefix) && len(upstream) > len(prefix) {
+				remote = candidate.Name
+				target = strings.TrimPrefix(upstream, prefix)
+				break
+			}
+		}
+	}
+	if remote == "" {
+		for _, candidate := range remotes {
+			if candidate.Name == "origin" {
+				remote = candidate.Name
+				break
+			}
+		}
+	}
+	if remote == "" {
+		remote = remotes[0].Name
+	}
+	if target == "" {
+		target = strings.TrimSpace(*info.Head)
+	}
+	branch := strings.TrimSpace(*info.Head)
+	if branch == "" || remote == "" || target == "" {
+		return vcsPushRepositoryPlan{}, errors.New("could not resolve the branch, remote and target")
+	}
+	if forceWithLease && m.vcsProtectedBranch(target) {
+		return vcsPushRepositoryPlan{}, fmt.Errorf(
+			"force push to protected branch %q is not allowed", target,
+		)
+	}
+	plan := vcsPushRepositoryPlan{
+		root: root, branch: branch, remote: remote, target: target,
+		setUpstream: setUpstream,
+	}
+	plan.op = map[string]any{
+		"op": "pushBranch", "branch": branch, "revision": nil,
+		"force_with_lease": forceWithLease, "target": target, "remote": remote,
+		"force": false, "set_upstream": setUpstream, "no_verify": false,
+	}
+	return plan, nil
+}
+
+func (m *Model) executeVCSMultiRepoPush(
+	ctx context.Context,
+	request, channel uint32,
+	forceWithLease, setUpstream bool,
+) vcsPushRepositoriesResult {
+	repositories, err := m.loadVCSRepositories(ctx)
+	if err != nil {
+		return vcsPushRepositoriesResult{failures: []vcsRepositoryFailure{{err: err}}}
+	}
+	var result vcsPushRepositoriesResult
+	for _, repository := range repositories {
+		root := vcsRepositoryKey(repository.Root)
+		if root == "" {
+			continue
+		}
+		result.attempted = append(result.attempted, root)
+		plan, err := m.vcsPushPlanForRepository(ctx, root, forceWithLease, setUpstream)
+		if err != nil {
+			result.failures = append(result.failures,
+				vcsRepositoryFailure{root: root, err: err})
+			continue
+		}
+		if err := m.invokeVCSRemoteAttemptForRequest(
+			ctx, request, vcsRepositoryArgFor(root), channel, plan.op,
+		); err != nil {
+			result.failures = append(result.failures,
+				vcsRepositoryFailure{root: root, err: err})
+			continue
+		}
+		result.completed = append(result.completed, plan)
+	}
+	return result
+}
+
+func (m *Model) runVCSMultiRepoPush(title string, forceWithLease, setUpstream bool) {
+	if m.Root() == "" {
+		return
+	}
+	state := &m.vcsOps
+	state.kind = vcsOpPush
+	state.allRepositories = true
+	state.busy = true
+	state.err = ""
+	state.output = nil
+	state.request = m.nextRequest()
+	state.channel = m.nextChannel()
+	root := m.Root()
+	request, channel := state.request, state.channel
+	m.invalidate()
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, 10*time.Minute)
+		defer cancel()
+		result := m.executeVCSMultiRepoPush(
+			ctx, request, channel, forceWithLease, setUpstream,
+		)
+		m.post(func() {
+			if m.Root() != root || !m.vcsOps.open || m.vcsOps.kind != vcsOpPush ||
+				m.vcsOps.request != request {
+				return
+			}
+			m.vcsOps.busy = false
+			if len(result.failures) > 0 {
+				prefix := title + " failed"
+				if len(result.completed) > 0 {
+					prefix = title + " partially failed"
+				}
+				m.vcsOps.err = prefix + ":\n" + m.vcsRepositoryFailuresText(result.failures)
+				m.refreshAfterVCSWrite()
+				m.invalidate()
+				return
+			}
+			m.status = fmt.Sprintf("Pushed %d repositories", len(result.completed))
+			m.refreshAfterVCSWrite()
+			m.resetVCSOperations()
+			m.invalidate()
+		})
+	}()
+}
+
+func (m *Model) invokeVCSRemoteAttempt(
+	ctx context.Context,
+	repoArg any,
+	channel uint32,
+	op map[string]any,
+) error {
+	return m.invokeVCSRemoteAttemptForRequest(ctx, m.nextRequest(), repoArg, channel, op)
+}
+
+func (m *Model) invokeVCSRemoteAttemptForRequest(
+	ctx context.Context,
+	request uint32,
+	repoArg any,
+	channel uint32,
+	op map[string]any,
+) error {
+	_, err := m.invoke(ctx, "vcs_remote", map[string]any{
+		"repo": repoArg, "request": request, "op": op,
+		"onOutput": map[string]any{"$channel": channel},
+	})
+	return err
+}
+
+func (m *Model) handleRejectedPush(
+	ctx context.Context,
+	root string,
+	request uint32,
+	channel uint32,
+	repo, title string,
+	op map[string]any,
+	pushErr error,
+	autoUpdate bool,
+	updateMethod string,
+) (error, bool) {
+	if vcsPushLeaseRejected(pushErr) && vcsBoolOption(op, "force_with_lease") {
+		m.post(func() {
+			if m.Root() != root || m.vcsOps.request != request || m.vcsOps.kind != vcsOpPush {
+				return
+			}
+			m.vcsOps.busy = false
+			m.vcsOps.err = ""
+			m.vcsOps.pushRejected = &vcsPushRejectedState{
+				repo: repo, op: cloneVCSOperation(op), detail: title,
+				errText: pushErr.Error(), lease: true, attempts: 1,
+			}
+			m.invalidate()
+		})
+		return nil, true
+	}
+	if !vcsPushCanUpdate(op, pushErr) {
+		return pushErr, false
+	}
+	branch, merges, ok := m.rejectedPushBranch(ctx, vcsRepositoryArgFor(repo))
+	if !ok {
+		return pushErr, false
+	}
+	if autoUpdate {
+		err := m.retryVCSRemotePush(ctx, vcsRepositoryArgFor(repo), channel, op, updateMethod, 1)
+		return err, false
+	}
+	m.post(func() {
+		if m.Root() != root || m.vcsOps.request != request || m.vcsOps.kind != vcsOpPush {
+			return
+		}
+		m.vcsOps.busy = false
+		m.vcsOps.err = ""
+		m.vcsOps.pushRejected = &vcsPushRejectedState{
+			repo: repo, op: cloneVCSOperation(op), detail: title,
+			errText: pushErr.Error(), branch: branch, merges: merges, attempts: 1,
+		}
+		m.invalidate()
+	})
+	return nil, true
+}
+
+func (m *Model) rejectedPushBranch(ctx context.Context, repoArg any) (string, bool, bool) {
+	raw, err := m.invoke(ctx, "vcs_branch_info", map[string]any{"repo": repoArg})
+	var info openidea.BranchInfo
+	if err != nil {
+		return "", false, false
+	}
+	if err := json.Unmarshal(raw, &info); err != nil ||
+		info.Head == nil || strings.TrimSpace(*info.Head) == "" || info.Upstream == nil {
+		return "", false, false
+	}
+	raw, err = m.invoke(ctx, "vcs_log", map[string]any{
+		"repo": repoArg,
+		"query": map[string]any{
+			"branch": "HEAD", "path": nil, "author": nil, "text": nil,
+			"range": "@{u}..HEAD", "skip": 0, "limit": 1000,
+		},
+	})
+	var commits []openidea.Commit
+	if err != nil {
+		return *info.Head, false, true
+	}
+	if json.Unmarshal(raw, &commits) != nil {
+		return *info.Head, false, true
+	}
+	merges := false
+	for _, commit := range commits {
+		if len(commit.Parents) > 1 {
+			merges = true
+			break
+		}
+	}
+	return *info.Head, merges, true
+}
+
+func (m *Model) retryVCSRemotePush(
+	ctx context.Context,
+	repoArg any,
+	channel uint32,
+	op map[string]any,
+	method string,
+	attempts int,
+) error {
+	var last error
+	for attempts < 10 {
+		attempts++
+		if err := m.invokeVCSRemoteAttempt(ctx, repoArg, channel, map[string]any{
+			"op": "pull", "rebase": method == "rebase",
+		}); err != nil {
+			return fmt.Errorf("push was rejected and the update failed: %w", err)
+		}
+		last = m.invokeVCSRemoteAttempt(ctx, repoArg, channel, op)
+		if last == nil {
+			return nil
+		}
+		if !vcsPushCanUpdate(op, last) {
+			return last
+		}
+	}
+	return fmt.Errorf("push was rejected after 10 attempts: %w", last)
+}
+
+func (m *Model) resolveVCSRejectedPush(method string) {
+	state := &m.vcsOps
+	rejected := state.pushRejected
+	if rejected == nil || rejected.busy {
+		return
+	}
+	if method == "cancel" {
+		state.err = "Push rejected"
+		state.pushRejected = nil
+		m.invalidate()
+		return
+	}
+	if method == "merge" || method == "rebase" {
+		if rejected.remember {
+			m.saveVCSGitChoice("vcs.git.autoUpdateOnPushRejected", true)
+		}
+		if !rejected.merges && method != m.vcsGitUpdateMethod() {
+			m.saveVCSGitChoice("vcs.git.updateMethod", method)
+		}
+	}
+	rejected.busy = true
+	rejected.err = ""
+	root := m.Root()
+	request := state.request
+	repoArg := vcsRepositoryArgFor(rejected.repo)
+	op := cloneVCSOperation(rejected.op)
+	channel := state.channel
+	attempts := rejected.attempts
+	m.invalidate()
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, 10*time.Minute)
+		defer cancel()
+		var err error
+		switch method {
+		case "force":
+			forceOp := cloneVCSOperation(op)
+			forceOp["force"] = true
+			forceOp["force_with_lease"] = false
+			err = m.invokeVCSRemoteAttempt(ctx, repoArg, channel, forceOp)
+		default:
+			err = m.retryVCSRemotePush(ctx, repoArg, channel, op, method, attempts)
+		}
+		m.post(func() {
+			if m.Root() != root || m.vcsOps.request != request ||
+				m.vcsOps.kind != vcsOpPush || m.vcsOps.pushRejected != rejected {
+				return
+			}
+			m.vcsOps.pushRejected = nil
+			m.vcsOps.busy = false
+			if err != nil {
+				m.vcsOps.err = rejected.detail + " failed: " + err.Error()
+				m.invalidate()
+				return
+			}
+			m.status = rejected.detail + " completed"
+			m.refreshAfterVCSWrite()
+			m.invalidate()
+		})
+	}()
+}
+
+func (m *Model) restoreVCSRepositoryHead(
+	ctx context.Context,
+	completed vcsRepoHeadChange,
+) error {
+	if completed.before == completed.after {
+		return nil
+	}
+	_, err := m.invoke(ctx, "vcs_restore_head", map[string]any{
+		"repo":   vcsRepositoryArgFor(completed.root),
+		"before": completed.before,
+		"after":  completed.after,
+	})
+	return err
+}
+
+func (m *Model) resolveVCSMultiRepoRollback(action string) {
+	state := &m.vcsOps
+	rollback := state.multiRepoRollback
+	if rollback == nil || rollback.busy {
+		return
+	}
+	title := "Merge"
+	if rollback.kind == vcsOpRebase {
+		title = "Rebase"
+	}
+	if action != "rollback" {
+		state.multiRepoRollback = nil
+		m.status = fmt.Sprintf("Kept %s in %d repositories", title, len(rollback.completed))
+		m.resetVCSOperations()
+		m.invalidate()
+		return
+	}
+	rollback.busy = true
+	rollback.err = ""
+	root := m.Root()
+	request := state.request
+	completed := append([]vcsRepoHeadChange(nil), rollback.completed...)
+	m.invalidate()
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, 5*time.Minute)
+		defer cancel()
+		failures := make([]vcsRepositoryFailure, 0)
+		remaining := make([]vcsRepoHeadChange, 0)
+		for _, repository := range completed {
+			if err := m.restoreVCSRepositoryHead(ctx, repository); err != nil {
+				failures = append(failures, vcsRepositoryFailure{root: repository.root, err: err})
+				remaining = append(remaining, repository)
+			}
+		}
+		m.post(func() {
+			if m.Root() != root || m.vcsOps.request != request ||
+				m.vcsOps.multiRepoRollback != rollback {
+				return
+			}
+			rollback.busy = false
+			m.refreshAfterVCSWrite()
+			if len(failures) > 0 {
+				rollback.completed = remaining
+				rollback.err = "Rollback failed:\n" + m.vcsRepositoryFailuresText(failures)
+				m.invalidate()
+				return
+			}
+			m.status = fmt.Sprintf("Rolled back %s in %d repositories", title, len(completed))
+			m.resetVCSOperations()
+			m.invalidate()
+		})
+	}()
+}
+
+func (m *Model) saveVCSGitChoice(key string, value any) {
+	state := m.nativeSettings.pages[settingsPageVCSGit]
+	state.loaded = true
+	state.scope = "project"
+	state.root = m.Root()
+	if state.applied == nil {
+		state.applied = map[string]any{}
+	}
+	if state.draft == nil {
+		state.draft = map[string]any{}
+	}
+	state.applied[key] = value
+	state.draft[key] = value
+	m.nativeSettings.pages[settingsPageVCSGit] = state
+	m.invalidate()
+	go func() {
+		ctx, cancel := context.WithTimeout(modelContext(m), 8*time.Second)
+		defer cancel()
+		if err := m.invokeSettingsSet(ctx, "project", key, value); err != nil {
+			m.post(func() {
+				m.status = "Could not save " + key + ": " + err.Error()
+				m.invalidate()
+			})
+		}
+	}()
+}
+
+func cloneVCSOperation(op map[string]any) map[string]any {
+	out := make(map[string]any, len(op))
+	for key, value := range op {
+		out[key] = value
+	}
+	return out
+}
+
+func vcsBoolOption(op map[string]any, key string) bool {
+	value, _ := op[key].(bool)
+	return value
+}
+
+func vcsPushCanUpdate(op map[string]any, err error) bool {
+	return vcsPushWasRejected(err) &&
+		!vcsBoolOption(op, "force") &&
+		!vcsBoolOption(op, "force_with_lease")
+}
+
+func vcsPushLeaseRejected(err error) bool {
+	if err == nil {
+		return false
+	}
+	text := strings.ToLower(err.Error())
+	return strings.Contains(text, "stale info") ||
+		strings.Contains(text, "force-with-lease") && strings.Contains(text, "rejected")
+}
+
 func (m *Model) runVCSGitOperation(title string, op map[string]any) {
+	m.runVCSGitOperationAt(m.vcsRepositoryArg(), title, op)
+}
+
+func (m *Model) runVCSGitOperationAt(repoArg any, title string, op map[string]any) {
 	state := &m.vcsOps
 	state.busy = true
 	state.err = ""
@@ -673,7 +1739,7 @@ func (m *Model) runVCSGitOperation(title string, op map[string]any) {
 		ctx, cancel := context.WithTimeout(m.ctx, 10*time.Minute)
 		defer cancel()
 		_, err := m.invoke(ctx, "vcs_operation", map[string]any{
-			"repo": nil, "request": request, "op": op,
+			"repo": repoArg, "request": request, "op": op,
 			"onOutput": map[string]any{"$channel": channel},
 		})
 		m.post(func() {
@@ -753,6 +1819,13 @@ func (m *Model) selectedGitCommit() string {
 	return ""
 }
 
+func (m *Model) selectedLogCommitRepositoryArg() any {
+	if m.log.selected >= 0 && m.log.selected < len(m.log.commits) {
+		return vcsRepositoryArgFor(m.logCommitRepository(m.log.selected))
+	}
+	return m.vcsRepositoryArg()
+}
+
 // CherryPickSelectedCommit applies the commit selected in Git Log.
 func (m *Model) CherryPickSelectedCommit() {
 	commit := m.selectedGitCommit()
@@ -761,7 +1834,8 @@ func (m *Model) CherryPickSelectedCommit() {
 		return
 	}
 	m.vcsOps = VCSOperationPane{kind: "operation", open: true, title: "Cherry-Pick"}
-	m.runVCSGitOperation("Cherry-Pick", map[string]any{
+	repoArg := m.selectedLogCommitRepositoryArg()
+	m.runVCSGitOperationAt(repoArg, "Cherry-Pick", map[string]any{
 		"op": "cherryPick", "commits": []string{commit}, "recordOrigin": false,
 	})
 }
@@ -774,7 +1848,10 @@ func (m *Model) RevertSelectedCommit() {
 		return
 	}
 	m.vcsOps = VCSOperationPane{kind: "operation", open: true, title: "Revert Commit"}
-	m.runVCSGitOperation("Revert", map[string]any{"op": "revert", "commits": []string{commit}})
+	repoArg := m.selectedLogCommitRepositoryArg()
+	m.runVCSGitOperationAt(repoArg, "Revert", map[string]any{
+		"op": "revert", "commits": []string{commit},
+	})
 }
 
 func (m *Model) vcsOperationDialog(c *ui.Context, p *ui.Theme) {
@@ -792,6 +1869,14 @@ func (m *Model) vcsOperationDialog(c *ui.Context, p *ui.Theme) {
 			ui.Text(c, state.title).FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			if state.hint != "" {
 				ui.Text(c, state.hint).FontSize(12).TextColor(p.TextMuted)
+			}
+			if state.multiRepoRollback != nil {
+				m.drawVCSMultiRepoRollback(c, p, state.multiRepoRollback)
+				return
+			}
+			if state.pushRejected != nil {
+				m.drawVCSRejectedPush(c, p, state, state.pushRejected)
+				return
 			}
 			if state.loading {
 				ui.Text(c, "Reading revisions…").FontSize(12).TextColor(p.TextMuted)
@@ -839,7 +1924,12 @@ func (m *Model) vcsOperationDialog(c *ui.Context, p *ui.Theme) {
 				ui.Checkbox(c, &state.rebase, "Rebase incoming changes")
 			}
 			if state.kind == vcsOpPush {
-				ui.Checkbox(c, &state.force, "Force push with lease")
+				protected := m.vcsProtectedBranch(m.vcsCurrentBranch())
+				ui.Checkbox(c, &state.force, "Force push with lease").Disabled(protected)
+				if protected {
+					ui.Text(c, "Force push is not allowed to protected branches.").
+						FontSize(11).TextColor(p.TextMuted).SingleLine()
+				}
 				ui.Checkbox(c, &state.setUpstream, "Set upstream")
 			}
 			if state.kind == vcsOpReset {
@@ -928,6 +2018,104 @@ func (m *Model) vcsOperationDialog(c *ui.Context, p *ui.Theme) {
 	if d.Dismissed() || !open {
 		m.closeVCSOperation()
 	}
+}
+
+func (m *Model) drawVCSMultiRepoRollback(
+	c *ui.Context,
+	p *ui.Theme,
+	rollback *vcsMultiRepoRollbackState,
+) {
+	title := "Merge Partially Failed"
+	if rollback.kind == vcsOpRebase {
+		title = "Rebase Partially Failed"
+	}
+	ui.Text(c, title).FontSize(15).Bold().TextColor(p.Text)
+	repositories := "repositories"
+	if len(rollback.completed) == 1 {
+		repositories = "repository"
+	}
+	ui.Text(c, fmt.Sprintf(
+		"Succeeded in %d %s before %q failed. Rollback restores only the successful %s to its previous HEAD.",
+		len(rollback.completed), repositories, m.vcsOperationRepositoryLabel(rollback.failureRoot),
+		repositories,
+	)).FontSize(12).TextColor(p.Text)
+	ui.Text(c, "The failed repository is left as it is, including any merge or rebase conflict.").
+		FontSize(12).TextColor(p.Warning)
+	if rollback.failureText != "" {
+		ui.Text(c, rollback.failureText).FontSize(12).TextColor(p.Danger)
+	}
+	if rollback.err != "" {
+		ui.Text(c, rollback.err).FontSize(12).TextColor(p.Danger)
+	}
+	ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
+		ui.Button(c, "Rollback").Disabled(rollback.busy).
+			OnClick(func() { m.resolveVCSMultiRepoRollback("rollback") })
+		ui.Button(c, "Keep").Disabled(rollback.busy).
+			OnClick(func() { m.resolveVCSMultiRepoRollback("keep") })
+	})
+	if rollback.busy {
+		ui.Text(c, "Rolling back completed repositories…").FontSize(12).TextColor(p.TextMuted)
+	}
+}
+
+func (m *Model) drawVCSRejectedPush(
+	c *ui.Context,
+	p *ui.Theme,
+	state *VCSOperationPane,
+	rejected *vcsPushRejectedState,
+) {
+	ui.Text(c, "Push Rejected").FontSize(15).Bold().TextColor(p.Text)
+	if rejected.lease {
+		ui.Text(c, "The force-with-lease Push was rejected because the remote moved. "+
+			"Fetch first if those changes must be preserved, or force Push to override them.").
+			FontSize(12).TextColor(p.TextMuted)
+		ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
+			ui.Button(c, "Force push anyway").Disabled(rejected.busy).
+				OnClick(func() { m.resolveVCSRejectedPush("force") })
+			ui.Button(c, "Cancel").Disabled(rejected.busy).
+				OnClick(func() { m.resolveVCSRejectedPush("cancel") })
+		})
+		if rejected.busy {
+			ui.Text(c, "Updating and retrying Push…").FontSize(12).TextColor(p.TextMuted)
+		}
+		if rejected.err != "" {
+			ui.Text(c, rejected.err).FontSize(12).TextColor(p.Danger)
+		}
+		return
+	}
+	branch := rejected.branch
+	if branch == "" {
+		branch = state.title
+	}
+	ui.Text(c, fmt.Sprintf("Push of the current branch %q was rejected. "+
+		"Remote changes need to be updated before pushing.", branch)).
+		FontSize(12).TextColor(p.Text)
+	if rejected.merges {
+		ui.Text(c, "The branch contains unpushed merge commits. Merge is recommended; "+
+			"rebasing them can rewrite commits that are already referenced.").
+			FontSize(12).TextColor(p.Warning)
+	}
+	ui.Checkbox(c, &rejected.remember,
+		"Remember the update method and update silently in the future. "+
+			"Change this later in Settings | Version Control.")
+	if rejected.busy {
+		ui.Text(c, "Updating and retrying Push…").FontSize(12).TextColor(p.TextMuted)
+	}
+	if rejected.err != "" {
+		ui.Text(c, rejected.err).FontSize(12).TextColor(p.Danger)
+	}
+	ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
+		ui.Button(c, "Merge").Disabled(rejected.busy).
+			OnClick(func() { m.resolveVCSRejectedPush("merge") })
+		rebase := "Rebase"
+		if rejected.merges {
+			rebase = "Rebase Anyway"
+		}
+		ui.Button(c, rebase).Disabled(rejected.busy).
+			OnClick(func() { m.resolveVCSRejectedPush("rebase") })
+		ui.Button(c, "Cancel").Disabled(rejected.busy).
+			OnClick(func() { m.resolveVCSRejectedPush("cancel") })
+	})
 }
 
 // SmokeVCSOperations proves the Git operations added to the native UI against

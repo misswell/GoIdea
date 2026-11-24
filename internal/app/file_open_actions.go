@@ -61,6 +61,12 @@ func (m *Model) openPaths(paths []string) {
 			m.fail(clean, err)
 		}
 	}
+	files, associated := partitionAssociatedPaths(files, m.associatedApplicationPatterns())
+	for _, path := range associated {
+		if err := mygo.Shell.OpenPath(path); err != nil {
+			m.fail(path, err)
+		}
+	}
 	if len(files) > 0 {
 		m.openBatch(files, func() {
 			if dir != "" {

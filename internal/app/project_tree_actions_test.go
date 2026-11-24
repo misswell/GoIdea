@@ -3,12 +3,50 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
 )
+
+func TestNewEmptyFileDefersEncodingAndBOMToBackendCreateFile(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "notes.txt")
+	var command string
+	var args map[string]any
+	finished := make(chan struct{})
+	m := &Model{
+		ctx: context.Background(),
+		postHook: func(fn func()) {
+			fn()
+			close(finished)
+		},
+		invokeHook: func(_ context.Context, got string, input any) (json.RawMessage, error) {
+			command = got
+			args, _ = input.(map[string]any)
+			return nil, errors.New("stop")
+		},
+	}
+	m.setRoot(root)
+	m.treeOp = &treeOpState{
+		kind: treeOpNewFile, path: root, dir: true, name: "notes.txt", open: true,
+	}
+	m.ConfirmTreeOp()
+	select {
+	case <-finished:
+	case <-time.After(2 * time.Second):
+		t.Fatal("empty file creation did not finish")
+	}
+	if command != "fs_create_file" {
+		t.Fatalf("command = %q, want fs_create_file", command)
+	}
+	if want := map[string]any{"path": target}; !reflect.DeepEqual(args, want) {
+		t.Fatalf("fs_create_file arguments = %#v, want %#v", args, want)
+	}
+}
 
 func TestProjectTreeOpenIDEAActionsAreRegistered(t *testing.T) {
 	ids := []string{

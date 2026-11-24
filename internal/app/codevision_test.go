@@ -126,9 +126,11 @@ func TestInlayAndCodeVisionResultsMergeByOffset(t *testing.T) {
 			{Offset: 30, Text: "2 usages"},
 			{Offset: 10, Text: "Ann"},
 		},
+		debug: []editor.Inlay{{Offset: 25, Text: "count: 42"}},
 	}
 	got := mergedEditorInlays(state)
-	if len(got) != 3 || got[0].Text != "Ann" || got[1].Text != "hint" || got[2].Text != "2 usages" {
+	if len(got) != 4 || got[0].Text != "Ann" || got[1].Text != "hint" ||
+		got[2].Text != "count: 42" || got[3].Text != "2 usages" {
 		t.Fatalf("merged inlays = %+v", got)
 	}
 }

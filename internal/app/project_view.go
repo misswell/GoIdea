@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -257,12 +258,15 @@ func (m *Model) configureProjectTreeView() {
 	m.prefs.ProjectTree.Mode = mode
 
 	scratchRoot := ""
-	if dir, err := m.scratchDir(); err == nil {
-		scratchRoot = dir
-		_ = os.MkdirAll(scratchRoot, 0o755)
+	if !remoteConnected(m) {
+		if dir, err := m.scratchDir(); err == nil {
+			scratchRoot = dir
+			_ = os.MkdirAll(scratchRoot, 0o755)
+		}
 	}
 	m.tree.SetScratchRoot(scratchRoot)
 	m.tree.SetOptions(treeOptionsFromPrefs(m.prefs.ProjectTree))
+	m.applyProjectTreeFileFilters()
 	m.tree.SetExpanded(m.projectViews[layoutKey(root)])
 	m.tree.SetExpandedChanged(func(paths []string) {
 		m.rememberProjectTreeExpanded(root, paths)
@@ -454,6 +458,20 @@ func (m *Model) projectTreeTitle(c *ui.Context, p *ui.Theme, oi oiColors) {
 		oiIconEl(c, "general/chevronDown", 14, oi, oi.textMuted)
 	})
 	button.Menu(func(menu *ui.Menu) { m.projectViewModeMenu(menu) })
+	if m.vcsGitBool("vcs.git.showBranchInProjectView") {
+		branch := m.vcsCurrentBranch()
+		if branch == "" && m.branch.head != nil {
+			branch = *m.branch.head
+		}
+		if branch != "" {
+			ui.Text(c, branch).FontSize(11).TextColor(oi.link).
+				SingleLine().Ellipsis("…")
+			if m.branch.ahead > 0 || m.branch.behind > 0 {
+				ui.Text(c, fmt.Sprintf("↑%d ↓%d", m.branch.ahead, m.branch.behind)).
+					FontSize(10).TextColor(oi.textSubtle).SingleLine()
+			}
+		}
+	}
 }
 
 func (m *Model) projectViewModeMenu(menu *ui.Menu) {

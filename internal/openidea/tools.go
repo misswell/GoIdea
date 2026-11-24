@@ -35,8 +35,10 @@ type ToolInfo struct {
 
 // LanguageInfo is one language the backend can assign to a custom server.
 type LanguageInfo struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID         string   `json:"id"`
+	Name       string   `json:"name"`
+	Extensions []string `json:"extensions"`
+	Filenames  []string `json:"filenames,omitempty"`
 }
 
 // InstallEvent is one message of tools_install: a line of installer output or

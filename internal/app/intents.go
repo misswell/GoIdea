@@ -3,11 +3,15 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/editor"
 
+	"mayoi/internal/docbridge"
 	"mayoi/internal/openidea"
 )
 
@@ -19,11 +23,14 @@ const intentTimeout = 60 * time.Second
 // raw goes back to lsp_apply_code_action unchanged, so the resolve data the
 // server sent with it is still there.
 type intentAction struct {
-	raw       json.RawMessage
-	title     string
-	kind      string
-	preferred bool
-	disabled  string
+	raw        json.RawMessage
+	title      string
+	kind       string
+	preferred  bool
+	disabled   string
+	dependency *dependencyIntentEdit
+	run        func(*Model)
+	priority   int
 }
 
 // intentPane is the intentions prompt: the actions offered where the caret
@@ -36,25 +43,73 @@ type intentPane struct {
 	list  ui.ListState
 	busy  bool
 	err   string
+	title string
+
+	filter              func(intentAction) bool
+	priority            func(intentAction) int
+	clientItems         []intentAction
+	emptyText           string
+	only                []string
+	autoApplySingle     bool
+	dependenciesAllowed bool
 
 	request uint32
+	depReq  uint32
+
+	// lspItems and dependencies arrive independently. items is their stable
+	// merged view so a fast Cargo answer cannot erase the language server's.
+	lspItems     []intentAction
+	dependencies []intentAction
 }
 
 // ShowIntentions opens the intentions prompt for the caret or selection.
 func (m *Model) ShowIntentions() {
+	m.showIntentionsPane(intentionPaneOptions{
+		title:               "Context Actions",
+		dependenciesAllowed: true,
+	})
+}
+
+type intentionPaneOptions struct {
+	title               string
+	emptyText           string
+	only                []string
+	filter              func(intentAction) bool
+	priority            func(intentAction) int
+	clientItems         []intentAction
+	autoApplySingle     bool
+	dependenciesAllowed bool
+}
+
+func (m *Model) showIntentionsPane(options intentionPaneOptions) {
 	t := m.tab()
 	if t == nil || !m.tabOpen(t) || m.intents != nil {
+		return
+	}
+	if m.ctx == nil || m.mgr == nil && m.invokeHook == nil {
+		m.status = "Context actions require the GoIDEA backend"
+		m.invalidate()
 		return
 	}
 	sel := t.state.Selection()
 	start := t.doc.UTF16Pos(sel.Start())
 	end := t.doc.UTF16Pos(sel.End())
-	p := &intentPane{open: true, tab: t, busy: true}
+	p := &intentPane{
+		open: true, tab: t, busy: true, title: options.title,
+		filter: options.filter, priority: options.priority,
+		clientItems: append([]intentAction(nil), options.clientItems...),
+		emptyText:   options.emptyText, only: append([]string(nil), options.only...),
+		autoApplySingle:     options.autoApplySingle,
+		dependenciesAllowed: options.dependenciesAllowed,
+	}
 	p.list.Selected = &p.sel
 	m.intents = p
 	m.status = "Finding context actions…"
 	m.invalidate()
 	m.queryIntentions(p, start, end)
+	if p.dependenciesAllowed {
+		m.queryDependencyIntentions(p, sel.Start())
+	}
 }
 
 // queryIntentions asks the servers what they offer at a range.
@@ -75,10 +130,14 @@ func (m *Model) queryIntentions(p *intentPane, start, end openidea.OutlinePos) {
 			m.post(func() { m.finishIntentions(p, req, nil, serr) })
 			return
 		}
-		raw, err := m.mgr.Invoke(ctx, Window, "lsp_code_action_query", map[string]any{
+		only := p.only
+		if only == nil {
+			only = []string{}
+		}
+		raw, err := m.invoke(ctx, "lsp_code_action_query", map[string]any{
 			"request": req, "doc": docID,
 			"range": map[string]any{"start": lspPos(start), "end": lspPos(end)},
-			"only":  []string{},
+			"only":  only,
 		})
 		var q openidea.CodeActionQuery
 		if err == nil {
@@ -103,9 +162,105 @@ func (m *Model) finishIntentions(p *intentPane, req uint32, q *openidea.CodeActi
 		m.invalidate()
 		return
 	}
-	p.items = parseIntentActions(q.Actions)
-	p.sel = 0
+	p.lspItems = parseIntentActions(q.Actions)
+	if p.filter != nil {
+		filtered := p.lspItems[:0]
+		for _, action := range p.lspItems {
+			if p.filter(action) {
+				filtered = append(filtered, action)
+			}
+		}
+		p.lspItems = filtered
+	}
+	p.lspItems = append(p.lspItems, p.clientItems...)
+	if p.priority != nil {
+		sort.SliceStable(p.lspItems, func(i, j int) bool {
+			left, right := p.priority(p.lspItems[i]), p.priority(p.lspItems[j])
+			if left != right {
+				return left < right
+			}
+			return p.lspItems[i].priority < p.lspItems[j].priority
+		})
+	}
+	m.rebuildIntentions(p)
+	if len(p.items) == 0 && p.emptyText != "" {
+		m.intents = nil
+		m.status = p.emptyText
+		m.invalidate()
+		return
+	}
+	if p.autoApplySingle && len(p.items) == 1 {
+		m.applyIntent(p.items[0])
+		return
+	}
 	m.invalidate()
+}
+
+// queryDependencyIntentions adds OpenIDEA's registry-backed Cargo update to
+// the language-server actions. Registry failures stay quiet, as they do in
+// the upstream editor contribution.
+func (m *Model) queryDependencyIntentions(p *intentPane, selection int) {
+	t := p.tab
+	if m.mgr == nil || !isCargoManifest(t.doc.Path()) || t.doc.ReadOnly() {
+		return
+	}
+	doc := t.doc
+	docID := doc.ID()
+	req := m.nextRequest()
+	p.depReq = req
+	text := doc.Buffer().Snapshot().String()
+	offset := byteToUTF16Offset(text, selection)
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, intentTimeout)
+		defer cancel()
+		if err := doc.Sync(ctx); err != nil {
+			m.post(func() {
+				if p == m.intents && p.depReq == req {
+					p.depReq = 0
+				}
+			})
+			return
+		}
+		found, err := m.mgr.DependencyVersions(ctx, Window, req, docID, &offset)
+		m.post(func() {
+			if p != m.intents || p.depReq != req {
+				return
+			}
+			p.depReq = 0
+			if err != nil {
+				return
+			}
+			snapshot := doc.Buffer().Snapshot()
+			if snapshot.String() != text {
+				return
+			}
+			p.dependencies = dependencyIntentItems(
+				text,
+				selection,
+				snapshot.Version(),
+				found,
+			)
+			m.rebuildIntentions(p)
+			m.invalidate()
+		})
+	}()
+}
+
+func (m *Model) rebuildIntentions(p *intentPane) {
+	previous := ""
+	if len(p.items) > 0 && p.sel >= 0 && p.sel < len(p.items) {
+		previous = p.items[p.sel].title
+	}
+	p.items = append(append([]intentAction(nil), p.lspItems...), p.dependencies...)
+	p.sel = 0
+	if previous != "" {
+		for i := range p.items {
+			if p.items[i].title == previous && p.items[i].disabled == "" {
+				p.sel = i
+				break
+			}
+		}
+	}
 }
 
 // parseIntentActions keeps the fields the prompt shows from each raw action.
@@ -149,10 +304,41 @@ func (m *Model) applyIntent(it intentAction) {
 	p.busy = true
 	p.err = ""
 	m.invalidate()
+	if it.run != nil {
+		m.intents = nil
+		it.run(m)
+		return
+	}
+	if it.dependency != nil {
+		source := *it.dependency
+		go func() {
+			ctx, cancel := context.WithTimeout(m.ctx, intentTimeout)
+			defer cancel()
+			err := t.doc.ApplyEditsIfVersion(ctx, source.version, editor.Edit{
+				Start: source.from, End: source.to, Text: source.replacement,
+			})
+			m.post(func() {
+				if p != m.intents {
+					return
+				}
+				p.busy = false
+				if errors.Is(err, docbridge.ErrChanged) {
+					p.err = "The dependency changed before the update was applied."
+				} else if err != nil {
+					p.err = "Applying the dependency update failed: " + err.Error()
+				} else {
+					m.intents = nil
+					m.status = "Updated dependency to " + source.latest
+				}
+				m.invalidate()
+			})
+		}()
+		return
+	}
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, intentTimeout)
 		defer cancel()
-		_, err := m.mgr.Invoke(ctx, Window, "lsp_apply_code_action", map[string]any{
+		_, err := m.invoke(ctx, "lsp_apply_code_action", map[string]any{
 			"doc": docID, "action": it.raw,
 		})
 		m.post(func() {
@@ -193,15 +379,23 @@ func (m *Model) closeIntents() {
 
 func (m *Model) cancelIntentQuery() {
 	p := m.intents
-	if p == nil || p.request == 0 {
+	if p == nil || p.request == 0 && p.depReq == 0 {
 		return
 	}
-	id := p.request
+	ids := []uint32{p.request, p.depReq}
 	p.request = 0
+	p.depReq = 0
+	if m.ctx == nil || m.mgr == nil && m.invokeHook == nil {
+		return
+	}
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 10*time.Second)
 		defer cancel()
-		_, _ = m.mgr.Invoke(ctx, Window, "cancel_request", map[string]any{"id": id})
+		for _, id := range ids {
+			if id != 0 {
+				_, _ = m.invoke(ctx, "cancel_request", map[string]any{"id": id})
+			}
+		}
 	}()
 }
 
@@ -245,7 +439,11 @@ func (m *Model) intentionsDialog(c *ui.Context, p *ui.Theme) {
 	open := pn.open
 	d := ui.Modal(c, &open, func() {
 		ui.Column(c).Width(460).Gap(8).Children(func() {
-			ui.Text(c, "Context Actions").FontSize(13).Bold().TextColor(p.Text).SingleLine()
+			title := pn.title
+			if title == "" {
+				title = "Context Actions"
+			}
+			ui.Text(c, title).FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			hint := count(len(pn.items), "action", "actions")
 			switch {
 			case pn.busy:

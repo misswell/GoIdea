@@ -27,19 +27,41 @@ var (
 	stopLineColor   = ui.RGBA(255, 200, 60, 0.16)
 )
 
-// DebugPane is the Debug tool window: one java-debug session (through jdtls),
-// the paused thread's frames and variables, adapter output, and the line
-// breakpoints the user set. Breakpoints live here, not in the session: they
-// are given to every session that starts.
+// DebugPane is the Debug tool window: independent java-debug content tabs
+// through jdtls, the selected session's paused frames and variables, adapter
+// output, and the line breakpoints the user set. Breakpoints live here, not in
+// a session: they are given to every session that starts.
 type DebugPane struct {
 	visible  bool
 	starting bool
+	// active is the selected Debug content tab. session is the active tab's
+	// live backend id and becomes zero when that tab terminates; sessions keeps
+	// the other tabs' independent frames, console, status and lifecycle.
+	active          uint32
+	sessions        map[uint32]*debugSessionState
+	sessionOrder    []uint32
+	closeAfterStop  map[uint32]bool
+	retiredSessions map[uint32]bool
+	retiredOrder    []uint32
+	// heapChannels maps a bounded backend progress stream to the content tab
+	// that requested it. It is cleared when that request finishes, fails or is
+	// cancelled, so late chunk notifications cannot revive an old request.
+	heapChannels map[uint32]uint32
 	// startCancel stops a launch that is still waiting or preparing (Stop
 	// while the Java project imports), so no session starts after the user
 	// gave up.
-	startCancel context.CancelFunc
-	session     uint32 // active backend DebugSessionId; 0 when none is running
-	stopping    bool   // debug_stop is in flight for session
+	startCancel    context.CancelFunc
+	session        uint32 // active backend DebugSessionId; 0 when none is running
+	parent         uint32 // root session for an adapter-started child; 0 for a root
+	adapter        string
+	stopping       bool // debug_stop is in flight for session
+	caps           openidea.DebugCapabilities
+	capsKnown      bool
+	capsRequest    uint64
+	jvmBackend     openidea.JvmBackendState
+	stopGeneration uint64
+	threadRequest  uint64
+	frameRequest   uint64
 	// retiredSession is the last session the user stopped. Events can arrive
 	// after the stop reply, so they must not attach the old session to a new
 	// launch.
@@ -60,6 +82,7 @@ type DebugPane struct {
 	// session subscription does.
 	pluginExit    func(code *int32, stopped bool)
 	pluginStopped bool
+	pluginRequest uint64
 	// launchCwd is the session's working directory (its module dir); the
 	// HotSwap compile covers it.
 	launchCwd string
@@ -70,7 +93,11 @@ type DebugPane struct {
 	hotSwapStage string
 	// hotSwapRequest is the cancellable java_build_workspace request behind
 	// Reload Changed Classes.
-	hotSwapRequest uint32
+	hotSwapRequest      uint32
+	hotSwapCancel       chan struct{}
+	hotSwapNeedsRestart bool
+	hotSwapQuietUntil   time.Time
+	buildToolDebug      *debugBuildToolState
 
 	paused     bool
 	pausing    bool
@@ -101,20 +128,33 @@ type DebugPane struct {
 	muted bool
 	// temporaryBps records which of bps are removed after their first stop.
 	temporaryBps map[string][]int
+	// breakpointOptions keeps conditions, hit counts, log messages and the
+	// per-line enabled state beside the line list used by the gutter.
+	breakpointOptions map[string]map[int]debugBreakpointOptions
 	// methodBps and fieldBps are the special breakpoints the adapter owns.
 	methodBps []openidea.FunctionBreakpoint
 	fieldBps  []openidea.DataBreakpoint
+	// breakpointEdit is the modal editor opened from View Breakpoints.
+	breakpointEdit debugBreakpointEditState
 
 	// watches are expressions the user pinned; they evaluate again in each
 	// stopped frame. evalText is the input being typed for a new one.
 	watches  []debugWatch
 	evalText string
 	evalBusy bool
+	evaluate debugEvaluateState
 
 	setValue        debugSetValueState
 	smartStep       debugSmartStepState
 	breakpointsOpen bool
 	heap            debugHeapState
+}
+
+type debugBreakpointOptions struct {
+	Enabled      bool
+	Condition    string
+	HitCondition string
+	LogMessage   string
 }
 
 // debugWatch is one pinned expression and what it evaluated to in the current
@@ -131,13 +171,43 @@ const maxWatches = 20
 
 const maxDebugLines = 2000
 
+const (
+	debugJavaPreparationRetryWindow = 2 * time.Minute
+	debugJavaPreparationRetryMax    = 2 * time.Second
+)
+
 // resetDebug drops the previous project's debug state, breakpoints included:
 // a line number means nothing in another project.
 func (m *Model) resetDebug() {
 	if m.debug.startCancel != nil {
 		m.debug.startCancel()
 	}
+	if m.debug.hotSwapRequest != 0 {
+		request := m.debug.hotSwapRequest
+		go func() {
+			ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
+			defer cancel()
+			_, _ = m.invoke(ctx, "cancel_request", map[string]any{"id": request})
+		}()
+	}
+	sessions := map[uint32]bool{}
+	if m.debug.session != 0 {
+		sessions[m.debug.session] = true
+	}
+	for _, state := range m.debug.sessions {
+		if state != nil && state.session != 0 && state.parent == 0 {
+			sessions[state.session] = true
+		}
+	}
+	m.releaseDebugHeapChannels(0)
 	m.debug = DebugPane{stopLine: -1}
+	for session := range sessions {
+		go func(id uint32) {
+			ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
+			defer cancel()
+			_, _ = m.invoke(ctx, "debug_stop", map[string]any{"session": id})
+		}(session)
+	}
 }
 
 // breakpointLines returns a copy of path's lines, sorted.
@@ -147,11 +217,47 @@ func (p *DebugPane) breakpointLines(path string) []int {
 	return lines
 }
 
+func (p *DebugPane) breakpointOptionsAt(path string, line int) debugBreakpointOptions {
+	options := debugBreakpointOptions{Enabled: true}
+	if byLine := p.breakpointOptions[path]; byLine != nil {
+		if saved, ok := byLine[line]; ok {
+			return saved
+		}
+	}
+	return options
+}
+
+func (p *DebugPane) setBreakpointOptions(path string, line int, options debugBreakpointOptions) {
+	defaults := debugBreakpointOptions{Enabled: true}
+	if options == defaults {
+		p.removeBreakpointOptions(path, line)
+		return
+	}
+	if p.breakpointOptions == nil {
+		p.breakpointOptions = map[string]map[int]debugBreakpointOptions{}
+	}
+	if p.breakpointOptions[path] == nil {
+		p.breakpointOptions[path] = map[int]debugBreakpointOptions{}
+	}
+	p.breakpointOptions[path][line] = options
+}
+
+func (p *DebugPane) removeBreakpointOptions(path string, line int) {
+	byLine := p.breakpointOptions[path]
+	if byLine == nil {
+		return
+	}
+	delete(byLine, line)
+	if len(byLine) == 0 {
+		delete(p.breakpointOptions, path)
+	}
+}
+
 // toggleBreakpointAt adds or removes a breakpoint on a 0-based line, then
 // gives the file's whole list to the backend (which keeps it for sessions).
 func (m *Model) toggleBreakpointAt(path string, line int) {
-	if line < 0 || !isJavaSource(path) {
-		m.status = "Breakpoints only work in Java source files"
+	if line < 0 || (!isJavaSource(path) && !m.prefs.Debugger.BreakpointsAnyFile) {
+		m.status = "Enable Allow placing breakpoints in any file to use this file"
 		m.invalidate()
 		return
 	}
@@ -166,6 +272,7 @@ func (m *Model) toggleBreakpointAt(path string, line int) {
 		m.debug.bps[path] = next
 	}
 	if found {
+		m.debug.removeBreakpointOptions(path, line)
 		m.status = fmt.Sprintf("Breakpoint removed at line %d", line+1)
 	} else {
 		m.status = fmt.Sprintf("Breakpoint set at line %d", line+1)
@@ -240,7 +347,15 @@ func (m *Model) pushBreakpoints(ctx context.Context, path string) error {
 func (m *Model) pushFileBreakpoints(ctx context.Context, path string) error {
 	var list []openidea.Breakpoint
 	for _, line := range m.debug.breakpointLines(path) {
-		list = append(list, openidea.Breakpoint{Line: line, Enabled: !m.debug.muted})
+		options := m.debug.breakpointOptionsAt(path, line)
+		bp := openidea.Breakpoint{
+			Line:         line,
+			Condition:    breakpointString(options.Condition),
+			HitCondition: breakpointString(options.HitCondition),
+			LogMessage:   breakpointString(options.LogMessage),
+			Enabled:      options.Enabled && !m.debug.muted,
+		}
+		list = append(list, bp)
 	}
 	if list == nil {
 		list = []openidea.Breakpoint{}
@@ -249,6 +364,14 @@ func (m *Model) pushFileBreakpoints(ctx context.Context, path string) error {
 		"path": path, "breakpoints": list,
 	})
 	return err
+}
+
+func breakpointString(value string) *string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	return &value
 }
 
 // ToggleBreakpointsMuted is OpenIDEA's Mute Breakpoints: the markers stay in
@@ -307,6 +430,17 @@ func (m *Model) refreshTabDecorations(t *Tab) {
 		}
 	}
 	marks = append(marks, m.bookmarkMarks(path, seen)...)
+	for _, mark := range m.pluginGutterMarks(t) {
+		if seen[mark.Line] {
+			continue
+		}
+		marks = append(marks, mark)
+		seen[mark.Line] = true
+	}
+	for _, mark := range m.colorPreviewGutterMarks(t, seen) {
+		marks = append(marks, mark)
+		seen[mark.Line] = true
+	}
 	t.state.GutterMarks = marks
 	var bgs []editor.LineBackground
 	if m.debug.paused && m.debug.stopFile == path && m.debug.stopLine >= 0 {
@@ -314,7 +448,10 @@ func (m *Model) refreshTabDecorations(t *Tab) {
 			First: m.debug.stopLine, Last: m.debug.stopLine, Color: stopLineColor,
 		})
 	}
+	pluginLines, _ := m.pluginDecorationBackgrounds(t)
+	bgs = append(bgs, pluginLines...)
 	t.state.LineBackgrounds = bgs
+	m.refreshDebugInlays(t)
 }
 
 // javaTarget is what Debug starts: the module whose classpath jdtls resolves
@@ -520,6 +657,7 @@ func (m *Model) javaDebugLaunch(ctx context.Context, rc *openidea.RunConfig, roo
 		shorten = *info.ShortenCommandLine
 	}
 	vmArgs := append(adapter.ConsoleVMArgs(rc.Kind, rc.Args), parsed.VMArgs...)
+	vmArgs = append(debugAttachListenerArgs(rc, strings.Join(vmArgs, " ")), vmArgs...)
 	extra := map[string]any{
 		"debugServer": int(port),
 		"mainClass":   parsed.MainClass,
@@ -616,13 +754,7 @@ func (m *Model) reportDebugConsole(ctx context.Context, root string) func(text, 
 }
 
 func (d *DebugPane) appendOutput(text, kind string) {
-	for _, line := range strings.Split(text, "\n") {
-		d.output = append(d.output, outputLine{kind: kind, text: line})
-	}
-	if over := len(d.output) - maxDebugLines; over > 0 {
-		d.output = append(d.output[:0], d.output[over:]...)
-		d.truncated = true
-	}
+	appendDebugOutput(&d.output, &d.truncated, text, kind)
 	if !d.console.noFollow && !d.console.searching {
 		d.console.list.ScrollToEnd()
 	}
@@ -637,12 +769,15 @@ func (m *Model) ShowDebug() { m.dockActivate("debug") }
 // Debug is run.debug: debug the selected run configuration (upstream
 // debugSelected). The active file's own configuration is run.debugContext.
 func (m *Model) Debug() {
-	m.DockShow("debug")
 	if m.busy {
 		m.invalidate()
 		return
 	}
 	cfg := m.run.current()
+	if m.run.currentFile {
+		m.DebugContext()
+		return
+	}
 	if cfg == nil && m.run.inline != nil {
 		cfg = m.run.inline
 	}
@@ -659,14 +794,37 @@ func (m *Model) Debug() {
 // through the shared PrepareJavaLaunch, a kind GoIDEA cannot debug is
 // reported instead of silently starting.
 func (m *Model) DebugRunConfig(rc *openidea.RunConfig) {
+	_ = m.debugRunConfig(rc, true)
+}
+
+// debugRunConfig keeps the debug console available to Services without
+// bringing the Debug tool window to the front.
+func (m *Model) debugRunConfig(rc *openidea.RunConfig, show bool) bool {
 	root := m.Root()
-	if m.canStartDebug(root) {
-		m.startJavaDebug(rc, root)
+	show = m.showRunWindow(rc, show)
+	if isRemoteDebugKind(rc.Kind) {
+		m.startRemoteDebug(rc, root, show)
+		return true
 	}
+	if debugBuildToolKind(rc) != "" {
+		m.startBuildToolDebug(rc, root, show)
+		return true
+	}
+	if m.canStartDebugWithWindow(root, show) {
+		m.startJavaDebug(rc, root)
+		return true
+	}
+	return false
 }
 
 func (m *Model) canStartDebug(root string) bool {
-	m.DockShow("debug")
+	return m.canStartDebugWithWindow(root, true)
+}
+
+func (m *Model) canStartDebugWithWindow(root string, show bool) bool {
+	if show {
+		m.DockShow("debug")
+	}
 	if root == "" || m.busy {
 		m.invalidate()
 		return false
@@ -677,11 +835,6 @@ func (m *Model) canStartDebug(root string) bool {
 		return false
 	}
 	if m.debug.starting {
-		return false
-	}
-	if m.debug.session != 0 && !m.debug.ended {
-		m.debug.err = "A debug session is already running: stop it first"
-		m.invalidate()
 		return false
 	}
 	return true
@@ -696,9 +849,15 @@ func (m *Model) canStartDebug(root string) bool {
 // precise errors.
 func (m *Model) waitForJavaDebugReady(ctx context.Context) error {
 	for {
-		var servers []lspServerState
-		if err := m.smokeLSPCall(ctx, "lsp_servers", nil, &servers); err != nil {
+		callCtx, cancel := context.WithTimeout(ctx, lspTimeout)
+		raw, err := m.invoke(callCtx, "lsp_servers", nil)
+		cancel()
+		if err != nil {
 			return fmt.Errorf("could not check the Java project import: %w", err)
+		}
+		var servers []lspServerState
+		if err := json.Unmarshal(raw, &servers); err != nil {
+			return fmt.Errorf("could not read the Java project import: %w", err)
 		}
 		if !javaDebugProjectBusy(servers) {
 			return nil
@@ -728,6 +887,44 @@ func javaDebugProjectBusy(servers []lspServerState) bool {
 	return waiting
 }
 
+// prepareJavaDebugLaunch retries the launch preparation when jdtls is still
+// starting and OpenIDEA reports a transient cancelled request. Bind this retry
+// to the caller's context and a short window so a real stop remains immediate
+// and an unsupported project keeps its precise backend error.
+func (m *Model) prepareJavaDebugLaunch(ctx context.Context, rc *openidea.RunConfig, root string) (*adapter.PreparedJavaLaunch, error) {
+	deadline := time.Now().Add(debugJavaPreparationRetryWindow)
+	delay := 200 * time.Millisecond
+	report := m.reportDebugConsole(ctx, root)
+	for {
+		prepared, err := adapter.PrepareJavaLaunch(ctx, javaBackend{m}, rc, &adapter.Preparation{
+			Request: m.nextRequest(),
+			Report:  report,
+		})
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, ctxErr
+		}
+		if err == nil || openidea.ErrorKind(err) != "cancelled" ||
+			time.Now().After(deadline) {
+			return prepared, err
+		}
+		// A Java server that is visible as busy or starting can be awaited
+		// directly. Before it appears, the bounded delay below leaves the
+		// import a chance to register the server.
+		_ = m.waitForJavaDebugReady(ctx)
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(delay):
+		}
+		if delay < debugJavaPreparationRetryMax {
+			delay *= 2
+			if delay > debugJavaPreparationRetryMax {
+				delay = debugJavaPreparationRetryMax
+			}
+		}
+	}
+}
+
 func (m *Model) startJavaDebug(rc *openidea.RunConfig, root string) {
 	if !adapter.IsJVMApplication(rc.Kind) {
 		m.debug.err = fmt.Sprintf("GoIDEA cannot debug %s run configurations yet", adapter.KindLabel(rc.Kind))
@@ -744,6 +941,10 @@ func (m *Model) startJavaDebug(rc *openidea.RunConfig, root string) {
 		m.invalidate()
 		return
 	}
+	m.debug.rememberDebugSession()
+	m.debug.active = 0
+	m.debug.retiredSession = 0
+	m.debug.resetActiveDebugFields()
 	m.debug.lastID = rc.ID
 	m.debug.lastRaw = append(json.RawMessage(nil), rc.Raw()...)
 	m.debug.lastKind = rc.Kind
@@ -753,21 +954,7 @@ func (m *Model) startJavaDebug(rc *openidea.RunConfig, root string) {
 	m.debug.console = debugConsoleView{}
 	m.debug.memory = debugMemoryView{}
 	m.debug.starting = true
-	m.debug.session = 0
-	m.debug.ended = false
-	m.debug.paused = false
-	m.debug.pausing = false
-	m.debug.stopThread = 0
-	m.debug.frameID = 0
-	m.debug.stopLine = -1
-	m.debug.stopFile = ""
-	m.debug.frames = nil
-	m.debug.scopes = nil
-	m.debug.vars = nil
-	m.debug.threads = nil
 	m.debug.output = []outputLine{{kind: "system", text: "Starting debugger for " + rc.Name + "…"}}
-	m.debug.truncated = false
-	m.debug.err = ""
 	m.debug.status = "Saving and building…"
 	m.refreshDecorations()
 	m.invalidate()
@@ -784,12 +971,16 @@ func (m *Model) startJavaDebug(rc *openidea.RunConfig, root string) {
 			}
 			m.post(func() {
 				if ctx.Err() == context.Canceled || m.Root() != root || !m.debug.starting {
+					if m.Root() == root && !m.debug.starting {
+						m.finishPluginDebug(nil)
+					}
 					return
 				}
 				m.debug.starting = false
 				m.debug.startCancel = nil
 				m.debug.err = text
 				m.debug.status = ""
+				m.finishPluginDebug(nil)
 				m.invalidate()
 			})
 		}
@@ -799,12 +990,9 @@ func (m *Model) startJavaDebug(rc *openidea.RunConfig, root string) {
 			return
 		}
 		_ = m.pushBreakpoints(ctx, "")
-		// OpenIDEA's launch RPC waits for the target module's import.
-		// Language-server activity is only advisory.
-		prepared, err := adapter.PrepareJavaLaunch(ctx, javaBackend{m}, rc, &adapter.Preparation{
-			Request: m.nextRequest(),
-			Report:  m.reportDebugConsole(ctx, root),
-		})
+		// The launch RPC normally waits for the target module's import. A
+		// cancelled verdict during jdtls startup is retried within a bound.
+		prepared, err := m.prepareJavaDebugLaunch(ctx, rc, root)
 		if err != nil {
 			fail(err.Error(), nil)
 			return
@@ -869,11 +1057,17 @@ func (m *Model) startJavaDebug(rc *openidea.RunConfig, root string) {
 			m.debug.starting = false
 			m.debug.startCancel = nil
 			m.debug.retiredSession = 0
-			if m.debug.session == 0 {
+			if m.debug.active == 0 {
+				m.debug.adoptDebugSession(session)
+				m.debug.session = session
+			} else if m.debug.active == session {
 				m.debug.session = session
 			}
 			m.debug.status = "Debugging started: " + m.debug.config
+			m.recordRecentRunConfig(rc.ID)
+			m.debug.rememberDebugSession()
 			m.pushSpecialBreakpoints()
+			m.refreshDebugCapabilities(session)
 			m.refreshDecorations()
 			m.invalidate()
 		})
@@ -901,22 +1095,56 @@ func (m *Model) DebugRerun() {
 	m.StopDebug()
 	session := m.debug.session
 	go func() {
-		deadline := time.Now().Add(30 * time.Second)
-		for {
-			var ended bool
-			var next uint32
+		ctx, cancel := context.WithTimeout(modelContext(m), 30*time.Second)
+		defer cancel()
+		if !m.waitForDebugSessionStop(ctx, session) {
 			m.post(func() {
-				ended = m.debug.ended || m.debug.session != session && m.debug.session == 0
-				next = m.debug.session
+				if m.debug.session == session && !m.debug.ended {
+					if m.debug.err == "" {
+						m.debug.err = "The previous debug session did not stop, so it was not restarted"
+					}
+					m.invalidate()
+				}
 			})
-			_ = next
-			if ended || time.Now().After(deadline) {
-				break
-			}
-			time.Sleep(100 * time.Millisecond)
+			return
 		}
-		m.post(func() { m.DebugRunConfig(cfg) })
+		m.post(func() {
+			if m.debug.session == 0 || m.debug.ended {
+				m.DebugRunConfig(cfg)
+			}
+		})
 	}()
+}
+
+func (m *Model) waitForDebugSessionStop(ctx context.Context, session uint32) bool {
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		state := make(chan struct {
+			stopped bool
+			failed  bool
+		}, 1)
+		m.post(func() {
+			stopped := m.debug.ended || m.debug.session != session && m.debug.session == 0
+			failed := !stopped && m.debug.session == session && !m.debug.stopping
+			state <- struct {
+				stopped bool
+				failed  bool
+			}{stopped: stopped, failed: failed}
+		})
+		select {
+		case current := <-state:
+			if current.stopped {
+				return true
+			}
+			if current.failed {
+				return false
+			}
+		case <-ctx.Done():
+			return false
+		case <-ticker.C:
+		}
+	}
 }
 
 // Continue resumes the paused thread.
@@ -925,13 +1153,24 @@ func (m *Model) DebugContinue() {
 		return
 	}
 	session, thread := m.debug.session, m.debug.stopThread
+	m.debug.stopGeneration++
+	m.debug.threadRequest++
+	m.debug.frameRequest++
 	m.debug.status = "Resuming…"
+	m.debug.rememberDebugSession()
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 		defer cancel()
 		if _, err := m.invoke(ctx, "debug_resume", map[string]any{"session": session, "threadId": thread}); err != nil {
-			m.post(func() { m.debug.err = "Resume failed: " + err.Error(); m.invalidate() })
+			m.post(func() {
+				m.updateDebugSession(session, func(state *debugSessionState) {
+					if state.session == session && !state.ended {
+						state.err = "Resume failed: " + err.Error()
+					}
+				})
+				m.invalidate()
+			})
 		}
 	}()
 }
@@ -967,13 +1206,15 @@ func (m *Model) DebugPause() {
 			_, err = m.invoke(ctx, "debug_pause", map[string]any{"session": session, "threadId": thread})
 		}
 		m.post(func() {
-			if m.debug.session != session {
-				return
-			}
-			m.debug.pausing = false
-			if err != nil && !m.debug.ended {
-				m.debug.err = "Pause failed: " + err.Error()
-			}
+			m.updateDebugSession(session, func(state *debugSessionState) {
+				if state.session != session {
+					return
+				}
+				state.pausing = false
+				if err != nil && !state.ended {
+					state.err = "Pause failed: " + err.Error()
+				}
+			})
 			m.invalidate()
 		})
 	}()
@@ -986,8 +1227,12 @@ func (m *Model) DebugStep(kind string) {
 		return
 	}
 	session, thread := m.debug.session, m.debug.stopThread
+	m.debug.stopGeneration++
+	m.debug.threadRequest++
+	m.debug.frameRequest++
 	m.debug.status = "Stepping…"
 	m.debug.paused = false
+	m.debug.rememberDebugSession()
 	m.refreshDecorations()
 	m.invalidate()
 	go func() {
@@ -996,7 +1241,18 @@ func (m *Model) DebugStep(kind string) {
 		if _, err := m.invoke(ctx, "debug_step", map[string]any{
 			"session": session, "threadId": thread, "kind": kind,
 		}); err != nil {
-			m.post(func() { m.debug.err = "Step failed: " + err.Error(); m.invalidate() })
+			m.post(func() {
+				m.updateDebugSession(session, func(state *debugSessionState) {
+					if state.session == session && !state.ended {
+						state.paused = true
+						state.err = "Step failed: " + err.Error()
+					}
+				})
+				if m.debug.active == session {
+					m.refreshDecorations()
+				}
+				m.invalidate()
+			})
 		}
 	}()
 }
@@ -1013,8 +1269,12 @@ func (m *Model) ForceStepOver() {
 		return
 	}
 	session, thread := m.debug.session, m.debug.stopThread
+	m.debug.stopGeneration++
+	m.debug.threadRequest++
+	m.debug.frameRequest++
 	m.debug.status = "Force-stepping over…"
 	m.debug.paused = false
+	m.debug.rememberDebugSession()
 	m.refreshDecorations()
 	m.invalidate()
 	go func() {
@@ -1023,7 +1283,18 @@ func (m *Model) ForceStepOver() {
 		if _, err := m.invoke(ctx, "debug_force_step_over", map[string]any{
 			"session": session, "threadId": thread,
 		}); err != nil {
-			m.post(func() { m.debug.err = "Force Step Over failed: " + err.Error(); m.invalidate() })
+			m.post(func() {
+				m.updateDebugSession(session, func(state *debugSessionState) {
+					if state.session == session && !state.ended {
+						state.paused = true
+						state.err = "Force Step Over failed: " + err.Error()
+					}
+				})
+				if m.debug.active == session {
+					m.refreshDecorations()
+				}
+				m.invalidate()
+			})
 		}
 	}()
 }
@@ -1041,6 +1312,7 @@ func (m *Model) RemoveAllBreakpoints() {
 	}
 	m.debug.bps = map[string][]int{}
 	m.debug.temporaryBps = map[string][]int{}
+	m.debug.breakpointOptions = nil
 	m.debug.methodBps = nil
 	m.debug.fieldBps = nil
 	m.refreshDecorations()
@@ -1063,20 +1335,34 @@ func (m *Model) RemoveAllBreakpoints() {
 // RunToCursor continues to the caret's line (Alt+F9); force ignores
 // breakpoints on the way (Cmd+Alt+F9).
 func (m *Model) RunToCursor(force bool) {
+	t := m.tab()
+	if t == nil || t.doc == nil || t.state == nil {
+		if m.debug.session != 0 && m.debug.paused {
+			m.debug.err = "No file is open, so Run to Cursor has no place to go"
+			m.invalidate()
+		}
+		return
+	}
+	m.runToCursorAtLine(t.doc.Path(), t.state.CursorPos().Line, force)
+}
+
+// runToCursorAtLine is shared by Alt+F9 and the native Run to Cursor hover.
+func (m *Model) runToCursorAtLine(path string, line int, force bool) {
 	if m.debug.session == 0 || !m.debug.paused || m.debug.stopThread == 0 {
 		return
 	}
-	t := m.tab()
-	if t == nil {
-		m.debug.err = "No file is open, so Run to Cursor has no place to go"
+	if path == "" || line < 0 {
+		m.debug.err = "Run to Cursor needs a source line"
 		m.invalidate()
 		return
 	}
-	path := t.doc.Path()
-	line := t.state.CursorPos().Line
 	session, thread := m.debug.session, m.debug.stopThread
+	m.debug.stopGeneration++
+	m.debug.threadRequest++
+	m.debug.frameRequest++
 	m.debug.status = "Running to the cursor…"
 	m.debug.paused = false
+	m.debug.rememberDebugSession()
 	m.refreshDecorations()
 	m.invalidate()
 	go func() {
@@ -1085,7 +1371,18 @@ func (m *Model) RunToCursor(force bool) {
 		if _, err := m.invoke(ctx, "debug_run_to", map[string]any{
 			"session": session, "threadId": thread, "path": path, "line": line, "force": force,
 		}); err != nil {
-			m.post(func() { m.debug.err = "Run to Cursor failed: " + err.Error(); m.invalidate() })
+			m.post(func() {
+				m.updateDebugSession(session, func(state *debugSessionState) {
+					if state.session == session && !state.ended {
+						state.paused = true
+						state.err = "Run to Cursor failed: " + err.Error()
+					}
+				})
+				if m.debug.active == session {
+					m.refreshDecorations()
+				}
+				m.invalidate()
+			})
 		}
 	}()
 }
@@ -1096,14 +1393,22 @@ func (m *Model) ForceRunToCursor() { m.RunToCursor(true) }
 // StopDebug stops the session or cancels pending Java launch preparation.
 func (m *Model) StopDebug() {
 	session := m.debug.session
+	if m.debug.active == 0 && session != 0 {
+		m.debug.active = session
+		m.debug.ensureDebugSessionOrder(session)
+	}
 	if m.debug.starting {
 		if m.debug.startCancel != nil {
 			m.debug.startCancel()
 			m.debug.startCancel = nil
 		}
+		if m.debug.pluginExit != nil {
+			m.debug.pluginStopped = true
+		}
 		m.debug.starting = false
 		m.debug.status = ""
 		m.debug.err = ""
+		m.finishPluginDebug(nil)
 		m.invalidate()
 	}
 	if session == 0 || m.debug.ended {
@@ -1112,32 +1417,63 @@ func (m *Model) StopDebug() {
 	if m.debug.pluginExit != nil {
 		m.debug.pluginStopped = true
 	}
+	if m.mgr == nil && m.invokeHook == nil {
+		m.debug.stopping = false
+		m.invalidate()
+		return
+	}
 	m.debug.stopping = true
 	m.debug.status = "Stopping the debug session…"
 	m.invalidate()
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
+		ctx, cancel := context.WithTimeout(modelContext(m), 30*time.Second)
 		defer cancel()
 		if _, err := m.invoke(ctx, "debug_stop", map[string]any{"session": session}); err != nil {
 			m.post(func() {
-				if m.debug.session == session {
-					m.debug.stopping = false
+				m.updateDebugSession(session, func(state *debugSessionState) {
+					if state.session != session {
+						return
+					}
+					state.stopping = false
+					delete(m.debug.closeAfterStop, session)
+					state.err = "Stopping the debug session failed: " + err.Error()
+				})
+				if m.debug.active == session {
 					m.debug.retiredSession = 0
-					m.debug.err = "Stopping the debug session failed: " + err.Error()
-					m.invalidate()
 				}
+				m.invalidate()
 			})
 			return
 		}
 		m.post(func() {
-			if m.debug.session == session {
-				m.debug.session = 0
+			m.markDebugSessionRetired(session)
+			m.updateDebugSession(session, func(state *debugSessionState) {
+				if state.session != session {
+					return
+				}
+				state.session = 0
+				state.ended = true
+				state.stopping = false
+				state.paused = false
+				state.status = "Debugging stopped"
+				state.stopGeneration++
+				state.threadRequest++
+				state.frameRequest++
+				state.memory.invalidateInspection()
+			})
+			if m.debug.active == session {
 				m.debug.retiredSession = session
-				m.debug.ended = true
-				m.debug.stopping = false
-				m.debug.status = "Debugging stopped"
-				m.invalidate()
 			}
+			m.endDebugHeapOperation(session)
+			if m.debug.closeAfterStop[session] {
+				delete(m.debug.closeAfterStop, session)
+				m.closeDebugSessionTab(session)
+				return
+			}
+			if m.debug.active == session {
+				m.refreshDecorations()
+			}
+			m.invalidate()
 		})
 	}()
 }
@@ -1151,19 +1487,73 @@ func (m *Model) acceptDebugEvent(session uint32, raw json.RawMessage) {
 	if json.Unmarshal(raw, &e) != nil {
 		return
 	}
+	if m.debug.retiredSessions[session] {
+		return
+	}
 	d := &m.debug
+	if d.sessions != nil && d.sessions[session] != nil {
+		if d.active != session && m.acceptBackgroundDebugEvent(session, e) {
+			return
+		}
+	}
+	if d.sessions == nil {
+		d.sessions = map[uint32]*debugSessionState{}
+	}
+	if d.sessions[session] == nil && e.Kind == "started" && e.Parent != nil {
+		if !m.debugSessionOwns(*e.Parent) {
+			return
+		}
+		state := &debugSessionState{
+			session:  session,
+			parent:   *e.Parent,
+			adapter:  e.Adapter,
+			config:   e.Name,
+			tabName:  e.Name,
+			view:     debugViewVariables,
+			status:   "Debugging started",
+			stopLine: -1,
+		}
+		d.sessions[session] = state
+		d.ensureDebugSessionOrder(session)
+		if d.active == 0 && !d.starting {
+			d.restoreDebugSession(*state)
+			d.active = session
+		}
+		m.refreshDebugCapabilities(session)
+		m.invalidate()
+		return
+	}
+	if d.sessions[session] == nil && d.starting {
+		d.adoptDebugSession(session)
+		d.active = session
+		d.session = session
+		d.parent = 0
+		d.adapter = e.Adapter
+	}
+	if d.active == 0 && d.session == session {
+		d.active = session
+		d.ensureDebugSessionOrder(session)
+	}
+	if d.active != 0 && d.active != session {
+		if m.acceptBackgroundDebugEvent(session, e) {
+			return
+		}
+		return
+	}
 	if session == d.retiredSession {
 		return
 	}
-	if d.session == 0 {
+	if d.active == 0 {
 		if !d.starting {
 			return
 		}
+		d.adoptDebugSession(session)
 		d.session = session
 	}
-	if session != d.session {
+	if session != d.active {
 		return
 	}
+	d.rememberDebugSession()
 	if d.stopping && e.Kind != "terminated" && e.Kind != "exited" {
 		return
 	}
@@ -1172,11 +1562,25 @@ func (m *Model) acceptDebugEvent(session uint32, raw json.RawMessage) {
 		d.visible = true
 		m.occupyBottom("debug")
 		d.ended = false
+		d.adapter = e.Adapter
+		if e.Parent != nil {
+			d.parent = *e.Parent
+		}
 		if e.Name != "" {
 			d.config = e.Name
+			d.tabName = e.Name
 		}
 		d.status = "Debugging started"
+		m.refreshDebugCapabilities(session)
+	case "initialized":
+		if d.status == "" || strings.HasPrefix(d.status, "Starting") ||
+			strings.HasPrefix(d.status, "Debugging started") {
+			d.status = "Running…"
+		}
 	case "stopped":
+		d.stopGeneration++
+		d.threadRequest++
+		d.frameRequest++
 		d.memory.invalidateInspection()
 		if e.Reason != "step" && d.view != debugViewMemory {
 			d.view = debugViewVariables
@@ -1185,12 +1589,29 @@ func (m *Model) acceptDebugEvent(session uint32, raw json.RawMessage) {
 		d.ended = false
 		d.stopThread = e.ThreadID
 		d.reason = e.Reason
+		d.frames = nil
+		d.scopes = nil
+		d.vars = nil
+		d.frameID = 0
+		d.varContainer = 0
+		d.stopLine = -1
+		d.stopFile = ""
 		d.status = "Paused"
 		if e.Description != "" {
 			d.status = "Paused: " + e.Description
 		}
-		m.fetchStop(e.ThreadID)
+		if m.prefs.Debugger.ShowOnBreakpoint() {
+			m.DockShow("debug")
+		}
+		if m.prefs.Debugger.FocusAppOnBreakpoint && m.win != nil {
+			m.win.Focus()
+		}
+		d.rememberDebugSession()
+		m.fetchStop(session, e.ThreadID, d.stopGeneration)
 	case "continued":
+		d.stopGeneration++
+		d.threadRequest++
+		d.frameRequest++
 		d.memory.invalidateInspection()
 		d.paused = false
 		d.setValue.open = false
@@ -1200,6 +1621,8 @@ func (m *Model) acceptDebugEvent(session uint32, raw json.RawMessage) {
 		d.vars = nil
 		d.stopLine = -1
 		d.stopFile = ""
+		d.frameID = 0
+		d.varContainer = 0
 		m.clearWatchValues()
 		d.status = "Running…"
 	case "output":
@@ -1211,7 +1634,16 @@ func (m *Model) acceptDebugEvent(session uint32, raw json.RawMessage) {
 			}
 			d.appendOutput(text, kind)
 		}
+	case "thread":
+		if d.paused {
+			m.fetchDebugThreads(session, d.threadRequest)
+		}
 	case "terminated":
+		m.markDebugSessionRetired(session)
+		m.endDebugHeapOperation(session)
+		d.stopGeneration++
+		d.threadRequest++
+		d.frameRequest++
 		d.memory.invalidateInspection()
 		d.starting = false
 		d.startCancel = nil
@@ -1226,10 +1658,18 @@ func (m *Model) acceptDebugEvent(session uint32, raw json.RawMessage) {
 		d.scopes = nil
 		d.vars = nil
 		d.stopLine = -1
+		d.frameID = 0
+		d.varContainer = 0
 		m.clearWatchValues()
 		d.status = "Debugging ended"
 		m.finishPluginDebug(nil)
+		d.rememberDebugSession()
 	case "exited":
+		m.markDebugSessionRetired(session)
+		m.endDebugHeapOperation(session)
+		d.stopGeneration++
+		d.threadRequest++
+		d.frameRequest++
 		d.memory.invalidateInspection()
 		d.starting = false
 		d.startCancel = nil
@@ -1238,12 +1678,20 @@ func (m *Model) acceptDebugEvent(session uint32, raw json.RawMessage) {
 		d.stopping = false
 		d.ended = true
 		d.paused = false
+		d.frames = nil
+		d.scopes = nil
+		d.vars = nil
+		d.stopLine = -1
+		d.stopFile = ""
+		d.frameID = 0
+		d.varContainer = 0
 		m.clearWatchValues()
 		d.status = "The program exited"
 		if e.Code != nil {
 			d.status = fmt.Sprintf("The program exited (code %d)", *e.Code)
 		}
 		m.finishPluginDebug(e.Code)
+		d.rememberDebugSession()
 	case "breakpointsChanged":
 		// Verification is refetched by the file's next push; nothing to do
 		// in this panel yet.
@@ -1252,10 +1700,34 @@ func (m *Model) acceptDebugEvent(session uint32, raw json.RawMessage) {
 		// build (BUILD_COMPLETE): offer the reload, as IDEA's default
 		// "Reload classes after compilation: Ask" does.
 		if e.ChangeType == "BUILD_COMPLETE" {
-			m.offerHotSwapAfterBuild()
+			m.offerHotSwapAfterBuild(session)
 		} else if e.Message != "" {
 			d.status = "Hot swap: " + e.Message
 		}
+	case "capabilities":
+		m.refreshDebugCapabilities(session)
+	case "invalidated":
+		if d.paused && debugInvalidatedVariables(e.Areas) {
+			d.frameRequest++
+			if frameID := d.frameID; frameID != 0 {
+				m.loadDebugScopes(session, frameID, d.frameRequest)
+			}
+		}
+	case "jvmBackend":
+		if e.JVMBackend != nil {
+			m.acceptJVMBackend(session, *e.JVMBackend)
+		}
+	}
+	d = &m.debug
+	d.rememberDebugSession()
+	if (e.Kind == "terminated" || e.Kind == "exited") &&
+		m.prefs.Debugger.HideOnTermination && !m.debugHasLiveSessions() {
+		m.DockHide("debug")
+	}
+	if d.closeAfterStop[session] {
+		delete(d.closeAfterStop, session)
+		m.closeDebugSessionTab(session)
+		return
 	}
 	m.refreshDecorations()
 	m.invalidate()
@@ -1273,9 +1745,9 @@ func (m *Model) finishPluginDebug(code *int32) {
 }
 
 // fetchStop loads the thread list, the stopped thread's frames, and the first
-// scope's variables: what the panel shows for a pause.
-func (m *Model) fetchStop(threadID int64) {
-	session := m.debug.session
+// scope's variables for the session and stop that produced the event. Replies
+// from an earlier stop are discarded even if that session is active again.
+func (m *Model) fetchStop(session uint32, threadID int64, generation uint64) {
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 		defer cancel()
@@ -1285,18 +1757,29 @@ func (m *Model) fetchStop(threadID int64) {
 		}
 		frames, scopes, vars := m.loadFrames(ctx, session, threadID, 0)
 		m.post(func() {
-			if session != m.debug.session {
+			current := m.debugSessionState(session)
+			if current == nil || current.session != session || current.ended ||
+				!current.paused || current.stopGeneration != generation ||
+				current.stopThread != threadID {
 				return
 			}
-			m.debug.threads = threads
-			m.debug.frames = frames
-			m.debug.selFrame = 0
-			m.debug.scopes = scopes
-			m.debug.vars = vars
-			m.debug.varContainer = debugScopeContainer(scopes)
-			m.debug.selVar = 0
-			m.applyStopFrame()
-			m.evaluateWatches()
+			m.updateDebugSession(session, func(state *debugSessionState) {
+				state.threads = cloneThreads(threads)
+				state.frames = cloneFrames(frames)
+				state.selFrame = 0
+				state.scopes = append([]openidea.Scope(nil), scopes...)
+				state.vars = append([]openidea.Variable(nil), vars...)
+				state.varContainer = debugScopeContainer(scopes)
+				state.selVar = 0
+				state.frameID = 0
+				if len(frames) > 0 {
+					state.frameID = frames[0].ID
+				}
+			})
+			if m.debug.active == session {
+				m.applyStopFrame()
+				m.evaluateWatches()
+			}
 			m.invalidate()
 		})
 	}()
@@ -1351,6 +1834,53 @@ func (m *Model) loadScopes(ctx context.Context, session uint32, frameID int64) (
 	return scopes, nil
 }
 
+func (m *Model) fetchDebugThreads(session uint32, request uint64) {
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
+		defer cancel()
+		raw, err := m.invoke(ctx, "debug_threads", map[string]any{"session": session})
+		var threads []openidea.ThreadInfo
+		if err == nil {
+			err = json.Unmarshal(raw, &threads)
+		}
+		m.post(func() {
+			if err != nil {
+				return
+			}
+			m.updateDebugSession(session, func(state *debugSessionState) {
+				if state.threadRequest == request && state.paused && !state.ended {
+					state.threads = cloneThreads(threads)
+				}
+			})
+			m.invalidate()
+		})
+	}()
+}
+
+func (m *Model) loadDebugScopes(session uint32, frameID int64, request uint64) {
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
+		defer cancel()
+		scopes, vars := m.loadScopes(ctx, session, frameID)
+		m.post(func() {
+			m.updateDebugSession(session, func(state *debugSessionState) {
+				if state.frameRequest != request || state.frameID != frameID ||
+					!state.paused || state.ended {
+					return
+				}
+				state.scopes = append([]openidea.Scope(nil), scopes...)
+				state.vars = append([]openidea.Variable(nil), vars...)
+				state.varContainer = debugScopeContainer(scopes)
+				state.selVar = 0
+			})
+			if m.debug.active == session {
+				m.evaluateWatches()
+			}
+			m.invalidate()
+		})
+	}()
+}
+
 // SubmitWatch evaluates the typed expression and pins it to the panel.
 func (m *Model) SubmitWatch() {
 	if !m.debug.paused {
@@ -1397,19 +1927,6 @@ func (m *Model) RemoveWatch(i int) {
 	m.invalidate()
 }
 
-// OpenDebugEvaluate brings the watch input forward with the selected text, as
-// the Evaluate Expression command does. Enter evaluates it in the stopped frame.
-func (m *Model) OpenDebugEvaluate() {
-	m.DockShow("debug")
-	m.debug.view = debugViewVariables
-	if t := m.tab(); t != nil {
-		if selected := strings.TrimSpace(t.state.SelectedText()); selected != "" {
-			m.debug.evalText = selected
-		}
-	}
-	m.invalidate()
-}
-
 // QuickEvaluate evaluates the selection, or the identifier at the caret, as a
 // temporary watch in the current paused frame.
 func (m *Model) QuickEvaluate() {
@@ -1446,15 +1963,18 @@ func (m *Model) ShowExecutionPoint() {
 // reply for a frame the user has stepped past is dropped.
 func (m *Model) evaluateWatches() {
 	d := &m.debug
-	if m.mgr == nil || d.session == 0 || !d.paused || d.frameID == 0 || len(d.watches) == 0 {
+	if (m.mgr == nil && m.invokeHook == nil) ||
+		d.session == 0 || !d.paused || d.frameID == 0 || len(d.watches) == 0 {
 		return
 	}
-	session, frame := d.session, d.frameID
+	session, frame, generation := d.session, d.frameID, d.stopGeneration
 	exprs := make([]string, len(d.watches))
 	for i, w := range d.watches {
 		exprs[i] = w.Expr
 	}
-	d.evalBusy = true
+	m.updateDebugSession(session, func(state *debugSessionState) {
+		state.evalBusy = true
+	})
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
@@ -1478,16 +1998,19 @@ func (m *Model) evaluateWatches() {
 			values[expr] = w
 		}
 		m.post(func() {
-			if m.debug.session != session || m.debug.frameID != frame || !m.debug.paused {
-				return
-			}
-			m.debug.evalBusy = false
-			for i := range m.debug.watches {
-				if w, ok := values[m.debug.watches[i].Expr]; ok {
-					m.debug.watches[i].Value = w.Value
-					m.debug.watches[i].Err = w.Err
+			m.updateDebugSession(session, func(state *debugSessionState) {
+				if state.session != session || state.stopGeneration != generation ||
+					state.frameID != frame || !state.paused || state.ended {
+					return
 				}
-			}
+				state.evalBusy = false
+				for i := range state.watches {
+					if w, ok := values[state.watches[i].Expr]; ok {
+						state.watches[i].Value = w.Value
+						state.watches[i].Err = w.Err
+					}
+				}
+			})
 			m.invalidate()
 		})
 	}()
@@ -1529,8 +2052,11 @@ func (m *Model) SelectFrame(i int) {
 	if i < 0 || i >= len(m.debug.frames) {
 		return
 	}
-	m.debug.selFrame = i
 	session, frame := m.debug.session, m.debug.frames[i]
+	m.debug.frameRequest++
+	request := m.debug.frameRequest
+	m.debug.selFrame = i
+	m.debug.frameID = frame.ID
 	m.applyStopFrame()
 	m.refreshDecorations()
 	m.invalidate()
@@ -1539,14 +2065,19 @@ func (m *Model) SelectFrame(i int) {
 		defer cancel()
 		scopes, vars := m.loadScopes(ctx, session, frame.ID)
 		m.post(func() {
-			if m.debug.session != session {
-				return
+			m.updateDebugSession(session, func(state *debugSessionState) {
+				if state.frameRequest != request || state.frameID != frame.ID ||
+					!state.paused || state.ended {
+					return
+				}
+				state.scopes = append([]openidea.Scope(nil), scopes...)
+				state.vars = append([]openidea.Variable(nil), vars...)
+				state.varContainer = debugScopeContainer(scopes)
+				state.selVar = 0
+			})
+			if m.debug.active == session {
+				m.evaluateWatches()
 			}
-			m.debug.scopes = scopes
-			m.debug.vars = vars
-			m.debug.varContainer = debugScopeContainer(scopes)
-			m.debug.selVar = 0
-			m.evaluateWatches()
 			m.invalidate()
 		})
 	}()
@@ -1632,13 +2163,14 @@ func (m *Model) SmokeDebug(ctx context.Context) (map[string]any, error) {
 	})
 
 	// The same shared preparation Run and Debug use: no smoke-only shortcut.
-	prepared, err := adapter.PrepareJavaLaunch(ctx, javaBackend{m}, rc, &adapter.Preparation{
-		Request: m.nextRequest(),
-		Report:  m.reportDebugConsole(ctx, root),
-	})
+	prepared, err := m.prepareJavaDebugLaunch(ctx, rc, root)
 	if err != nil {
 		m.post(func() { m.debug.starting = false })
 		return out, err
+	}
+	if jdk := strings.TrimSpace(os.Getenv("GOIDEA_SMOKE_DEBUG_JDK")); jdk != "" {
+		prepared.Command = filepath.Join(jdk, "bin", "java")
+		out["jdk"] = jdk
 	}
 	if prepared.Info.Build != nil {
 		out["build"] = *prepared.Info.Build
@@ -1798,6 +2330,50 @@ func (m *Model) SmokeDebug(ctx context.Context) (map[string]any, error) {
 				out["memoryFieldsError"] = node.fieldsError
 				out["memoryReferrersError"] = node.referrersError
 			})
+		}
+	}
+
+	// Capture and query a real heap snapshot over the same bounded progress
+	// channel and pinned RPCs as the Heap tab. Closing it here also proves the
+	// snapshot cleanup that runs when the UI closes a session-owned snapshot.
+	heapRequest := m.nextRequest()
+	heapChannel := m.nextChannel()
+	m.registerDebugHeapChannel(session, heapChannel)
+	rawHeap, heapErr := m.invoke(ctx, "debug_heap_capture", map[string]any{
+		"session":    session,
+		"request":    heapRequest,
+		"onProgress": map[string]any{"$channel": heapChannel},
+	})
+	m.releaseDebugHeapChannel(heapChannel)
+	var heapResult debugHeapCaptureResult
+	if heapErr == nil {
+		heapErr = json.Unmarshal(rawHeap, &heapResult)
+	}
+	out["heapStatus"] = heapResult.Status
+	if heapErr != nil {
+		out["heapError"] = heapErr.Error()
+	} else if heapResult.Status != "ready" || heapResult.Snapshot == nil {
+		out["heapError"] = debugHeapUnavailable(heapResult.Reason)
+	} else {
+		snapshot := heapResult.Snapshot
+		out["heapSnapshot"] = snapshot.ID
+		out["heapObjects"] = snapshot.Summary.Objects
+		rawClasses, classErr := m.invoke(ctx, "debug_heap_classes", map[string]any{
+			"snapshot": snapshot.ID,
+		})
+		var classes []debugHeapClass
+		if classErr == nil {
+			classErr = json.Unmarshal(rawClasses, &classes)
+		}
+		if classErr != nil {
+			out["heapClassesError"] = classErr.Error()
+		} else {
+			out["heapClasses"] = len(classes)
+		}
+		if _, closeErr := m.invoke(ctx, "debug_heap_close", map[string]any{
+			"snapshot": snapshot.ID,
+		}); closeErr != nil {
+			out["heapCloseError"] = closeErr.Error()
 		}
 	}
 

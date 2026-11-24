@@ -93,6 +93,9 @@ func (m *Model) resolveJVMConfig(ctx context.Context, raw json.RawMessage, root 
 	if err != nil {
 		return nil, fmt.Errorf("The run configuration could not be resolved: %w", err)
 	}
+	if cfg.Kind == "dotnet" || cfg.Kind == "dotnet-test" {
+		return m.prepareDotnetLaunch(ctx, raw)
+	}
 	if !adapter.IsJVMApplication(cfg.Kind) {
 		// Maven and Gradle rewrite their own command from the build policy
 		// (upstream applyBuildPolicyToCommand); other kinds pass through.
@@ -102,9 +105,20 @@ func (m *Model) resolveJVMConfig(ctx context.Context, raw json.RawMessage, root 
 				return nil, fmt.Errorf("The run configuration could not be resolved: %w", err)
 			}
 			obj["args"] = rewritten.Args
-			return json.Marshal(obj)
+			resolved, err := json.Marshal(obj)
+			if err != nil {
+				return nil, fmt.Errorf("The run configuration could not be resolved: %w", err)
+			}
+			raw = resolved
+			cfg = rewritten
 		}
-		return raw, nil
+		raw, err = m.prepareGradleJVMLaunch(ctx, raw, cfg)
+		if err != nil {
+			return nil, err
+		}
+		// Gradle prints no passed tests while a task is running. Upstream adds
+		// an init script that reports every test through TeamCity messages.
+		return m.prepareGradleTestLaunch(ctx, raw, cfg), nil
 	}
 	prepared, err := adapter.PrepareJavaLaunch(ctx, javaBackend{m}, cfg, &adapter.Preparation{
 		Request: m.nextRequest(),

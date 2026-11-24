@@ -179,6 +179,86 @@ func TestJavaDebugProjectBusy(t *testing.T) {
 	}
 }
 
+func TestJavaDebugPreparationRetriesTransientCancellation(t *testing.T) {
+	root := t.TempDir()
+	calls := 0
+	var requests []uint32
+	m := &Model{
+		ctx:      context.Background(),
+		postHook: func(fn func()) { fn() },
+	}
+	m.invokeHook = func(_ context.Context, command string, input any) (json.RawMessage, error) {
+		switch command {
+		case "lsp_servers":
+			return json.RawMessage(`[]`), nil
+		case "java_resolve_launch":
+			calls++
+			requests = append(requests, input.(map[string]any)["request"].(uint32))
+			if calls == 1 {
+				return nil, &openidea.Error{Code: -32603, Kind: "cancelled", Message: "cancelled"}
+			}
+			return json.Marshal(openidea.JavaLaunchInfo{
+				Build:             strPtr("succeeded"),
+				ProjectRoot:       &root,
+				ClassPaths:        []string{filepath.Join(root, "target", "classes")},
+				ModulePaths:       []string{},
+				PathListSeparator: ":",
+				JavaExec:          strPtr("/jdk/bin/java"),
+			})
+		default:
+			return nil, fmt.Errorf("unexpected command %s", command)
+		}
+	}
+	rc := &openidea.RunConfig{
+		Name: "Application", Kind: "application", Command: "java", Module: strPtr(""),
+		Args: []string{"-cp", "${classpath}", "example.Application"},
+	}
+	prepared, err := m.prepareJavaDebugLaunch(context.Background(), rc, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 2 || len(requests) != 2 || requests[0] == requests[1] {
+		t.Fatalf("preparation calls = %d, request ids = %v", calls, requests)
+	}
+	if prepared == nil || prepared.Parsed.MainClass != "example.Application" {
+		t.Fatalf("prepared launch = %+v", prepared)
+	}
+}
+
+func TestJavaDebugPreparationStopsWhenCallerCancels(t *testing.T) {
+	root := t.TempDir()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	calls := 0
+	m := &Model{
+		ctx:      ctx,
+		postHook: func(fn func()) { fn() },
+	}
+	m.invokeHook = func(_ context.Context, command string, _ any) (json.RawMessage, error) {
+		if command != "java_resolve_launch" {
+			return nil, fmt.Errorf("unexpected command %s", command)
+		}
+		calls++
+		cancel()
+		return nil, &openidea.Error{Code: -32603, Kind: "cancelled", Message: "cancelled"}
+	}
+	rc := &openidea.RunConfig{
+		Name: "Application", Kind: "application", Command: "java", Module: strPtr(""),
+		Args: []string{"-cp", "${classpath}", "example.Application"},
+	}
+	started := time.Now()
+	_, err := m.prepareJavaDebugLaunch(ctx, rc, root)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("preparation error = %v, want context cancellation", err)
+	}
+	if calls != 1 {
+		t.Fatalf("preparation calls = %d, want 1", calls)
+	}
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("caller cancellation took %s", elapsed)
+	}
+}
+
 func TestJavaTargetForMavenLayout(t *testing.T) {
 	root := "/p"
 	text := "package demo;\n\npublic class Hello {\n"
@@ -311,7 +391,7 @@ func TestJavaDebugLaunch(t *testing.T) {
 		"classPaths":         []any{"/p/target/classes"},
 		"modulePaths":        []any{},
 		"javaExec":           "/jdk/bin/java",
-		"vmArgs":             "",
+		"vmArgs":             debugAttachListener,
 		"args":               "",
 		"shortenCommandLine": "none",
 		"console":            "internalConsole",
@@ -324,6 +404,18 @@ func TestJavaDebugLaunch(t *testing.T) {
 	}
 	if extra["projectName"] != "p" {
 		t.Errorf("projectName = %v", extra["projectName"])
+	}
+}
+
+func TestJavaDebugLaunchKeepsExplicitAttachOptions(t *testing.T) {
+	for _, option := range []string{
+		"-XX:+StartAttachListener",
+		"-XX:-StartAttachListener",
+		"-XX:+DisableAttachMechanism",
+	} {
+		if got := debugAttachListenerArgs(nil, option); len(got) != 0 {
+			t.Errorf("debugAttachListenerArgs(%q) = %v, want no override", option, got)
+		}
 	}
 }
 

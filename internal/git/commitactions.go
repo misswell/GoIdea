@@ -250,6 +250,31 @@ func (r *Repo) remoteURL(names []string, chosen string) (raw, upstream string, e
 	return strings.TrimSuffix(string(out), "\n"), upstream, nil
 }
 
+// PreferredRemoteURL returns the URL of the current upstream's remote, or
+// origin, or the first remote. It is the same selection commit actions use.
+func (r *Repo) PreferredRemoteURL() (raw, upstream string, err error) {
+	names, err := r.Remotes()
+	if err != nil {
+		return "", "", err
+	}
+	if len(names) == 0 {
+		return "", "", fmt.Errorf("this repository has no remote")
+	}
+	return r.remoteURL(names, "")
+}
+
+// RemoteURL returns the fetch URL of one named remote.
+func (r *Repo) RemoteURL(name string) (string, error) {
+	if name == "" {
+		return "", fmt.Errorf("remote name is empty")
+	}
+	out, err := r.run(nil, "remote", "get-url", "--", name)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSuffix(string(out), "\n"), nil
+}
+
 // FileRemoteURL links the file at path on the hosting service of the
 // current upstream's remote, else origin's, or the first remote's, with
 // the lines from to to marked (none for 0). A permalink is to the commit

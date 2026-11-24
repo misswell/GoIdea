@@ -660,7 +660,10 @@ func (m *Model) loadLanguageServerSettings() {
 		return
 	}
 	state.session = true
-	if !state.scopeChosen || (state.scope == "project" && m.Root() == "") {
+	if m.settingsDraft.newProjects {
+		state.scope = "global"
+		state.scopeChosen = true
+	} else if !state.scopeChosen || (state.scope == "project" && m.Root() == "") {
 		state.scope = "global"
 		if m.Root() != "" {
 			state.scope = "project"
@@ -677,7 +680,7 @@ func (m *Model) SetLanguageServerScope(scope string) {
 	if scope != "global" && scope != "project" {
 		return
 	}
-	if scope == "project" && m.Root() == "" {
+	if m.settingsDraft.newProjects || scope == "project" && m.Root() == "" {
 		scope = "global"
 	}
 	if scope == state.scope || state.loading || state.saving {
@@ -1929,7 +1932,7 @@ func (m *Model) settingsLanguageServersBody(c *ui.Context, p *ui.Theme, oi oiCol
 	state := &m.languageToolSettings
 	ui.Text(c, "Language servers and debug adapters used by the IDE. Missing tools can be installed into the IDE's own tools folder; nothing is downloaded until you click Install.").
 		FontSize(12).TextColor(oi.textMuted).MaxWidth(760)
-	if m.Root() != "" {
+	if m.Root() != "" && !m.settingsDraft.newProjects {
 		ui.Row(c).Height(8)
 		ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
 			for _, choice := range []struct {

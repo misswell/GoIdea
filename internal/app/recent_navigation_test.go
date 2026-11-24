@@ -12,6 +12,7 @@ import (
 	"github.com/egoist/mygo/ui/editor"
 
 	"mayoi/internal/docbridge"
+	"mayoi/internal/highlight"
 	"mayoi/internal/openidea"
 )
 
@@ -218,6 +219,40 @@ func TestRecentLocationsTracksUTF16AndChangedSnippets(t *testing.T) {
 	m.removeRecentPlace()
 	if len(p.places) != 0 || len(m.recentNav.places) != 1 {
 		t.Fatalf("dismissed wrong locations: %+v", m.recentNav.places)
+	}
+}
+
+func TestRecentLocationsRenderSyntaxAndBreadcrumbOffscreen(t *testing.T) {
+	m := gotoLineTestModel("public class Main {\n  void run() {\n    int answer = 42;\n  }\n}", 2)
+	m.setRoot(filepath.Dir(m.tab().doc.Path()))
+	m.tab().outline = []openidea.OutlineItem{
+		outlineAt("Main", "class", 0, 0, 3, outlineAt("run", "method", 1, 1, 2)),
+	}
+	m.tab().outlineDoc = m.tab().doc.ID()
+	m.tab().outlineVersion = m.tab().doc.Buffer().Version()
+	m.tab().state.GoTo(editor.Pos{Line: 2, Col: 4})
+	if got := m.recentLocationBreadcrumb(m.tab().doc.Path(), 2); got != "Main > run()" {
+		t.Fatalf("breadcrumb helper = %q", got)
+	}
+
+	if !m.RunCommand("navigate.recentLocations") {
+		t.Fatal("Recent Locations action is missing")
+	}
+	tester := ui.NewTester(func(c *ui.Context) {
+		m.recentNavigationDialog(c, c.Theme())
+	}, 1200, 700)
+	tester.Frame()
+
+	for _, text := range []string{"Main > run()", "void run() {", "int answer = 42;"} {
+		if !tester.HasText(text) {
+			t.Errorf("Recent Locations lacks %q: %q", text, tester.Texts())
+		}
+	}
+	if got := recentSnippetTokenKind(highlight.Keyword); got != editor.TokenKeyword {
+		t.Fatalf("keyword kind = %v", got)
+	}
+	if got := recentSnippetTokenKind(highlight.Kind(200)); got != editor.TokenText {
+		t.Fatalf("unknown kind = %v", got)
 	}
 }
 

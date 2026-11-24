@@ -11,6 +11,7 @@ type DataSource struct {
 	ID       string `json:"id"`
 	Name     string `json:"name"`
 	Driver   string `json:"driver"`
+	ReadOnly bool   `json:"readOnly"`
 	Host     string `json:"host"`
 	Database string `json:"database"`
 	User     string `json:"user"`

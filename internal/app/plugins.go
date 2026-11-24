@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -37,6 +38,12 @@ type goideaPluginHost struct {
 	// views are the latest trees the plugins rendered, by their full id.
 	viewMu sync.Mutex
 	views  map[string]pluginViewTree
+
+	// viewForm keeps input, select and checkbox values between frames. A new
+	// views.render clears the entries for that view, as the plugin supplies
+	// the next values.
+	viewFormMu sync.Mutex
+	viewForm   map[string]pluginViewFormValue
 }
 
 // pluginViewTree is one view's last tree and the plugin that owns it, for
@@ -44,6 +51,11 @@ type goideaPluginHost struct {
 type pluginViewTree struct {
 	plugin *plugin.Plugin
 	tree   json.RawMessage
+}
+
+type pluginViewFormValue struct {
+	text    string
+	checked bool
 }
 
 // pluginStatusItem is one plugin's status bar line.
@@ -66,14 +78,26 @@ func (h *goideaPluginHost) setFolder(folder string) { h.folder.Store(&folder) }
 // error naming them, so a plugin sees the limit instead of a silent nil.
 func (h *goideaPluginHost) Call(p *plugin.Plugin, method string, args json.RawMessage) (any, error) {
 	var in struct {
-		ID      string          `json:"id"`
-		Arg     json.RawMessage `json:"arg"`
-		Path    string          `json:"path"`
-		Item    json.RawMessage `json:"item"`
-		Tree    json.RawMessage `json:"tree"`
-		Message string          `json:"message"`
-		Kind    string          `json:"kind"`
-		Action  string          `json:"action"`
+		ID         string            `json:"id"`
+		Arg        json.RawMessage   `json:"arg"`
+		Path       string            `json:"path"`
+		Item       json.RawMessage   `json:"item"`
+		Tree       json.RawMessage   `json:"tree"`
+		Message    string            `json:"message"`
+		Kind       string            `json:"kind"`
+		Action     string            `json:"action"`
+		Line       int               `json:"line"`
+		Column     int               `json:"column"`
+		Text       string            `json:"text"`
+		Glob       string            `json:"glob"`
+		Limit      int               `json:"limit"`
+		Doc        uint32            `json:"doc"`
+		Editor     uint32            `json:"editor"`
+		Range      *pluginTextRange  `json:"range"`
+		Edits      []pluginTextEdit  `json:"edits"`
+		Version    uint64            `json:"version"`
+		Select     []pluginSelection `json:"select"`
+		Selections []pluginSelection `json:"selections"`
 	}
 	if len(args) > 0 {
 		_ = json.Unmarshal(args, &in)
@@ -82,31 +106,39 @@ func (h *goideaPluginHost) Call(p *plugin.Plugin, method string, args json.RawMe
 	case "workspace.root":
 		return h.m.Root(), nil
 	case "workspace.isRemote":
-		return false, nil
+		return h.m.projectTreeUsesRemotePaths(), nil
+	case "workspace.open":
+		resolved, err := h.projectPath(in.Path)
+		if err != nil {
+			return nil, err
+		}
+		h.pluginOpenFile(resolved, in.Line, in.Column)
+		return nil, nil
 	case "workspace.readFile":
-		path, err := h.projectPath(in.Path)
-		if err != nil {
-			return nil, err
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return nil, err
-		}
-		return string(data), nil
+		return h.pluginReadWorkspaceFile(in.Path)
+	case "workspace.writeFile":
+		return nil, h.pluginWriteWorkspaceFile(in.Path, in.Text)
 	case "workspace.stat":
-		path, err := h.projectPath(in.Path)
-		if err != nil {
-			return nil, err
+		return h.pluginWorkspaceStat(in.Path)
+	case "workspace.findFiles":
+		return h.pluginFindWorkspaceFiles(in.Glob, in.Limit)
+	case "workspace.documents":
+		return h.pluginDocuments(), nil
+	case "document.text":
+		if in.Doc == 0 {
+			return nil, errors.New("document.text needs a document id")
 		}
-		info, err := os.Stat(path)
-		if err != nil {
-			return nil, err
+		return h.pluginDocumentText(in.Doc, in.Range)
+	case "document.line":
+		if in.Doc == 0 {
+			return nil, errors.New("document.line needs a document id")
 		}
-		kind := "file"
-		if info.IsDir() {
-			kind = "directory"
+		return h.pluginDocumentLine(in.Doc, in.Line)
+	case "document.save":
+		if in.Doc == 0 {
+			return nil, errors.New("document.save needs a document id")
 		}
-		return map[string]any{"type": kind, "size": info.Size()}, nil
+		return nil, h.pluginSaveDocument(in.Doc)
 	case "commands.list":
 		out := make([]map[string]string, 0, 32)
 		for _, a := range actionList() {
@@ -125,6 +157,30 @@ func (h *goideaPluginHost) Call(p *plugin.Plugin, method string, args json.RawMe
 		}
 		h.m.post(func() { h.m.RunCommandWithArg(in.ID, arg) })
 		return nil, nil
+	case "editor.active":
+		return h.pluginActiveEditor(), nil
+	case "editor.visible":
+		return h.pluginVisibleEditors(), nil
+	case "editor.edit":
+		if in.Editor == 0 {
+			return nil, errors.New("editor.edit needs an editor id")
+		}
+		return h.pluginEdit(in.Editor, in.Edits, in.Version, in.Select)
+	case "editor.insert":
+		if in.Editor == 0 {
+			return nil, errors.New("editor.insert needs an editor id")
+		}
+		return h.pluginInsert(in.Editor, in.Text)
+	case "editor.select":
+		if in.Editor == 0 {
+			return nil, errors.New("editor.select needs an editor id")
+		}
+		return nil, h.pluginSetSelections(in.Editor, in.Selections)
+	case "editor.reveal":
+		if in.Editor == 0 {
+			return nil, errors.New("editor.reveal needs an editor id")
+		}
+		return nil, h.pluginRevealEditor(in.Editor, in.Line)
 	case "window.notify":
 		if strings.TrimSpace(in.Message) == "" {
 			return nil, errors.New("window.notify needs a message")
@@ -192,6 +248,7 @@ func (h *goideaPluginHost) Call(p *plugin.Plugin, method string, args json.RawMe
 			return nil, errors.New("views.render needs an id")
 		}
 		full := pluginViewPrefix + p.Name + ":" + in.ID
+		h.resetViewForm(full)
 		h.viewMu.Lock()
 		if h.views == nil {
 			h.views = map[string]pluginViewTree{}
@@ -199,6 +256,16 @@ func (h *goideaPluginHost) Call(p *plugin.Plugin, method string, args json.RawMe
 		h.views[full] = pluginViewTree{plugin: p, tree: append(json.RawMessage(nil), in.Tree...)}
 		h.viewMu.Unlock()
 		h.m.invalidate()
+		return nil, nil
+	case "views.reveal":
+		if p == nil || in.ID == "" {
+			return nil, errors.New("views.reveal needs an id")
+		}
+		if !pluginContributesView(p, in.ID) {
+			return nil, fmt.Errorf("plugin %s does not contribute view %q", p.Name, in.ID)
+		}
+		full := pluginViewPrefix + p.Name + ":" + in.ID
+		h.m.post(func() { h.m.DockShow(full) })
 		return nil, nil
 	}
 	return nil, fmt.Errorf("GoIDEA does not support the plugin API %q yet", method)
@@ -289,24 +356,74 @@ func (h *goideaPluginHost) clearStatus(name string) {
 }
 
 // projectPath resolves a plugin's workspace path, refusing one outside the
-// project so a plugin cannot read the rest of the machine through GoIDEA.
-func (h *goideaPluginHost) projectPath(path string) (string, error) {
+// project, including through a symbolic link, so a plugin cannot read or
+// write the rest of the machine through GoIDEA.
+func (h *goideaPluginHost) projectPath(value string) (string, error) {
+	if strings.TrimSpace(value) == "" {
+		return "", errors.New("no path")
+	}
 	root := h.m.Root()
 	if root == "" {
 		return "", errors.New("no project is open")
 	}
-	if !filepath.IsAbs(path) {
-		path = filepath.Join(root, path)
+	if h.m.projectTreeUsesRemotePaths() {
+		if !path.IsAbs(value) {
+			value = path.Join(root, value)
+		}
+		value = path.Clean(value)
+		rel, err := h.m.projectTreePathRelative(root, value)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, "../") {
+			return "", fmt.Errorf("outside the project: %s", value)
+		}
+		return value, nil
 	}
-	abs, err := filepath.Abs(path)
+	root, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return "", fmt.Errorf("project root unavailable: %w", err)
+	}
+	if !filepath.IsAbs(value) {
+		value = filepath.Join(root, value)
+	}
+	absolute, err := filepath.Abs(value)
 	if err != nil {
 		return "", err
 	}
-	rel, err := filepath.Rel(root, abs)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("outside the project: %s", path)
+	resolved, err := resolvePluginLocalPath(filepath.Clean(absolute))
+	if err != nil {
+		return "", err
 	}
-	return abs, nil
+	relative, err := filepath.Rel(root, resolved)
+	if err != nil || relative == ".." ||
+		strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("outside the project: %s", value)
+	}
+	return resolved, nil
+}
+
+// resolvePluginLocalPath resolves every existing symbolic link and appends a
+// missing tail at its would-be location. That makes a link inside the project
+// to a file outside it fail the containment check in projectPath.
+func resolvePluginLocalPath(value string) (string, error) {
+	probe := value
+	var missing []string
+	for {
+		resolved, resolveErr := filepath.EvalSymlinks(probe)
+		if resolveErr == nil {
+			for i := len(missing) - 1; i >= 0; i-- {
+				resolved = filepath.Join(resolved, missing[i])
+			}
+			return filepath.Clean(resolved), nil
+		}
+		if !errors.Is(resolveErr, os.ErrNotExist) {
+			return "", resolveErr
+		}
+		parent := filepath.Dir(probe)
+		if parent == probe {
+			return "", resolveErr
+		}
+		missing = append(missing, filepath.Base(probe))
+		probe = parent
+	}
 }
 
 // Settings implements plugin.Host: the plugin's object of plugins.<name>.
@@ -347,6 +464,13 @@ func (h *goideaPluginHost) lines(name string) []plugin.LogLine {
 	return append([]plugin.LogLine(nil), h.logs[name]...)
 }
 
+func (h *goideaPluginHost) clearLogs(name string) {
+	h.logMu.Lock()
+	delete(h.logs, name)
+	h.logMu.Unlock()
+	h.Changed()
+}
+
 // The Available tab's index, as it is read.
 const (
 	pluginIndexIdle = iota
@@ -381,6 +505,9 @@ type pluginPage struct {
 	busy        string
 	err         string
 	confirm     string
+	logFindOpen bool
+	logQuery    string
+	logWrap     bool
 
 	index      []plugin.IndexEntry
 	indexState int
@@ -391,6 +518,13 @@ type pluginPage struct {
 	// the tool window ids of their contributed views.
 	actions []string
 	views   []string
+
+	// openideaServices projects the backend plugin host's `location =
+	// "services"` views into the native Services registry. It starts only
+	// while that tool window is visible.
+	openideaServices *pluginServicesRuntime
+
+	visual pluginVisualState
 }
 
 // pluginDirs are where GoIDEA keeps its plugins: beside its settings file,
@@ -434,8 +568,9 @@ func (m *Model) pluginsPage() *pluginPage {
 	return pg
 }
 
-// pluginActionPrefix keeps a plugin's command ids from colliding with the
-// point's own actions in the palette.
+// pluginActionPrefix is the legacy internal prefix. OpenIDEA commands are
+// addressed as plugin.<pluginId>.<commandId>; the old ids remain aliases so
+// existing user keymaps and macros keep working.
 const pluginActionPrefix = "plugin:"
 
 // pluginViewPrefix is the tool window id of a view a plugin contributes.
@@ -474,7 +609,9 @@ func (pg *pluginPage) syncViews(m *Model) {
 			}
 			registerToolWindow(&toolWindowSpec{
 				id: full, title: title, anchor: dockLeftSplit, order: 1000, stripe: true,
-				open:  func(*Model) {},
+				open: func(mm *Model) {
+					mm.pluginsPage().host.dispatchViewShow(pl, v.ID)
+				},
 				close: func(*Model) {},
 				render: func(mm *Model, c *ui.Context, p *ui.Theme, oi oiColors) {
 					mm.pluginsPage().host.renderView(c, p, oi, full)
@@ -488,23 +625,39 @@ func (pg *pluginPage) syncViews(m *Model) {
 	}
 }
 
+func pluginContributesView(p *plugin.Plugin, id string) bool {
+	if p == nil {
+		return false
+	}
+	for _, view := range p.Contributes.Views {
+		if view.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
 // pluginViewNode is a node of the tree a plugin renders.
 type pluginViewNode struct {
-	Type     string           `json:"type"`
-	Text     string           `json:"text"`
-	Label    string           `json:"label"`
-	Muted    bool             `json:"muted"`
-	Bold     bool             `json:"bold"`
-	Size     float32          `json:"size"`
-	Gap      float32          `json:"gap"`
-	Children []pluginViewNode `json:"children"`
-	Items    []pluginViewItem `json:"items"`
-	Empty    string           `json:"empty"`
-	Value    float32          `json:"value"`
-	Primary  bool             `json:"primary"`
-	Options  []string         `json:"options"`
-	Checked  bool             `json:"checked"`
-	OnClick  *pluginViewRef   `json:"onClick"`
+	Type        string           `json:"type"`
+	Text        string           `json:"text"`
+	Label       string           `json:"label"`
+	Value       json.RawMessage  `json:"value"`
+	Placeholder string           `json:"placeholder"`
+	Muted       bool             `json:"muted"`
+	Bold        bool             `json:"bold"`
+	Size        float32          `json:"size"`
+	Gap         float32          `json:"gap"`
+	Children    []pluginViewNode `json:"children"`
+	Items       []pluginViewItem `json:"items"`
+	Empty       string           `json:"empty"`
+	Progress    float32          `json:"progress"`
+	Primary     bool             `json:"primary"`
+	Options     []string         `json:"options"`
+	Checked     bool             `json:"checked"`
+	OnClick     *pluginViewRef   `json:"onClick"`
+	OnChange    *pluginViewRef   `json:"onChange"`
+	OnSubmit    *pluginViewRef   `json:"onSubmit"`
 }
 
 // pluginViewItem is a list or tree row.
@@ -528,7 +681,7 @@ func (h *goideaPluginHost) renderView(c *ui.Context, p *ui.Theme, oi oiColors, i
 	view := h.views[id]
 	h.viewMu.Unlock()
 	raw := view.tree
-	ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Background(p.Surface).Padding(6, 8).
+	ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Background(oi.island).Padding(6, 8).
 		Children(func() {
 			if len(raw) == 0 {
 				emptyState(c, p, "The plugins view has not rendered")
@@ -539,25 +692,33 @@ func (h *goideaPluginHost) renderView(c *ui.Context, p *ui.Theme, oi oiColors, i
 				errorState(c, p, "The plugins view could not be parsed: "+err.Error())
 				return
 			}
-			h.drawViewNode(c, p, oi, node, 0, view.plugin)
+			h.drawViewNode(c, p, oi, node, 0, view.plugin, id, "0")
 		})
 }
 
-func (h *goideaPluginHost) drawViewNode(c *ui.Context, p *ui.Theme, oi oiColors, n pluginViewNode, depth int, owner *plugin.Plugin) {
+func (h *goideaPluginHost) drawViewNode(
+	c *ui.Context,
+	p *ui.Theme,
+	oi oiColors,
+	n pluginViewNode,
+	depth int,
+	owner *plugin.Plugin,
+	viewID, path string,
+) {
 	if depth > 12 {
 		return
 	}
 	switch n.Type {
 	case "row":
 		ui.Row(c).Gap(n.Gap).Children(func() {
-			for _, ch := range n.Children {
-				h.drawViewNode(c, p, oi, ch, depth+1, owner)
+			for i, ch := range n.Children {
+				h.drawViewNode(c, p, oi, ch, depth+1, owner, viewID, fmt.Sprintf("%s/%d", path, i))
 			}
 		})
 	case "stack", "":
 		ui.Column(c).Gap(n.Gap).Children(func() {
-			for _, ch := range n.Children {
-				h.drawViewNode(c, p, oi, ch, depth+1, owner)
+			for i, ch := range n.Children {
+				h.drawViewNode(c, p, oi, ch, depth+1, owner, viewID, fmt.Sprintf("%s/%d", path, i))
 			}
 		})
 	case "text", "code", "markdown":
@@ -582,7 +743,13 @@ func (h *goideaPluginHost) drawViewNode(c *ui.Context, p *ui.Theme, oi oiColors,
 	case "empty":
 		emptyState(c, p, n.Text)
 	case "progress":
-		ui.Text(c, fmt.Sprintf("%d%%", int(n.Value*100))).
+		value := n.Progress
+		if value == 0 {
+			if number, ok := pluginViewValueNumber(n.Value); ok {
+				value = number
+			}
+		}
+		ui.Text(c, fmt.Sprintf("%d%%", int(value*100))).
 			FontSize(oiFontSizeM).TextColor(oi.textMuted)
 	case "list", "tree":
 		if len(n.Items) == 0 {
@@ -600,6 +767,51 @@ func (h *goideaPluginHost) drawViewNode(c *ui.Context, p *ui.Theme, oi oiColors,
 			owner, ref := owner, n.OnClick.H
 			b.OnClick(func() { h.dispatchHandler(owner, ref, "") })
 		}
+	case "input":
+		key := viewID + "\x00" + path
+		value := h.viewTextValue(key, pluginViewValueText(n.Value, ""))
+		input := ui.TextInput(c.Key("plugin-view:"+key), &value).
+			Grow(1).Placeholder(n.Placeholder)
+		input.OnChange(func() {
+			h.setViewTextValue(key, value)
+			if n.OnChange != nil {
+				h.dispatchHandler(owner, n.OnChange.H, value)
+			}
+		})
+		input.OnSubmit(func() {
+			h.setViewTextValue(key, value)
+			if n.OnSubmit != nil {
+				h.dispatchHandler(owner, n.OnSubmit.H, value)
+			} else if n.OnChange != nil {
+				h.dispatchHandler(owner, n.OnChange.H, value)
+			}
+		})
+	case "select":
+		if len(n.Options) == 0 {
+			return
+		}
+		key := viewID + "\x00" + path
+		current := h.viewTextValue(key, pluginViewValueText(n.Value, ""))
+		if !containsStringFold(n.Options, current) {
+			current = n.Options[0]
+			h.setViewTextValue(key, current)
+		}
+		choice := ui.Select(c.Key("plugin-view:"+key), &current, n.Options).Grow(1)
+		if choice.Changed() {
+			h.setViewTextValue(key, current)
+			if n.OnChange != nil {
+				h.dispatchHandler(owner, n.OnChange.H, current)
+			}
+		}
+	case "checkbox":
+		key := viewID + "\x00" + path
+		checked := h.viewCheckedValue(key, n.Checked)
+		if ui.Checkbox(c.Key("plugin-view:"+key), &checked, n.Label).Changed() {
+			h.setViewCheckedValue(key, checked)
+			if n.OnChange != nil {
+				h.dispatchHandler(owner, n.OnChange.H, checked)
+			}
+		}
 	default:
 		if n.Text != "" {
 			ui.Text(c, n.Text).FontSize(oiFontSizeM).TextColor(oi.text)
@@ -607,6 +819,87 @@ func (h *goideaPluginHost) drawViewNode(c *ui.Context, p *ui.Theme, oi oiColors,
 			ui.Text(c, n.Label).FontSize(oiFontSizeM).TextColor(oi.text)
 		}
 	}
+}
+
+func pluginViewValueText(value json.RawMessage, fallback string) string {
+	if len(value) == 0 || string(value) == "null" {
+		return fallback
+	}
+	var text string
+	if err := json.Unmarshal(value, &text); err != nil {
+		return fallback
+	}
+	return text
+}
+
+func pluginViewValueNumber(value json.RawMessage) (float32, bool) {
+	if len(value) == 0 || string(value) == "null" {
+		return 0, false
+	}
+	var out float64
+	if err := json.Unmarshal(value, &out); err != nil {
+		return 0, false
+	}
+	return float32(out), true
+}
+
+func (h *goideaPluginHost) resetViewForm(viewID string) {
+	prefix := viewID + "\x00"
+	h.viewFormMu.Lock()
+	for key := range h.viewForm {
+		if strings.HasPrefix(key, prefix) {
+			delete(h.viewForm, key)
+		}
+	}
+	h.viewFormMu.Unlock()
+}
+
+func (h *goideaPluginHost) viewTextValue(key, fallback string) string {
+	h.viewFormMu.Lock()
+	defer h.viewFormMu.Unlock()
+	if value, ok := h.viewForm[key]; ok {
+		return value.text
+	}
+	if h.viewForm == nil {
+		h.viewForm = map[string]pluginViewFormValue{}
+	}
+	h.viewForm[key] = pluginViewFormValue{text: fallback}
+	return fallback
+}
+
+func (h *goideaPluginHost) setViewTextValue(key, value string) {
+	h.viewFormMu.Lock()
+	if h.viewForm == nil {
+		h.viewForm = map[string]pluginViewFormValue{}
+	}
+	current := h.viewForm[key]
+	current.text = value
+	h.viewForm[key] = current
+	h.viewFormMu.Unlock()
+}
+
+func (h *goideaPluginHost) viewCheckedValue(key string, fallback bool) bool {
+	h.viewFormMu.Lock()
+	defer h.viewFormMu.Unlock()
+	if value, ok := h.viewForm[key]; ok {
+		return value.checked
+	}
+	if h.viewForm == nil {
+		h.viewForm = map[string]pluginViewFormValue{}
+	}
+	h.viewForm[key] = pluginViewFormValue{checked: fallback}
+	return fallback
+}
+
+func (h *goideaPluginHost) setViewCheckedValue(key string, value bool) {
+	h.viewFormMu.Lock()
+	if h.viewForm == nil {
+		h.viewForm = map[string]pluginViewFormValue{}
+	}
+	current := h.viewForm[key]
+	current.checked = value
+	h.viewForm[key] = current
+	h.viewFormMu.Unlock()
 }
 
 func (h *goideaPluginHost) drawViewItem(c *ui.Context, oi oiColors, it pluginViewItem, depth int, owner *plugin.Plugin) {
@@ -637,7 +930,7 @@ func (h *goideaPluginHost) drawViewItem(c *ui.Context, oi oiColors, it pluginVie
 
 // dispatchHandler calls the handler the prelude bound to a view node, on the
 // plugin's own goroutine, as a click on it does.
-func (h *goideaPluginHost) dispatchHandler(p *plugin.Plugin, handler, value string) {
+func (h *goideaPluginHost) dispatchHandler(p *plugin.Plugin, handler string, value any) {
 	if p == nil || handler == "" {
 		return
 	}
@@ -653,10 +946,32 @@ func (h *goideaPluginHost) dispatchHandler(p *plugin.Plugin, handler, value stri
 	}()
 }
 
+func (h *goideaPluginHost) dispatchViewShow(p *plugin.Plugin, view string) {
+	if p == nil || view == "" {
+		return
+	}
+	if !p.Stats().Active {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if _, err := p.Request(ctx, "viewShow", map[string]any{"id": view}); err != nil {
+			h.m.post(func() {
+				h.m.status = "The plugins view could not load: " + err.Error()
+				h.m.invalidate()
+			})
+		}
+	}()
+}
+
 // syncActions replaces the plugin-command actions with cmds.
 func (pg *pluginPage) syncActions(m *Model, cmds []plugin.Command) {
 	for _, id := range pg.actions {
 		unregisterAction(id)
+		if aliases := actionAliases[id]; aliases != "" {
+			delete(actionAliases, id)
+		}
 	}
 	pg.actions = nil
 	for _, c := range cmds {
@@ -665,27 +980,45 @@ func (pg *pluginPage) syncActions(m *Model, cmds []plugin.Command) {
 		if title == "" {
 			title = c.ID
 		}
+		id := pluginOpenIDEAActionID(c)
+		legacyID := pluginActionPrefix + c.ID
 		err := registerAction(&Action{
-			ID:          pluginActionPrefix + c.ID,
+			ID:          id,
 			Title:       title,
 			Category:    "Plugins",
 			Description: "Plugin: " + c.Plugin.Name,
 			Keywords:    "plugin " + c.Plugin.Name,
-			Run:         func(mm *Model) { mm.runPluginCommand(pg, c) },
+			RunWithArg:  func(mm *Model, arg any) { mm.runPluginCommand(pg, c, arg) },
 		})
 		if err == nil {
-			pg.actions = append(pg.actions, pluginActionPrefix+c.ID)
+			pg.actions = append(pg.actions, id)
+			if legacyID != id {
+				actionAliases[legacyID] = id
+			}
 		}
 	}
+}
+
+// pluginOpenIDEAActionID follows OpenIDEA's stable plugin command address.
+// Mayoi manifests qualify the declared command with the plugin name, so the
+// duplicate qualifier is removed when present.
+func pluginOpenIDEAActionID(c plugin.Command) string {
+	if c.Plugin == nil {
+		return "plugin." + c.ID
+	}
+	commandID := strings.TrimPrefix(c.ID, c.Plugin.Name+".")
+	return "plugin." + c.Plugin.Name + "." + commandID
 }
 
 // runPluginCommand asks the plugin to run a command; a command may ask the
 // user and wait, so it runs off the UI thread and reports failure in the
 // status bar.
-func (m *Model) runPluginCommand(pg *pluginPage, c plugin.Command) {
+func (m *Model) runPluginCommand(pg *pluginPage, c plugin.Command, supplied any) {
 	go func() {
 		var arg any
-		if c.Arg != "" {
+		if supplied != nil {
+			arg = supplied
+		} else if c.Arg != "" {
 			arg = c.Arg
 		}
 		if _, err := pg.reg.Run(c.ID, arg); err != nil {
@@ -1003,11 +1336,17 @@ func (m *Model) pluginGear(c *ui.Context, oi oiColors, pg *pluginPage) {
 				pg.err = ""
 				m.invalidate()
 			})
+			m.welcomeGearItem(c, oi, "Install Plugin from Disk…", func() {
+				pg.gearOpen = false
+				m.InstallPluginFromDisk("")
+			})
+			m.welcomeGearItem(c, oi, "Update All Plugins", func() {
+				pg.gearOpen = false
+				m.UpdateAllPlugins()
+			})
 			m.welcomeGearItem(c, oi, "Reload Installed Plugins", func() {
 				pg.gearOpen = false
-				pg.reg.Load()
-				pg.sync(m)
-				m.invalidate()
+				m.ReloadPlugins()
 			})
 		})
 	})
@@ -1472,21 +1811,67 @@ func (m *Model) pluginPoints(c *ui.Context, oi oiColors, p *plugin.Plugin) {
 
 func (m *Model) pluginLogs(c *ui.Context, oi oiColors, pg *pluginPage, p *plugin.Plugin) {
 	lines := pg.host.lines(p.Name)
-	if len(lines) > 6 {
+	query := strings.TrimSpace(pg.logQuery)
+	if query != "" {
+		matched := make([]plugin.LogLine, 0, len(lines))
+		for _, line := range lines {
+			if strings.Contains(strings.ToLower(line.Message), strings.ToLower(query)) ||
+				strings.Contains(strings.ToLower(line.Level), strings.ToLower(query)) {
+				matched = append(matched, line)
+			}
+		}
+		lines = matched
+	}
+	if !pg.logWrap && len(lines) > 6 {
 		lines = lines[len(lines)-6:]
 	}
-	if len(lines) == 0 {
-		return
-	}
 	ui.Column(c).Gap(2).Margin(16, 0, 0, 0).Children(func() {
-		ui.Text(c, "Log").FontSize(12).Bold().TextColor(oi.textSecondary).SingleLine()
+		ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, "Log").FontSize(12).Bold().TextColor(oi.textSecondary).SingleLine()
+			ui.Spacer(c)
+			if pg.logFindOpen {
+				query := pg.logQuery
+				input := ui.TextInput(c, &query).Width(180).Placeholder("Find in Logs")
+				if input.Changed() {
+					pg.logQuery = query
+					m.invalidate()
+				}
+			} else {
+				ui.Button(c, "Find in Logs").OnClick(func() {
+					pg.logFindOpen = true
+					m.invalidate()
+				})
+			}
+			if ui.Checkbox(c, &pg.logWrap, "Soft-wrap").Changed() {
+				m.invalidate()
+			}
+			ui.Button(c, "Clear").OnClick(func() {
+				pg.host.clearLogs(p.Name)
+				pg.logQuery = ""
+				pg.logFindOpen = false
+				m.invalidate()
+			})
+		})
+		if len(lines) == 0 {
+			text := "No plugin log entries"
+			if query != "" {
+				text = "No plugin log lines match " + query
+			}
+			ui.Text(c, text).FontSize(12).TextColor(oi.textMuted).SingleLine()
+			return
+		}
 		for _, line := range lines {
 			tone := oi.textMuted
 			if line.Level == "error" {
 				tone = oi.danger
 			}
 			text := line.Level + ": " + line.Message
-			ui.Text(c, text).FontSize(12).TextColor(tone).SingleLine().Ellipsis(text)
+			element := ui.Text(c, text).FontSize(12).TextColor(tone).SingleLine()
+			if pg.logWrap {
+				element.Wrap()
+			} else {
+				element.Ellipsis(text)
+			}
 		}
 	})
 }

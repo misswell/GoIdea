@@ -1,6 +1,7 @@
 package openidea_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui/editor"
+	"golang.org/x/text/encoding/simplifiedchinese"
 
 	"mayoi/internal/docbridge"
 	"mayoi/internal/openidea"
@@ -177,6 +179,137 @@ func TestIntegrationDocumentSync(t *testing.T) {
 	}
 	if snap.Text != text {
 		t.Fatalf("undo did not reach the backend:\n%q\nwant\n%q", snap.Text, text)
+	}
+}
+
+func TestIntegrationFileEncodingsDriveDocumentsAndNewFiles(t *testing.T) {
+	m := launchForTest(t)
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.test/encodings\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	const window = "goidea-encoding-it"
+	openProject(t, m, window, dir)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	for _, setting := range []struct {
+		key   string
+		value string
+	}{
+		{key: "editor.encodings.project", value: `"gbk"`},
+		{key: "editor.encodings.properties", value: `"windows-1252"`},
+	} {
+		if _, err := m.Invoke(ctx, window, "settings_set", map[string]any{
+			"scope": "project", "key": setting.key, "value": setting.value,
+		}); err != nil {
+			t.Fatalf("settings_set %s: %v", setting.key, err)
+		}
+	}
+
+	text := "name=中文\n"
+	gbkBytes, err := simplifiedchinese.GBK.NewEncoder().Bytes([]byte(text))
+	if err != nil {
+		t.Fatal(err)
+	}
+	textPath := filepath.Join(dir, "encoded.txt")
+	if err := os.WriteFile(textPath, gbkBytes, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	propertiesPath := filepath.Join(dir, "messages.properties")
+	propertiesBytes := []byte("greeting=caf\xe9\n")
+	if err := os.WriteFile(propertiesPath, propertiesBytes, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	docs := openidea.Docs{M: m, Window: window}
+	document, err := docs.DocOpen(ctx, window, textPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if document.Text != text || document.Encoding != "gbk" {
+		t.Fatalf("project document = %+v", document)
+	}
+	if err := docs.DocClose(ctx, window, document.ID); err != nil {
+		t.Fatal(err)
+	}
+	properties, err := docs.DocOpen(ctx, window, propertiesPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if properties.Text != "greeting=café\n" || properties.Encoding != "windows-1252" {
+		t.Fatalf("properties document = %+v", properties)
+	}
+	if err := docs.DocClose(ctx, window, properties.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := m.Invoke(ctx, window, "settings_set", map[string]any{
+		"scope": "global", "key": "editor.encodings.global", "value": `"windows-1252"`,
+	}); err != nil {
+		t.Fatalf("settings_set global encoding: %v", err)
+	}
+	standalonePath := filepath.Join(t.TempDir(), "standalone.txt")
+	if err := os.WriteFile(standalonePath, []byte("outside=caf\xe9\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	standalone, err := docs.DocOpen(ctx, window, standalonePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if standalone.Text != "outside=café\n" || standalone.Encoding != "windows-1252" {
+		t.Fatalf("standalone document = %+v", standalone)
+	}
+	if err := docs.DocClose(ctx, window, standalone.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := m.Invoke(ctx, window, "settings_set", map[string]any{
+		"scope": "project", "key": "editor.encodings.project", "value": `"utf-8"`,
+	}); err != nil {
+		t.Fatalf("settings_set UTF-8 project encoding: %v", err)
+	}
+	if _, err := m.Invoke(ctx, window, "settings_set", map[string]any{
+		"scope": "project", "key": "editor.encodings.utf8Bom", "value": `"always"`,
+	}); err != nil {
+		t.Fatalf("settings_set UTF-8 BOM policy: %v", err)
+	}
+	rawSettings, err := m.Invoke(ctx, window, "settings_get", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var effective struct {
+		Editor struct {
+			Encodings struct {
+				UTF8BOM string `json:"utf8Bom"`
+			} `json:"encodings"`
+		} `json:"editor"`
+	}
+	if err := json.Unmarshal(rawSettings, &effective); err != nil {
+		t.Fatal(err)
+	}
+	if effective.Editor.Encodings.UTF8BOM != "always" {
+		t.Fatalf("effective UTF-8 BOM policy = %q", effective.Editor.Encodings.UTF8BOM)
+	}
+	withBOM := filepath.Join(dir, "WithBom.txt")
+	if _, err := m.Invoke(ctx, window, "fs_create_file", map[string]any{"path": withBOM}); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := os.ReadFile(withBOM); err != nil || !bytes.Equal(got, []byte{0xef, 0xbb, 0xbf}) {
+		t.Fatalf("BOM file = %x, err %v", got, err)
+	}
+
+	if _, err := m.Invoke(ctx, window, "settings_set", map[string]any{
+		"scope": "project", "key": "editor.encodings.utf8Bom", "value": `"never"`,
+	}); err != nil {
+		t.Fatalf("settings_set UTF-8 BOM off: %v", err)
+	}
+	withoutBOM := filepath.Join(dir, "WithoutBom.txt")
+	if _, err := m.Invoke(ctx, window, "fs_create_file", map[string]any{"path": withoutBOM}); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := os.ReadFile(withoutBOM); err != nil || len(got) != 0 {
+		t.Fatalf("no-BOM file = %x, err %v", got, err)
 	}
 }
 

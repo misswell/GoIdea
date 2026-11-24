@@ -661,7 +661,7 @@ func (m *Model) welcomeCustomize(c *ui.Context, oi oiColors) {
 					}
 				})
 				m.welcomeField(c, oi, "Keymap", func() {
-					ui.Text(c, keymapPreset()).FontSize(13).TextColor(oi.text).SingleLine()
+					ui.Text(c, m.keymapPresetTitle()).FontSize(13).TextColor(oi.text).SingleLine()
 					open := ui.Text(c, "Open Settings…").FontSize(13).TextColor(oi.link).
 						Cursor(ui.CursorPointer)
 					if open.Clicked() {
@@ -817,6 +817,9 @@ func (m *Model) welcomeCloneDialog(c *ui.Context, oi oiColors) {
 func (m *Model) chooseCloneDir() {
 	parent := m.win
 	start := m.welcomeCloneDir
+	if start == "" {
+		start = m.prefs.System.defaultProjectDirectory()
+	}
 	go func() {
 		paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
 			Parent: parent, Title: "Clone Repository", ButtonLabel: "Choose",
@@ -1173,10 +1176,11 @@ func (m *Model) chooseProject() { m.chooseProjectDialog("Open Project", "Open") 
 
 func (m *Model) chooseProjectDialog(title, label string) {
 	parent := m.win
+	start := m.prefs.System.defaultProjectDirectory()
 	go func() {
 		paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
 			Parent: parent, Title: title, ButtonLabel: label,
-			Directory: true, CreateDirectories: true,
+			DefaultPath: start, Directory: true, CreateDirectories: true,
 		})
 		if err != nil || len(paths) == 0 {
 			return

@@ -47,25 +47,24 @@ func rebaseActionLabel(value string) string {
 
 // OpenInteractiveRebase builds IDEA's target..HEAD plan, oldest first.
 func (m *Model) OpenInteractiveRebase(arg any) {
-	target := m.selectedLogCommitArg(arg)
-	if target == nil {
-		m.status = "Select a commit in the Git Log"
-		m.invalidate()
-		return
-	}
-	index := -1
-	for i := range m.log.commits {
-		if m.log.commits[i].ID == target.ID {
-			index = i
-			break
-		}
-	}
-	if index < 0 {
+	if !m.selectLogCommitTarget(arg) {
 		m.status = "The commit is outside the loaded Git Log"
 		m.invalidate()
 		return
 	}
-	rangeCommits := append([]openidea.Commit(nil), m.log.commits[:index+1]...)
+	index := m.log.selected
+	if index < 0 || index >= len(m.log.commits) {
+		m.status = "Select a commit in the Git Log"
+		m.invalidate()
+		return
+	}
+	repo := m.logCommitRepository(index)
+	rangeCommits := make([]openidea.Commit, 0, index+1)
+	for i := 0; i <= index; i++ {
+		if vcsRepositoryKey(m.logCommitRepository(i)) == vcsRepositoryKey(repo) {
+			rangeCommits = append(rangeCommits, m.log.commits[i])
+		}
+	}
 	base := ""
 	for _, commit := range rangeCommits {
 		if len(commit.Parents) > 1 {
@@ -82,6 +81,7 @@ func (m *Model) OpenInteractiveRebase(arg any) {
 		fmt.Sprintf("Rebase %s", count(len(rangeCommits), "commit", "commits")),
 		"Commits are applied from oldest to newest.")
 	m.vcsMore.rebaseBase = base
+	m.vcsMore.input3 = repo
 	for i := len(rangeCommits) - 1; i >= 0; i-- {
 		commit := rangeCommits[i]
 		m.vcsMore.rebaseCommits = append(m.vcsMore.rebaseCommits, commit)
@@ -132,6 +132,7 @@ func (m *Model) moveInteractiveRebaseRow(index, delta int) {
 		m.vcsMore.rebaseActions[to], m.vcsMore.rebaseActions[index]
 	m.vcsMore.rebaseMessages[index], m.vcsMore.rebaseMessages[to] =
 		m.vcsMore.rebaseMessages[to], m.vcsMore.rebaseMessages[index]
+	m.vcsMore.flag = false
 	m.invalidate()
 }
 
@@ -175,6 +176,22 @@ func (m *Model) submitInteractiveRebase() {
 		m.invalidate()
 		return
 	}
+	drops := 0
+	for _, action := range m.vcsMore.rebaseActions {
+		if action == "drop" {
+			drops++
+		}
+	}
+	if drops > 0 &&
+		m.nativeRuntimeBool(settingsPageVCSConfirmation, "vcs.confirmation.confirmDropCommits") &&
+		!m.vcsMore.flag {
+		m.vcsMore.flag = true
+		m.vcsMore.err = fmt.Sprintf(
+			"%s will be dropped. Click Drop Commits and Rebase to confirm.",
+			count(drops, "commit", "commits"))
+		m.invalidate()
+		return
+	}
 	entries := make([]map[string]any, 0, len(m.vcsMore.rebaseCommits))
 	for i, commit := range m.vcsMore.rebaseCommits {
 		action := m.vcsMore.rebaseActions[i]
@@ -188,10 +205,15 @@ func (m *Model) submitInteractiveRebase() {
 	if m.vcsMore.rebaseBase != "" {
 		base = m.vcsMore.rebaseBase
 	}
+	repo := m.vcsMore.input3
 	title := "Interactive Rebase"
 	m.closeVCSMore()
 	m.vcsOps = VCSOperationPane{kind: "operation", open: true, title: title}
-	m.runVCSGitOperation(title, map[string]any{
+	repoArg := m.vcsRepositoryArg()
+	if repo != "" {
+		repoArg = vcsRepositoryArgFor(repo)
+	}
+	m.runVCSGitOperationAt(repoArg, title, map[string]any{
 		"op": "interactiveRebase", "base": base, "entries": entries,
 	})
 }
@@ -210,6 +232,7 @@ func (m *Model) drawInteractiveRebase(c *ui.Context, p *ui.Theme) {
 						if choice := ui.Select(c, &action, interactiveRebaseActions).Width(145); choice.Changed() {
 							m.vcsMore.rebaseActions[i] = rebaseActionValue(action)
 							m.vcsMore.err = ""
+							m.vcsMore.flag = false
 							m.invalidate()
 						}
 						ui.Text(c, commit.ShortID).Font(oiFontMono).FontSize(12).TextColor(p.TextMuted)
@@ -230,6 +253,7 @@ func (m *Model) drawInteractiveRebase(c *ui.Context, p *ui.Theme) {
 						ui.TextArea(c, &message).Height(58).FontSize(12)
 						if message != m.vcsMore.rebaseMessages[i] {
 							m.vcsMore.rebaseMessages[i] = message
+							m.vcsMore.flag = false
 							m.invalidate()
 						}
 					}

@@ -1,8 +1,13 @@
 package app
 
 import (
+	"context"
+	"encoding/json"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/egoist/mygo/ui"
 	"mayoi/internal/openidea"
 )
 
@@ -95,5 +100,57 @@ func TestToggleStructureClosesBackToTheTree(t *testing.T) {
 	m.ToggleStructure()
 	if m.structure.visible || m.leftSplit != "" {
 		t.Fatalf("second Cmd+7: visible=%v split=%q", m.structure.visible, m.leftSplit)
+	}
+}
+
+func TestFileStructureActionLoadsFiltersAndOpensSymbolOffscreen(t *testing.T) {
+	m := gotoLineTestModel(strings.Repeat("line\n", 11)+"class Greeter {}", 0)
+	m.setRoot(t.TempDir())
+	m.tab().outlineDoc = ^uint32(0)
+	m.tab().outlineVersion = ^uint64(0)
+	m.ctx = context.Background()
+	loaded := make(chan struct{}, 1)
+	m.postHook = func(fn func()) {
+		fn()
+		loaded <- struct{}{}
+	}
+	m.invokeHook = func(_ context.Context, command string, _ any) (json.RawMessage, error) {
+		if command != "doc_outline" {
+			t.Fatalf("unexpected command %q", command)
+		}
+		raw, err := json.Marshal(structureOutline())
+		return raw, err
+	}
+
+	if !m.RunCommand("navigate.fileStructure") {
+		t.Fatal("File Structure action did not run")
+	}
+	select {
+	case <-loaded:
+	case <-time.After(time.Second):
+		t.Fatal("File Structure did not finish loading its live outline")
+	}
+	tester := ui.NewTester(func(c *ui.Context) {
+		m.fileStructureDialog(c, c.Theme())
+	}, 760, 560)
+	tester.Frame()
+	for _, text := range []string{"File Structure", "Greeter", "Runner", "run"} {
+		if !tester.HasText(text) {
+			t.Fatalf("File Structure lacks %q: %q", text, tester.Texts())
+		}
+	}
+	m.structure.filter = "run"
+	tester.Frame()
+	if tester.HasText("Greeter") {
+		t.Fatalf("File Structure did not filter nonmatching symbols: %q", tester.Texts())
+	}
+	if err := tester.Click("run"); err != nil {
+		t.Fatal(err)
+	}
+	if m.structure.popup {
+		t.Fatal("choosing a symbol did not close File Structure")
+	}
+	if got := m.tab().state.CursorPos().Line; got != 10 {
+		t.Fatalf("chosen symbol line = %d, want 10", got)
 	}
 }

@@ -53,7 +53,8 @@ func TestVCSGroupsSplitByStagingState(t *testing.T) {
 func TestRollbackAsksBeforeDiscarding(t *testing.T) {
 	m := &Model{}
 	m.AskRollback(openidea.FileStatus{Path: "/p/a.java", RelPath: "a.java"})
-	if m.rollback == nil || !m.rollback.open || m.rollback.path != "/p/a.java" || m.rollback.name != "a.java" {
+	if m.rollback == nil || !m.rollback.open || len(m.rollback.files) != 1 ||
+		m.rollback.files[0].Path != "/p/a.java" || m.rollback.name != "a.java" {
 		t.Fatalf("rollback = %+v, want an open confirmation for a.java", m.rollback)
 	}
 	m.closeRollback()

@@ -334,9 +334,15 @@ def dedupe(items, key):
 
 
 def feature_of(rel):
+    if rel.startswith("src/features/run/testing/"):
+        return "testing"
     parts = rel.split("/")
     if len(parts) >= 3 and parts[0] == "src" and parts[1] == "features":
-        return parts[2]
+        # Files directly under src/features are registration glue, not feature
+        # folders. Treating them as folders made the audit invent a bogus
+        # `feature:index.ts` product area.
+        if len(parts) > 3 or not parts[2].endswith((".ts", ".tsx")):
+            return parts[2]
     return None
 
 
@@ -396,6 +402,28 @@ def expand_dynamic_action(item):
                 "title": "Project View: " + label,
             }
             for sort, label in values
+        ]
+    if aid == "dotnet.${op}":
+        text = read(feature / "dotnet" / "index.ts")
+        match = re.search(
+            r'\.\.\.\(\[\s*((?:"[^"]+"\s*,?\s*)+)\]\s*as\s+const\)',
+            text,
+        )
+        if not match:
+            return [item]
+        operations = re.findall(r'"([^"]+)"', match.group(1))
+        titles = {
+            "build": "Build .NET Project",
+            "restore": "Restore .NET Project",
+            "clean": "Clean .NET Project",
+        }
+        return [
+            {
+                **item,
+                "id": "dotnet." + operation,
+                "title": titles.get(operation, item["title"]),
+            }
+            for operation in operations
         ]
     if aid == "merge.${command}":
         text = read(feature / "vcs" / "mergeActions.ts")
@@ -1086,6 +1114,11 @@ def render():
     feature_dirs = sorted(
         p.name for p in (OPENIDEA / "src" / "features").iterdir() if p.is_dir()
     )
+    # Testing is a nested client feature rather than a top-level product area.
+    # Its parsers, results model and rerun derivation deserve their own row
+    # instead of disappearing into the parent Run feature.
+    if (OPENIDEA / "src" / "features" / "run" / "testing").is_dir():
+        feature_dirs = sorted([*feature_dirs, "testing"])
     feature_stats = {}
     for fd in feature_dirs:
         feature_stats[fd] = {

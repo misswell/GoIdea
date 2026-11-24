@@ -36,12 +36,14 @@ type stackTraceState struct {
 type traceLink struct {
 	start, end int
 	location   adapter.TestLocation
+	url        string
 }
 
 var (
 	tracePython    = regexp.MustCompile(`File "([^"]+)", line ([0-9]+)`)
 	traceJVM       = regexp.MustCompile(`(?:([\w$]+(?:\.[\w$]+)*)\.[\w$<>-]+)?\(([\w$.-]+\.(?:java|kt|kts|scala|groovy|clj)):([0-9]+)\)`)
 	tracePath      = regexp.MustCompile(`(?:[A-Za-z]:[\\/]|~?/|\.{1,2}/)?(?:[\w.@+\-]+[\\/])*[\w@+\-][\w.@+\-]*\.[A-Za-z][\w]{0,9}` + `(?::\[?([0-9]+)(?::([0-9]+)|,([0-9]+)\])?|\(([0-9]+)(?:,([0-9]+))?\))`)
+	traceURL       = regexp.MustCompile(`\bhttps?://[^\s<>"'` + "`" + `]+`)
 	traceException = regexp.MustCompile(`^(?:Exception in thread "[^"]*"\s+)?(?:[\w$]+\.)*([\w$]+(?:Exception|Error))\b`)
 )
 
@@ -83,23 +85,46 @@ func stackTraceTitle(s string) string {
 	return head
 }
 
-// traceLinks recognizes source locations using the same precedence as upstream.
+func trimTraceURL(value string) string {
+	for value != "" {
+		last := value[len(value)-1]
+		if strings.ContainsRune(".,;:!?'\"", rune(last)) {
+			value = value[:len(value)-1]
+			continue
+		}
+		if last == ')' && strings.Count(value, "(") < strings.Count(value, ")") {
+			value = value[:len(value)-1]
+			continue
+		}
+		break
+	}
+	return value
+}
+
+// traceLinks recognizes the same source locations and URLs as OpenIDEA's run
+// console. More specific file patterns win over the generic path pattern.
 func traceLinks(line string) []traceLink {
 	if len(line) > 4000 {
 		return nil
 	}
 	var links []traceLink
-	add := func(start, end int, loc adapter.TestLocation) {
+	add := func(start, end int, loc adapter.TestLocation, url string) {
 		for _, l := range links {
 			if start < l.end && end > l.start {
 				return
 			}
 		}
-		links = append(links, traceLink{start, end, loc})
+		links = append(links, traceLink{start: start, end: end, location: loc, url: url})
 	}
 	num := func(s string) int { n, _ := strconv.Atoi(s); return n }
+	for _, m := range traceURL.FindAllStringIndex(line, -1) {
+		url := trimTraceURL(line[m[0]:m[1]])
+		if url != "" {
+			add(m[0], m[0]+len(url), adapter.TestLocation{}, url)
+		}
+	}
 	for _, m := range tracePython.FindAllStringSubmatchIndex(line, -1) {
-		add(m[0], m[1], adapter.TestLocation{Path: line[m[2]:m[3]], Line: num(line[m[4]:m[5]]), Resolve: "path"})
+		add(m[0], m[1], adapter.TestLocation{Path: line[m[2]:m[3]], Line: num(line[m[4]:m[5]]), Resolve: "path"}, "")
 	}
 	for _, m := range traceJVM.FindAllStringSubmatchIndex(line, -1) {
 		class := ""
@@ -111,7 +136,7 @@ func traceLinks(line string) []traceLink {
 		if i := strings.LastIndex(class, "."); i >= 0 {
 			path = strings.ReplaceAll(class[:i], ".", "/") + "/" + file
 		}
-		add(m[4], m[7], adapter.TestLocation{Path: path, Line: num(line[m[6]:m[7]]), Resolve: "name", ClassName: class})
+		add(m[4], m[7], adapter.TestLocation{Path: path, Line: num(line[m[6]:m[7]]), Resolve: "name", ClassName: class}, "")
 	}
 	for _, m := range tracePath.FindAllStringSubmatchIndex(line, -1) {
 		if m[0] > 0 && strings.ContainsRune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_/.~-", rune(line[m[0]-1])) {
@@ -143,7 +168,7 @@ func traceLinks(line string) []traceLink {
 		if col == "" {
 			col = part(10)
 		}
-		add(m[0], m[1], adapter.TestLocation{Path: path, Line: num(lineNo), Col: num(col), Resolve: "path"})
+		add(m[0], m[1], adapter.TestLocation{Path: path, Line: num(lineNo), Col: num(col), Resolve: "path"}, "")
 	}
 	for i := 1; i < len(links); i++ {
 		for j := i; j > 0 && links[j].start < links[j-1].start; j-- {
@@ -156,11 +181,22 @@ func traceLinks(line string) []traceLink {
 func countStackFrames(s string) int {
 	n := 0
 	for _, line := range strings.Split(s, "\n") {
-		if len(traceLinks(line)) > 0 {
-			n++
+		for _, link := range traceLinks(line) {
+			if link.url == "" && link.location.Path != "" {
+				n++
+				break
+			}
 		}
 	}
 	return n
+}
+
+func (m *Model) openTraceLink(link traceLink, c *ui.Context) {
+	if link.url != "" {
+		c.OpenURL(link.url)
+		return
+	}
+	m.openTraceSource(link.location)
 }
 
 func (m *Model) OpenStackTrace() {
@@ -319,7 +355,7 @@ func (m *Model) renderStackTraces(c *ui.Context, p *ui.Theme) bool {
 					ui.Text(c, line[pos:link.start]).FontSize(12).Font(oiFontMono).TextColor(p.Text).SingleLine()
 				}
 				ui.Text(c, line[link.start:link.end]).FontSize(12).Font(oiFontMono).TextColor(p.Accent).SingleLine().
-					OnClick(func() { m.openTraceSource(link.location) })
+					OnClick(func() { m.openTraceLink(link, c) })
 				pos = link.end
 			}
 			if pos < len(line) {

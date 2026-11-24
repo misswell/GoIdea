@@ -19,7 +19,7 @@ func TestBuiltinCommandsAreRegisteredOnce(t *testing.T) {
 		if canonical := canonicalActionID(a.ID); canonical != a.ID {
 			t.Fatalf("%s is shadowed by alias target %s", a.ID, canonical)
 		}
-		if a.Builtin && (a.Title == "" || a.Run == nil) {
+		if a.Builtin && (a.Title == "" || (a.Run == nil && a.RunWithArg == nil)) {
 			t.Fatalf("%s has no title or run", a.ID)
 		}
 	}
@@ -141,29 +141,30 @@ func TestActionToggledAndRunning(t *testing.T) {
 }
 
 func TestKeymapDefaultsAndOverrides(t *testing.T) {
-	if got := keymapShortcutLabel("app.commandPalette"); got == "" {
-		t.Fatal("the palette has no default shortcut")
+	const actionID = "file.save"
+	if got := keymapShortcutLabel(actionID); got == "" {
+		t.Fatal("Save has no default shortcut")
 	}
 	if keymapNormalize("cmd+shift+a") != keymapNormalize("Cmd+Shift+A") {
 		t.Fatal("normalization is case sensitive")
 	}
 	m := &Model{}
-	before := m.KeymapBindings("app.commandPalette")
+	before := m.KeymapBindings(actionID)
 	if len(before) == 0 {
 		t.Fatal("no default binding")
 	}
-	m.KeymapSetOverrides(map[string][]string{"app.commandPalette": {"Alt+P"}})
-	if got := m.KeymapBindings("app.commandPalette"); len(got) != 1 || got[0] != "Alt+P" {
+	m.KeymapSetOverrides(map[string][]string{actionID: {"Alt+P"}})
+	if got := m.KeymapBindings(actionID); len(got) != 1 || got[0] != "Alt+P" {
 		t.Fatalf("the override is %v", got)
 	}
-	if got := keymapShortcutLabel("app.commandPalette"); got == "Alt+P" {
+	if got := keymapShortcutLabel(actionID); got == "Alt+P" {
 		t.Fatal("the global label followed a per-model override")
 	}
-	m.KeymapSetOverrides(map[string][]string{"app.commandPalette": nil})
-	if got := m.KeymapBindings("app.commandPalette"); len(got) != 0 {
+	m.KeymapSetOverrides(map[string][]string{actionID: nil})
+	if got := m.KeymapBindings(actionID); len(got) != 0 {
 		t.Fatalf("an empty override kept %v", got)
 	}
-	if m.prefs.Keymap == nil || len(m.prefs.Keymap["app.commandPalette"]) != 0 {
+	if m.prefs.Keymap == nil || len(m.prefs.Keymap[actionID]) != 0 {
 		t.Fatalf("the removal was not stored: %v", m.prefs.Keymap)
 	}
 }

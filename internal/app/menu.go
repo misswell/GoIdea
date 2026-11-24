@@ -1,6 +1,10 @@
 package app
 
-import "github.com/egoist/mygo"
+import (
+	"strings"
+
+	"github.com/egoist/mygo"
+)
 
 // menuEntry is one item of GoIDEA's main menu, following OpenIDEA's menu.rs:
 // the label is its English wording, and the command the id of the registry
@@ -11,7 +15,6 @@ type menuEntry struct {
 	command string
 	arg     any
 	role    mygo.MenuRole
-	accel   string
 	sep     bool
 	check   func(*Model) bool
 	dynamic func(*Model) []menuEntry
@@ -22,8 +25,8 @@ type menuEntry struct {
 }
 
 // action is a menu item that runs a registry command.
-func action(label, command, accel string) menuEntry {
-	return menuEntry{label: label, command: command, accel: accel}
+func action(label, command, _ string) menuEntry {
+	return menuEntry{label: label, command: command}
 }
 
 // actionChecked is a menu item that runs a registry command and shows a
@@ -75,9 +78,12 @@ func mainMenuGroups() []menuEntry {
 		action("Commit", "view.commit", "CmdOrCtrl+0"),
 		action("Notifications", "view.notifications", ""),
 		action("Git", "vcs.show", "CmdOrCtrl+9"),
+		action("Pull Requests", "github.pullRequest.showInToolWindow", ""),
 		action("Terminal", "view.terminal", "Alt+F12"),
 		action("Database", "view.database", ""),
 		action("Services", "view.services", ""),
+		action("Logcat", "view.logcat", ""),
+		action("GraphQL", "graphql.showToolWindow", ""),
 		action("Agents", "agents.showToolWindow", ""),
 		action("Remote Development", "remote.showToolWindow", ""),
 		action("Documentation", "toolwindow.documentation", ""),
@@ -154,8 +160,10 @@ func mainMenuGroups() []menuEntry {
 			action("Open Workspace…", "workspace.open", ""),
 			action("Manage Workspace…", "workspace.manage", ""),
 			action("New…", "file.new", ""),
+			action("New File from Template…", "templates.newFromTemplate", ""),
 			action("New Scratch File…", "file.newScratchFile", "CmdOrCtrl+Shift+N"),
 			action("Open…", "file.openProject", "CmdOrCtrl+Shift+Alt+O"),
+			action("Open Project in New Window", "file.openInNewWindow", ""),
 			action("Attach Project…", "project.attach", ""),
 			action("Open File…", "file.openFile", ""),
 			submenu("Remote Development",
@@ -181,6 +189,7 @@ func mainMenuGroups() []menuEntry {
 			),
 			rule(),
 			action("Settings…", "file.settings", "CmdOrCtrl+,"),
+			action("Project Structure…", "file.projectStructure", "Cmd+;"),
 			rule(),
 			action("Invalidate Caches…", "file.invalidateCaches", ""),
 			action("Restart IDE", "app.restart", ""),
@@ -192,10 +201,16 @@ func mainMenuGroups() []menuEntry {
 			platform(mygo.RoleCut),
 			platform(mygo.RoleCopy),
 			platform(mygo.RolePaste),
+			action("Paste from History…", "code.pasteFromHistory", "CmdOrCtrl+Shift+V"),
 			platform(mygo.RoleSelectAll),
+			actionChecked("Column Selection Mode", "editor.toggleColumnSelection", func(m *Model) bool {
+				return m.columnSelectionEnabled()
+			}),
 			rule(),
 			action("Copy Path", "editor.copyPath", ""),
 			action("Copy Reference", "editor.copyReference", "CmdOrCtrl+Alt+Shift+C"),
+			rule(),
+			submenu("Macros", menuEntry{dynamic: macroMenuEntries}),
 			rule(),
 			submenu("Find",
 				action("Find…", "find.inFile", "CmdOrCtrl+F"),
@@ -203,6 +218,8 @@ func mainMenuGroups() []menuEntry {
 				rule(),
 				action("Find in Files…", "find.inPath", "CmdOrCtrl+Shift+F"),
 				action("Replace in Files…", "find.replaceInPath", "CmdOrCtrl+Shift+R"),
+				action("Search Structurally…", "find.structural", ""),
+				action("Replace Structurally…", "find.replaceStructural", ""),
 				action("Rerun Search", "find.rerun", "CmdOrCtrl+R"),
 				action("Edit Scopes…", "search.editScopes", ""),
 				action("Find Usages", "code.usages", "Alt+F7"),
@@ -221,6 +238,7 @@ func mainMenuGroups() []menuEntry {
 				actionChecked("Render Documentation Comments", "editor.toggleRenderedDocs", func(m *Model) bool {
 					return m.activeEditorRenderedDocs()
 				}),
+				actionChecked("Built-in Preview", "web.togglePreview", webPreviewToggled),
 			),
 			rule(),
 			action("Quick Definition", "code.quickDefinition", "Alt+Space Cmd+Y"),
@@ -273,7 +291,19 @@ func mainMenuGroups() []menuEntry {
 		),
 		submenu("Code",
 			action("Quick Documentation", "code.quickDocumentation", "F1"),
+			action("Insert Live Template…", "code.insertLiveTemplate", ""),
+			action("Surround With…", "code.surroundWith", ""),
+			action("Surround With Live Template…", "code.surroundWithLiveTemplate", ""),
+			action("Update Tag with Emmet", "emmet.updateTag", ""),
+			action("Call Inline Completion", "editor.inlineCompletion.trigger", "Alt+\\"),
+			rule(),
 			action("Analyze Stack Trace or Thread Dump…", "analyze.stackTrace", ""),
+			submenu("Analyze Code",
+				action("Inspect Code…", "analyze.inspectCode", ""),
+				action("Inspect Current File", "analyze.inspectFile", ""),
+				action("Locate Duplicates…", "analyze.locateDuplicates", ""),
+				action("Code Cleanup…", "code.cleanup", ""),
+			),
 			action("Show Context Actions", "code.intentions", "Alt+Enter"),
 			action("Go to Symbol…", "navigate.gotoSymbol", "CmdOrCtrl+Alt+O"),
 			action("Find Usages", "code.usages", "Alt+F7"),
@@ -317,8 +347,10 @@ func mainMenuGroups() []menuEntry {
 		submenu("Run",
 			action("Run", "run.start", "F5"),
 			action("Run Context Configuration", "run.runContext", "Ctrl+Shift+R"),
+			action("Modify Run Configuration…", "run.modifyContext", ""),
 			action("Run Context Configuration with Coverage", "run.coverageContext", ""),
 			action("Run with Coverage", "run.coverage", ""),
+			action("Profile", "run.profile", ""),
 			action("Debug", "run.debug", "F9"),
 			action("Debug Context Configuration", "run.debugContext", "Ctrl+Shift+D"),
 			action("Rerun Debug", "debug.rerun", ""),
@@ -334,6 +366,8 @@ func mainMenuGroups() []menuEntry {
 			),
 			rule(),
 			action("Select Run/Debug Configuration…", "run.chooseConfig", ""),
+			action("Composer Install", "php.composerInstall", ""),
+			action("Run Targets…", "runTargets.configure", ""),
 			action("Reload Run Configurations", "run.reloadConfigs", ""),
 			rule(),
 			action("Toggle Line Breakpoint", "run.breakpoint", "CmdOrCtrl+F8"),
@@ -380,13 +414,19 @@ func mainMenuGroups() []menuEntry {
 			rule(),
 			action("Merge…", "vcs.merge", ""),
 			action("Rebase…", "vcs.rebase", ""),
+			action("Compare with Branch or Revision…", "vcs.compareWithBranch", ""),
+			action("Checkout Tag or Revision…", "vcs.checkoutRevision", ""),
 			action("New Branch…", "vcs.newBranch", ""),
 			action("New Tag…", "vcs.newTag", ""),
+			rule(),
+			action("Worktrees…", "vcs.worktrees", ""),
+			action("New Worktree…", "vcs.newWorktree", ""),
 			rule(),
 			action("Stash Changes…", "vcs.stash", ""),
 			action("Unstash Changes…", "vcs.unstash", ""),
 			action("Reset HEAD…", "vcs.resetHead", ""),
 			rule(),
+			action("Resolve Conflicts…", "vcs.resolveConflicts", ""),
 			submenu("Resolve in Progress",
 				action("Continue", "vcs.rebase.continue", ""),
 				action("Skip Commit", "vcs.rebase.skip", ""),
@@ -403,6 +443,17 @@ func mainMenuGroups() []menuEntry {
 		submenu("Tools",
 			action("Database", "view.database", ""),
 			action("Terminal", "view.terminal", "Alt+F12"),
+			submenu("GraphQL",
+				action("GraphQL", "graphql.showToolWindow", ""),
+				action("Add Schema Configuration", "graphql.addConfiguration", ""),
+				action("Open Configuration File", "graphql.editConfiguration", ""),
+				action("Rerun Introspection Query", "graphql.introspect", ""),
+				action("Restart Schema Discovery", "graphql.restartDiscovery", ""),
+				action("Execute GraphQL", "graphql.runQuery", "CmdOrCtrl+Enter"),
+			),
+			rule(),
+			action("Start SSH Session…", "ssh.startSession", ""),
+			action("SSH Configurations…", "ssh.configurations", ""),
 			rule(),
 			action("Install 'goidea' Command", "app.installCli", ""),
 			action("Uninstall 'goidea' Command", "app.uninstallCli", ""),
@@ -418,6 +469,10 @@ func mainMenuGroups() []menuEntry {
 			action("Show TODO Items in Current File", "todo.showCurrentFile", ""),
 		),
 		submenu("Window",
+			action("New Window", "window.new", ""),
+			action("Next Window", "window.next", ""),
+			action("Previous Window", "window.previous", ""),
+			rule(),
 			submenu("Tool Window Layouts",
 				action("Save Current Layout as…", "layout.save", ""),
 				action("Restore Default Layout", "layout.restoreDefault", "Shift+F12"),
@@ -473,6 +528,10 @@ func mainMenuGroups() []menuEntry {
 			action("What's New", "app.whatsNew", ""),
 			action("Show Log in Finder", "help.showLog", ""),
 			rule(),
+			action("Clear Caches", "perf.clearCaches", ""),
+			action("Show Memory Indicator Details", "perf.showMemory", ""),
+			action("Toggle Performance Overlay (Dev)", "perf.toggleOverlay", ""),
+			rule(),
 			action("Check for Updates…", "app.checkForUpdates", ""),
 			action("About GoIDEA", "app.about", ""),
 		),
@@ -497,9 +556,7 @@ func gearGroup(m *Model) []menuEntry {
 			action("Appearance…", "settings.appearance", ""),
 		),
 		submenu("Keymap",
-			menuEntry{label: keymapPresetTitle, check: func(*Model) bool { return true }},
-			rule(),
-			action("Configure Keymap…", "settings.keymap", ""),
+			keymapPresetMenuEntries()...,
 		),
 		submenu("View Mode",
 			menuEntry{label: zenTitle(m), command: "editor.toggleZen"},
@@ -512,9 +569,20 @@ func gearGroup(m *Model) []menuEntry {
 	}
 }
 
-// keymapPresetTitle is the one keymap preset GoIDEA carries, named as
-// OpenIDEA's PRESET_TITLES names IntelliJ's macOS map.
-const keymapPresetTitle = "macOS"
+// keymapPresetMenuEntries lists all six pinned presets and switches one
+// immediately, which also writes it to the settings file.
+func keymapPresetMenuEntries() []menuEntry {
+	entries := make([]menuEntry, 0, len(keymapPresetOrder))
+	for _, preset := range keymapPresetOrder {
+		preset := preset
+		entries = append(entries, menuEntry{
+			label: preset.Title,
+			check: func(m *Model) bool { return m.keymapPresetID() == preset.ID },
+			run:   func(m *Model) { m.SetKeymapPresetPref(preset.ID) },
+		})
+	}
+	return entries
+}
 
 // zenTitle is Enter/Exit Distraction Free Mode, the title following the mode
 // as OpenIDEA's dynamic action title does.
@@ -577,7 +645,11 @@ func menuItems(m *Model, groups []menuEntry) []*mygo.MenuItem {
 			items = append(items, mygo.Separator())
 			continue
 		}
-		it := &mygo.MenuItem{Label: g.label, Role: g.role, Accelerator: g.accel}
+		it := &mygo.MenuItem{
+			Label:       g.label,
+			Role:        g.role,
+			Accelerator: menuAccelerator(m, g),
+		}
 		if len(g.sub) > 0 {
 			it.Submenu = menuItems(m, g.sub)
 		}
@@ -598,4 +670,45 @@ func menuItems(m *Model, groups []menuEntry) []*mygo.MenuItem {
 		items = append(items, it)
 	}
 	return items
+}
+
+// menuAccelerator takes the native menu shortcut from the selected preset.
+// Native menus can represent one keyboard stroke, so chords and pointer
+// bindings stay in the in-app keymap dispatcher without leaking a stale
+// accelerator into the menu bar.
+func menuAccelerator(m *Model, entry menuEntry) string {
+	if m == nil || entry.command == "" {
+		return ""
+	}
+	for _, binding := range m.KeymapBindings(entry.command) {
+		if accelerator := keymapNativeAccelerator(binding); accelerator != "" {
+			return accelerator
+		}
+	}
+	return ""
+}
+
+func keymapNativeAccelerator(binding string) string {
+	strokes := strings.Fields(keymapNormalize(binding))
+	if len(strokes) != 1 {
+		return ""
+	}
+	parts := strings.Split(strokes[0], "+")
+	key := parts[len(parts)-1]
+	if _, ok := keymapUIKey(key); !ok {
+		return ""
+	}
+	if len(parts) == 1 {
+		return key
+	}
+	modifiers := make([]string, 0, len(parts)-1)
+	for _, part := range parts[:len(parts)-1] {
+		switch part {
+		case "Ctrl", "Alt", "Shift", "Cmd":
+			modifiers = append(modifiers, part)
+		default:
+			return ""
+		}
+	}
+	return strings.Join(append(modifiers, key), "+")
 }

@@ -6,13 +6,15 @@
 #
 # Usage: scripts/e2e.sh
 #   GOIDEA_E2E_OFFLINE=1   skip the phases that need a download (tools, LSP,
-#                          debug) and say so; the build/search/Git/Run phases
-#                          still run.
+#                          debug, extended toolchains) and say so; the
+#                          build/search/Git/Run phases still run.
 #   GOIDEA_E2E_FIXTURES=1  also build the JUnit, multi-module, Lombok and
 #                          Spring Boot fixtures with the real mvn.
 #   GOIDEA_E2E_DATA=<dir>  reuse a data directory (default build/e2e-data), so
 #                          jdtls/java-debug are downloaded once.
 #   GOIDEA_E2E_BIN=<path>  test an already built binary.
+#   GOIDEA_GRADLE_HOME=<dir>  Gradle 8.10.2 for the published catalog phase.
+#   GOIDEA_GRADLE=<path>      the Gradle 8.10.2 executable, when not on PATH.
 # Exits 0 only when every run passed its assertions; a missing download or
 # toolchain fails the run instead of being counted as a pass.
 set -euo pipefail
@@ -82,6 +84,20 @@ smoke() {
 
 command -v mvn >/dev/null || { echo "缺少 mvn：本测试用真实 Maven 构建 Java 项目" >&2; exit 1; }
 
+say "阶段 0：两个原生项目窗口、独立后端与单窗关闭隔离"
+WINDOW_PROJ="$WORK/java-maven-window"
+cp -R "$ROOT/testdata/java-maven" "$WINDOW_PROJ"
+rm -rf "$WINDOW_PROJ/target"
+git -C "$WINDOW_PROJ" init -q
+git -C "$WINDOW_PROJ" add -A
+git -C "$WINDOW_PROJ" -c user.name=e2e -c user.email=e2e@goidea.invalid commit -qm baseline
+WINDOW_JAVA="$WINDOW_PROJ/src/main/java/com/example/App.java"
+WINDOWS_JSON="$WORK/windows.json"
+smoke "$WINDOWS_JSON" GOIDEA_SMOKE_WINDOWS=1 \
+    GOIDEA_SMOKE_WINDOW_PROJECT="$WINDOW_PROJ" \
+    GOIDEA_SMOKE_WINDOW_FILES="$WINDOW_JAVA"
+python3 "$CHECKS" windows "$WINDOWS_JSON"
+
 say "阶段 1：编辑、搜索、Git、设置、外观、Maven 构建运行"
 BASE="$WORK/base.json"
 COVERAGE="$WORK/coverage.info"
@@ -90,16 +106,98 @@ ln -s "$PROJ" "$COVERAGE_SOURCE"
 printf 'TN:\nSF:%s\nDA:3,1\nDA:4,0\nBRDA:3,0,0,1\nBRDA:3,0,1,0\nend_of_record\n' \
     "$COVERAGE_SOURCE/src/main/java/com/example/Greeter.java" > "$COVERAGE"
 smoke "$BASE" \
-    GOIDEA_SMOKE_EDIT=1 GOIDEA_SMOKE_CODEINTEL=1 GOIDEA_SMOKE_SEARCH=1 GOIDEA_SMOKE_TODO=1 \
-    GOIDEA_SMOKE_SCRATCH=1 GOIDEA_SMOKE_DIFF=1 GOIDEA_SMOKE_COMMANDS=1 GOIDEA_SMOKE_SETTINGS=1 GOIDEA_SMOKE_NOTIFY=1 GOIDEA_SMOKE_NEWPROJECT=1 \
+    GOIDEA_SMOKE_EDIT=1 GOIDEA_SMOKE_MCP=1 GOIDEA_SMOKE_CODEINTEL=1 GOIDEA_SMOKE_SEARCH=1 GOIDEA_SMOKE_TODO=1 \
+    GOIDEA_SMOKE_SCRATCH=1 GOIDEA_SMOKE_DIFF=1 GOIDEA_SMOKE_COMMANDS=1 GOIDEA_SMOKE_KEYMAP=1 GOIDEA_SMOKE_SETTINGS=1 GOIDEA_SMOKE_NOTIFY=1 GOIDEA_SMOKE_NEWPROJECT=1 \
     GOIDEA_SMOKE_DOCK=1 GOIDEA_SMOKE_COVERAGE="$COVERAGE" GOIDEA_SMOKE_WORKSPACE=1 \
     GOIDEA_SMOKE_WATCH=1 GOIDEA_SMOKE_RUN=1 GOIDEA_SMOKE_RUNCFG=1 GOIDEA_SMOKE_BUILD=1 GOIDEA_SMOKE_STAGE=1 GOIDEA_SMOKE_BOOKMARK=1 GOIDEA_SMOKE_LOG=1 GOIDEA_SMOKE_COMMIT=1 GOIDEA_SMOKE_BRANCH=1 GOIDEA_SMOKE_TERM=1 GOIDEA_SMOKE_FILES=1
 python3 "$CHECKS" base "$BASE"
+
+say "阶段 1a：Database 数据页、内联编辑与 db_apply_edits（真实 SQLite）"
+DATABASE_JSON="$WORK/database.json"
+smoke "$DATABASE_JSON" GOIDEA_SMOKE_DB=1
+python3 "$CHECKS" database "$DATABASE_JSON"
+
+say "阶段 1a：External Libraries（真实 openidea-server SDK 与归档）"
+LIBRARIES_JSON="$WORK/libraries.json"
+smoke "$LIBRARIES_JSON" GOIDEA_SMOKE_LIBRARIES=1
+python3 "$CHECKS" libraries "$LIBRARIES_JSON"
+
+say "阶段 1a：Project Structure（七个分区与真实设置保存）"
+PROJECT_STRUCTURE_JSON="$WORK/project-structure.json"
+smoke "$PROJECT_STRUCTURE_JSON" GOIDEA_SMOKE_PROJECT_STRUCTURE=1
+python3 "$CHECKS" projectstructure "$PROJECT_STRUCTURE_JSON"
+
+say "阶段 1a：File Types 精确路径覆盖（真实 openidea-server 设置）"
+FILE_TYPES_JSON="$WORK/file-types.json"
+smoke "$FILE_TYPES_JSON" GOIDEA_SMOKE_FILE_TYPES=1
+python3 "$CHECKS" filetypes "$FILE_TYPES_JSON"
 
 say "阶段 1a：Agents 订阅、Provider 与外部会话（真实 openidea-server）"
 AGENTS_JSON="$WORK/agents.json"
 smoke "$AGENTS_JSON" GOIDEA_SMOKE_AGENTS=1
 python3 "$CHECKS" agents "$AGENTS_JSON"
+
+say "阶段 1a：GraphQL、HTTP Client 与 Deployment（真实 openidea-server）"
+FEATURE_PARITY_JSON="$WORK/feature-parity.json"
+FEATURE_PARITY_LOG="$WORK/feature-parity.log"
+if ! GOIDEA_SERVER="$SERVER" GOIDEA_PARITY_REPORT="$FEATURE_PARITY_JSON" \
+    CGO_ENABLED=0 go test ./internal/app \
+    -run '^(TestIntegrationGraphQLAndHTTPClientAgainstLocalFixtures|TestIntegrationDeploymentLocalFilesystemRoundTrip)$' \
+    -count=1 >"$FEATURE_PARITY_LOG" 2>&1; then
+    tail -80 "$FEATURE_PARITY_LOG" >&2
+    exit 1
+fi
+
+say "阶段 1a：Gradle 8.10.2 真实 Maven publication 与 version catalog"
+GRADLE_BIN="${GOIDEA_GRADLE:-}"
+if [ -z "$GRADLE_BIN" ] && [ -n "${GOIDEA_GRADLE_HOME:-}" ]; then
+    GRADLE_BIN="$GOIDEA_GRADLE_HOME/bin/gradle"
+fi
+if [ -z "$GRADLE_BIN" ]; then
+    GRADLE_BIN="$(command -v gradle || true)"
+fi
+if [ ! -x "$GRADLE_BIN" ]; then
+    echo "缺少 Gradle 8.10.2：设置 GOIDEA_GRADLE_HOME 或 GOIDEA_GRADLE" >&2
+    exit 1
+fi
+GRADLE_CATALOG_LOG="$WORK/gradle-version-catalog.log"
+if ! GOIDEA_SERVER="$SERVER" GOIDEA_GRADLE="$GRADLE_BIN" GOIDEA_PARITY_REPORT="$FEATURE_PARITY_JSON" \
+    CGO_ENABLED=0 go test ./internal/app \
+    -run '^TestIntegrationGradlePublishedVersionCatalog$' \
+    -count=1 -timeout 20m >"$GRADLE_CATALOG_LOG" 2>&1; then
+    tail -100 "$GRADLE_CATALOG_LOG" >&2
+    exit 1
+fi
+python3 "$CHECKS" featureparity "$FEATURE_PARITY_JSON"
+
+say "阶段 1a：Language SDK detection and Python environment (real openidea-server)"
+TOOLCHAIN_LOG="$WORK/toolchains.log"
+if ! GOIDEA_SERVER="$SERVER" GOIDEA_SDK_ACCEPTANCE=1 GOIDEA_PARITY_REPORT="$FEATURE_PARITY_JSON" \
+    CGO_ENABLED=0 go test ./internal/openidea \
+    -run '^TestIntegrationLanguageToolchainsAcceptance$' -count=1 >"$TOOLCHAIN_LOG" 2>&1; then
+    tail -80 "$TOOLCHAIN_LOG" >&2
+    exit 1
+fi
+python3 "$CHECKS" toolchains "$FEATURE_PARITY_JSON"
+
+if [ "$OFFLINE" = "1" ]; then
+    skip "Prettier、oxfmt、Ruff、uv、Poetry、Conda 与 Gradle 扩展验收（GOIDEA_E2E_OFFLINE=1）"
+else
+    say "阶段 1a：真实格式化器、隔离 Python 工具与 Gradle（release）"
+    EXTENDED_TOOLCHAIN_CACHE="$DATA/extended-toolchains"
+    mkdir -p "$EXTENDED_TOOLCHAIN_CACHE"
+    EXTENDED_TOOLCHAIN_LOG="$WORK/extended-toolchains.log"
+    if ! GOIDEA_SERVER="$SERVER" GOIDEA_EXTENDED_TOOLCHAIN_ACCEPTANCE=1 \
+        GOIDEA_EXTENDED_TOOLCHAIN_CACHE="$EXTENDED_TOOLCHAIN_CACHE" \
+        GOIDEA_PARITY_REPORT="$FEATURE_PARITY_JSON" \
+        CGO_ENABLED=0 go test ./internal/openidea \
+        -run '^TestIntegrationExtendedToolchainAcceptance$' \
+        -count=1 -timeout 30m >"$EXTENDED_TOOLCHAIN_LOG" 2>&1; then
+        tail -100 "$EXTENDED_TOOLCHAIN_LOG" >&2
+        exit 1
+    fi
+    python3 "$CHECKS" extendedToolchains "$FEATURE_PARITY_JSON"
+fi
 
 say "阶段 1b：原生 Git 操作（真实本地远端）"
 VCSOPS="$WORK/java-vcs-operations"
@@ -180,6 +278,28 @@ PROJ="$JSRUN"
 JAVA=""
 smoke "$JSRUN_JSON" GOIDEA_SMOKE_JSRERUN=1
 python3 "$CHECKS" jsrerun "$JSRUN_JSON"
+
+say "阶段 1b7：Run with Profiler（真实 Node.js CPU profile）"
+PROFILER_JSON="$WORK/profiler.json"
+PROJ="$JSRUN"
+JAVA=""
+smoke "$PROFILER_JSON" GOIDEA_SMOKE_PROFILER=1
+python3 "$CHECKS" profiler "$PROFILER_JSON"
+if [ -n "${ASYNC_PROFILER_HOME:-}" ] &&
+    [ -f "$ASYNC_PROFILER_HOME/lib/libasyncProfiler.dylib" ]; then
+    say "阶段 1b8：Run with Profiler（真实 JVM allocations 与 live objects）"
+    PROFILER_ALLOCATIONS_JSON="$WORK/profiler-allocations.json"
+    smoke "$PROFILER_ALLOCATIONS_JSON" \
+        GOIDEA_SMOKE_PROFILER=1 GOIDEA_SMOKE_PROFILER_MODE=allocations
+    python3 "$CHECKS" profilerallocations "$PROFILER_ALLOCATIONS_JSON"
+
+    PROFILER_LIVE_JSON="$WORK/profiler-live.json"
+    smoke "$PROFILER_LIVE_JSON" \
+        GOIDEA_SMOKE_PROFILER=1 GOIDEA_SMOKE_PROFILER_MODE=liveObjects
+    python3 "$CHECKS" profilerlive "$PROFILER_LIVE_JSON"
+else
+    skip "JVM allocation/live-object profiler (set ASYNC_PROFILER_HOME)"
+fi
 PROJ="$PROJ_BASE"; JAVA="$JAVA_BASE"
 
 READINESS_JSON="$WORK/readiness.json"
@@ -277,9 +397,22 @@ else
     smoke "$LSP" GOIDEA_SMOKE_LSP=1 GOIDEA_SMOKE_HIERARCHY=1 GOIDEA_SMOKE_SE=1
     python3 "$CHECKS" lsp "$LSP"
 
+    say "阶段 3a：Java 分析（检查、重复、结构搜索/替换、清理）"
+    ANALYSIS="$WORK/analysis.json"
+    smoke "$ANALYSIS" GOIDEA_SMOKE_ANALYSIS=1
+    python3 "$CHECKS" analysis "$ANALYSIS"
+
     say "阶段 4：断点、变量、求值、步过、运行结束"
     DEBUG="$WORK/debug.json"
-    smoke "$DEBUG" GOIDEA_SMOKE_DEBUG=1
+    JAVA17="${GOIDEA_E2E_JAVA17:-}"
+    if [ -z "$JAVA17" ] && [ -x /usr/libexec/java_home ]; then
+        JAVA17="$(/usr/libexec/java_home -v 17 2>/dev/null || true)"
+    fi
+    [ -x "$JAVA17/bin/java" ] || {
+        echo "Debug heap capture needs a real JDK 17+; set GOIDEA_E2E_JAVA17." >&2
+        exit 1
+    }
+    smoke "$DEBUG" GOIDEA_SMOKE_DEBUG=1 GOIDEA_SMOKE_DEBUG_JDK="$JAVA17"
     python3 "$CHECKS" debug "$DEBUG"
 
     say "阶段 4b：HotSwap（重新加载变更的类）"

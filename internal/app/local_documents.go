@@ -1,7 +1,6 @@
 package app
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -25,9 +24,15 @@ type hybridDocs struct {
 	remote docbridge.Backend
 	local  *localDocsBackend
 	root   func() string
+	// remotePath lets SDK and dependency roots outside the project use the
+	// backend's VFS for ordinary folders and archive entries.
+	remotePath func(string) bool
 
 	mu      sync.RWMutex
 	sources map[uint32]docSource
+
+	ensureEncoding func(context.Context)
+	encodingFor    func(string) string
 }
 
 type docSource uint8
@@ -46,15 +51,41 @@ func newHybridDocs(remote docbridge.Backend, root func() string) *hybridDocs {
 	}
 }
 
+func (h *hybridDocs) SetRemotePathMatcher(match func(string) bool) {
+	h.remotePath = match
+}
+
+func (h *hybridDocs) SetEncodingRuntime(
+	ensure func(context.Context),
+	fallbackFor func(string) string,
+) {
+	h.ensureEncoding = ensure
+	h.encodingFor = fallbackFor
+}
+
+func (h *hybridDocs) usesRemote(filePath string) bool {
+	if root := h.root(); root != "" && inProject(root, filePath) {
+		return true
+	}
+	return h.remotePath != nil && h.remotePath(filePath)
+}
+
 func (h *hybridDocs) DocOpen(ctx context.Context, window, path string) (openidea.DocInfo, error) {
-	if root := h.root(); root != "" && inProject(root, path) {
+	if h.usesRemote(path) {
 		info, err := h.remote.DocOpen(ctx, window, path)
 		if err == nil {
 			h.remember(info.ID, docSourceRemote)
 		}
 		return info, err
 	}
-	info, err := h.local.DocOpen(ctx, window, path)
+	if h.ensureEncoding != nil {
+		h.ensureEncoding(ctx)
+	}
+	fallback := "utf-8"
+	if h.encodingFor != nil {
+		fallback = h.encodingFor(path)
+	}
+	info, err := h.local.docOpen(ctx, window, path, fallback)
 	if err == nil {
 		h.remember(info.ID, docSourceLocal)
 	}
@@ -145,6 +176,7 @@ type localDocument struct {
 	text       string
 	version    uint32
 	mode       os.FileMode
+	encoding   string
 	hasBOM     bool
 	lineEnding string
 	readOnly   bool
@@ -159,6 +191,10 @@ func newLocalDocsBackend() *localDocsBackend {
 }
 
 func (b *localDocsBackend) DocOpen(_ context.Context, _ string, path string) (openidea.DocInfo, error) {
+	return b.docOpen(context.Background(), "", path, "utf-8")
+}
+
+func (b *localDocsBackend) docOpen(_ context.Context, _ string, path, fallback string) (openidea.DocInfo, error) {
 	clean := realPath(path)
 	b.mu.Lock()
 	if id, ok := b.paths[clean]; ok {
@@ -186,13 +222,14 @@ func (b *localDocsBackend) DocOpen(_ context.Context, _ string, path string) (op
 		b.mu.Unlock()
 		return openidea.DocInfo{}, err
 	}
-	text, hasBOM, lineEnding := decodeLocalText(data)
+	text, encoding, hasBOM, lineEnding := decodeLocalText(data, fallback)
 	id := b.nextLocalIDLocked()
 	doc := &localDocument{
 		id:         id,
 		path:       clean,
 		text:       text,
 		mode:       info.Mode().Perm(),
+		encoding:   encoding,
 		hasBOM:     hasBOM,
 		lineEnding: lineEnding,
 		readOnly:   info.Mode().Perm()&0o222 == 0,
@@ -259,7 +296,10 @@ func (b *localDocsBackend) DocSave(_ context.Context, _ string, id uint32) error
 	if doc.readOnly {
 		return errors.New("goidea: the file is read-only")
 	}
-	data := encodeLocalText(doc.text, doc.hasBOM, doc.lineEnding)
+	data, err := encodeLocalText(doc.text, doc.encoding, doc.hasBOM, doc.lineEnding)
+	if err != nil {
+		return err
+	}
 	return writeFileAtomically(doc.path, data, doc.mode)
 }
 
@@ -293,44 +333,13 @@ func (d *localDocument) info() openidea.DocInfo {
 		Text:       d.text,
 		Version:    d.version,
 		Language:   "",
-		Encoding:   "UTF-8",
+		Encoding:   d.encoding,
 		HasBOM:     d.hasBOM,
 		LineEnding: d.lineEnding,
 		ReadOnly:   d.readOnly,
 		Dirty:      false,
 		URI:        "file://" + filepath.ToSlash(d.path),
 	}
-}
-
-func decodeLocalText(data []byte) (text string, hasBOM bool, lineEnding string) {
-	if bytes.HasPrefix(data, []byte{0xef, 0xbb, 0xbf}) {
-		hasBOM = true
-		data = data[3:]
-	}
-	lineEnding = "LF"
-	switch {
-	case bytes.Contains(data, []byte("\r\n")):
-		lineEnding = "CRLF"
-		data = bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n"))
-	case bytes.Contains(data, []byte("\r")):
-		lineEnding = "CR"
-		data = bytes.ReplaceAll(data, []byte("\r"), []byte("\n"))
-	}
-	return string(data), hasBOM, lineEnding
-}
-
-func encodeLocalText(text string, hasBOM bool, lineEnding string) []byte {
-	switch lineEnding {
-	case "CRLF":
-		text = strings.ReplaceAll(text, "\n", "\r\n")
-	case "CR":
-		text = strings.ReplaceAll(text, "\n", "\r")
-	}
-	data := []byte(text)
-	if hasBOM {
-		return append([]byte{0xef, 0xbb, 0xbf}, data...)
-	}
-	return data
 }
 
 func applyLocalChanges(text string, cs position.ChangeSet) (string, error) {

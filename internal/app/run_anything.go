@@ -71,6 +71,19 @@ func (m *Model) refreshRunAnything() {
 		return
 	}
 	v.rows = buildRunAnythingRows(strings.TrimSpace(v.query), m.runAnythingHistory(), m.run.configs)
+	if extra := m.buildToolCompletionRows(v.query); len(extra) > 0 {
+		at := len(v.rows)
+		for i, row := range v.rows {
+			if row.section == "Run Configurations" {
+				at = i
+				break
+			}
+		}
+		merged := append([]runAnythingRow(nil), v.rows[:at]...)
+		merged = append(merged, extra...)
+		merged = append(merged, v.rows[at:]...)
+		v.rows = merged
+	}
 	v.sel = -1
 }
 
@@ -285,8 +298,7 @@ func (m *Model) runAnythingRow(r runAnythingRow) {
 		name := m.run.configs[r.config].Name
 		m.closeRunAnything()
 		m.pushRunAnythingHistory(name)
-		m.run.inline = nil
-		m.run.sel = r.config
+		m.selectRunConfig(m.run.configs[r.config].ID)
 		m.startRun()
 		return
 	}
@@ -313,11 +325,13 @@ func (m *Model) runAnythingLine(line string) {
 	}
 	for i, c := range m.run.configs {
 		if c.Name == line {
-			m.run.inline = nil
-			m.run.sel = i
+			m.selectRunConfig(m.run.configs[i].ID)
 			m.startRun()
 			return
 		}
+	}
+	if m.executeBuildToolLine(line) {
+		return
 	}
 	cfg, raw, err := runAnythingShellConfig(line, root)
 	if err != nil {
@@ -328,7 +342,7 @@ func (m *Model) runAnythingLine(line string) {
 		return
 	}
 	if m.startRunWith(raw, cfg.Name) {
-		m.run.inline = &cfg
+		m.adoptRunTemporary(cfg)
 		m.invalidate()
 	}
 }

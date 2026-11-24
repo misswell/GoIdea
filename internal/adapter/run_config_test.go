@@ -109,6 +109,185 @@ func TestValidateConfig(t *testing.T) {
 	if errs := ValidateConfig(badEnv, nil); errs["env"] == "" {
 		t.Fatalf("an environment name with whitespace must be reported")
 	}
+	gradle := &openidea.RunConfig{
+		ID: "g", Name: "gradle", Kind: "gradle", Command: "./gradlew",
+		Params: map[string]any{"wrapper": "true"},
+	}
+	if errs := ValidateConfig(gradle, nil); errs["tasks"] == "" {
+		t.Fatalf("a Gradle configuration without tasks must be reported: %v", errs)
+	}
+}
+
+func TestBuildToolFormAppliesTasksWorkingDirectoryAndForkedJVMArgs(t *testing.T) {
+	maven := &openidea.RunConfig{
+		ID: "m", Name: "Spring", Kind: "maven", Command: "mvn",
+		Params: map[string]any{"tasks": "spring-boot:run", "wrapper": "false"},
+	}
+	form := BuildToolForm(maven)
+	form["vmOptions"] = `-Xmx1g -Dname="my app"`
+	form["activeProfiles"] = "dev,local"
+	form["projectDir"] = "service"
+	form["arguments"] = "-q"
+	edited := ApplyBuildToolForm(maven, form)
+	if edited.Cwd == nil || *edited.Cwd != "service" {
+		t.Fatalf("working directory = %#v", edited.Cwd)
+	}
+	want := []string{
+		"spring-boot:run", "-q",
+		`-Dspring-boot.run.jvmArguments=-Xmx1g "-Dname=my app"`,
+		"-Dspring-boot.run.profiles=dev,local",
+	}
+	if strings.Join(edited.Args, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("args = %#v, want %#v", edited.Args, want)
+	}
+	if edited.Params["tasks"] != "spring-boot:run" || edited.Params["activeProfiles"] != "dev,local" {
+		t.Fatalf("params = %#v", edited.Params)
+	}
+
+	gradle := &openidea.RunConfig{
+		ID: "g", Name: "Boot", Kind: "gradle", Command: "./gradlew",
+		Params: map[string]any{"tasks": "bootRun", "wrapper": "true", "vmOptions": "-Xmx512m"},
+	}
+	edited = ApplyBuildToolForm(gradle, BuildToolForm(gradle))
+	if strings.Join(edited.Args, " ") != "bootRun" {
+		t.Fatalf("Gradle VM options must stay in params for the init-script launch: %v", edited.Args)
+	}
+	if edited.Params["vmOptions"] != "-Xmx512m" {
+		t.Fatalf("Gradle params = %#v", edited.Params)
+	}
+	payload, err := ConfigObject(edited)
+	if err != nil {
+		t.Fatal(err)
+	}
+	savedParams, ok := payload["params"].(map[string]any)
+	if !ok || savedParams["vmOptions"] != "-Xmx512m" {
+		t.Fatalf("edited build-tool params were not written into the save payload: %#v", payload)
+	}
+}
+
+func TestGradleForkedJVMArgsFollowTheSelectedTasks(t *testing.T) {
+	config := &openidea.RunConfig{
+		Kind: "gradle",
+		Params: map[string]any{
+			"tasks":          "clean :service:bootRun",
+			"vmOptions":      `-Xmx512m -Dname="two words"`,
+			"activeProfiles": "dev,local",
+		},
+	}
+	want := []string{"-Xmx512m", "-Dname=two words", "-Dspring.profiles.active=dev,local"}
+	if got := GradleForkedJVMArgs(config); strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("Gradle forked JVM args = %#v, want %#v", got, want)
+	}
+	config.Params["tasks"] = "assemble"
+	if got := GradleForkedJVMArgs(config); len(got) != 0 {
+		t.Fatalf("a task without a forked JVM received args: %#v", got)
+	}
+	if !BuildToolShowsVMOptions("maven", "verify") ||
+		!BuildToolShowsActiveProfiles("maven", "org.example:spring-boot-maven-plugin:3.3:run") {
+		t.Fatal("Maven Spring Boot/test fields were hidden")
+	}
+}
+
+func TestRunConfigTypesAndNewConfigOfTypeUseTemplates(t *testing.T) {
+	plugin := &openidea.RunConfig{ID: "plugin:one", Name: "Plugin", Kind: "kotlin"}
+	types := RunConfigTypes([]*openidea.RunConfig{plugin})
+	seenPlugin := false
+	for _, typ := range types {
+		if typ.ID == "kotlin" && typ.Label == "Kotlin Script" {
+			seenPlugin = true
+		}
+	}
+	if !seenPlugin {
+		t.Fatalf("plugin configuration kind was not added: %+v", types)
+	}
+
+	templateRaw, _ := json.Marshal(map[string]any{
+		"id": "template:maven", "name": "Maven", "kind": "maven",
+		"command": "custom-mvn", "args": []string{"verify"},
+		"env":          map[string]string{"MAVEN_OPTS": "-Xmx1g"},
+		"beforeLaunch": []map[string]string{{"kind": "build"}},
+	})
+	template, err := openidea.DecodeRunConfig(templateRaw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := NewConfigOfType("maven", nil, []*openidea.RunConfig{template}, "Services")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Command != "custom-mvn" || strings.Join(cfg.Args, " ") != "verify" ||
+		cfg.Env["MAVEN_OPTS"] != "-Xmx1g" || len(cfg.BeforeLaunch) != 1 {
+		t.Fatalf("the type template was not inherited: %+v", cfg)
+	}
+	if cfg.ID == "template:maven" || cfg.Name != "Unnamed" || cfg.Detected ||
+		!cfg.Local || cfg.Folder == nil || *cfg.Folder != "Services" {
+		t.Fatalf("the new configuration did not receive identity fields: %+v", cfg)
+	}
+}
+
+func TestCompoundCycleAndFlattenedChildren(t *testing.T) {
+	a := &openidea.RunConfig{ID: "a", Name: "A", Kind: "compound", Compound: []string{"b", "c"}}
+	b := &openidea.RunConfig{ID: "b", Name: "B", Kind: "compound", Compound: []string{"run1"}}
+	c := &openidea.RunConfig{ID: "c", Name: "C", Kind: "compound", Compound: []string{"run2", "run1"}}
+	run1 := &openidea.RunConfig{ID: "run1", Name: "One", Kind: "shell", Command: "one"}
+	run2 := &openidea.RunConfig{ID: "run2", Name: "Two", Kind: "shell", Command: "two"}
+	all := []*openidea.RunConfig{a, b, c, run1, run2}
+	children := CompoundChildren(a, all)
+	if len(children) != 2 || children[0].ID != "run1" || children[1].ID != "run2" {
+		t.Fatalf("nested Compound children = %+v", children)
+	}
+	if CompoundCycle(a, all) {
+		t.Fatal("an acyclic nested Compound was reported as a cycle")
+	}
+	b.Compound = append(b.Compound, "a")
+	if !CompoundCycle(a, all) {
+		t.Fatal("the reachable cycle was not detected")
+	}
+}
+
+func TestValidateBeforeLaunchAndConfigObjectRoundTrip(t *testing.T) {
+	self := &openidea.RunConfig{
+		ID: "self", Name: "Self", Kind: "shell", Command: "echo",
+		BeforeLaunch: []openidea.BeforeLaunchTask{{Kind: "run", Target: "self"}},
+	}
+	if errs := ValidateConfig(self, []*openidea.RunConfig{self}); errs["beforeLaunch"] == "" {
+		t.Fatalf("a before-launch self cycle was accepted: %v", errs)
+	}
+	missing := &openidea.RunConfig{
+		ID: "missing", Name: "Missing", Kind: "shell", Command: "echo",
+		BeforeLaunch: []openidea.BeforeLaunchTask{{Kind: "run", Target: "gone"}},
+	}
+	if errs := ValidateConfig(missing, []*openidea.RunConfig{missing}); errs["beforeLaunch"] == "" {
+		t.Fatalf("a missing before-launch target was accepted: %v", errs)
+	}
+
+	raw, _ := json.Marshal(map[string]any{
+		"id": "app", "name": "App", "kind": "application", "command": "java",
+		"args": []string{"App"}, "detected": false,
+		"beforeLaunch": []map[string]string{{"kind": "build"}},
+		"compound":     []string{"one", "two"},
+		"showOnStdout": true, "showOnStderr": true,
+		"focusToolWindow": true, "emulateTerminal": true,
+		"target": "staging", "extraField": map[string]any{"kept": true},
+	})
+	cfg, err := openidea.DecodeRunConfig(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	obj, err := ConfigObject(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(obj["beforeLaunch"].([]openidea.BeforeLaunchTask)) != 1 ||
+		len(obj["compound"].([]string)) != 2 ||
+		obj["showOnStdout"] != true || obj["showOnStderr"] != true ||
+		obj["focusToolWindow"] != true || obj["emulateTerminal"] != true ||
+		obj["target"] != "staging" {
+		t.Fatalf("the run configuration fields were not written back: %v", obj)
+	}
+	if _, ok := obj["extraField"]; !ok {
+		t.Fatal("an unmodelled field was dropped")
+	}
 }
 
 func TestSaveUserConfigsResolvesTheModuleThenSaves(t *testing.T) {
@@ -192,5 +371,29 @@ func TestFormatEnvParseEnv(t *testing.T) {
 	got := ParseEnv("A=1\nB=2\nNOEQUALS\n")
 	if got["A"] != "1" || got["B"] != "2" || len(got) != 2 {
 		t.Fatalf("ParseEnv = %v", got)
+	}
+}
+
+func TestDockerRunConfigTypesAndDefaults(t *testing.T) {
+	want := map[string]string{"docker-dockerfile": "Dockerfile", "docker-image": "Docker Image", "docker-compose": "Docker Compose"}
+	for _, typ := range RunConfigTypes(nil) {
+		if label, ok := want[typ.ID]; ok {
+			if typ.Label != label || typ.Group != "Docker" {
+				t.Fatalf("unexpected Docker type: %#v", typ)
+			}
+			delete(want, typ.ID)
+		}
+	}
+	if len(want) != 0 {
+		t.Fatalf("missing Docker types: %v", want)
+	}
+	for kind, key := range map[string]string{"docker-dockerfile": "dockerfile", "docker-compose": "files", "docker-image": "connection"} {
+		cfg, err := BlankTemplate(kind)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.Params[key] == nil {
+			t.Fatalf("missing %s in %#v", key, cfg.Params)
+		}
 	}
 }

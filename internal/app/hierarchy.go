@@ -723,7 +723,7 @@ func (m *Model) hierarchyRootRow(c *ui.Context, p *ui.Theme, oi oiColors) {
 // its detail and the call-site count.
 func (m *Model) hierarchyRow(c *ui.Context, p *ui.Theme, oi oiColors, node hierarchyNode) {
 	row := ui.Row(c.Key("hierarchy:" + node.id)).Height(24).Gap(4).
-		PaddingStart(4 + float32(node.depth)*20).PaddingEnd(8).Radius(5).
+		PaddingStart(4 + float32(node.depth)*m.treeIndentWidth()).PaddingEnd(8).Radius(5).
 		AlignItems(ui.Center).Cursor(ui.CursorPointer)
 	if node.item.Path != "" {
 		path := node.item.Path

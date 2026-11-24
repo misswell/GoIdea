@@ -1,11 +1,6 @@
 package app
 
-import (
-	"path/filepath"
-	"strings"
-
-	"github.com/egoist/mygo/ui"
-)
+import "path/filepath"
 
 // parityWindowCommands adds OpenIDEA's project-window tab actions to the
 // native window groups. A GoIDEA window group is the equivalent surface for an
@@ -13,12 +8,14 @@ import (
 // all happen over that group's strip.
 func parityWindowCommands() []appCommand {
 	return []appCommand{
+		{"window.detachTab", "Move Tab to New Window", "Window", "", "window project tab detach", func(m *Model) { m.detachProjectTab(nil) }},
+		{"window.mergeAllWindows", "Merge All Project Windows", "Window", "", "window project tabs merge", func(m *Model) { m.MergeAllWindowGroups() }},
 		{"window.closeTab", "Close Project Tab", "Window", "", "window project tab close", func(m *Model) { m.CloseWindowTab(nil) }},
-		{"window.closeOtherTabs", "Close Other Project Tabs", "Window", "", "window project tabs close others", func(m *Model) { m.CloseOtherTabs(nil) }},
-		{"window.closeTabsToLeft", "Close Project Tabs to the Left", "Window", "", "window project tabs close left", func(m *Model) { m.CloseTabsToLeft(m.tab()) }},
-		{"window.closeTabsToRight", "Close Project Tabs to the Right", "Window", "", "window project tabs close right", func(m *Model) { m.CloseTabsToRight(m.tab()) }},
-		{"window.nextTab", "Next Project Tab", "Window", "Ctrl+Alt+PageDown", "window project next tab cycle", func(m *Model) { m.cycleEditorTab(1) }},
-		{"window.previousTab", "Previous Project Tab", "Window", "Ctrl+Alt+PageUp", "window project previous tab cycle", func(m *Model) { m.cycleEditorTab(-1) }},
+		{"window.closeOtherTabs", "Close Other Project Tabs", "Window", "", "window project tabs close others", func(m *Model) { m.closeProjectTabs("others", nil) }},
+		{"window.closeTabsToLeft", "Close Project Tabs to the Left", "Window", "", "window project tabs close left", func(m *Model) { m.closeProjectTabs("left", nil) }},
+		{"window.closeTabsToRight", "Close Project Tabs to the Right", "Window", "", "window project tabs close right", func(m *Model) { m.closeProjectTabs("right", nil) }},
+		{"window.nextTab", "Next Project Tab", "Window", "Ctrl+Alt+PageDown", "window project next tab cycle", func(m *Model) { m.cycleProjectTab(1) }},
+		{"window.previousTab", "Previous Project Tab", "Window", "Ctrl+Alt+PageUp", "window project previous tab cycle", func(m *Model) { m.cycleProjectTab(-1) }},
 		{"window.reorderTabs", "Reorder Project Tabs", "Window", "", "window project reorder tabs", func(m *Model) { m.ReorderWindowTabs(nil) }},
 		{"window.selectTab", "Select Project Tab", "Window", "", "window project select tab", func(m *Model) { m.SelectWindowTab("") }},
 		{"lightEdit.openProject", "Open Project in Current Directory", "File", "", "light edit file folder project open", func(m *Model) { m.OpenLightEditProject() }},
@@ -27,126 +24,101 @@ func parityWindowCommands() []appCommand {
 	}
 }
 
-// CloseWindowTab closes the tab named by arg, or the active tab when arg is
-// absent. It is the target of OpenIDEA's hidden window.closeTab action.
-func (m *Model) CloseWindowTab(arg any) {
-	path, ok := arg.(string)
-	if !ok || strings.TrimSpace(path) == "" {
-		if t := m.tab(); t != nil {
-			m.closeTabThen(t, nil)
+// CloseWindowTab asks the owning project window to run its close guards.
+func (m *Model) CloseWindowTab(arg any) { m.closeProjectTabs("one", arg) }
+
+func (m *Model) closeProjectTabs(side string, arg any) {
+	host, ok := m.workspaceHost.(projectTabHost)
+	if !ok {
+		return
+	}
+	windows := m.workspaceWindows()
+	id, _ := arg.(string)
+	for i, w := range windows {
+		if w.ID != id && (arg != nil || !w.Selected) {
+			continue
 		}
+		keep := w.ID
+		var ids []string
+		for j, target := range windows {
+			switch side {
+			case "one":
+				if j != i {
+					continue
+				}
+			case "others":
+				if j == i {
+					continue
+				}
+			case "left":
+				if j >= i {
+					continue
+				}
+			case "right":
+				if j <= i {
+					continue
+				}
+			default:
+				return
+			}
+			ids = append(ids, target.ID)
+		}
+		if side == "one" {
+			keep = ""
+		}
+		host.CloseWorkspaceWindows(m, keep, ids)
 		return
-	}
-	if t, found := m.tabByPathInAnyGroup(path); found {
-		m.closeTabThen(t, nil)
 	}
 }
 
-// SelectWindowTab activates the tab named by path.
-func (m *Model) SelectWindowTab(path string) {
-	if strings.TrimSpace(path) == "" {
-		return
-	}
-	if t, ok := m.tabByPathInAnyGroup(path); ok {
-		m.activateTab(t)
+func (m *Model) SelectWindowTab(id string) {
+	for _, w := range m.workspaceWindows() {
+		if w.ID == id {
+			m.focusWorkspaceWindow(id)
+			return
+		}
 	}
 }
 
-// ReorderWindowTabs applies an ordered list of paths to the focused group's
-// strip. Paths that do not belong to the strip are ignored, and tabs omitted
-// from the argument keep their relative order at the end.
+func (m *Model) cycleProjectTab(delta int) {
+	windows := m.workspaceWindows()
+	for i, w := range windows {
+		if w.Selected {
+			m.focusWorkspaceWindow(windows[(i+delta+len(windows))%len(windows)].ID)
+			return
+		}
+	}
+}
+
 func (m *Model) ReorderWindowTabs(arg any) {
-	paths := tabPathArgList(arg)
-	if len(paths) == 0 {
+	host, ok := m.workspaceHost.(projectTabHost)
+	if !ok {
 		return
 	}
-	order := reorderTabsByPath(m.tabs, m.active, paths)
-	if order.active == m.active && sameTabOrder(order.tabs, m.tabs) {
-		return
-	}
-	m.tabs, m.active = order.tabs, order.active
-	m.saveSession()
-	m.invalidate()
-}
-
-// reorderTabsByPath returns the focused strip in the requested path order and
-// where its active tab moved.
-func reorderTabsByPath(tabs []*Tab, active int, paths []string) (out struct {
-	tabs   []*Tab
-	active int
-}) {
-	byPath := make(map[string][]*Tab)
-	for _, t := range tabs {
-		path := tabPath(t)
-		if path != "" {
-			path = realPath(path)
-			byPath[path] = append(byPath[path], t)
-		}
-	}
-	used := make(map[*Tab]bool, len(tabs))
-	ordered := make([]*Tab, 0, len(tabs))
-	for _, path := range paths {
-		path = realPath(strings.TrimSpace(path))
-		for len(byPath[path]) > 0 {
-			t := byPath[path][0]
-			byPath[path] = byPath[path][1:]
-			if used[t] {
-				continue
-			}
-			used[t] = true
-			ordered = append(ordered, t)
-		}
-	}
-	for _, t := range tabs {
-		if !used[t] {
-			used[t] = true
-			ordered = append(ordered, t)
-		}
-	}
-	out.tabs = ordered
-	out.active = active
-	if active >= 0 && active < len(tabs) {
-		want := tabs[active]
-		for i, t := range ordered {
-			if t == want {
-				out.active = i
-				break
-			}
-		}
-	}
-	return out
-}
-
-func sameTabOrder(a, b []*Tab) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
-
-func tabPathArgList(arg any) []string {
-	switch value := arg.(type) {
-	case string:
-		if value != "" {
-			return []string{value}
-		}
+	var ids []string
+	switch values := arg.(type) {
 	case []string:
-		return value
+		ids = values
 	case []any:
-		out := make([]string, 0, len(value))
-		for _, item := range value {
-			if path, ok := item.(string); ok && path != "" {
-				out = append(out, path)
+		for _, v := range values {
+			id, ok := v.(string)
+			if !ok {
+				return
 			}
+			ids = append(ids, id)
 		}
-		return out
+	default:
+		return
 	}
-	return nil
+	host.ReorderWorkspaceWindows(m, ids)
+}
+
+func (m *Model) detachProjectTab(arg any) {
+	if m.workspaceHost == nil {
+		m.DetachWindowTab(arg)
+	} else if host, ok := m.workspaceHost.(projectTabHost); ok {
+		host.DetachWorkspaceWindow(m)
+	}
 }
 
 func (m *Model) tabByPathInAnyGroup(path string) (*Tab, bool) {
@@ -193,10 +165,15 @@ func parityWindowActionState(a *Action) {
 	switch a.ID {
 	case "window.closeTab":
 		a.RunWithArg = func(m *Model, arg any) { m.CloseWindowTab(arg) }
+	case "window.closeOtherTabs", "window.closeTabsToLeft", "window.closeTabsToRight":
+		side := map[string]string{"window.closeOtherTabs": "others", "window.closeTabsToLeft": "left", "window.closeTabsToRight": "right"}[a.ID]
+		a.RunWithArg = func(m *Model, arg any) { m.closeProjectTabs(side, arg) }
+	case "window.detachTab":
+		a.RunWithArg = (*Model).detachProjectTab
 	case "window.selectTab":
 		a.RunWithArg = func(m *Model, arg any) {
-			path, _ := arg.(string)
-			m.SelectWindowTab(path)
+			id, _ := arg.(string)
+			m.SelectWindowTab(id)
 		}
 	case "window.reorderTabs":
 		a.RunWithArg = func(m *Model, arg any) { m.ReorderWindowTabs(arg) }
@@ -205,7 +182,13 @@ func parityWindowActionState(a *Action) {
 	case "window.closeTab", "window.closeOtherTabs", "window.closeTabsToLeft",
 		"window.closeTabsToRight", "window.nextTab", "window.previousTab",
 		"window.reorderTabs", "window.selectTab":
-		a.When = func(m *Model) bool { return len(m.tabs) > 0 }
+		a.When = func(m *Model) bool { return len(m.workspaceWindows()) > 1 }
+	case "window.detachTab":
+		a.When = func(m *Model) bool { return len(m.workspaceWindows()) > 1 || m.workspaceHost == nil && m.tab() != nil }
+	case "window.mergeAllWindows":
+		a.When = func(m *Model) bool {
+			return m.workspaceHost != nil && m.Root() != "" || m.workspaceHost == nil && m.tab() != nil
+		}
 	case "lightEdit.openProject":
 		a.When = func(m *Model) bool {
 			t := m.tab()
@@ -220,7 +203,3 @@ func parityWindowActionState(a *Action) {
 		a.Enabled = func(m *Model) bool { return !m.usages.running }
 	}
 }
-
-// Keep the UI dependency visible in this file: action context mirrors the
-// same local menus and strips drawn with MyGo.
-var _ = ui.Modifiers(0)

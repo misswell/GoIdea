@@ -19,7 +19,7 @@ func init() {
 	_ = registerAction(&Action{
 		ID:       "debug.pluginStart",
 		Title:    "Debug Plugin Configuration",
-		Category: "Run",
+		Category: "Debug",
 		Keywords: "plugin debug configuration external run",
 		When:     func(m *Model) bool { return m.Root() != "" },
 		RunWithArg: func(m *Model, arg any) {
@@ -39,30 +39,36 @@ func (m *Model) DebugPluginStart(arg any) {
 		m.invalidate()
 		return
 	}
+	var onExit func(code *int32, stopped bool)
+	if callback, ok := request["onExit"].(func(*int32, bool)); ok {
+		onExit = callback
+	}
 	config, wrapped := request["config"]
 	if !wrapped {
 		config = request
 	}
 	raw, err := json.Marshal(config)
 	if err != nil || len(raw) == 0 || string(raw) == "null" {
+		m.finishDebugPluginCallback(onExit, nil, false)
 		m.status = "Could not read the plugin debug configuration"
 		m.invalidate()
 		return
 	}
-	var onExit func(code *int32, stopped bool)
-	if callback, ok := request["onExit"].(func(*int32, bool)); ok {
-		onExit = callback
-	}
 	if m.ctx == nil {
+		m.finishDebugPluginCallback(onExit, nil, false)
 		m.status = "The plugin debugger is not connected"
 		m.invalidate()
 		return
 	}
 	if m.mgr == nil && m.invokeHook == nil {
+		m.finishDebugPluginCallback(onExit, nil, false)
 		m.status = "The plugin debugger is not connected"
 		m.invalidate()
 		return
 	}
+	root := m.Root()
+	m.debug.pluginRequest++
+	generation := m.debug.pluginRequest
 	ctx, cancel := context.WithTimeout(m.ctx, 2*time.Minute)
 	m.status = "Preparing plugin debug configuration…"
 	m.invalidate()
@@ -72,23 +78,53 @@ func (m *Model) DebugPluginStart(arg any) {
 			"config": json.RawMessage(raw),
 		})
 		m.post(func() {
+			if !m.debugPluginRequestCurrent(generation, root) {
+				m.finishDebugPluginCallback(onExit, nil, true)
+				return
+			}
 			if err != nil {
+				m.finishDebugPluginCallback(onExit, nil, false)
 				m.status = "Could not prepare the plugin debug configuration: " + err.Error()
 				m.invalidate()
 				return
 			}
 			cfg, decodeErr := openidea.DecodeRunConfig(prepared)
 			if decodeErr != nil {
+				m.finishDebugPluginCallback(onExit, nil, false)
 				m.status = "Could not read the prepared plugin debug configuration: " + decodeErr.Error()
 				m.invalidate()
+				return
+			}
+			if !m.canStartDebugWithWindow(root, false) {
+				m.finishDebugPluginCallback(onExit, nil, false)
 				return
 			}
 			m.debug.pluginExit = onExit
 			m.debug.pluginStopped = false
 			m.status = ""
 			m.DebugRunConfig(cfg)
+			if m.debug.pluginExit != nil &&
+				!m.debug.starting &&
+				m.debug.session == 0 &&
+				m.debug.err != "" {
+				m.finishPluginDebug(nil)
+			}
 		})
 	}()
+}
+
+func (m *Model) debugPluginRequestCurrent(generation uint64, root string) bool {
+	return generation == m.debug.pluginRequest && m.Root() == root
+}
+
+func (m *Model) finishDebugPluginCallback(
+	callback func(code *int32, stopped bool),
+	code *int32,
+	stopped bool,
+) {
+	if callback != nil {
+		callback(code, stopped)
+	}
 }
 
 func debugPluginArgObject(arg any) map[string]any {
@@ -116,23 +152,162 @@ func debugPluginArgObject(arg any) map[string]any {
 }
 
 type debugSetValueState struct {
-	open      bool
-	busy      bool
-	value     string
-	err       string
-	variable  openidea.Variable
-	container int64
-	frameID   int64
-	session   uint32
+	open       bool
+	busy       bool
+	value      string
+	err        string
+	variable   openidea.Variable
+	container  int64
+	frameID    int64
+	session    uint32
+	generation uint64
 }
 
 type debugSmartStepState struct {
-	open    bool
-	loading bool
-	err     string
-	targets []openidea.StepInTarget
-	session uint32
-	thread  int64
+	open       bool
+	loading    bool
+	err        string
+	targets    []openidea.StepInTarget
+	session    uint32
+	thread     int64
+	frameID    int64
+	generation uint64
+}
+
+type debugEvaluateState struct {
+	open       bool
+	busy       bool
+	expression string
+	err        string
+	result     openidea.Variable
+	hasResult  bool
+	session    uint32
+	frameID    int64
+	generation uint64
+}
+
+// OpenDebugEvaluate opens OpenIDEA's Evaluate Expression dialog with the
+// editor selection seeded as the expression.
+func (m *Model) OpenDebugEvaluate() {
+	d := &m.debug
+	if d.session == 0 {
+		d.err = "Start a debug session before evaluating an expression"
+		m.invalidate()
+		return
+	}
+	expression := ""
+	if t := m.tab(); t != nil {
+		expression = strings.TrimSpace(t.state.SelectedText())
+	}
+	d.evaluate = debugEvaluateState{
+		open:       true,
+		expression: expression,
+		session:    d.session,
+		frameID:    d.frameID,
+		generation: d.stopGeneration,
+	}
+	m.invalidate()
+}
+
+func (m *Model) commitDebugEvaluate() {
+	v := &m.debug.evaluate
+	if !v.open || v.busy {
+		return
+	}
+	expression := strings.TrimSpace(v.expression)
+	if expression == "" {
+		v.err = "Enter an expression"
+		m.invalidate()
+		return
+	}
+	if m.debug.session == 0 || !m.debug.paused {
+		v.err = "Pause the program before evaluating an expression"
+		m.invalidate()
+		return
+	}
+	session, frameID := m.debug.session, m.debug.frameID
+	generation := m.debug.stopGeneration
+	v.session, v.frameID, v.generation = session, frameID, generation
+	v.busy, v.err, v.hasResult = true, "", false
+	m.invalidate()
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
+		defer cancel()
+		args := map[string]any{
+			"session": session, "expression": expression,
+		}
+		if frameID != 0 {
+			args["frameId"] = frameID
+		}
+		raw, err := m.invoke(ctx, "debug_evaluate", args)
+		var result openidea.Variable
+		if err == nil {
+			err = json.Unmarshal(raw, &result)
+		}
+		m.post(func() {
+			m.updateDebugSession(session, func(state *debugSessionState) {
+				if state.evaluate.session != session ||
+					state.evaluate.generation != generation {
+					return
+				}
+				state.evaluate.busy = false
+				if state.stopGeneration != generation || state.frameID != frameID {
+					state.evaluate.err = "The selected frame changed before evaluation finished"
+					return
+				}
+				if err != nil {
+					state.evaluate.err = "Evaluation failed: " + err.Error()
+					return
+				}
+				state.evaluate.result = result
+				state.evaluate.hasResult = true
+			})
+			m.invalidate()
+		})
+	}()
+}
+
+func (m *Model) debugEvaluateDialog(c *ui.Context, p *ui.Theme) {
+	v := &m.debug.evaluate
+	open := v.open
+	d := ui.Modal(c.Key("debug-evaluate"), &open, func() {
+		ui.Column(c).Width(620).Gap(9).Children(func() {
+			ui.Text(c, "Evaluate").FontSize(13).Bold().TextColor(p.Text)
+			ui.Text(c, "Expression").FontSize(12).TextColor(p.TextMuted)
+			ui.TextArea(c.Key("debug-evaluate-expression"), &v.expression).
+				Height(84).Font("monospace").FontSize(12).AutoFocus()
+			switch {
+			case v.err != "":
+				ui.Text(c, v.err).FontSize(12).TextColor(p.Danger)
+			case v.hasResult:
+				ui.Text(c, v.result.Name+" = "+v.result.Value).
+					Font("monospace").FontSize(12).TextColor(p.Text)
+			default:
+				ui.Text(c, "Evaluation is available while the program is suspended.").
+					FontSize(12).TextColor(p.TextMuted)
+			}
+			ui.Row(c).Gap(8).Children(func() {
+				ui.Button(c, "Close").OnClick(func() {
+					v.open = false
+					m.invalidate()
+				})
+				ui.Button(c, "Add to Watches").Disabled(strings.TrimSpace(v.expression) == "").
+					OnClick(func() {
+						if m.addWatch(v.expression) {
+							v.open = false
+						}
+					})
+				ui.Spacer(c)
+				ui.Button(c, "Evaluate").
+					Disabled(v.busy || m.debug.session == 0 || !m.debug.paused ||
+						strings.TrimSpace(v.expression) == "").
+					OnClick(m.commitDebugEvaluate)
+			})
+		})
+	})
+	if d.Dismissed() || !open {
+		v.open = false
+	}
 }
 
 // OpenDebugSetValue opens the native Set Value editor for the selected
@@ -144,18 +319,26 @@ func (m *Model) OpenDebugSetValue() {
 		m.invalidate()
 		return
 	}
+	if !m.debugSessionSupports(d.session, func(caps openidea.DebugCapabilities) bool {
+		return caps.SetValue
+	}) {
+		d.err = "This debugger does not support changing values"
+		m.invalidate()
+		return
+	}
 	i := d.selVar
 	if i < 0 || i >= len(d.vars) {
 		i = 0
 	}
 	v := d.vars[i]
 	d.setValue = debugSetValueState{
-		open:      true,
-		value:     v.Value,
-		variable:  v,
-		container: d.varContainer,
-		frameID:   d.frameID,
-		session:   d.session,
+		open:       true,
+		value:      v.Value,
+		variable:   v,
+		container:  d.varContainer,
+		frameID:    d.frameID,
+		session:    d.session,
+		generation: d.stopGeneration,
 	}
 	m.invalidate()
 }
@@ -182,6 +365,7 @@ func (m *Model) commitDebugSetValue() {
 	v.busy, v.err = true, ""
 	m.invalidate()
 	name, session := v.variable.Name, v.session
+	generation, frameID := v.generation, v.frameID
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 		defer cancel()
@@ -191,23 +375,27 @@ func (m *Model) commitDebugSetValue() {
 			err = json.Unmarshal(raw, &updated)
 		}
 		m.post(func() {
-			if m.debug.setValue.session != session {
-				return
-			}
-			m.debug.setValue.busy = false
-			if err != nil {
-				m.debug.setValue.err = err.Error()
-				m.invalidate()
-				return
-			}
-			for i := range m.debug.vars {
-				if m.debug.vars[i].Name == name {
-					m.debug.vars[i] = updated
-					break
+			m.updateDebugSession(session, func(state *debugSessionState) {
+				if state.session != session || state.stopGeneration != generation ||
+					state.frameID != frameID {
+					return
 				}
+				state.setValue.busy = false
+				if err != nil {
+					state.setValue.err = err.Error()
+					return
+				}
+				for i := range state.vars {
+					if state.vars[i].Name == name {
+						state.vars[i] = updated
+						break
+					}
+				}
+				state.setValue.open = false
+			})
+			if m.debug.active == session {
+				m.evaluateWatches()
 			}
-			m.debug.setValue.open = false
-			m.evaluateWatches()
 			m.invalidate()
 		})
 	}()
@@ -241,18 +429,54 @@ func (m *Model) debugSetValueDialog(c *ui.Context, p *ui.Theme) {
 	}
 }
 
+func (m *Model) debugResetFrameDisabledReason() string {
+	return m.debugResetFrameDisabledReasonAt(m.debug.selFrame)
+}
+
+func (m *Model) debugResetFrameDisabledReasonAt(frame int) string {
+	d := &m.debug
+	switch {
+	case d.session == 0 || d.ended:
+		return "No live debug session can reset a frame"
+	case !d.paused:
+		return "Pause before resetting a frame"
+	case !d.capsKnown:
+		return "Reading the debugger capabilities"
+	case !d.caps.RestartFrame:
+		return "This debugger does not support Reset Frame"
+	case len(d.frames) == 0:
+		return "No stack frame is available"
+	case frame < 0 || frame >= len(d.frames):
+		return "Select a stack frame first"
+	}
+	if frame == len(d.frames)-1 {
+		return "The bottom stack frame cannot be reset"
+	}
+	if strings.Contains(d.frames[frame].Name, "[native method]") ||
+		frame+1 < len(d.frames) && strings.Contains(d.frames[frame+1].Name, "[native method]") {
+		return "A frame involving a native caller cannot be reset"
+	}
+	return ""
+}
+
 // DebugResetFrame returns the selected frame to the start of its method.
 func (m *Model) DebugResetFrame() {
 	d := &m.debug
-	if !d.paused || d.session == 0 || len(d.frames) == 0 {
-		return
-	}
-	if d.selFrame < 0 || d.selFrame >= len(d.frames) {
+	if reason := m.debugResetFrameDisabledReason(); reason != "" {
+		d.err = reason
+		m.invalidate()
 		return
 	}
 	session, frame := d.session, d.frames[d.selFrame]
+	generation := d.stopGeneration
+	d.stopGeneration++
+	d.threadRequest++
+	d.frameRequest++
 	d.status = "Resetting frame…"
 	d.paused = false
+	d.setValue.open = false
+	d.smartStep.open = false
+	d.rememberDebugSession()
 	m.refreshDecorations()
 	m.invalidate()
 	go func() {
@@ -262,14 +486,19 @@ func (m *Model) DebugResetFrame() {
 			"session": session, "frameId": frame.ID,
 		})
 		m.post(func() {
-			if m.debug.session != session {
-				return
-			}
-			if err != nil {
-				m.debug.paused = true
-				m.debug.err = "Reset Frame failed: " + err.Error()
-			} else {
-				m.debug.status = "Frame reset"
+			m.updateDebugSession(session, func(state *debugSessionState) {
+				if state.session != session || state.stopGeneration != generation+1 {
+					return
+				}
+				if err != nil {
+					state.paused = true
+					state.err = "Reset Frame failed: " + err.Error()
+					return
+				}
+				state.status = "Frame reset"
+			})
+			if m.debug.active == session {
+				m.refreshDecorations()
 			}
 			m.invalidate()
 		})
@@ -287,7 +516,12 @@ func (m *Model) DebugSmartStepInto() {
 		return
 	}
 	session, thread, frame := d.session, d.stopThread, d.frames[d.selFrame]
-	d.smartStep = debugSmartStepState{open: true, loading: true, session: session, thread: thread}
+	generation := d.stopGeneration
+	d.smartStep = debugSmartStepState{
+		open: true, loading: true, session: session, thread: thread,
+		frameID: frame.ID, generation: generation,
+	}
+	d.rememberDebugSession()
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
@@ -300,25 +534,35 @@ func (m *Model) DebugSmartStepInto() {
 			err = json.Unmarshal(raw, &targets)
 		}
 		m.post(func() {
-			if m.debug.session != session || !m.debug.paused {
+			accepted := false
+			m.updateDebugSession(session, func(state *debugSessionState) {
+				if state.session != session || !state.paused ||
+					state.stopGeneration != generation || state.stopThread != thread ||
+					state.frameID != frame.ID {
+					return
+				}
+				accepted = true
+				state.smartStep.loading = false
+				if err != nil {
+					state.err = "Smart Step Into failed: " + err.Error()
+					state.smartStep.open = false
+					return
+				}
+				state.smartStep.targets = targets
+			})
+			if !accepted {
 				return
 			}
 			if err != nil {
-				m.debug.err = "Smart Step Into failed: " + err.Error()
-				m.debug.smartStep.open = false
 				m.invalidate()
 				return
 			}
 			switch len(targets) {
 			case 0:
-				m.debug.smartStep.open = false
-				m.StepInto()
+				m.debugStepInSession(session, thread, frame.ID, generation)
 			case 1:
-				m.debug.smartStep.open = false
-				m.stepIntoDebugTarget(targets[0].ID)
+				m.stepIntoDebugTargetForSession(session, thread, frame.ID, generation, targets[0].ID)
 			default:
-				m.debug.smartStep.loading = false
-				m.debug.smartStep.targets = targets
 				m.invalidate()
 			}
 		})
@@ -326,15 +570,43 @@ func (m *Model) DebugSmartStepInto() {
 }
 
 func (m *Model) stepIntoDebugTarget(targetID int64) {
-	d := &m.debug
-	if d.smartStep.session == 0 || d.smartStep.thread == 0 || targetID == 0 {
+	smart := m.debug.smartStep
+	if smart.session == 0 || smart.thread == 0 || smart.frameID == 0 || targetID == 0 {
 		return
 	}
-	session, thread := d.smartStep.session, d.smartStep.thread
-	d.smartStep.open = false
-	d.status = "Smart stepping…"
-	d.paused = false
-	m.refreshDecorations()
+	m.stepIntoDebugTargetForSession(
+		smart.session, smart.thread, smart.frameID, smart.generation, targetID,
+	)
+}
+
+func (m *Model) stepIntoDebugTargetForSession(
+	session uint32,
+	thread int64,
+	frameID int64,
+	generation uint64,
+	targetID int64,
+) {
+	var expectedGeneration uint64
+	accepted := m.updateDebugSession(session, func(state *debugSessionState) {
+		if state.session != session || !state.paused || state.ended ||
+			state.stopThread != thread || state.frameID != frameID ||
+			state.stopGeneration != generation {
+			return
+		}
+		state.stopGeneration++
+		state.threadRequest++
+		state.frameRequest++
+		state.smartStep = debugSmartStepState{}
+		state.status = "Smart stepping…"
+		state.paused = false
+		expectedGeneration = state.stopGeneration
+	})
+	if !accepted || expectedGeneration == 0 {
+		return
+	}
+	if m.debug.active == session {
+		m.refreshDecorations()
+	}
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
@@ -343,12 +615,71 @@ func (m *Model) stepIntoDebugTarget(targetID int64) {
 			"session": session, "threadId": thread, "targetId": targetID,
 		})
 		m.post(func() {
-			if m.debug.session != session {
-				return
-			}
 			if err != nil {
-				m.debug.paused = true
-				m.debug.err = "Smart Step Into failed: " + err.Error()
+				m.updateDebugSession(session, func(state *debugSessionState) {
+					if state.session != session || state.ended ||
+						state.stopGeneration != expectedGeneration {
+						return
+					}
+					state.paused = true
+					state.err = "Smart Step Into failed: " + err.Error()
+				})
+			}
+			if m.debug.active == session {
+				m.refreshDecorations()
+			}
+			m.invalidate()
+		})
+	}()
+}
+
+func (m *Model) debugStepInSession(
+	session uint32,
+	thread int64,
+	frameID int64,
+	generation uint64,
+) {
+	var expectedGeneration uint64
+	accepted := m.updateDebugSession(session, func(state *debugSessionState) {
+		if state.session != session || !state.paused || state.ended ||
+			state.stopThread != thread || state.frameID != frameID ||
+			state.stopGeneration != generation {
+			return
+		}
+		state.stopGeneration++
+		state.threadRequest++
+		state.frameRequest++
+		state.smartStep = debugSmartStepState{}
+		state.status = "Stepping…"
+		state.paused = false
+		expectedGeneration = state.stopGeneration
+	})
+	if !accepted || expectedGeneration == 0 {
+		return
+	}
+	if m.debug.active == session {
+		m.refreshDecorations()
+	}
+	m.invalidate()
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
+		defer cancel()
+		_, err := m.invoke(ctx, "debug_step", map[string]any{
+			"session": session, "threadId": thread, "kind": "into",
+		})
+		m.post(func() {
+			if err != nil {
+				m.updateDebugSession(session, func(state *debugSessionState) {
+					if state.session != session || state.ended ||
+						state.stopGeneration != expectedGeneration {
+						return
+					}
+					state.paused = true
+					state.err = "Step failed: " + err.Error()
+				})
+			}
+			if m.debug.active == session {
+				m.refreshDecorations()
 			}
 			m.invalidate()
 		})
@@ -402,32 +733,58 @@ func (m *Model) DebugJumpToSource() {
 	m.ShowExecutionPoint()
 }
 
-// DebugHotRestart asks adapters that support it (Flutter) to restart the app
-// while keeping the debug session.
-func (m *Model) DebugHotRestart() {
+func (m *Model) debugDartSessionRunning() bool {
 	d := &m.debug
-	if d.session == 0 || d.ended || d.starting {
+	return d.session != 0 && !d.ended && !d.starting && d.adapter == "dart"
+}
+
+func (m *Model) debugHotApplicationAction(command, started, completed, failed string) {
+	d := &m.debug
+	if !m.debugDartSessionRunning() {
+		d.err = "Hot Reload and Hot Restart are available for a running Dart or Flutter debug session"
+		m.invalidate()
 		return
 	}
 	session := d.session
-	d.status = "Restarting the application…"
+	d.err = ""
+	d.status = started
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 2*time.Minute)
 		defer cancel()
-		_, err := m.invoke(ctx, "debug_hot_restart", map[string]any{"session": session})
+		_, err := m.invoke(ctx, command, map[string]any{"session": session})
 		m.post(func() {
 			if m.debug.session != session {
 				return
 			}
 			if err != nil {
-				m.debug.err = "Hot Restart failed: " + err.Error()
+				m.debug.err = failed + ": " + err.Error()
 			} else {
-				m.debug.status = "Application restarted"
+				m.debug.status = completed
 			}
 			m.invalidate()
 		})
 	}()
+}
+
+// DebugHotReload injects changed Dart or Flutter sources into the running app.
+func (m *Model) DebugHotReload() {
+	m.debugHotApplicationAction(
+		"debug_hot_reload",
+		"Reloading the application…",
+		"Application reloaded",
+		"Hot Reload failed",
+	)
+}
+
+// DebugHotRestart restarts a Dart or Flutter app while keeping its debugger.
+func (m *Model) DebugHotRestart() {
+	m.debugHotApplicationAction(
+		"debug_hot_restart",
+		"Restarting the application…",
+		"Application restarted",
+		"Hot Restart failed",
+	)
 }
 
 func (m *Model) OpenDebugBreakpoints() {
@@ -500,6 +857,7 @@ func (m *Model) ToggleTemporaryBreakpoint() {
 	if containsInt(lines, line) {
 		m.debug.bps[path] = removeInt(lines, line)
 		m.debug.temporaryBps[path] = removeInt(m.debug.temporaryBps[path], line)
+		m.debug.removeBreakpointOptions(path, line)
 		m.debug.status = fmt.Sprintf("Temporary breakpoint removed at line %d", line+1)
 	} else {
 		m.debug.bps[path] = append(lines, line)
@@ -525,6 +883,7 @@ func (m *Model) removeTemporaryBreakpoint(path string, line int) {
 	}
 	m.debug.bps[path] = removeInt(m.debug.bps[path], line)
 	m.debug.temporaryBps[path] = removeInt(m.debug.temporaryBps[path], line)
+	m.debug.removeBreakpointOptions(path, line)
 	if len(m.debug.bps[path]) == 0 {
 		delete(m.debug.bps, path)
 	}
@@ -693,6 +1052,243 @@ func (m *Model) pushSpecialBreakpoints() {
 	}()
 }
 
+type debugBreakpointEditState struct {
+	open         bool
+	kind         string
+	path         string
+	line         int
+	name         string
+	enabled      bool
+	condition    string
+	hitCondition string
+	logMessage   string
+	err          string
+}
+
+func (m *Model) editDebugLineBreakpoint(path string, line int) {
+	options := m.debug.breakpointOptionsAt(path, line)
+	m.debug.breakpointsOpen = false
+	m.debug.breakpointEdit = debugBreakpointEditState{
+		open:         true,
+		kind:         "line",
+		path:         path,
+		line:         line,
+		enabled:      options.Enabled,
+		condition:    options.Condition,
+		hitCondition: options.HitCondition,
+		logMessage:   options.LogMessage,
+	}
+	m.invalidate()
+}
+
+func (m *Model) editDebugMethodBreakpoint(name string) {
+	for _, bp := range m.debug.methodBps {
+		if bp.Name != name {
+			continue
+		}
+		m.debug.breakpointsOpen = false
+		m.debug.breakpointEdit = debugBreakpointEditState{
+			open:         true,
+			kind:         "method",
+			name:         name,
+			enabled:      bp.Enabled,
+			condition:    debugStringValue(bp.Condition),
+			hitCondition: debugStringValue(bp.HitCondition),
+		}
+		m.invalidate()
+		return
+	}
+}
+
+func (m *Model) editDebugFieldBreakpoint(dataID string) {
+	for _, bp := range m.debug.fieldBps {
+		if bp.DataID != dataID {
+			continue
+		}
+		m.debug.breakpointsOpen = false
+		m.debug.breakpointEdit = debugBreakpointEditState{
+			open:         true,
+			kind:         "data",
+			name:         dataID,
+			enabled:      bp.Enabled,
+			condition:    debugStringValue(bp.Condition),
+			hitCondition: debugStringValue(bp.HitCondition),
+		}
+		m.invalidate()
+		return
+	}
+}
+
+func debugStringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+func (m *Model) saveDebugBreakpointEditor() {
+	v := &m.debug.breakpointEdit
+	if !v.open {
+		return
+	}
+	switch v.kind {
+	case "line":
+		if !containsInt(m.debug.bps[v.path], v.line) {
+			v.err = "This breakpoint no longer exists"
+			m.invalidate()
+			return
+		}
+		m.debug.setBreakpointOptions(v.path, v.line, debugBreakpointOptions{
+			Enabled:      v.enabled,
+			Condition:    strings.TrimSpace(v.condition),
+			HitCondition: strings.TrimSpace(v.hitCondition),
+			LogMessage:   strings.TrimSpace(v.logMessage),
+		})
+		m.pushBreakpointsAsync(v.path)
+	case "method":
+		found := false
+		for i := range m.debug.methodBps {
+			bp := &m.debug.methodBps[i]
+			if bp.Name != v.name {
+				continue
+			}
+			bp.Enabled = v.enabled
+			bp.Condition = breakpointString(v.condition)
+			bp.HitCondition = breakpointString(v.hitCondition)
+			found = true
+			break
+		}
+		if !found {
+			v.err = "This method breakpoint no longer exists"
+			m.invalidate()
+			return
+		}
+		m.pushSpecialBreakpoints()
+	case "data":
+		found := false
+		for i := range m.debug.fieldBps {
+			bp := &m.debug.fieldBps[i]
+			if bp.DataID != v.name {
+				continue
+			}
+			bp.Enabled = v.enabled
+			bp.Condition = breakpointString(v.condition)
+			bp.HitCondition = breakpointString(v.hitCondition)
+			found = true
+			break
+		}
+		if !found {
+			v.err = "This field watchpoint no longer exists"
+			m.invalidate()
+			return
+		}
+		m.pushSpecialBreakpoints()
+	default:
+		v.err = "This breakpoint cannot be edited"
+		m.invalidate()
+		return
+	}
+	v.open = false
+	m.debug.breakpointsOpen = true
+	m.invalidate()
+}
+
+func (m *Model) debugBreakpointEditorDialog(c *ui.Context, p *ui.Theme) {
+	v := &m.debug.breakpointEdit
+	open := v.open
+	d := ui.Modal(c.Key("debug-breakpoint-editor"), &open, func() {
+		ui.Column(c).Width(560).Gap(9).Children(func() {
+			title := "Breakpoint"
+			switch v.kind {
+			case "method":
+				title = "Method Breakpoint"
+			case "data":
+				title = "Field Watchpoint"
+			}
+			ui.Text(c, title).FontSize(13).Bold().TextColor(p.Text)
+			if v.name != "" {
+				ui.Text(c, v.name).FontSize(12).TextColor(p.TextMuted).SingleLine().Ellipsis("…")
+			}
+			ui.Checkbox(c, &v.enabled, "Enabled")
+			ui.Text(c, "Condition").FontSize(12).TextColor(p.TextMuted)
+			ui.TextInput(c.Key("debug-breakpoint-condition"), &v.condition).
+				Placeholder("Evaluate to true before stopping").
+				Font("monospace").FontSize(12)
+			ui.Text(c, "Hit count").FontSize(12).TextColor(p.TextMuted)
+			ui.TextInput(c.Key("debug-breakpoint-hit-condition"), &v.hitCondition).
+				Placeholder("For example: 3, >= 5").
+				Font("monospace").FontSize(12)
+			if v.kind == "line" {
+				ui.Text(c, "Log message").FontSize(12).TextColor(p.TextMuted)
+				ui.TextInput(c.Key("debug-breakpoint-log-message"), &v.logMessage).
+					Placeholder("Log text with {expression} values and continue").
+					Font("monospace").FontSize(12)
+			}
+			if v.err != "" {
+				ui.Text(c, v.err).FontSize(12).TextColor(p.Danger)
+			}
+			ui.Row(c).Gap(8).Children(func() {
+				ui.Button(c, "Cancel").OnClick(func() {
+					v.open = false
+					m.debug.breakpointsOpen = true
+					m.invalidate()
+				})
+				ui.Spacer(c)
+				ui.Button(c, "Apply").OnClick(m.saveDebugBreakpointEditor)
+			})
+		})
+	})
+	if d.Dismissed() || !open {
+		v.open = false
+		m.debug.breakpointsOpen = true
+	}
+}
+
+func debugLineBreakpointState(options debugBreakpointOptions) string {
+	state := make([]string, 0, 3)
+	if !options.Enabled {
+		state = append(state, "Disabled")
+	}
+	if strings.TrimSpace(options.Condition) != "" {
+		state = append(state, "Conditional")
+	}
+	if strings.TrimSpace(options.HitCondition) != "" {
+		state = append(state, "Hit count")
+	}
+	if strings.TrimSpace(options.LogMessage) != "" {
+		state = append(state, "Log")
+	}
+	return strings.Join(state, " · ")
+}
+
+func debugSpecialBreakpointState(bp openidea.FunctionBreakpoint) string {
+	state := make([]string, 0, 3)
+	if !bp.Enabled {
+		state = append(state, "Disabled")
+	}
+	if bp.Condition != nil && strings.TrimSpace(*bp.Condition) != "" {
+		state = append(state, "Conditional")
+	}
+	if bp.HitCondition != nil && strings.TrimSpace(*bp.HitCondition) != "" {
+		state = append(state, "Hit count")
+	}
+	return strings.Join(state, " · ")
+}
+
+func debugDataBreakpointState(bp openidea.DataBreakpoint) string {
+	state := make([]string, 0, 3)
+	if !bp.Enabled {
+		state = append(state, "Disabled")
+	}
+	if bp.Condition != nil && strings.TrimSpace(*bp.Condition) != "" {
+		state = append(state, "Conditional")
+	}
+	if bp.HitCondition != nil && strings.TrimSpace(*bp.HitCondition) != "" {
+		state = append(state, "Hit count")
+	}
+	return strings.Join(state, " · ")
+}
+
 func (m *Model) debugBreakpointsDialog(c *ui.Context, p *ui.Theme) {
 	open := m.debug.breakpointsOpen
 	d := ui.Modal(c.Key("debug-breakpoints"), &open, func() {
@@ -712,14 +1308,22 @@ func (m *Model) debugBreakpointsDialog(c *ui.Context, p *ui.Theme) {
 							label = rel
 						}
 						ui.Row(c).Height(26).Gap(6).AlignItems(ui.Center).Children(func() {
+							options := m.debug.breakpointOptionsAt(path, line)
 							if containsInt(m.debug.temporaryBps[path], line) {
 								label = "Temporary · " + label
 							}
 							ui.Text(c, fmt.Sprintf("%s:%d", label, line+1)).Grow(1).FontSize(12).
 								TextColor(p.Text).SingleLine().Ellipsis("…")
+							if state := debugLineBreakpointState(options); state != "" {
+								ui.Text(c, state).Shrink(0).FontSize(11).TextColor(p.TextMuted)
+							}
+							if ui.Button(c, "Edit").Clicked() {
+								m.editDebugLineBreakpoint(path, line)
+							}
 							if ui.Button(c, "Remove").Clicked() {
 								m.debug.bps[path] = removeInt(m.debug.bps[path], line)
 								m.debug.temporaryBps[path] = removeInt(m.debug.temporaryBps[path], line)
+								m.debug.removeBreakpointOptions(path, line)
 								m.pushBreakpointsAsync(path)
 								m.invalidate()
 							}
@@ -730,6 +1334,12 @@ func (m *Model) debugBreakpointsDialog(c *ui.Context, p *ui.Theme) {
 					i, bp := i, bp
 					ui.Row(c).Height(26).Gap(6).AlignItems(ui.Center).Children(func() {
 						ui.Text(c, "Method · "+bp.Name).Grow(1).FontSize(12).TextColor(p.Text)
+						if state := debugSpecialBreakpointState(bp); state != "" {
+							ui.Text(c, state).Shrink(0).FontSize(11).TextColor(p.TextMuted)
+						}
+						if ui.Button(c, "Edit").Clicked() {
+							m.editDebugMethodBreakpoint(bp.Name)
+						}
 						if ui.Button(c, "Remove").Clicked() {
 							m.debug.methodBps = append(m.debug.methodBps[:i], m.debug.methodBps[i+1:]...)
 							m.pushSpecialBreakpoints()
@@ -741,6 +1351,12 @@ func (m *Model) debugBreakpointsDialog(c *ui.Context, p *ui.Theme) {
 					i, bp := i, bp
 					ui.Row(c).Height(26).Gap(6).AlignItems(ui.Center).Children(func() {
 						ui.Text(c, "Field · "+bp.DataID).Grow(1).FontSize(12).TextColor(p.Text)
+						if state := debugDataBreakpointState(bp); state != "" {
+							ui.Text(c, state).Shrink(0).FontSize(11).TextColor(p.TextMuted)
+						}
+						if ui.Button(c, "Edit").Clicked() {
+							m.editDebugFieldBreakpoint(bp.DataID)
+						}
 						if ui.Button(c, "Remove").Clicked() {
 							m.debug.fieldBps = append(m.debug.fieldBps[:i], m.debug.fieldBps[i+1:]...)
 							m.pushSpecialBreakpoints()

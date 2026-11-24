@@ -139,6 +139,11 @@ func (m *Model) dockDocumentation() {
 // gives the popup the keyboard, then moves its history into the tool window.
 func (m *Model) QuickDocumentation() {
 	d := &m.documentation
+	if m.PowerSaveMode() {
+		m.status = "Power Save Mode is on: documentation popups are off"
+		m.invalidate()
+		return
+	}
 	if d.popup != nil {
 		if d.popup.loading {
 			return
@@ -153,6 +158,11 @@ func (m *Model) QuickDocumentation() {
 	}
 	t := m.tab()
 	if t == nil || t.doc == nil || t.doc.ID() == 0 || m.ctx == nil || (m.mgr == nil && m.invokeHook == nil) {
+		return
+	}
+	if item, info, ok := m.selectedCompletion(t); ok &&
+		(info.LSP != nil || strings.TrimSpace(item.Documentation) != "") {
+		m.quickCompletionDocumentation(t, item, info)
 		return
 	}
 	view := &d.window
@@ -201,6 +211,146 @@ func (m *Model) QuickDocumentation() {
 			m.invalidate()
 		})
 	}()
+}
+
+func (m *Model) quickCompletionDocumentation(t *Tab, item editor.Completion, info completionInfo) {
+	d := &m.documentation
+	view := &d.window
+	popup := !m.toolVisible(documentationWindow)
+	offset := t.state.Cursor()
+	version := t.doc.Buffer().Version()
+	if popup {
+		view = &documentationView{}
+		d.popup, d.tab, d.offset, d.version = view, t, offset, version
+	}
+	if info.LSP == nil || strings.TrimSpace(item.Documentation) != "" ||
+		info.LSP.Documentation != nil {
+		entry := documentationEntry{blocks: completionDocumentationBlocks(item, info.LSP, t.doc.Info().Language)}
+		if len(entry.blocks) == 0 {
+			view.message = "No documentation found"
+		} else {
+			view.push(entry)
+		}
+		m.invalidate()
+		return
+	}
+	source := *info.LSP
+	resolveData := strings.TrimSpace(string(source.Data))
+	if resolveData == "" || resolveData == "null" || source.Server == 0 {
+		entry := documentationEntry{blocks: completionDocumentationBlocks(item, &source, t.doc.Info().Language)}
+		if len(entry.blocks) == 0 {
+			view.message = "No documentation found"
+		} else {
+			view.push(entry)
+		}
+		m.invalidate()
+		return
+	}
+
+	docID := t.doc.ID()
+	root := m.Root()
+	selected := completionTrackKey(item)
+	resolveKey := completionResolveKey(&source)
+	language := t.doc.Info().Language
+	id, ctx := m.beginDocumentationRequest(view)
+	go func() {
+		resolved, err := m.documentationResolveCompletion(ctx, docID, source)
+		entry := documentationEntry{
+			blocks: completionDocumentationBlocks(item, &source, language),
+		}
+		if err == nil {
+			entry.blocks = completionDocumentationBlocks(item, &resolved, language)
+		}
+		m.post(func() {
+			if d.request != id {
+				return
+			}
+			m.completeDocumentationRequest()
+			current, currentInfo, selectedNow := m.selectedCompletion(t)
+			stale := m.Root() != root || m.tab() != t ||
+				t.doc.Buffer().Version() != version || t.state.Cursor() != offset ||
+				!selectedNow || currentInfo.LSP == nil ||
+				completionTrackKey(current) != selected ||
+				completionResolveKey(currentInfo.LSP) != resolveKey
+			if stale {
+				if popup {
+					m.closeDocumentationPopup()
+				}
+				m.invalidate()
+				return
+			}
+			if err != nil {
+				if len(entry.blocks) > 0 {
+					view.push(entry)
+				}
+				view.message = "Could not load documentation: " + err.Error()
+			} else if len(entry.blocks) == 0 {
+				view.message = "No documentation found"
+			} else {
+				view.push(entry)
+			}
+			m.invalidate()
+		})
+	}()
+}
+
+func completionResolveKey(item *openidea.CompletionItem) string {
+	if item == nil {
+		return ""
+	}
+	return item.Label + "\x00" + item.InsertText + "\x00" +
+		strconv.FormatUint(uint64(item.Server), 10) + "\x00" + string(item.Data)
+}
+
+func (m *Model) documentationResolveCompletion(
+	ctx context.Context,
+	doc uint32,
+	item openidea.CompletionItem,
+) (openidea.CompletionItem, error) {
+	reply, err := m.invoke(ctx, "lsp_resolve_completion", map[string]any{"doc": doc, "item": item})
+	if err != nil {
+		return openidea.CompletionItem{}, err
+	}
+	var resolved openidea.CompletionItem
+	if err := json.Unmarshal(reply, &resolved); err != nil {
+		return openidea.CompletionItem{}, err
+	}
+	return resolved, nil
+}
+
+func completionDocumentationBlocks(
+	item editor.Completion,
+	source *openidea.CompletionItem,
+	language string,
+) []documentationBlock {
+	var out []documentationBlock
+	detail := strings.TrimSpace(item.Detail)
+	labelDetail := ""
+	if source != nil {
+		if source.LabelDetail != nil {
+			labelDetail = strings.TrimSpace(*source.LabelDetail)
+		}
+		if source.Detail != nil && detail == "" {
+			detail = strings.TrimSpace(*source.Detail)
+		}
+	}
+	detail = strings.TrimSpace(detail)
+	if detail != "" {
+		code := detail
+		if labelDetail != "" && strings.HasPrefix(detail, "(") {
+			code = item.Label + detail
+		}
+		markup := openidea.Markup{Kind: "markdown", Value: "```" + strings.ToLower(language) + "\n" + code + "\n```"}
+		out = append(out, documentationBlocks(markup, language)...)
+	}
+	if source != nil && source.Documentation != nil && strings.TrimSpace(source.Documentation.Value) != "" {
+		out = append(out, documentationBlocks(*source.Documentation, language)...)
+	} else if strings.TrimSpace(item.Documentation) != "" {
+		out = append(out, documentationBlocks(
+			openidea.Markup{Kind: "plaintext", Value: item.Documentation}, language,
+		)...)
+	}
+	return out
 }
 
 func (m *Model) beginDocumentationRequest(view *documentationView) (uint32, context.Context) {
@@ -323,8 +473,12 @@ func (m *Model) documentationPopup(c *ui.Context, p *ui.Theme) {
 func (m *Model) documentationPanel(c *ui.Context, p *ui.Theme) {
 	d := &m.documentation
 	oi := oiPaletteOf(p)
+	background := oi.island
+	if m.prefs.Appearance.DifferentToolWindowBackground {
+		background = oi.elev
+	}
 	box := ui.Column(c.Key("documentation:tool")).Grow(1).MinHeight(0).MinWidth(0).
-		Background(oi.island).Radius(oiIslandRadius).Focusable().Bind(&d.dockFocus)
+		Background(background).Radius(oiIslandRadius).Focusable().Bind(&d.dockFocus)
 	box.Children(func() {
 		ui.Row(c).Height(oiTokensFor(m, p).HeaderHeight).Shrink(0).Padding(0, 6, 0, 8).Gap(6).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, "Documentation").FontSize(13).TextColor(oi.textStrong).SingleLine().Ellipsis("…")
@@ -638,7 +792,7 @@ func (m *Model) openDocumentationSource(v *documentationView, target documentati
 			t := &Tab{doc: doc, kind: documentationSourceTab, gitOff: true,
 				seen: version, synced: version, outlineVersion: version, state: &editor.State{
 					Buffer: doc.Buffer(), ReadOnly: true, Font: ui.Font{Family: oiFontMono, Size: m.prefs.fontSize()},
-					LineHeight: editorLineHeight(m.prefs.fontSize()), Bindings: intellijEditorBindings(),
+					LineHeight: editorLineHeight(m.prefs.fontSize()), Bindings: m.editorBindings(),
 				}}
 			m.noteTabUse(t)
 			m.insertTab(t)

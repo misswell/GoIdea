@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -68,12 +66,12 @@ func (m *Model) topLevelTreePaths(paths []string) []string {
 	clean := make([]string, 0, len(paths))
 	seen := map[string]bool{}
 	for _, path := range paths {
-		path = filepath.Clean(path)
+		path = m.projectTreePathClean(path)
 		if path == "" || path == "." {
 			continue
 		}
 		key := path
-		if caseInsensitiveFileSystem() {
+		if m.projectTreeCaseInsensitive() {
 			key = strings.ToLower(path)
 		}
 		if seen[key] {
@@ -89,7 +87,7 @@ func (m *Model) topLevelTreePaths(paths []string) []string {
 			if index == otherIndex || other == path {
 				continue
 			}
-			if underTreePath(path, other) {
+			if m.projectTreeUnderPath(path, other) {
 				nested = true
 				break
 			}
@@ -108,7 +106,10 @@ func (m *Model) mutableTreePaths(paths []string) []string {
 		if path == "" || path == m.Root() || m.workspaceContains(path) {
 			continue
 		}
-		if _, err := os.Stat(path); err != nil {
+		if m.tree != nil && m.tree.ReadOnly(path) {
+			continue
+		}
+		if !m.projectTreeEntryKnown(path) {
 			continue
 		}
 		out = append(out, path)
@@ -151,17 +152,14 @@ func (m *Model) readTreeClipboardFiles() (files []string, err error) {
 	return mygo.Clipboard.ReadFiles()
 }
 
-func sameTreeClipboardFiles(left, right []string) bool {
+func (m *Model) sameTreeClipboardFiles(left, right []string) bool {
 	if len(left) != len(right) {
 		return false
 	}
 	key := func(files []string) []string {
 		keys := make([]string, 0, len(files))
 		for _, path := range files {
-			path = filepath.Clean(path)
-			if caseInsensitiveFileSystem() {
-				path = strings.ToLower(path)
-			}
+			path = m.projectTreeNameKey(m.projectTreePathClean(path))
 			keys = append(keys, path)
 		}
 		sort.Strings(keys)
@@ -178,10 +176,10 @@ func sameTreeClipboardFiles(left, right []string) bool {
 
 func (m *Model) treeActionDirectory() string {
 	if target, ok := m.selectedTreeEntry(); ok {
-		return target.folder()
+		return m.treeTargetFolder(target)
 	}
 	if tab := m.tab(); tab != nil && tab.kind == "" && tab.doc != nil {
-		return filepath.Dir(tab.doc.Path())
+		return m.projectTreePathDir(tab.doc.Path())
 	}
 	return m.Root()
 }
@@ -238,9 +236,9 @@ func (m *Model) CopySelectedTreePath(mode string) {
 	text := target.path
 	switch mode {
 	case "name":
-		text = filepath.Base(target.path)
+		text = m.projectTreePathBase(target.path)
 	case "relative", "source":
-		if rel, err := filepath.Rel(m.Root(), target.path); err == nil {
+		if rel, err := m.projectTreePathRelative(m.Root(), target.path); err == nil {
 			text = rel
 		}
 	}
@@ -272,7 +270,7 @@ func (m *Model) MoveSelectedTreeEntry() {
 	if len(paths) == 0 {
 		return
 	}
-	targetFolder := filepath.Dir(paths[0])
+	targetFolder := m.projectTreePathDir(paths[0])
 	if target, ok := m.selectedTreeEntry(); ok && target.dir {
 		targetFolder = target.path
 	}
@@ -287,37 +285,35 @@ func (m *Model) moveTreeEntry(target treeTarget) {
 	if len(paths) == 0 {
 		paths = []string{target.path}
 	}
-	m.OpenFileMoveDialogFor(paths, filepath.Dir(paths[0]), false)
+	m.OpenFileMoveDialogFor(paths, m.projectTreePathDir(paths[0]), false)
 }
 
 func (m *Model) moveProjectTreeEntry(target treeTarget, destination string) {
 	if target.root || destination == "" {
 		return
 	}
-	destination = filepath.Clean(destination)
+	destination = m.projectTreePathClean(destination)
 	if target.dir {
-		inside := destination == target.path ||
-			strings.HasPrefix(destination, target.path+string(filepath.Separator))
+		inside := m.projectTreeUnderPath(destination, target.path)
 		if inside {
 			m.status = "A folder cannot be moved into itself"
 			m.invalidate()
 			return
 		}
 	}
-	info, err := os.Stat(destination)
-	if err != nil || !info.IsDir() {
+	if !m.projectTreeIsDir(destination) {
 		m.status = "Choose an existing destination folder"
 		m.invalidate()
 		return
 	}
-	to := filepath.Join(destination, filepath.Base(target.path))
+	to := m.projectTreePathJoin(destination, m.projectTreePathBase(target.path))
 	if to == target.path {
 		m.status = "It is already in that directory"
 		m.invalidate()
 		return
 	}
-	if _, err := os.Stat(to); err == nil {
-		m.status = "The destination already has " + filepath.Base(to)
+	if m.projectTreeEntryKnown(to) {
+		m.status = "The destination already has " + m.projectTreePathBase(to)
 		m.invalidate()
 		return
 	}
@@ -327,7 +323,7 @@ func (m *Model) moveProjectTreeEntry(target treeTarget, destination string) {
 		return
 	}
 	reopen := target.path == m.tabPath()
-	m.applyTreeMove(target.path, to, "Move "+filepath.Base(target.path), func(err error) {
+	m.applyTreeMove(target.path, to, "Move "+m.projectTreePathBase(target.path), func(err error) {
 		if err != nil {
 			m.status = "Move failed: " + err.Error()
 			m.invalidate()
@@ -335,8 +331,8 @@ func (m *Model) moveProjectTreeEntry(target treeTarget, destination string) {
 		}
 		m.closedTreeTabs(target.path)
 		m.moveBookmarkPaths(target.path, to)
-		m.refreshTree(filepath.Dir(target.path))
-		m.refreshTree(filepath.Dir(to))
+		m.refreshTree(m.projectTreePathDir(target.path))
+		m.refreshTree(m.projectTreePathDir(to))
 		if m.tree != nil {
 			m.tree.Select(to)
 		}
@@ -385,7 +381,7 @@ func (m *Model) runTreeFileCopies(
 			})
 			if err != nil {
 				outcome.Failures = append(outcome.Failures,
-					filepath.Base(copy.From)+": "+err.Error())
+					m.projectTreePathBase(copy.From)+": "+err.Error())
 				continue
 			}
 			outcome.Copied = append(outcome.Copied, copy)
@@ -393,17 +389,22 @@ func (m *Model) runTreeFileCopies(
 		m.post(func() {
 			if len(outcome.Copied) > 0 {
 				m.refreshTree(target)
+				created := make([]string, 0, len(outcome.Copied))
+				for _, copied := range outcome.Copied {
+					created = append(created, copied.To)
+				}
+				m.notifyVCSFileOperation("created", created)
 				if m.tree != nil {
 					m.tree.Select(outcome.Copied[0].To)
 				}
 				if openInEditor && len(outcome.Copied) == 1 {
-					if info, err := os.Stat(outcome.Copied[0].To); err == nil && !info.IsDir() {
+					if !m.projectTreeIsDir(outcome.Copied[0].To) {
 						m.openFile(outcome.Copied[0].To)
 					}
 				}
 				if len(outcome.Copied) == 1 {
-					m.status = "Copied " + filepath.Base(outcome.Copied[0].From) +
-						" to " + filepath.Base(outcome.Copied[0].To)
+					m.status = "Copied " + m.projectTreePathBase(outcome.Copied[0].From) +
+						" to " + m.projectTreePathBase(outcome.Copied[0].To)
 				} else {
 					m.status = fmt.Sprintf("Copied %d items", len(outcome.Copied))
 				}
@@ -473,21 +474,21 @@ func (m *Model) UndoLastTreeMove() {
 			for _, move := range reverted {
 				m.closedTreeTabs(move.From)
 				m.moveBookmarkPaths(move.From, move.To)
-				m.refreshTree(filepath.Dir(move.From))
-				m.refreshTree(filepath.Dir(move.To))
+				m.refreshTree(m.projectTreePathDir(move.From))
+				m.refreshTree(m.projectTreePathDir(move.To))
 			}
 			if len(reverted) > 0 && m.tree != nil {
 				m.tree.Select(reverted[0].To)
 			}
 			m.treeLastMove = nil
 			if len(reverted) == 1 {
-				m.status = "Undid move of " + filepath.Base(reverted[0].To)
+				m.status = "Undid move of " + m.projectTreePathBase(reverted[0].To)
 			} else {
 				m.status = fmt.Sprintf("Undid move of %d items", len(reverted))
 			}
 			opened := map[string]bool{}
 			for _, path := range openPaths {
-				restored := movedFilePath(path, reverted)
+				restored := m.movedFilePath(path, reverted)
 				if restored == path {
 					continue
 				}
@@ -496,7 +497,7 @@ func (m *Model) UndoLastTreeMove() {
 					m.openFile(restored)
 				}
 			}
-			if restored := movedFilePath(active, reverted); restored != active {
+			if restored := m.movedFilePath(active, reverted); restored != active {
 				if index := m.tabForPath(restored); index >= 0 {
 					m.activate(index)
 				}
@@ -558,7 +559,7 @@ func (m *Model) undoLastTreeDelete() {
 				err = json.Unmarshal(raw, &history)
 			}
 			if err != nil {
-				failed = append(failed, filepath.Base(deletedPath))
+				failed = append(failed, m.projectTreePathBase(deletedPath))
 				continue
 			}
 			gone := map[string]bool{}
@@ -594,11 +595,11 @@ func (m *Model) undoLastTreeDelete() {
 				}
 			}
 			if !ok {
-				failed = append(failed, filepath.Base(deletedPath))
+				failed = append(failed, m.projectTreePathBase(deletedPath))
 				continue
 			}
 			restored = append(restored, deletedPath)
-			parents[filepath.Dir(deletedPath)] = true
+			parents[m.projectTreePathDir(deletedPath)] = true
 		}
 		m.post(func() {
 			for parent := range parents {
@@ -608,7 +609,7 @@ func (m *Model) undoLastTreeDelete() {
 				m.tree.Select(restored[0])
 			}
 			if len(restored) == 1 {
-				m.status = "Restored " + filepath.Base(restored[0])
+				m.status = "Restored " + m.projectTreePathBase(restored[0])
 			} else if len(restored) > 1 {
 				m.status = fmt.Sprintf("Restored %d items", len(restored))
 			} else {

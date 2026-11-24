@@ -206,7 +206,7 @@ func TestOpenIDEAShellShortcuts(t *testing.T) {
 	m := &Model{}
 	checks := map[string][]string{
 		"navigate.navigationBar":            {"Cmd+Up", "Alt+Home"},
-		"workbench.stopBackgroundProcesses": {"Cmd+Shift+F2"},
+		"workbench.stopBackgroundProcesses": {"Shift+Cmd+F2"},
 		"toolwindow.closeContent":           {"Cmd+W", "Ctrl+Shift+F4"},
 	}
 	for id, want := range checks {

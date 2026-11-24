@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -42,6 +43,14 @@ func init() {
 		"apply left change right", func(m *Model, _ any) { m.ApplyDiffSide(true) })
 	register("diff.applyRightSide", "Accept Right Side", "Diff",
 		"apply right change left", func(m *Model, _ any) { m.ApplyDiffSide(false) })
+	register("diff.acceptLeftAll", "Accept Entire Left Side", "Diff",
+		"replace right with left whole file all", func(m *Model, _ any) { m.ApplyWholeDiffSide(true) })
+	register("diff.acceptRightAll", "Accept Entire Right Side", "Diff",
+		"replace left with right whole file all", func(m *Model, _ any) { m.ApplyWholeDiffSide(false) })
+	register("diff.applyResult", "Apply Diff Result", "Diff",
+		"apply compare result working copy", func(m *Model, _ any) { m.ApplyDiffResult() })
+	register("diff.saveResult", "Save Diff Result", "Diff",
+		"save compare result working copy files", func(m *Model, _ any) { m.SaveDiffResult() })
 	register("diff.jumpToSource", "Jump to Source", "Diff",
 		"open source line", func(m *Model, _ any) { m.JumpDiffToSource() })
 	register("diff.showSettings", "Diff Settings", "Diff",
@@ -133,6 +142,7 @@ func diffChangesWithOptions(left, right string, options DiffPrefs) []diffChange 
 	rows := textdiff.CompareWithOptions(left, right, 0, diffComparisonOptions(options.normalized()))
 	var out []diffChange
 	current := diffChange{oldStart: -1, newStart: -1}
+	oldPosition, newPosition := 0, 0
 	flush := func() {
 		if current.oldStart < 0 && current.newStart < 0 {
 			return
@@ -149,23 +159,36 @@ func diffChangesWithOptions(left, right string, options DiffPrefs) []diffChange 
 	for _, row := range rows {
 		switch row.Kind {
 		case textdiff.Hunk:
+			flush()
+			oldPosition = max(0, row.Old)
+			newPosition = max(0, row.New-1)
 			continue
 		case textdiff.Context:
 			flush()
+			oldPosition = row.Old
+			newPosition = row.New
 		case textdiff.Delete:
 			if current.oldStart < 0 {
 				current.oldStart = row.Old - 1
 			}
+			if current.newStart < 0 {
+				current.newStart = newPosition
+			}
 			if row.Old > 0 {
 				current.oldEnd = row.Old
 			}
+			oldPosition = current.oldEnd
 		case textdiff.Add:
+			if current.oldStart < 0 {
+				current.oldStart = oldPosition
+			}
 			if current.newStart < 0 {
 				current.newStart = row.New - 1
 			}
 			if row.New > 0 {
 				current.newEnd = row.New
 			}
+			newPosition = current.newEnd
 		}
 	}
 	flush()
@@ -176,7 +199,11 @@ func diffChangesWithOptions(left, right string, options DiffPrefs) []diffChange 
 // IntelliJ diff navigator does.
 func (m *Model) StepDiffChange(delta int) {
 	d := m.diff
-	if d == nil || len(d.changes) == 0 {
+	if d == nil {
+		return
+	}
+	d.refreshDiffEditorText()
+	if len(d.changes) == 0 {
 		m.status = "There are no differences"
 		m.invalidate()
 		return
@@ -185,14 +212,47 @@ func (m *Model) StepDiffChange(delta int) {
 	if d.selected < 0 {
 		d.selected += len(d.changes)
 	}
+	m.revealDiffChange(d, d.changes[d.selected])
 	m.status = fmt.Sprintf("Change %d of %d", d.selected+1, len(d.changes))
 	m.invalidate()
+}
+
+func (m *Model) revealDiffChange(d *diffView, change diffChange) {
+	if d == nil {
+		return
+	}
+	m.ensureDiffEditors(d)
+	state := d.editorFor(d.activeSide == editor.DiffOld)
+	if state == nil {
+		return
+	}
+	start, end := change.newStart, change.newEnd
+	if d.activeSide == editor.DiffOld {
+		start, end = change.oldStart, change.oldEnd
+	}
+	if start < 0 {
+		return
+	}
+	snapshot := state.Buffer.Snapshot()
+	from := snapshot.LineStart(min(start, snapshot.LineCount()-1))
+	to := snapshot.Len()
+	if end < snapshot.LineCount() {
+		to = snapshot.LineStart(max(start, end))
+	}
+	state.Select(from, to)
+	state.ScrollTo(start)
 }
 
 // StepDiffFile moves through a Compare Directories or agent review chain.
 func (m *Model) StepDiffFile(delta int) {
 	d := m.diff
 	if d == nil {
+		return
+	}
+	d.refreshDiffEditorText()
+	if d.dirty {
+		m.status = "Apply, save, or discard the current result before changing files"
+		m.invalidate()
 		return
 	}
 	if len(d.agentChain) > 1 {
@@ -213,17 +273,72 @@ func (m *Model) StepDiffFile(delta int) {
 	m.invalidate()
 }
 
-// ApplyDiffSide applies the selected edit from the left to the right, or from
-// the right to the left, exactly as the diff toolbar actions do.
+func diffChangeContainsLine(change diffChange, line int, left bool) bool {
+	start, end := change.newStart, change.newEnd
+	if left {
+		start, end = change.oldStart, change.oldEnd
+	}
+	if start < 0 || line < start {
+		return false
+	}
+	return line < end || line == start && start == end
+}
+
+func (d *diffView) selectChangeAtCursor() (diffChange, bool) {
+	if d == nil {
+		return diffChange{}, false
+	}
+	side := d.rightEditor
+	left := d.activeSide == editor.DiffOld
+	if left {
+		side = d.leftEditor
+	}
+	if side != nil {
+		line := side.CursorPos().Line
+		for i, change := range d.changes {
+			if diffChangeContainsLine(change, line, left) {
+				d.selected = i
+				return change, true
+			}
+		}
+	}
+	if len(d.changes) == 0 || d.selected < 0 || d.selected >= len(d.changes) {
+		return diffChange{}, false
+	}
+	return d.changes[d.selected], true
+}
+
+// ApplyDiffSide applies the change at the active caret, or the current
+// navigator selection when the caret is between changes, from the left to the
+// right or from the right to the left. The result remains staged in the
+// compare view until Apply Result or Save Result.
 func (m *Model) ApplyDiffSide(fromLeft bool) {
 	d := m.diff
-	if d == nil || len(d.changes) == 0 || d.selected < 0 || d.selected >= len(d.changes) {
+	if d == nil || d.applying {
+		return
+	}
+	d.refreshDiffEditorText()
+	if len(d.changes) == 0 {
 		m.status = "There is no selected change to apply"
 		m.invalidate()
 		return
 	}
-	change := d.changes[d.selected]
-	previousLeft, previousRight := d.leftText, d.rightText
+	targetEditable := d.rightEditable
+	if !fromLeft {
+		targetEditable = d.leftEditable
+	}
+	if !targetEditable {
+		m.status = "This side is read-only"
+		m.invalidate()
+		return
+	}
+	m.ensureDiffEditors(d)
+	change, ok := d.selectChangeAtCursor()
+	if !ok {
+		m.status = "There is no selected change to apply"
+		m.invalidate()
+		return
+	}
 	leftLines, leftNewline := diffTextLines(d.leftText)
 	rightLines, rightNewline := diffTextLines(d.rightText)
 	left, right := d.leftText, d.rightText
@@ -251,13 +366,105 @@ func (m *Model) ApplyDiffSide(fromLeft bool) {
 		left = joinDiffText(leftLines, leftNewline)
 	}
 	d.message = ""
-	d.leftText, d.rightText = left, right
+	d.replaceDiffSide(true, left)
+	d.replaceDiffSide(false, right)
 	d.setDiffRows(left, right)
-	if fromLeft {
-		m.syncDiffDocument(d, false, previousRight, right)
-	} else {
-		m.syncDiffDocument(d, true, previousLeft, left)
+	d.dirty = d.leftText != d.leftOriginal || d.rightText != d.rightOriginal
+	m.status = "Accepted the change. Use Save Result to write it to disk."
+	m.invalidate()
+}
+
+// ApplyWholeDiffSide replaces the editable opposite pane with the whole source
+// side. This is the Compare Files counterpart of a merge editor's Accept Yours
+// or Accept Theirs and remains part of the unsaved compare result.
+func (m *Model) ApplyWholeDiffSide(fromLeft bool) {
+	d := m.diff
+	if d == nil || d.applying {
+		return
 	}
+	d.refreshDiffEditorText()
+	targetEditable := d.rightEditable
+	sourceText := d.leftText
+	left := false
+	if !fromLeft {
+		targetEditable = d.leftEditable
+		sourceText = d.rightText
+		left = true
+	}
+	if !targetEditable {
+		m.status = "This side is read-only"
+		m.invalidate()
+		return
+	}
+	m.ensureDiffEditors(d)
+	d.replaceDiffSide(left, sourceText)
+	if left {
+		d.leftText = sourceText
+	} else {
+		d.rightText = sourceText
+	}
+	d.message = ""
+	d.setDiffRows(d.leftText, d.rightText)
+	d.dirty = d.leftText != d.leftOriginal || d.rightText != d.rightOriginal
+	m.status = "Accepted the entire side. Save Result writes the working copy."
+	m.invalidate()
+}
+
+// RejectDiffChange copies the opposite side over the active side's selected
+// change. In a two-file comparison the active side is the result being
+// edited, so this is the mirror of Accept for that pane.
+func (m *Model) RejectDiffChange() {
+	d := m.diff
+	if d == nil || d.applying {
+		return
+	}
+	switch {
+	case d.activeSide == editor.DiffOld && d.leftEditable:
+		m.ApplyDiffSide(false)
+	case d.rightEditable:
+		m.ApplyDiffSide(true)
+	default:
+		m.status = "This comparison has no editable side"
+		m.invalidate()
+	}
+}
+
+// RejectWholeDiffSide restores the active editable side from the opposite
+// side. It stages the result in the compare view until Apply Result or Save
+// Result, exactly like accepting a whole side.
+func (m *Model) RejectWholeDiffSide() {
+	d := m.diff
+	if d == nil || d.applying {
+		return
+	}
+	switch {
+	case d.activeSide == editor.DiffOld && d.leftEditable:
+		m.ApplyWholeDiffSide(false)
+	case d.rightEditable:
+		m.ApplyWholeDiffSide(true)
+	default:
+		m.status = "This comparison has no editable side"
+		m.invalidate()
+	}
+}
+
+// DiscardDiffResult drops edits made inside the compare panes and returns to
+// the two texts shown when the comparison opened. It never touches a working
+// copy document.
+func (m *Model) DiscardDiffResult() {
+	d := m.diff
+	if d == nil || d.applying {
+		return
+	}
+	d.refreshDiffEditorText()
+	d.replaceDiffSide(true, d.leftOriginal)
+	d.replaceDiffSide(false, d.rightOriginal)
+	d.leftText, d.rightText = d.leftOriginal, d.rightOriginal
+	d.dirty = false
+	d.err = ""
+	d.message = ""
+	d.setDiffRows(d.leftText, d.rightText)
+	m.status = "Discarded the diff result"
 	m.invalidate()
 }
 
@@ -282,56 +489,6 @@ func joinDiffText(lines []string, newline bool) string {
 	return text
 }
 
-// syncDiffDocument mirrors an accepted in-memory side into its open editor.
-// The snapshot guard prevents an old compare window from replacing newer user
-// edits silently.
-func (m *Model) syncDiffDocument(d *diffView, left bool, expected, next string) {
-	path := d.rightPath
-	if left {
-		path = d.leftPath
-	}
-	if path == "" {
-		return
-	}
-	m.openFileThen(path, func(t *Tab) {
-		if m.diff != d || t == nil || t.doc == nil {
-			return
-		}
-		if current := t.doc.Text(); current != expected {
-			if left {
-				d.leftText = current
-			} else {
-				d.rightText = current
-			}
-			d.setDiffRows(d.leftText, d.rightText)
-			m.status = "The file changed while comparing; select the change again"
-			m.invalidate()
-			return
-		}
-		if t.doc.Text() == next {
-			return
-		}
-		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
-		defer cancel()
-		go func() {
-			err := t.doc.ApplyEdits(ctx, editor.Edit{
-				Start: 0, End: len(t.doc.Text()), Text: next,
-			})
-			m.post(func() {
-				if m.diff != d {
-					return
-				}
-				if err != nil {
-					m.status = "Could not apply the compared change: " + err.Error()
-				} else {
-					m.status = "Applied the compared change"
-				}
-				m.invalidate()
-			})
-		}()
-	})
-}
-
 // JumpDiffToSource opens the right side, or the left when the right is an
 // in-memory result, at the selected edit.
 func (m *Model) JumpDiffToSource() {
@@ -339,16 +496,26 @@ func (m *Model) JumpDiffToSource() {
 	if d == nil {
 		return
 	}
+	d.refreshDiffEditorText()
+	if d.dirty {
+		m.status = "Apply, save, or discard the comparison result before jumping to source"
+		m.invalidate()
+		return
+	}
 	path, line := d.rightPath, 0
-	if path == "" {
+	fromLeft := d.activeSide == editor.DiffOld && d.leftPath != ""
+	if path == "" && d.leftPath != "" {
+		fromLeft = true
+	}
+	if fromLeft {
 		path = d.leftPath
 	}
 	if len(d.changes) > 0 && d.selected >= 0 && d.selected < len(d.changes) {
 		change := d.changes[d.selected]
-		if d.rightPath != "" {
-			line = change.newStart
-		} else {
+		if fromLeft {
 			line = change.oldStart
+		} else {
+			line = change.newStart
 		}
 	}
 	if path == "" {
@@ -375,6 +542,7 @@ func (m *Model) setDiffOptions(next DiffPrefs) {
 	if d == nil {
 		return
 	}
+	d.refreshDiffEditorText()
 	next = next.normalized()
 	if next.Collapse == nil {
 		next.Collapse = boolPref(true)
@@ -392,6 +560,217 @@ func (m *Model) setDiffOptions(next DiffPrefs) {
 		d.message = ""
 	}
 	m.invalidate()
+}
+
+// RequestCloseDiff protects staged edits made directly in the native compare
+// panes. Applying transfers the result to each open document as an undoable,
+// unsaved edit. Saving additionally writes those documents through the normal
+// save pipeline.
+func (m *Model) RequestCloseDiff() {
+	d := m.diff
+	if d == nil {
+		return
+	}
+	d.refreshDiffEditorText()
+	if !d.dirty {
+		m.closeDiffNow()
+		return
+	}
+	if d.applying {
+		m.status = "Finishing the diff result…"
+		m.invalidate()
+		return
+	}
+	go func() {
+		result, err := mygo.Dialog.Message(mygo.MessageOptions{
+			Parent: m.win, Type: mygo.MessageWarning, Title: "Unsaved Diff Result",
+			Message:       "Save the editable compare result before closing?",
+			Buttons:       []string{"Save & Close", "Apply & Close", "Discard", "Cancel"},
+			DefaultButton: 0, CancelButton: 3,
+		})
+		if err != nil {
+			return
+		}
+		m.post(func() {
+			if m.diff != d {
+				return
+			}
+			switch result.Button {
+			case 0:
+				m.applyDiffResult(true, true)
+			case 1:
+				m.applyDiffResult(false, true)
+			case 2:
+				m.closeDiffNow()
+			}
+		})
+	}()
+}
+
+type diffResultFile struct {
+	left         bool
+	path         string
+	before       string
+	after        string
+	version      uint64
+	versionKnown bool
+}
+
+func (d *diffView) pendingResultFiles() []diffResultFile {
+	if d == nil {
+		return nil
+	}
+	d.refreshDiffEditorText()
+	var out []diffResultFile
+	if d.leftEditable && d.leftPath != "" && d.leftText != d.leftOriginal {
+		out = append(out, diffResultFile{
+			left: true, path: d.leftPath, before: d.leftOriginal, after: d.leftText,
+			version: d.leftDocumentVersion, versionKnown: d.leftVersionKnown,
+		})
+	}
+	if d.rightEditable && d.rightPath != "" && d.rightText != d.rightOriginal {
+		out = append(out, diffResultFile{
+			path: d.rightPath, before: d.rightOriginal, after: d.rightText,
+			version: d.rightDocumentVersion, versionKnown: d.rightVersionKnown,
+		})
+	}
+	return out
+}
+
+// ApplyDiffResult transfers the changed editable sides to their working-copy
+// documents without saving. The tabs become dirty and keep the standard close
+// and quit protection.
+func (m *Model) ApplyDiffResult() {
+	m.applyDiffResult(false, false)
+}
+
+// SaveDiffResult transfers and saves the changed editable sides.
+func (m *Model) SaveDiffResult() {
+	m.applyDiffResult(true, false)
+}
+
+func (m *Model) applyDiffResult(save, closeAfter bool) {
+	d := m.diff
+	if d == nil || d.applying {
+		return
+	}
+	m.ensureDiffEditors(d)
+	d.refreshDiffEditorText()
+	files := d.pendingResultFiles()
+	if len(files) == 0 {
+		if closeAfter {
+			m.closeDiffNow()
+		} else {
+			m.status = "There is no diff result to apply"
+			m.invalidate()
+		}
+		return
+	}
+	d.applying = true
+	d.err = ""
+	d.message = ""
+	m.status = "Applying the diff result…"
+	m.invalidate()
+
+	var applyNext func(int, error)
+	applyNext = func(index int, firstErr error) {
+		if firstErr != nil || index >= len(files) {
+			m.post(func() {
+				if m.diff != d {
+					return
+				}
+				d.applying = false
+				d.refreshDiffEditorText()
+				d.dirty = d.leftText != d.leftOriginal || d.rightText != d.rightOriginal
+				if firstErr != nil {
+					d.err = "Could not apply the diff result: " + firstErr.Error()
+					m.invalidate()
+					return
+				}
+				m.applyActive()
+				m.invalidate()
+				if closeAfter {
+					if d.dirty {
+						m.status = "The comparison still has an unsaved in-memory side"
+						return
+					}
+					m.closeDiffNow()
+					return
+				}
+				if save {
+					m.status = "Saved the diff result"
+					if m.vcs.loaded {
+						m.RefreshVCS()
+					}
+				} else {
+					m.status = "Applied the diff result; the working-copy tab is unsaved"
+				}
+			})
+			return
+		}
+		target := files[index]
+		m.openWith(target.path, openSpec{
+			at: -1,
+			done: func(tab *Tab) {
+				if m.diff != d || tab == nil || tab.doc == nil {
+					applyNext(index+1, errors.New("the comparison closed"))
+					return
+				}
+				version := tab.doc.Buffer().Version()
+				if tab.doc.Text() != target.before ||
+					target.versionKnown && version != target.version {
+					applyNext(index+1, fmt.Errorf("%s changed while it was being compared",
+						filepath.Base(target.path)))
+					return
+				}
+				ctx := m.ctx
+				if ctx == nil {
+					ctx = context.Background()
+				}
+				ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+				go func() {
+					defer cancel()
+					err := tab.doc.ApplyEditsIfVersion(ctx, version, editor.Edit{
+						Start: 0, End: len(tab.doc.Text()), Text: target.after,
+					})
+					if err == nil && save {
+						err = cleanForSave(ctx, tab.doc, m.prefs.SaveFiles)
+						if err == nil {
+							err = tab.doc.Sync(ctx)
+						}
+						if err == nil {
+							err = tab.doc.Save(ctx)
+						}
+					}
+					m.post(func() {
+						if err != nil {
+							applyNext(index+1, err)
+							return
+						}
+						if save {
+							tab.synced = tab.doc.Buffer().Version()
+							tab.noteDisk()
+						}
+						if target.left {
+							d.leftOriginal = target.after
+							d.leftDocumentVersion = tab.doc.Buffer().Version()
+							d.leftVersionKnown = true
+						} else {
+							d.rightOriginal = target.after
+							d.rightDocumentVersion = tab.doc.Buffer().Version()
+							d.rightVersionKnown = true
+						}
+						d.dirty = d.leftText != d.leftOriginal || d.rightText != d.rightOriginal
+						applyNext(index+1, nil)
+					})
+				}()
+			},
+			failed: func(_ string, err error) {
+				applyNext(index+1, err)
+			},
+		})
+	}
+	applyNext(0, nil)
 }
 
 // CompareFiles opens Compare Files with two explicit paths or the platform's
@@ -491,6 +870,7 @@ func (m *Model) CompareTextsArg(arg any) {
 		leftText: left.text, rightText: right.text,
 		options: m.diffPrefs(),
 	}
+	d.resetDiffEditors()
 	d.setDiffRows(left.text, right.text)
 	if line, ok := actionInt(data["line"]); ok {
 		d.selected = diffChangeAtLine(d.changes, line)
@@ -544,12 +924,23 @@ func (m *Model) OpenDiffArg(arg any) {
 	if path == "" || !leftOK || !rightOK {
 		return
 	}
+	leftBuffered, leftVersion, leftOpen := m.bufferTextVersion(left.path)
+	rightBuffered, rightVersion, rightOpen := m.bufferTextVersion(right.path)
 	d := &diffView{
 		open: true, path: path, inline: true,
 		leftPath: left.path, rightPath: right.path,
 		leftLabel: left.label, rightLabel: right.label,
 		leftText: left.text, rightText: right.text, loading: true,
-		options: m.diffPrefs(),
+		leftDocumentVersion: leftVersion, rightDocumentVersion: rightVersion,
+		leftVersionKnown: leftOpen, rightVersionKnown: rightOpen,
+		options:      m.diffPrefs(),
+		leftEditable: left.path != "", rightEditable: right.path != "",
+	}
+	if left.path == "" {
+		d.leftEditable = false
+	}
+	if right.path == "" {
+		d.rightEditable = false
 	}
 	if left.path != "" {
 		d.leftText = ""
@@ -573,8 +964,15 @@ func (m *Model) OpenDiffArg(arg any) {
 			return string(data)
 		}
 		leftText, rightText := read(left), ""
+		if left.path != "" && leftOpen {
+			leftText = leftBuffered
+		}
 		if err == nil {
-			rightText = read(right)
+			if right.path != "" && rightOpen {
+				rightText = rightBuffered
+			} else {
+				rightText = read(right)
+			}
 		}
 		m.post(func() {
 			if m.diff != d {
@@ -587,6 +985,7 @@ func (m *Model) OpenDiffArg(arg any) {
 				return
 			}
 			d.leftText, d.rightText = leftText, rightText
+			d.resetDiffEditors()
 			d.setDiffRows(leftText, rightText)
 			m.invalidate()
 		})
@@ -709,15 +1108,27 @@ func (m *Model) loadDiffFile(chain []diffFileTarget, index int) {
 	d := &diffView{
 		open: true, path: target.right, other: target.left,
 		leftPath: target.left, rightPath: target.right,
-		leftLabel: filepath.Base(target.left), rightLabel: filepath.Base(target.right),
+		leftLabel: m.diffPathLabel(target.left), rightLabel: m.diffPathLabel(target.right),
 		fileChain: append([]diffFileTarget(nil), chain...), fileIndex: index,
 		loading: true, options: m.diffPrefs(),
+		leftEditable: true, rightEditable: true,
 	}
 	m.diff = d
 	m.invalidate()
+	leftText, leftVersion, leftOpen := m.bufferTextVersion(target.left)
+	rightText, rightVersion, rightOpen := m.bufferTextVersion(target.right)
 	go func() {
-		left, leftErr := os.ReadFile(target.left)
-		right, rightErr := os.ReadFile(target.right)
+		var leftErr, rightErr error
+		if !leftOpen {
+			var data []byte
+			data, leftErr = os.ReadFile(target.left)
+			leftText = string(data)
+		}
+		if !rightOpen {
+			var data []byte
+			data, rightErr = os.ReadFile(target.right)
+			rightText = string(data)
+		}
 		m.post(func() {
 			if m.diff != d {
 				return
@@ -728,7 +1139,10 @@ func (m *Model) loadDiffFile(chain []diffFileTarget, index int) {
 				m.invalidate()
 				return
 			}
-			d.leftText, d.rightText = string(left), string(right)
+			d.leftText, d.rightText = leftText, rightText
+			d.leftDocumentVersion, d.rightDocumentVersion = leftVersion, rightVersion
+			d.leftVersionKnown, d.rightVersionKnown = leftOpen, rightOpen
+			d.resetDiffEditors()
 			d.setDiffRows(d.leftText, d.rightText)
 			m.invalidate()
 		})
@@ -862,6 +1276,67 @@ func (m *Model) showDiffStatus(text string) {
 	m.invalidate()
 }
 
+func (m *Model) diffPaneContextMenu(menu *ui.Menu, left bool) {
+	d := m.diff
+	if d == nil || menu == nil {
+		return
+	}
+	d.activeSide = editor.DiffNew
+	if left {
+		d.activeSide = editor.DiffOld
+	}
+	menu.Submenu("Accept Difference", func(menu *ui.Menu) {
+		acceptLeft := menu.Item("From Left").Disabled(!d.rightEditable || len(d.changes) == 0)
+		if acceptLeft.Chosen() {
+			m.ApplyDiffSide(true)
+		}
+		acceptRight := menu.Item("From Right").Disabled(!d.leftEditable || len(d.changes) == 0)
+		if acceptRight.Chosen() {
+			m.ApplyDiffSide(false)
+		}
+	})
+	menu.Submenu("Accept Entire Side", func(menu *ui.Menu) {
+		useLeft := menu.Item("Use Left").Disabled(!d.rightEditable)
+		if useLeft.Chosen() {
+			m.ApplyWholeDiffSide(true)
+		}
+		useRight := menu.Item("Use Right").Disabled(!d.leftEditable)
+		if useRight.Chosen() {
+			m.ApplyWholeDiffSide(false)
+		}
+	})
+	reject := menu.Item("Reject Change").Disabled(len(d.changes) == 0 ||
+		!d.leftEditable && !d.rightEditable || d.applying)
+	if reject.Chosen() {
+		m.RejectDiffChange()
+	}
+	rejectSide := menu.Item("Reject Entire Side").Disabled(
+		!d.leftEditable && !d.rightEditable || d.applying,
+	)
+	if rejectSide.Chosen() {
+		m.RejectWholeDiffSide()
+	}
+	menu.Separator()
+	apply := menu.Item("Apply Result").Disabled(!d.dirty || d.applying)
+	if apply.Chosen() {
+		m.ApplyDiffResult()
+	}
+	save := menu.Item("Save Result").Disabled(!d.dirty || d.applying)
+	if save.Chosen() {
+		m.SaveDiffResult()
+	}
+	discard := menu.Item("Discard Result").Disabled(!d.dirty || d.applying)
+	if discard.Chosen() {
+		m.DiscardDiffResult()
+	}
+	if left {
+		menu.Separator()
+		if menu.Item("Jump to Source").Chosen() {
+			m.JumpDiffToSource()
+		}
+	}
+}
+
 func diffToolbar(c *ui.Context, m *Model, p *ui.Theme) {
 	d := m.diff
 	if d == nil {
@@ -869,19 +1344,45 @@ func diffToolbar(c *ui.Context, m *Model, p *ui.Theme) {
 	}
 	options := m.diffPrefs()
 	ui.Column(c).Gap(4).Children(func() {
-		ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+		ui.Row(c).Wrap().Gap(6).AlignItems(ui.Center).Children(func() {
 			ui.Button(c, "‹ Change").Disabled(len(d.changes) == 0).
 				OnClick(func() { m.StepDiffChange(-1) })
 			ui.Button(c, "Change ›").Disabled(len(d.changes) == 0).
 				OnClick(func() { m.StepDiffChange(1) })
-			ui.Button(c, "Accept Left").Disabled(len(d.changes) == 0).
+			ui.Button(c, "Accept Left").Disabled(len(d.changes) == 0 || !d.rightEditable).
 				OnClick(func() { m.ApplyDiffSide(true) })
-			ui.Button(c, "Accept Right").Disabled(len(d.changes) == 0).
+			ui.Button(c, "Accept Right").Disabled(len(d.changes) == 0 || !d.leftEditable).
 				OnClick(func() { m.ApplyDiffSide(false) })
+			ui.Button(c, "Use Left for All").Disabled(!d.rightEditable).
+				OnClick(func() { m.ApplyWholeDiffSide(true) })
+			ui.Button(c, "Use Right for All").Disabled(!d.leftEditable).
+				OnClick(func() { m.ApplyWholeDiffSide(false) })
+			ui.Button(c, "Reject Change").Disabled(len(d.changes) == 0 ||
+				!d.leftEditable && !d.rightEditable || d.applying).
+				Tooltip("Restore the selected change from the opposite side").
+				OnClick(m.RejectDiffChange)
+			ui.Button(c, "Reject Entire Side").Disabled(
+				!d.leftEditable && !d.rightEditable || d.applying,
+			).Tooltip("Restore the active editable side from the opposite side").
+				OnClick(m.RejectWholeDiffSide)
+			ui.Button(c, "Apply Result").Disabled(!d.dirty || d.applying).
+				OnClick(m.ApplyDiffResult)
+			ui.Button(c, "Save Result").Disabled(!d.dirty || d.applying).
+				OnClick(m.SaveDiffResult)
+			ui.Button(c, "Discard Result").Disabled(!d.dirty || d.applying).
+				Tooltip("Drop edits made inside the comparison without touching files").
+				OnClick(m.DiscardDiffResult)
 			ui.Button(c, "Jump to Source").Disabled(d.rightPath == "" && d.leftPath == "").
 				OnClick(m.JumpDiffToSource)
 			ui.Spacer(c)
 			ui.Text(c, diffSelectionSummary(d)).FontSize(11).TextColor(p.TextMuted).SingleLine()
+			if d.dirty {
+				state := "Unsaved result"
+				if d.applying {
+					state = "Applying…"
+				}
+				ui.Text(c, state).FontSize(11).TextColor(p.Accent).SingleLine()
+			}
 		})
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 			mode := diffModeLabel(options.Mode)

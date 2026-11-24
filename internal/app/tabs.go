@@ -36,6 +36,14 @@ func (m *Model) tabLabelIn(tabs []*Tab, t *Tab) (name, dir string) {
 		switch t.kind {
 		case tabKindWhatsNew:
 			return "What's New", ""
+		case tabKindDockerLog:
+			if t.pageTitle != "" {
+				return t.pageTitle, ""
+			}
+		case tabKindNotebook:
+			if t.pageTitle != "" {
+				return t.pageTitle, ""
+			}
 		case tabKindAgentSession, tabKindAgentHome:
 			return m.agentEditorTitle(t), ""
 		}
@@ -78,7 +86,8 @@ func tabLabelFor(path string, prefs TabPrefs, dirty bool, siblings []string) (na
 // tabSortKey is the title Sort tabs alphabetically compares, folded to lower
 // case as sortTabs avoids case deciding the order.
 func tabSortKey(t *Tab) string {
-	if t != nil && (t.kind == tabKindAgentSession || t.kind == tabKindAgentHome) {
+	if t != nil && (t.kind == tabKindAgentSession || t.kind == tabKindAgentHome ||
+		t.kind == tabKindDockerLog || t.kind == tabKindNotebook) {
 		if t.pageTitle != "" {
 			return strings.ToLower(t.pageTitle)
 		}
@@ -198,6 +207,17 @@ func (m *Model) promoteTab(t *Tab) {
 	m.invalidate()
 }
 
+// restorePreviewFlags reapplies a saved group's preview tabs. Pinned tabs are
+// regular, as pinning promotes a preview in OpenIDEA.
+func restorePreviewFlags(tabs []*Tab, blocked, previews map[string]bool) {
+	for _, tab := range tabs {
+		if tab == nil || tab.kind != "" || tab.doc == nil {
+			continue
+		}
+		tab.preview = !blocked[tab.doc.Path()] && previews[tab.doc.Path()]
+	}
+}
+
 // tabLimitCandidates are the default least-recently-used candidates the limit
 // may close. The policy-aware form below keeps the same safety rules.
 func tabLimitCandidates(tabs []*Tab, active int, unsaved func(*Tab) bool) []*Tab {
@@ -224,13 +244,15 @@ func tabLimitCandidatesWithPolicy(
 	sort.SliceStable(out, func(i, j int) bool { return out[i].used < out[j].used })
 	if policy == "unchanged" {
 		sort.SliceStable(out, func(i, j int) bool {
-			// Every automatic candidate is unchanged because unsaved text is
-			// excluded above. The explicit predicate documents the intended
-			// priority and keeps the fallback LRU if that safety rule changes.
-			iUnchanged := !unsaved(out[i])
-			jUnchanged := !unsaved(out[j])
-			if iUnchanged != jUnchanged {
-				return iUnchanged
+			// Modified tabs are excluded above. Within the safe candidates,
+			// previews and tabs with no edit in this session are the closest
+			// native equivalent of OpenIDEA's non-modified-first policy.
+			if out[i].preview != out[j].preview {
+				return out[i].preview
+			}
+			iNeverEdited, jNeverEdited := out[i].edited.IsZero(), out[j].edited.IsZero()
+			if iNeverEdited != jNeverEdited {
+				return iNeverEdited
 			}
 			return out[i].used < out[j].used
 		})

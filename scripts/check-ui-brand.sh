@@ -15,7 +15,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-allowed='^"(@@OPENIDEA@@|openidea-server|openidea-server\.log|\.openidea|\.openidea/|openidea|OPENIDEA_SERVER_HOME=|mayoi/internal/openidea|openidea/|openidea/[^"]*)"$'
+allowed='^"(@@OPENIDEA@@|X-OpenIDEA-Project|Agents name this project with the X-OpenIDEA-Project header or the \?project= query\.|[A-Za-z0-9_./$*+=-]*openidea[A-Za-z0-9_./$*+=-]*|-Dopenidea\.run\.[A-Za-z]+=true|OPENIDEA_[A-Za-z0-9_]+(=.*)?)"$'
 
 # The client boundary: the UI package, the entry point, the ports of
 # OpenIDEA's run/debug logic, and the protocol package that normalises what

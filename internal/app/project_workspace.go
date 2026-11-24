@@ -30,6 +30,9 @@ type workspaceDialogState struct {
 	truncated bool
 	scanning  bool
 	request   uint32
+	// parity carries project-level prompts introduced for OpenIDEA File and
+	// Find parity. They use the registered workspace modal while they are open.
+	parity parityDialogState
 }
 
 // setProjectWorkspace applies project_current's manifest to the Project and
@@ -58,6 +61,7 @@ func (m *Model) setProjectInfo(info openidea.ProjectInfo) {
 	m.projectName = info.Name
 	m.projectDisplayName = info.DisplayName
 	m.setProjectWorkspace(info.Workspace)
+	m.pluginVisualProjectChanged()
 	m.applyActive()
 }
 
@@ -630,7 +634,9 @@ func (m *Model) drawWorkspaceDialog(c *ui.Context, p *ui.Theme) {
 	}
 	open := state.open
 	dialog := ui.Modal(c, &open, func() {
-		if state.discovery != nil {
+		if state.parity.Kind != "" {
+			m.drawParityWorkspaceDialog(c, p, state)
+		} else if state.discovery != nil {
 			m.workspaceDiscoverySheet(c, p, state)
 		} else {
 			m.workspaceEditorSheet(c, p, state)

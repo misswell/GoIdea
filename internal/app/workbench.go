@@ -15,14 +15,17 @@ import (
 )
 
 const (
-	oiTitleBarHeight  float32 = 40
-	oiStatusBarHeight float32 = 34
-	oiStripeWidth     float32 = 40 // 30px button + 4px padding + the island gap
-	oiStripeButton    float32 = 30
-	oiStripeGap       float32 = 10 // title bar height minus the button
-	oiIslandGap       float32 = 6
-	oiIslandRadius    float32 = 10
-	oiLeftWidth       float32 = 240
+	oiTitleBarHeight    float32 = 40
+	oiStatusBarHeight   float32 = 34
+	oiStripeWidth       float32 = 40 // 30px button + 4px padding + the island gap
+	oiStripeButton      float32 = 30
+	oiStripeGap         float32 = 10 // title bar height minus the button
+	oiStripeNamedBar    float32 = 66
+	oiStripeNamedButton float32 = 56
+	oiStripeNamedHeight float32 = 44
+	oiIslandGap         float32 = 6
+	oiIslandRadius      float32 = 10
+	oiLeftWidth         float32 = 240
 	// rightWidthDefault and its stored range are the right area's width, as
 	// OpenIDEA's sizes.right.
 	rightWidthDefault     float32 = 300
@@ -69,6 +72,9 @@ func (m *Model) compactTitleBar(c *ui.Context, p *ui.Theme) {
 	title := m.projectLabel()
 	if t := m.tab(); t != nil && t.kind == "" && t.doc != nil && t.doc.Path() != "" {
 		title = filepath.Base(t.doc.Path())
+		if m.prefs.Appearance.FullPathInTitle {
+			title = t.doc.Path()
+		}
 		if project := m.projectLabel(); project != "" {
 			title += " – " + project
 		}
@@ -135,13 +141,20 @@ func (m *Model) projectWidget(c *ui.Context, p *ui.Theme, oi oiColors) {
 		w.Tooltip(root)
 	}
 	w.Children(func() {
-		start, end := projectColors(name)
 		size := tk.StripeButton - tk.SpaceM
-		ui.Row(c).Size(size, size).Shrink(0).Radius(4).
-			LinearGradient(ui.LinearGradient{From: start, To: end, Angle: 135}).
-			Justify(ui.Center).AlignItems(ui.Center).Children(func() {
+		avatar := ui.Row(c).Size(size, size).Shrink(0).Radius(4).
+			Justify(ui.Center).AlignItems(ui.Center)
+		initialColor := ui.Hex("#ffffff")
+		if m.prefs.projectColorsInToolbar() {
+			start, end := projectColors(name)
+			avatar.LinearGradient(ui.LinearGradient{From: start, To: end, Angle: 135})
+		} else {
+			avatar.Background(oi.elev)
+			initialColor = oi.text
+		}
+		avatar.Children(func() {
 			ui.Text(c, projectInitials(name)).FontSize(11).Bold().
-				TextColor(ui.Hex("#ffffff")).LetterSpacing(0.02).SingleLine()
+				TextColor(initialColor).LetterSpacing(0.02).SingleLine()
 		})
 		ui.Text(c, name).FontSize(13).TextColor(oi.textStrong).SingleLine().Ellipsis("…")
 		oiIconEl(c, "general/chevronDown", 12, oi, oi.textMuted)
@@ -267,6 +280,7 @@ func (m *Model) workbench(c *ui.Context, p *ui.Theme) {
 	bottom := m.bottomTool()
 	ui.Column(c).Fill().Background(oi.frame).Children(func() {
 		m.titleBar(c, p)
+		m.workspaceWindowTabs(c, p)
 		m.renderTopNavigationBar(c, p, oi)
 		if m.maximized && bottom != "" {
 			// A maximized tool window takes the workbench, as OpenIDEA
@@ -278,18 +292,30 @@ func (m *Model) workbench(c *ui.Context, p *ui.Theme) {
 				if !m.prefs.Appearance.HideToolWindowBars {
 					m.toolStripe(c, p, oi)
 				}
+				if m.prefs.Appearance.WidescreenToolWindows {
+					m.leftSide(c, p, oi)
+					if m.leftShown() {
+						m.leftWidthHandle(c, oi)
+					} else {
+						ui.Box(c).Width(oiIslandGap).Shrink(0)
+					}
+				}
 				ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Children(func() {
 					ui.Row(c).Grow(1).MinWidth(0).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
-						m.leftSide(c, p, oi)
-						if m.leftShown() {
-							m.leftWidthHandle(c, oi)
-						} else {
-							ui.Box(c).Width(oiIslandGap).Shrink(0)
+						if !m.prefs.Appearance.WidescreenToolWindows {
+							m.leftSide(c, p, oi)
+							if m.leftShown() {
+								m.leftWidthHandle(c, oi)
+							} else {
+								ui.Box(c).Width(oiIslandGap).Shrink(0)
+							}
 						}
 						m.editorIsland(c, p)
 						if m.rightShown() {
 							m.rightWidthHandle(c, oi)
-							m.rightSide(c, p, oi)
+							if !m.prefs.Appearance.WidescreenToolWindows {
+								m.rightSide(c, p, oi)
+							}
 						}
 					})
 					if bottom != "" {
@@ -297,6 +323,13 @@ func (m *Model) workbench(c *ui.Context, p *ui.Theme) {
 						m.bottomSlot(c, p)
 					}
 				})
+				if m.prefs.Appearance.WidescreenToolWindows {
+					if m.rightShown() {
+						m.rightSide(c, p, oi)
+					} else {
+						ui.Box(c).Width(oiIslandGap).Shrink(0)
+					}
+				}
 				if !m.prefs.Appearance.HideToolWindowBars {
 					m.rightStripe(c, p, oi)
 				}
@@ -323,8 +356,14 @@ func (m *Model) showWelcome() {
 // below the Project window.
 func (m *Model) toolStripe(c *ui.Context, p *ui.Theme, oi oiColors) {
 	tk := oiTokensFor(m, p)
-	ui.Column(c).Width(tk.StripeWidth).Shrink(0).Padding(5, oiIslandGap, 6, 4).
-		Gap(tk.StripeGap).Children(func() {
+	stripeWidth := tk.StripeWidth
+	gap := tk.StripeGap
+	if m.prefs.Appearance.ShowToolWindowNames {
+		stripeWidth = oiStripeNamedBar
+		gap = 4
+	}
+	ui.Column(c).Width(stripeWidth).Shrink(0).Padding(5, oiIslandGap, 6, 4).
+		Gap(gap).Children(func() {
 		m.stripeButton(c, p, oi, "project", "toolwindows/project", "Project", m.sideMode == "" && !m.leftHidden, func() {
 			m.modeClick("")
 		})
@@ -344,7 +383,7 @@ func (m *Model) toolStripe(c *ui.Context, p *ui.Theme, oi oiColors) {
 				continue
 			}
 			spec := dockSpec(id)
-			if spec == nil || !spec.stripe {
+			if spec == nil || spec.anchor != dockLeft || !m.toolWindowStripeVisible(id) {
 				continue
 			}
 			id, title := id, spec.title
@@ -352,7 +391,14 @@ func (m *Model) toolStripe(c *ui.Context, p *ui.Theme, oi oiColors) {
 				m.DockToggle(id)
 			})
 		}
+		m.stripeMoreButton(c, p, oi)
 		ui.Spacer(c)
+		for _, id := range m.toolWindowsForStripe(dockBottom) {
+			spec := dockSpec(id)
+			id := id
+			m.stripeButton(c, p, oi, id, pluginWindowIcon(spec), spec.title,
+				m.dockWindowShown(id), func() { m.DockToggle(id) })
+		}
 		m.stripeButton(c, p, oi, "commands", "general/search", "Search Everywhere", false, func() {
 			m.OpenCommands()
 		})
@@ -403,22 +449,45 @@ func (m *Model) splitClick(mode string) {
 
 func (m *Model) stripeButton(c *ui.Context, p *ui.Theme, oi oiColors, key, icon, tip string, active bool, onClick func()) {
 	tk := oiTokensFor(m, p)
-	b := ui.ButtonBase(c.Key("stripe:"+key)).Size(tk.StripeButton, tk.StripeButton).
+	width, height := tk.StripeButton, tk.StripeButton
+	showName := m.prefs.Appearance.ShowToolWindowNames
+	if showName {
+		width, height = oiStripeNamedButton, oiStripeNamedHeight
+	}
+	b := ui.ButtonBase(c.Key("stripe:"+key)).Size(width, height).
 		Radius(6).Justify(ui.Center).AlignItems(ui.Center).Cursor(ui.CursorPointer)
 	switch {
-	case active && !m.leftHidden:
+	case active:
 		b.Background(oi.stripeSelected)
 	case b.Hovered():
 		b.Background(oi.stripeHover)
 	}
 	b.Tooltip(tip)
 	tone := oi.icon
-	if active && !m.leftHidden {
+	if active {
 		tone = oi.text
 	}
-	b.Children(func() { oiIconEl(c, icon, 20, oi, tone) })
+	b.Children(func() {
+		ui.Column(c).AlignItems(ui.Center).Justify(ui.Center).Gap(3).Children(func() {
+			ui.Row(c).Size(20, 20).AlignItems(ui.Center).Justify(ui.Center).Children(func() {
+				oiIconEl(c, icon, 20, oi, tone)
+				count := m.toolWindowBadge(key)
+				if key == "vcs" && m.prefs.toolWindowBadgesVisible() {
+					count = m.vcsBadge()
+				}
+				m.stripeBadge(c, oi, count)
+			})
+			if showName {
+				ui.Text(c, tip).FontSize(9).TextColor(oi.textMuted).
+					Width(oiStripeNamedButton - 4).TextAlign(ui.Center).SingleLine().Ellipsis("…")
+			}
+		})
+	})
 	if b.Clicked() {
 		onClick()
+	}
+	if dockSpec(key) != nil {
+		b.ContextMenu(func(menu *ui.Menu) { m.stripeButtonMenu(menu, key) })
 	}
 	// A registered window's button drags: the edges of the workbench dock it,
 	// as OpenIDEA's drag and drop does.
@@ -432,10 +501,87 @@ func (m *Model) stripeButton(c *ui.Context, p *ui.Theme, oi oiColors, key, icon,
 	}
 }
 
+// stripeBadge draws OpenIDEA's 13px overhanging count pill.
+func (m *Model) stripeBadge(c *ui.Context, oi oiColors, count int) {
+	if count <= 0 || !m.prefs.toolWindowBadgesVisible() {
+		return
+	}
+	label := fmt.Sprintf("%d", count)
+	if count > 99 {
+		label = "99+"
+	}
+	ui.Row(c).Absolute().Left(10).Top(-5).MinWidth(13).Height(13).
+		Padding(0, 3).Radius(7).Background(oi.badge).Justify(ui.Center).
+		AlignItems(ui.Center).Children(func() {
+		ui.Text(c, label).FontSize(9).Bold().TextColor(oi.text).SingleLine()
+	})
+}
+
+// stripeMoreButton is OpenIDEA's "…" button for registered windows whose
+// onUse stripe button has not been added yet.
+func (m *Model) stripeMoreButton(c *ui.Context, p *ui.Theme, oi oiColors) {
+	ids := m.toolWindowsWithoutStripeButton()
+	if len(ids) == 0 {
+		return
+	}
+	tk := oiTokensFor(m, p)
+	width := tk.StripeButton
+	if m.prefs.Appearance.ShowToolWindowNames {
+		width = oiStripeNamedButton
+	}
+	b := ui.ButtonBase(c.Key("stripe:more")).Size(width, tk.StripeButton).
+		Radius(6).Justify(ui.Center).AlignItems(ui.Center).Cursor(ui.CursorPointer)
+	if b.Hovered() {
+		b.Background(oi.stripeHover)
+	}
+	b.Tooltip("More Tool Windows")
+	b.Children(func() { oiIconEl(c, "general/moreHorizontal", 20, oi, oi.icon) })
+	b.Menu(func(menu *ui.Menu) {
+		for _, id := range ids {
+			spec := dockSpec(id)
+			if spec == nil {
+				continue
+			}
+			if menu.Item(spec.title).Chosen() {
+				m.DockShow(id)
+			}
+		}
+	})
+}
+
+// stripeButtonMenu is the context menu of a tool-window stripe button.
+func (m *Model) stripeButtonMenu(menu *ui.Menu, id string) {
+	if menu.Item("Hide").Chosen() {
+		m.HideToolWindowFromStripe(id)
+	}
+	menu.Separator()
+	current, shown := m.dockSlotOf(id)
+	menu.Submenu("Move To", func(sub *ui.Menu) {
+		for slot := dockSlot(0); slot < dockSlotCount; slot++ {
+			item := sub.Item(dockSlotLabel(slot))
+			if shown && current == slot {
+				item.Checked(true)
+			}
+			if item.Chosen() {
+				m.DockMove(id, slot)
+			}
+		}
+	})
+	menu.Separator()
+	item := menu.Item("Show Tool Window Names")
+	item.Checked(m.prefs.Appearance.ShowToolWindowNames)
+	if item.Chosen() {
+		m.prefs.Appearance.ShowToolWindowNames = !m.prefs.Appearance.ShowToolWindowNames
+		m.savePreferences()
+		m.invalidate()
+	}
+}
+
 // leftShown reports whether the left side draws: a window in either of its
 // areas.
 func (m *Model) leftShown() bool {
-	return !m.leftHidden || m.dockOccupant(dockLeftSplit) != ""
+	return m.dockOccupant(dockLeft) != "" || !m.leftHidden ||
+		m.dockOccupant(dockLeftSplit) != ""
 }
 
 // leftSide is the left side's two areas: the primary island and, below it,
@@ -625,7 +771,7 @@ func (m *Model) rightIsland(c *ui.Context, p *ui.Theme, oi oiColors, id string, 
 		return
 	}
 	ui.Column(c).Key("right:island:" + id).Grow(grow).MinHeight(0).
-		MinWidth(0).AlignItems(ui.Stretch).Children(func() {
+		MinWidth(0).Background(m.toolWindowBackground(p)).AlignItems(ui.Stretch).Children(func() {
 		spec.render(m, c, p, oi)
 	})
 }
@@ -675,27 +821,28 @@ func (m *Model) rightSplitHandle(c *ui.Context, oi oiColors, room float32) {
 }
 
 // rightStripe is the right edge's stripe of tool window buttons, mirroring the
-// left one. Hierarchy joins it on use, as OpenIDEA registers that window with
-// stripe: "onUse"; its button stays while the window has a tree. The bell is
-// OpenIDEA's Notifications window and carries the unread count.
+// left one. It follows the same icon/name width and the same context menu for
+// every registered window.
 func (m *Model) rightStripe(c *ui.Context, p *ui.Theme, oi oiColors) {
 	tk := oiTokensFor(m, p)
-	ui.Column(c).Width(tk.StripeWidth).Shrink(0).Padding(5, oiIslandGap, 6, 4).
-		Gap(tk.StripeGap).Children(func() {
-		ui.Spacer(c)
-		if m.hierarchy.active() || m.rightTool == "hierarchy" {
-			m.stripeButton(c, p, oi, "hierarchy", "toolwindows/hierarchy", "Hierarchy",
-				m.rightShown() && m.rightTool == "hierarchy", m.ToggleHierarchyWindow)
-		}
-		m.stripeBell(c, p, oi)
-		for _, id := range toolWindowOrder {
+	stripeWidth := tk.StripeWidth
+	gap := tk.StripeGap
+	if m.prefs.Appearance.ShowToolWindowNames {
+		stripeWidth = oiStripeNamedBar
+		gap = 4
+	}
+	ui.Column(c).Width(stripeWidth).Shrink(0).Padding(5, oiIslandGap, 6, 4).
+		Gap(gap).Children(func() {
+		for _, id := range m.toolWindowsForStripe(dockRight) {
 			spec := dockSpec(id)
-			if spec == nil || spec.anchor != dockRight || id == "hierarchy" || id == "notifications" {
-				continue
-			}
-			if _, shown := m.dockSlotOf(id); !shown && !spec.stripe {
-				continue
-			}
+			id := id
+			m.stripeButton(c, p, oi, id, pluginWindowIcon(spec), spec.title,
+				m.dockWindowShown(id), func() { m.DockToggle(id) })
+		}
+		ui.Spacer(c)
+		for _, id := range m.toolWindowsForStripe(dockBottomSplit) {
+			spec := dockSpec(id)
+			id := id
 			m.stripeButton(c, p, oi, id, pluginWindowIcon(spec), spec.title,
 				m.dockWindowShown(id), func() { m.DockToggle(id) })
 		}
@@ -709,44 +856,6 @@ func pluginWindowIcon(spec *toolWindowSpec) string {
 		return spec.icon
 	}
 	return "nodes/plugin"
-}
-
-// stripeBell is the Notifications stripe button with its unread badge.
-func (m *Model) stripeBell(c *ui.Context, p *ui.Theme, oi oiColors) {
-	active := m.rightShown() && m.rightTool == "notifications"
-	tk := oiTokensFor(m, p)
-	b := ui.ButtonBase(c.Key("stripe:notifications")).Size(tk.StripeButton, tk.StripeButton).
-		Radius(6).Justify(ui.Center).AlignItems(ui.Center).Cursor(ui.CursorPointer)
-	switch {
-	case active && !m.leftHidden:
-		b.Background(oi.stripeSelected)
-	case b.Hovered():
-		b.Background(oi.stripeHover)
-	}
-	b.Tooltip("Notifications")
-	tone := oi.textMuted
-	if active && !m.leftHidden {
-		tone = oi.text
-	}
-	b.Children(func() {
-		oiIconEl(c, "toolwindows/notifications", 20, oi, tone)
-		if n := m.unreadNotifications(); n > 0 {
-			// Upstream's StripeBadge: a 13px pill overhanging the button's top
-			// edge, in bg-active with fg-emphasis text.
-			label := fmt.Sprintf("%d", n)
-			if n > 99 {
-				label = "99+"
-			}
-			ui.Row(c).Absolute().Left(10).Top(-5).MinWidth(13).Height(13).
-				Padding(0, 3).Radius(7).Background(oi.badge).Justify(ui.Center).
-				AlignItems(ui.Center).Children(func() {
-				ui.Text(c, label).FontSize(9).Bold().TextColor(oi.text).SingleLine()
-			})
-		}
-	})
-	if b.Clicked() {
-		m.ToggleNotificationsWindow()
-	}
 }
 
 // hideLeftSide closes both of the left side's areas, which a drag of its gap
@@ -909,17 +1018,34 @@ func (m *Model) leftSplitHandle(c *ui.Context, oi oiColors, room float32) {
 // side, which the drag of the gap between the islands moves.
 func (m *Model) leftIsland(c *ui.Context, p *ui.Theme, oi oiColors, grow float32) {
 	tk := oiTokensFor(m, p)
+	if id := m.dockOccupant(dockLeft); id != "" {
+		if spec := dockSpec(id); spec != nil && spec.render != nil {
+			background := oi.island
+			if m.prefs.Appearance.DifferentToolWindowBackground {
+				background = oi.elev
+			}
+			ui.Column(c).Grow(grow).MinHeight(0).Background(background).
+				Radius(oiIslandRadius).Children(func() {
+				spec.render(m, c, p, oi)
+			})
+			return
+		}
+	}
 	title := "Project"
 	if m.sideMode == "vcs" {
 		title = "Commit"
-		if n := len(m.vcs.files); n > 0 {
+		if n := len(m.currentVCSFiles()); n > 0 {
 			title = fmt.Sprintf("Commit · %d", n)
 		}
 	}
 	if m.sideMode != "vcs" {
 		m.syncProjectTreeState()
 	}
-	ui.Column(c).Grow(grow).MinHeight(0).Background(oi.island).
+	background := oi.island
+	if m.prefs.Appearance.DifferentToolWindowBackground {
+		background = oi.elev
+	}
+	ui.Column(c).Grow(grow).MinHeight(0).Background(background).
 		Radius(oiIslandRadius).Children(func() {
 		ui.Row(c).Height(tk.HeaderHeight).Shrink(0).Padding(0, 6, 0, 8).
 			Gap(6).AlignItems(ui.Center).Children(func() {
@@ -929,13 +1055,7 @@ func (m *Model) leftIsland(c *ui.Context, p *ui.Theme, oi oiColors, grow float32
 				m.projectTreeTitle(c, p, oi)
 			}
 			ui.Spacer(c)
-			if m.sideMode == "vcs" {
-				label := "Refresh"
-				if m.vcs.loading {
-					label = "Loading…"
-				}
-				ui.Button(c, label).OnClick(func() { m.RefreshVCS() })
-			} else if m.tree != nil {
+			if m.sideMode != "vcs" && m.tree != nil {
 				if !m.prefs.ProjectTree.AutoscrollFromSource {
 					m.headerIcon(c, p, oi, "tree-locate", "Select Opened File", "general/locate", func() {
 						m.followActiveInProjectView(true)
@@ -951,16 +1071,16 @@ func (m *Model) leftIsland(c *ui.Context, p *ui.Theme, oi oiColors, grow float32
 				m.projectViewOptionsButton(c, p, oi)
 			}
 		})
+		if m.sideMode == "vcs" {
+			m.vcsToolWindow(c, p, oi)
+			return
+		}
 		// The rows scroll both ways, as OpenIDEA's tree does: a name that runs
 		// past the island keeps its whole text, and the tree shows the rest
 		// when it is scrolled sideways.
 		scroll := ui.ScrollBoth(c).Key("tree:scroll").Grow(1).MinHeight(0).
 			TrackScroll(&m.treeScroll)
 		scroll.Children(func() {
-			if m.sideMode == "vcs" {
-				m.vcsRows(c, p)
-				return
-			}
 			if m.tree == nil {
 				return
 			}
@@ -1100,6 +1220,10 @@ func (m *Model) editorBody(c *ui.Context, p *ui.Theme, g groupView) {
 	if m.banner != "" && g.focused {
 		m.bannerRow(c, p)
 	}
+	if g.focused {
+		m.composeDetectionBanner(c, p, g.tab())
+	}
+	m.librarySourcesBanner(c, p, g.tab())
 	m.editorArea(c, p, g)
 }
 
@@ -1252,6 +1376,9 @@ func (m *Model) verticalTabs(c *ui.Context, p *ui.Theme, oi oiColors, g groupVie
 	if len(g.tabs) == 0 || m.tabPrefs.Hidden() {
 		return
 	}
+	if g.focused {
+		m.applyTabDrop()
+	}
 	reveal := *g.shown != g.active
 	*g.shown = g.active
 	strip := ui.Column(c).Shrink(0).MinWidth(oiTabColumnMin).MaxWidth(oiTabColumnMax).
@@ -1297,8 +1424,11 @@ func (m *Model) tabButtons(c *ui.Context, p *ui.Theme, oi oiColors, g groupView,
 	tk := oiTokensFor(m, p)
 	squeeze := m.tabPrefs.SqueezeTabs || vertical
 	from := -1
-	if g.focused && !vertical && m.tabDrag.Held {
-		from = m.tabDrag.From - offset
+	if g.focused && m.tabDrag.Held {
+		candidate := m.tabDrag.From - offset
+		if candidate >= 0 && candidate < len(tabs) {
+			from = candidate
+		}
 	}
 	lifted := from >= 0 && from < len(tabs) && m.tabDrag.Lifted
 	order := tabOrder(len(tabs), from, m.tabDrag.To-offset, lifted)
@@ -1402,14 +1532,12 @@ func (m *Model) tabButtons(c *ui.Context, p *ui.Theme, oi oiColors, g groupView,
 				m.activateIn(g.ref, i)
 			}
 		}
-		if !vertical {
-			if b := tab.Bounds(); b.W > 0 {
-				rects = append(rects, b)
-				others = append(others, j)
-			}
-			if g.focused {
-				m.tabDragPress(tab, i)
-			}
+		if b := tab.Bounds(); b.W > 0 {
+			rects = append(rects, b)
+			others = append(others, j)
+		}
+		if g.focused {
+			m.tabDragPress(tab, i, offset, len(tabs))
 		}
 	}
 	if !lifted {
@@ -1433,6 +1561,8 @@ type tabDragState struct {
 	Lifted bool
 	From   int // strip index of the tab pressed
 	To     int // insertion index in its row the tab would drop at
+	Offset int // first strip index in the row the drag belongs to
+	Count  int // number of tabs in that row
 	Press  ui.Point
 	At     ui.Point // the pointer now, in window DIPs
 	Grab   ui.Point // where in the tab the press took it
@@ -1442,7 +1572,7 @@ type tabDragState struct {
 // tabDragPress follows a pressed tab, as OpenIDEA's Tabs does: once the
 // pointer moves past its threshold the tab lifts out of the strip, and
 // letting go drops it where the strip made room.
-func (m *Model) tabDragPress(tab ui.Element, i int) {
+func (m *Model) tabDragPress(tab ui.Element, i, offset, count int) {
 	dx, dy, pressed := tab.Dragged()
 	if !pressed {
 		if m.tabDrag.Held {
@@ -1455,7 +1585,7 @@ func (m *Model) tabDragPress(tab ui.Element, i int) {
 		lx, ly, _ := tab.PointerPosition()
 		b := tab.Bounds()
 		m.tabDrag = tabDragState{
-			Held: true, From: i, To: i,
+			Held: true, From: i, To: i, Offset: offset, Count: count,
 			Press: ui.Point{X: b.X + lx, Y: b.Y + ly},
 			At:    ui.Point{X: b.X + lx, Y: b.Y + ly},
 			Grab:  ui.Point{X: lx, Y: ly},
@@ -1487,8 +1617,28 @@ func (m *Model) applyTabDrop() {
 			m.moveTabToEditorEdge(m.tabs[d.From], edge)
 			return
 		}
-		m.tabs, m.active = reorderTabs(m.tabs, m.active, d.From, d.To)
+		m.tabs, m.active = reorderTabsInRange(m.tabs, m.active, d.From, d.To, d.Offset, d.Count)
 	}
+}
+
+// reorderTabsInRange keeps a drag within the strip row where it started. A
+// vertical strip can therefore reorder its column and still drop on an editor
+// edge to create a group, without crossing a pinned/unpinned divider.
+func reorderTabsInRange(tabs []*Tab, active, from, to, offset, count int) ([]*Tab, int) {
+	start := max(0, offset)
+	end := min(len(tabs), start+count)
+	to = max(start, min(to, end))
+	if from < start || from >= end || count <= 0 || to == from || to == from+1 {
+		return tabs, active
+	}
+	localActive := active - start
+	ordered, localActive := reorderTabs(tabs[start:end], localActive, from-start, to-start)
+	out := append([]*Tab(nil), tabs...)
+	copy(out[start:end], ordered)
+	if active >= start && active < end {
+		active = start + localActive
+	}
+	return out, active
 }
 
 // editorDropEdge maps a lifted tab's release point to the edge of an editor
@@ -1769,6 +1919,16 @@ func (m *Model) tabMenu(menu *ui.Menu, t *Tab) {
 	path := tabPath(t)
 	if t.kind == "" {
 		m.compileFileMenu(menu, path)
+		if strings.EqualFold(filepath.Ext(path), ".go") {
+			menu.Submenu("Go Generate", func(sub *ui.Menu) {
+				if sub.Item("Go Generate File").Chosen() {
+					m.RunCommandWithArg("go.generate.file", map[string]any{"path": path})
+				}
+				if sub.Item("Go Generate Package").Chosen() {
+					m.RunCommandWithArg("go.generate.package", map[string]any{"path": path})
+				}
+			})
+		}
 	}
 	if menu.Item("Close").Shortcut(ui.Cmd, ui.KeyW).Chosen() {
 		m.closeTabThen(t, nil)
@@ -1900,6 +2060,7 @@ func (m *Model) tabMenu(menu *ui.Menu, t *Tab) {
 		if menu.Item("Rename File…").Chosen() {
 			m.OpenFileRenameDialog(path)
 		}
+		m.fileTypeOverrideMenu(menu, path)
 		menu.Separator()
 	}
 	if menu.Item("Configure Editor Tabs…").Chosen() {
@@ -1919,6 +2080,17 @@ func (m *Model) tabOpenInMenu(menu *ui.Menu, path string) {
 		}
 		if menu.Item("Terminal").Chosen() {
 			m.OpenTerminalAt(filepath.Dir(path))
+		}
+		if isWebPath(path) {
+			menu.Submenu("Browser", func(sub *ui.Menu) {
+				if sub.Item("Default Browser").Chosen() {
+					m.OpenWebInBrowser(path)
+				}
+				if isHTMLPath(path) &&
+					sub.Item("Built-in Preview").Checked(m.remote.webPreviews[path]).Chosen() {
+					m.ToggleWebPreview(path)
+				}
+			})
 		}
 	})
 }
@@ -1944,8 +2116,20 @@ func (m *Model) tabGitMenu(menu *ui.Menu, path string) {
 	if menu.Item("Show Diff").Chosen() {
 		m.ShowDiff(path)
 	}
+	if menu.Item("Compare with Branch or Revision…").Chosen() {
+		m.OpenCompareWithRevision(map[string]any{"path": path})
+	}
+	if menu.Item("Compare with Revision…").Chosen() {
+		m.OpenCompareWithRevision(map[string]any{"path": path})
+	}
 	if menu.Item("Show History").Chosen() {
 		m.ShowHistory(path)
+	}
+	if menu.Item("Show History for Selection").Chosen() {
+		m.ShowHistoryForSelection()
+	}
+	if menu.Item("Show Current Revision").Chosen() {
+		m.ShowCurrentRevision(map[string]any{"path": path})
 	}
 	if menu.Item("Rollback…").Disabled(!changed || f.Unstaged == nil).Chosen() {
 		m.AskRollback(f)
@@ -1960,8 +2144,23 @@ func (m *Model) tabGitMenu(menu *ui.Menu, path string) {
 	if menu.Item("New Tag…").Chosen() {
 		m.OpenNewGitTag()
 	}
+	if menu.Item("Checkout Tag or Revision…").Chosen() {
+		m.OpenCheckoutRevision("")
+	}
+	if menu.Item("Worktrees…").Chosen() {
+		m.OpenVCSWorktrees()
+	}
+	if menu.Item("New Worktree…").Chosen() {
+		m.OpenNewVCSWorktree()
+	}
+	if menu.Item("Manage Remotes…").Chosen() {
+		m.OpenGitRemotes()
+	}
+	if menu.Item("Resolve Conflicts…").Chosen() {
+		m.OpenResolveConflicts()
+	}
 	menu.Separator()
-	if menu.Item("Update Project…").Chosen() {
+	if menu.Item("Pull…").Chosen() {
 		m.OpenGitPull()
 	}
 	if menu.Item("Push…").Chosen() {

@@ -729,7 +729,7 @@ func (m *Model) SuppressGroup(group string) {
 	p.Groups[group] = g
 	m.prefs.Notify = &p
 	if path := m.settingsWritePath(); path != "" {
-		if err := m.prefs.Save(path); err != nil {
+		if err := m.savePreferences(); err != nil {
 			m.notifyError("notify:save", "Couldn't save notification settings", notifySuffix(err.Error()))
 		}
 	}

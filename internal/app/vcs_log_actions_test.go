@@ -1,10 +1,13 @@
 package app
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 
@@ -125,6 +128,76 @@ func TestNewTagAtCommitUsesTheRequestedRevision(t *testing.T) {
 	}
 	if len(m.vcsOps.choices) != 1 || m.vcsOps.choices[0].value != "bbbbbbbb" {
 		t.Fatalf("tag choices = %+v", m.vcsOps.choices)
+	}
+}
+
+func TestInteractiveRebaseScopesAggregateHistoryToCommitRepository(t *testing.T) {
+	first := "/project/orders"
+	second := "/project/catalog"
+	operationArgs := make(chan map[string]any, 1)
+	m := &Model{
+		ctx: context.Background(),
+		invokeHook: func(_ context.Context, command string, args any) (json.RawMessage, error) {
+			if command == "vcs_operation" {
+				operationArgs <- args.(map[string]any)
+			}
+			return json.RawMessage(`null`), nil
+		},
+		postHook: func(fn func()) { fn() },
+	}
+	m.setRoot("/project")
+	m.vcs.repositories = []vcsRepository{
+		{Root: first, Head: str("main")},
+		{Root: second, Head: str("feature")},
+	}
+	m.vcs.current = first
+	m.log = LogPane{
+		visible:     true,
+		aggregate:   true,
+		repo:        first,
+		selected:    2,
+		commitRepos: []string{second, first, second, first, second, first},
+		commits: []openidea.Commit{
+			{ID: "bbbb", ShortID: "bbbb", Summary: "Catalog newest", Parents: []string{"bbbb-old"}},
+			{ID: "aaaa-new", ShortID: "aaaa", Summary: "Orders newest", Parents: []string{"aaaa"}},
+			{ID: "bbbb-old", ShortID: "bbbb", Summary: "Catalog older", Parents: []string{"bbbb-root"}},
+			{ID: "aaaa", ShortID: "aaaa", Summary: "Orders older", Parents: []string{"aaaa-root"}},
+			{ID: "bbbb-root", ShortID: "bbbb", Summary: "Catalog root"},
+			{ID: "aaaa-root", ShortID: "aaaa", Summary: "Orders root"},
+		},
+	}
+
+	m.OpenInteractiveRebase(map[string]any{"id": "bbbb-old", "repo": second})
+	if m.vcsMore.input3 != second {
+		t.Fatalf("interactive rebase repo = %q, want %q", m.vcsMore.input3, second)
+	}
+	if len(m.vcsMore.rebaseCommits) != 2 ||
+		m.vcsMore.rebaseCommits[0].ID != "bbbb-old" ||
+		m.vcsMore.rebaseCommits[1].ID != "bbbb" {
+		t.Fatalf("interactive rebase commits = %+v", m.vcsMore.rebaseCommits)
+	}
+	if m.vcsMore.rebaseBase != "bbbb-root" {
+		t.Fatalf("interactive rebase base = %q, want bbbb-root", m.vcsMore.rebaseBase)
+	}
+
+	m.vcsMore.rebaseActions[0] = "reword"
+	m.vcsMore.rebaseMessages[0] = "Rewritten catalog commit"
+	m.log.visible = false
+	m.submitInteractiveRebase()
+	select {
+	case args := <-operationArgs:
+		if args["repo"] != second {
+			t.Fatalf("interactive rebase operation repo = %#v, want %q", args["repo"], second)
+		}
+		op := args["op"].(map[string]any)
+		entries := op["entries"].([]map[string]any)
+		if len(entries) != 2 ||
+			entries[0]["commit"] != "bbbb-old" ||
+			entries[1]["commit"] != "bbbb" {
+			t.Fatalf("interactive rebase entries = %+v", entries)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("interactive rebase did not reach the backend")
 	}
 }
 

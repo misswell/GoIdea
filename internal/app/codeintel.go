@@ -136,6 +136,9 @@ func (m *Model) kickOutline(t *Tab, v uint64) {
 	if t.outlineLoading {
 		return
 	}
+	if m.ctx == nil || (m.mgr == nil && m.invokeHook == nil) {
+		return
+	}
 	doc := t.doc.ID()
 	t.outlineLoading = true
 	t.outlineDoc = doc
@@ -145,7 +148,7 @@ func (m *Model) kickOutline(t *Tab, v uint64) {
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 		defer cancel()
-		raw, err := m.mgr.Invoke(ctx, Window, "doc_outline", map[string]any{"doc": doc})
+		raw, err := m.invoke(ctx, "doc_outline", map[string]any{"doc": doc})
 		var items []openidea.OutlineItem
 		if err == nil {
 			err = json.Unmarshal(raw, &items)

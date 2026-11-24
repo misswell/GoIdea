@@ -1,19 +1,23 @@
 package app
 
-// Search Everywhere's funnel, after filters.ts: excluded symbol kinds on the
-// Classes and Symbols tabs and a file mask on Text. Upstream's language half
-// needs a language list the backend does not expose, so it is left out rather
-// than faked; the kinds and the mask work on the results already loaded.
+// Search Everywhere's funnel, after filters.ts: excluded file types and symbol
+// kinds on the relevant tabs and a file mask on Text.
 
 import (
 	"path/filepath"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
+
+	"mayoi/internal/openidea"
 )
 
 // seFilters is the funnel's stored state, per tab.
 type seFilters struct {
+	// Files, Classes and Symbols list excluded language ids.
+	FilesLanguages   []string `json:"filesLanguages,omitempty"`
+	ClassesLanguages []string `json:"classesLanguages,omitempty"`
+	SymbolsLanguages []string `json:"symbolsLanguages,omitempty"`
 	// Classes and Symbols list the excluded symbol kinds, so a newly known
 	// kind shows by default.
 	Classes []string `json:"classes,omitempty"`
@@ -64,7 +68,19 @@ func seFilterKinds(tab seTab) []string {
 
 // seFilterTab reports whether the tab has a funnel at all.
 func seFilterTab(tab seTab) bool {
-	return tab == seTabClasses || tab == seTabSymbols || tab == seTabText
+	return tab == seTabFiles || tab == seTabClasses || tab == seTabSymbols || tab == seTabText
+}
+
+func (f seFilters) languages(tab seTab) []string {
+	switch tab {
+	case seTabFiles:
+		return f.FilesLanguages
+	case seTabClasses:
+		return f.ClassesLanguages
+	case seTabSymbols:
+		return f.SymbolsLanguages
+	}
+	return nil
 }
 
 func (f seFilters) kinds(tab seTab) []string {
@@ -79,7 +95,44 @@ func (f seFilters) kinds(tab seTab) []string {
 
 // active reports whether the tab's filter would drop anything.
 func (f seFilters) active(tab seTab) bool {
-	return len(f.kinds(tab)) > 0 || (tab == seTabText && strings.TrimSpace(f.Text) != "")
+	return len(f.languages(tab)) > 0 || len(f.kinds(tab)) > 0 ||
+		(tab == seTabText && strings.TrimSpace(f.Text) != "")
+}
+
+// languageExcluded drops paths whose longest registered suffix belongs to an
+// excluded language. Unknown paths stay visible, as OpenIDEA's passesFilter.
+func (f seFilters) languageExcluded(tab seTab, path string, languages []openidea.LanguageInfo) bool {
+	id := seLanguageOf(path, languages)
+	if id == "" {
+		return false
+	}
+	for _, excluded := range f.languages(tab) {
+		if excluded == id {
+			return true
+		}
+	}
+	return false
+}
+
+// seLanguageOf matches the longest suffix first, so d.ts wins over ts.
+func seLanguageOf(path string, languages []openidea.LanguageInfo) string {
+	name := strings.ToLower(filepath.Base(path))
+	for dot := strings.IndexByte(name, '.'); dot >= 0; {
+		suffix := name[dot+1:]
+		for _, language := range languages {
+			for _, extension := range language.Extensions {
+				if strings.TrimPrefix(strings.ToLower(extension), ".") == suffix {
+					return language.ID
+				}
+			}
+		}
+		next := strings.IndexByte(name[dot+1:], '.')
+		if next < 0 {
+			break
+		}
+		dot += next + 1
+	}
+	return ""
 }
 
 // kindExcluded reports whether a symbol kind is filtered out. Kinds the menu
@@ -128,13 +181,42 @@ func (f seFilters) toggleKind(tab seTab, kind string) seFilters {
 	return f
 }
 
+func (f seFilters) toggleLanguage(tab seTab, id string) seFilters {
+	list := f.languages(tab)
+	kept := make([]string, 0, len(list)+1)
+	found := false
+	for _, language := range list {
+		if language == id {
+			found = true
+		} else {
+			kept = append(kept, language)
+		}
+	}
+	if !found {
+		kept = append(kept, id)
+	}
+	switch tab {
+	case seTabFiles:
+		f.FilesLanguages = kept
+	case seTabClasses:
+		f.ClassesLanguages = kept
+	case seTabSymbols:
+		f.SymbolsLanguages = kept
+	}
+	return f
+}
+
 // clearTab removes one tab's filter, as Reset Filter does.
 func (f seFilters) clearTab(tab seTab) seFilters {
 	switch tab {
+	case seTabFiles:
+		f.FilesLanguages = nil
 	case seTabClasses:
 		f.Classes = nil
+		f.ClassesLanguages = nil
 	case seTabSymbols:
 		f.Symbols = nil
+		f.SymbolsLanguages = nil
 	case seTabText:
 		f.Text = ""
 	}
@@ -194,12 +276,11 @@ func (m *Model) saveSearchFilters() {
 	f := m.seFilters
 	m.prefs.SearchFilters = &f
 	if m.cfg.SettingsPath != "" {
-		_ = m.prefs.Save(m.cfg.SettingsPath)
+		_ = m.savePreferences()
 	}
 }
 
-// seFilterPanel draws the funnel's panel under the tab row: a checkbox per
-// symbol kind, or the Text tab's mask field.
+// seFilterPanel draws file types and symbol kinds, or the Text mask.
 func (m *Model) seFilterPanel(c *ui.Context, p *ui.Theme, s *sePane) {
 	col := ui.Column(c).Gap(2).Padding(6, 4).Radius(6).Background(p.Surface)
 	col.Children(func() {
@@ -212,28 +293,40 @@ func (m *Model) seFilterPanel(c *ui.Context, p *ui.Theme, s *sePane) {
 				m.refreshSearchEverywhere()
 			})
 		} else {
-			ui.Text(c, "Show symbol kinds").FontSize(12).TextColor(p.TextMuted).SingleLine()
-			for _, kind := range seFilterKinds(s.tab) {
-				kind := kind
-				on := !s.filters.kindExcluded(s.tab, kind)
-				b := ui.ButtonBase(c.Key("se:filter:"+string(s.tab)+":"+kind)).Height(22).
-					Padding(0, 6).Radius(4).AlignItems(ui.Center).Cursor(ui.CursorPointer)
-				if b.Hovered() {
-					b.Background(p.SurfaceHover)
-				}
-				b.Children(func() {
-					box := "☐"
-					if on {
-						box = "☑"
+			switch {
+			case !s.languagesDone && s.languagesBusy:
+				ui.Text(c, "Loading file types…").FontSize(12).TextColor(p.TextMuted).SingleLine()
+			case s.languagesError != "":
+				ui.Text(c, s.languagesError).FontSize(12).TextColor(p.TextMuted).SingleLine()
+			case len(s.languages) == 0:
+				ui.Text(c, "No file types are available.").FontSize(12).TextColor(p.TextMuted).SingleLine()
+			default:
+				ui.Text(c, "File types").FontSize(12).TextColor(p.TextMuted).SingleLine()
+				for _, language := range s.languages {
+					language := language
+					id := language.ID
+					on := true
+					for _, excluded := range s.filters.languages(s.tab) {
+						if excluded == id {
+							on = false
+							break
+						}
 					}
-					ui.Text(c, box+" "+seKindLabels[kind]).FontSize(12).TextColor(p.Text).SingleLine()
-				})
-				b.OnClick(func() {
-					s.filters = s.filters.toggleKind(s.tab, kind)
-					m.seFilters = s.filters
-					m.saveSearchFilters()
-					m.refreshSearchEverywhere()
-				})
+					m.seFilterCheckbox(c, p, s, "language:"+id, seLanguageLabel(language), on, func() {
+						s.filters = s.filters.toggleLanguage(s.tab, id)
+					})
+				}
+			}
+			if kinds := seFilterKinds(s.tab); len(kinds) > 0 {
+				ui.Text(c, "Show symbol kinds").FontSize(12).TextColor(p.TextMuted).SingleLine()
+				for _, kind := range kinds {
+					kind := kind
+					label := seKindLabels[kind]
+					on := !s.filters.kindExcluded(s.tab, kind)
+					m.seFilterCheckbox(c, p, s, "kind:"+kind, label, on, func() {
+						s.filters = s.filters.toggleKind(s.tab, kind)
+					})
+				}
 			}
 		}
 		if s.filters.active(s.tab) {
@@ -252,5 +345,33 @@ func (m *Model) seFilterPanel(c *ui.Context, p *ui.Theme, s *sePane) {
 				m.refreshSearchEverywhere()
 			})
 		}
+	})
+}
+
+func seLanguageLabel(language openidea.LanguageInfo) string {
+	if strings.TrimSpace(language.Name) != "" {
+		return language.Name
+	}
+	return language.ID
+}
+
+func (m *Model) seFilterCheckbox(c *ui.Context, p *ui.Theme, s *sePane, id, label string, on bool, run func()) {
+	b := ui.ButtonBase(c.Key("se:filter:"+string(s.tab)+":"+id)).Height(22).
+		Padding(0, 6).Radius(4).AlignItems(ui.Center).Cursor(ui.CursorPointer)
+	if b.Hovered() {
+		b.Background(p.SurfaceHover)
+	}
+	b.Children(func() {
+		box := "☐"
+		if on {
+			box = "☑"
+		}
+		ui.Text(c, box+" "+label).FontSize(12).TextColor(p.Text).SingleLine()
+	})
+	b.OnClick(func() {
+		run()
+		m.seFilters = s.filters
+		m.saveSearchFilters()
+		m.refreshSearchEverywhere()
 	})
 }

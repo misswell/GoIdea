@@ -56,14 +56,10 @@ func TestAccentAndStartupPersist(t *testing.T) {
 	}
 }
 
-func TestStartupIsWelcomeUnlessReopenChosen(t *testing.T) {
+func TestStartupReopensUnlessWelcomeIsChosen(t *testing.T) {
 	m := &Model{}
-	if m.startupReopensProject() {
-		t.Fatal("an untouched start reopens the last project")
-	}
-	m.SetStartupPref("reopen")
 	if !m.startupReopensProject() {
-		t.Fatal("the reopen choice is not read")
+		t.Fatal("an untouched start does not reopen the last project")
 	}
 	m.SetStartupPref("welcome")
 	if m.startupReopensProject() {
@@ -73,10 +69,15 @@ func TestStartupIsWelcomeUnlessReopenChosen(t *testing.T) {
 	if m.prefs.Startup != "welcome" {
 		t.Fatalf("an unknown choice was stored: %q", m.prefs.Startup)
 	}
+	m.SetStartupPref("reopen")
+	if !m.startupReopensProject() {
+		t.Fatal("the reopen choice is not read")
+	}
 }
 
 func TestKeymapPresetLabel(t *testing.T) {
-	if keymapPreset() != keymapPresetTitle {
-		t.Fatalf("preset = %q", keymapPreset())
+	m := &Model{}
+	if keymapPreset() != m.keymapPresetTitle() {
+		t.Fatalf("preset = %q", m.keymapPresetTitle())
 	}
 }

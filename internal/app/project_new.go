@@ -35,6 +35,7 @@ type projectNewEntry struct {
 	key           string
 	label         string
 	keywords      []string
+	templateID    string
 	templateIndex int
 	action        string
 	separator     bool
@@ -307,7 +308,7 @@ func (m *Model) refreshProjectNewMatches() {
 	query := strings.TrimSpace(v.query)
 	found := make([]projectNewMatch, 0, len(projectNewEntries()))
 	var keywordMatches []projectNewMatch
-	for _, entry := range projectNewEntries() {
+	for _, entry := range m.projectNewEntries() {
 		if query == "" {
 			found = append(found, projectNewMatch{entry: entry})
 			continue
@@ -351,32 +352,49 @@ func projectNewGenericKeyword(keyword string) bool {
 }
 
 func projectNewEntries() []projectNewEntry {
+	scheme := defaultFileTemplateScheme()
+	return projectNewEntriesForCatalog(scheme.Templates)
+}
+
+func (m *Model) projectNewEntries() []projectNewEntry {
+	if m == nil {
+		return projectNewEntries()
+	}
+	scheme := m.effectiveFileTemplateScheme()
+	return projectNewEntriesForCatalog(scheme.Templates)
+}
+
+func projectNewEntriesForCatalog(templates []projectNewTemplate) []projectNewEntry {
 	entries := []projectNewEntry{
-		{key: "new.file", label: "File", templateIndex: 0, action: "file"},
+		{key: "new.file", label: "File", templateID: "file", templateIndex: 0, action: "file"},
 		{key: "new.dir", label: "Directory", templateIndex: -1, action: "directory"},
+		{
+			key: "scratch.new", label: "Scratch File", templateIndex: -1, action: "scratch",
+			keywords: []string{"scratch", "temporary", "buffer", "language"},
+		},
 	}
 	firstTemplate := true
-	for index := range projectNewTemplates {
-		template := &projectNewTemplates[index]
+	for index := range templates {
+		template := &templates[index]
 		if template.id == "file" || template.id == "http-request" {
 			continue
 		}
 		entries = append(entries, projectNewEntry{
 			key: "new.template." + template.id, label: template.name,
-			keywords:      projectNewTemplateKeywords(template),
-			templateIndex: index, action: "template", separator: firstTemplate,
+			keywords:   projectNewTemplateKeywords(template),
+			templateID: template.id, templateIndex: index, action: "template", separator: firstTemplate,
 		})
 		firstTemplate = false
 	}
-	for index := range projectNewTemplates {
-		template := &projectNewTemplates[index]
+	for index := range templates {
+		template := &templates[index]
 		if template.id != "http-request" {
 			continue
 		}
 		entries = append(entries, projectNewEntry{
 			key: "http.newRequest", label: template.name,
-			keywords:      []string{"http client", "rest", "scratch", "curl"},
-			templateIndex: index, action: "template", separator: true,
+			keywords:   []string{"http client", "rest", "scratch", "curl"},
+			templateID: template.id, templateIndex: index, action: "template", separator: true,
 		})
 		break
 	}
@@ -422,16 +440,18 @@ func (m *Model) StepProjectNew(delta int) {
 // SelectProjectNewTemplate chooses a template by its index in
 // projectNewTemplates. The chooser is closed and the name step opens.
 func (m *Model) SelectProjectNewTemplate(index int) {
+	scheme := m.effectiveFileTemplateScheme()
+	templates := scheme.Templates
 	v := m.projectNew
-	if v == nil || index < 0 || index >= len(projectNewTemplates) {
+	if v == nil || index < 0 || index >= len(templates) {
 		return
 	}
-	t := &projectNewTemplates[index]
+	t := &templates[index]
 	name := t.defaultName
 	m.projectNew = nil
 	m.treeOp = &treeOpState{
 		kind: treeOpNewFile, path: v.dir, dir: true, name: name, open: true,
-		projectTemplate: t,
+		projectTemplate: t, projectIncludes: scheme.Includes,
 	}
 	m.refreshProjectNewTarget(m.treeOp)
 	m.invalidate()
@@ -454,6 +474,9 @@ func (m *Model) chooseProjectNewMatch(match projectNewMatch) {
 	case "directory":
 		m.projectNew = nil
 		m.OpenNewTreeEntry(v.dir, true)
+	case "scratch":
+		m.projectNew = nil
+		m.OpenScratchChooser()
 	case "file", "fromTemplate":
 		m.projectNew = nil
 		m.OpenNewTreeEntry(v.dir, false)
@@ -550,10 +573,11 @@ func (m *Model) projectNewDialog(c *ui.Context, p *ui.Theme) {
 								folderIconEl(c, oi, "plain", 16, oi.textMuted)
 							} else {
 								name := match.entry.label
+								scheme := m.effectiveFileTemplateScheme()
 								if match.entry.templateIndex >= 0 &&
-									match.entry.templateIndex < len(projectNewTemplates) {
+									match.entry.templateIndex < len(scheme.Templates) {
 									ext := projectNewTemplateExtension(
-										projectNewTemplates[match.entry.templateIndex], 0,
+										scheme.Templates[match.entry.templateIndex], 0,
 									)
 									if ext != "" {
 										name = "file." + ext
@@ -1053,26 +1077,30 @@ func projectNewPSR4Namespace(directory, composerDir string, data []byte) string 
 }
 
 func projectNewExpandedBody(body string) string {
-	return projectNewExpandIncludes(strings.ReplaceAll(body, "\r\n", "\n"), 0)
+	return projectNewExpandedBodyWithIncludes(body, projectNewIncludes)
+}
+
+func projectNewExpandedBodyWithIncludes(body string, includes map[string]string) string {
+	return projectNewExpandIncludes(strings.ReplaceAll(body, "\r\n", "\n"), includes, 0)
 }
 
 var projectNewParseLineRE = regexp.MustCompile(`^([ \t]*)#parse\(\s*"([^"]+)"\s*\)[ \t]*$`)
 var projectNewParseInlineRE = regexp.MustCompile(`#parse\(\s*"([^"]+)"\s*\)`)
 
-func projectNewExpandIncludes(body string, depth int) string {
+func projectNewExpandIncludes(body string, includes map[string]string, depth int) string {
 	if depth > 4 || !strings.Contains(body, "#parse") {
 		return body
 	}
 	var out []string
 	for _, line := range strings.Split(body, "\n") {
 		if match := projectNewParseLineRE.FindStringSubmatch(line); match != nil {
-			include, ok := projectNewIncludes[match[2]]
+			include, ok := includes[match[2]]
 			if !ok {
 				out = append(out, line)
 				continue
 			}
 			include = strings.TrimSuffix(strings.ReplaceAll(include, "\r\n", "\n"), "\n")
-			include = projectNewExpandIncludes(include, depth+1)
+			include = projectNewExpandIncludes(include, includes, depth+1)
 			if include == "" {
 				continue
 			}
@@ -1086,12 +1114,12 @@ func projectNewExpandIncludes(body string, depth int) string {
 		}
 		line = projectNewParseInlineRE.ReplaceAllStringFunc(line, func(directive string) string {
 			match := projectNewParseInlineRE.FindStringSubmatch(directive)
-			include, ok := projectNewIncludes[match[1]]
+			include, ok := includes[match[1]]
 			if !ok {
 				return directive
 			}
 			include = strings.TrimSuffix(strings.ReplaceAll(include, "\r\n", "\n"), "\n")
-			return projectNewExpandIncludes(include, depth+1)
+			return projectNewExpandIncludes(include, includes, depth+1)
 		})
 		out = append(out, line)
 	}
@@ -1099,11 +1127,15 @@ func projectNewExpandIncludes(body string, depth int) string {
 }
 
 func renderFileTemplate(body string, vars projectNewVars) (string, int) {
+	return renderFileTemplateWithIncludes(body, vars, projectNewIncludes)
+}
+
+func renderFileTemplateWithIncludes(body string, vars projectNewVars, includes map[string]string) (string, int) {
 	if vars.now.IsZero() {
 		vars.now = time.Now()
 	}
 	body = strings.ReplaceAll(body, "\r\n", "\n")
-	body = projectNewExpandedBody(body)
+	body = projectNewExpandedBodyWithIncludes(body, includes)
 	lines := strings.Split(body, "\n")
 	if vars.pkg == "" {
 		clean := make([]string, 0, len(lines))
@@ -1190,11 +1222,15 @@ func projectNewUserName(root string) string {
 }
 
 func projectNewRenderedText(t *projectNewTemplate, kindIndex int, plan projectNewPlan, packageName, projectName, root string, now time.Time) (string, int) {
+	return projectNewRenderedTextWithIncludes(t, kindIndex, plan, packageName, projectName, root, now, projectNewIncludes)
+}
+
+func projectNewRenderedTextWithIncludes(t *projectNewTemplate, kindIndex int, plan projectNewPlan, packageName, projectName, root string, now time.Time, includes map[string]string) (string, int) {
 	kind := projectNewKindFor(t, kindIndex)
-	return renderFileTemplate(kind.body, projectNewVars{
+	return renderFileTemplateWithIncludes(kind.body, projectNewVars{
 		name: plan.name, fileName: plan.fileName, pkg: packageName,
 		projectName: projectName, user: projectNewUserName(root), now: now,
-	})
+	}, includes)
 }
 
 func projectNewCaretPosition(text string, offset int) (line, col int) {

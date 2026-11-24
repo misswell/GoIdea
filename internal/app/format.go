@@ -24,12 +24,13 @@ func (m *Model) formatTab(t *Tab) {
 	t.formatting = true
 	m.status = "Formatting " + filepath.Base(t.doc.Path()) + "…"
 	m.invalidate()
+	guard := m.formatGuardForDocument()
 	docID := t.doc.ID()
 	version := t.doc.Buffer().Version()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, lspTimeout)
 		defer cancel()
-		applied, stale, err := m.applyLanguageFormat(ctx, t, docID, version, false)
+		applied, stale, err := m.applyLanguageFormat(ctx, t, docID, version, false, guard)
 		m.finishFormat(t, err, stale, applied)
 	}()
 }
@@ -43,17 +44,29 @@ func (m *Model) applyLanguageFormat(
 	docID uint32,
 	version uint64,
 	onSave bool,
+	guard formatGuard,
 ) (applied int, stale bool, err error) {
+	if formatPathExcluded(t.doc.Path(), m.Root(), guard.doNotFormat) {
+		return 0, false, nil
+	}
 	// The server formats the text it was last given; typing since the
 	// debounce sync has to land first or its ranges mean other text.
 	if err = t.doc.Sync(ctx); err != nil {
 		return 0, false, err
 	}
+	tabSize := int(m.nativeRuntimeNumber(settingsPageCodeStyleOther, "editor.tabSize"))
+	if tabSize <= 0 {
+		tabSize = 4
+	}
 	raw, err := m.invoke(ctx, "lsp_format", map[string]any{
 		"doc":   docID,
 		"range": nil,
 		"options": map[string]any{
-			"tabSize": 4, "insertSpaces": true, "onSave": onSave, "tool": nil,
+			"tabSize": tabSize,
+			"insertSpaces": m.nativeRuntimeBool(
+				settingsPageCodeStyleOther, "editor.insertSpaces",
+			),
+			"onSave": onSave, "tool": nil,
 		},
 	})
 	var edits []openidea.TextEdit
@@ -63,6 +76,7 @@ func (m *Model) applyLanguageFormat(
 	if err != nil {
 		return 0, false, err
 	}
+	edits = guardFormatTextEdits(t.doc.Text(), edits, guard)
 	// The ranges are against the text the server formatted; typing since then
 	// makes them mean something else.
 	if t.doc.Buffer().Version() != version {

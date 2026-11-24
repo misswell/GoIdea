@@ -19,10 +19,7 @@ func (m *Model) runWidget(c *ui.Context, p *ui.Theme, oi oiColors) {
 		m.runConfigChooser(c, p, oi)
 		live := m.run.running || m.run.awaiting
 		debugging := m.debug.session != 0 && !m.debug.ended
-		name := ""
-		if cfg := m.run.current(); cfg != nil {
-			name = cfg.Name
-		}
+		name := m.run.selectedLabel()
 		if m.debug.starting {
 			m.runWidgetButton(c, p, oi, "stop", titled("Stop", m.debug.tabName), "run/stop_stroke", 16, oi.danger, m.StopDebug)
 			return
@@ -75,8 +72,8 @@ func titled(verb, name string) string {
 // configuration's name and the chevron, with the configurations in its menu.
 func (m *Model) runConfigChooser(c *ui.Context, p *ui.Theme, oi oiColors) {
 	label := "Select Configuration"
-	if cfg := m.run.current(); cfg != nil {
-		label = cfg.Name
+	if selected := m.run.selectedLabel(); selected != "" {
+		label = selected
 	}
 	w := ui.ButtonBase(c.Key("title:run-config")).Height(30).Padding(0, 8).Gap(4).
 		Radius(6).AlignItems(ui.Center).Cursor(ui.CursorPointer)
@@ -94,17 +91,34 @@ func (m *Model) runConfigChooser(c *ui.Context, p *ui.Theme, oi oiColors) {
 			m.RunCommand("run.chooseConfig")
 		}
 		menu.Separator()
+		current := menu.Item("Current File")
+		current.Checked(m.run.currentFile)
+		if current.Chosen() {
+			m.selectRunConfig("current-file")
+			m.invalidate()
+		}
 		for i, cfg := range m.run.configs {
 			i, cfg := i, cfg
 			it := menu.Item(cfg.Name)
-			it.Checked(i == m.run.sel)
+			it.Checked(!m.run.currentFile && m.run.inline == nil && i == m.run.sel)
 			if it.Chosen() {
-				m.run.sel = i
-				m.run.inline = nil
+				m.selectRunConfig(cfg.ID)
 				m.invalidate()
 			}
 		}
-		if len(m.run.configs) == 0 {
+		for _, cfg := range m.run.temporaries {
+			cfg := cfg
+			if cfg == nil {
+				continue
+			}
+			it := menu.Item(cfg.Name)
+			it.Checked(m.run.inline != nil && m.run.inline.ID == cfg.ID)
+			if it.Chosen() {
+				m.selectRunConfig(cfg.ID)
+				m.invalidate()
+			}
+		}
+		if len(m.run.configs) == 0 && len(m.run.temporaries) == 0 {
 			menu.Item("No configurations").Disabled(true)
 		}
 		menu.Separator()
@@ -151,19 +165,32 @@ func (m *Model) runMoreButton(c *ui.Context, p *ui.Theme, oi oiColors) {
 		oiIconEl(c, "general/moreVertical", 20, oi, oi.icon)
 	})
 	b.Menu(func(menu *ui.Menu) {
-		name := ""
+		hasExecutors := false
 		if cfg := m.run.current(); cfg != nil {
-			name = cfg.Name
+			if profilerSupports(*cfg) {
+				hasExecutors = true
+				if menu.Item("Profile '" + cfg.Name + "'").Chosen() {
+					m.RunCommand("run.profile")
+				}
+			}
+			if allocationProfilerSupports(*cfg) {
+				hasExecutors = true
+				if menu.Item("Profile '" + cfg.Name + "' Allocations").Chosen() {
+					m.RunCommand("run.profileAllocations")
+				}
+				if menu.Item("Profile '" + cfg.Name + "' Live Objects").Chosen() {
+					m.RunCommand("run.profileLiveObjects")
+				}
+			}
 		}
-		if menu.Item(titled("Run", name)).Chosen() {
-			m.RunCommand("run.start")
+		if hasExecutors {
+			menu.Separator()
 		}
-		if menu.Item(titled("Debug", name)).Chosen() {
-			m.RunCommand("run.debug")
+		if menu.Item("Run Context Configuration").Chosen() {
+			m.RunCommand("run.runContext")
 		}
-		menu.Separator()
-		if menu.Item("Show Run Window").Chosen() {
-			m.RunCommand("view.run")
+		if menu.Item("Debug Context Configuration").Chosen() {
+			m.RunCommand("run.debugContext")
 		}
 		menu.Separator()
 		if menu.Item("Edit Configurations…").Chosen() {

@@ -175,6 +175,75 @@ func TestRunAnythingShellConfigTruncatesALongName(t *testing.T) {
 	}
 }
 
+func TestRunAnythingCompletesMavenGoalsAndGradleTasks(t *testing.T) {
+	m := &Model{}
+	m.setRoot("/work/demo")
+	m.maven.model.Maven = &mavenModel{Projects: []mavenProject{{
+		Pom: "pom.xml", Dir: "", ArtifactID: "demo", DisplayName: "demo",
+		Plugins: []mavenPlugin{{
+			GroupID: "org.example", ArtifactID: "build-helper", Prefix: "build-helper",
+			Goals: []string{"add-source"},
+		}},
+	}}}
+	m.maven.model.Gradle = []gradleModel{{
+		Dir: "", Command: "./gradlew", Projects: []gradleProject{
+			{Path: ":", Name: "demo", Tasks: []gradleTask{{Name: "test", Group: "verification"}}},
+			{Path: ":app", Name: "app", Dir: "app", Tasks: []gradleTask{{Name: "jar", Group: "build"}}},
+		},
+	}}
+
+	m.runAnything = &runAnythingState{open: true, sel: -1, query: "mvn cle"}
+	m.refreshRunAnything()
+	assertRunAnythingLine(t, m.runAnything.rows, "mvn clean", "Maven Goals")
+	m.runAnything.query = "mvn build-helper:"
+	m.refreshRunAnything()
+	assertRunAnythingLine(t, m.runAnything.rows, "mvn build-helper:add-source", "Maven Goals")
+
+	m.runAnything.query = "gradlew t"
+	m.refreshRunAnything()
+	assertRunAnythingLine(t, m.runAnything.rows, "gradlew test", "Gradle Tasks")
+	m.runAnything.query = "gradlew :app:j"
+	m.refreshRunAnything()
+	assertRunAnythingLine(t, m.runAnything.rows, "gradlew :app:jar", "Gradle Tasks")
+}
+
+func TestRunAnythingRecognizesEveryBuildToolLauncher(t *testing.T) {
+	for _, launcher := range []string{
+		"mvn", "mvn.cmd", "./mvn", "./mvn.cmd",
+		"mvnw", "mvnw.cmd", "./mvnw", "./mvnw.cmd",
+	} {
+		if got := buildToolForLine(launcher + " test"); got != "maven" {
+			t.Errorf("buildToolForLine(%q) = %q, want maven", launcher+" test", got)
+		}
+	}
+	for _, launcher := range []string{
+		"gradle", "gradle.bat", "./gradle", "./gradle.bat",
+		"gradlew", "gradlew.bat", "./gradlew", "./gradlew.bat",
+	} {
+		if got := buildToolForLine(launcher + " test"); got != "gradle" {
+			t.Errorf("buildToolForLine(%q) = %q, want gradle", launcher+" test", got)
+		}
+	}
+	if got := buildToolForLine("go test ./..."); got != "" {
+		t.Fatalf("go command classified as %q", got)
+	}
+}
+
+func assertRunAnythingLine(t *testing.T, rows []runAnythingRow, line, section string) {
+	t.Helper()
+	inSection := false
+	for _, row := range rows {
+		if row.section != "" {
+			inSection = row.section == section
+			continue
+		}
+		if inSection && row.line == line {
+			return
+		}
+	}
+	t.Fatalf("%q is not under %q: %+v", line, section, rows)
+}
+
 // The popup is OpenIDEA's RunAnything: its title, the command line, the
 // configuration group and the footer sentence.
 func TestRunAnythingDialogRenders(t *testing.T) {

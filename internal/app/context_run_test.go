@@ -35,6 +35,7 @@ func TestContextRunProducesScriptConfigurations(t *testing.T) {
 		{"python module", "worker/src/shop/__main__.py", "from .models import Item\n", "python", "../../.venv/bin/python", []string{"python", "-m", "shop"}},
 		{"node", "tools/run.js", "console.log('ok')", "shell", "node", []string{"tools/run.js"}},
 		{"tsx", "tools/run.ts", "console.log('ok')", "shell", "npx", []string{"tsx", "tools/run.ts"}},
+		{"php", "tools/run.php", "<?php echo 'ok';", "php", "php", []string{"tools/run.php"}},
 		{"shell", "scripts/build.zsh", "true\n", "shell", "zsh", []string{"scripts/build.zsh"}},
 	}
 	for _, test := range tests {
@@ -48,6 +49,83 @@ func TestContextRunProducesScriptConfigurations(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestContextRunResolvesBareToolsThroughBackend(t *testing.T) {
+	root := t.TempDir()
+	t.Run("configured PHP", func(t *testing.T) {
+		m := &Model{ctx: context.Background()}
+		var commands []string
+		m.invokeHook = func(_ context.Context, command string, _ any) (json.RawMessage, error) {
+			commands = append(commands, command)
+			if command != "sdk_php_effective" {
+				t.Fatalf("unexpected RPC %q", command)
+			}
+			return json.RawMessage(`"/opt/php8.3/bin/php"`), nil
+		}
+		cfg := openidea.RunConfig{Kind: "php", Command: "php"}
+		if err := m.resolveContextRunTool(&cfg, filepath.Join(root, "tools/run.php")); err != nil {
+			t.Fatal(err)
+		}
+		if cfg.Command != "/opt/php8.3/bin/php" {
+			t.Fatalf("PHP command = %q", cfg.Command)
+		}
+		if len(commands) != 1 {
+			t.Fatalf("commands = %q, want only sdk_php_effective", commands)
+		}
+	})
+
+	t.Run("located npx", func(t *testing.T) {
+		m := &Model{ctx: context.Background()}
+		m.invokeHook = func(_ context.Context, command string, args any) (json.RawMessage, error) {
+			if command != "sdk_locate_tools" {
+				t.Fatalf("unexpected RPC %q", command)
+			}
+			request := args.(map[string]any)
+			if request["near"] != filepath.Join(root, "tools") {
+				t.Fatalf("locate request = %#v", request)
+			}
+			if names := request["names"].([]string); len(names) != 1 || names[0] != "npx" {
+				t.Fatalf("locate names = %#v", names)
+			}
+			return json.RawMessage(`{
+				"tools":[{"name":"npx","path":"/repo/node_modules/.bin/npx","version":"10.8.0"}],
+				"compileDir":"/tmp"
+			}`), nil
+		}
+		cfg := openidea.RunConfig{Kind: "shell", Command: "npx"}
+		if err := m.resolveContextRunTool(&cfg, filepath.Join(root, "tools/run.ts")); err != nil {
+			t.Fatal(err)
+		}
+		if cfg.Command != "/repo/node_modules/.bin/npx" {
+			t.Fatalf("npx command = %q", cfg.Command)
+		}
+	})
+
+	t.Run("PHP on PATH", func(t *testing.T) {
+		m := &Model{ctx: context.Background()}
+		m.invokeHook = func(_ context.Context, command string, _ any) (json.RawMessage, error) {
+			switch command {
+			case "sdk_php_effective":
+				return json.RawMessage(`null`), nil
+			case "sdk_locate_tools":
+				return json.RawMessage(`{
+					"tools":[{"name":"php","path":"/usr/bin/php","version":"8.3.0"}],
+					"compileDir":"/tmp"
+				}`), nil
+			default:
+				t.Fatalf("unexpected RPC %q", command)
+				return nil, nil
+			}
+		}
+		cfg := openidea.RunConfig{Kind: "php", Command: "php"}
+		if err := m.resolveContextRunTool(&cfg, filepath.Join(root, "run.php")); err != nil {
+			t.Fatal(err)
+		}
+		if cfg.Command != "/usr/bin/php" {
+			t.Fatalf("fallback PHP command = %q", cfg.Command)
+		}
+	})
 }
 
 func TestContextRunNarrowsEachTestRunner(t *testing.T) {
@@ -167,7 +245,7 @@ func TestContextRunWithCoveragePreparesLaunchesAndCollects(t *testing.T) {
 	var prepared openidea.RunConfig
 	var launched openidea.RunConfig
 	m.invokeHook = func(_ context.Context, command string, input any) (json.RawMessage, error) {
-		args := input.(map[string]any)
+		args, _ := input.(map[string]any)
 		switch command {
 		case "coverage_prepare":
 			config, ok := args["config"].(json.RawMessage)
@@ -199,6 +277,8 @@ func TestContextRunWithCoveragePreparesLaunchesAndCollects(t *testing.T) {
 				return nil, fmt.Errorf("coverage report payload changed: %s", raw)
 			}
 			return json.RawMessage(`{"runner":"go test -cover","hasBranches":false,"files":[{"path":"internal/calc/calc.go","linesTotal":5,"linesCovered":4}]}`), nil
+		case "settings_get":
+			return json.RawMessage(`{"runTargets":[],"run":{}}`), nil
 		default:
 			return nil, fmt.Errorf("unexpected RPC %q", command)
 		}

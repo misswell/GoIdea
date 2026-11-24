@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -32,6 +33,9 @@ type RunPane struct {
 	sel     int
 	loaded  bool
 	loading bool
+	// runSettings is the applied Run/Debug page for this RunPane's project.
+	// resetRun replaces the pane, so one project's values cannot drive another.
+	runSettings runRuntimeSettings
 	// pendingStart runs the selected configuration once run_configs lands.
 	pendingStart bool
 	// pendingTrust is a Run the user asked for before trusting the project;
@@ -40,14 +44,45 @@ type RunPane struct {
 	// pendingCoverage selects the coverage executor for the next pending Run.
 	pendingCoverage bool
 	// pendingContext runs the active file once trust and run configurations
-	// are ready. pendingContextCoverage selects the coverage executor.
+	// are ready. pendingContextCoverage selects the coverage executor and
+	// pendingContextProfile selects the profiler executor.
 	pendingContext         bool
 	pendingContextCoverage bool
+	pendingContextProfile  openidea.ProfileMode
 	pendingDebugContext    bool
 	coverage               *coverageExecution
-	// inline is a configuration that is not in the detected list, such as the
-	// command line Run Anything starts; current() reports it while it is set.
+	// temporaries are OpenIDEA's at-most-five context configurations. One of
+	// them is selected through inline; current() reports it while it is set.
+	temporaries []*openidea.RunConfig
+	// inline is the selected temporary configuration. It points to the same
+	// value represented in temporaries.
 	inline *openidea.RunConfig
+	// temporaryPersistGeneration prevents a slower no-derived persistence
+	// request from restoring configurations that were removed since the call.
+	temporaryPersistGeneration uint64
+	// currentFile is OpenIDEA's CURRENT_FILE sentinel selected from the title
+	// bar chooser. Run and Debug derive the active file instead of launching a
+	// saved configuration.
+	currentFile bool
+	// pluginExit is the completion callback passed to run.pluginStart. The
+	// generation and root keep late exits and project switches from settling a
+	// newer request.
+	pluginExit       func(code *int32, stopped bool)
+	pluginStopped    bool
+	pluginGeneration uint64
+	pluginRoot       string
+	pluginConfigID   string
+	// pendingInline/pendingConfigID remember an action that named a
+	// configuration before trust or run_configs was ready. They must survive
+	// loadRunConfigs, whose normal path replaces the list and selects a
+	// detected configuration.
+	pendingInline   *openidea.RunConfig
+	pendingConfigID string
+	// pendingModifyContext opens the context editor after run_configs loads.
+	pendingModifyContext *runContextModifyRequest
+	// terminateAsk is the confirmation shown before closing a live Run or
+	// Debug tab when run.confirmTerminate is enabled.
+	terminateAsk *runTerminateAsk
 
 	busy     bool
 	running  bool
@@ -66,6 +101,41 @@ type RunPane struct {
 
 	output    []outputLine
 	truncated bool
+	// The hidden performance action owns a synthetic console stream. It never
+	// calls run_start, but Stop still cancels it through the same command.
+	sampleOutputBusy       bool
+	sampleOutputCancel     context.CancelFunc
+	sampleOutputGeneration uint64
+
+	// children holds the independent sessions of a Compound or a before-launch
+	// run. activeChild is the child whose console is visible; zero keeps the
+	// primary session (runID/channel above) active.
+	children       []*runChild
+	activeChild    uint32
+	preparingGroup bool
+	groupID        string
+	// pendingChildExits receives exits that arrive before run_start returns the
+	// child's process id. The id cannot be matched to a child before then.
+	pendingChildExits map[uint32]*int32
+	// retiredChildChannels and retiredChildRuns make late events from closed
+	// tabs inert. Both histories are bounded and survive resetRun.
+	retiredChildChannels     map[uint32]bool
+	retiredChildChannelOrder []uint32
+	retiredChildRuns         map[uint32]bool
+	retiredChildRunOrder     []uint32
+	// earlyExit records the primary process exiting before run_start returned
+	// its id. The late RunInfo must not put that finished process back into the
+	// running state.
+	earlyExit bool
+	// viewChild is a Services session temporarily shown in the Run window by
+	// "Show in Run Tool Window". Service output remains owned by Services.
+	viewChild *runChild
+	// agentRuns are the Run window's agent-command sessions. Their lifecycle
+	// and archive are owned by the window, as in OpenIDEA's run store.
+	agentRuns        []*agentRunSession
+	agentNextID      uint64
+	agentActive      uint64
+	agentPendingExit map[uint32]*int32
 
 	// tests folds the run's test output into a results tree (testing
 	// feature), and testParser feeds it; set for JVM configurations, whose
@@ -80,7 +150,12 @@ type RunPane struct {
 	testPHPUnit  *adapter.PHPUnitParser
 	testRuby     *adapter.RubyParser
 	testDotnet   *adapter.DotnetReports
+	testAuto     *adapter.AutoTestParser
+	testPlugin   *runPluginTestOutput
 	testStdout   *adapter.TestStdoutBuffer
+	// rerunPluginGeneration drops a slower plugin test selection after another
+	// rerun request or a project switch.
+	rerunPluginGeneration uint64
 	// selTest is the selected node of the results tree view.
 	selTest string
 }
@@ -94,9 +169,10 @@ type outputLine struct {
 // reads, and an unbounded log would grow with the process's lifetime.
 const maxRunLines = 3000
 
-// resetRun drops the previous project's run state.
+// resetRun stops the previous project's sessions and drops its Run state.
 func (m *Model) resetRun() {
-	m.run = RunPane{}
+	m.resetRunLifecycle()
+	m.resetProfiler()
 }
 
 // nextChannel allocates a streaming channel id for run output.
@@ -124,7 +200,9 @@ func (m *Model) checkTrust(dir string) {
 			}
 			if m.run.trusted {
 				m.loadRunConfigs()
+				m.RefreshExternalLibraries()
 			} else {
+				m.applyExternalLibraries(nil)
 				m.status += " · untrusted (allow it before running)"
 				m.trustAsk = true
 				m.trustFolder = false
@@ -189,6 +267,7 @@ func (m *Model) TrustProject() {
 					}
 				}
 				m.loadRunConfigs()
+				m.RefreshExternalLibraries()
 			}
 			if reopenErr != nil {
 				m.run.trustErr = "Reconnecting the language service failed: " + reopenErr.Error()
@@ -228,6 +307,7 @@ func (m *Model) RevokeProjectTrust() {
 			m.run.configs = nil
 			m.run.sel = -1
 			m.run.trustErr = ""
+			m.resetExternalLibraries()
 			m.status = "Project trust revoked"
 			m.invalidate()
 		})
@@ -286,7 +366,9 @@ func (m *Model) clearTrustPrompt() {
 	m.run.pendingCoverage = false
 	m.run.pendingContext = false
 	m.run.pendingContextCoverage = false
+	m.run.pendingContextProfile = ""
 	m.run.pendingDebugContext = false
+	m.profiler.pending = ""
 }
 
 // loadRunConfigs asks the backend for the project's configurations. Detection
@@ -296,6 +378,7 @@ func (m *Model) loadRunConfigs() {
 	if root == "" || m.run.loading {
 		return
 	}
+	storedTemporaries, storedSelected := m.storedRunTemporaries()
 	m.run.loading = true
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 60*time.Second)
@@ -304,6 +387,30 @@ func (m *Model) loadRunConfigs() {
 		var configs []openidea.RunConfig
 		if err == nil {
 			configs, err = openidea.DecodeRunConfigs(raw)
+		}
+		temporaries := storedTemporaries
+		if err == nil && len(temporaries) > 0 {
+			saved := map[string]bool{}
+			for _, cfg := range configs {
+				saved[cfg.ID] = true
+			}
+			kept := temporaries[:0]
+			for _, cfg := range temporaries {
+				if !saved[cfg.ID] {
+					kept = append(kept, cfg)
+				}
+			}
+			temporaries = kept
+			if len(temporaries) > 0 {
+				rawApplied, applyErr := m.invoke(ctx, "run_apply_settings", map[string]any{
+					"configs": runConfigPointers(temporaries),
+				})
+				if applyErr == nil {
+					if applied, decodeErr := openidea.DecodeRunConfigs(rawApplied); decodeErr == nil {
+						temporaries = applied
+					}
+				}
+			}
 		}
 		m.post(func() {
 			m.run.loading = false
@@ -315,9 +422,11 @@ func (m *Model) loadRunConfigs() {
 					m.run.pendingStart = false
 					m.run.pendingCoverage = false
 				}
+				m.run.pendingModifyContext = nil
 				if m.run.pendingContext {
 					m.run.pendingContext = false
 					m.run.pendingContextCoverage = false
+					m.run.pendingContextProfile = ""
 				}
 				m.run.pendingDebugContext = false
 				m.run.err = "Could not read the run configurations: " + err.Error()
@@ -327,11 +436,84 @@ func (m *Model) loadRunConfigs() {
 				return
 			}
 			m.run.configs = configs
-			m.run.inline = nil
 			m.run.loaded = true
+			saved := map[string]bool{}
+			for _, cfg := range configs {
+				saved[cfg.ID] = true
+			}
+			merged := append([]openidea.RunConfig(nil), temporaries...)
+			for _, cfg := range runConfigValues(m.run.temporaries) {
+				merged = append([]openidea.RunConfig{cfg}, removeRunConfigValueID(merged, cfg.ID)...)
+			}
+			if m.run.pendingInline != nil {
+				merged = append([]openidea.RunConfig{*m.run.pendingInline},
+					removeRunConfigValueID(merged, m.run.pendingInline.ID)...)
+			}
+			filtered := merged[:0]
+			for _, cfg := range merged {
+				if !saved[cfg.ID] {
+					filtered = append(filtered, cfg)
+				}
+			}
+			m.run.temporaries = nil
+			for i := range filtered {
+				if clone := cloneRunConfig(&filtered[i]); clone != nil {
+					m.run.temporaries = append(m.run.temporaries, clone)
+				}
+			}
 			m.refreshReadiness()
-			m.run.sel = pickRunConfig(configs)
+			pendingInline := m.run.pendingInline
+			m.run.pendingInline = nil
+			selected := storedSelected
+			if pendingInline != nil {
+				selected = pendingInline.ID
+			}
+			m.run.inline = nil
+			m.run.currentFile = false
+			if selected == "current-file" {
+				m.run.currentFile = true
+			} else if selected != "" {
+				m.selectRunConfig(selected)
+			}
+			if m.run.selectedID() == "" {
+				if len(configs) == 0 {
+					m.run.currentFile = true
+				} else {
+					m.run.sel = pickRunConfig(configs)
+				}
+			}
+			m.persistRunSelection()
+			var pendingLaunch *openidea.RunConfig
+			if pendingInline != nil {
+				pendingLaunch = m.adoptRunTemporary(*pendingInline)
+				m.run.pendingInline = nil
+			}
+			if id := m.run.pendingConfigID; id != "" {
+				found := false
+				for i := range configs {
+					if configs[i].ID == id {
+						m.run.sel = i
+						m.run.inline = nil
+						m.run.currentFile = false
+						found = true
+						break
+					}
+				}
+				m.run.pendingConfigID = ""
+				if !found {
+					m.run.pendingStart = false
+					m.run.err = "The run configuration no longer exists"
+				}
+			}
+			if m.chooser != nil {
+				m.syncRunChooserSelection()
+			}
 			m.invalidate()
+			if pending := m.run.pendingModifyContext; pending != nil {
+				m.run.pendingModifyContext = nil
+				m.finishModifyRunContext(*pending)
+				return
+			}
 			if m.run.pendingContext {
 				m.startContextRun()
 				return
@@ -340,9 +522,16 @@ func (m *Model) loadRunConfigs() {
 				m.startContextDebug()
 				return
 			}
+			if m.startPendingProfiler() {
+				return
+			}
 			if m.run.pendingStart {
 				m.run.pendingStart = false
-				m.startRun()
+				if pendingLaunch != nil {
+					m.startRunWith(pendingLaunch.Raw(), pendingLaunch.Name)
+				} else {
+					m.startRun()
+				}
 			}
 		})
 	}()
@@ -354,38 +543,49 @@ func (m *Model) ReloadRunConfigs() {
 		return
 	}
 	m.run.loaded = false
-	m.run.inline = nil
 	m.loadRunConfigs()
 	m.invalidate()
 }
 
-// pickRunConfig prefers the program over the build tool: a detected Java
-// application, then any non-test configuration. `mvn package` is a build, so
-// it should not be what the Run button starts when an application is known.
+var (
+	runTargetNamePattern = regexp.MustCompile(`bootrun|spring-boot:run|:run\b|run:|\bdev\b|\bstart\b|\bserve\b|runserver`)
+	runBuildNamePattern  = regexp.MustCompile(`build|package|lint|check|format|clean`)
+)
+
+// pickRunConfig follows OpenIDEA's defaultSelection scoring. A Spring Boot
+// target wins, then an explicit run/dev/start/serve target, then an ordinary
+// non-test configuration. Build-only tasks are the last choice.
 func pickRunConfig(configs []openidea.RunConfig) int {
+	bestIndex := 0
+	bestScore := -1
 	for i, c := range configs {
-		if c.IsTest {
-			continue
+		score := 0
+		switch {
+		case c.IsTest:
+			score = 1
+		case c.Kind == "spring-boot":
+			score = 4
+		case runTargetNamePattern.MatchString(strings.ToLower(c.ID + " " + c.Name)):
+			score = 3
+		case runBuildNamePattern.MatchString(strings.ToLower(c.ID + " " + c.Name)):
+			score = 0
+		default:
+			score = 2
 		}
-		if c.DebugAdapter != nil && *c.DebugAdapter != "" {
-			return i
-		}
-		switch c.Kind {
-		case "java", "application", "spring-boot":
-			return i
+		if score > bestScore {
+			bestIndex = i
+			bestScore = score
 		}
 	}
-	for i, c := range configs {
-		if !c.IsTest {
-			return i
-		}
-	}
-	return 0
+	return bestIndex
 }
 
 func (p *RunPane) current() *openidea.RunConfig {
 	if p.inline != nil {
 		return p.inline
+	}
+	if p.currentFile {
+		return nil
 	}
 	if p.sel < 0 || p.sel >= len(p.configs) {
 		return nil
@@ -393,13 +593,41 @@ func (p *RunPane) current() *openidea.RunConfig {
 	return &p.configs[p.sel]
 }
 
+func (p *RunPane) selectedID() string {
+	if p.inline != nil {
+		return p.inline.ID
+	}
+	if p.currentFile {
+		return "current-file"
+	}
+	if p.sel >= 0 && p.sel < len(p.configs) {
+		return p.configs[p.sel].ID
+	}
+	return ""
+}
+
+func (p *RunPane) selectedLabel() string {
+	if p.inline != nil {
+		return p.inline.Name
+	}
+	if p.currentFile {
+		return "Current File"
+	}
+	if p.sel >= 0 && p.sel < len(p.configs) {
+		return p.configs[p.sel].Name
+	}
+	return ""
+}
+
 // ShowRun toggles the Run tool window.
-func (m *Model) ShowRun() { m.dockActivate("run") }
+func (m *Model) ShowRun() {
+	m.run.viewChild = nil
+	m.dockActivate("run")
+}
 
 // Run starts the selected configuration, after saving what the build must see.
 func (m *Model) Run() {
 	m.run.pendingCoverage = false
-	m.DockShow("run")
 	if m.busy {
 		m.invalidate()
 		return
@@ -422,7 +650,10 @@ func (m *Model) Run() {
 }
 
 func (m *Model) startRun() {
-	m.run.inline = nil
+	if m.run.currentFile {
+		m.RunContextConfiguration()
+		return
+	}
 	cfg := m.run.current()
 	if cfg == nil {
 		if m.run.pendingCoverage {
@@ -455,139 +686,201 @@ func (m *Model) startRunWithCoverage(raw json.RawMessage, name string, coverage 
 	if m.run.busy || m.run.running {
 		return false
 	}
+	cfg, err := openidea.DecodeRunConfig(raw)
+	if err != nil {
+		m.run.err = "Starting failed: " + err.Error()
+		m.invalidate()
+		return false
+	}
+	if cfg.Kind == "compound" {
+		return m.startCompoundRun(cfg, coverage)
+	}
+	if len(cfg.BeforeLaunch) > 0 {
+		return m.startRunWithBeforeLaunch(raw, name, coverage, cfg)
+	}
+	return m.startRunWithCoverageNow(raw, name, coverage, false)
+}
+
+// startRunWithBeforeLaunch runs OpenIDEA's before-launch list before creating
+// the main session. A failed task never reaches run_start.
+func (m *Model) startRunWithBeforeLaunch(
+	raw json.RawMessage,
+	name string,
+	coverage *coverageExecution,
+	cfg *openidea.RunConfig,
+) bool {
+	tabs := append([]*Tab(nil), m.tabs...)
+	root := m.Root()
+	pluginGeneration := m.run.pluginGeneration
+	m.run.viewChild = nil
+	m.run.visible = true
+	m.occupyBottom("run")
+	m.run.busy = true
+	m.run.preparingGroup = true
+	m.run.groupID = cfg.ID
+	m.run.children = nil
+	m.run.activeChild = 0
+	m.run.pendingChildExits = map[uint32]*int32{}
+	m.run.awaiting = true
+	m.run.running = false
+	m.run.runID = 0
+	m.run.channel = 0
+	m.run.exitCode = nil
+	m.run.err = ""
+	m.run.output = nil
+	m.run.truncated = false
+	m.run.lastID = cfg.ID
+	m.run.lastRaw = append(json.RawMessage(nil), raw...)
+	m.run.lastName = name
+	m.status = "Preparing " + name + "…"
+	m.invalidate()
+
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Minute)
+		defer cancel()
+		if err := m.saveOpenTabs(ctx, tabs); err != nil {
+			m.post(func() {
+				m.failRunPluginGeneration(pluginGeneration)
+				m.run.preparingGroup = false
+				m.run.busy = false
+				m.run.awaiting = false
+				m.run.err = "Saving before running failed: " + err.Error()
+				m.status = m.run.err
+				m.invalidate()
+			})
+			return
+		}
+		if err := m.prepareBeforeLaunch(ctx, cfg, nil, true, cfg.ID); err != nil {
+			m.post(func() {
+				m.failRunPluginGeneration(pluginGeneration)
+				m.run.preparingGroup = false
+				m.run.busy = false
+				m.run.awaiting = false
+				m.run.err = "'" + cfg.Name + "' was not started: Before launch: " + err.Error()
+				m.status = m.run.err
+				m.invalidate()
+			})
+			return
+		}
+		m.post(func() {
+			if m.Root() != root || m.run.groupID != cfg.ID {
+				m.cancelRunPluginGeneration(pluginGeneration)
+				return
+			}
+			m.run.preparingGroup = false
+			m.run.busy = false
+			m.run.awaiting = false
+			m.run.activeChild = 0
+			m.startRunWithCoverageNow(raw, name, coverage, true)
+		})
+	}()
+	return true
+}
+
+// configureRunTests replaces the output parsers for one launch. OpenIDEA
+// creates a results tree only for test configurations. A test tool it does
+// not recognize uses the parser set from testing/index.ts combinedParser.
+func (m *Model) configureRunTests(
+	config *openidea.RunConfig,
+	dotnetReports *adapter.DotnetReports,
+) {
+	if m.run.testPlugin != nil {
+		m.run.testPlugin.stop()
+	}
+	m.run.testParser = nil
+	m.run.testGo = nil
+	m.run.testCargo = nil
+	m.run.testPytest = nil
+	m.run.testUnittest = nil
+	m.run.testJs = nil
+	m.run.testPHPUnit = nil
+	m.run.testRuby = nil
+	m.run.testDotnet = nil
+	m.run.testAuto = nil
+	m.run.testPlugin = nil
+	m.run.tests = nil
+	m.run.testStdout = nil
+	if config == nil || !config.IsTest {
+		return
+	}
+	m.run.tests = adapter.NewTestResults()
+	m.run.testStdout = adapter.NewTestStdoutBuffer()
+	if configID := pluginTestConfigID(config); configID != "" {
+		m.run.testPlugin = newRunPluginTestOutput(m, configID, m.run.tests)
+		return
+	}
+	switch adapter.FrameworkFor(config) {
+	case "jvm":
+		m.run.testParser = adapter.NewJvmParser()
+	case "go":
+		m.run.testGo = adapter.NewGoParser()
+	case "cargo":
+		m.run.testCargo = adapter.NewCargoParser()
+	case "pytest":
+		m.run.testPytest = adapter.NewPytestParser()
+	case "unittest":
+		m.run.testUnittest = adapter.NewUnittestParser()
+	case "js":
+		m.run.testJs = adapter.NewJsParser()
+	case "phpunit":
+		m.run.testPHPUnit = adapter.NewPHPUnitParser()
+	case "ruby":
+		m.run.testRuby = adapter.NewRubyParser()
+	case "dotnet":
+		m.run.testDotnet = dotnetReports
+	case "auto":
+		m.run.testAuto = adapter.NewAutoTestParser()
+	}
+}
+
+// startRunWithCoverageNow is the single-process launcher used directly for a
+// configuration without before-launch tasks and after those tasks succeed.
+func (m *Model) startRunWithCoverageNow(
+	raw json.RawMessage,
+	name string,
+	coverage *coverageExecution,
+	keepChildren bool,
+) bool {
 	// Rerun launches this configuration as saved now (upstream rerunConfig).
 	var probe struct {
 		ID string `json:"id"`
 	}
 	_ = json.Unmarshal(raw, &probe)
-	// withTestReporting (testing/index.ts): a `go test` run reports per test
-	// only with -json, which the parser consumes; the console shows the
-	// records' output text.
-	var dotnetReports *adapter.DotnetReports
-	if probeCfg, rerr := openidea.DecodeRunConfig(raw); rerr == nil {
-		switch adapter.FrameworkFor(probeCfg) {
-		case "go":
-			if len(probeCfg.Args) > 0 && probeCfg.Args[0] == "test" {
-				hasJSON := false
-				for _, a := range probeCfg.Args {
-					if a == "-json" || strings.HasPrefix(a, "-json=") {
-						hasJSON = true
-						break
-					}
-				}
-				if !hasJSON {
-					if patched, ok := patchRunConfigArgs(raw, append([]string{"test", "-json"}, probeCfg.Args[1:]...)); ok {
-						raw = patched
-					}
-				}
-			}
-		case "pytest":
-			// withTestReporting: pytest prints progress dots without -v, so
-			// passed tests would never reach the tree.
-			chosen := false
-			for _, a := range probeCfg.Args {
-				if a == "-v" || a == "-q" || a == "--verbose" || a == "--quiet" || strings.HasPrefix(a, "--verbosity") {
-					chosen = true
-					break
-				}
-			}
-			if !chosen {
-				if patched, ok := patchRunConfigArgs(raw, append(append([]string(nil), probeCfg.Args...), "-v")); ok {
-					raw = patched
-				}
-			}
-		case "unittest":
-			args := adapter.UnittestWithVerbose(probeCfg)
-			if patched, ok := patchRunConfigArgs(raw, args); ok {
-				raw = patched
-			}
-		case "phpunit":
-			args := adapter.PHPUnitWithTeamcity(probeCfg.Args)
-			if patched, ok := patchRunConfigArgs(raw, args); ok {
-				raw = patched
-			}
-		case "ruby":
-			if probeCfg.Kind != "rspec" {
-				args := adapter.RubyVerboseArgs(probeCfg)
-				if patched, ok := patchRunConfigArgs(raw, args); ok {
-					raw = patched
-				}
-			}
-		case "dotnet":
-			dotnetReports = adapter.NewDotnetReports(probeCfg)
-			args := dotnetReports.Args(probeCfg)
-			if patched, ok := patchRunConfigArgs(raw, args); ok {
-				raw = patched
-			}
-		}
-	}
+	probeCfg, _ := openidea.DecodeRunConfig(raw)
+	raw, dotnetReports := prepareTestReporting(raw, probeCfg)
 	m.run.lastID = probe.ID
 	m.run.lastRaw = append(json.RawMessage(nil), raw...)
 	m.run.lastName = name
+	m.run.groupID = probe.ID
+	m.run.agentActive = 0
 	// A JVM or Go configuration's output reports tests per test: fold it
 	// into the results tree the rerun-failed action works from. Upstream's
 	// withTestReporting turns `go test` into `go test -json` so passed tests
 	// reach the tree.
-	if probeCfg, err := openidea.DecodeRunConfig(raw); err == nil {
-		switch adapter.FrameworkFor(probeCfg) {
-		case "jvm":
-			m.run.tests = adapter.NewTestResults()
-			m.run.testParser = adapter.NewJvmParser()
-			m.run.testStdout = adapter.NewTestStdoutBuffer()
-		case "go":
-			m.run.tests = adapter.NewTestResults()
-			m.run.testGo = adapter.NewGoParser()
-			m.run.testStdout = adapter.NewTestStdoutBuffer()
-		case "cargo":
-			m.run.tests = adapter.NewTestResults()
-			m.run.testCargo = adapter.NewCargoParser()
-			m.run.testStdout = adapter.NewTestStdoutBuffer()
-		case "pytest":
-			m.run.tests = adapter.NewTestResults()
-			m.run.testPytest = adapter.NewPytestParser()
-			m.run.testStdout = adapter.NewTestStdoutBuffer()
-		case "unittest":
-			m.run.tests = adapter.NewTestResults()
-			m.run.testUnittest = adapter.NewUnittestParser()
-			m.run.testStdout = adapter.NewTestStdoutBuffer()
-		case "js":
-			m.run.tests = adapter.NewTestResults()
-			m.run.testJs = adapter.NewJsParser()
-			m.run.testStdout = adapter.NewTestStdoutBuffer()
-		case "phpunit":
-			m.run.tests = adapter.NewTestResults()
-			m.run.testPHPUnit = adapter.NewPHPUnitParser()
-			m.run.testStdout = adapter.NewTestStdoutBuffer()
-		case "ruby":
-			m.run.tests = adapter.NewTestResults()
-			m.run.testRuby = adapter.NewRubyParser()
-			m.run.testStdout = adapter.NewTestStdoutBuffer()
-		case "dotnet":
-			m.run.tests = adapter.NewTestResults()
-			m.run.testDotnet = dotnetReports
-			m.run.testStdout = adapter.NewTestStdoutBuffer()
-		}
-	}
-	if m.run.tests == nil {
-		m.run.testParser = nil
-		m.run.testGo = nil
-		m.run.testCargo = nil
-		m.run.testPytest = nil
-		m.run.testUnittest = nil
-		m.run.testJs = nil
-		m.run.testPHPUnit = nil
-		m.run.testRuby = nil
-		m.run.testDotnet = nil
-		m.run.testStdout = nil
+	configured, configErr := openidea.DecodeRunConfig(raw)
+	if configErr == nil {
+		m.configureRunTests(configured, dotnetReports)
+	} else {
+		m.configureRunTests(nil, nil)
 	}
 	tabs := append([]*Tab(nil), m.tabs...)
 	root := m.Root()
+	pluginGeneration := m.run.pluginGeneration
+	if state := m.debug.buildToolDebug; state != nil && state.channel != 0 {
+		m.debug.buildToolDebug = nil
+	}
 	ch := m.nextChannel()
+	if state := m.debug.buildToolDebug; state != nil && state.channel == 0 {
+		state.channel = ch
+	}
+	m.run.viewChild = nil
 	if m.stackTrace != nil {
 		m.stackTrace.active = -1
 	}
-	m.run.visible = true
-	m.occupyBottom("run")
+	if m.showRunWindow(configured, true) {
+		m.run.visible = true
+		m.occupyBottom("run")
+	}
 	m.run.busy = true
 	m.run.awaiting = true
 	m.run.running = false
@@ -597,6 +890,13 @@ func (m *Model) startRunWithCoverage(raw json.RawMessage, name string, coverage 
 	m.run.pid = nil
 	m.run.exitCode = nil
 	m.run.err = ""
+	m.run.earlyExit = false
+	if !keepChildren {
+		m.run.children = nil
+		m.run.pendingChildExits = nil
+	}
+	m.run.activeChild = 0
+	m.run.preparingGroup = false
 	m.run.output = nil
 	m.run.truncated = false
 	m.status = "Starting " + name + "…"
@@ -613,8 +913,10 @@ func (m *Model) startRunWithCoverage(raw json.RawMessage, name string, coverage 
 		fail := func(message string, plan *coveragePlan, err error) {
 			m.post(func() {
 				if m.Root() != root || m.run.channel != ch {
+					m.cancelRunPluginGeneration(pluginGeneration)
 					return
 				}
+				m.failRunPluginGeneration(pluginGeneration)
 				m.run.busy = false
 				m.run.awaiting = false
 				m.run.coverage = nil
@@ -641,12 +943,18 @@ func (m *Model) startRunWithCoverage(raw json.RawMessage, name string, coverage 
 			}
 			launch = plan.Launch
 		}
+		launch, err := m.prepareDockerLaunch(ctx, launch, root)
+		if err != nil {
+			fail("Starting failed: ", nil, err)
+			return
+		}
 		resolved, err := m.resolveJVMConfig(ctx, launch, root, m.reportRunConsole(root, ch))
 		if err != nil {
 			fail("Starting failed: ", nil, err)
 			return
 		}
 		args["config"] = resolved
+		runTargetSSHConfig, _ := m.runTargetSSHConfigForRaw(ctx, resolved)
 		rawInfo, err := m.invoke(ctx, "run_start", args)
 		var info openidea.RunInfo
 		if err == nil {
@@ -657,6 +965,7 @@ func (m *Model) startRunWithCoverage(raw json.RawMessage, name string, coverage 
 				// The project changed while run_start was in flight: the
 				// process belongs to the old one, so stop it and keep the
 				// new project's run state untouched.
+				m.cancelRunPluginGeneration(pluginGeneration)
 				if err == nil && info.ID != 0 {
 					go func(id uint32) {
 						ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
@@ -668,15 +977,44 @@ func (m *Model) startRunWithCoverage(raw json.RawMessage, name string, coverage 
 			}
 			m.run.busy = false
 			if err != nil {
+				m.failRunPluginGeneration(pluginGeneration)
+				retryRaw := append(json.RawMessage(nil), raw...)
+				if m.offerRunTargetAuth(err.Error(), runTargetSSHConfig, func() {
+					m.startRunWithCoverageNow(retryRaw, name, coverage, false)
+				}) {
+					m.run.awaiting = false
+					m.run.running = false
+					m.run.coverage = nil
+					m.run.err = ""
+					m.status = "Waiting for SSH authentication"
+					m.invalidate()
+					return
+				}
 				m.run.awaiting = false
 				m.run.running = false
 				m.run.coverage = nil
+				if m.run.testPlugin != nil {
+					m.run.testPlugin.stop()
+					m.run.testPlugin = nil
+					m.run.tests = nil
+					m.run.testStdout = nil
+				}
 				m.run.err = "Starting failed: " + err.Error()
 				m.invalidate()
 				return
 			}
+			m.recordRecentRunConfig(probe.ID)
 			m.run.runID = info.ID
 			m.run.pid = info.PID
+			if m.run.earlyExit {
+				m.run.earlyExit = false
+				m.run.busy = false
+				m.run.awaiting = false
+				m.run.running = false
+				m.run.coverage = nil
+				m.invalidate()
+				return
+			}
 			m.run.running = info.Running
 			if coverage != nil {
 				coverage.report = plan.Report
@@ -691,6 +1029,7 @@ func (m *Model) startRunWithCoverage(raw json.RawMessage, name string, coverage 
 			if !info.Running {
 				m.run.awaiting = false
 				m.run.coverage = nil
+				m.finishRunPluginGeneration(pluginGeneration, nil)
 			}
 			m.status = "Running: " + info.Name
 			m.invalidate()
@@ -701,6 +1040,20 @@ func (m *Model) startRunWithCoverage(raw json.RawMessage, name string, coverage 
 
 // StopRun terminates the running configuration.
 func (m *Model) StopRun() {
+	if m.run.sampleOutputCancel != nil {
+		m.run.sampleOutputCancel()
+		m.run.sampleOutputCancel = nil
+		m.status = "Stopping sample output…"
+		m.invalidate()
+		return
+	}
+	m.markRunPluginStopped()
+	stoppedChildren := m.stopSelectedChildren()
+	if stoppedChildren && m.run.runID == 0 && m.run.channel == 0 {
+		m.status = "Stopping…"
+		m.invalidate()
+		return
+	}
 	if !m.run.running && !m.run.awaiting {
 		return
 	}
@@ -710,6 +1063,13 @@ func (m *Model) StopRun() {
 		m.invalidate()
 		return
 	}
+	m.markRunPluginStopped()
+	if m.debug.buildToolDebug != nil && m.debug.buildToolDebug.channel == m.run.channel {
+		m.debug.buildToolDebug = nil
+	}
+	if m.stopProfiledRun(id) {
+		return
+	}
 	m.status = "Stopping…"
 	coverage := m.run.coverage
 	if coverage != nil {
@@ -717,7 +1077,7 @@ func (m *Model) StopRun() {
 	}
 	m.invalidate()
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
+		ctx, cancel := context.WithTimeout(modelContext(m), 15*time.Second)
 		defer cancel()
 		if _, err := m.invoke(ctx, "run_stop", map[string]any{"id": id}); err != nil {
 			m.post(func() {
@@ -740,13 +1100,24 @@ func (m *Model) CycleRunConfig(delta int) {
 	}
 	m.run.sel = (m.run.sel + delta + n) % n
 	m.run.inline = nil
+	m.run.currentFile = false
+	m.persistRunSelection()
 	m.invalidate()
 }
 
 // ClearRun empties the output pane.
 func (m *Model) ClearRun() {
+	if m.clearActiveAgentRun() {
+		return
+	}
 	m.run.output = nil
 	m.run.truncated = false
+	for _, child := range m.run.children {
+		if !child.live() {
+			child.output = nil
+			child.truncated = false
+		}
+	}
 	m.run.exitCode = nil
 	m.run.err = ""
 	m.invalidate()
@@ -782,6 +1153,31 @@ func (m *Model) watchBackend(ctx context.Context) {
 					continue
 				}
 				switch openidea.EventType(env.Event) {
+				case "mcpRequest":
+					var e openidea.McpRequestEvent
+					if json.Unmarshal(env.Event, &e) != nil {
+						continue
+					}
+					m.post(func() { m.acceptMCPRequest(e) })
+				case "mcpRequestClosed":
+					var e openidea.McpRequestClosedEvent
+					if json.Unmarshal(env.Event, &e) != nil {
+						continue
+					}
+					id := e.ID
+					m.post(func() { m.dropMCPRequest(id) })
+				case "fsChanged":
+					var e openidea.FsChangedEvent
+					if json.Unmarshal(env.Event, &e) != nil {
+						continue
+					}
+					m.post(func() { m.acceptFsChanged(e) })
+				case "projectRootsChanged":
+					var e openidea.ProjectRootsChangedEvent
+					if json.Unmarshal(env.Event, &e) != nil {
+						continue
+					}
+					m.post(func() { m.noteProjectRootsChanged(e) })
 				case "runExited":
 					var e openidea.RunExitedEvent
 					if json.Unmarshal(env.Event, &e) != nil {
@@ -826,20 +1222,58 @@ func (m *Model) watchBackend(ctx context.Context) {
 						continue
 					}
 					m.post(func() { m.acceptLanguageServerRemoved(e) })
+				case "notebookKernel":
+					var e openidea.NotebookKernelEvent
+					if json.Unmarshal(env.Event, &e) != nil {
+						continue
+					}
+					m.post(func() { m.acceptNotebookKernelEvent(e) })
 				}
+			case "plugin":
+				var message openidea.PluginEventMessage
+				if json.Unmarshal(n.Params, &message) != nil {
+					continue
+				}
+				if message.Window != nil && *message.Window != Window {
+					continue
+				}
+				event := message.Event
+				m.post(func() { m.acceptPluginEvent(event) })
 			}
 		}
 	}
 }
 
 func (m *Model) acceptChunk(id uint32, data json.RawMessage) {
+	if m.acceptDebugHeapProgress(id, data) {
+		return
+	}
 	if m.acceptJDKEvent(id, data) {
+		return
+	}
+	if m.acceptLanguageSDKChunk(id, data) {
 		return
 	}
 	if m.acceptToolEvent(id, data) {
 		return
 	}
+	if m.acceptChildChunk(id, data) {
+		return
+	}
+	if m.acceptAgentRunChunk(id, data) {
+		return
+	}
+	if m.acceptNotebookChunk(id, data) {
+		return
+	}
+	if m.acceptLogcatChunk(id, data) {
+		return
+	}
+	if m.acceptExternalLibrariesChunk(id, data) {
+		return
+	}
 	switch {
+	case m.acceptDockerChunk(id, data):
 	case m.acceptVCSOperationOutput(id, data):
 	case m.acceptVCSMoreOutput(id, data):
 	case id != 0 && id == m.agents.registry.InstallChannel:
@@ -851,13 +1285,12 @@ func (m *Model) acceptChunk(id uint32, data json.RawMessage) {
 		if json.Unmarshal(data, &chunk) != nil {
 			return
 		}
+		m.acceptBuildToolDebugOutput(chunk.Text)
 		if display := m.feedRunTests(chunk.Text); display != chunk.Text {
 			chunk.Text = display
 		}
 		m.run.append(chunk)
 		m.invalidate()
-	case id != 0 && id == m.debug.heap.channel:
-		m.acceptDebugHeapProgress(id, data)
 	case id != 0 && id == m.build.channel:
 		m.acceptBuildEvent(data)
 	case id != 0 && id == m.maven.channel && m.maven.syncing:
@@ -1031,6 +1464,12 @@ func (m *Model) flushRunTests() string {
 }
 
 func (m *Model) foldRunTestLines(lines []string, fallback string) string {
+	if m.run.testPlugin != nil {
+		for _, line := range lines {
+			m.run.testPlugin.Feed(line)
+		}
+		return fallback
+	}
 	var display []string
 	for _, line := range lines {
 		var events []adapter.TestEvent
@@ -1055,6 +1494,8 @@ func (m *Model) foldRunTestLines(lines []string, fallback string) string {
 			display = append(display, adapter.RubyConsoleText(line))
 		} else if m.run.testDotnet != nil {
 			m.run.testDotnet.Feed(line)
+		} else if m.run.testAuto != nil {
+			events = m.run.testAuto.Feed(line)
 		} else if m.run.testParser != nil {
 			events = m.run.testParser.Feed(line)
 		}
@@ -1070,6 +1511,12 @@ func (m *Model) foldRunTestLines(lines []string, fallback string) string {
 }
 
 func (m *Model) acceptExit(e openidea.RunExitedEvent) {
+	if m.acceptAgentRunExit(e) {
+		return
+	}
+	if m.acceptChildExit(e.Run, e.Code) {
+		return
+	}
 	if !m.run.awaiting {
 		return
 	}
@@ -1085,6 +1532,13 @@ func (m *Model) acceptExit(e openidea.RunExitedEvent) {
 		m.run.coverage = nil
 		m.collectCoverage(coverage, e)
 	}
+	if m.debug.buildToolDebug != nil && m.debug.buildToolDebug.channel == m.run.channel {
+		m.debug.buildToolDebug = nil
+	}
+	m.finishProfiledRun()
+	if m.run.runID == 0 {
+		m.run.earlyExit = true
+	}
 	m.run.awaiting = false
 	m.run.running = false
 	m.run.busy = false
@@ -1096,12 +1550,23 @@ func (m *Model) acceptExit(e openidea.RunExitedEvent) {
 		}
 		if m.run.testUnittest != nil {
 			m.run.tests.Apply(m.run.testUnittest.End())
+		} else if m.run.testAuto != nil {
+			m.run.tests.Apply(m.run.testAuto.End())
 		}
 		code := 0
 		if e.Code != nil {
 			code = int(*e.Code)
 		}
-		m.run.tests.Finish(code)
+		tests := m.run.tests
+		finish := func() {
+			tests.Finish(code)
+			m.invalidate()
+		}
+		if plugin := m.run.testPlugin; plugin != nil {
+			plugin.End(finish)
+		} else {
+			finish()
+		}
 	}
 	if reports := m.run.testDotnet; reports != nil && m.run.tests != nil {
 		tests := m.run.tests
@@ -1132,6 +1597,7 @@ func (m *Model) acceptExit(e openidea.RunExitedEvent) {
 	default:
 		m.status = fmt.Sprintf("Run failed (exit code %d)", *e.Code)
 	}
+	m.finishRunPlugin(e.Code)
 	m.invalidate()
 }
 
@@ -1251,6 +1717,15 @@ func (m *Model) SmokeRun(ctx context.Context) (config string, code *int32, outpu
 		m.run.busy = false
 		m.run.runID = info.ID
 		m.run.pid = info.PID
+		if m.run.earlyExit {
+			m.run.earlyExit = false
+			m.run.busy = false
+			m.run.awaiting = false
+			m.run.running = false
+			m.run.coverage = nil
+			m.invalidate()
+			return
+		}
 		m.run.running = info.Running
 		m.invalidate()
 	})
