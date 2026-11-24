@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -304,9 +305,12 @@ func (m *Model) RunAnalysisStructural() {
 	m.invalidate()
 
 	var stop func()
+	var doneEvent chan struct{}
 	if m.mgr != nil {
 		events, unlisten := m.mgr.Listen(2048)
+		doneEvent = make(chan struct{})
 		done := make(chan struct{})
+		var closeDoneEvent sync.Once
 		stop = func() {
 			unlisten()
 			close(done)
@@ -325,11 +329,16 @@ func (m *Model) RunAnalysisStructural() {
 						continue
 					}
 					data := message.Data
+					var event analysisStructuralEvent
+					finished := analysisJSON(data, &event) == nil && event.Type == "done"
 					m.post(func() {
 						if m.analysis.generation == generation {
 							m.acceptAnalysisStructuralEvent(request, data)
 						}
 					})
+					if finished {
+						closeDoneEvent.Do(func() { close(doneEvent) })
+					}
 				}
 			}
 		}()
@@ -376,6 +385,13 @@ func (m *Model) RunAnalysisStructural() {
 			}
 		})
 		_, callErr := m.invoke(ctx, "structural_search", args)
+		if callErr == nil && doneEvent != nil {
+			select {
+			case <-doneEvent:
+			case <-ctx.Done():
+				callErr = ctx.Err()
+			}
+		}
 		m.post(func() {
 			if m.analysis.generation != generation || state.request != request {
 				return

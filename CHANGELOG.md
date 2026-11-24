@@ -3,6 +3,11 @@
 The GitHub release notes, which **Help › What's New** shows, come from the
 `## <version>` section here. Every release needs one, or its build fails.
 
+## Unreleased
+
+- Structural Search now keeps its channel results when the backend reply arrives first.
+- This release includes 0.1.35's native workbench expansion and 0.1.36's bookmark crash fix.
+
 ## 0.1.37
 
 - This release includes 0.1.35's native workbench expansion and 0.1.36's bookmark crash fix.

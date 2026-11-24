@@ -392,12 +392,10 @@ func TestDeleteBranchRemovesHoldingWorktreeWithSafeForceFallback(t *testing.T) {
 
 	calls := make(chan string, 6)
 	posted := make(chan struct{}, 8)
+	main := &serialMainThread{}
 	m := &Model{
-		ctx: context.Background(),
-		postHook: func(fn func()) {
-			fn()
-			posted <- struct{}{}
-		},
+		ctx:      context.Background(),
+		postHook: func(fn func()) { main.post(func() { fn(); posted <- struct{}{} }) },
 	}
 	m.setRoot(root)
 	m.vcs.current = root
@@ -423,12 +421,17 @@ func TestDeleteBranchRemovesHoldingWorktreeWithSafeForceFallback(t *testing.T) {
 			return json.RawMessage(`null`), nil
 		}
 	}
-	m.deleteLocalBranch(openidea.Branch{Name: topic})
-	waitBranchPrompt(t, &m.branch, posted, "delete-worktree")
-	m.submitBranchPrompt()
-	waitBranchPrompt(t, &m.branch, posted, "force-worktree")
-	m.submitBranchPrompt()
-	for m.branch.busy {
+	main.do(func() { m.deleteLocalBranch(openidea.Branch{Name: topic}) })
+	waitBranchPrompt(t, main, &m.branch, posted, "delete-worktree")
+	main.do(m.submitBranchPrompt)
+	waitBranchPrompt(t, main, &m.branch, posted, "force-worktree")
+	main.do(m.submitBranchPrompt)
+	for {
+		var busy bool
+		main.do(func() { busy = m.branch.busy })
+		if !busy {
+			break
+		}
 		select {
 		case <-posted:
 		case <-time.After(2 * time.Second):
@@ -447,6 +450,7 @@ func TestDeleteBranchRemovesHoldingWorktreeWithSafeForceFallback(t *testing.T) {
 
 func waitBranchPrompt(
 	t *testing.T,
+	main *serialMainThread,
 	branch *BranchPane,
 	posted <-chan struct{},
 	kind string,
@@ -455,7 +459,12 @@ func waitBranchPrompt(
 	deadline := time.NewTimer(2 * time.Second)
 	defer deadline.Stop()
 	for {
-		if branch.prompt == kind && !branch.busy {
+		var prompt string
+		var busy bool
+		main.do(func() {
+			prompt, busy = branch.prompt, branch.busy
+		})
+		if prompt == kind && !busy {
 			return
 		}
 		select {
