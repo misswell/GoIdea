@@ -3,6 +3,12 @@
 The GitHub release notes, which **Help › What's New** shows, come from the
 `## <version>` section here. Every release needs one, or its build fails.
 
+## Unreleased
+
+- Online updates now use the macOS system proxy and a detached installer that restarts reliably.
+- The update balloon now shows OpenIDEA's live download progress bar and megabyte count.
+- A failed online update now reports its installer log instead of leaving the old version silently running.
+
 ## 0.1.41
 
 - The project title-bar menu now lists actions, open projects and recent projects with filtering.

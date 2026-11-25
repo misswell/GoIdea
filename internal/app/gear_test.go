@@ -248,9 +248,12 @@ func TestInstallerScriptReplacesTheBundle(t *testing.T) {
 	for _, want := range []string{
 		"kill -0 1234",
 		"hdiutil attach -nobrowse -readonly '/tmp/a b/GoIDEA 1.dmg'",
-		"ditto \"$src\" '/Applications/GoIDEA.app.new'",
-		"rm -rf '/Applications/GoIDEA.app'",
-		"mv '/Applications/GoIDEA.app.new' '/Applications/GoIDEA.app'",
+		"ditto \"$src\" \"$stage\"",
+		"mv '/Applications/GoIDEA.app' \"$previous\"",
+		"if ! mv \"$stage\" '/Applications/GoIDEA.app'",
+		"mv \"$previous\" '/Applications/GoIDEA.app'",
+		"trap fail ERR",
+		"open '/tmp/a b/GoIDEA 1.dmg'",
 		"open '/Applications/GoIDEA.app'",
 	} {
 		if !strings.Contains(script, want) {

@@ -40,12 +40,45 @@ func TestBalloonHeightCountsTheSuppressionAction(t *testing.T) {
 	if actions := m.balloonActions(n); len(actions) != 1 || actions[0].label != "Don't Show Again" {
 		t.Fatalf("actions = %+v, want the suppression", actions)
 	}
-	if plain, with := notifyHeight(n, 0), notifyHeight(n, len(m.balloonActions(n))); with-plain != 24 {
+	if plain, with := m.notifyHeight(n, 0), m.notifyHeight(n, len(m.balloonActions(n))); with-plain != 24 {
 		t.Fatalf("suppression adds %v to the balloon height, want 24", with-plain)
 	}
 	err := ideNotification{group: "shot.error", level: "error", title: "Build failed", body: "two"}
 	if got := len(m.balloonActions(err)); got != 0 {
 		t.Fatalf("an error offers %d actions, want none", got)
+	}
+}
+
+func TestUpdateBalloonUsesTheLiveTaskProgress(t *testing.T) {
+	m := &Model{}
+	m.tasks = []BackgroundTask{{
+		ID: updateInstallTaskID, Title: "Downloading GoIDEA 0.1.42",
+		Message: "5.0 MB of 60.0 MB", Fraction: 0.5,
+	}}
+	m.notifyStickyProgress(updateKey, "info", "Downloading GoIDEA 0.1.42",
+		updateInstallTaskID, true)
+	if len(m.notify.items) != 1 {
+		t.Fatalf("notifications = %+v", m.notify.items)
+	}
+	n := m.notify.items[0]
+	if n.progressTask != updateInstallTaskID || n.body != "" {
+		t.Fatalf("progress notification = %+v", n)
+	}
+	task, ok := m.notificationTask(n)
+	if !ok || task.Fraction != 0.5 || task.Message != "5.0 MB of 60.0 MB" {
+		t.Fatalf("notification task = %+v, %v", task, ok)
+	}
+	withoutProgress := m.notifyHeight(ideNotification{
+		group: "shot.info", level: "info", title: n.title,
+	}, 0)
+	if withProgress := m.notifyHeight(n, 0); withProgress <= withoutProgress {
+		t.Fatalf("progress height = %v, plain height = %v", withProgress, withoutProgress)
+	}
+	m.tasks[0].Message = "9.0 MB of 60.0 MB"
+	m.tasks[0].Fraction = 0.9
+	if task, ok := m.notificationTask(n); !ok ||
+		task.Fraction != 0.9 || task.Message != "9.0 MB of 60.0 MB" {
+		t.Fatalf("live notification task = %+v, %v", task, ok)
 	}
 }
 

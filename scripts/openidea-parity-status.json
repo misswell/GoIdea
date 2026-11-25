@@ -1947,7 +1947,7 @@
     },
     "feature:app": {
       "status": "partial",
-      "evidence": "internal/app/update.go, tasks.go and notifications.go cover update checks, background download, cancellation and install/restart; update_flow_test.go; internal/app/invalidate.go covers cache invalidation and restart; other app overlays still have pending scope"
+      "evidence": "internal/app/update.go, update_network.go, tasks.go, notifications.go and update_installer_unix.go cover update checks, macOS system proxy routing, background download, cancellation, live balloon progress and a detached atomic install/restart with next-launch failure reporting; update_flow_test.go, update_network_test.go and notifications_test.go cover the flow, while internal/app/invalidate.go covers cache invalidation and restart; other app overlays still have pending scope"
     },
     "action:navigate.gotoFile": {
       "status": "integrated",

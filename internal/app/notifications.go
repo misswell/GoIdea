@@ -40,6 +40,9 @@ type ideNotification struct {
 	actions []notifyAction
 	at      time.Time
 	read    bool
+	// progressTask replaces the body with the live task's message and bar,
+	// as OpenIDEA's UpdateBalloonBody does.
+	progressTask string
 	// verbatim keeps text supplied by a plugin as written. Native messages
 	// already contain their final text, but the flag follows upstream's
 	// notification model and survives history persistence.
@@ -95,6 +98,15 @@ func (m *Model) notifyUser(key, level, title, body string, actions ...notifyActi
 func (m *Model) notifySticky(key, level, title, body string, userInitiated bool, actions ...notifyAction) {
 	m.postNotification(ideNotification{key: key, level: level, title: title, body: body,
 		actions: actions, userInitiated: userInitiated, permanent: true})
+}
+
+// notifyStickyProgress draws a background task's live message and progress
+// bar in a sticky balloon.
+func (m *Model) notifyStickyProgress(key, level, title string, taskID string,
+	userInitiated bool, actions ...notifyAction) {
+	m.postNotification(ideNotification{key: key, level: level, title: title,
+		actions: actions, userInitiated: userInitiated, permanent: true,
+		progressTask: taskID})
 }
 
 // notifyPlugin posts text supplied by a plugin. It is user-initiated because
@@ -393,7 +405,7 @@ func (m *Model) balloons(c *ui.Context, p *ui.Theme) {
 	w, h := c.Size()
 	total := float32(0)
 	for _, it := range items {
-		total += notifyHeight(it, len(m.balloonActions(it))) + 8
+		total += m.notifyHeight(it, len(m.balloonActions(it))) + 8
 	}
 	x := w - notifyBalloonWidth - 16
 	statusHeight := oiStatusBarHeight
@@ -414,9 +426,14 @@ func (m *Model) balloons(c *ui.Context, p *ui.Theme) {
 // notifyHeight is a balloon's height from its content, including the actions
 // the balloon actually shows: the suppression balloonView appends counts, and
 // leaving it out clipped the last action row of the bottom balloon.
-func notifyHeight(n ideNotification, actions int) float32 {
+func (m *Model) notifyHeight(n ideNotification, actions int) float32 {
 	h := float32(46)
-	if n.body != "" {
+	if task, ok := m.notificationTask(n); ok {
+		h += taskBarHeight + oiSpaceS
+		if task.Message != "" {
+			h += notificationBodyHeight(task.Message) + oiSpaceS
+		}
+	} else if n.body != "" {
 		h += notificationBodyHeight(n.body)
 	}
 	if actions > 0 {
@@ -442,7 +459,7 @@ func (m *Model) balloonActions(n ideNotification) []notifyAction {
 func (m *Model) balloonView(c *ui.Context, p *ui.Theme, n ideNotification) {
 	oi := oiPaletteOf(p)
 	actions := m.balloonActions(n)
-	height := notifyHeight(n, len(actions))
+	height := m.notifyHeight(n, len(actions))
 	shade := float32(0.14)
 	if oi.dark {
 		shade = 0.45
@@ -482,7 +499,13 @@ func (m *Model) balloonView(c *ui.Context, p *ui.Theme, n ideNotification) {
 				})
 				close.OnClick(func() { m.dismissBalloon(n.id) })
 			})
-			if n.body != "" {
+			if task, ok := m.notificationTask(n); ok {
+				if task.Message != "" {
+					body := ui.Text(c, task.Message).FontSize(13).TextColor(oi.textSecondary).Wrap()
+					body.MaxHeight(notificationBodyHeight(task.Message))
+				}
+				m.taskBar(c, p, oi, task.Fraction, 0)
+			} else if n.body != "" {
 				body := ui.Text(c, n.body).FontSize(13).TextColor(oi.textSecondary).Wrap()
 				body.MaxHeight(notificationBodyHeight(n.body))
 			}
@@ -504,6 +527,18 @@ func (m *Model) balloonView(c *ui.Context, p *ui.Theme, n ideNotification) {
 			}
 		})
 	})
+}
+
+func (m *Model) notificationTask(n ideNotification) (BackgroundTask, bool) {
+	if n.progressTask == "" {
+		return BackgroundTask{}, false
+	}
+	for _, task := range m.tasks {
+		if task.ID == n.progressTask && !task.Done {
+			return task, true
+		}
+	}
+	return BackgroundTask{}, false
 }
 
 // notificationsView is the Notifications tool window: history newest first,

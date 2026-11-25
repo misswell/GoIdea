@@ -30,10 +30,6 @@ import (
 
 var updateFeedURL = "https://api.github.com/repos/misswell/GoIdea/releases/latest"
 
-// updateHTTP fetches the feed, the notes and the release assets; requests get
-// their own deadlines.
-var updateHTTP = &http.Client{}
-
 const (
 	updateCheckInterval = 4 * time.Hour
 	updateFirstCheck    = 5 * time.Second
@@ -188,13 +184,15 @@ func (m *Model) SetShowWhatsNewAfterUpdate(on bool) {
 // hours while the app runs, unless Settings turned the automatic check off,
 // and opens what the last update left as What's New.
 func (m *Model) startUpdateChecks() {
-	m.post(m.showWhatsNewIfPending)
 	go func() {
 		select {
 		case <-time.After(updateFirstCheck):
 		case <-m.ctx.Done():
 			return
 		}
+		// Give a detached installer time to replace a failed old bundle
+		// before deciding that the previous online update did not apply.
+		m.post(m.finishPendingUpdate)
 		for {
 			m.post(func() {
 				if m.autoCheckUpdates() {
@@ -360,7 +358,7 @@ func (m *Model) InstallUpdate() {
 	m.update.cancel = cancel
 	title := "Downloading GoIDEA " + rel.Version
 	m.upsertTask(BackgroundTask{ID: updateInstallTaskID, Title: title, Fraction: -1, Cancel: cancel})
-	m.notifySticky(updateKey, "info", title, "Preparing the download…", true,
+	m.notifyStickyProgress(updateKey, "info", title, updateInstallTaskID, true,
 		notifyAction{label: "Cancel", run: func(m *Model) { m.cancelUpdateInstall() }})
 	go m.installWorker(ctx, rel)
 }
@@ -396,11 +394,10 @@ func (m *Model) installWorker(ctx context.Context, want updateRelease) {
 	}
 	target := appBundlePath()
 	script := installerScript(installWaitPID(os.Getpid()), dmg, target)
-	cmd := exec.Command("/bin/sh", "-c", script)
-	cmd.Stdout, cmd.Stderr = nil, nil
-	if err := cmd.Start(); err != nil {
+	logPath := updateInstallLogPath(m.cfg.SessionPath)
+	if err := startUpdateInstaller(script, logPath); err != nil {
 		_ = os.Remove(dmg)
-		failed(err)
+		failed(fmt.Errorf("%w; installer log: %s", err, logPath))
 		return
 	}
 	// The next launch shows these notes as What's New.
@@ -678,23 +675,40 @@ func installWaitPID(pid int) string {
 	return fmt.Sprintf("while kill -0 %d 2>/dev/null; do sleep 0.2; done", pid)
 }
 
-// installerScript mounts dmg after wait ran, copies GoIDEA.app over target and
-// reopens it; a target that cannot be replaced opens the image in Finder so
-// the user can move the app by hand.
+// installerScript mounts dmg after wait ran, stages GoIDEA.app beside target,
+// swaps it atomically and reopens it. A failed replacement restores the old
+// bundle and opens the image in Finder so the user can install it by hand.
 func installerScript(wait, dmg, target string) string {
 	q := shellQuote
-	return "set -e\n" + wait + "\n" +
+	stage := target + ".new"
+	previous := target + ".previous"
+	return "set -eu\n" + wait + "\n" +
+		"mnt=\"\"\n" +
+		"stage=" + q(stage) + "\n" +
+		"previous=" + q(previous) + "\n" +
+		"fail() {\n" +
+		"  code=\"$?\"\n" +
+		"  printf 'GoIDEA update installer failed (exit %s)\\n' \"$code\" >&2\n" +
+		"  if [ -n \"$mnt\" ]; then hdiutil detach \"$mnt\" >/dev/null 2>&1 || true; fi\n" +
+		"  rm -rf \"$stage\"\n" +
+		"  open " + q(dmg) + "\n" +
+		"  exit \"$code\"\n" +
+		"}\n" +
+		"trap fail ERR\n" +
 		"mnt=\"$(mktemp -d /tmp/goidea-update.XXXXXX)\"\n" +
 		"hdiutil attach -nobrowse -readonly " + q(dmg) + " -mountpoint \"$mnt\" >/dev/null\n" +
 		"src=\"$(find \"$mnt\" -maxdepth 2 -name GoIDEA.app -type d -print -quit)\"\n" +
-		"if [ -z \"$src\" ]; then hdiutil detach \"$mnt\" >/dev/null 2>&1; open " + q(dmg) + "; exit 1; fi\n" +
-		"rm -rf " + q(target+".new") + "\n" +
-		"ditto \"$src\" " + q(target+".new") + "\n" +
+		"if [ -z \"$src\" ]; then printf 'GoIDEA.app is missing from the update image\\n' >&2; false; fi\n" +
+		"rm -rf \"$previous\"\n" +
+		"rm -rf \"$stage\"\n" +
+		"ditto \"$src\" \"$stage\"\n" +
 		"hdiutil detach \"$mnt\" >/dev/null 2>&1 || true\n" +
 		"rmdir \"$mnt\" 2>/dev/null || true\n" +
-		"if ! rm -rf " + q(target) + "; then rm -rf " + q(target+".new") + "; open " + q(dmg) + "; exit 1; fi\n" +
-		"mv " + q(target+".new") + " " + q(target) + "\n" +
+		"mv " + q(target) + " \"$previous\"\n" +
+		"if ! mv \"$stage\" " + q(target) + "; then mv \"$previous\" " + q(target) + " 2>/dev/null || true; false; fi\n" +
+		"rm -rf \"$previous\"\n" +
 		"rm -f " + q(dmg) + "\n" +
+		"trap - ERR\n" +
 		"open " + q(target) + "\n"
 }
 
@@ -703,22 +717,49 @@ func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
-// showWhatsNewIfPending opens the notes of a version this start runs for the
-// first time, as upstream's checkAfterUpdate does: one start of a different
-// version opens the page, unless the setting turned it off.
-func (m *Model) showWhatsNewIfPending() {
+func updateInstallLogPath(sessionPath string) string {
+	if prefsPath := updatePrefsPath(sessionPath); prefsPath != "" {
+		return filepath.Join(filepath.Dir(prefsPath), "update-install.log")
+	}
+	return filepath.Join(os.TempDir(), "goidea-update-install.log")
+}
+
+// finishPendingUpdate opens What's New after a successful install and reports
+// a post-quit installer failure that the old process could not show.
+func (m *Model) finishPendingUpdate() {
 	path := updatePrefsPath(m.cfg.SessionPath)
 	prefs := loadUpdatePrefs(path)
 	current := mygo.App.Version()
-	if current == "" || prefs.LastRunVersion == current {
+	if current == "" {
+		return
+	}
+	if prefs.PendingVersion != "" && compareVersions(current, prefs.PendingVersion) < 0 {
+		failed := prefs.PendingVersion
+		prefs.PendingVersion, prefs.PendingNotes = "", ""
+		prefs.LastRunVersion = current
+		saveUpdatePrefs(path, prefs)
+		m.notifyUser(updateKey, "error",
+			"GoIDEA "+failed+" did not finish installing",
+			"The installer log is at "+updateInstallLogPath(m.cfg.SessionPath),
+			notifyAction{label: "Check Again", run: func(m *Model) { m.CheckForUpdates() }})
+		return
+	}
+	notes := ""
+	if prefs.PendingVersion != "" && compareVersions(current, prefs.PendingVersion) >= 0 {
+		if prefs.PendingVersion == current {
+			notes = prefs.PendingNotes
+		}
+		prefs.PendingVersion, prefs.PendingNotes = "", ""
+	}
+	// showWhatsNewIfPending opens the notes of a version this start runs for
+	// the first time, as upstream's checkAfterUpdate does: one start of a
+	// different version opens the page, unless the setting turned it off.
+	if prefs.LastRunVersion == current {
+		saveUpdatePrefs(path, prefs)
 		return
 	}
 	previous := prefs.LastRunVersion
 	prefs.LastRunVersion = current
-	notes := ""
-	if prefs.PendingVersion == current {
-		notes, prefs.PendingVersion, prefs.PendingNotes = prefs.PendingNotes, "", ""
-	}
 	saveUpdatePrefs(path, prefs)
 	// The first run has nothing to compare against.
 	if previous == "" || !m.showWhatsNewAfterUpdate() {
