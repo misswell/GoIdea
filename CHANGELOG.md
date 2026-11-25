@@ -3,7 +3,7 @@
 The GitHub release notes, which **Help › What's New** shows, come from the
 `## <version>` section here. Every release needs one, or its build fails.
 
-## Unreleased
+## 0.1.43
 
 - Dialogs now keep the workbench undimmed, rise in 140 ms and accept Enter's default action.
 - **Run** now uses OpenIDEA's shared title bar and corner actions.
