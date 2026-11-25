@@ -622,7 +622,7 @@ func (m *Model) annotateDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := a.open
-	dlg := ui.Modal(c, &open, func() {
+	dlg := nativeModal(c, &open, func() {
 		ui.Column(c).Width(820).Gap(8).Children(func() {
 			title := "Annotate · " + filepath.Base(a.path)
 			if a.loading {

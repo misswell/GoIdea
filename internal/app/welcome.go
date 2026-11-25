@@ -776,7 +776,7 @@ func (m *Model) welcomeCloneDialog(c *ui.Context, oi oiColors) {
 		return
 	}
 	open := m.welcomeCloneOpen
-	ui.Modal(c, &open, func() {
+	nativeModal(c, &open, func() {
 		ui.Column(c).Width(460).Gap(10).Children(func() {
 			ui.Text(c, "Clone Repository").FontSize(13).Bold().
 				TextColor(oi.textStrong).SingleLine()
@@ -952,7 +952,7 @@ func (m *Model) welcomeRemoveDialog(c *ui.Context, oi oiColors) {
 		return
 	}
 	open := m.welcomeRemoveOpen
-	ui.Modal(c, &open, func() {
+	nativeModal(c, &open, func() {
 		ui.Column(c).Width(400).Gap(12).Children(func() {
 			ui.Text(c, "Remove Recent Project").FontSize(13).Bold().
 				TextColor(oi.textStrong).SingleLine()
@@ -1054,7 +1054,7 @@ func (m *Model) recentGroupDialog(c *ui.Context, p *ui.Theme) {
 	if d.rename != "" {
 		title = "Rename Group"
 	}
-	ui.Modal(c, &open, func() {
+	nativeModal(c, &open, func() {
 		ui.Column(c).Width(420).Gap(12).Children(func() {
 			ui.Text(c, title).FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			in := ui.TextInput(c, &d.text).AutoFocus()

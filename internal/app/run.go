@@ -2316,7 +2316,7 @@ func (m *Model) trustDialog(c *ui.Context, p *ui.Theme) {
 	if path == "" {
 		path = "No project selected"
 	}
-	dialog := ui.Modal(c.Key("trust-dialog"), &open, func() {
+	dialog := nativeModal(c.Key("trust-dialog"), &open, func() {
 		ui.Column(c).Width(560).Gap(12).Children(func() {
 			ui.Row(c).Gap(10).AlignItems(ui.Start).Children(func() {
 				if logo := welcomeLogoImage(); logo != nil {

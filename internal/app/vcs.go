@@ -645,7 +645,7 @@ func (m *Model) rollbackDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := r.open
-	d := ui.Modal(c, &open, func() {
+	d := nativeModal(c, &open, func() {
 		ui.Column(c).Width(420).Gap(10).Children(func() {
 			ui.Text(c, "Roll Back Changes").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			ui.Text(c, "Roll back "+r.name+"? Unstaged changes are lost.").FontSize(12).

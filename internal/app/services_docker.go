@@ -1256,7 +1256,7 @@ func (m *Model) dockerDialogView(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := true
-	modal := ui.Modal(c.Key("services:docker-dialog"), &open, func() {
+	modal := nativeModal(c.Key("services:docker-dialog"), &open, func() {
 		ui.Column(c).Width(480).Padding(18).Gap(10).Children(func() {
 			ui.Text(c, dialog.title).FontSize(15).Bold().TextColor(p.Text)
 			if dialog.message != "" {

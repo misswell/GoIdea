@@ -132,7 +132,7 @@ func (m *Model) recentNavigationDialog(c *ui.Context, theme *ui.Theme) {
 		title = "Recently Edited Files"
 	}
 	open := true
-	dialog := ui.Modal(c.Key("recent-navigation"), &open, func() {
+	dialog := nativeModal(c.Key("recent-navigation"), &open, func() {
 		body := ui.Column(c).Width(720)
 		if p.switcher {
 			body = body.Focusable().AutoFocus().Label("Switcher")

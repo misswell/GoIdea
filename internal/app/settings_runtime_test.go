@@ -8,6 +8,8 @@ import (
 )
 
 func setNativeAppliedTestValue(m *Model, page, key string, value any) {
+	m.nativeSettingsMu.Lock()
+	defer m.nativeSettingsMu.Unlock()
 	state := m.nativeSettings.pages[page]
 	if state.applied == nil {
 		state.applied = map[string]any{}

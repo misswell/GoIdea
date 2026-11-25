@@ -1182,7 +1182,7 @@ func (m *Model) branchesDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := m.branch.open
-	d := ui.Modal(c, &open, func() {
+	d := nativeModal(c, &open, func() {
 		ui.Column(c).Width(520).Gap(8).Children(func() {
 			ui.Text(c, "Branches").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			in := ui.TextInput(c, &m.branch.query).AutoFocus()
@@ -1272,7 +1272,7 @@ func (m *Model) branchesDialog(c *ui.Context, p *ui.Theme) {
 
 func (m *Model) branchPromptDialog(c *ui.Context, p *ui.Theme) {
 	open := true
-	d := ui.Modal(c.Key("branches:"+m.branch.prompt), &open, func() {
+	d := nativeModal(c.Key("branches:"+m.branch.prompt), &open, func() {
 		ui.Column(c).Width(440).Gap(10).Children(func() {
 			switch m.branch.prompt {
 			case "rename":

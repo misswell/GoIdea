@@ -3,6 +3,24 @@
 The GitHub release notes, which **Help › What's New** shows, come from the
 `## <version>` section here. Every release needs one, or its build fails.
 
+## Unreleased
+
+- Dialogs now keep the workbench undimmed, rise in 140 ms and accept Enter's default action.
+- **Run** now uses OpenIDEA's shared title bar and corner actions.
+- The **Git** tool window now has Local Changes, Stash, Log, Console and Worktrees content tabs.
+- Plugin commands now receive the active editor, selected paths and settings context.
+- **HTTP Proxy** now exposes authentication and can test the staged proxy with a real connection.
+- Maven goals now honor the configured runner JRE, daemon, profiles, threads and repository.
+- Color scheme actions now apply built-in, Solarized and imported token colors natively.
+- Tool windows now use OpenIDEA's island gaps, rounded surfaces and focus-on-open behavior.
+- Empty, loading and error panes now use OpenIDEA's centered layout and loading spinner.
+- Services tabs use OpenIDEA's compact rounded tab treatment.
+- The Notifications tool window now shows visible **Clear All** and **Hide** header actions.
+- **Find** now shows a result tree beside a highlighted code preview.
+- **Build** now groups compiler messages beside its streaming console.
+- Settings search now finds option labels as well as page and control names.
+- **Version Control** settings no longer race while detecting Git or loading credentials.
+
 ## 0.1.42
 
 - Online updates now use the macOS system proxy and a detached installer that restarts reliably.

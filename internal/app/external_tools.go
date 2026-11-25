@@ -242,7 +242,7 @@ func (m *Model) externalToolPromptDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := true
-	dlg := ui.Modal(c.Key("tools:external-tool-prompt"), &open, func() {
+	dlg := nativeModal(c.Key("tools:external-tool-prompt"), &open, func() {
 		ui.Column(c).Width(440).Gap(10).Children(func() {
 			ui.Text(c, state.tool).FontSize(13).Bold().TextColor(p.Text).
 				SingleLine().Ellipsis("…")

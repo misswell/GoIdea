@@ -313,7 +313,7 @@ func (m *Model) settingsKeymapRecorderDialog(c *ui.Context, p *ui.Theme) {
 	}
 	oi := oiPaletteOf(p)
 	open := m.keymapRecorder.open
-	dlg := ui.Modal(c.Key("settings:keymap-recorder"), &open, func() {
+	dlg := nativeModal(c.Key("settings:keymap-recorder"), &open, func() {
 		ui.Column(c).Width(460).Padding(18).Gap(12).
 			Background(oi.elev).Border(1, oi.border).Radius(6).
 			Children(func() {

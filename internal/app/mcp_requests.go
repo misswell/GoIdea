@@ -215,7 +215,7 @@ func (m *Model) mcpConfirmDialog(c *ui.Context, p *ui.Theme) {
 	open := true
 	choice := 0
 	waiting := len(m.mcp.confirms) - 1
-	modal := ui.Modal(c.Key(fmt.Sprintf("mcp-confirm:%d", request.id)), &open, func() {
+	modal := nativeModal(c.Key(fmt.Sprintf("mcp-confirm:%d", request.id)), &open, func() {
 		dialog := ui.Column(c).Width(480).Gap(10).Children(func() {
 			ui.Text(c, fmt.Sprintf("%s wants to run %s", request.request.Client, request.request.Subject)).
 				FontSize(13).Bold().TextColor(p.Text)

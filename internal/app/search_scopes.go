@@ -12,7 +12,7 @@ func (m *Model) searchScopesDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := s.scopesOpen
-	dialog := ui.Modal(c.Key("search-scopes"), &open, func() {
+	dialog := nativeModal(c.Key("search-scopes"), &open, func() {
 		ui.Column(c).Width(680).Gap(10).Children(func() {
 			ui.Text(c, "Scopes").FontSize(14).Bold().TextColor(p.Text).SingleLine()
 			ui.Text(c, "A scope is a file pattern such as file:src//*.java&&!file:*test*.").

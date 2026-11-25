@@ -135,7 +135,7 @@ func (m *Model) runTerminateConfirmDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := ask.open
-	modal := ui.Modal(c, &open, func() {
+	modal := nativeModal(c, &open, func() {
 		ui.Column(c).Width(440).Gap(10).Children(func() {
 			title := "A Process Is Running"
 			body := "Do you want to terminate the running process?"

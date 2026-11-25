@@ -194,7 +194,7 @@ func (m *Model) filesDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := f.open
-	d := ui.Modal(c, &open, func() {
+	d := nativeModal(c, &open, func() {
 		ui.Column(c).Width(600).Gap(8).Children(func() {
 			ui.Text(c, "Quick Open").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			in := ui.TextInput(c, &f.query).AutoFocus()

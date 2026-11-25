@@ -554,7 +554,7 @@ func (m *Model) agentMCPEditorDialog(c *ui.Context, oi oiColors) {
 		return
 	}
 	open := true
-	dlg := ui.Modal(c.Key("agent-mcp-editor"), &open, func() {
+	dlg := nativeModal(c.Key("agent-mcp-editor"), &open, func() {
 		ui.Column(c).Width(560).Gap(9).Children(func() {
 			title := "Add MCP Server"
 			action := "Add"

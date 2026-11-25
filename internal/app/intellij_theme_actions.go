@@ -423,7 +423,7 @@ func (m *Model) intellijThemesDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := state.open
-	dialog := ui.Modal(c, &open, func() {
+	dialog := nativeModal(c, &open, func() {
 		ui.Column(c).Width(640).Gap(10).Children(func() {
 			ui.Text(c, "Import Theme from JetBrains IDE").FontSize(16).Bold().TextColor(p.Text).SingleLine()
 			ui.Text(c,
@@ -509,7 +509,7 @@ func (m *Model) intellijConsentDialog(c *ui.Context, p *ui.Theme) {
 	open := state.open
 	capabilities := sortedIntellijCapabilities(state.preview.Capabilities)
 	title := fmt.Sprintf("Install %s %s?", state.preview.Name, state.preview.Version)
-	dialog := ui.Modal(c, &open, func() {
+	dialog := nativeModal(c, &open, func() {
 		ui.Column(c).Width(520).Gap(10).Children(func() {
 			ui.Text(c, title).FontSize(16).Bold().TextColor(p.Text).SingleLine()
 			if state.preview.Unsigned {

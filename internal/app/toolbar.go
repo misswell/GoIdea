@@ -369,7 +369,7 @@ func (m *Model) toolbarCustomizeDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := m.toolbarCustomize
-	dlg := ui.Modal(c, &open, func() {
+	dlg := nativeModal(c, &open, func() {
 		ui.Column(c).Width(620).Gap(10).Children(func() {
 			ui.Text(c, "Customize Main Toolbar").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			ui.Row(c).Height(240).Gap(12).Children(func() {

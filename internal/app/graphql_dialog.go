@@ -43,7 +43,7 @@ func (m *Model) graphqlIntrospectionDialog(c *ui.Context, p *ui.Theme) {
 	}
 	open := true
 	oi := oiPaletteOf(p)
-	ui.Modal(c.Key("graphql:introspection-confirmation"), &open, func() {
+	nativeModal(c.Key("graphql:introspection-confirmation"), &open, func() {
 		ui.Column(c).Width(520).Padding(16).Gap(12).Children(func() {
 			ui.Text(c, "Get GraphQL Schema from Endpoint").FontSize(15).Bold().TextColor(oi.text)
 			ui.Text(c, fmt.Sprintf(
@@ -81,7 +81,7 @@ func (m *Model) graphqlErrorDialog(c *ui.Context, p *ui.Theme) {
 	}
 	open := true
 	oi := oiPaletteOf(p)
-	ui.Modal(c.Key("graphql:error-dialog"), &open, func() {
+	nativeModal(c.Key("graphql:error-dialog"), &open, func() {
 		ui.Column(c).Width(580).Padding(18).Gap(12).Children(func() {
 			ui.Text(c, dialog.Title).FontSize(15).Bold().TextColor(oi.text)
 			ui.Scroll(c).MaxHeight(280).Children(func() {
@@ -108,7 +108,7 @@ func (m *Model) graphqlEnvironmentDialog(c *ui.Context, p *ui.Theme) {
 	}
 	open := true
 	oi := oiPaletteOf(p)
-	ui.Modal(c.Key("graphql:environment-dialog"), &open, func() {
+	nativeModal(c.Key("graphql:environment-dialog"), &open, func() {
 		ui.Column(c).Width(520).Padding(16).Gap(12).Children(func() {
 			ui.Text(c, "GraphQL Environment Variables").FontSize(15).Bold().TextColor(oi.text)
 			ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {

@@ -598,16 +598,9 @@ func (m *Model) ensureVCSGitCredentials() {
 	if m.mgr == nil && m.invokeHook == nil {
 		return
 	}
-	page := settingsPageVCSGit
-	state := m.nativeSettings.pages[page]
-	if state.aux == nil {
-		state.aux = map[string]string{}
-	}
-	if state.aux["git.credentialsState"] != "" {
+	if !m.beginVCSGitAux("git.credentialsState") {
 		return
 	}
-	state.aux["git.credentialsState"] = "loading"
-	m.nativeSettings.pages[page] = state
 	go func() {
 		ctx, cancel := context.WithTimeout(modelContext(m), 8*time.Second)
 		defer cancel()
@@ -617,67 +610,94 @@ func (m *Model) ensureVCSGitCredentials() {
 			err = json.Unmarshal(raw, &hosts)
 		}
 		m.post(func() {
-			state := m.nativeSettings.pages[page]
-			if state.aux == nil {
-				state.aux = map[string]string{}
-			}
-			state.aux["git.credentialsState"] = "ready"
-			if err != nil {
-				state.aux["git.credentialsError"] = err.Error()
-			} else {
-				encoded, _ := json.Marshal(hosts)
-				state.aux["git.credentials"] = string(encoded)
-				delete(state.aux, "git.credentialsError")
-			}
-			m.nativeSettings.pages[page] = state
-			m.invalidate()
+			m.mutateVCSGitAux(func(aux map[string]string) {
+				aux["git.credentialsState"] = "ready"
+				if err != nil {
+					aux["git.credentialsError"] = err.Error()
+				} else {
+					encoded, _ := json.Marshal(hosts)
+					aux["git.credentials"] = string(encoded)
+					delete(aux, "git.credentialsError")
+				}
+			})
 		})
 	}()
 }
 
 func (m *Model) forgetVCSGitCredential(host string) {
-	page := settingsPageVCSGit
-	state := m.nativeSettings.pages[page]
-	if state.aux == nil {
-		state.aux = map[string]string{}
-	}
-	state.aux["git.credentialsForgetting:"+host] = "1"
-	delete(state.aux, "git.credentialsError")
-	m.nativeSettings.pages[page] = state
-	m.invalidate()
+	m.mutateVCSGitAux(func(aux map[string]string) {
+		aux["git.credentialsForgetting:"+host] = "1"
+		delete(aux, "git.credentialsError")
+	})
 	go func() {
 		ctx, cancel := context.WithTimeout(modelContext(m), 8*time.Second)
 		defer cancel()
 		_, err := m.invoke(ctx, "git_credential_forget", map[string]any{"key": host})
 		m.post(func() {
-			state := m.nativeSettings.pages[page]
-			if state.aux == nil {
-				state.aux = map[string]string{}
-			}
-			delete(state.aux, "git.credentialsForgetting:"+host)
-			if err != nil {
-				state.aux["git.credentialsError"] = err.Error()
-				m.nativeSettings.pages[page] = state
-				m.invalidate()
-				return
-			}
-			hosts := []string{}
-			if encoded := state.aux["git.credentials"]; encoded != "" {
-				_ = json.Unmarshal([]byte(encoded), &hosts)
-			}
-			filtered := hosts[:0]
-			for _, existing := range hosts {
-				if existing != host {
-					filtered = append(filtered, existing)
+			m.mutateVCSGitAux(func(aux map[string]string) {
+				delete(aux, "git.credentialsForgetting:"+host)
+				if err != nil {
+					aux["git.credentialsError"] = err.Error()
+					return
 				}
-			}
-			encoded, _ := json.Marshal(filtered)
-			state.aux["git.credentials"] = string(encoded)
-			delete(state.aux, "git.credentialsError")
-			m.nativeSettings.pages[page] = state
-			m.invalidate()
+				hosts := []string{}
+				if encoded := aux["git.credentials"]; encoded != "" {
+					_ = json.Unmarshal([]byte(encoded), &hosts)
+				}
+				filtered := hosts[:0]
+				for _, existing := range hosts {
+					if existing != host {
+						filtered = append(filtered, existing)
+					}
+				}
+				encoded, _ := json.Marshal(filtered)
+				aux["git.credentials"] = string(encoded)
+				delete(aux, "git.credentialsError")
+			})
 		})
 	}()
+}
+
+func (m *Model) vcsGitAuxSnapshot() map[string]string {
+	m.nativeSettingsMu.Lock()
+	defer m.nativeSettingsMu.Unlock()
+	state := m.nativeSettings.pages[settingsPageVCSGit]
+	aux := make(map[string]string, len(state.aux))
+	for key, value := range state.aux {
+		aux[key] = value
+	}
+	return aux
+}
+
+func (m *Model) mutateVCSGitAux(change func(map[string]string)) {
+	m.nativeSettingsMu.Lock()
+	state := m.nativeSettings.pages[settingsPageVCSGit]
+	aux := make(map[string]string, len(state.aux)+1)
+	for key, value := range state.aux {
+		aux[key] = value
+	}
+	change(aux)
+	state.aux = aux
+	m.nativeSettings.pages[settingsPageVCSGit] = state
+	m.nativeSettingsMu.Unlock()
+	m.invalidate()
+}
+
+func (m *Model) beginVCSGitAux(key string) bool {
+	m.nativeSettingsMu.Lock()
+	defer m.nativeSettingsMu.Unlock()
+	state := m.nativeSettings.pages[settingsPageVCSGit]
+	aux := make(map[string]string, len(state.aux)+1)
+	for name, value := range state.aux {
+		aux[name] = value
+	}
+	if aux[key] != "" {
+		return false
+	}
+	aux[key] = "loading"
+	state.aux = aux
+	m.nativeSettings.pages[settingsPageVCSGit] = state
+	return true
 }
 
 type vcsGitExecutableInfo struct {
@@ -688,8 +708,8 @@ type vcsGitExecutableInfo struct {
 func (m *Model) settingsVCSGitExecutableRow(c *ui.Context, oi oiColors) {
 	page := settingsPageVCSGit
 	m.ensureVCSGitDetected()
-	state := m.nativeSettings.pages[page]
-	detected, testing := state.aux["git.detected"], state.aux["git.testing"] == "1"
+	aux := m.vcsGitAuxSnapshot()
+	detected, testing := aux["git.detected"], aux["git.testing"] == "1"
 	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Path to Git executable:", 230)
 		value := nativeSettingsString(m, page, "vcs.git.executable")
@@ -709,10 +729,10 @@ func (m *Model) settingsVCSGitExecutableRow(c *ui.Context, oi oiColors) {
 		ui.Button(c, label).Width(82).Disabled(testing || (m.mgr == nil && m.invokeHook == nil)).
 			OnClick(func() { m.testVCSGitExecutable(value) })
 	})
-	result := state.aux["git.result"]
+	result := aux["git.result"]
 	if result != "" {
 		tone := oi.success
-		if state.aux["git.resultOK"] != "1" {
+		if aux["git.resultOK"] != "1" {
 			tone = oi.danger
 		}
 		ui.Text(c, result).FontSize(11).TextColor(tone).PaddingStart(20).
@@ -721,16 +741,12 @@ func (m *Model) settingsVCSGitExecutableRow(c *ui.Context, oi oiColors) {
 }
 
 func (m *Model) ensureVCSGitDetected() {
-	page := settingsPageVCSGit
-	state := m.nativeSettings.pages[page]
-	if state.aux == nil {
-		state.aux = map[string]string{}
-	}
-	if state.aux["git.detectedState"] != "" || (m.mgr == nil && m.invokeHook == nil) {
+	if m.mgr == nil && m.invokeHook == nil {
 		return
 	}
-	state.aux["git.detectedState"] = "loading"
-	m.nativeSettings.pages[page] = state
+	if !m.beginVCSGitAux("git.detectedState") {
+		return
+	}
 	go func() {
 		ctx, cancel := context.WithTimeout(modelContext(m), 8*time.Second)
 		defer cancel()
@@ -740,42 +756,32 @@ func (m *Model) ensureVCSGitDetected() {
 			err = json.Unmarshal(raw, &detected)
 		}
 		m.post(func() {
-			state := m.nativeSettings.pages[page]
-			if state.aux == nil {
-				state.aux = map[string]string{}
-			}
-			if err == nil {
-				state.aux["git.detected"] = detected
-			}
-			state.aux["git.detectedState"] = "ready"
-			m.nativeSettings.pages[page] = state
-			m.invalidate()
+			m.mutateVCSGitAux(func(aux map[string]string) {
+				if err == nil {
+					aux["git.detected"] = detected
+				}
+				aux["git.detectedState"] = "ready"
+			})
 		})
 	}()
 }
 
 func (m *Model) clearVCSGitTestResult() {
-	page := settingsPageVCSGit
-	state := m.nativeSettings.pages[page]
-	if state.aux == nil {
+	if m.vcsGitAuxSnapshot() == nil {
 		return
 	}
-	delete(state.aux, "git.result")
-	delete(state.aux, "git.resultOK")
-	m.nativeSettings.pages[page] = state
+	m.mutateVCSGitAux(func(aux map[string]string) {
+		delete(aux, "git.result")
+		delete(aux, "git.resultOK")
+	})
 }
 
 func (m *Model) testVCSGitExecutable(path string) {
-	page := settingsPageVCSGit
-	state := m.nativeSettings.pages[page]
-	if state.aux == nil {
-		state.aux = map[string]string{}
-	}
-	state.aux["git.testing"] = "1"
-	delete(state.aux, "git.result")
-	delete(state.aux, "git.resultOK")
-	m.nativeSettings.pages[page] = state
-	m.invalidate()
+	m.mutateVCSGitAux(func(aux map[string]string) {
+		aux["git.testing"] = "1"
+		delete(aux, "git.result")
+		delete(aux, "git.resultOK")
+	})
 	go func() {
 		ctx, cancel := context.WithTimeout(modelContext(m), 15*time.Second)
 		defer cancel()
@@ -785,22 +791,18 @@ func (m *Model) testVCSGitExecutable(path string) {
 			err = json.Unmarshal(raw, &info)
 		}
 		m.post(func() {
-			state := m.nativeSettings.pages[page]
-			if state.aux == nil {
-				state.aux = map[string]string{}
-			}
-			delete(state.aux, "git.testing")
-			if err != nil {
-				state.aux["git.result"] = err.Error()
-				state.aux["git.resultOK"] = "0"
-			} else {
-				version := strings.TrimSpace(info.Version)
-				version = strings.Replace(version, "git version", "Git version is", 1)
-				state.aux["git.result"] = fmt.Sprintf("%s (%s)", version, info.Path)
-				state.aux["git.resultOK"] = "1"
-			}
-			m.nativeSettings.pages[page] = state
-			m.invalidate()
+			m.mutateVCSGitAux(func(aux map[string]string) {
+				delete(aux, "git.testing")
+				if err != nil {
+					aux["git.result"] = err.Error()
+					aux["git.resultOK"] = "0"
+				} else {
+					version := strings.TrimSpace(info.Version)
+					version = strings.Replace(version, "git version", "Git version is", 1)
+					aux["git.result"] = fmt.Sprintf("%s (%s)", version, info.Path)
+					aux["git.resultOK"] = "1"
+				}
+			})
 		})
 	}()
 }

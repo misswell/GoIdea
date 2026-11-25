@@ -10,7 +10,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"regexp"
+	"runtime"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -619,11 +625,7 @@ func (m *Model) runMavenGoal(p *mavenProject, goals []string) {
 // or mvn), the goals with the settings' flags, the project's directory and the
 // name IDEA gives the configuration.
 func (m *Model) mavenGoalRunConfig(p *mavenProject, goals []string) (openidea.RunConfig, string) {
-	command := "mvn"
-	if mvnw.MatchString(p.Command) {
-		command = p.Command
-	}
-	args := append([]string(nil), goals...)
+	command, args := m.mavenLaunch(p, goals)
 	has := func(flag string) bool {
 		for _, a := range args {
 			if a == flag || strings.HasPrefix(a, flag+"=") {
@@ -633,13 +635,10 @@ func (m *Model) mavenGoalRunConfig(p *mavenProject, goals []string) (openidea.Ru
 		return false
 	}
 	if m.maven.offline && !has("-o") && !has("--offline") {
-		args = append(args, "-o")
+		args = insertMavenExecutionFlags(args, "-o")
 	}
 	if m.maven.skipTests && !has("-DskipTests") {
-		args = append(args, "-DskipTests")
-	}
-	if list := m.mavenProfilesList(); len(list) > 0 {
-		args = append(args, "-P"+strings.Join(list, ","))
+		args = insertMavenExecutionFlags(args, "-DskipTests")
 	}
 	label := p.DisplayName
 	if label == "" {
@@ -651,6 +650,12 @@ func (m *Model) mavenGoalRunConfig(p *mavenProject, goals []string) (openidea.Ru
 		dir := p.Dir
 		cwd = &dir
 	}
+	settingsEnv := map[string]string{}
+	if jre := strings.TrimSpace(
+		nativeSettingsString(m, settingsPageMaven, "languages.java.maven.runnerJre"),
+	); jre != "" {
+		settingsEnv["JAVA_HOME"] = expandMavenHome(jre)
+	}
 	// A whole RunConfig, not a sparse map: the backend's deserializer has no
 	// defaults for isTest and debugAdapter, so a partial object is refused
 	// with "missing field `isTest`".
@@ -661,12 +666,306 @@ func (m *Model) mavenGoalRunConfig(p *mavenProject, goals []string) (openidea.Ru
 		Command:      command,
 		Args:         args,
 		Cwd:          cwd,
-		Env:          map[string]string{},
+		Env:          settingsEnv,
 		Detected:     false,
 		IsTest:       mavenTestGoals(goals, args),
 		DebugAdapter: nil,
 		EnvFiles:     []string{},
 	}, name
+}
+
+func (m *Model) mavenLaunch(p *mavenProject, goals []string) (string, []string) {
+	if p == nil {
+		return "mvn", append([]string(nil), goals...)
+	}
+	m.nativeSettingsMu.Lock()
+	settings := m.nativeSettings.pages[settingsPageMaven]
+	m.nativeSettingsMu.Unlock()
+	settingString := func(key, fallback string) string {
+		return nativeAppliedString(settings, key, fallback)
+	}
+	settingBool := func(key string, fallback bool) bool {
+		return nativeAppliedBool(settings, key, fallback)
+	}
+	command := "mvn"
+	if mvnw.MatchString(p.Command) {
+		command = p.Command
+	}
+	if detected := strings.TrimSpace(p.Command); detected != "" && !mvnw.MatchString(detected) {
+		if path, err := exec.LookPath(detected); err == nil {
+			command = path
+		} else {
+			command = detected
+		}
+	}
+	if custom := strings.TrimSpace(
+		settingString("languages.java.maven.home", ""),
+	); custom != "" {
+		command = mavenExecutable(custom)
+	}
+	if settingBool("languages.java.maven.daemon", false) {
+		if !mavenRunnerJreSupportsDaemon(
+			settingString("languages.java.maven.runnerJre", ""),
+		) {
+			m.status = "Maven Daemon needs Java 17 or newer; building with Maven"
+		} else if daemon := m.mavenDaemonExecutable(); daemon != "" {
+			command = daemon
+		} else {
+			m.status = "Maven Daemon is enabled but mvnd could not be resolved; building with Maven"
+		}
+	}
+	args := []string{}
+	appendSettingArg := func(flag, key string) {
+		if value := strings.TrimSpace(
+			settingString(key, ""),
+		); value != "" {
+			args = append(args, flag, expandMavenHome(value))
+		}
+	}
+	appendSettingArg("-s", "languages.java.maven.userSettings")
+	appendSettingArg("-t", "languages.java.maven.toolchains")
+	if repository := strings.TrimSpace(
+		settingString("languages.java.maven.localRepository", ""),
+	); repository != "" {
+		args = append(args, "-Dmaven.repo.local="+expandMavenHome(repository))
+	}
+	if threads := normalizedMavenThreads(
+		settingString("languages.java.maven.threads", ""),
+	); threads != "" {
+		args = append(args, "-T", threads)
+	}
+	profiles := mavenActiveProfiles(
+		settingString("languages.java.maven.activeProfiles", ""),
+		m.mavenProfilesList(),
+	)
+	if len(profiles) > 0 {
+		args = append(args, "-P", strings.Join(profiles, ","))
+	}
+	return command, append(args, goals...)
+}
+
+func mavenExecutable(home string) string {
+	home = expandMavenHome(home)
+	if home == "" {
+		return "mvn"
+	}
+	if info, err := os.Stat(home); err == nil && !info.IsDir() {
+		return home
+	}
+	endsWithSeparator := strings.HasSuffix(home, string(filepath.Separator))
+	if !endsWithSeparator && strings.ContainsRune(home, filepath.Separator) {
+		if _, err := os.Stat(home); err != nil {
+			return home
+		}
+	}
+	if !endsWithSeparator && !strings.ContainsRune(home, filepath.Separator) {
+		if path, err := exec.LookPath(home); err == nil {
+			return path
+		}
+	}
+	if endsWithSeparator {
+		home = strings.TrimRight(home, string(filepath.Separator))
+	}
+	if name := filepath.Base(home); name == "mvn" || name == "mvn.cmd" ||
+		name == "mvn.bat" {
+		if _, err := os.Stat(home); err == nil {
+			return home
+		}
+	}
+	name := "mvn"
+	if runtime.GOOS == "windows" {
+		name = "mvn.cmd"
+	}
+	for _, candidate := range []string{
+		filepath.Join(home, "bin", name),
+		filepath.Join(home, name),
+	} {
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			return candidate
+		}
+	}
+	return home
+}
+
+func (m *Model) mavenDaemonExecutable() string {
+	home := strings.TrimSpace(nativeSettingsString(
+		m, settingsPageMaven, "languages.java.maven.mvndHome",
+	))
+	if home == "" {
+		home = strings.TrimSpace(os.Getenv("MVND_HOME"))
+	}
+	if home == "" {
+		if path, err := exec.LookPath("mvnd"); err == nil {
+			return path
+		}
+		return ""
+	}
+	home = expandMavenHome(home)
+	if info, err := os.Stat(home); err == nil && !info.IsDir() {
+		return home
+	}
+	name := "mvnd"
+	if runtime.GOOS == "windows" {
+		name = "mvnd.cmd"
+	}
+	for _, candidate := range []string{
+		filepath.Join(home, "bin", name),
+		filepath.Join(home, name),
+	} {
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			return candidate
+		}
+	}
+	return ""
+}
+
+func mavenRunnerJreSupportsDaemon(path string) bool {
+	path = expandMavenHome(path)
+	if path == "" {
+		return true
+	}
+	candidates := []string{filepath.Join(path, "bin", "java")}
+	if runtime.GOOS == "windows" {
+		candidates = append(
+			[]string{filepath.Join(path, "bin", "java.exe")},
+			candidates...,
+		)
+	}
+	java := ""
+	for _, candidate := range candidates {
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			java = candidate
+			break
+		}
+	}
+	if java == "" {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, java, "-version").CombinedOutput()
+	if err != nil {
+		return false
+	}
+	return javaRuntimeAtLeast17(string(out))
+}
+
+func javaRuntimeAtLeast17(output string) bool {
+	fields := strings.Fields(output)
+	for i, field := range fields {
+		if field == "version" && i+1 < len(fields) {
+			version := strings.Trim(fields[i+1], `"`)
+			parts := strings.Split(version, ".")
+			major := 0
+			if len(parts) > 0 {
+				major, _ = strconv.Atoi(parts[0])
+			}
+			if major == 1 && len(parts) > 1 {
+				major, _ = strconv.Atoi(parts[1])
+			}
+			return major >= 17
+		}
+	}
+	return false
+}
+
+func expandMavenHome(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "~" || strings.HasPrefix(path, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			return filepath.Join(home, strings.TrimPrefix(path, "~/"))
+		}
+	}
+	return path
+}
+
+func normalizedMavenThreads(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	number := strings.TrimSuffix(value, "C")
+	parts := strings.Split(number, ".")
+	if len(parts) > 2 {
+		return ""
+	}
+	for _, part := range parts {
+		if part == "" {
+			return ""
+		}
+		for _, ch := range part {
+			if ch < '0' || ch > '9' {
+				return ""
+			}
+		}
+	}
+	parsed, err := strconv.ParseFloat(number, 64)
+	if err != nil || parsed <= 0 {
+		return ""
+	}
+	return value
+}
+
+func mavenActiveProfiles(settings string, choices []string) []string {
+	combined := append(strings.Split(settings, ","), choices...)
+	profiles := make([]string, 0, len(combined))
+	for _, item := range combined {
+		item = strings.TrimSpace(item)
+		if item == "" || slices.Contains(profiles, item) {
+			continue
+		}
+		profiles = append(profiles, item)
+	}
+	excluded := map[string]bool{}
+	for _, profile := range profiles {
+		profile = strings.TrimSpace(profile)
+		if strings.HasPrefix(profile, "!") || strings.HasPrefix(profile, "-") {
+			excluded[strings.TrimLeft(profile, "!-")] = true
+		}
+	}
+	out := profiles[:0]
+	for _, profile := range profiles {
+		if !strings.HasPrefix(profile, "!") &&
+			!strings.HasPrefix(profile, "-") &&
+			!excluded[profile] {
+			out = append(out, profile)
+		}
+	}
+	return out
+}
+
+func insertMavenExecutionFlags(args []string, flags ...string) []string {
+	prefix := 0
+	for prefix < len(args) {
+		flag := args[prefix]
+		switch {
+		case flag == "-P" || flag == "--activate-profiles":
+			prefix = min(prefix+2, len(args))
+		case flag == "-s" || flag == "--settings" ||
+			flag == "-t" || flag == "--toolchains" ||
+			flag == "-T" || flag == "--threads" ||
+			false:
+			prefix = min(prefix+2, len(args))
+		case strings.HasPrefix(flag, "-s=") ||
+			strings.HasPrefix(flag, "--settings=") ||
+			strings.HasPrefix(flag, "-t=") ||
+			strings.HasPrefix(flag, "--toolchains=") ||
+			strings.HasPrefix(flag, "-T") ||
+			strings.HasPrefix(flag, "--threads=") ||
+			strings.HasPrefix(flag, "-P") ||
+			strings.HasPrefix(flag, "--activate-profiles=") ||
+			strings.HasPrefix(flag, "-Dmaven.repo.local=") ||
+			strings.HasPrefix(flag, "-D"):
+			prefix++
+		default:
+			goto insert
+		}
+	}
+insert:
+	out := make([]string, 0, len(args)+len(flags))
+	out = append(out, args[:prefix]...)
+	out = append(out, flags...)
+	return append(out, args[prefix:]...)
 }
 
 // --- tree -----------------------------------------------------------------

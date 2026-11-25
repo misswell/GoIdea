@@ -18,7 +18,10 @@ import (
 
 // logLimit is how many commits the Git log asks for at once, as OpenIDEA's
 // first window does; the list is read-only, so a fixed window is enough.
-const logLimit = 200
+const (
+	logLimit                        = 200
+	vcsContentConsole vcsContentTab = 6
+)
 
 // LogPane is the Git tool window's Log tab: the commit list, the selected
 // commit's message, branches and signature, and the files that commit changed.
@@ -76,6 +79,9 @@ type LogPane struct {
 	filterRegex     bool
 	filterMatchCase bool
 	filterErr       string
+	// console is the Git window's command/output log. Operations may append
+	// lines here without coupling the window to a particular RPC dialog.
+	console []string
 	// repo is an external Git log root; empty uses the open project's repository.
 	repo string
 }
@@ -109,6 +115,7 @@ func (m *Model) ShowLog() {
 	if m.Root() == "" {
 		return
 	}
+	m.setGitToolWindowTab(vcsContentLog)
 	root := m.vcs.current
 	if root != "" && vcsRepositoryKey(m.log.repo) != vcsRepositoryKey(root) {
 		if oldRoot := vcsRepositoryKey(m.log.repo); oldRoot != "" {
@@ -133,6 +140,17 @@ func (m *Model) ShowLog() {
 	if root != "" {
 		m.ensureVCSLogForRepository(root)
 	}
+}
+
+func (m *Model) setGitToolWindowTab(tab vcsContentTab) {
+	root := vcsRepositoryKey(m.vcs.current)
+	if root == "" {
+		return
+	}
+	if m.vcs.content == nil {
+		m.vcs.content = map[string]vcsContentTab{}
+	}
+	m.vcs.content[root] = tab
 }
 
 // CloseLog hides the Git log panel; the next open reloads it.
@@ -777,12 +795,112 @@ func (m *Model) SmokeLog(ctx context.Context) (map[string]any, error) {
 	return out, nil
 }
 
-// logPanel draws the Git log: commits on the left, the selected commit on the
-// right, as OpenIDEA's Git tool window splits Log and its details.
+// logPanel draws OpenIDEA's single bottom Git window. The dock ID stays "log"
+// so every existing Show Git Log action keeps its route, while the content tabs
+// share the Local Changes, Stash, Log, Console and Worktrees native surfaces.
 func (m *Model) logPanel(c *ui.Context, p *ui.Theme) {
 	if !m.log.visible {
 		return
 	}
+	oi := oiPaletteOf(p)
+	ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Children(func() {
+		m.gitToolWindowTabs(c, p, oi)
+		ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Children(func() {
+			switch m.gitToolWindowTab() {
+			case vcsContentChanges:
+				m.vcsChangesContent(c, p)
+			case vcsContentStash:
+				m.vcsStashContent(c, p, oi)
+			case vcsContentConsole:
+				m.gitConsoleContent(c, p, oi)
+			case vcsContentWorktrees:
+				m.vcsWorktreeContent(c, p, oi)
+			default:
+				m.gitLogPanel(c, p)
+			}
+		})
+	})
+}
+
+func (m *Model) gitToolWindowTab() vcsContentTab {
+	switch tab := m.currentVCSContent(); tab {
+	case vcsContentChanges, vcsContentStash, vcsContentLog, vcsContentConsole, vcsContentWorktrees:
+		return tab
+	default:
+		return vcsContentLog
+	}
+}
+
+func (m *Model) gitToolWindowTabs(c *ui.Context, p *ui.Theme, oi oiColors) {
+	type gitTab struct {
+		tab   vcsContentTab
+		label string
+		count int
+	}
+	tabs := []gitTab{
+		{tab: vcsContentChanges, label: "Local Changes", count: len(m.currentVCSFiles())},
+		{tab: vcsContentStash, label: "Stash", count: m.vcsStashCount()},
+		{tab: vcsContentLog, label: "Log"},
+		{tab: vcsContentConsole, label: "Console"},
+		{tab: vcsContentWorktrees, label: "Worktrees"},
+	}
+	active := m.gitToolWindowTab()
+	ui.Row(c).Height(32).Shrink(0).Padding(0, 6).Gap(2).AlignItems(ui.Center).
+		BorderWidth(1, 0, 1, 0).BorderColor(p.Border).Children(func() {
+		for _, item := range tabs {
+			item := item
+			row := ui.Row(c.Key("git-window:"+item.label)).Height(26).Padding(0, 9).
+				Radius(5).AlignItems(ui.Center).Cursor(ui.CursorPointer)
+			switch {
+			case item.tab == active:
+				row.Background(oi.stripeSelected)
+			case row.Hovered():
+				row.Background(oi.hoverTint)
+			}
+			row.Children(func() {
+				ui.Text(c, item.label).FontSize(12).
+					TextColor(boolColor(item.tab == active, oi.textStrong, oi.textSubtle))
+				if item.count > 0 {
+					ui.Text(c, fmt.Sprint(item.count)).FontSize(10).
+						TextColor(oi.textSubtle)
+				}
+			})
+			if row.Clicked() {
+				m.SelectVCSTab(item.tab)
+			}
+		}
+		ui.Spacer(c)
+		if m.vcs.loading {
+			ui.Text(c, "Refreshing…").FontSize(11).TextColor(oi.textSubtle)
+		}
+	})
+}
+
+func (m *Model) gitConsoleContent(c *ui.Context, p *ui.Theme, oi oiColors) {
+	ui.Row(c).Height(32).Shrink(0).Padding(0, 6).Gap(3).AlignItems(ui.Center).
+		BorderWidth(1, 0, 1, 0).BorderColor(p.Border).Children(func() {
+		ui.Button(c, "Clear All").Size(72, 24).Disabled(len(m.log.console) == 0).
+			OnClick(func() {
+				m.log.console = nil
+				m.invalidate()
+			})
+	})
+	ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
+		ui.Column(c).Padding(8, 10).Gap(4).Children(func() {
+			if len(m.log.console) == 0 {
+				ui.Text(c, "Git commands run by the IDE appear here.").FontSize(12).
+					TextColor(oi.textMuted)
+				return
+			}
+			for i, line := range m.log.console {
+				ui.Text(c, line).Key(fmt.Sprintf("git-console:%d", i)).FontSize(12).
+					Font("monospace").TextColor(oi.textStrong)
+			}
+		})
+	})
+}
+
+func (m *Model) gitLogPanel(c *ui.Context, p *ui.Theme) {
 	l := &m.log
 	col := ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Background(m.toolWindowBackground(p)).
 		BorderWidth(1, 0, 0, 0).BorderColor(p.Border)

@@ -170,3 +170,21 @@ func TestProblemsRenderOnTheRight(t *testing.T) {
 		t.Fatalf("the right Problems window is blank: %q", tt.Texts())
 	}
 }
+
+func TestDockShowRequestsFocusForTheOpenedContent(t *testing.T) {
+	m := toolModel()
+	m.ShowProblems()
+	if m.dock.focusPending != "problems" {
+		t.Fatalf("focus request = %q, want problems", m.dock.focusPending)
+	}
+	if !m.consumeToolWindowFocus("problems") {
+		t.Fatal("the first content frame did not consume the focus request")
+	}
+	if m.consumeToolWindowFocus("problems") {
+		t.Fatal("the focus request was consumed twice")
+	}
+	m.DockShow("problems")
+	if m.dock.focusPending != "problems" {
+		t.Fatal("showing an already-open window did not refocus its content")
+	}
+}

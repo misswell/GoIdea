@@ -165,7 +165,7 @@ func (m *Model) invalidateCachesDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := v.open
-	d := ui.Modal(c, &open, func() {
+	d := nativeModal(c, &open, func() {
 		ui.Column(c).Width(480).Gap(10).Children(func() {
 			ui.Text(c, "Clear Caches").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			ui.Text(c, "The next start rebuilds the caches: each project's symbol index and syntax caches.").

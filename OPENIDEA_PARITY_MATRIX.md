@@ -28,18 +28,18 @@ command appears automatically.
 | Kind | Items | Integrated | Partial | Engine | Blocked | Missing |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Feature folders | 45 | 21 | 24 | 0 | 0 | 0 |
-| Actions | 890 | 494 | 396 | 0 | 0 | 0 |
+| Actions | 890 | 495 | 395 | 0 | 0 | 0 |
 | Keymap presets | 6 | 6 | 0 | 0 | 0 | 0 |
 | Tool windows | 30 | 24 | 6 | 0 | 0 | 0 |
 | Overlays | 56 | 49 | 7 | 0 | 0 | 0 |
 | Editor contributions | 35 | 32 | 3 | 0 | 0 | 0 |
 | Editor kinds | 4 | 4 | 0 | 0 | 0 | 0 |
 | File editor providers | 4 | 4 | 0 | 0 | 0 | 0 |
-| Settings pages | 88 | 53 | 35 | 0 | 0 | 0 |
-| Settings keys | 470 | 65 | 2 | 0 | 0 | 403 |
+| Settings pages | 88 | 54 | 34 | 0 | 0 | 0 |
+| Settings keys | 470 | 70 | 1 | 0 | 0 | 399 |
 | Languages | 82 | 1 | 44 | 0 | 0 | 37 |
 | Backend crates | 43 | 0 | 0 | 37 | 0 | 6 |
-| Events | 31 | 2 | 0 | 0 | 0 | 29 |
+| Events | 31 | 2 | 13 | 0 | 0 | 16 |
 | Plugin worlds | 37 | 0 | 0 | 0 | 0 | 37 |
 | Plugin exports | 21 | 0 | 0 | 0 | 0 | 21 |
 | IPC commands | 668 | - | - | - | - | see [OPENIDEA_IPC.md](OPENIDEA_IPC.md) |
@@ -54,7 +54,7 @@ directory registers.
 | `agents` | 32 | 0 | 0 | 0 | 3 | integrated - internal/app/agents.go, agents_view.go, agent_composer.go, agent_editor.go, agent_markdown.go, agent_workspace.go and agent_registry_settings.go implement OpenIDEA's task home, editor/tool-window placement, groups, selection, search, conversation timeline, composer, changes, registry, policy and MCP settings over the real agent RPCs; agents_test.go, agent_*_test.go and the agents e2e phase cover the surface |
 | `analysis` | 6 | 2 | 1 | 0 | 0 | integrated - internal/app/analysis.go, analysis_inspection.go, analysis_duplicates.go, analysis_structural.go and analysis_cleanup.go implement native Inspection Results, Duplicates, Code Cleanup and Structural Search/Replace over the pinned invoke/post/action/tool-window infrastructure. Focused and offscreen pointer tests cover the UI, while 16 hidden checks pass against openidea-server 0.1.54 and JDT 1.63.0-SNAPSHOT for file/project inspection, live cancellation, duplicates, language loading, structural search, Find Usages transfer, stale edit rejection, apply/undo, scope cleanup and the hidden per-file cleanup action |
 | `app` | 47 | 0 | 6 | 0 | 0 | partial - internal/app/update.go, update_network.go, tasks.go, notifications.go and update_installer_unix.go cover update checks, macOS system proxy routing, background download, cancellation, live balloon progress and a detached atomic install/restart with next-launch failure reporting; update_flow_test.go, update_network_test.go and notifications_test.go cover the flow, while internal/app/invalidate.go covers cache invalidation and restart; other app overlays still have pending scope |
-| `build` | 6 | 1 | 0 | 0 | 0 | partial - internal/app/build.go, run_widget.go and build-tool run configurations implement OpenIDEA build, rebuild, artifact, module, compile-file, stop and output flows through the native Build window and real run/build RPCs. Action arguments preserve string or object targets, hidden activation, CMake build ids and the awaitable wait=true path used by Before launch. Rebuild always activates Build, a failed hidden build reveals it without stealing editor focus, and the main configuration starts only after a successful prerequisite build. TestBuildActionsPassOpenIDEATargetsActivationAndCMake, TestBuildActionsAreGatedByBuildState, TestBuildActionWithoutWaitRemainsNonblocking, TestHiddenBuildRevealsBuildWindowOnlyWhenItFails, TestBeforeLaunchBuildWaitHoldsMainUntilSuccess, TestBeforeLaunchBuildWaitRejectsFailure, TestBeforeLaunchBuildStopNeverStartsMain and base.build.success cover the integrated subset. Remaining gap: full tool-window visual parity and a real long-running Maven or Gradle before-launch build |
+| `build` | 6 | 1 | 0 | 0 | 0 | partial - internal/app/build.go, run_widget.go and build-tool run configurations implement OpenIDEA build, rebuild, artifact, module, compile-file, stop and output flows through the native Build window and real run/build RPCs. Action arguments preserve string or object targets, hidden activation, CMake build ids and the awaitable wait=true path used by Before launch. Rebuild always activates Build, a failed hidden build reveals it without stealing editor focus, and the main configuration starts only after a successful prerequisite build. internal/app/view.go now renders the compiler-message tree beside the streaming console, with file grouping, severity icons, source line and click navigation. TestBuildActionsPassOpenIDEATargetsActivationAndCMake, TestBuildActionsAreGatedByBuildState, TestBuildActionWithoutWaitRemainsNonblocking, TestHiddenBuildRevealsBuildWindowOnlyWhenItFails, TestBeforeLaunchBuildWaitHoldsMainUntilSuccess, TestBeforeLaunchBuildWaitRejectsFailure, TestBeforeLaunchBuildStopNeverStartsMain, TestBuildWindowShowsCompilerMessagesBesideTheConsole and base.build.success cover the integrated subset. Remaining gap: a real long-running Maven or Gradle before-launch build |
 | `build-tools` | 23 | 2 | 1 | 3 | 0 | partial - internal/app/maven.go, gradle.go, dependency_analyzer.go, dependency_analyzer_view.go, maven_add_dependency.go, build_tool_actions.go, pom_completion.go and pom_goto.go; Maven/Gradle trees, dependency RPCs, selected or all-project Maven source generation, full-span POM completion/navigation and focused UI/RPC tests. extendedToolchains.gradle covers real Gradle wrapper, local-distribution sync, structured tests, failed-test rerun and daemon cleanup; see the separate Maven row for remaining real mutation |
 | `code-insight` | 6 | 3 | 1 | 0 | 0 | integrated - internal/app/completion_input.go, completion_parameter_info.go, documentation.go, quick_definition.go, lsp.go and lsp_actions.go provide native completion, parameter information, documentation, signature help, quick definition/type definition, declaration and navigation over the pinned language-server RPCs. internal/app/intents.go, editor_quick_fix.go, codevision.go, inlay.go, diagnostics.go and problems.go provide intentions, quick fixes, Code Vision, inlay hints, diagnostics and Problems; internal/app/usage_popup.go and usages.go provide Show Usages and the rerunnable Find Usages tool window; structure.go, hierarchy.go and recent_navigation.go provide File Structure, call/type hierarchy and Go to File/Symbol/Class. Real JDT gates include lsp.completion.items, lsp.hover, lsp.references.count, lsp.symbols, lsp.structure.rows, lsp.problems.* and lsp.usagesPopup.open/transfer; focused tests cover parameter info, documentation, quick definition, quick fixes, intentions, type info, hierarchy defaults, usages, File Structure and Search Everywhere navigation |
 | `color-preview` | 0 | 0 | 0 | 1 | 0 | integrated - internal/app/editor_runtime_settings.go maps OpenIDEA's color preview contributions to native gutter marks and filters them through the Gutter Icons master and group settings. TestColorPreviewGutterMarksRespectGutterGroups covers rendering eligibility and settings changes |
@@ -469,7 +469,7 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 
 | Action | Title | Source | Status |
 | --- | --- | --- | --- |
-| `plugin.${pluginId}.${decl.id}` |  | `src/features/plugins/views/serviceProvider.tsx` | integrated - internal/app/plugins.go registers each enabled plugin command under OpenIDEA's plugin.<pluginId>.<commandId> address, forwards executeAction arguments and keeps the legacy plugin:<id> address as a keymap alias. TestPluginPageListsInstalledPlugins proves registration, argument-capable lifecycle and alias removal/restoration |
+| `plugin.${pluginId}.${decl.id}` |  | `src/features/plugins/views/serviceProvider.tsx` | integrated - internal/app/plugins.go registers each enabled plugin command under OpenIDEA's plugin.<pluginId>.<commandId> address, forwards the complete executeAction context including editor, paths, settings scope, chain and request id, and keeps the legacy plugin:<id> address as a keymap alias. TestPluginPageListsInstalledPlugins proves lifecycle registration and alias removal/restoration; TestPluginActionsForwardArgumentsAndKeepLegacyAlias and TestPluginActionParityRPCWireRequests cover dynamic naming, argument forwarding and the exact RPC payload |
 | `plugins.content.action` | Run Content Editor Action | `src/features/plugins/views/contentActions.ts` | partial - internal/app/plugins_services.go registers plugins.content.action with OpenIDEA's target/id argument and routes it through a reusable native pluginContentController seam, while reporting a safe status when no content editor is present. TestOpenIDEAPluginServicesContentActionsUseRegisteredController covers registration, controller dispatch and the no-surface status. A native plugin content editor surface remains absent |
 | `plugins.content.find` | Find in Editor | `src/features/plugins/views/contentActions.ts` | partial - internal/app/plugins_services.go registers plugins.content.find and targets a string pane key or the active registered pluginContentController. TestOpenIDEAPluginServicesContentActionsUseRegisteredController covers registration, active-controller dispatch and the no-surface status. A native plugin content editor surface remains absent |
 | `plugins.importInstalledIntellijTheme` | Import Theme from JetBrains IDE… | `src/features/plugins/index.ts` | integrated - internal/app/intellij_theme_actions.go groups the backend's installed JetBrains themes one row per plugin and opens the native plugins.intellijThemes chooser; TestIntellijThemeChooserLoadsAndRendersNativeOverlay covers loading, grouping and rendering |
@@ -691,7 +691,7 @@ Registered ids are listed by feature folder; keymap-only ids follow.
 
 | Action | Title | Source | Status |
 | --- | --- | --- | --- |
-| `editor.colorScheme.${name}` |  | `src/features/settings/pages/editor/colorScheme.tsx` | partial - internal/app/editor_scheme.go registers OpenIDEA's dynamic editor.colorScheme.${name} actions as native editor.colorScheme.import, editor.colorScheme.export and editor.colorScheme.delete commands with MyGo open/save and confirmation dialogs. The parser stores supported IntelliJ .icls colors and text attributes in global editor.customSchemes, editor.colorOverrides and editor.colorScheme through settings_set and Preferences.EditorScheme; export round-trips the same supported values. TestEditorSchemeActionsAreRegisteredAndToggled, TestParseAndExportICLSRoundTripsSupportedAttributes, TestColorSchemeImportPlanningAndChoices and TestImportColorSchemeWritesBackendAndLocalSettings cover the actions, parser, settings writes and overwrite/keep-both planning. MyGo has no per-token foreground API, so imported attributes are retained and exported rather than applied to token glyphs |
+| `editor.colorScheme.${name}` |  | `src/features/settings/pages/editor/colorScheme.tsx` | integrated - internal/app/editor_scheme_actions.go resolves OpenIDEA's dynamic editor.colorScheme.${name} family by scheme id, display name and action argument, including custom schemes, and updates global editor.colorScheme. internal/app/editor_scheme_theme.go applies the selected Islands, high-contrast and Solarized palettes plus imported and overridden text attributes to MyGo editor Theme tokens, backgrounds, selection and caret. TestEditorColorSchemeDynamicActionsResolveIDsNamesAndArguments, TestDynamicColorSchemeActionUsesTheSchemeID and TestEditorColorSchemeAppliesNativeTokenTheme cover actions, persistence and real token styling; import/export/delete round trips are covered by the existing scheme tests |
 | `editor.encodings.toggleNativeToAscii` | Transparent native-to-ascii conversion | `src/features/settings/nativeToAscii.ts` | integrated - internal/app/settings_encoding_action.go registers OpenIDEA's action, stages the page checkbox value when Settings supplies pageId/scope/value, and otherwise writes editor.encodings.nativeToAscii immediately in project scope or global scope without a project; TestNativeToAsciiActionStagesOnEncodingPage and TestNativeToAsciiActionWritesProjectOrGlobalScope cover both paths |
 | `file.newProjectsSettings` | Settings for New Projects… | `src/features/settings/index.ts` | integrated - internal/app/settings_ui.go opens the native Settings for New Projects sheet, and internal/app/settings_native_catalog.go forces every requested and written property to the global scope while that mode is active. TestNewProjectsSettingsUsesGlobalJavaScopeAndTitle covers the native Java entry, and TestNewProjectsSettingsForceEveryPageToGlobalScope covers a mixed project/global page |
 | `file.overrideFileType` | Override File Type | `src/features/settings/fileTypesRuntime.ts` | integrated - Settings › Editor › File Types and the Project View and editor-tab Override File Type menus stage exact-path language overrides with a typed or chosen path and project-relative key normalization in internal/app/file_type_actions.go and settings_backend_catalog_pages.go; open editors switch language immediately and newly opened tabs resolve exact-path overrides; internal/app/file_type_actions_test.go and settings_backend_catalog_test.go plus real-server filetypes.backend and filetypes.override |
@@ -1225,7 +1225,7 @@ same bindings until a check records it.
 | Tool window | Title | Anchor | Source | Status |
 | --- | --- | --- | --- | --- |
 | `bookmarks` | Bookmarks | left | `src/features/search/index.ts` | integrated - internal/app/bookmarks.go bookmarkWindowRows, ShowBookmarksWindow Cmd+2, move chooser 移动 with OpenMoveBookmark/OpenNewBookmarkListForMove and folder rows; Cmd+F3 popup edit description (F2) in bookmarksDialog; internal/app/view.go sidebar tab and project tree 书签 chip; base.bookmark.window, base.bookmark.popup, base.bookmark.move, base.bookmark.folder |
-| `build` | Build | bottom | `src/features/build/index.ts` | integrated - internal/app/view.go buildPanel renders the native Build console and line rows; base.build.console and base.build.lines exercise output against the real backend, and TestHiddenBuildRevealsBuildWindowOnlyWhenItFails covers the build-window state transition |
+| `build` | Build | bottom | `src/features/build/index.ts` | integrated - internal/app/view.go buildPanel renders OpenIDEA's compiler-message tree and streaming console side by side, with file grouping, severity, line and click navigation; TestBuildWindowShowsCompilerMessagesBesideTheConsole, base.build.console and base.build.lines cover the surface, and TestHiddenBuildRevealsBuildWindowOnlyWhenItFails covers the transition |
 | `commit` | Commit | left | `src/features/vcs/index.ts` | integrated - internal/app/commit.go commitDialog renders the native Commit surface with the selected repository and change set; base.commit.id passes against a real repository, and TestVCSCommitDefaultsDraftAndNonModalMode plus the VCS integration and multi-repository tests cover OpenCommit state, draft and repository routing |
 | `compare` | Compare | left | `src/features/vcs/compareTool.tsx` | integrated - internal/app/diff.go and diff_actions.go provide the native Compare editor and overlay with two MyGo editors, synchronized scrolling, change navigation, per-change and whole-side application, unsaved-text protection and content-root labels. TestDiffDialogRendersSideBySideControls, TestDiffSyncScrollMapsBothDirections, TestDiffRejectAndDiscardKeepUnsavedDocumentsUntouched and TestApplyDiffResultRefusesAChangedDocument cover the native window |
 | `coverage` | Coverage | right | `src/features/coverage/index.ts` | integrated - internal/app/coverage_view.go renders Coverage suite tabs, compact package/file rollups and OpenIDEA line/branch percentages; TestCoverageWindowRendersLineAndBranchMetrics, TestCoverageMetricsRollUpThroughCompactDirectories and TestCoverageEmptyStateMatchesOpenIDEA cover the native window |
@@ -1234,14 +1234,14 @@ same bindings until a check records it.
 | `documentation` | Documentation | right | `src/editor/lsp/index.ts` | integrated - internal/app/documentation.go renders the native popup and docked Documentation window, including history, source links, rendered markup and keyboard docking. TestDocumentationFocusAndKeyboardDock, TestQuickDocumentationForSelectedCompletionUsesInlineDocs, TestQuickDocumentationResolvesSelectedCompletion and the dependency documentation tests cover the backend and completion entry paths |
 | `dotnet` | .NET | right | `src/features/dotnet/index.ts` | partial - internal/app/dotnet_view.go registers the right-side native .NET tool window with project/solution chooser, configuration and framework selectors, build actions, references, NuGet rows and test controls; TestDotnetActionsAndToolWindowAreRegistered and TestDotnetPanelRendersWorkspacePackagesAndTestsOffscreen cover registration and offscreen rendering. Visual golden comparison against the pinned web view remains |
 | `duplicates` | Duplicates | bottom | `src/features/analysis/index.ts` | integrated - internal/app/analysis.go registers the bottom Duplicates window; internal/app/analysis_duplicates.go renders scope/options, group and fragment trees, navigation, rerun and cancellation. TestAnalysisDuplicatesPointerNavigateCollapseAndCancelOffscreen covers native pointer interaction, and the hidden analysis acceptance rendered two groups and six real duplicate fragments |
-| `find` | Find | bottom | `src/features/search/index.ts` | integrated - base.search.done, base.search.files, base.search.matches; internal/app/search.go searchPanel; bottom anchor in internal/app/anchor_test.go |
-| `git` | Git | bottom | `src/features/vcs/index.ts` | partial - base.vcs.changes, base.log.*, base.branch.* and base.stage.* cover the native changes, log, branch and staging views; internal/app/vcs_operations.go adds fetch, pull, push, merge, rebase, tag, branch, stash and reset, while vcs_remotes.go and vcs_more.go add remote, compare and worktree dialogs; vcsoperations.* exercises the real backend, including remote add/edit/remove and worktree create/move/remove. Repository tabs, repository-scoped content switching and state restoration are covered by TestVCSToolWindowRendersRepositoryTabsAndSwitchesThem, TestVCSToolWindowContentTabsAreRepositoryScoped and TestVCSRepositorySwitchRestoresBranchLogContentAndStagingState. Remaining limits are complete compare-editor depth and the VCS interaction gaps tracked by the partial child actions |
+| `find` | Find | bottom | `src/features/search/index.ts` | integrated - base.search.done, base.search.files, base.search.matches; internal/app/search.go and internal/app/view.go render the header, result tree and a split code preview with a bounded 41-line cache and selected match highlight; TestFindWindowShowsResultTreeAndCodePreview covers the native surface; bottom anchor in internal/app/anchor_test.go |
+| `git` | Git | bottom | `src/features/vcs/index.ts` | partial - base.vcs.changes, base.log.*, base.branch.* and base.stage.* cover the native changes, log, branch and staging views; internal/app/vcs_operations.go adds fetch, pull, push, merge, rebase, tag, branch, stash and reset, while vcs_remotes.go and vcs_more.go add remote, compare and worktree dialogs; vcsoperations.* exercises the real backend, including remote add/edit/remove and worktree create/move/remove. internal/app/log.go now presents one Git window with Local Changes, Stash, Log, Console and Worktrees content tabs, covered by TestGitToolWindowUsesSingleBottomWindow, TestGitToolWindowTabsSelectTheirNativeContent and TestShowLogSelectsTheGitWindowLogTab. Repository tabs, repository-scoped content switching and state restoration are covered by TestVCSToolWindowRendersRepositoryTabsAndSwitchesThem, TestVCSToolWindowContentTabsAreRepositoryScoped and TestVCSRepositorySwitchRestoresBranchLogContentAndStagingState. Remaining limits are VCS operation output mirroring in Console, independent log tabs, complete compare-editor depth and the VCS interaction gaps tracked by partial child actions |
 | `gradle` | Gradle | right | `src/features/build-tools/index.ts` | integrated - internal/app/gradle.go and build_tool_ui.go provide the separate native Gradle window, project/task/run-configuration tree, per-build refresh and context actions; maven.go/build_sync and dependency_analyzer.go/gradle_dependencies are wired with cancellation; gradle_test.go and build_tools_parity_test.go cover rendering and RPC arguments. extendedToolchains.gradle completes real offline build_sync task imports through both a generated Gradle wrapper and an isolated Gradle 8.10.2 local installation. extendedToolchains.gradleTestResults, gradleTeamCity, gradleRerun and gradleDaemons additionally prove real JUnit results, failure locations, a --tests rerun and daemon cleanup |
 | `hierarchy` | Hierarchy | right | `src/features/code-insight/index.ts` | integrated - internal/app/hierarchy.go hierarchyRightView: right-anchored window with Call/Type direction tabs, lazy children per node and recursion leaves; lsp_call_hierarchy, lsp_type_hierarchy; e2e hierarchy.rows, hierarchy.visible, hierarchyError; internal/app/hierarchy_test.go; internal/app/workbench_render_test.go TestWorkbenchHierarchyRightWindowRenders |
 | `inspection` | Inspection Results | bottom | `src/features/analysis/index.ts` | integrated - internal/app/analysis.go registers the bottom Inspection Results window; internal/app/analysis_inspection.go implements the inspection/file/problem tree, live progress, filters, navigation and CSV export. TestAnalysisInspectionPointerFiltersNavigateAndCancelOffscreen covers pointer interaction, and the hidden analysis acceptance grouped real error and warning rows, navigated to a problem and canceled a live request |
 | `logcat` | Logcat | bottom | `src/features/logcat/index.ts` | integrated - internal/app/logcat.go and logcat_filter.go register the bottom Logcat tool window, Android device discovery, bounded streaming, pause/follow/clear, level and Android Studio query filters and native rows. TestLogcatDevicesStreamingFiltersPauseAndClear and TestLogcatToolWindowRendersNativeControlsAndRows cover the backend and offscreen surfaces |
 | `maven` | Maven | right | `src/features/build-tools/index.ts` | partial - internal/app/maven.go, build_tool_ui.go, dependency_analyzer.go, dependency_analyzer_view.go, maven_add_dependency.go and build_tool_actions.go; native Maven tree, lifecycle/plugin goals, profiles, build_model/build_sync refresh, dependency declaration/exclusion RPCs and version-guarded Add Dependency. Generate Maven Sources runs one named POM once or every non-aggregated project sequentially, refreshes Maven only after success and stops cleanly, covered by maven_generate_sources_test.go. maven_test.go and build_tools_parity_test.go cover the UI, and real headless SmokeMaven loaded 3 modules, 3 profiles, 20 plugins and a dependency tree; real Add/Exclude mutation acceptance remains |
-| `notifications` | Notifications | right | `src/workbench/activate.ts` | partial - internal/app/notifications.go balloons (3 newest, 10 s fade, sticky errors, hover pause, keyed replacement, actions) and notificationsView history with unread badge and Clear All; build results and failures notify; plugin notifications preserve their verbatim multiline body, grouping, actions and 20-second timeout; base.notify.* in the e2e; Settings › Appearance & Behavior › Notifications with the global balloon switch, per-group Balloon/Sticky/No popup and Log, and the balloon's Don't Show Again; sound remains pending |
+| `notifications` | Notifications | right | `src/workbench/activate.ts` | partial - internal/app/notifications.go balloons (3 newest, 10 s fade, sticky errors, hover pause, keyed replacement, actions) and notificationsView history with a visible title, Clear All and Hide header actions plus the unread badge; TestNotificationsWindowRendersOpenIDEAHeader covers the header; build results and failures notify; plugin notifications preserve their verbatim multiline body, grouping, actions and 20-second timeout; Settings › Appearance & Behavior › Notifications with the global balloon switch, per-group Balloon/Sticky/No popup and Log, and the balloon's Don't Show Again; sound and entrance motion remain pending |
 | `problems` | Problems | bottom | `src/features/code-insight/index.ts` | integrated - internal/app/problems.go problemsPanel; lsp.problems.errors, lsp.problems.rows, lsp.problems.visible; internal/app/problems_test.go |
 | `profiler` | Profiler | bottom | `src/features/profiler/index.ts` | integrated - internal/app/dockregistry.go registers the bottom Profiler tool window and profiler_view.go renders snapshot tabs, flame graph, call tree, methods, search and empty/error states; profiler.window passes after the real Node.js CPU profile |
 | `project` | Project | left | `src/features/project-tree/index.ts` | integrated - internal/workspace tree tests; base.tabs |
@@ -1437,7 +1437,7 @@ The plain text editor is the workbench default and is not registered through
 | `editor.vim` | Vim | Editor | `src/features/vim/index.ts` | integrated - internal/app/settings_window.go registers editor.vim and settings_vim.go renders the global Vim switch, rc path/state and reload, IdeaVim shortcut-conflict table with IDE/Vim handler selection and Reset to Defaults. TestVimSettingsPageRegistersAndDescribesRc, TestVimRcMappingsPreferencesAndSettingsPersistence and TestVimActionsToggleReloadAndOpenSettings cover staging, apply, persistence and the native page |
 | `general` | System Settings | Appearance & Behavior | `src/features/settings/pages/behavior.tsx` | integrated - settingsSystemBody stages Reopen projects, Open project in New/Current/Ask with native project-window routing, default directory, local data directory with optional migration and restart, idle/switch autosave, focus synchronization, local-history limits, Exit, Welcome-on-close/quit policy and close-tab persistence. internal/app/workspace_host.go sends the New choice to an independent native model and backend, while Current opens in the active window and Ask presents the three choices. local_data_dir.go stores a bootstrap path before mygo resolves user data and copies the old tree safely. TestLocalDataDirectoryBootstrapMigrationAndStaging, TestOpenProjectPolicyUsesThreeChoices, TestNewProjectPolicyCreatesANativeWindowAndCurrentPolicyDoesNot and the System Settings stage/render tests cover the runtime and persistence |
 | `general.dateFormats` | Date Formats |  | `src/features/settings/pages/behavior.tsx` | integrated - internal/app/settings_pages.go settingsDateFormatsBody mirrors behavior.tsx DateFormatRows: Override system date and time format, the date pattern, Use 24-hour time format, Use pretty formatting and a live preview over Preferences.DateFormat; internal/app/dateformat.go follows Intl.DateTimeFormat with MyGo's system region and CLDR formats, and shares the result with Git Log, Local History, Code Vision and Git blame; dateformat_test.go TestSystemDateFormatMatchesIntlRegionalPatterns and TestFormatAppTimestampPrettyAndClock plus settings_test.go TestSettingsDateFormatsStageApplyAndReset prove the page and persistence |
-| `general.httpProxy` | HTTP Proxy |  | `src/features/settings/pages/httpProxy.tsx` | partial - internal/app/settings_native_catalog.go renders global proxy mode, type, host, port, exclusions, authentication and login; TestNativeGlobalSettingsUseGlobalScopeAndPreserveLists proves global loading and changed-key saving. Check Connection remains unavailable because the pinned stdio server has no proxy_check_connection command |
+| `general.httpProxy` | HTTP Proxy |  | `src/features/settings/pages/httpProxy.tsx` | integrated - internal/app/settings_native_catalog.go and settings_http_proxy.go render global mode, type, host, port, defaults, exclusions, authentication and a hidden password, validate manual settings and run Check connection with the staged proxy. internal/app/update_network.go applies the same proxy, credentials and no-proxy rules to native update requests. TestHTTPProxySettingsRouteManualSOCKSAndNoProxy, TestHTTPProxyCheckConnectionUsesDraftAndReturnsStatus, TestHTTPProxyPageRendersPasswordAndCheckConnection and TestNativeGlobalSettingsUseGlobalScopeAndPreserveLists cover routing, validation, connection status, rendering and global persistence |
 | `general.language` | Language and Region |  | `src/features/settings/pages/behavior.tsx` | partial - internal/app/settings_native_catalog.go stores appearance.locale with the seven OpenIDEA choices in global scope; TestNativeGlobalSettingsUseGlobalScopeAndPreserveLists covers global loading and writes and TestNativeSettingsPagesRenderEveryDeclaredControl covers the page. Native menus and dialogs remain English until translations are supplied |
 | `general.updates` | Updates |  | `src/features/settings/pages/updates.tsx` | integrated - settingsUpdatesBody stages version, last checked, Check Now, automatic checks, What's New and Automatic/GitHub/CNB source. update.go resolves the selected feed for checks and installs; CNB reports its unconfigured feed instead of silently using another source. update_flow_test.go and TestSettingsUpdatesStageSourceAndPersist cover the runtime and staged persistence |
 | `keymap` | Keymap |  | `src/features/settings/pages/builtins.tsx` | integrated - internal/app/settings_pages.go settingsKeymapBody lists every registry action and its bindings; internal/app/settings_keymap.go adds the native Set Keyboard Shortcut recorder, normalized chord capture, conflict warnings, cancel and staged Save, while Remove restores defaults and Settings Apply persists overrides; action_test.go TestKeymapDefaultsAndOverrides and TestKeymapConflicts plus TestSettingsKeymapRecorderStagesAndPersistsABinding cover the flow |
@@ -1484,18 +1484,18 @@ settings.
 | Key | Edited on | Status |
 | --- | --- | --- |
 | `actionsOnSave` |  | missing |
-| `actionsOnSave.cleanup` |  | missing |
-| `actionsOnSave.optimizeImports` |  | missing |
+| `actionsOnSave.cleanup` |  | integrated - internal/app/save_actions_settings.go reads actionsOnSave.cleanup and runs the backend code-action cleanup step after optimize imports while Save Files is enabled; TestActionsOnSaveRunOptimizeImportsThenCleanup covers the ordered runtime path |
+| `actionsOnSave.optimizeImports` |  | integrated - internal/app/save_actions_settings.go reads actionsOnSave.optimizeImports and invokes source.organizeImports before cleanup; TestActionsOnSaveRunOptimizeImportsThenCleanup covers the real save sequence |
 | `agentSecurity` |  | missing |
 | `agentSecurity.allowedCommands` |  | missing |
 | `agentSecurity.blockedCommands` |  | missing |
 | `agents` |  | missing |
 | `agents.defaults` |  | missing |
 | `agents.expandToolOutput` | agents.chat | missing |
-| `agents.foldTurns` | agents.chat | missing |
+| `agents.foldTurns` | agents.chat | integrated - internal/app/agent_settings_backend.go loads and saves agents.foldTurns, while internal/app/agents_view.go renders folded conversation turns according to the persisted preference |
 | `agents.mcpServers` |  | missing |
 | `agents.newTaskApprovals` | agents.chat | missing |
-| `agents.sendWith` | agents.chat | missing |
+| `agents.sendWith` | agents.chat | integrated - internal/app/agent_settings_backend.go persists agents.sendWith and internal/app/agent_composer.go maps Enter and Shift+Enter to send or insert-a-newline according to that preference |
 | `agents.showContextUsage` | agents.chat | missing |
 | `agents.showCost` | agents.chat | missing |
 | `agents.showUsageLimits` | agents.chat | missing |
@@ -1623,7 +1623,7 @@ settings.
 | `editor.codeStyle.lineSeparator` |  | integrated - internal/app/settings_native_catalog.go registers the OpenIDEA page and controls through the native settings catalog. TestNativeSettingsPagesRenderEveryDeclaredControl renders every declared control, TestNativeSettingsPageIDsAreUnique verifies page registration, and TestEditorCodeStyleAndColorSchemePagesRoundTripOpenIDEAStructures proves the structured settings load and project write path. |
 | `editor.codeStyle.visualGuides` |  | integrated - internal/app/settings_native_catalog.go registers the OpenIDEA page and controls through the native settings catalog. TestNativeSettingsPagesRenderEveryDeclaredControl renders every declared control, TestNativeSettingsPageIDsAreUnique verifies page registration, and TestEditorCodeStyleAndColorSchemePagesRoundTripOpenIDEAStructures proves the structured settings load and project write path. Visual guides use structured JSON so the upstream number array round-trips without corruption. |
 | `editor.colorOverrides` |  | missing |
-| `editor.colorScheme` |  | partial - internal/app/settings_native_catalog.go registers the OpenIDEA page and controls through the native settings catalog. TestNativeSettingsPagesRenderEveryDeclaredControl renders every declared control, TestNativeSettingsPageIDsAreUnique verifies page registration, and TestEditorCodeStyleAndColorSchemePagesRoundTripOpenIDEAStructures proves the structured settings load and project write path. The scheme id, imported schemes and supported .icls attributes are saved globally and imported schemes appear in the native chooser. Attribute-level foreground token application remains limited by MyGo. |
+| `editor.colorScheme` |  | integrated - internal/app/settings_native_catalog.go registers the choice and import controls, and internal/app/editor_scheme.go writes editor.colorScheme globally and locally. internal/app/editor_scheme_theme.go applies built-in, custom and imported scheme colors to MyGo editor Theme token foregrounds, weights, italics, editor background, selection, caret and line numbers; TestEditorCodeStyleAndColorSchemePagesRoundTripOpenIDEAStructures and TestEditorColorSchemeAppliesNativeTokenTheme cover settings persistence and the native renderer consumer |
 | `editor.completion.autoInsertSingle` |  | missing |
 | `editor.completion.autoPopup` |  | missing |
 | `editor.completion.caseSensitivity` |  | missing |
@@ -2232,16 +2232,16 @@ Local-only commands and the per-command argument lists are in
 | `doc_snapshot` | doc | yes | yes | integrated - internal/openidea/docs.go invokes the OpenIDEA RPC through the native Go adapter |
 | `doc_sync_from_disk` | doc | yes |  | missing |
 | `doc_ui_mode` | doc | yes |  | missing |
-| `docker_compose_op` | docker | yes | yes | missing |
+| `docker_compose_op` | docker | yes | yes | partial - internal/openidea/parity_rpc.go exposes DockerComposeOp with endpoint, project, files, workingDir, operation, request and onOutput; TestDockerParityAdaptersSendOpenIDEAStreamArguments covers the request |
 | `docker_container_op` | docker | yes | yes | missing |
 | `docker_container_stats` | docker | yes | yes | missing |
 | `docker_container_top` | docker | yes | yes | missing |
-| `docker_events` | docker | yes | yes | missing |
+| `docker_events` | docker | yes | yes | partial - internal/openidea/parity_rpc.go exposes DockerEvents with OpenIDEA's endpoint, request and onEvent channel shape; TestDockerParityAdaptersSendOpenIDEAStreamArguments covers the exact payload. Native Services currently streams docker events through its existing invoke path |
 | `docker_image_history` | docker | yes | yes | missing |
 | `docker_inspect` | docker | yes | yes | missing |
-| `docker_logs` | docker | yes | yes | missing |
-| `docker_prune` | docker | yes | yes | missing |
-| `docker_pull` | docker | yes | yes | missing |
+| `docker_logs` | docker | yes | yes | partial - internal/openidea/parity_rpc.go exposes DockerLogs with tail, follow, timestamps, request and onLine; TestDockerParityAdaptersSendOpenIDEAStreamArguments covers the payload and native Services already owns the bounded log stream |
+| `docker_prune` | docker | yes | yes | partial - internal/openidea/parity_rpc.go exposes DockerPrune with endpoint, target, request and onOutput; TestDockerParityAdaptersSendOpenIDEAStreamArguments covers the request |
+| `docker_pull` | docker | yes | yes | partial - internal/openidea/parity_rpc.go exposes DockerPull with the endpoint, image reference, request and onOutput channel; TestDockerParityAdaptersSendOpenIDEAStreamArguments covers the payload |
 | `docker_registry_login` | docker | yes | yes | missing |
 | `docker_remove` | docker | yes | yes | missing |
 | `docker_run_env` | docker | yes | yes | missing |
@@ -2324,7 +2324,7 @@ Local-only commands and the per-command argument lists are in
 | `lsp_call_hierarchy` | lsp | yes | yes | integrated - internal/app/hierarchy.go invokes the OpenIDEA RPC through the native Go adapter |
 | `lsp_can_download_sources` | lsp | yes | yes | missing |
 | `lsp_code_action_query` | lsp | yes | yes | integrated - internal/app/intents.go, internal/app/source_actions.go invokes the OpenIDEA RPC through the native Go adapter |
-| `lsp_code_actions` | lsp | yes |  | missing |
+| `lsp_code_actions` | lsp | yes | yes | partial - internal/openidea/parity_rpc.go exposes LSPCodeActions with the document, range and only filters; TestDockerParityAdaptersSendOpenIDEAStreamArguments verifies action payload decoding |
 | `lsp_code_lens` | lsp | yes |  | missing |
 | `lsp_completion` | lsp | yes | yes | integrated - internal/app/lsp.go invokes the OpenIDEA RPC through the native Go adapter |
 | `lsp_document_highlights` | lsp | yes | yes | missing |
@@ -2450,7 +2450,7 @@ Local-only commands and the per-command argument lists are in
 | `plugin_status_items` | plugin | yes |  | missing |
 | `plugin_subscribe` | plugin | no |  | missing |
 | `plugin_terminal_session_close` | plugin | yes |  | missing |
-| `plugin_terminal_session_spawn` | plugin | yes |  | missing |
+| `plugin_terminal_session_spawn` | plugin | yes | yes | partial - internal/openidea/parity_rpc.go exposes PluginTerminalSessionSpawn with the backend terminal operation and output channel; TestDockerParityAdaptersSendOpenIDEAStreamArguments verifies the protocol payload |
 | `plugin_uninstall` | plugin | yes | yes | missing |
 | `plugin_unlink` | plugin | no |  | missing |
 | `plugin_unpack_package` | plugin | no |  | missing |
@@ -2503,7 +2503,7 @@ Local-only commands and the per-command argument lists are in
 | `remove_recent` | nav | yes | yes | integrated - internal/app/recent_navigation.go invokes the OpenIDEA RPC through the native Go adapter |
 | `remove_recent_project` | app | no |  | missing |
 | `replace_in_files` | search | yes | yes | integrated - internal/app/search.go invokes the OpenIDEA RPC through the native Go adapter |
-| `replace_preview` | search | yes |  | missing |
+| `replace_preview` | search | yes | yes | partial - internal/openidea/parity_rpc.go exposes ReplacePreview and decodes before, after and backend edit payloads; TestDockerParityAdaptersSendOpenIDEAStreamArguments covers the request and response |
 | `run_application_build` | run | yes | yes | missing |
 | `run_application_publish` | run | yes | yes | missing |
 | `run_apply_settings` | run | yes | yes | missing |
@@ -2644,7 +2644,7 @@ Local-only commands and the per-command argument lists are in
 | `vcs_open_external_log` | vcs | yes | yes | integrated - internal/app/agent_diff.go, internal/app/vcs_log_actions.go invokes the OpenIDEA RPC through the native Go adapter |
 | `vcs_operation` | vcs | yes | yes | integrated - internal/app/vcs_operations.go invokes the OpenIDEA RPC through the native Go adapter |
 | `vcs_patch_preview` | vcs | yes | yes | integrated - internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter |
-| `vcs_rebase` | vcs | yes |  | missing |
+| `vcs_rebase` | vcs | yes | yes | partial - internal/openidea/parity_rpc.go exposes VCSRebase with repository and target revision; TestDockerParityAdaptersSendOpenIDEAStreamArguments covers the request. Interactive rebase UI continues to use the pinned vcs_rebase_with command where available |
 | `vcs_rebase_with` | vcs | yes | yes | integrated - internal/app/vcs_operations.go, internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter |
 | `vcs_remote` | vcs | yes | yes | integrated - internal/app/vcs_operations.go invokes the OpenIDEA RPC through the native Go adapter |
 | `vcs_remotes` | vcs | yes | yes | integrated - internal/openidea/types.go, internal/app/vcs_remotes.go invokes the OpenIDEA RPC through the native Go adapter |
@@ -2719,7 +2719,7 @@ Local-only commands and the per-command argument lists are in
 | `wsl_distros` | wsl | no |  | missing |
 | `wsl_resolve` | wsl | no |  | missing |
 
-549 commands are served over stdio and 436 are called by GoIDEA today. A command
+549 commands are served over stdio and 440 are called by GoIDEA today. A command
 that is registered only in the desktop shell needs an `ops` module before stdio
 can serve it; a GoIDEA check counts only when the UI path works end to end.
 
@@ -2731,31 +2731,31 @@ can serve it; a GoIDEA check counts only when the UI path works end to end.
 | --- | --- | --- | --- |
 | IdeEvent | `McpRequest` | `mcpRequest` | integrated - internal/app/run.go decodes mcpRequest and posts it to internal/app/mcp_requests.go; TestMCPConfirmQueueAnswersAllowDenyAndExpiry, TestMCPOpenFileUsesZeroBasedCoordinatesAndReportsFailures and TestMCPAgentRunAnswersExactlyOnceAfterStart cover confirm, openFile and agentRun, and settings_start_http_server_and_stdio_bridge_and_stop_both emits the event from a real MCP client |
 | IdeEvent | `McpRequestClosed` | `mcpRequestClosed` | integrated - internal/app/run.go decodes mcpRequestClosed and internal/app/mcp_requests.go removes the matching queued or in-flight response without re-showing it. TestMCPClosedRequestDoesNotReturnAfterFailedAnswer covers the closed-event lifecycle; settings_start_http_server_and_stdio_bridge_and_stop_both verifies expiry before mcp_ui_ready on the real backend |
-| IdeEvent | `ProjectTrustChanged` | `projectTrustChanged` | missing |
-| IdeEvent | `FsChanged` | `fsChanged` | missing |
-| IdeEvent | `ExcludedDirsChanged` | `excludedDirsChanged` | missing |
+| IdeEvent | `ProjectTrustChanged` | `projectTrustChanged` | partial - internal/openidea/parity_events.go decodes projectTrustChanged into ProjectTrustChangedEvent and TestDecodeIDEEventPreservesOpenIDEAEvents covers the wire shape; runtime trust refresh remains to be connected |
+| IdeEvent | `FsChanged` | `fsChanged` | partial - internal/openidea/parity_events.go decodes fsChanged including ignoreRules and TestDecodeIDEEventPreservesOpenIDEAEvents covers the payload; native file watching already refreshes the project tree through its own path |
+| IdeEvent | `ExcludedDirsChanged` | `excludedDirsChanged` | partial - internal/openidea/parity_events.go decodes excludedDirsChanged into ExcludedDirsChangedEvent; TestDecodeIDEEventPreservesOpenIDEAEvents covers the wire shape |
 | IdeEvent | `DocPatched` | `docPatched` | missing |
 | IdeEvent | `DocDirty` | `docDirty` | missing |
 | IdeEvent | `WorkspaceEditApplied` | `workspaceEditApplied` | missing |
 | IdeEvent | `DocLanguage` | `docLanguage` | missing |
 | IdeEvent | `Diagnostics` | `diagnostics` | missing |
-| IdeEvent | `Task` | `task` | missing |
+| IdeEvent | `Task` | `task` | partial - internal/openidea/parity_events.go decodes task progress, cancellation and done fields; TestDecodeIDEEventPreservesOpenIDEAEvents covers the payload |
 | IdeEvent | `IndexState` | `indexState` | missing |
-| IdeEvent | `VcsChanged` | `vcsChanged` | missing |
+| IdeEvent | `VcsChanged` | `vcsChanged` | partial - internal/openidea/parity_events.go decodes vcsChanged into VCSChangedEvent; TestDecodeIDEEventPreservesOpenIDEAEvents covers the wire shape |
 | IdeEvent | `LanguageServer` | `languageServer` | missing |
 | IdeEvent | `LanguageServerWarning` | `languageServerWarning` | missing |
 | IdeEvent | `LanguageServerRemoved` | `languageServerRemoved` | missing |
-| IdeEvent | `LspRefresh` | `lspRefresh` | missing |
+| IdeEvent | `LspRefresh` | `lspRefresh` | partial - internal/openidea/parity_events.go decodes lspRefresh into LSPRefreshEvent; TestDecodeIDEEventPreservesOpenIDEAEvents covers the payload |
 | IdeEvent | `TerminalExited` | `terminalExited` | missing |
 | IdeEvent | `RunExited` | `runExited` | missing |
-| IdeEvent | `Debug` | `debug` | missing |
-| IdeEvent | `Notify` | `notify` | missing |
-| IdeEvent | `SettingsChanged` | `settingsChanged` | missing |
-| IdeEvent | `UpdateStatusChanged` | `updateStatusChanged` | missing |
-| IdeEvent | `UpdateAvailable` | `updateAvailable` | missing |
+| IdeEvent | `Debug` | `debug` | partial - internal/openidea/parity_events.go decodes debug session events while retaining the nested adapter payload; TestDecodeIDEEventPreservesOpenIDEAEvents covers the envelope and event JSON |
+| IdeEvent | `Notify` | `notify` | partial - internal/openidea/parity_events.go decodes notify level, title and body; TestDecodeIDEEventPreservesOpenIDEAEvents covers the payload |
+| IdeEvent | `SettingsChanged` | `settingsChanged` | partial - internal/openidea/parity_events.go decodes settingsChanged keys; TestDecodeIDEEventPreservesOpenIDEAEvents covers the wire shape |
+| IdeEvent | `UpdateStatusChanged` | `updateStatusChanged` | partial - internal/openidea/parity_events.go decodes updateStatusChanged and retains the status object; TestDecodeIDEEventPreservesOpenIDEAEvents covers the payload |
+| IdeEvent | `UpdateAvailable` | `updateAvailable` | partial - internal/openidea/parity_events.go decodes updateAvailable and retains the update object; TestDecodeIDEEventPreservesOpenIDEAEvents covers the payload |
 | IdeEvent | `ProjectRootsChanged` | `projectRootsChanged` | missing |
-| IdeEvent | `Askpass` | `askpass` | missing |
-| IdeEvent | `AskpassDone` | `askpassDone` | missing |
+| IdeEvent | `Askpass` | `askpass` | partial - internal/openidea/parity_events.go decodes askpass id, prompt, kind and remember; TestDecodeIDEEventPreservesOpenIDEAEvents covers the payload |
+| IdeEvent | `AskpassDone` | `askpassDone` | partial - internal/openidea/parity_events.go decodes askpassDone completion ids; TestDecodeIDEEventPreservesOpenIDEAEvents covers the payload |
 | IdeEvent | `NotebookKernel` | `notebookKernel` | missing |
 | McpUiRequest | `Confirm` | `confirm` | missing |
 | McpUiRequest | `OpenFile` | `openFile` | missing |
@@ -2777,23 +2777,23 @@ instead (RPC_PROTOCOL.md).
 | `build_sync` | `onProgress` | integrated - internal/app/maven.go invokes the OpenIDEA RPC through the native Go adapter |
 | `debug_heap_capture` | `onProgress` | integrated - internal/app/debug_heap.go invokes the OpenIDEA RPC through the native Go adapter; ordinary Debug launch enables -XX:+StartAttachListener and debug.heap.capture passes on a suspended JDK 17 JVM over a bounded progress channel |
 | `debug_heap_open` | `onProgress` | integrated - internal/app/debug_heap.go invokes the OpenIDEA RPC through the native Go adapter |
-| `docker_compose_op` | `onOutput` | missing |
-| `docker_events` | `onEvent` | missing |
-| `docker_logs` | `onLine` | missing |
-| `docker_prune` | `onOutput` | missing |
-| `docker_pull` | `onOutput` | missing |
+| `docker_compose_op` | `onOutput` | partial - internal/openidea/parity_rpc.go exposes DockerComposeOp with endpoint, project, files, workingDir, operation, request and onOutput; TestDockerParityAdaptersSendOpenIDEAStreamArguments covers the request |
+| `docker_events` | `onEvent` | partial - internal/openidea/parity_rpc.go exposes DockerEvents with OpenIDEA's endpoint, request and onEvent channel shape; TestDockerParityAdaptersSendOpenIDEAStreamArguments covers the exact payload. Native Services currently streams docker events through its existing invoke path |
+| `docker_logs` | `onLine` | partial - internal/openidea/parity_rpc.go exposes DockerLogs with tail, follow, timestamps, request and onLine; TestDockerParityAdaptersSendOpenIDEAStreamArguments covers the payload and native Services already owns the bounded log stream |
+| `docker_prune` | `onOutput` | partial - internal/openidea/parity_rpc.go exposes DockerPrune with endpoint, target, request and onOutput; TestDockerParityAdaptersSendOpenIDEAStreamArguments covers the request |
+| `docker_pull` | `onOutput` | partial - internal/openidea/parity_rpc.go exposes DockerPull with the endpoint, image reference, request and onOutput channel; TestDockerParityAdaptersSendOpenIDEAStreamArguments covers the payload |
 | `fs_compare_directories` | `onProgress` | integrated - internal/app/dircompare.go invokes the OpenIDEA RPC through the native Go adapter |
 | `inspect_code` | `onEvent` | integrated - internal/app/analysis_inspection.go subscribes to the request channel and calls inspect_code with request, scope and onEvent, decoding Started, File and Done events. TestAnalysisInspectionEventsFilteringAndCSV covers streaming, and the hidden analysis acceptance completed real file and project JDT inspections with cancellation |
 | `jdk_download` | `onEvent` | integrated - internal/openidea/tools.go, internal/app/jdk_download.go invokes the OpenIDEA RPC through the native Go adapter |
 | `lsp_code_action_query` | `only` | integrated - internal/app/intents.go, internal/app/source_actions.go invokes the OpenIDEA RPC through the native Go adapter |
-| `lsp_code_actions` | `only` | missing |
+| `lsp_code_actions` | `only` | partial - internal/openidea/parity_rpc.go exposes LSPCodeActions with the document, range and only filters; TestDockerParityAdaptersSendOpenIDEAStreamArguments verifies action payload decoding |
 | `lsp_goto_implementation` | `onPartial` | integrated - internal/app/navigation.go invokes the OpenIDEA RPC through the native Go adapter |
 | `lsp_references` | `onPartial` | integrated - internal/app/codevision.go, internal/app/usages.go invokes the OpenIDEA RPC through the native Go adapter |
 | `notebook_execute` | `onOutput` | integrated - internal/app/notebook.go starts cancellable notebook_execute runs and routes onOutput; TestNotebookExecuteInterruptAndStreamingOutput covers execution, streaming and interruption |
 | `plugin_service_log` | `on`, `onLine` | missing |
-| `plugin_terminal_session_spawn` | `onOutput` | missing |
+| `plugin_terminal_session_spawn` | `onOutput` | partial - internal/openidea/parity_rpc.go exposes PluginTerminalSessionSpawn with the backend terminal operation and output channel; TestDockerParityAdaptersSendOpenIDEAStreamArguments verifies the protocol payload |
 | `replace_in_files` | `onEvent` | integrated - internal/app/search.go invokes the OpenIDEA RPC through the native Go adapter |
-| `replace_preview` | `only` | missing |
+| `replace_preview` | `only` | partial - internal/openidea/parity_rpc.go exposes ReplacePreview and decodes before, after and backend edit payloads; TestDockerParityAdaptersSendOpenIDEAStreamArguments covers the request and response |
 | `run_start` | `onOutput` | integrated - internal/app/run.go invokes the OpenIDEA RPC through the native Go adapter |
 | `scaffold_create` | `onEvent` | integrated - internal/app/newproject_scaffold.go invokes the OpenIDEA RPC through the native Go adapter |
 | `sdk_project_libraries` | `onGroups` | integrated - internal/openidea/libraries.go calls sdk_project_libraries with request, cancel_request and onGroups streaming; internal/app/libraries_smoke.go and libraries.* run it against the pinned openidea-server with SDK groups and an expanded JDK source archive |
@@ -2806,7 +2806,7 @@ instead (RPC_PROTOCOL.md).
 | `tools_install` | `onEvent` | integrated - internal/openidea/tools.go invokes the OpenIDEA RPC through the native Go adapter |
 | `vcs_clone` | `onOutput` | integrated - internal/app/vcs_more.go invokes the OpenIDEA RPC through the native Go adapter |
 | `vcs_operation` | `onOutput` | integrated - internal/app/vcs_operations.go invokes the OpenIDEA RPC through the native Go adapter |
-| `vcs_rebase` | `onto` | missing |
+| `vcs_rebase` | `onto` | partial - internal/openidea/parity_rpc.go exposes VCSRebase with repository and target revision; TestDockerParityAdaptersSendOpenIDEAStreamArguments covers the request. Interactive rebase UI continues to use the pinned vcs_rebase_with command where available |
 | `vcs_remote` | `onOutput` | integrated - internal/app/vcs_operations.go invokes the OpenIDEA RPC through the native Go adapter |
 
 ## Backend feature modules (crates)

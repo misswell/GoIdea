@@ -462,7 +462,7 @@ func (m *Model) dbTableFormDialog(c *ui.Context, p *ui.Theme) {
 	}
 	form := m.db.tableForm
 	open := form.open
-	ui.Modal(c, &open, func() {
+	nativeModal(c, &open, func() {
 		ui.Column(c).Width(780).Height(640).Gap(10).Children(func() {
 			title := "Create Table"
 			if !form.creating {
@@ -821,7 +821,7 @@ func (m *Model) dbImportFormDialog(c *ui.Context, p *ui.Theme) {
 	}
 	form := m.db.importForm
 	open := form.open
-	ui.Modal(c, &open, func() {
+	nativeModal(c, &open, func() {
 		ui.Column(c).Width(760).Height(620).Gap(10).Children(func() {
 			ui.Text(c, fmt.Sprintf("Import Data into %s.%s", form.schema, form.table)).
 				FontSize(13).Bold().TextColor(p.Text).SingleLine()

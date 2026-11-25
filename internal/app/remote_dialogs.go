@@ -13,7 +13,7 @@ func (m *Model) remoteSecretDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := state.secretOpen
-	dialog := ui.Modal(c.Key("remote-secret-dialog"), &open, func() {
+	dialog := nativeModal(c.Key("remote-secret-dialog"), &open, func() {
 		ui.Column(c).Width(520).Padding(18).Gap(10).Children(func() {
 			ui.Text(c, state.secretTitle).FontSize(14).Bold().TextColor(p.Text).SingleLine()
 			ui.Text(c, "Connect to "+state.pendingSSH.Label()).FontSize(12).TextColor(p.TextMuted)
@@ -43,7 +43,7 @@ func (m *Model) remoteTrustDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := state.trustOpen
-	dialog := ui.Modal(c.Key("remote-trust-dialog"), &open, func() {
+	dialog := nativeModal(c.Key("remote-trust-dialog"), &open, func() {
 		ui.Column(c).Width(600).Padding(18).Gap(10).Children(func() {
 			ui.Text(c, "Unknown SSH Host Key").FontSize(14).Bold().TextColor(p.Text).SingleLine()
 			ui.Text(c, "Host: "+state.trustHost).FontSize(12).TextColor(p.TextMuted).SingleLine()
@@ -69,7 +69,7 @@ func (m *Model) remoteSSHSettingsDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := state.sshSettingsOpen
-	dialog := ui.Modal(c.Key("remote-ssh-settings-dialog"), &open, func() {
+	dialog := nativeModal(c.Key("remote-ssh-settings-dialog"), &open, func() {
 		ui.Column(c).Width(760).Height(540).Padding(18).Gap(10).Children(func() {
 			ui.Text(c, "SSH Configurations").FontSize(14).Bold().TextColor(p.Text).SingleLine()
 			ui.Text(c, "Connections are made from this machine. OpenSSH config can use ~/.ssh/config and its agent.").

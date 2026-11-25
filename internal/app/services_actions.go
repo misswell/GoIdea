@@ -335,7 +335,7 @@ func (m *Model) serviceImportDialog(c *ui.Context, p *ui.Theme) {
 	if state == nil {
 		return
 	}
-	dlg := ui.Modal(c.Key("services:add-service"), &state.open, func() {
+	dlg := nativeModal(c.Key("services:add-service"), &state.open, func() {
 		ui.Column(c).Width(440).Gap(10).Children(func() {
 			ui.Text(c, "Add Service ("+adapter.KindLabel(state.kind)+")").
 				FontSize(14).Bold().TextColor(p.Text)

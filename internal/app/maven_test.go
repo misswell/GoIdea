@@ -2,6 +2,9 @@ package app
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -115,5 +118,85 @@ func TestMavenGoalConfigCarriesEveryRunConfigField(t *testing.T) {
 	}
 	if cfg, _ := m.mavenGoalRunConfig(p, []string{"validate"}); cfg.IsTest {
 		t.Fatal("validate is marked as a test")
+	}
+}
+
+func TestMavenSettingsDriveGoalCommandArgumentsAndEnvironment(t *testing.T) {
+	home := t.TempDir()
+	maven := filepath.Join(home, "bin", "mvn")
+	if err := os.MkdirAll(filepath.Dir(maven), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(maven, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	jre := filepath.Join(t.TempDir(), "jdk-21")
+	m := &Model{}
+	m.nativeSettings.pages = map[string]nativeSettingsPageState{
+		settingsPageMaven: {
+			loaded: true,
+			applied: map[string]any{
+				"languages.java.maven.home":            home,
+				"languages.java.maven.runnerJre":       jre,
+				"languages.java.maven.userSettings":    "~/.m2/settings.xml",
+				"languages.java.maven.toolchains":      "/tmp/toolchains.xml",
+				"languages.java.maven.localRepository": "/tmp/repository",
+				"languages.java.maven.activeProfiles":  "dev, !prod,dev",
+				"languages.java.maven.threads":         "2.5C",
+			},
+			draft: map[string]any{
+				"languages.java.maven.runnerJre": jre,
+			},
+		},
+	}
+	p := &mavenProject{DisplayName: "app", Pom: "pom.xml", Command: "./mvnw"}
+	cfg, _ := m.mavenGoalRunConfig(p, []string{"test"})
+	if cfg.Command != maven {
+		t.Fatalf("Maven command = %q, want %q", cfg.Command, maven)
+	}
+	want := []string{
+		"-s", expandMavenHome("~/.m2/settings.xml"),
+		"-t", "/tmp/toolchains.xml",
+		"-Dmaven.repo.local=/tmp/repository",
+		"-T", "2.5C",
+		"-P", "dev",
+		"test",
+	}
+	if !reflect.DeepEqual(cfg.Args, want) {
+		t.Fatalf("Maven args = %#v, want %#v", cfg.Args, want)
+	}
+	if cfg.Env["JAVA_HOME"] != jre {
+		t.Fatalf("JAVA_HOME = %q, want %q", cfg.Env["JAVA_HOME"], jre)
+	}
+}
+
+func TestMavenSettingsRejectInvalidThreadsAndExcludedProfile(t *testing.T) {
+	if got := normalizedMavenThreads("four"); got != "" {
+		t.Fatalf("invalid thread count = %q", got)
+	}
+	if got := mavenActiveProfiles("dev,!prod", []string{"prod", "qa"}); !reflect.DeepEqual(got, []string{"dev", "qa"}) {
+		t.Fatalf("Maven profiles = %#v, want dev and qa", got)
+	}
+}
+
+func TestMavenDaemonFallsBackForOldRunnerJRE(t *testing.T) {
+	jre := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(jre, "bin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	java := filepath.Join(jre, "bin", "java")
+	if err := os.WriteFile(java, []byte(
+		"#!/bin/sh\nprintf 'openjdk version \"11.0.2\" 2019-01-15\\n' >&2\n",
+	), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if !javaRuntimeAtLeast17(`openjdk version "17.0.10" 2024-01-16`) {
+		t.Fatal("Java 17 was not recognized")
+	}
+	if javaRuntimeAtLeast17(`openjdk version "11.0.2" 2019-01-15`) {
+		t.Fatal("Java 11 was accepted for Maven Daemon")
+	}
+	if mavenRunnerJreSupportsDaemon(jre) {
+		t.Fatal("the Java 11 runner was accepted for Maven Daemon")
 	}
 }

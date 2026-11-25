@@ -821,7 +821,7 @@ func (m *Model) remoteConnectDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := state.connectOpen
-	dialog := ui.Modal(c.Key("remote-connect-dialog"), &open, func() {
+	dialog := nativeModal(c.Key("remote-connect-dialog"), &open, func() {
 		ui.Column(c).Width(640).Padding(18).Gap(10).Children(func() {
 			ui.Text(c, "Remote Development").FontSize(14).Bold().TextColor(p.Text).SingleLine()
 			ui.Text(c, "The project runs on the remote host; the IDE backend is installed there on first use.").
@@ -951,7 +951,7 @@ func (m *Model) remoteDisconnectDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := state.disconnectOpen
-	dialog := ui.Modal(c.Key("remote-disconnect-dialog"), &open, func() {
+	dialog := nativeModal(c.Key("remote-disconnect-dialog"), &open, func() {
 		ui.Column(c).Width(600).Padding(18).Gap(10).Children(func() {
 			ui.Text(c, "Disconnect from Remote Host?").FontSize(14).Bold().TextColor(p.Text).SingleLine()
 			if state.session == nil {
@@ -984,7 +984,7 @@ func (m *Model) remoteNoticeDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := state.noticeOpen
-	dialog := ui.Modal(c.Key("remote-notice-dialog"), &open, func() {
+	dialog := nativeModal(c.Key("remote-notice-dialog"), &open, func() {
 		ui.Column(c).Width(580).Padding(18).Gap(10).Children(func() {
 			ui.Text(c, state.noticeTitle).FontSize(14).Bold().TextColor(p.Text).SingleLine()
 			ui.Text(c, state.noticeBody).FontSize(12).TextColor(p.TextMuted)

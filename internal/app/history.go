@@ -630,7 +630,7 @@ func (m *Model) historyDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := h.open
-	d := ui.Modal(c, &open, func() {
+	d := nativeModal(c, &open, func() {
 		ui.Column(c).Width(980).Gap(8).Children(func() {
 			title := "Local History · " + filepath.Base(h.path)
 			if h.loading {

@@ -38,11 +38,15 @@ type BuildPane struct {
 
 	output    []outputLine
 	truncated bool
+	// messages is OpenIDEA's compiler-message tree beside the console.
+	messages        []openidea.BuildMessage
+	selectedMessage int
 }
 
 // maxBuildLines bounds the console; Maven and Gradle can print more than
 // anyone reads, and an unbounded log would grow with the build.
 const maxBuildLines = 20000
+const maxBuildMessages = 4000
 
 // resetBuild drops the previous project's build state.
 func (m *Model) resetBuild() { m.build = BuildPane{} }
@@ -375,6 +379,8 @@ func (m *Model) startBuildOperation(kind string, file *string, cmake *string, ac
 	m.build.err = ""
 	m.build.output = nil
 	m.build.truncated = false
+	m.build.messages = nil
+	m.build.selectedMessage = 0
 	m.status = "Building…"
 	m.upsertTask(BackgroundTask{
 		ID: taskID, Title: kindLabel(kind), Message: "Saving files…",
@@ -432,6 +438,13 @@ func (m *Model) startBuildOperation(kind string, file *string, cmake *string, ac
 			m.build.warnings = result.Warnings
 			m.build.duration = result.DurationMS
 			m.build.files = buildMessageFiles(result.Messages)
+			m.build.messages = append([]openidea.BuildMessage(nil), result.Messages...)
+			if over := len(m.build.messages) - maxBuildMessages; over > 0 {
+				m.build.messages = append(m.build.messages[:0], m.build.messages[over:]...)
+			}
+			if len(m.build.messages) > 0 {
+				m.build.selectedMessage = 0
+			}
 			if result.Title != "" {
 				m.build.title = result.Title
 			}
@@ -584,6 +597,15 @@ func (m *Model) acceptBuildEvent(data json.RawMessage) {
 			m.build.errors++
 		case "warning":
 			m.build.warnings++
+		}
+		m.build.messages = append(m.build.messages, msg)
+		if over := len(m.build.messages) - maxBuildMessages; over > 0 {
+			m.build.messages = append(m.build.messages[:0], m.build.messages[over:]...)
+			if m.build.selectedMessage >= over {
+				m.build.selectedMessage -= over
+			} else {
+				m.build.selectedMessage = 0
+			}
 		}
 	case "progress":
 		var text string

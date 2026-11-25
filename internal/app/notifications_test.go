@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/egoist/mygo/ui"
 )
 
 func TestNotificationKeyReplacesAndErrorsStick(t *testing.T) {
@@ -170,6 +172,21 @@ func TestNotificationsWindowMarksRead(t *testing.T) {
 	m.CloseNotifications()
 	if m.notificationsShown() || !m.rightHidden {
 		t.Fatalf("closing left shown=%v hidden=%v", m.notificationsShown(), m.rightHidden)
+	}
+	m.ClearNotifications()
+}
+
+func TestNotificationsWindowRendersOpenIDEAHeader(t *testing.T) {
+	m := &Model{}
+	m.notifyInfo("header", "Build finished", "ready")
+	tester := ui.NewTester(func(c *ui.Context) {
+		m.notificationsView(c, c.Theme(), oiPaletteOf(c.Theme()))
+	}, 420, 480)
+	tester.Frame()
+	for _, text := range []string{"Notifications", "Build finished"} {
+		if !tester.HasText(text) {
+			t.Fatalf("%q is missing from the Notifications window: %q", text, tester.Texts())
+		}
 	}
 	m.ClearNotifications()
 }

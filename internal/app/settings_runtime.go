@@ -11,6 +11,7 @@ import (
 // Settings pages normally load lazily when opened. Runtime pages also need
 // their stored values at startup and after a project switch.
 func (m *Model) loadNativeRuntimeSettings(ctx context.Context) error {
+	setProxyRuntime(m)
 	if m.mgr == nil && m.invokeHook == nil {
 		return errors.New("the GoIDEA backend is not connected")
 	}
@@ -97,6 +98,12 @@ func (m *Model) loadNativeRuntimeSettings(ctx context.Context) error {
 // nativeRuntimeValue reads a loaded page value and otherwise uses the same
 // default the Settings page shows.
 func (m *Model) nativeRuntimeValue(page, key string) any {
+	m.nativeSettingsMu.Lock()
+	defer m.nativeSettingsMu.Unlock()
+	return m.nativeRuntimeValueLocked(page, key)
+}
+
+func (m *Model) nativeRuntimeValueLocked(page, key string) any {
 	if state, ok := m.nativeSettings.pages[page]; ok && state.loaded {
 		if value, exists := state.applied[key]; exists && value != nil {
 			return value
@@ -116,18 +123,81 @@ func (m *Model) nativeRuntimeValue(page, key string) any {
 	return nil
 }
 
+func (m *Model) proxySnapshot() nativeProxySettings {
+	m.nativeSettingsMu.Lock()
+	defer m.nativeSettingsMu.Unlock()
+	state := m.nativeSettings.pages[settingsPageHTTPProxy]
+	return proxySnapshotFromState(state)
+}
+
+func proxySnapshotFromState(state nativeSettingsPageState) nativeProxySettings {
+	port := nativeAppliedInt(state, "proxy.port", 0)
+	if port < 1 || port > 65535 {
+		if strings.EqualFold(
+			nativeAppliedString(state, "proxy.kind", ""),
+			"socks",
+		) {
+			port = 1080
+		} else {
+			port = 80
+		}
+	}
+	return nativeProxySettings{
+		mode:         nativeAppliedString(state, "proxy.mode", "auto"),
+		kind:         nativeAppliedString(state, "proxy.kind", "http"),
+		host:         nativeAppliedString(state, "proxy.host", ""),
+		port:         port,
+		noProxy:      nativeAppliedString(state, "proxy.noProxy", ""),
+		authenticate: nativeAppliedBool(state, "proxy.authenticate", false),
+		login:        nativeAppliedString(state, "proxy.login", ""),
+		password:     nativeAppliedString(state, "proxy.password", ""),
+	}
+}
+
+func nativeAppliedString(state nativeSettingsPageState, key, fallback string) string {
+	if value, ok := state.applied[key].(string); ok {
+		return value
+	}
+	return fallback
+}
+
+func (m *Model) proxyPageLoaded() bool {
+	m.nativeSettingsMu.Lock()
+	defer m.nativeSettingsMu.Unlock()
+	state, ok := m.nativeSettings.pages[settingsPageHTTPProxy]
+	return ok && state.loaded
+}
+
 func (m *Model) nativeRuntimeBool(page, key string) bool {
-	value, _ := m.nativeRuntimeValue(page, key).(bool)
+	m.nativeSettingsMu.Lock()
+	defer m.nativeSettingsMu.Unlock()
+	return m.nativeRuntimeBoolLocked(page, key)
+}
+
+func (m *Model) nativeRuntimeBoolLocked(page, key string) bool {
+	value, _ := m.nativeRuntimeValueLocked(page, key).(bool)
 	return value
 }
 
 func (m *Model) nativeRuntimeString(page, key string) string {
-	value, _ := m.nativeRuntimeValue(page, key).(string)
+	m.nativeSettingsMu.Lock()
+	defer m.nativeSettingsMu.Unlock()
+	return m.nativeRuntimeStringLocked(page, key)
+}
+
+func (m *Model) nativeRuntimeStringLocked(page, key string) string {
+	value, _ := m.nativeRuntimeValueLocked(page, key).(string)
 	return value
 }
 
 func (m *Model) nativeRuntimeNumber(page, key string) float64 {
-	switch value := m.nativeRuntimeValue(page, key).(type) {
+	m.nativeSettingsMu.Lock()
+	defer m.nativeSettingsMu.Unlock()
+	return m.nativeRuntimeNumberLocked(page, key)
+}
+
+func (m *Model) nativeRuntimeNumberLocked(page, key string) float64 {
+	switch value := m.nativeRuntimeValueLocked(page, key).(type) {
 	case float64:
 		return value
 	case int:
@@ -141,12 +211,16 @@ func (m *Model) nativeRuntimeNumber(page, key string) float64 {
 }
 
 func (m *Model) nativeRuntimeStringList(page, key string) []string {
-	return nativeSettingsStringList(m.nativeRuntimeValue(page, key))
+	m.nativeSettingsMu.Lock()
+	defer m.nativeSettingsMu.Unlock()
+	return nativeSettingsStringList(m.nativeRuntimeValueLocked(page, key))
 }
 
 func (m *Model) nativeRuntimeStringMap(page, key string) map[string]string {
+	m.nativeSettingsMu.Lock()
+	defer m.nativeSettingsMu.Unlock()
 	out := map[string]string{}
-	switch values := m.nativeRuntimeValue(page, key).(type) {
+	switch values := m.nativeRuntimeValueLocked(page, key).(type) {
 	case map[string]string:
 		for name, value := range values {
 			out[name] = value
@@ -161,9 +235,39 @@ func (m *Model) nativeRuntimeStringMap(page, key string) map[string]string {
 	return out
 }
 
+func (m *Model) setNativeSettingsValue(page, key string, value any) {
+	m.nativeSettingsMu.Lock()
+	state := m.nativeSettings.pages[page]
+	if state.draft == nil {
+		state.draft = map[string]any{}
+	}
+	state.draft[key] = value
+	m.nativeSettings.pages[page] = state
+	if key == "languages.python.interpreter" {
+		for _, other := range []string{settingsPagePythonDeps, settingsPagePythonInterpret} {
+			if other == page {
+				continue
+			}
+			otherState := m.nativeSettings.pages[other]
+			if !otherState.loaded {
+				continue
+			}
+			if otherState.draft == nil {
+				otherState.draft = map[string]any{}
+			}
+			otherState.draft[key] = value
+			m.nativeSettings.pages[other] = otherState
+		}
+	}
+	m.nativeSettingsMu.Unlock()
+	m.invalidate()
+}
+
 func nativeSettingsLanguageDisabled(m *Model, page, key, language string) bool {
+	m.nativeSettingsMu.Lock()
+	defer m.nativeSettingsMu.Unlock()
 	language = strings.ToLower(strings.TrimSpace(language))
-	for _, value := range m.nativeRuntimeStringList(page, key) {
+	for _, value := range nativeSettingsStringList(m.nativeRuntimeValueLocked(page, key)) {
 		if strings.EqualFold(strings.TrimSpace(value), language) {
 			return true
 		}

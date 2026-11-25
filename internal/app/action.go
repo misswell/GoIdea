@@ -172,7 +172,24 @@ func (r *actionRegistry) unregister(id string) bool {
 func actionGet(id string) (*Action, bool) {
 	id = canonicalActionID(id)
 	a, ok := actions.byID[id]
-	return a, ok
+	if ok {
+		return a, true
+	}
+	if a, ok := dynamicActionGet(id); ok {
+		return a, true
+	}
+	return editorSchemeActionGet(id)
+}
+
+func actionGetForModel(m *Model, id string) (*Action, bool) {
+	a, ok := actionGet(id)
+	if ok {
+		return a, true
+	}
+	if a, ok := dynamicActionGetForModel(m, id); ok {
+		return a, true
+	}
+	return editorSchemeActionGetForModel(m, id)
 }
 
 func canonicalActionID(id string) string {
@@ -203,7 +220,7 @@ func (m *Model) RunAction(id string) bool {
 // RunActionWithArg runs an action with the argument supplied by a menu,
 // plugin or automation. It is equivalent to OpenIDEA's executeAction(id, arg).
 func (m *Model) RunActionWithArg(id string, arg any) bool {
-	a, ok := actionGet(id)
+	a, ok := actionGetForModel(m, id)
 	if !ok || !a.usable(m) {
 		return false
 	}
@@ -221,13 +238,13 @@ func (m *Model) RunActionWithArg(id string, arg any) bool {
 // ActionEnabled reports whether an action can run now; a missing action is
 // not enabled.
 func (m *Model) ActionEnabled(id string) bool {
-	a, ok := actionGet(id)
+	a, ok := actionGetForModel(m, id)
 	return ok && a.usable(m)
 }
 
 // ActionToggled is the checkmark state a menu or toolbar shows for an action.
 func (m *Model) ActionToggled(id string) bool {
-	if a, ok := actionGet(id); ok && a.Toggled != nil {
+	if a, ok := actionGetForModel(m, id); ok && a.Toggled != nil {
 		return a.Toggled(m)
 	}
 	return false
@@ -235,7 +252,7 @@ func (m *Model) ActionToggled(id string) bool {
 
 // ActionRunning is the busy indicator some toolbar widgets show.
 func (m *Model) ActionRunning(id string) bool {
-	if a, ok := actionGet(id); ok && a.Running != nil {
+	if a, ok := actionGetForModel(m, id); ok && a.Running != nil {
 		return a.Running(m)
 	}
 	return false

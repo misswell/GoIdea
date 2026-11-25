@@ -57,7 +57,7 @@ func (m *Model) aboutDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := m.aboutOpen
-	dialog := ui.Modal(c, &open, func() { m.aboutSheet(c, p) })
+	dialog := nativeSurfaceModal(c, &open, func() { m.aboutSheet(c, p) })
 	if dialog.Dismissed() || !open {
 		m.closeAbout()
 	}
@@ -70,7 +70,8 @@ func (m *Model) aboutSheet(c *ui.Context, p *ui.Theme) {
 		version = "Development"
 	}
 	ui.Column(c).Width(520).Padding(22, 24, 18, 24).Gap(14).
-		Background(oi.elev).Border(1, oi.border).Radius(6).Children(func() {
+		Background(oi.elev).Border(1, oi.border).Radius(6).
+		Shadow(0, 10, 30, 0, ui.RGBA(0, 0, 0, 0.30)).Children(func() {
 		ui.Text(c, "About GoIDEA").FontSize(14).Bold().TextColor(oi.textStrong).SingleLine()
 		ui.Row(c).Gap(18).AlignItems(ui.Start).Children(func() {
 			if logo := welcomeLogoImage(); logo != nil {
@@ -145,7 +146,7 @@ func (m *Model) keymapReferenceDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := m.keymapReference.open
-	dialog := ui.Modal(c, &open, func() { m.keymapReferenceSheet(c, p) })
+	dialog := nativeSurfaceModal(c, &open, func() { m.keymapReferenceSheet(c, p) })
 	if dialog.Dismissed() || !open {
 		m.closeKeymapReference()
 	}
@@ -159,7 +160,8 @@ func (m *Model) keymapReferenceSheet(c *ui.Context, p *ui.Theme) {
 		count += len(group.entries)
 	}
 	ui.Column(c).Width(720).Height(560).Padding(16, 18, 14, 18).Gap(10).
-		Background(oi.elev).Border(1, oi.border).Radius(6).Children(func() {
+		Background(oi.elev).Border(1, oi.border).Radius(6).
+		Shadow(0, 10, 30, 0, ui.RGBA(0, 0, 0, 0.30)).Children(func() {
 		ui.Text(c, "Keyboard Reference").FontSize(14).Bold().TextColor(oi.textStrong).SingleLine()
 		ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
 			in := ui.TextInput(c, &m.keymapReference.query).Grow(1).

@@ -59,25 +59,25 @@ release can be called today.
 | hotkeys | `hotkeys` | 0 | 1 | 0 |
 | HTTP client | `http` | 10 | 1 | 9 |
 | Java | `java` | 3 | 0 | 3 |
-| Language services | `lsp` | 43 | 1 | 30 |
+| Language services | `lsp` | 43 | 1 | 31 |
 | MCP | `mcp` | 7 | 0 | 7 |
 | Navigation and index | `nav` | 16 | 0 | 7 |
 | Notebooks | `notebook` | 12 | 0 | 12 |
 | Performance | `perf` | 0 | 2 | 0 |
-| Plugins | `plugin` | 44 | 24 | 25 |
+| Plugins | `plugin` | 44 | 24 | 26 |
 | Profiler | `profiler` | 3 | 0 | 3 |
 | Refactoring | `refactor` | 5 | 0 | 4 |
 | Remote development | `remote_dev` | 0 | 11 | 0 |
 | Run configurations | `run` | 28 | 0 | 23 |
 | scaffold | `scaffold` | 4 | 0 | 3 |
 | SDKs | `sdk` | 13 | 0 | 13 |
-| Search | `search` | 4 | 0 | 3 |
+| Search | `search` | 4 | 0 | 4 |
 | Spelling | `spell` | 2 | 0 | 0 |
 | SSH | `ssh` | 7 | 3 | 3 |
 | Syntax trees | `syntax` | 9 | 0 | 3 |
 | Terminal | `term` | 8 | 0 | 6 |
 | Toolchains | `tools` | 8 | 0 | 8 |
-| Version control | `vcs` | 83 | 0 | 63 |
+| Version control | `vcs` | 83 | 0 | 64 |
 | Web preview | `web` | 1 | 2 | 1 |
 | Window and menu | `window` | 0 | 35 | 0 |
 | Window drag | `window_drag` | 0 | 1 | 0 |
@@ -88,7 +88,7 @@ release can be called today.
 ## Served by `openidea-server --stdio`
 
 549 commands. `GoIDEA` marks the ones a non-test Go source invokes today
-(436 of 549).
+(440 of 549).
 
 | Command | Domain | Arguments | GoIDEA |
 | --- | --- | --- | --- |
@@ -323,7 +323,7 @@ release can be called today.
 | `lsp_call_hierarchy` | Language services | `direction`, `doc`, `pos`, `request` | yes |
 | `lsp_can_download_sources` | Language services | `uri` | yes |
 | `lsp_code_action_query` | Language services | `doc`, `only`, `range`, `request` | yes |
-| `lsp_code_actions` | Language services | `doc`, `only`, `range` | — |
+| `lsp_code_actions` | Language services | `doc`, `only`, `range` | yes |
 | `lsp_code_lens` | Language services | `doc` | — |
 | `lsp_completion` | Language services | `doc`, `pos`, `request`, `trigger` | yes |
 | `lsp_document_highlights` | Language services | `doc`, `pos` | yes |
@@ -428,7 +428,7 @@ release can be called today.
 | `plugin_sync_languages` | ? | `languages` | — |
 | `plugin_sync_packages` | ? | `files`, `packages` | — |
 | `plugin_terminal_session_close` | Plugins | — | — |
-| `plugin_terminal_session_spawn` | Plugins | `cols`, `onOutput`, `operation`, `rows` | — |
+| `plugin_terminal_session_spawn` | Plugins | `cols`, `onOutput`, `operation`, `rows` | yes |
 | `plugin_uninstall` | Plugins | `id` | yes |
 | `plugin_view_event` | Plugins | `doc`, `editor`, `event`, `pluginId`, `view` | yes |
 | `plugin_view_render` | Plugins | `doc`, `editor`, `pluginId`, `view`, `viewport` | yes |
@@ -463,7 +463,7 @@ release can be called today.
 | `remote_rename` | Deployment | `connection`, `from`, `to` | — |
 | `remove_recent` | Navigation and index | `path` | yes |
 | `replace_in_files` | Search | `onEvent`, `preserveCase`, `query`, `replacement`, `request`, `targets` | yes |
-| `replace_preview` | Search | `only`, `path`, `preserveCase`, `query`, `replacement` | — |
+| `replace_preview` | Search | `only`, `path`, `preserveCase`, `query`, `replacement` | yes |
 | `run_application_build` | Run configurations | `config`, `module` | yes |
 | `run_application_publish` | Run configurations | `classPaths`, `config`, `mainClass` | yes |
 | `run_apply_settings` | Run configurations | `configs` | yes |
@@ -600,7 +600,7 @@ release can be called today.
 | `vcs_open_external_log` | Version control | `path` | yes |
 | `vcs_operation` | Version control | `onOutput`, `op`, `repo`, `request` | yes |
 | `vcs_patch_preview` | Version control | `patch`, `repo` | yes |
-| `vcs_rebase` | Version control | `onto`, `repo` | — |
+| `vcs_rebase` | Version control | `onto`, `repo` | yes |
 | `vcs_rebase_with` | Version control | `options`, `repo`, `upstream` | yes |
 | `vcs_remote` | Version control | `onOutput`, `op`, `repo`, `request` | yes |
 | `vcs_remotes` | Version control | `repo` | yes |
@@ -792,7 +792,7 @@ GoIDEA needs to do for each:
 
 ## What this means for GoIDEA
 
-549 remote commands are available today; GoIDEA uses 436. The parity work is
+549 remote commands are available today; GoIDEA uses 440. The parity work is
 first to cover the remote surface OpenIDEA's own frontend uses, then to move
 `shared-op`/`host`/`crate` commands onto stdio through the OpenIDEA fork
 (a submodule bump and a server release), and to implement `desktop` commands

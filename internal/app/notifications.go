@@ -467,7 +467,12 @@ func (m *Model) balloonView(c *ui.Context, p *ui.Theme, n ideNotification) {
 	r := ui.Row(c.Key(fmt.Sprintf("balloon:%d", n.id))).Height(height).
 		Padding(14, 34, 14, 14).Gap(10).AlignItems(ui.Start).
 		Radius(10).Background(oi.popup).BorderWidth(1).BorderColor(oi.popupBorder).
-		Shadow(0, 8, 24, 0, ui.RGBA(0, 0, 0, shade))
+		Shadow(0, 8, 24, 0, ui.RGBA(0, 0, 0, shade)).
+		Transition(ui.ElementTransition{
+			Duration: 150 * time.Millisecond,
+			Ease:     ui.EaseOut,
+			Enter:    &ui.Motion{X: 12},
+		})
 	if r.Hovered() != n.hover {
 		m.SetBalloonHover(n.id, r.Hovered())
 	}
@@ -547,6 +552,26 @@ func (m *Model) notificationTask(n ideNotification) (BackgroundTask, bool) {
 func (m *Model) notificationsView(c *ui.Context, p *ui.Theme, oi oiColors) {
 	ui.Column(c).Key("notifications:window").Grow(1).Children(func() {
 		logged := m.loggedNotifications()
+		ui.Row(c).Key("notifications:header").Height(oiHeaderHeight).Shrink(0).
+			Padding(0, 8, 0, 10).Gap(6).AlignItems(ui.Center).
+			BorderWidth(0, 0, 1, 0).BorderColor(oi.border).Children(func() {
+			ui.Text(c, "Notifications").FontSize(13).Bold().TextColor(oi.textStrong).
+				SingleLine().Grow(1)
+			clear := func() {
+				if len(logged) > 0 {
+					m.ClearNotifications()
+				}
+			}
+			if len(logged) == 0 {
+				m.headerIconDisabled(c, p, oi, "notifications-clear",
+					"Clear All", "general/delete", nil)
+			} else {
+				m.headerIcon(c, p, oi, "notifications-clear",
+					"Clear All", "general/delete", clear)
+			}
+			m.headerIcon(c, p, oi, "notifications-hide",
+				"Hide", "general/close", func() { m.DockHide("notifications") })
+		})
 		if len(logged) == 0 {
 			// OpenIDEA's empty text is centred grey lines without an
 			// illustration, even though the call site names the bell icon.

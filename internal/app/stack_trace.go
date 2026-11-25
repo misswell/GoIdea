@@ -253,7 +253,7 @@ func (m *Model) stackTraceDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := s.open
-	dlg := ui.Modal(c, &open, func() {
+	dlg := nativeModal(c, &open, func() {
 		ui.Column(c).Width(720).Gap(8).Children(func() {
 			ui.Text(c, "Analyze Stack Trace").FontSize(13).Bold().TextColor(p.Text)
 			ui.Text(c, "Put a stack trace or a complete thread dump here:").FontSize(12).TextColor(p.TextMuted)

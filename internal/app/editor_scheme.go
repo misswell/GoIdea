@@ -252,7 +252,9 @@ func (m *Model) applyEditorSchemeNativePages(pages map[string]nativeSettingsPage
 	next := cloneEditorSchemePrefs(m.prefs.EditorScheme)
 	changed := false
 	for page, state := range pages {
-		if page != settingsPageColorScheme && page != settingsPageColorSchemeLang {
+		if page != settingsPageColorScheme && page != settingsPageColorSchemeGen &&
+			page != settingsPageColorSchemeLang && page != settingsPageColorSchemeDebug &&
+			page != settingsPageColorSchemeCons {
 			continue
 		}
 		if state.draft == nil {
@@ -358,14 +360,21 @@ func sanitizeColorOverrides(values map[string]ColorAttributeSet) map[string]Colo
 
 func (m *Model) setEditorSchemePreferences(next EditorSchemePrefs) error {
 	m.prefs.EditorScheme = cloneEditorSchemePrefs(next)
+	rememberEditorColorSchemeRegistry(m.prefs.EditorScheme)
+	rememberEditorColorSchemeActions(m.prefs.EditorScheme)
 	m.syncNativeEditorSchemeState(m.prefs.EditorScheme)
+	m.applyEditorColorSchemeTheme()
 	m.refreshEditorSchemeBackgrounds()
 	m.invalidate()
 	return m.savePreferences()
 }
 
 func (m *Model) syncNativeEditorSchemeState(prefs EditorSchemePrefs) {
-	for _, page := range []string{settingsPageColorScheme, settingsPageColorSchemeLang} {
+	for _, page := range []string{
+		settingsPageColorScheme, settingsPageColorSchemeGen,
+		settingsPageColorSchemeLang, settingsPageColorSchemeDebug,
+		settingsPageColorSchemeCons,
+	} {
 		state := m.nativeSettings.pages[page]
 		if !state.loaded {
 			continue
@@ -376,13 +385,9 @@ func (m *Model) syncNativeEditorSchemeState(prefs EditorSchemePrefs) {
 		if state.draft == nil {
 			state.draft = map[string]any{}
 		}
-		switch page {
-		case settingsPageColorScheme:
-			state.applied[editorColorSchemeKey] = prefs.ColorScheme
-			state.draft[editorColorSchemeKey] = prefs.ColorScheme
-		case settingsPageColorSchemeLang:
-			state.applied[editorColorSchemeKey] = prefs.ColorScheme
-			state.draft[editorColorSchemeKey] = prefs.ColorScheme
+		state.applied[editorColorSchemeKey] = prefs.ColorScheme
+		state.draft[editorColorSchemeKey] = prefs.ColorScheme
+		if page == settingsPageColorSchemeLang {
 			state.applied[editorSemanticHighlightingKey] = prefs.SemanticHighlighting
 			state.draft[editorSemanticHighlightingKey] = prefs.SemanticHighlighting
 			state.applied[editorRainbowBracketsKey] = prefs.RainbowBrackets

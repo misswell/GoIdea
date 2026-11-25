@@ -415,7 +415,7 @@ func (m *Model) autoImportPasteDialog(c *ui.Context, theme *ui.Theme) {
 		return
 	}
 	open := p.open
-	d := ui.Modal(c, &open, func() {
+	d := nativeModal(c, &open, func() {
 		ui.Column(c).Width(460).Gap(8).Children(func() {
 			ui.Text(c, "Add Imports").FontSize(13).Bold().TextColor(theme.Text)
 			for i, a := range p.actions {

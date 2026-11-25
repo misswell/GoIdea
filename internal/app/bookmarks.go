@@ -925,7 +925,7 @@ func (m *Model) newListDialog(c *ui.Context, p *ui.Theme) {
 		title, hint, action = "Rename Bookmark List", "The list keeps its bookmarks.", "Rename"
 	}
 	open := v.open
-	d := ui.Modal(c, &open, func() {
+	d := nativeModal(c, &open, func() {
 		ui.Column(c).Width(420).Gap(8).Children(func() {
 			ui.Text(c, title).FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			in := ui.TextInput(c, &v.name).AutoFocus()
@@ -957,7 +957,7 @@ func (m *Model) moveBookmarkDialog(c *ui.Context, p *ui.Theme) {
 	}
 	open := v.open
 	src := m.moveSourceList(v)
-	d := ui.Modal(c, &open, func() {
+	d := nativeModal(c, &open, func() {
 		ui.Column(c).Width(360).Gap(6).Children(func() {
 			ui.Text(c, "Move to List").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			ui.Text(c, "Choose the bookmark's new list:").FontSize(12).TextColor(p.TextMuted).SingleLine()
@@ -986,7 +986,7 @@ func (m *Model) bookmarkDescriptionDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := v.open
-	d := ui.Modal(c, &open, func() {
+	d := nativeModal(c, &open, func() {
 		ui.Column(c).Width(420).Gap(8).Children(func() {
 			ui.Text(c, "Edit Bookmark Description").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			in := ui.TextInput(c, &v.text).AutoFocus()
@@ -1013,7 +1013,7 @@ func (m *Model) deleteListDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := v.open
-	d := ui.Modal(c, &open, func() {
+	d := nativeModal(c, &open, func() {
 		ui.Column(c).Width(420).Gap(10).Children(func() {
 			ui.Text(c, "Delete Bookmark List").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			ui.Text(c, fmt.Sprintf("Delete the list “%s”? Its %d bookmarks are deleted too.", v.name, v.count)).
@@ -1497,7 +1497,7 @@ func (m *Model) bookmarksDialog(c *ui.Context, p *ui.Theme) {
 	rows := m.bookmarkPopupRows()
 	items := bookmarkPopupItems(rows)
 	open := v.open
-	d := ui.Modal(c, &open, func() {
+	d := nativeModal(c, &open, func() {
 		ui.Column(c).Width(520).Gap(8).Children(func() {
 			ui.Text(c, "Bookmarks").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			if len(items) == 0 {
@@ -1596,7 +1596,7 @@ func (m *Model) mnemonicDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := v.open
-	d := ui.Modal(c, &open, func() {
+	d := nativeModal(c, &open, func() {
 		ui.Column(c).Width(440).Gap(8).Children(func() {
 			ui.Text(c, "Bookmark Mnemonics").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			t := m.tab()

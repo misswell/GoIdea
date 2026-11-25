@@ -590,7 +590,7 @@ func (m *Model) commitDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := true
-	d := ui.Modal(c, &open, func() {
+	d := nativeModal(c, &open, func() {
 		files := m.commitFiles(s)
 		ui.Column(c).Width(560).Gap(8).Children(func() {
 			ui.Text(c, "Commit Changes").FontSize(13).Bold().TextColor(p.Text)
@@ -642,6 +642,11 @@ func (m *Model) commitDialog(c *ui.Context, p *ui.Theme) {
 				m.commitOptions(c, s)
 			})
 			m.commitFooter(c, p, s, len(files) == 0)
+			setNativeModalDefault(func() {
+				if !s.busy && (len(files) > 0 || s.amend) {
+					m.submitCommit()
+				}
+			})
 		})
 	})
 	if d.Dismissed() || !open {

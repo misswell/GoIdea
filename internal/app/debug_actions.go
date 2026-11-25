@@ -270,7 +270,7 @@ func (m *Model) commitDebugEvaluate() {
 func (m *Model) debugEvaluateDialog(c *ui.Context, p *ui.Theme) {
 	v := &m.debug.evaluate
 	open := v.open
-	d := ui.Modal(c.Key("debug-evaluate"), &open, func() {
+	d := nativeModal(c.Key("debug-evaluate"), &open, func() {
 		ui.Column(c).Width(620).Gap(9).Children(func() {
 			ui.Text(c, "Evaluate").FontSize(13).Bold().TextColor(p.Text)
 			ui.Text(c, "Expression").FontSize(12).TextColor(p.TextMuted)
@@ -404,7 +404,7 @@ func (m *Model) commitDebugSetValue() {
 func (m *Model) debugSetValueDialog(c *ui.Context, p *ui.Theme) {
 	v := &m.debug.setValue
 	open := v.open
-	d := ui.Modal(c.Key("debug-set-value"), &open, func() {
+	d := nativeModal(c.Key("debug-set-value"), &open, func() {
 		ui.Column(c).Width(460).Gap(9).Children(func() {
 			ui.Text(c, "Set Value").FontSize(13).Bold().TextColor(p.Text)
 			ui.Text(c, v.variable.Name).FontSize(12).TextColor(p.TextMuted).SingleLine()
@@ -689,7 +689,7 @@ func (m *Model) debugStepInSession(
 func (m *Model) debugSmartStepDialog(c *ui.Context, p *ui.Theme) {
 	v := &m.debug.smartStep
 	open := v.open
-	d := ui.Modal(c.Key("debug-smart-step"), &open, func() {
+	d := nativeModal(c.Key("debug-smart-step"), &open, func() {
 		ui.Column(c).Width(420).Gap(7).Children(func() {
 			ui.Text(c, "Smart Step Into").FontSize(13).Bold().TextColor(p.Text)
 			if v.loading {
@@ -807,7 +807,7 @@ func (m *Model) DebugBrowseConsoleHistory() {
 func (m *Model) debugConsoleHistoryDialog(c *ui.Context, p *ui.Theme) {
 	v := &m.debug.console
 	open := v.historyOpen
-	d := ui.Modal(c.Key("debug-console-history"), &open, func() {
+	d := nativeModal(c.Key("debug-console-history"), &open, func() {
 		ui.Column(c).Width(520).Gap(6).Children(func() {
 			ui.Text(c, "Debug Console History").FontSize(13).Bold().TextColor(p.Text)
 			for i := len(v.history) - 1; i >= 0; i-- {
@@ -1196,7 +1196,7 @@ func (m *Model) saveDebugBreakpointEditor() {
 func (m *Model) debugBreakpointEditorDialog(c *ui.Context, p *ui.Theme) {
 	v := &m.debug.breakpointEdit
 	open := v.open
-	d := ui.Modal(c.Key("debug-breakpoint-editor"), &open, func() {
+	d := nativeModal(c.Key("debug-breakpoint-editor"), &open, func() {
 		ui.Column(c).Width(560).Gap(9).Children(func() {
 			title := "Breakpoint"
 			switch v.kind {
@@ -1291,7 +1291,7 @@ func debugDataBreakpointState(bp openidea.DataBreakpoint) string {
 
 func (m *Model) debugBreakpointsDialog(c *ui.Context, p *ui.Theme) {
 	open := m.debug.breakpointsOpen
-	d := ui.Modal(c.Key("debug-breakpoints"), &open, func() {
+	d := nativeModal(c.Key("debug-breakpoints"), &open, func() {
 		ui.Column(c).Width(620).Height(460).Gap(7).Children(func() {
 			ui.Text(c, "Breakpoints").FontSize(13).Bold().TextColor(p.Text)
 			ui.Scroll(c).Grow(1).Children(func() {

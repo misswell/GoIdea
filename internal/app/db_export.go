@@ -998,7 +998,7 @@ func (m *Model) dbExportDialog(c *ui.Context, p *ui.Theme) {
 	}
 	dialog := m.db.exportDialog
 	open := dialog.open
-	ui.Modal(c, &open, func() {
+	nativeModal(c, &open, func() {
 		ui.Column(c).Width(860).Height(620).Gap(12).Children(func() {
 			ui.Text(c, "Export Data").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			ui.Row(c).Grow(1).MinHeight(0).Gap(16).AlignItems(ui.Stretch).Children(func() {

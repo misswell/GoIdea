@@ -81,7 +81,7 @@ func (m *Model) addMavenDependencyDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := a.open
-	dialog := ui.Modal(c, &open, func() {
+	dialog := nativeModal(c, &open, func() {
 		ui.Column(c).Width(500).Gap(8).Children(func() {
 			ui.Text(c, "Add Maven Dependency").FontSize(14).Bold().TextColor(p.Text).SingleLine()
 			ui.Text(c, a.pom).FontSize(11).TextColor(p.TextMuted).SingleLine().Ellipsis("…")

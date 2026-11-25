@@ -11,8 +11,8 @@ func (m *Model) servicesHostTabs(c *ui.Context, p *ui.Theme) {
 	if m.services.view == "" {
 		m.services.view = serviceHostServices
 	}
-	ui.Row(c.Key("services:host-tabs")).Height(29).Shrink(0).Padding(0, 6).
-		Gap(2).AlignItems(ui.Stretch).
+	ui.Row(c.Key("services:host-tabs")).Height(30).Shrink(0).Padding(2, 6).
+		Gap(4).AlignItems(ui.Center).
 		BorderWidth(0, 0, 1, 0).BorderColor(oi.border).Children(func() {
 		ui.ScrollHorizontal(c).Grow(1).MinWidth(0).AlignItems(ui.Stretch).
 			Children(func() {
@@ -28,11 +28,10 @@ func (m *Model) servicesHostTabs(c *ui.Context, p *ui.Theme) {
 						id := serviceHostView(view.id)
 						active := m.services.view == id
 						button := ui.ButtonBase(c.Key("services:host-tab:"+view.id)).
-							Height(29).Padding(0, 10).Gap(6).Radius(0).
+							Height(24).Padding(0, 9).Gap(6).Radius(oiRadiusM).
 							AlignItems(ui.Center).Cursor(ui.CursorPointer)
 						if active {
 							button.Background(oi.selected)
-							button.BorderWidth(0, 0, 2, 0).BorderColor(p.Accent)
 						} else if button.Hovered() {
 							button.Background(oi.hoverTint)
 						}

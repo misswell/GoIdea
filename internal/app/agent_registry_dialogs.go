@@ -17,7 +17,7 @@ func (m *Model) agentRegistryInstallConfirmDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := true
-	dialog := ui.Modal(c.Key("agent-registry-install-confirm"), &open, func() {
+	dialog := nativeModal(c.Key("agent-registry-install-confirm"), &open, func() {
 		ui.Column(c).Width(500).Gap(9).Children(func() {
 			ui.Text(c, "Install "+agent.Name).FontSize(14).Bold().TextColor(p.Text)
 			ui.Text(c, agent.Name+" provides no checksum for its download, so the downloaded file cannot be verified. Install it anyway?").
@@ -55,7 +55,7 @@ func (m *Model) agentRegistryRemoveConfirmDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := st.RemoveOpen
-	dialog := ui.Modal(c.Key("agent-registry-remove-confirm"), &open, func() {
+	dialog := nativeModal(c.Key("agent-registry-remove-confirm"), &open, func() {
 		ui.Column(c).Width(500).Gap(9).Children(func() {
 			ui.Text(c, "Remove "+name).FontSize(14).Bold().TextColor(p.Text)
 			message := "Remove " + name + " and delete its agent file? Its tasks stay, but can't continue without it."
@@ -86,7 +86,7 @@ func (m *Model) agentCustomDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := st.CustomOpen
-	dialog := ui.Modal(c.Key("agent-custom-dialog"), &open, func() {
+	dialog := nativeModal(c.Key("agent-custom-dialog"), &open, func() {
 		ui.Column(c).Width(560).Gap(9).Children(func() {
 			ui.Text(c, "Add Custom Agent").FontSize(14).Bold().TextColor(p.Text)
 			if st.CustomErr != "" {

@@ -1001,7 +1001,7 @@ func (m *Model) diffDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := d.open
-	dlg := ui.Modal(c, &open, func() {
+	dlg := nativeModal(c, &open, func() {
 		ui.Column(c).Width(1080).Gap(8).Children(func() {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, diffTitle(d)).FontSize(13).Bold().TextColor(p.Text).SingleLine()

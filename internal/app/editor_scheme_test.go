@@ -17,10 +17,92 @@ import (
 	"mayoi/internal/position"
 )
 
+func TestEditorSchemeToggleActionsReachNativeConsumers(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "Main.java")
+	backend := &editorSchemeTestBackend{info: openidea.DocInfo{
+		ID: 11, Path: path, Text: "call([{ }]) \"([{\"; // ([{\n",
+		Version: 1, Language: "java",
+	}}
+	doc, err := docbridge.Open(context.Background(), backend, Window, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tab := &Tab{doc: doc, state: &editor.State{Buffer: doc.Buffer()}}
+	m := &Model{
+		cfg:      Config{SettingsPath: filepath.Join(t.TempDir(), "settings.json")},
+		ctx:      context.Background(),
+		postHook: func(fn func()) { fn() },
+		tabs:     []*Tab{tab},
+		active:   0,
+		theme:    openideaTheme(true),
+	}
+	m.invokeHook = func(_ context.Context, command string, args any) (json.RawMessage, error) {
+		switch command {
+		case "settings_set":
+			return json.RawMessage(`{}`), nil
+		case "lsp_semantic_tokens":
+			return json.RawMessage(`{
+						"data":[0,0,4,0,1],
+				"tokenTypes":["variable"],
+				"tokenModifiers":["local"]
+			}`), nil
+		default:
+			t.Fatalf("command = %q", command)
+			return nil, nil
+		}
+	}
+	m.rememberEditorSchemeTestModel()
+	if !m.RunAction("editor.toggleRainbowBrackets") {
+		t.Fatal("rainbow brackets action did not run")
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for !m.ActionToggled("editor.toggleRainbowBrackets") && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if !m.ActionToggled("editor.toggleRainbowBrackets") {
+		t.Fatal("rainbow brackets setting did not commit")
+	}
+	if got := m.rainbowBracketBackgrounds(tab); len(got) != 6 {
+		t.Fatalf("rainbow action produced %d native ranges", len(got))
+	}
+	if !m.RunAction("editor.toggleSemanticHighlighting") {
+		t.Fatal("semantic highlighting action did not run")
+	}
+	deadline = time.Now().Add(2 * time.Second)
+	for !m.ActionToggled("editor.toggleSemanticHighlighting") && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if !m.ActionToggled("editor.toggleSemanticHighlighting") {
+		t.Fatal("semantic highlighting setting did not commit")
+	}
+	deadline = time.Now().Add(2 * time.Second)
+	for len(tab.semanticRanges) == 0 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if len(tab.semanticRanges) != 1 {
+		t.Fatalf("semantic action produced %d native token spans", len(tab.semanticRanges))
+	}
+	off := false
+	setting := backendEditorSchemeSettings{}
+	setting.Editor.SemanticHighlighting = &off
+	setting.Editor.RainbowBrackets = &off
+	m.mergeBackendEditorSchemeSettings(setting)
+	if got := m.composeTextBackgrounds(tab, nil); len(got) != 0 {
+		t.Fatalf("backend off sync retained native highlights: %+v", got)
+	}
+}
+
+func (m *Model) rememberEditorSchemeTestModel() {
+	rememberEditorColorSchemeRegistry(m.prefs.EditorScheme)
+	rememberEditorColorSchemeActions(m.prefs.EditorScheme)
+}
+
 func TestEditorSchemeActionsAreRegisteredAndToggled(t *testing.T) {
 	for _, id := range []string{
 		"editor.toggleSemanticHighlighting",
 		"editor.toggleRainbowBrackets",
+		"editor.colorScheme.dark",
+		"editor.colorScheme.solarized-light",
 		"editor.colorScheme.import",
 		"editor.colorScheme.export",
 		"editor.colorScheme.delete",
@@ -29,7 +111,12 @@ func TestEditorSchemeActionsAreRegisteredAndToggled(t *testing.T) {
 		if !ok {
 			t.Fatalf("action %q is not registered", id)
 		}
-		if action.Run == nil || (strings.HasPrefix(id, "editor.colorScheme.") && action.RunWithArg == nil) {
+		if (action.Run == nil && action.RunWithArg == nil) ||
+			(strings.HasPrefix(id, "editor.colorScheme.") &&
+				!strings.HasSuffix(id, ".import") &&
+				!strings.HasSuffix(id, ".export") &&
+				!strings.HasSuffix(id, ".delete") &&
+				action.RunWithArg == nil) {
 			t.Fatalf("action %q has no runnable path", id)
 		}
 	}
@@ -46,6 +133,136 @@ func TestEditorSchemeActionsAreRegisteredAndToggled(t *testing.T) {
 	if m.ActionToggled("editor.toggleSemanticHighlighting") ||
 		m.ActionToggled("editor.toggleRainbowBrackets") {
 		t.Fatal("scheme action toggled state did not clear")
+	}
+}
+
+func TestDynamicColorSchemeActionUsesTheSchemeID(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	m := &Model{cfg: Config{SettingsPath: path}}
+	if !m.RunActionWithArg("editor.colorScheme.dark", nil) {
+		t.Fatal("dynamic dark scheme action did not run")
+	}
+	if m.prefs.EditorScheme.ColorScheme != "dark" {
+		t.Fatalf("selected color scheme = %q, want dark", m.prefs.EditorScheme.ColorScheme)
+	}
+	if !m.ActionEnabled("editor.colorScheme.dark") {
+		t.Fatal("known color scheme action is not enabled")
+	}
+	if m.ActionEnabled("editor.colorScheme.missing") {
+		t.Fatal("unknown color scheme action is enabled")
+	}
+}
+
+func TestEditorColorSchemeDynamicActionsResolveIDsNamesAndArguments(t *testing.T) {
+	settingsPath := filepath.Join(t.TempDir(), "settings.json")
+	m := &Model{
+		cfg:      Config{SettingsPath: settingsPath},
+		ctx:      context.Background(),
+		postHook: func(fn func()) { fn() },
+		prefs: Preferences{EditorScheme: EditorSchemePrefs{
+			ColorScheme: "dark",
+			CustomSchemes: map[string]CustomColorScheme{
+				"custom-harbor": {Name: "Harbor & Moss", Parent: "dark"},
+			},
+		}},
+	}
+	m.rememberEditorSchemeTestModel()
+	if !m.ActionEnabled("editor.colorScheme.custom-harbor") {
+		t.Fatal("custom scheme action did not resolve for the model")
+	}
+	for _, test := range []struct {
+		id   string
+		want string
+	}{
+		{"editor.colorScheme.dark", "dark"},
+		{"editor.colorScheme.Islands Dark", "dark"},
+		{"editor.colorScheme.solarized-light", "solarized-light"},
+		{"editor.colorScheme.custom-harbor", "custom-harbor"},
+		{"editor.colorScheme.Harbor & Moss", "custom-harbor"},
+	} {
+		action, ok := actionGet(test.id)
+		if !ok {
+			t.Fatalf("%q did not resolve", test.id)
+		}
+		if action.RunWithArg == nil || action.Title != "Color Scheme: "+
+			editorColorSchemeActionLabel(m.prefs.EditorScheme, test.want) {
+			t.Fatalf("%q resolved to %+v", test.id, action)
+		}
+	}
+	if _, ok := actionGet("editor.colorScheme.import"); !ok {
+		t.Fatal("the concrete import action no longer resolves")
+	}
+	if _, ok := actionGet("editor.colorScheme.missing"); ok {
+		t.Fatal("an unknown scheme resolved")
+	}
+
+	if !m.ActionToggled("editor.colorScheme.dark") ||
+		m.ActionToggled("editor.colorScheme.Islands Light") {
+		t.Fatal("dynamic action toggled state does not follow the selected scheme")
+	}
+	if !m.RunActionWithArg("editor.colorScheme.Islands Light", nil) {
+		t.Fatal("a scheme name did not run its dynamic action")
+	}
+	if m.prefs.EditorScheme.ColorScheme != "light" || !m.ActionToggled("editor.colorScheme.light") {
+		t.Fatalf("scheme name action selected %q", m.prefs.EditorScheme.ColorScheme)
+	}
+	if !m.RunActionWithArg("editor.colorScheme.dark", "Harbor & Moss") {
+		t.Fatal("a scheme argument did not run")
+	}
+	if m.prefs.EditorScheme.ColorScheme != "custom-harbor" {
+		t.Fatalf("scheme argument selected %q", m.prefs.EditorScheme.ColorScheme)
+	}
+	if got := LoadPreferences(settingsPath).EditorScheme.ColorScheme; got != "custom-harbor" {
+		t.Fatalf("stored scheme = %q", got)
+	}
+}
+
+func TestEditorColorSchemeAppliesNativeTokenTheme(t *testing.T) {
+	m := &Model{
+		cfg: Config{SettingsPath: filepath.Join(t.TempDir(), "settings.json")},
+		prefs: Preferences{EditorScheme: EditorSchemePrefs{
+			ColorScheme: "custom-harbor",
+			CustomSchemes: map[string]CustomColorScheme{
+				"custom-harbor": {
+					Name: "Harbor", Parent: "dark",
+					Attributes: map[string]ColorAttributes{
+						"keyword": {
+							Foreground: "#112233",
+							Bold:       boolPointer(true),
+							Italic:     boolPointer(false),
+						},
+					},
+				},
+			},
+			ColorOverrides: map[string]ColorAttributeSet{
+				"custom-harbor": {
+					"string": {Foreground: "#445566", Italic: boolPointer(true)},
+				},
+			},
+		}},
+	}
+	theme := m.editorColorSchemeTheme()
+	if theme == nil {
+		t.Fatal("custom color scheme produced no native editor theme")
+	}
+	if theme.Background != ui.Hex("#191a1c") ||
+		theme.Tokens[editor.TokenKeyword].Color != ui.Hex("#112233") ||
+		!theme.Tokens[editor.TokenKeyword].Bold ||
+		theme.Tokens[editor.TokenKeyword].Italic ||
+		theme.Tokens[editor.TokenString].Color != ui.Hex("#445566") ||
+		!theme.Tokens[editor.TokenString].Italic {
+		t.Fatalf("native scheme theme = background %v, keyword %+v, string %+v",
+			theme.Background, theme.Tokens[editor.TokenKeyword], theme.Tokens[editor.TokenString])
+	}
+	m.prefs.EditorScheme.ColorScheme = "solarized-light"
+	theme = m.editorColorSchemeTheme()
+	if theme == nil || theme.Background != ui.Hex("#fdf6e3") ||
+		theme.Tokens[editor.TokenKeyword].Color != ui.Hex("#859900") {
+		t.Fatalf("Solarized Light theme = %+v", theme)
+	}
+	m.prefs.EditorScheme.ColorScheme = themeDefaultColorScheme
+	if theme := m.editorColorSchemeTheme(); theme != nil {
+		t.Fatalf("theme-default should use the native default theme, got %+v", theme)
 	}
 }
 

@@ -99,7 +99,7 @@ func (m *Model) gotoLineDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := v.open
-	d := ui.Modal(c, &open, func() {
+	d := nativeModal(c, &open, func() {
 		ui.Column(c).Width(340).Gap(8).Children(func() {
 			ui.Text(c, "Go to Line:Column").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			in := ui.TextInput(c, &v.query).Bind(&v.input).Font(oiFontMono).Placeholder("line[:column]")

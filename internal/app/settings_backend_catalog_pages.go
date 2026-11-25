@@ -1247,7 +1247,7 @@ func (m *Model) settingsInspectionProfileDialog(c *ui.Context, p *ui.Theme) {
 	} else if prompt.Mode == "delete" {
 		title, action = "Delete Profile", "Delete"
 	}
-	dlg := ui.Modal(c.Key("settings:inspection-profile:"+prompt.Mode), &open, func() {
+	dlg := nativeModal(c.Key("settings:inspection-profile:"+prompt.Mode), &open, func() {
 		ui.Column(c).Width(420).Padding(18).Gap(10).
 			Background(oi.elev).Border(1, oi.border).Radius(6).
 			Children(func() {

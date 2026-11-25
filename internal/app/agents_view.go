@@ -1532,7 +1532,7 @@ func (m *Model) agentsNewTaskDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := a.newOpen
-	dialog := ui.Modal(c.Key("agents-new-dialog"), &open, func() {
+	dialog := nativeModal(c.Key("agents-new-dialog"), &open, func() {
 		ui.Column(c).Width(560).Gap(10).Children(func() {
 			ui.Text(c, "New Agent Task").FontSize(15).Bold().TextColor(p.Text)
 			ui.Text(c, "Provider").FontSize(12).TextColor(p.TextMuted)
@@ -1700,7 +1700,7 @@ func (m *Model) agentsExternalSessionsDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := a.externalOpen
-	dialog := ui.Modal(c.Key("agents-external-dialog"), &open, func() {
+	dialog := nativeModal(c.Key("agents-external-dialog"), &open, func() {
 		ui.Column(c).Width(660).Height(480).Gap(8).Children(func() {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Column(c).Grow(1).MinWidth(0).Children(func() {
@@ -1783,7 +1783,7 @@ func (m *Model) agentsRenameDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := a.renameOpen
-	dialog := ui.Modal(c.Key("agents-rename-dialog"), &open, func() {
+	dialog := nativeModal(c.Key("agents-rename-dialog"), &open, func() {
 		ui.Column(c).Width(420).Gap(9).Children(func() {
 			ui.Text(c, "Rename Agent Task").FontSize(14).Bold().TextColor(p.Text)
 			in := ui.TextInput(c.Key("agents-rename-title"), &a.renameTitle).AutoFocus()
@@ -1814,7 +1814,7 @@ func (m *Model) agentsGroupDialog(c *ui.Context, p *ui.Theme) {
 	if a.groupMode == "rename" {
 		title, action = "Rename Group", "Rename"
 	}
-	dialog := ui.Modal(c.Key("agents-group-dialog"), &open, func() {
+	dialog := nativeModal(c.Key("agents-group-dialog"), &open, func() {
 		ui.Column(c).Width(420).Gap(9).Children(func() {
 			ui.Text(c, title).FontSize(14).Bold().TextColor(p.Text)
 			ui.Text(c, "Group name:").FontSize(12).TextColor(p.TextMuted)
@@ -1859,7 +1859,7 @@ func (m *Model) agentsRemoveGroupDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := a.removeGroupOpen
-	dialog := ui.Modal(c.Key("agents-remove-group-dialog"), &open, func() {
+	dialog := nativeModal(c.Key("agents-remove-group-dialog"), &open, func() {
 		ui.Column(c).Width(460).Gap(9).Children(func() {
 			ui.Text(c, "Remove Group").FontSize(14).Bold().TextColor(p.Text)
 			ui.Text(c, fmt.Sprintf("Remove “%s”? Its tasks move back to their status groups.",
@@ -1890,7 +1890,7 @@ func (m *Model) agentsDeleteDialog(c *ui.Context, p *ui.Theme) {
 	}
 	multiple := len(taskIDs) > 1
 	open := a.deleteOpen
-	dialog := ui.Modal(c.Key("agents-delete-dialog"), &open, func() {
+	dialog := nativeModal(c.Key("agents-delete-dialog"), &open, func() {
 		ui.Column(c).Width(460).Gap(9).Children(func() {
 			title := "Delete Agent Task?"
 			if multiple {
@@ -1950,7 +1950,7 @@ func (m *Model) agentsChangesDialog(c *ui.Context, p *ui.Theme) {
 		a.changesFold = make(map[string]bool)
 	}
 	open := a.changesOpen
-	dialog := ui.Modal(c.Key("agents-changes-dialog"), &open, func() {
+	dialog := nativeModal(c.Key("agents-changes-dialog"), &open, func() {
 		ui.Column(c).Width(760).Height(520).Gap(8).Children(func() {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Column(c).Grow(1).MinWidth(0).Children(func() {

@@ -353,7 +353,7 @@ func (m *Model) searchRows(c *ui.Context, p *ui.Theme) {
 				col = int(mm.Ranges[0][0])
 			}
 			if r.Clicked() {
-				s.selectedFile, s.selectedMatch = fi, mi
+				m.selectSearchHit(fi, mi)
 				m.previewAt(f.Path, int(mm.Line), col)
 			}
 			if r.DoubleClicked() {
@@ -791,9 +791,13 @@ func (m *Model) runPanel(c *ui.Context, p *ui.Theme) {
 	if !m.run.visible {
 		return
 	}
-	col := ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Background(m.toolWindowBackground(p)).
-		BorderWidth(1, 0, 0, 0).BorderColor(p.Border)
+	oi := oiPaletteOf(p)
+	col := ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).
+		Background(m.toolWindowBackground(p)).Radius(oiIslandRadius).Clip()
 	col.Children(func() {
+		m.toolWindowHeader(c, p, oi, "run", func() {
+			m.runSessionTabs(c, p)
+		})
 		if m.run.viewChild != nil {
 			m.runViewedServicePanel(c, p)
 			return
@@ -802,7 +806,6 @@ func (m *Model) runPanel(c *ui.Context, p *ui.Theme) {
 			m.runEmptyState(c, p)
 			return
 		}
-		m.runSessionTabs(c, p)
 		if m.renderStackTraces(c, p) {
 			return
 		}
@@ -824,27 +827,110 @@ func (m *Model) buildPanel(c *ui.Context, p *ui.Theme) {
 				ui.Text(c, b.err).FontSize(12).TextColor(p.Warning).SingleLine().Ellipsis("…")
 			})
 		}
-		ui.Scroll(c).Grow(1).Children(func() {
-			ui.Column(c).Padding(8, 10).Children(func() {
-				if !m.run.trusted {
-					ui.Text(c, "This project is not trusted: building is disabled.").
-						FontSize(12).TextColor(p.TextMuted)
-					ui.Row(c).Padding(6, 0).Children(func() {
-						ui.Button(c, "Trust Project").OnClick(func() { m.TrustProject() })
-					})
-					return
-				}
-				if len(b.output) == 0 {
-					ui.Text(c, "No output yet. Press Build Project to start.").
-						FontSize(12).TextColor(p.TextMuted)
-					return
-				}
-				if b.truncated {
-					ui.Text(c, "(Output truncated: earlier lines were omitted)").
-						FontSize(12).TextColor(p.TextMuted)
-				}
-				m.renderRunOutput(c, p, b.output)
+		if len(b.messages) == 0 {
+			m.buildConsole(c, p)
+			return
+		}
+		ui.Row(c).Grow(1).MinWidth(0).MinHeight(0).Children(func() {
+			ui.Column(c).Grow(2).MinWidth(220).MinHeight(0).
+				BorderWidth(0, 1, 0, 0).BorderColor(p.Border).Children(func() {
+				m.buildMessageTree(c, p)
 			})
+			ui.Column(c).Grow(3).MinWidth(0).MinHeight(0).Children(func() {
+				m.buildConsole(c, p)
+			})
+		})
+	})
+}
+
+func (m *Model) buildConsole(c *ui.Context, p *ui.Theme) {
+	b := &m.build
+	ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
+		ui.Column(c).Padding(8, 10).Children(func() {
+			if !m.run.trusted {
+				ui.Text(c, "This project is not trusted: building is disabled.").
+					FontSize(12).TextColor(p.TextMuted)
+				ui.Row(c).Padding(6, 0).Children(func() {
+					ui.Button(c, "Trust Project").OnClick(func() { m.TrustProject() })
+				})
+				return
+			}
+			if len(b.output) == 0 {
+				ui.Text(c, "No output yet. Press Build Project to start.").
+					FontSize(12).TextColor(p.TextMuted)
+				return
+			}
+			if b.truncated {
+				ui.Text(c, "(Output truncated: earlier lines were omitted)").
+					FontSize(12).TextColor(p.TextMuted)
+			}
+			m.renderRunOutput(c, p, b.output)
+		})
+	})
+}
+
+func (m *Model) buildMessageTree(c *ui.Context, p *ui.Theme) {
+	oi := oiPaletteOf(p)
+	b := &m.build
+	ui.Row(c).Height(28).Shrink(0).Padding(0, 8).Gap(6).AlignItems(ui.Center).
+		BorderWidth(0, 0, 1, 0).BorderColor(oi.border).Children(func() {
+		ui.Text(c, "Compiler messages").FontSize(12).Bold().TextColor(oi.textStrong).
+			SingleLine().Grow(1)
+		ui.Text(c, fmt.Sprintf("%d", len(b.messages))).FontSize(11).
+			TextColor(oi.textMuted)
+	})
+	ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
+		ui.Column(c).Padding(4, 4).Gap(1).Children(func() {
+			path := ""
+			for i := range b.messages {
+				message := b.messages[i]
+				messagePath := ""
+				if message.Path != nil {
+					messagePath = *message.Path
+				}
+				if messagePath != "" && messagePath != path {
+					path = messagePath
+					ui.Text(c, filepath.Base(path)).FontSize(11).Bold().
+						TextColor(oi.textMuted).Padding(14, 5).SingleLine().Ellipsis("…")
+				}
+				row := ui.Row(c.Key(fmt.Sprintf("build:message:%d", i))).Height(26).
+					Padding(4, 6).Gap(6).Radius(oiRadiusS).AlignItems(ui.Center).
+					Cursor(ui.CursorPointer)
+				if i == b.selectedMessage {
+					row.Background(oi.selected)
+				} else if row.Hovered() {
+					row.Background(oi.hoverTint)
+				}
+				row.OnClick(func() {
+					b.selectedMessage = i
+					if message.Path != nil {
+						line, col := 1, 0
+						if message.Range != nil {
+							line = int(message.Range.Start.Line)
+							col = int(message.Range.Start.Col)
+						}
+						m.previewAt(*message.Path, line, col)
+					}
+					m.invalidate()
+				})
+				row.Children(func() {
+					icon := "status/info"
+					tone := oi.textMuted
+					switch strings.ToLower(message.Severity) {
+					case "error":
+						icon, tone = "status/error", oi.danger
+					case "warning":
+						icon, tone = "status/warning", oi.warning
+					}
+					oiIconEl(c, icon, 14, oi, tone)
+					ui.Text(c, message.Text).FontSize(12).TextColor(oi.text).
+						SingleLine().Ellipsis("…").Grow(1)
+					if message.Range != nil {
+						ui.Text(c, fmt.Sprintf("%d", message.Range.Start.Line+1)).
+							FontSize(10).TextColor(oi.textMuted)
+					}
+				})
+			}
 		})
 	})
 }
@@ -1368,7 +1454,8 @@ func (m *Model) bottomSlot(c *ui.Context, p *ui.Theme) {
 	if !m.maximized && m.bottomDrawHeight() == 0 {
 		return
 	}
-	row := ui.Row(c).Shrink(0).AlignItems(ui.Stretch)
+	row := ui.Row(c).Shrink(0).Padding(0, oiIslandGap).Gap(oiIslandGap).
+		AlignItems(ui.Stretch)
 	if m.maximized {
 		row.Grow(1)
 	} else {
@@ -1376,15 +1463,22 @@ func (m *Model) bottomSlot(c *ui.Context, p *ui.Theme) {
 	}
 	row.Children(func() {
 		if primary != "" {
-			m.toolPanel(c, p, primary)
-		}
-		if primary != "" && split != "" {
-			ui.Column(c).Width(1).Shrink(0).Background(p.Border)
+			m.bottomToolIsland(c, p, primary)
 		}
 		if split != "" {
-			m.toolPanel(c, p, split)
+			m.bottomToolIsland(c, p, split)
 		}
 	})
+}
+
+func (m *Model) bottomToolIsland(c *ui.Context, p *ui.Theme, id string) {
+	island := ui.Column(c).Key("bottom:island:" + id).Grow(1).MinWidth(0).
+		MinHeight(0).Background(m.toolWindowBackground(p)).Radius(oiIslandRadius).
+		Clip()
+	if m.consumeToolWindowFocus(id) {
+		island.Focusable().AutoFocus()
+	}
+	island.Children(func() { m.toolPanel(c, p, id) })
 }
 
 func (m *Model) toolPanel(c *ui.Context, p *ui.Theme, name string) {
@@ -1415,10 +1509,93 @@ func (m *Model) toolPanel(c *ui.Context, p *ui.Theme, name string) {
 }
 
 func (m *Model) searchPanel(c *ui.Context, p *ui.Theme) {
+	oi := oiPaletteOf(p)
+	s := &m.search
 	col := ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Background(m.toolWindowBackground(p)).
 		BorderWidth(1, 0, 0, 0).BorderColor(p.Border)
 	col.Children(func() {
-		ui.Scroll(c).Grow(1).Children(func() { m.searchRows(c, p) })
+		ui.Row(c).Key("find:header").Height(oiHeaderHeight).Shrink(0).
+			Padding(0, 8, 0, 10).Gap(6).AlignItems(ui.Center).
+			BorderWidth(0, 0, 1, 0).BorderColor(oi.border).Children(func() {
+			ui.Text(c, "Find").FontSize(13).Bold().TextColor(oi.textStrong).
+				SingleLine()
+			query := strings.TrimSpace(s.query)
+			if query == "" {
+				query = "Find in Files"
+			}
+			ui.Text(c, query).FontSize(12).TextColor(oi.textMuted).
+				SingleLine().Ellipsis("…").Grow(1)
+			if s.matches > 0 {
+				ui.Text(c, count(s.matches, "match", "matches")).FontSize(11).
+					TextColor(oi.textFaint)
+			}
+			m.headerIcon(c, p, oi, "find-hide", "Hide", "general/close",
+				func() { m.DockHide("find") })
+		})
+		if !s.done || len(s.files) == 0 {
+			ui.Scroll(c).Grow(1).MinHeight(0).Children(func() { m.searchRows(c, p) })
+			return
+		}
+		if s.previewKey == "" && s.previewErr == "" {
+			s.refreshPreview()
+		}
+		ui.Row(c).Grow(1).MinWidth(0).MinHeight(0).Children(func() {
+			ui.Column(c).Grow(2).MinWidth(280).MinHeight(0).
+				BorderWidth(0, 1, 0, 0).BorderColor(oi.border).Children(func() {
+				ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
+					m.searchRows(c, p)
+				})
+			})
+			ui.Column(c).Grow(3).MinWidth(0).MinHeight(0).Children(func() {
+				m.searchPreview(c, p)
+			})
+		})
+	})
+}
+
+func (m *Model) searchPreview(c *ui.Context, p *ui.Theme) {
+	oi := oiPaletteOf(p)
+	s := &m.search
+	if len(s.files) == 0 {
+		emptyState(c, p, "Select a search result")
+		return
+	}
+	file := s.files[s.selectedFile]
+	ui.Row(c).Height(28).Shrink(0).Padding(0, 10).Gap(6).AlignItems(ui.Center).
+		BorderWidth(0, 0, 1, 0).BorderColor(oi.border).Children(func() {
+		fileIconEl(c, oi, file.Path, 15, oi.textMuted)
+		ui.Text(c, file.RelPath).FontSize(12).TextColor(oi.textStrong).
+			SingleLine().Ellipsis("…").Grow(1)
+		ui.Text(c, fmt.Sprintf("%d", s.previewLine+1)).FontSize(11).
+			TextColor(oi.textFaint)
+	})
+	if s.previewErr != "" {
+		errorState(c, p, s.previewErr)
+		return
+	}
+	if len(s.previewLines) == 0 {
+		loadingState(c, p, "Loading preview…")
+		return
+	}
+	ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
+		ui.Column(c).Padding(4, 0).Children(func() {
+			for i, line := range s.previewLines {
+				lineNumber := s.previewFrom + i
+				row := ui.Row(c.Key(fmt.Sprintf("find:preview:%d", lineNumber))).
+					Height(20).Shrink(0).Padding(0, 8).Gap(10).AlignItems(ui.Center)
+				if lineNumber == s.previewLine {
+					row.Background(oi.selected)
+				}
+				row.Children(func() {
+					ui.Text(c, fmt.Sprintf("%d", lineNumber+1)).Width(42).
+						FontSize(11).Font(oiFontMono).TextColor(oi.textFaint).
+						SingleLine()
+					ui.Text(c, strings.ReplaceAll(strings.TrimSuffix(line, "\r"), "\t", "    ")).
+						FontSize(12).Font(oiFontMono).TextColor(oi.text).
+						SingleLine().Ellipsis("…")
+				})
+			}
+		})
 	})
 }
 

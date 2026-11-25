@@ -240,7 +240,7 @@ func (m *Model) commitHunksDialog(c *ui.Context, p *ui.Theme) {
 	}
 	state := s.hunks[s.hunkPath]
 	open := true
-	d := ui.Modal(c.Key("commit-hunks:"+s.hunkPath), &open, func() {
+	d := nativeModal(c.Key("commit-hunks:"+s.hunkPath), &open, func() {
 		ui.Column(c).Width(520).Gap(8).Children(func() {
 			ui.Text(c, "Include Hunks").FontSize(14).Bold().TextColor(p.Text).SingleLine()
 			ui.Text(c, filepath.ToSlash(s.hunkPath)).Font(oiFontMono).FontSize(11).

@@ -355,7 +355,7 @@ func (m *Model) toolWindowLayoutDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := d.open
-	dialog := ui.Modal(c.Key("tool-window-layouts"), &open, func() {
+	dialog := nativeModal(c.Key("tool-window-layouts"), &open, func() {
 		m.drawToolWindowLayoutDialog(c, p, d)
 	})
 	if dialog.Dismissed() || !open {

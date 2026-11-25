@@ -1339,7 +1339,7 @@ func (m *Model) vimCommandDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := true
-	dlg := ui.Modal(c.Key("vim:command"), &open, func() {
+	dlg := nativeModal(c.Key("vim:command"), &open, func() {
 		ui.Column(c).Width(520).Gap(7).Children(func() {
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 				prompt := command.prompt

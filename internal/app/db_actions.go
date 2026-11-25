@@ -1938,7 +1938,7 @@ func (m *Model) dbActionPromptDialog(c *ui.Context, p *ui.Theme) {
 	}
 	prompt := m.db.actionPrompt
 	open := true
-	ui.Modal(c, &open, func() {
+	nativeModal(c, &open, func() {
 		ui.Column(c).Width(680).Height(520).Gap(10).Children(func() {
 			ui.Text(c, prompt.title).FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			if prompt.err != "" {
@@ -2046,7 +2046,7 @@ func (m *Model) dbValueEditorDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := s.valueOpen
-	ui.Modal(c, &open, func() {
+	nativeModal(c, &open, func() {
 		ui.Column(c).Width(720).Height(520).Gap(8).Children(func() {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "Value").FontSize(13).Bold().TextColor(p.Text).SingleLine()

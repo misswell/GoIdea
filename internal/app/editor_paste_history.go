@@ -391,7 +391,7 @@ func (m *Model) editorPasteHistoryDialog(c *ui.Context, p *ui.Theme) {
 	s.list.Selection = &s.chosen
 	s.list.Selected = &s.selected
 	open := true
-	dialog := ui.Modal(c.Key("editor.paste-history"), &open, func() {
+	dialog := nativeModal(c.Key("editor.paste-history"), &open, func() {
 		ui.Column(c).Width(680).Gap(8).Children(func() {
 			ui.Text(c, "Choose Content to Paste").FontSize(13).Bold().SingleLine()
 			input := ui.TextInput(c, &s.query).

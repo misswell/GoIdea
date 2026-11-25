@@ -153,7 +153,7 @@ func (m *Model) coverageManageDialog(c *ui.Context, p *ui.Theme) {
 	s := &m.coverage
 	oi := oiPaletteOf(p)
 	open := s.manage
-	ui.Modal(c, &open, func() {
+	nativeModal(c, &open, func() {
 		ui.Column(c.Key("coverage:reports")).Width(560).Gap(8).Children(func() {
 			ui.Text(c, "Coverage Reports").Bold().FontSize(13).TextColor(oi.textStrong)
 			m.coverageStatus(c, oi)

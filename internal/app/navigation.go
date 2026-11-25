@@ -260,7 +260,7 @@ func (m *Model) implementationDialog(c *ui.Context, p *ui.Theme) {
 	busy := m.impl.busy
 	open := m.impl.open
 	jump := -1
-	ui.Modal(c, &open, func() {
+	nativeModal(c, &open, func() {
 		ui.Column(c).Width(560).Gap(8).Children(func() {
 			ui.Text(c, title).FontSize(13).Bold().TextColor(p.Text).SingleLine().Ellipsis("…")
 			hint := fmt.Sprintf("%s · Enter opens · Esc cancels", count(len(items), "implementation", "implementations"))

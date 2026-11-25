@@ -354,7 +354,7 @@ func (m *Model) treeSafeDeleteDialog(c *ui.Context, p *ui.Theme, v *treeOpState)
 	if run.phase == treeSafeDeleteDetected {
 		title = "Usages Detected"
 	}
-	d := ui.Modal(c.Key("project-tree-safe-delete"), &open, func() {
+	d := nativeModal(c.Key("project-tree-safe-delete"), &open, func() {
 		ui.Column(c).Width(480).Gap(10).Children(func() {
 			ui.Text(c, title).FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			switch run.phase {

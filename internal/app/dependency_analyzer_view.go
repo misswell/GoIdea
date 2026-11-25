@@ -17,7 +17,7 @@ func (m *Model) buildDependencyAnalyzerDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := a.open
-	dialog := ui.Modal(c, &open, func() {
+	dialog := nativeModal(c, &open, func() {
 		ui.Column(c).Width(1040).Height(680).Gap(8).Children(func() {
 			m.dependencyAnalyzerHeader(c, p, a)
 			m.dependencyAnalyzerToolbar(c, p, a)

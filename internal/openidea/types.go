@@ -113,9 +113,10 @@ type DocDirtyEvent struct {
 
 // FsChangedEvent reports files changed on disk, after ignore rules.
 type FsChangedEvent struct {
-	Created  []string `json:"created"`
-	Modified []string `json:"modified"`
-	Removed  []string `json:"removed"`
+	Created     []string `json:"created"`
+	Modified    []string `json:"modified"`
+	Removed     []string `json:"removed"`
+	IgnoreRules []string `json:"ignoreRules"`
 }
 
 // ProjectRootsChangedEvent reports build or project-structure changes that

@@ -273,7 +273,7 @@ func (m *Model) symbolsDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := s.open
-	d := ui.Modal(c, &open, func() {
+	d := nativeModal(c, &open, func() {
 		ui.Column(c).Width(600).Gap(8).Children(func() {
 			ui.Text(c, "Go to Symbol").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			in := ui.TextInput(c, &s.query).AutoFocus()

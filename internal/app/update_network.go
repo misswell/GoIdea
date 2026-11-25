@@ -8,12 +8,13 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync/atomic"
 )
 
 // updateHTTP follows environment proxies as before, then falls back to the
-// macOS system proxy. A Finder-launched app has no shell proxy variables, so
-// without this fallback an update check can work while its GitHub asset
-// download does not.
+// Settings › HTTP Proxy, then the macOS system proxy. A Finder-launched app has
+// no shell proxy variables, so without these fallbacks an update check can work
+// while its GitHub asset download does not.
 var updateHTTP = newUpdateHTTPClient()
 
 func newUpdateHTTPClient() *http.Client {
@@ -26,6 +27,9 @@ func updateRequestProxy(req *http.Request) (*url.URL, error) {
 	if req == nil || req.URL == nil {
 		return nil, nil
 	}
+	if runtime := proxyRuntime.Load(); runtime != nil && runtime.proxyPageLoaded() {
+		return runtime.applicationRequestProxy(req)
+	}
 	if proxy, err := http.ProxyFromEnvironment(req); proxy != nil || err != nil {
 		return proxy, err
 	}
@@ -37,6 +41,139 @@ func updateRequestProxy(req *http.Request) (*url.URL, error) {
 		return nil, nil
 	}
 	return snapshot.proxyFor(req.URL), nil
+}
+
+type nativeProxySettings struct {
+	mode         string
+	kind         string
+	host         string
+	port         int
+	noProxy      string
+	authenticate bool
+	login        string
+	password     string
+}
+
+// proxyRuntime is the active window whose Settings page supplies the native
+// proxy. The update transport is package-level for compatibility with its
+// callers; requests are still resolved against the current window each time.
+var proxyRuntime atomic.Pointer[Model]
+
+func setProxyRuntime(m *Model) {
+	proxyRuntime.Store(m)
+}
+
+func (p nativeProxySettings) proxyFor(u *url.URL) (*url.URL, error) {
+	if u == nil || localRequestHost(u) {
+		return nil, nil
+	}
+	switch strings.ToLower(strings.TrimSpace(p.mode)) {
+	case "none":
+		return nil, nil
+	case "manual":
+		if proxyHTTPHostMatchesNoProxy(p.noProxy, u.Hostname()) {
+			return nil, nil
+		}
+		host := strings.TrimSpace(p.host)
+		if host == "" {
+			return nil, nil
+		}
+		scheme := "http"
+		if strings.EqualFold(strings.TrimSpace(p.kind), "socks") {
+			scheme = "socks5h"
+		}
+		proxy := &url.URL{
+			Scheme: scheme,
+			Host:   net.JoinHostPort(host, strconv.Itoa(p.port)),
+		}
+		if p.authenticate && strings.TrimSpace(p.login) != "" {
+			proxy.User = url.UserPassword(strings.TrimSpace(p.login), p.password)
+		}
+		return proxy, nil
+	default:
+		if requestProxy := updateSystemRequestProxy(u); requestProxy != nil {
+			return requestProxy, nil
+		}
+		return nil, nil
+	}
+}
+
+func (m *Model) proxySettings() nativeProxySettings {
+	return m.proxySnapshot()
+}
+
+func (m *Model) applicationRequestProxy(req *http.Request) (*url.URL, error) {
+	if req == nil || req.URL == nil {
+		return nil, nil
+	}
+	return m.proxySettings().proxyFor(req.URL)
+}
+
+func updateSystemRequestProxy(u *url.URL) *url.URL {
+	if u == nil {
+		return nil
+	}
+	req := &http.Request{URL: u}
+	if proxy, err := http.ProxyFromEnvironment(req); proxy != nil || err != nil {
+		return proxy
+	}
+	if runtime.GOOS != "darwin" || localRequestHost(u) {
+		return nil
+	}
+	snapshot, err := readMacProxySnapshot()
+	if err != nil {
+		return nil
+	}
+	return snapshot.proxyFor(u)
+}
+
+func proxyHTTPHostMatchesNoProxy(noProxy, host string) bool {
+	host = strings.ToLower(strings.TrimSpace(host))
+	if host == "" {
+		return false
+	}
+	for _, raw := range strings.FieldsFunc(noProxy, func(r rune) bool {
+		return r == ',' || r == ';' || r == '\n'
+	}) {
+		pattern := strings.ToLower(strings.TrimSpace(raw))
+		if pattern == "" {
+			continue
+		}
+		if proxyHTTPGlobMatch(pattern, host) {
+			return true
+		}
+		if strings.HasPrefix(pattern, ".") && proxyHTTPGlobMatch("*"+pattern, host) {
+			return true
+		}
+	}
+	return false
+}
+
+func proxyHTTPGlobMatch(pattern, value string) bool {
+	patternBytes, valueBytes := []byte(pattern), []byte(value)
+	patternIndex, valueIndex := 0, 0
+	starIndex, starValueIndex := -1, 0
+	for valueIndex < len(valueBytes) {
+		switch {
+		case patternIndex < len(patternBytes) && patternBytes[patternIndex] == byte('*'):
+			starIndex = patternIndex
+			starValueIndex = valueIndex
+			patternIndex++
+		case patternIndex < len(patternBytes) && patternBytes[patternIndex] == valueBytes[valueIndex]:
+			patternIndex++
+			valueIndex++
+		case starIndex >= 0:
+			patternIndex = starIndex + 1
+			starValueIndex++
+			valueIndex = starValueIndex
+		default:
+			return false
+		}
+	}
+	for patternIndex < len(patternBytes) && patternBytes[patternIndex] == byte('*') {
+		patternIndex++
+	}
+	return patternIndex == len(patternBytes)
 }
 
 func localRequestHost(u *url.URL) bool {

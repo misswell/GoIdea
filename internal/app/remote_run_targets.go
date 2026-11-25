@@ -725,7 +725,7 @@ func (m *Model) runTargetAuthDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := state.remedyOpen
-	dialog := ui.Modal(c.Key("run-target-auth"), &open, func() {
+	dialog := nativeModal(c.Key("run-target-auth"), &open, func() {
 		ui.Column(c).Width(580).Padding(18).Gap(10).Children(func() {
 			ui.Text(c, state.remedyTitle).FontSize(14).Bold().TextColor(p.Text).SingleLine()
 			ui.Text(c, state.remedyMessage).FontSize(12).TextColor(p.TextMuted).MaxWidth(540)
@@ -775,7 +775,7 @@ func (m *Model) runTargetSettingsDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := state.editorOpen
-	dialog := ui.Modal(c.Key("run-target-settings"), &open, func() {
+	dialog := nativeModal(c.Key("run-target-settings"), &open, func() {
 		ui.Column(c).Width(900).MaxHeight(740).Padding(18).Gap(10).Children(func() {
 			ui.Row(c).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "Run Targets").FontSize(14).Bold().TextColor(p.Text).SingleLine()

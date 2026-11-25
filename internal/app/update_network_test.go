@@ -1,12 +1,18 @@
 package app
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/ui"
 )
 
 func TestMacSystemProxyUsesHTTPSAndBypassesExceptions(t *testing.T) {
@@ -69,6 +75,139 @@ func TestMacSystemProxyFallsBackToSOCKS(t *testing.T) {
 	got := snapshot.proxyFor(u)
 	if got == nil || got.String() != "socks5://127.0.0.1:1080" {
 		t.Fatalf("SOCKS proxy = %v", got)
+	}
+}
+
+func TestHTTPProxySettingsRouteManualSOCKSAndNoProxy(t *testing.T) {
+	m := &Model{}
+	setProxyRuntime(m)
+	t.Cleanup(func() { setProxyRuntime(nil) })
+	m.nativeSettings.pages = map[string]nativeSettingsPageState{
+		settingsPageHTTPProxy: {
+			loaded: true,
+			applied: map[string]any{
+				"proxy.mode":         "manual",
+				"proxy.kind":         "socks",
+				"proxy.host":         "proxy.example",
+				"proxy.noProxy":      "*.internal.example, 192.168.*",
+				"proxy.port":         float64(1080),
+				"proxy.authenticate": true,
+				"proxy.login":        "me",
+				"proxy.password":     "secret",
+			},
+			draft: map[string]any{
+				"proxy.mode":         "manual",
+				"proxy.kind":         "socks",
+				"proxy.host":         "proxy.example",
+				"proxy.noProxy":      "*.internal.example, 192.168.*",
+				"proxy.port":         float64(1080),
+				"proxy.authenticate": true,
+				"proxy.login":        "me",
+				"proxy.password":     "secret",
+			},
+		},
+	}
+	for raw, want := range map[string]string{
+		"https://api.example.com/": "socks5h://me:secret@proxy.example:1080",
+	} {
+		req, err := http.NewRequest(http.MethodGet, raw, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := updateRequestProxy(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got == nil || got.String() != want {
+			t.Fatalf("proxy for %s = %v, want %s", raw, got, want)
+		}
+	}
+	for _, raw := range []string{
+		"https://service.internal.example/",
+		"https://192.168.4.9/",
+		"http://localhost:8080/",
+	} {
+		req, err := http.NewRequest(http.MethodGet, raw, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := updateRequestProxy(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != nil {
+			t.Fatalf("proxy for excluded %s = %v", raw, got)
+		}
+	}
+}
+
+func TestHTTPProxyCheckConnectionUsesDraftAndReturnsStatus(t *testing.T) {
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.String() != "http://target.example/check" {
+			t.Errorf("proxied URL = %q", r.URL.String())
+		}
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer proxy.Close()
+	proxyURL, err := url.Parse(proxy.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	port, err := strconv.Atoi(proxyURL.Port())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	status, err := proxyCheckConnection(ctx, nativeProxySettings{
+		mode: "manual", kind: "http", host: proxyURL.Hostname(), port: port,
+	}, "target.example/check")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status != "201 Created" {
+		t.Fatalf("proxy check status = %q", status)
+	}
+}
+
+func TestHTTPProxyPageRendersPasswordAndCheckConnection(t *testing.T) {
+	m := &Model{}
+	m.nativeSettings.pages = map[string]nativeSettingsPageState{
+		settingsPageHTTPProxy: {
+			loaded: true,
+			applied: map[string]any{
+				"proxy.mode":         "manual",
+				"proxy.kind":         "http",
+				"proxy.host":         "proxy.example",
+				"proxy.noProxy":      "",
+				"proxy.port":         float64(3128),
+				"proxy.authenticate": true,
+				"proxy.login":        "me",
+				"proxy.password":     "secret",
+			},
+			draft: map[string]any{
+				"proxy.mode":         "manual",
+				"proxy.kind":         "http",
+				"proxy.host":         "proxy.example",
+				"proxy.noProxy":      "",
+				"proxy.port":         float64(3128),
+				"proxy.authenticate": true,
+				"proxy.login":        "me",
+				"proxy.password":     "secret",
+			},
+		},
+	}
+	tester := ui.NewTester(func(c *ui.Context) {
+		m.settingsNativeBody(c, oiPaletteOf(c.Theme()), settingsPageHTTPProxy)
+	}, 1000, 800)
+	tester.Frame()
+	for _, text := range []string{"Password", "Check connection", "Check"} {
+		if !tester.HasText(text) {
+			t.Fatalf("HTTP Proxy page lacks %q: %q", text, tester.Texts())
+		}
+	}
+	if got := nativeSettingsString(m, settingsPageHTTPProxy, "proxy.password"); got != "secret" {
+		t.Fatalf("proxy password draft = %q", got)
 	}
 }
 

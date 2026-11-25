@@ -273,21 +273,51 @@ func (m *Manager) PluginServiceLog(
 	return code, nil
 }
 
+// PluginCommandContext is the workbench context OpenIDEA forwards with a code
+// plugin command. The zero value is an ordinary command invocation.
+type PluginCommandContext struct {
+	Editor        any
+	Paths         []string
+	SettingsScope *string
+	CommandChain  []string
+	Request       *uint32
+}
+
 // PluginRunCommand runs a command declared by a code plugin. Services item
 // menus pass the raw item key as arg.
 func (m *Manager) PluginRunCommand(
 	ctx context.Context,
 	window, pluginID, commandID, arg string,
 ) error {
+	return m.PluginRunCommandWithContext(
+		ctx,
+		window,
+		pluginID,
+		commandID,
+		arg,
+		PluginCommandContext{},
+	)
+}
+
+// PluginRunCommandWithContext runs a command with the editor, selected paths
+// and workbench invocation OpenIDEA forwards with an action.
+func (m *Manager) PluginRunCommandWithContext(
+	ctx context.Context,
+	window, pluginID, commandID, arg string,
+	invocation PluginCommandContext,
+) error {
+	if invocation.Paths == nil {
+		invocation.Paths = []string{}
+	}
 	_, err := m.Invoke(ctx, window, "plugin_run_command", map[string]any{
 		"pluginId":      pluginID,
 		"commandId":     commandID,
 		"arg":           arg,
-		"editor":        nil,
-		"paths":         nil,
-		"settingsScope": nil,
-		"commandChain":  nil,
-		"request":       nil,
+		"editor":        invocation.Editor,
+		"paths":         invocation.Paths,
+		"settingsScope": invocation.SettingsScope,
+		"commandChain":  invocation.CommandChain,
+		"request":       invocation.Request,
 	})
 	return err
 }

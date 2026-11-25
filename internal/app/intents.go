@@ -437,7 +437,7 @@ func (m *Model) intentionsDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := pn.open
-	d := ui.Modal(c, &open, func() {
+	d := nativeModal(c, &open, func() {
 		ui.Column(c).Width(460).Gap(8).Children(func() {
 			title := pn.title
 			if title == "" {

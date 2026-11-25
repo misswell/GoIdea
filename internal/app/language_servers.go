@@ -2448,7 +2448,7 @@ func (m *Model) languageServerAddDialog(c *ui.Context, p *ui.Theme, oi oiColors)
 		return
 	}
 	open := state.addOpen
-	ui.Modal(c.Key("language-servers:add"), &open, func() {
+	nativeModal(c.Key("language-servers:add"), &open, func() {
 		ui.Column(c).Width(520).Gap(10).Children(func() {
 			ui.Text(c, "New Language Server").FontSize(15).Bold().TextColor(p.Text).SingleLine()
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {

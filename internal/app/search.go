@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -50,6 +51,12 @@ type SearchPane struct {
 	// selectedFile and selectedMatch choose one result for Replace.
 	selectedFile  int
 	selectedMatch int
+	// The right preview is cached until another hit is selected.
+	previewKey   string
+	previewFrom  int
+	previewLine  int
+	previewLines []string
+	previewErr   string
 	// historyOpen shows the multi-line field's recent searches. The stored
 	// switch is inverse so the zero value keeps OpenIDEA's default enabled.
 	historyOpen       bool
@@ -262,6 +269,7 @@ func (m *Model) RunSearch() {
 	m.search.truncated = false
 	m.search.selectedFile = 0
 	m.search.selectedMatch = 0
+	m.search.clearPreview()
 	m.search.scrollSelected = !m.search.noScrollToResults
 	m.search.summary = ""
 	m.search.err = ""
@@ -372,6 +380,9 @@ func (m *Model) acceptSearchEvent(data json.RawMessage) {
 		}
 		m.search.files = append(m.search.files, *ev.File)
 		m.search.matches += len(ev.File.Matches)
+		if m.search.selectedFile == len(m.search.files)-1 && m.search.selectedMatch == 0 {
+			m.search.clearPreview()
+		}
 	case "done":
 		m.search.running = false
 		m.search.done = true
@@ -383,6 +394,79 @@ func (m *Model) acceptSearchEvent(data json.RawMessage) {
 		}
 	}
 	m.invalidate()
+}
+
+// selectSearchHit chooses one result and refreshes the preview beside the tree.
+func (m *Model) selectSearchHit(file, match int) {
+	s := &m.search
+	if file < 0 || file >= len(s.files) {
+		return
+	}
+	if match < 0 || match >= len(s.files[file].Matches) {
+		match = 0
+	}
+	s.selectedFile, s.selectedMatch = file, match
+	s.refreshPreview()
+}
+
+func (p *SearchPane) clearPreview() {
+	p.previewKey = ""
+	p.previewFrom = 0
+	p.previewLine = 0
+	p.previewLines = nil
+	p.previewErr = ""
+}
+
+const (
+	maxSearchPreviewBytes = 512 << 10
+	maxSearchPreviewLines = 41
+)
+
+// refreshPreview reads the selected file once and keeps 20 lines around the
+// match, as OpenIDEA's Find preview does.
+func (p *SearchPane) refreshPreview() {
+	p.clearPreview()
+	if p.selectedFile < 0 || p.selectedFile >= len(p.files) {
+		return
+	}
+	file := p.files[p.selectedFile]
+	if p.selectedMatch < 0 || p.selectedMatch >= len(file.Matches) {
+		return
+	}
+	match := file.Matches[p.selectedMatch]
+	key := fmt.Sprintf("%s:%d:%d", file.Path, match.Line, p.selectedMatch)
+	p.previewKey = key
+	p.previewLine = int(match.Line)
+	info, err := os.Stat(file.Path)
+	if err != nil {
+		p.previewErr = err.Error()
+		return
+	}
+	if info.IsDir() {
+		p.previewErr = "The search result is a directory"
+		return
+	}
+	if info.Size() > maxSearchPreviewBytes {
+		p.previewErr = "The result is too large to preview"
+		return
+	}
+	raw, err := os.ReadFile(file.Path)
+	if err != nil {
+		p.previewErr = err.Error()
+		return
+	}
+	lines := strings.Split(strings.ReplaceAll(string(raw), "\r\n", "\n"), "\n")
+	line := p.previewLine
+	if line >= len(lines) {
+		line = len(lines) - 1
+	}
+	from := max(0, line-maxSearchPreviewLines/2)
+	to := min(len(lines), from+maxSearchPreviewLines)
+	if to-from < maxSearchPreviewLines {
+		from = max(0, to-maxSearchPreviewLines)
+	}
+	p.previewFrom, p.previewLine = from, line
+	p.previewLines = append([]string(nil), lines[from:to]...)
 }
 
 // ReplaceSearchSelected replaces the selected Find result.

@@ -342,6 +342,7 @@ func (m *Model) applyPreferences() {
 	m.tabPrefs = m.prefs.Tabs
 	m.applyEditorFont(m.prefs.fontSize())
 	m.applyEditorAppearance()
+	m.applyEditorColorSchemeTheme()
 	m.applyVimPreferences()
 	m.invalidateCodeVision()
 	m.sortTabsAlphabetically()

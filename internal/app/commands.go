@@ -633,7 +633,7 @@ func (m *Model) commandsDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := pal.open
-	dlg := ui.Modal(c, &open, func() {
+	dlg := nativeModal(c, &open, func() {
 		ui.Column(c).Width(600).Gap(8).Children(func() {
 			ui.Text(c, "Commands").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			in := ui.TextInput(c, &pal.query).AutoFocus()

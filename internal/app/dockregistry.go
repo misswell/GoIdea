@@ -147,8 +147,9 @@ func init() {
 		render: func(m *Model, c *ui.Context, p *ui.Theme, _ oiColors) { m.termPanel(c, p) },
 	})
 	registerToolWindow(&toolWindowSpec{
-		id: "log", title: "Git Log", icon: "toolwindows/vcs", anchor: dockBottom, order: 5, stripe: true,
+		id: "log", title: "Git", icon: "toolwindows/vcs", anchor: dockBottom, order: 5, stripe: true,
 		open: func(m *Model) {
+			m.setGitToolWindowTab(vcsContentLog)
 			m.log.visible = true
 			if m.Root() != "" && m.ctx != nil && m.mgr != nil {
 				m.RefreshLog()

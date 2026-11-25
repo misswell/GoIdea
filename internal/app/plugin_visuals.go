@@ -1009,7 +1009,7 @@ func (m *Model) pluginMarkerDialog(c *ui.Context, theme *ui.Theme) {
 	chooser := &pg.visual.markerChooser
 	open := chooser.Open
 	chosen := -1
-	ui.Modal(c, &open, func() {
+	nativeModal(c, &open, func() {
 		box := ui.Column(c).Width(560).Gap(8)
 		box.Children(func() {
 			ui.Text(c, chooser.Title).FontSize(13).Bold().TextColor(oi.textStrong).

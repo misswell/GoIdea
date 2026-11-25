@@ -769,8 +769,13 @@ func (m *Model) rightIsland(c *ui.Context, p *ui.Theme, oi oiColors, id string, 
 	if spec == nil || spec.render == nil {
 		return
 	}
-	ui.Column(c).Key("right:island:" + id).Grow(grow).MinHeight(0).
-		MinWidth(0).Background(m.toolWindowBackground(p)).AlignItems(ui.Stretch).Children(func() {
+	island := ui.Column(c).Key("right:island:" + id).Grow(grow).MinHeight(0).
+		MinWidth(0).Background(m.toolWindowBackground(p)).Radius(oiIslandRadius).
+		Clip().AlignItems(ui.Stretch)
+	if m.consumeToolWindowFocus(id) {
+		island.Focusable().AutoFocus()
+	}
+	island.Children(func() {
 		spec.render(m, c, p, oi)
 	})
 }
@@ -1104,11 +1109,17 @@ func (m *Model) leftIsland(c *ui.Context, p *ui.Theme, oi oiColors, grow float32
 func (m *Model) leftSplitIsland(c *ui.Context, p *ui.Theme, oi oiColors, grow float32) {
 	tk := oiTokensFor(m, p)
 	title := "Structure"
+	id := "structure"
 	if m.leftSplit == "bookmarks" {
 		title = "Bookmarks"
+		id = "bookmarks"
 	}
-	ui.Column(c).Grow(grow).MinHeight(0).Background(oi.island).
-		Radius(oiIslandRadius).Children(func() {
+	island := ui.Column(c).Grow(grow).MinHeight(0).Background(oi.island).
+		Radius(oiIslandRadius).Clip()
+	if m.consumeToolWindowFocus(id) {
+		island.Focusable().AutoFocus()
+	}
+	island.Children(func() {
 		ui.Row(c).Height(tk.HeaderHeight).Shrink(0).Padding(0, 6, 0, 8).
 			Gap(6).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, title).FontSize(13).TextColor(oi.textStrong).SingleLine().Ellipsis("…")
@@ -1139,8 +1150,11 @@ func (m *Model) headerIconDisabled(c *ui.Context, p *ui.Theme, oi oiColors, key,
 	b := ui.ButtonBase(c.Key("panel:"+key)).Size(20, 20).Radius(4).
 		Justify(ui.Center).AlignItems(ui.Center).Cursor(ui.CursorPointer)
 	b.Disabled(onClick == nil)
-	if b.Hovered() {
+	if b.Hovered() || b.Focused() {
 		b.Background(oi.toolbarHover)
+		b.Opacity(1)
+	} else {
+		b.Opacity(0.42)
 	}
 	b.Tooltip(tip)
 	b.Children(func() { oiIconEl(c, icon, 16, oi, oi.icon) })

@@ -161,7 +161,7 @@ func (m *Model) dbConnectRemedyDialog(c *ui.Context, p *ui.Theme) {
 	}
 	remedy := m.db.connectRemedy
 	open := remedy.open
-	ui.Modal(c, &open, func() {
+	nativeModal(c, &open, func() {
 		width := 420
 		if remedy.kind == "trustHostKey" {
 			width = 500

@@ -24,7 +24,7 @@ func (m *Model) projectStructureDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := state.open
-	dlg := ui.Modal(c, &open, func() {
+	dlg := nativeModal(c, &open, func() {
 		m.projectStructureSheet(c, p)
 	})
 	if dlg.Dismissed() || !open {

@@ -676,7 +676,7 @@ func (m *Model) safeDeleteDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := true
-	dialog := ui.Modal(c.Key(fmt.Sprintf("editor-safe-delete:%d", state.phase)),
+	dialog := nativeModal(c.Key(fmt.Sprintf("editor-safe-delete:%d", state.phase)),
 		&open, func() {
 			ui.Column(c).Width(500).Gap(10).Children(func() {
 				switch state.phase {

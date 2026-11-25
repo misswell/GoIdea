@@ -693,7 +693,7 @@ func (m *Model) dbDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := v.open
-	dlg := ui.Modal(c, &open, func() {
+	dlg := nativeModal(c, &open, func() {
 		ui.Column(c).Width(980).Height(640).Gap(10).Children(func() {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "Database").FontSize(13).Bold().TextColor(p.Text).SingleLine()
@@ -1639,7 +1639,7 @@ func (m *Model) dbTableDialog(c *ui.Context, p *ui.Theme) {
 	}
 	if s.closeAsk {
 		open := s.closeAsk
-		ui.Modal(c, &open, func() {
+		nativeModal(c, &open, func() {
 			ui.Column(c).Width(430).Gap(10).Children(func() {
 				ui.Text(c, "Unsaved table changes").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 				ui.Text(c, "Submit the row changes before closing, or discard them.").
@@ -1665,7 +1665,7 @@ func (m *Model) dbTableDialog(c *ui.Context, p *ui.Theme) {
 
 	editable, editNotice := dbTableEditability(s)
 	open := s.open
-	ui.Modal(c, &open, func() {
+	nativeModal(c, &open, func() {
 		content := ui.Column(c).Width(940).Height(600).Gap(8)
 		content.Children(func() {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
@@ -2151,7 +2151,7 @@ func (m *Model) dbHistoryDialog(c *ui.Context, p *ui.Theme) {
 	}
 	open := h.open
 	jump := -1
-	ui.Modal(c, &open, func() {
+	nativeModal(c, &open, func() {
 		ui.Column(c).Width(620).Gap(8).Children(func() {
 			ui.Text(c, "Execution History").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			if h.loading {
@@ -2207,7 +2207,7 @@ func (m *Model) dbPlanDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := pl.open
-	ui.Modal(c, &open, func() {
+	nativeModal(c, &open, func() {
 		ui.Column(c).Width(720).Gap(8).Children(func() {
 			ui.Text(c, "Execution Plan").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			ui.Text(c, strings.TrimSpace(strings.SplitN(pl.statement, "\n", 2)[0])).FontSize(12).

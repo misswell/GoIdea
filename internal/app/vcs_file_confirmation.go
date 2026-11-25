@@ -318,7 +318,7 @@ func (m *Model) vcsFileConfirmationDialog(c *ui.Context, p *ui.Theme) {
 			1,
 		)
 	}
-	dialog := ui.Modal(c.Key("vcs-file-confirmation"), &open, func() {
+	dialog := nativeModal(c.Key("vcs-file-confirmation"), &open, func() {
 		ui.Column(c).Width(480).Gap(10).Children(func() {
 			ui.Text(c, title).FontSize(15).Bold().TextColor(p.Text)
 			ui.Text(c, question).FontSize(12).TextColor(p.Text)

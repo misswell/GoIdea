@@ -205,6 +205,43 @@ func TestNativeSettingsPageIDsAreUnique(t *testing.T) {
 	}
 }
 
+func TestNativeSettingsSearchFindsSelectChoices(t *testing.T) {
+	rows := settingsFilterTree(settingsTree(), "nearest indent position", nil)
+	for _, row := range settingsFlattenAll(rows) {
+		if row.key == settingsPageSmartKeys {
+			return
+		}
+	}
+	t.Fatal("searching for a select choice did not find Smart Keys")
+}
+
+func TestNativeSettingsPagesExplainUnsupportedBehavior(t *testing.T) {
+	for page, note := range map[string]string{
+		settingsPageRichTextCopy:     "native copy currently uses plain text",
+		settingsPageStickyLines:      "native editor does not show sticky lines yet",
+		settingsPagePythonDocstrings: "Python generation does not yet support every format",
+	} {
+		t.Run(page, func(t *testing.T) {
+			def, ok := nativeSettingsDefinition(page)
+			if !ok {
+				t.Fatalf("missing native page %q", page)
+			}
+			values := nativeTestDefaults(def)
+			m := &Model{}
+			m.nativeSettings.pages = map[string]nativeSettingsPageState{
+				page: {loaded: true, applied: nativeSettingsValuesCopy(values), draft: nativeSettingsValuesCopy(values)},
+			}
+			tester := ui.NewTester(func(c *ui.Context) {
+				m.settingsNativeBody(c, oiPaletteOf(c.Theme()), page)
+			}, 1000, 700)
+			tester.Frame()
+			if !tester.HasText(note) {
+				t.Fatalf("page does not explain its limitation: %q", tester.Texts())
+			}
+		})
+	}
+}
+
 func TestEditorCodeStyleAndColorSchemePagesRoundTripOpenIDEAStructures(t *testing.T) {
 	for _, page := range []string{
 		settingsPageCodeStyle,

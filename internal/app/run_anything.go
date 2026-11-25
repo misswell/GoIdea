@@ -386,7 +386,7 @@ func (m *Model) runAnythingDialog(c *ui.Context, p *ui.Theme) {
 	}
 	history := m.runAnythingHistory()
 	open := v.open
-	d := ui.Modal(c, &open, func() {
+	d := nativeModal(c, &open, func() {
 		ui.Column(c).Width(620).Gap(0).Children(func() {
 			ui.Row(c).Height(26).Padding(4, 10).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "Run Anything").FontSize(12).Bold().TextColor(p.Text).SingleLine().Grow(1)

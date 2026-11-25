@@ -1153,7 +1153,7 @@ func (m *Model) notebookPage(c *ui.Context, p *ui.Theme, tab *Tab) {
 	})
 	if session != nil && session.closeAsk {
 		open := true
-		ui.Modal(c.Key("notebook:close-confirm:"+session.path), &open, func() {
+		nativeModal(c.Key("notebook:close-confirm:"+session.path), &open, func() {
 			ui.Text(c, "Save changes to this notebook before closing?").
 				FontSize(13).TextColor(p.Text).Padding(8, 0)
 			ui.Row(c).Gap(8).Justify(ui.End).Padding(8, 0).Children(func() {

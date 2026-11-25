@@ -577,7 +577,7 @@ func (m *Model) dockerSettingsFormDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := true
-	modal := ui.Modal(c.Key("services:docker-settings-form"), &open, func() {
+	modal := nativeModal(c.Key("services:docker-settings-form"), &open, func() {
 		ui.Column(c).Width(520).MaxWidth(720).Padding(18).Gap(9).Children(func() {
 			ui.Text(c, dockerSettingsFormTitle(*u)).FontSize(15).Bold().TextColor(p.Text)
 			dockerSettingsField(c, p, "Name", &u.name)

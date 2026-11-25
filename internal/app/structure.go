@@ -62,7 +62,7 @@ func (m *Model) OpenFileStructure() {
 
 func (m *Model) fileStructureDialog(c *ui.Context, p *ui.Theme) {
 	open := m.structure.popup
-	dialog := ui.Modal(c.Key("file-structure"), &open, func() {
+	dialog := nativeModal(c.Key("file-structure"), &open, func() {
 		ui.Column(c).Width(620).Children(func() {
 			ui.Row(c).Padding(8, 12).Children(func() {
 				ui.Text(c, "File Structure").FontSize(13).Bold().TextColor(p.Text).SingleLine()

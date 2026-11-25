@@ -56,6 +56,7 @@ func TestRunWindowUnifiedTabsSessionRailAndEmptyState(t *testing.T) {
 	tt.Frame()
 	for _, text := range []string{
 		"Application Run Tab", "Child Run Tab", "Agent Run Tab", "Boom Run Tab",
+		"Run", "Options",
 		"Rerun", "Debug", "Stop", "Find…", "Scroll to End", "Soft-Wrap",
 		"Clear All", "Edit Configurations…", "More Run Actions", "Hide Run Tool Window",
 	} {

@@ -615,7 +615,7 @@ func (m *Model) analysisCleanupConfirmDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := true
-	dlg := ui.Modal(c.Key("analysis:cleanup:confirm"), &open, func() {
+	dlg := nativeModal(c.Key("analysis:cleanup:confirm"), &open, func() {
 		ui.Column(c).Width(430).Padding(18).Gap(10).
 			Background(p.Surface).Border(1, p.Border).Radius(6).Children(func() {
 			ui.Text(c, "Code Cleanup").FontSize(14).Bold().TextColor(p.Text).SingleLine()

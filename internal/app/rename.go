@@ -242,7 +242,7 @@ func (m *Model) renameDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := true
-	d := ui.Modal(c, &open, func() {
+	d := nativeModal(c, &open, func() {
 		ui.Column(c).Width(420).Gap(8).Children(func() {
 			title := "Rename Symbol"
 			if r.old != "" {
@@ -277,6 +277,7 @@ func (m *Model) renameDialog(c *ui.Context, p *ui.Theme) {
 					m.invalidate()
 				})
 			})
+			setNativeModalDefault(m.submitRename)
 		})
 	})
 	if d.Dismissed() || !open {

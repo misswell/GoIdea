@@ -171,7 +171,7 @@ func (m *Model) performanceMemoryDialog(c *ui.Context, p *ui.Theme) {
 	}
 	m.samplePerformance(false)
 	open := m.perf.memoryOpen
-	dialog := ui.Modal(c.Key("perf-memory-dialog"), &open, func() {
+	dialog := nativeModal(c.Key("perf-memory-dialog"), &open, func() {
 		ui.Column(c).Width(500).Padding(18).Gap(9).Children(func() {
 			ui.Row(c).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "Memory Indicator").FontSize(14).Bold().TextColor(p.Text)
@@ -216,7 +216,7 @@ func (m *Model) performanceOverlay(c *ui.Context, p *ui.Theme) {
 	}
 	m.samplePerformance(false)
 	open := m.perf.overlayOpen
-	dialog := ui.Modal(c.Key("perf-overlay-dialog"), &open, func() {
+	dialog := nativeModal(c.Key("perf-overlay-dialog"), &open, func() {
 		ui.Column(c).Width(430).Padding(14).Gap(6).Children(func() {
 			ui.Row(c).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "Performance (dev diagnostics)").FontSize(14).Bold().TextColor(p.Text)

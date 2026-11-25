@@ -149,7 +149,7 @@ func (m *Model) dirCompareDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := d.open
-	dlg := ui.Modal(c, &open, func() {
+	dlg := nativeModal(c, &open, func() {
 		ui.Column(c).Width(720).Gap(8).Children(func() {
 			title := "Compare Directories · " + filepath.Base(d.left)
 			if d.loading {

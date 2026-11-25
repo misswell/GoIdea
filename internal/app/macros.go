@@ -809,7 +809,7 @@ func (m *Model) macroEditDialog(c *ui.Context) {
 	p := c.Theme()
 	oi := oiPaletteOf(p)
 	open := true
-	dialog := ui.Modal(c.Key("macros:edit"), &open, func() {
+	dialog := nativeModal(c.Key("macros:edit"), &open, func() {
 		ui.Column(c).Width(620).Height(360).Gap(12).Children(func() {
 			ui.Text(c, "Edit Macros").FontSize(14).Bold().TextColor(oi.textStrong).SingleLine()
 			ui.Row(c).Grow(1).MinHeight(0).Gap(12).Children(func() {
@@ -892,7 +892,7 @@ func (m *Model) macroNameDialog(c *ui.Context) {
 	p := c.Theme()
 	oi := oiPaletteOf(p)
 	open := true
-	dialog := ui.Modal(c.Key("macros:name"), &open, func() {
+	dialog := nativeModal(c.Key("macros:name"), &open, func() {
 		ui.Column(c).Width(460).Padding(18).Gap(10).
 			Background(oi.elev).Border(1, oi.border).Radius(6).Children(func() {
 			ui.Text(c, "Enter Macro Name").FontSize(14).Bold().
@@ -924,7 +924,7 @@ func (m *Model) macroPlayDialog(c *ui.Context) {
 	p := c.Theme()
 	oi := oiPaletteOf(p)
 	open := true
-	dialog := ui.Modal(c.Key("macros:play"), &open, func() {
+	dialog := nativeModal(c.Key("macros:play"), &open, func() {
 		ui.Column(c).Width(430).Gap(10).Padding(18).
 			Background(oi.elev).Border(1, oi.border).Radius(6).Children(func() {
 			ui.Text(c, "Play Saved Macro").FontSize(14).Bold().
@@ -984,7 +984,7 @@ func (m *Model) macroRenameDialog(c *ui.Context) {
 	p := c.Theme()
 	oi := oiPaletteOf(p)
 	open := true
-	dialog := ui.Modal(c.Key("macros:rename"), &open, func() {
+	dialog := nativeModal(c.Key("macros:rename"), &open, func() {
 		ui.Column(c).Width(420).Padding(18).Gap(10).
 			Background(oi.elev).Border(1, oi.border).Radius(6).Children(func() {
 			ui.Text(c, "Rename Macro").FontSize(14).Bold().
@@ -1036,7 +1036,7 @@ func (m *Model) macroDeleteDialog(c *ui.Context) {
 	p := c.Theme()
 	oi := oiPaletteOf(p)
 	open := true
-	dialog := ui.Modal(c.Key("macros:delete"), &open, func() {
+	dialog := nativeModal(c.Key("macros:delete"), &open, func() {
 		ui.Column(c).Width(420).Padding(18).Gap(12).
 			Background(oi.elev).Border(1, oi.border).Radius(6).Children(func() {
 			ui.Text(c, "Delete Macro").FontSize(14).Bold().

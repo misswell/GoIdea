@@ -244,7 +244,7 @@ func (m *Model) vcsQuickListDialog(c *ui.Context, p *ui.Theme) {
 	if m.vcsQuick.sel >= len(rows) {
 		m.vcsQuick.sel = max(0, len(rows)-1)
 	}
-	ui.Modal(c, &open, func() {
+	nativeModal(c, &open, func() {
 		ui.Column(c).Width(540).Gap(8).Children(func() {
 			ui.Text(c, "VCS Operations").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			in := ui.TextInput(c, &m.vcsQuick.query).AutoFocus()
@@ -1864,7 +1864,7 @@ func (m *Model) vcsOperationDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := state.open
-	d := ui.Modal(c, &open, func() {
+	d := nativeModal(c, &open, func() {
 		ui.Column(c).Width(560).Gap(10).Children(func() {
 			ui.Text(c, state.title).FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			if state.hint != "" {

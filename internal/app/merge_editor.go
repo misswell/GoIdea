@@ -1001,7 +1001,7 @@ func (m *Model) mergeDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := state.open
-	dialog := ui.Modal(c.Key("merge-editor"), &open, func() {
+	dialog := nativeModal(c.Key("merge-editor"), &open, func() {
 		ui.Column(c).Width(1320).Gap(8).Children(func() {
 			if state.confirm != "" {
 				m.drawMergeConfirmation(c, p, state)

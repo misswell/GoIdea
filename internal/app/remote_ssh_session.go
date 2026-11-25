@@ -164,7 +164,7 @@ func (m *Model) remoteSSHSessionDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := state.sshSessionOpen
-	dialog := ui.Modal(c.Key("ssh-session-dialog"), &open, func() {
+	dialog := nativeModal(c.Key("ssh-session-dialog"), &open, func() {
 		ui.Column(c).Width(560).Padding(18).Gap(9).Children(func() {
 			ui.Text(c, "Start SSH Session").FontSize(14).Bold().TextColor(p.Text).SingleLine()
 			if state.sshSessionWaiting {

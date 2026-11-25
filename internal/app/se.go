@@ -985,7 +985,7 @@ func (m *Model) searchEverywhereDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := s.open
-	ui.Modal(c, &open, func() {
+	nativeModal(c, &open, func() {
 		ui.Column(c).Width(680).Gap(8).Children(func() {
 			ui.Row(c).Gap(4).Children(func() {
 				for _, t := range seTabs {

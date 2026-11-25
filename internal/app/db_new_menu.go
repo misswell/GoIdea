@@ -31,7 +31,7 @@ func (m *Model) dbNewMenuPopup(c *ui.Context, p *ui.Theme) {
 	}
 	menu := m.db.newMenu
 	open := menu.open
-	ui.Modal(c, &open, func() {
+	nativeModal(c, &open, func() {
 		ui.Column(c).Width(300).Gap(2).Children(func() {
 			item := func(label, detail string, run func()) {
 				row := ui.Row(c.Key("dbnew:"+label)).Height(30).Padding(8, 6).Gap(8).

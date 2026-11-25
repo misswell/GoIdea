@@ -1346,7 +1346,7 @@ func (m *Model) runConfigsDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := d.open
-	modal := ui.Modal(c, &open, func() {
+	modal := nativeModal(c, &open, func() {
 		ui.Column(c).Width(880).Gap(8).Children(func() {
 			ui.Text(c, "Run/Debug Configurations").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			if !d.templateMode {
@@ -1642,7 +1642,7 @@ func (m *Model) rerunConfirmDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := ask.open
-	modal := ui.Modal(c, &open, func() {
+	modal := nativeModal(c, &open, func() {
 		ui.Column(c).Width(440).Gap(10).Children(func() {
 			ui.Text(c, "Process '"+ask.name+"' Is Running").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			ui.Text(c, "'"+ask.name+"' does not allow parallel runs.\nStop the running process and run it again?").

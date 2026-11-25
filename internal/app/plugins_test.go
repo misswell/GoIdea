@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"mayoi/internal/openidea"
 	"mayoi/internal/plugin"
@@ -90,6 +91,78 @@ func TestPluginPageListsInstalledPlugins(t *testing.T) {
 	if _, ok := Command(legacyID); !ok {
 		t.Fatal("re-enabling the plugin did not restore its legacy alias")
 	}
+}
+
+func TestPluginActionsForwardArgumentsAndKeepLegacyAlias(t *testing.T) {
+	settingsPath := filepath.Join(t.TempDir(), "settings.json")
+	dir := filepath.Join(filepath.Dir(settingsPath), "plugins", "echo")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `{
+		"name": "echo",
+		"main": "main.js",
+		"contributes": {"commands": [{"id": "echo.run", "title": "Echo"}]}
+	}`
+	main := `import { commands, storage } from "mayoi";
+commands.register("echo.run", (arg) => {
+  storage.set("arg", arg);
+  return "ok";
+});`
+	if err := os.WriteFile(filepath.Join(dir, "plugin.json"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "main.js"), []byte(main), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := &Model{cfg: Config{SettingsPath: settingsPath}, welcomePage: "plugins"}
+	pg := m.pluginsPage()
+	t.Cleanup(func() {
+		unregisterAction("plugin.echo.run")
+		delete(actionAliases, pluginActionPrefix+"echo.run")
+		pg.reg.Close()
+	})
+
+	want := map[string]any{
+		"path":   "/project/App.java",
+		"paths":  []any{"/project/App.java", "/project/Util.java"},
+		"line":   float64(3),
+		"column": float64(7),
+	}
+	if !m.RunActionWithArg("plugin.echo.run", want) {
+		t.Fatal("the OpenIDEA plugin action is unavailable")
+	}
+	storagePath := filepath.Join(filepath.Dir(settingsPath), "plugin-storage", "echo", "global.json")
+	waitPluginStorage(t, storagePath, func(value any) bool {
+		got, ok := value.(map[string]any)
+		return ok && fmt.Sprint(got["path"]) == want["path"] &&
+			fmt.Sprint(got["line"]) == "3" && fmt.Sprint(got["column"]) == "7"
+	})
+
+	if !m.RunActionWithArg(pluginActionPrefix+"echo.run", "legacy") {
+		t.Fatal("the legacy plugin action alias is unavailable")
+	}
+	waitPluginStorage(t, storagePath, func(value any) bool {
+		got, ok := value.(string)
+		return ok && got == "legacy"
+	})
+}
+
+func waitPluginStorage(t *testing.T, path string, matches func(any) bool) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		data, err := os.ReadFile(path)
+		if err == nil {
+			var stored map[string]any
+			if json.Unmarshal(data, &stored) == nil && matches(stored["arg"]) {
+				return
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("plugin storage at %s did not receive the expected argument", path)
 }
 
 func TestPluginLogsCanFindWrapAndClear(t *testing.T) {

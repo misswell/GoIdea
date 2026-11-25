@@ -633,7 +633,7 @@ func (m *Model) drawWorkspaceDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := state.open
-	dialog := ui.Modal(c, &open, func() {
+	dialog := nativeModal(c, &open, func() {
 		if state.parity.Kind != "" {
 			m.drawParityWorkspaceDialog(c, p, state)
 		} else if state.discovery != nil {

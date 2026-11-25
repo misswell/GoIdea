@@ -412,8 +412,8 @@ func (m *Model) runSessionTabs(c *ui.Context, p *ui.Theme) {
 	}
 	oi := oiPaletteOf(p)
 	activeKey := m.activeRunTabKey()
-	ui.Row(c).Height(30).Shrink(0).Padding(0, 6).Gap(2).AlignItems(ui.Center).
-		BorderWidth(0, 0, 1, 0).BorderColor(oi.border).Children(func() {
+	ui.Row(c).Height(26).Grow(1).MinWidth(0).Padding(0, 2).Gap(2).
+		AlignItems(ui.Center).Children(func() {
 		ui.ScrollHorizontal(c).Grow(1).MinWidth(0).Shrink(1).Children(func() {
 			ui.Row(c).Height(28).Gap(2).AlignItems(ui.Center).Children(func() {
 				for i := range tabs {
@@ -425,18 +425,6 @@ func (m *Model) runSessionTabs(c *ui.Context, p *ui.Theme) {
 			m.runAgentArchive(c, p, archive)
 		}
 		m.runTabsMore(c, p, oi)
-		b := ui.ButtonBase(c.Key("run:hide")).Size(24, 24).Radius(4).
-			AlignItems(ui.Center).Justify(ui.Center).Tooltip("Hide Run Tool Window").
-			Label("Hide Run Tool Window")
-		if b.Hovered() {
-			b.Background(oi.toolbarHover)
-		}
-		b.Children(func() {
-			oiIconEl(c, "general/hide", 16, oi, oi.icon)
-		})
-		if b.Clicked() {
-			m.DockHide("run")
-		}
 	})
 }
 

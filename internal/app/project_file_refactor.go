@@ -1273,7 +1273,7 @@ func (m *Model) fileRefactorDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := true
-	modal := ui.Modal(c.Key("project-file-refactor"), &open, func() {
+	modal := nativeModal(c.Key("project-file-refactor"), &open, func() {
 		title := "Move"
 		action := "Refactor"
 		subject := ""
@@ -1410,7 +1410,7 @@ func (m *Model) fileRefactorPreviewDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := true
-	modal := ui.Modal(c.Key("project-refactoring-preview"), &open, func() {
+	modal := nativeModal(c.Key("project-refactoring-preview"), &open, func() {
 		ui.Column(c).Width(700).Gap(10).Children(func() {
 			ui.Text(c, "Refactoring Preview: "+v.title).FontSize(14).Bold().
 				TextColor(p.Text).SingleLine().Ellipsis("…")

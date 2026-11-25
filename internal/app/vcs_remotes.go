@@ -182,7 +182,7 @@ func (m *Model) submitGitRemote(state *vcsRemotesPane) {
 
 func (m *Model) vcsRemotesDialog(c *ui.Context, p *ui.Theme, state *vcsRemotesPane) {
 	open := true
-	dialog := ui.Modal(c, &open, func() {
+	dialog := nativeModal(c, &open, func() {
 		ui.Column(c).Width(560).Gap(10).Children(func() {
 			switch state.mode {
 			case "add", "edit":

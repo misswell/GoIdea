@@ -1418,7 +1418,7 @@ func (m *Model) termShellDialog(c *ui.Context, p *ui.Theme) {
 	}
 	open := pk.open
 	jump := -1
-	ui.Modal(c, &open, func() {
+	nativeModal(c, &open, func() {
 		ui.Column(c).Width(480).Gap(8).Children(func() {
 			ui.Text(c, "New Terminal Tab").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			switch {

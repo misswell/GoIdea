@@ -18,7 +18,7 @@ func (m *Model) serviceAddChooserDialog(c *ui.Context, p *ui.Theme) {
 	if state == nil {
 		return
 	}
-	ui.Modal(c.Key("services:add-service-chooser"), &state.open, func() {
+	nativeModal(c.Key("services:add-service-chooser"), &state.open, func() {
 		ui.Column(c).Width(460).Gap(10).Children(func() {
 			ui.Text(c, "Add Service").FontSize(14).Bold().TextColor(p.Text)
 			ui.Text(c, "Choose a run configuration type or a Docker provider entry.").

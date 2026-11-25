@@ -558,7 +558,8 @@ type Model struct {
 	// nativeSettings stages the backend-backed pages whose controls map
 	// directly to dotted settings keys. Each page keeps its own applied and
 	// draft maps so navigating between pages cannot discard staged edits.
-	nativeSettings nativeSettingsCatalogState
+	nativeSettings   nativeSettingsCatalogState
+	nativeSettingsMu sync.Mutex
 	// backendFormatOnSave mirrors editor.formatOnSave, which the backend's
 	// lsp_format checks before running an external formatter on save.
 	backendFormatOnSave      bool
@@ -2001,6 +2002,7 @@ func (m *Model) newTab(doc *docbridge.Document) *Tab {
 			LineHeight: font.lineHeightPixels(fontSize) / fontSize,
 			Bindings:   m.editorBindings(),
 			ReadOnly:   doc.Info().ReadOnly,
+			Theme:      m.editorColorSchemeTheme(),
 		},
 		synced: v,
 		seen:   v,

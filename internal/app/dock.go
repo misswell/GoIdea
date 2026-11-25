@@ -119,6 +119,9 @@ type dockState struct {
 	// stripeButtons overrides a contribution's default stripe membership.
 	// Opening an onUse window records true, while Hide records false.
 	stripeButtons map[string]bool
+	// focusPending is OpenIDEA's tool-window focus request. The shell consumes
+	// it on the next content frame so lazy windows focus after becoming visible.
+	focusPending string
 }
 
 // dockSpec returns a registered window.
@@ -519,6 +522,7 @@ func (m *Model) DockShow(id string) {
 	if _, ok := m.dockSlotOf(id); ok {
 		m.dockOpenContent(id)
 		m.dockTouch(id)
+		m.dock.focusPending = id
 		m.rememberToolWindowStripe(id)
 		m.dockSyncMirrors()
 		m.rememberLayout()
@@ -536,6 +540,7 @@ func (m *Model) DockShow(id string) {
 	m.dockOpenContent(id)
 	m.dock.slots[target] = id
 	m.dockTouch(id)
+	m.dock.focusPending = id
 	m.rememberToolWindowStripe(id)
 	release()
 	m.dockSyncMirrors()
@@ -612,11 +617,22 @@ func (m *Model) DockMove(id string, target dockSlot) {
 	}
 	m.dock.slots[target] = id
 	m.dockTouch(id)
+	m.dock.focusPending = id
 	m.rememberToolWindowStripe(id)
 	release()
 	m.dockSyncMirrors()
 	m.rememberLayout()
 	m.invalidate()
+}
+
+// consumeToolWindowFocus lets the next built content frame take the keyboard
+// focus once, matching OpenIDEA's delayed autofocus request.
+func (m *Model) consumeToolWindowFocus(id string) bool {
+	if m.dock.focusPending != id {
+		return false
+	}
+	m.dock.focusPending = ""
+	return true
 }
 
 // dockNewestShown is the most recently used window still shown, ignoring id.

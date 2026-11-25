@@ -635,7 +635,7 @@ func (m *Model) vcsMoreDialog(c *ui.Context, p *ui.Theme) {
 	if m.vcsMore.kind == vcsMorePrompt || m.vcsMore.kind == vcsMoreConfirm {
 		width = 520
 	}
-	dialog := ui.Modal(c.Key("vcs-more:"+m.vcsMore.kind+":"+m.vcsMore.action), &open, func() {
+	dialog := nativeModal(c.Key("vcs-more:"+m.vcsMore.kind+":"+m.vcsMore.action), &open, func() {
 		ui.Column(c).Width(width).Gap(10).Children(func() {
 			ui.Text(c, m.vcsMore.title).FontSize(15).Bold().TextColor(p.Text).SingleLine()
 			if m.vcsMore.hint != "" {

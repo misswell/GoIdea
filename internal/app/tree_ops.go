@@ -2138,7 +2138,7 @@ func (m *Model) treeOpDialog(c *ui.Context, p *ui.Theme) {
 	case treeOpDelete:
 		title = "Delete"
 	}
-	d := ui.Modal(c, &open, func() {
+	d := nativeModal(c, &open, func() {
 		ui.Column(c).Width(420).Gap(8).Children(func() {
 			ui.Text(c, title).FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			if v.kind == treeOpDelete {

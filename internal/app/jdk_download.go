@@ -707,7 +707,7 @@ func (m *Model) jdkDownloadDialog(c *ui.Context, p *ui.Theme) {
 	}
 	oi := oiPaletteOf(p)
 	open := d.open
-	modal := ui.Modal(c, &open, func() {
+	modal := nativeModal(c, &open, func() {
 		ui.Column(c).Width(560).Padding(18, 20, 16, 20).Gap(12).
 			Background(oi.elev).Border(1, oi.border).Radius(6).Children(func() {
 			ui.Text(c, "Download JDK").FontSize(14).Bold().

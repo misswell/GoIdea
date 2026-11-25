@@ -21,6 +21,7 @@ const utf8BOMSettingID = "editor.encodings.utf8Bom"
 const (
 	nativeSettingsToggle nativeSettingsKind = iota
 	nativeSettingsText
+	nativeSettingsPassword
 	nativeSettingsNumber
 	nativeSettingsSelect
 	nativeSettingsList
@@ -56,6 +57,8 @@ type nativeSettingsField struct {
 	directory bool
 	// invert shows and edits the negation of the stored setting.
 	invert bool
+	// disabledUnless names the native HTTP proxy state that enables the field.
+	disabledUnless string
 }
 
 type nativeSettingsSection struct {
@@ -89,6 +92,13 @@ func nativeText(key, label, placeholder, value string) nativeSettingsField {
 	return nativeSettingsField{
 		key: key, label: label, placeholder: placeholder,
 		kind: nativeSettingsText, defaultValue: value,
+	}
+}
+
+func nativePassword(key, label string) nativeSettingsField {
+	return nativeSettingsField{
+		key: key, label: label,
+		kind: nativeSettingsPassword, defaultValue: "",
 	}
 }
 
@@ -568,16 +578,44 @@ func nativeSettingsDefinitions() []nativeSettingsPageSpec {
 						nativeChoice("none", "No proxy"),
 						nativeChoice("auto", "Auto-detect proxy settings"),
 						nativeChoice("manual", "Manual proxy configuration")),
-					selectField("proxy.kind", "Proxy type", "http",
-						nativeChoice("http", "HTTP"), nativeChoice("socks", "SOCKS")),
-					text("proxy.host", "Host name", "", ""),
-					number("proxy.port", "Port number", 80, 1, 65535, 1),
-					text("proxy.noProxy", "No proxy for", "*.example.com, 192.168.*", ""),
-					toggle("proxy.authenticate", "Proxy authentication", false),
-					text("proxy.login", "Login", "", ""),
+					func() nativeSettingsField {
+						field := selectField("proxy.kind", "Proxy type", "http",
+							nativeChoice("http", "HTTP"), nativeChoice("socks", "SOCKS"))
+						field.disabledUnless = "manual"
+						return field
+					}(),
+					func() nativeSettingsField {
+						field := text("proxy.host", "Host name", "", "")
+						field.disabledUnless = "manual"
+						return field
+					}(),
+					func() nativeSettingsField {
+						field := number("proxy.port", "Port number", 80, 1, 65535, 1)
+						field.disabledUnless = "manual"
+						return field
+					}(),
+					func() nativeSettingsField {
+						field := text("proxy.noProxy", "No proxy for", "*.example.com, 192.168.*", "")
+						field.disabledUnless = "manual"
+						return field
+					}(),
+					func() nativeSettingsField {
+						field := toggle("proxy.authenticate", "Proxy authentication", false)
+						field.disabledUnless = "manual"
+						return field
+					}(),
+					func() nativeSettingsField {
+						field := text("proxy.login", "Login", "", "")
+						field.disabledUnless = "authenticated"
+						return field
+					}(),
+					func() nativeSettingsField {
+						field := nativePassword("proxy.password", "Password")
+						field.disabledUnless = "authenticated"
+						return field
+					}(),
 				},
 			}},
-			note: "Check connection needs proxy_check_connection, which the pinned GoIDEA backend does not expose.",
 		},
 		{
 			page: settingsPageSpec{
@@ -855,6 +893,16 @@ func nativeSettingsDefinitions() []nativeSettingsPageSpec {
 	}
 	pageDefs = append(pageDefs, cmakeAndEditorNativeSettingsPages()...)
 	pageDefs = append(pageDefs, vcsNativeSettingsPages()...)
+	for i := range pageDefs {
+		switch pageDefs[i].page.id {
+		case settingsPageRichTextCopy:
+			pageDefs[i].note = "Saved for compatibility; native copy currently uses plain text."
+		case settingsPageStickyLines:
+			pageDefs[i].note = "Saved for compatibility; the native editor does not show sticky lines yet."
+		case settingsPagePythonDocstrings:
+			pageDefs[i].note = "Saved for compatibility; Python generation does not yet support every format."
+		}
+	}
 	return pageDefs
 }
 
@@ -1026,6 +1074,9 @@ func nativeSettingsPages() []settingsPageSpec {
 			}
 			for _, field := range section.fields {
 				labels = append(labels, field.label)
+				for _, choice := range field.choices {
+					labels = append(labels, choice.label)
+				}
 			}
 		}
 		def.page.labels = labels
@@ -1364,13 +1415,15 @@ func (m *Model) loadNativeSettingsPage(page string) {
 	if !ok || len(def.sections) == 0 {
 		return
 	}
+	scope := nativeSettingsPageScope(m, def)
+	root := m.Root()
+	m.nativeSettingsMu.Lock()
 	if m.nativeSettings.pages == nil {
 		m.nativeSettings.pages = map[string]nativeSettingsPageState{}
 	}
 	state := m.nativeSettings.pages[page]
-	scope := nativeSettingsPageScope(m, def)
-	root := m.Root()
 	if state.session && (state.loading || state.loaded) && state.scope == scope && state.root == root {
+		m.nativeSettingsMu.Unlock()
 		return
 	}
 	state.session = true
@@ -1382,10 +1435,13 @@ func (m *Model) loadNativeSettingsPage(page string) {
 	state.loadGen++
 	generation := state.loadGen
 	m.nativeSettings.pages[page] = state
+	m.nativeSettingsMu.Unlock()
 	if m.mgr == nil && m.invokeHook == nil {
+		m.nativeSettingsMu.Lock()
 		state.loading = false
 		state.err = "The GoIDEA backend is not connected"
 		m.nativeSettings.pages[page] = state
+		m.nativeSettingsMu.Unlock()
 		m.invalidate()
 		return
 	}
@@ -1411,6 +1467,8 @@ func (m *Model) loadNativeSettingsPage(page string) {
 		}
 		values := nativeSettingsPageValuesFromRoots(roots, def)
 		m.post(func() {
+			m.nativeSettingsMu.Lock()
+			defer m.nativeSettingsMu.Unlock()
 			current := m.nativeSettings.pages[page]
 			if current.loadGen != generation || current.scope != nativeSettingsPageScope(m, def) ||
 				((def.projectOnly || nativeSettingsScopesIncludeProject(scopes)) && m.Root() != root) {
@@ -1461,6 +1519,12 @@ func nativeNestedSetting(root map[string]any, path ...string) any {
 }
 
 func nativeSettingsValue(m *Model, page, key string) any {
+	m.nativeSettingsMu.Lock()
+	defer m.nativeSettingsMu.Unlock()
+	return nativeSettingsValueLocked(m, page, key)
+}
+
+func nativeSettingsValueLocked(m *Model, page, key string) any {
 	if state, ok := m.nativeSettings.pages[page]; ok {
 		return state.draft[key]
 	}
@@ -1474,32 +1538,6 @@ func nativeSettingsValue(m *Model, page, key string) any {
 		}
 	}
 	return nil
-}
-
-func (m *Model) setNativeSettingsValue(page, key string, value any) {
-	state := m.nativeSettings.pages[page]
-	if state.draft == nil {
-		state.draft = map[string]any{}
-	}
-	state.draft[key] = value
-	m.nativeSettings.pages[page] = state
-	if key == "languages.python.interpreter" {
-		for _, other := range []string{settingsPagePythonDeps, settingsPagePythonInterpret} {
-			if other == page {
-				continue
-			}
-			otherState := m.nativeSettings.pages[other]
-			if !otherState.loaded {
-				continue
-			}
-			if otherState.draft == nil {
-				otherState.draft = map[string]any{}
-			}
-			otherState.draft[key] = value
-			m.nativeSettings.pages[other] = otherState
-		}
-	}
-	m.invalidate()
 }
 
 func nativeSettingsBool(m *Model, page, key string) bool {
@@ -1544,6 +1582,12 @@ func nativeSettingsSameValue(a, b any) bool {
 }
 
 func (m *Model) nativeSettingsDirty(page string) bool {
+	m.nativeSettingsMu.Lock()
+	defer m.nativeSettingsMu.Unlock()
+	return nativeSettingsDirtyLocked(m, page)
+}
+
+func nativeSettingsDirtyLocked(m *Model, page string) bool {
 	state, ok := m.nativeSettings.pages[page]
 	if !ok || !state.loaded {
 		return false
@@ -1570,6 +1614,8 @@ func (m *Model) resetNativeSettingsPage(page string) {
 	if !ok {
 		return
 	}
+	m.nativeSettingsMu.Lock()
+	defer m.nativeSettingsMu.Unlock()
 	state := m.nativeSettings.pages[page]
 	if state.draft == nil {
 		state.draft = map[string]any{}
@@ -1588,6 +1634,8 @@ func (m *Model) resetNativeSettingsPage(page string) {
 }
 
 func (m *Model) pendingNativeSettingsWrites() []settingsBackendWrite {
+	m.nativeSettingsMu.Lock()
+	defer m.nativeSettingsMu.Unlock()
 	defs := nativeSettingsDefinitionsByID()
 	pages := make([]string, 0, len(m.nativeSettings.pages))
 	for page := range m.nativeSettings.pages {
@@ -1643,10 +1691,14 @@ func (m *Model) settingsNativeBody(c *ui.Context, oi oiColors, page string) {
 			FontSize(12).TextColor(oi.textMuted).SingleLine()
 		return
 	}
+	m.nativeSettingsMu.Lock()
 	state := m.nativeSettings.pages[page]
+	m.nativeSettingsMu.Unlock()
 	settingsBackendScopeText(c, oi, state.scope)
 	settingsBackendStatus(c, oi, state.loading, state.err, def.page.title, func() {
+		m.nativeSettingsMu.Lock()
 		m.nativeSettings.pages[page] = nativeSettingsPageState{}
+		m.nativeSettingsMu.Unlock()
 		m.loadNativeSettingsPage(page)
 	})
 	if !state.loaded {
@@ -1681,19 +1733,31 @@ func (m *Model) settingsNativeBody(c *ui.Context, oi oiColors, page string) {
 	if page == settingsPageAgentMCPServer {
 		m.renderMCPServerEndpoint(c, oi)
 	}
+	if page == settingsPageHTTPProxy {
+		m.renderHTTPProxyCheck(c, oi)
+	}
 	if def.note != "" {
 		ui.Text(c, def.note).FontSize(11).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
 	}
 }
 
 func (m *Model) renderNativeSettingsField(c *ui.Context, oi oiColors, page string, field nativeSettingsField) {
+	disabled := false
+	if page == settingsPageHTTPProxy {
+		switch field.disabledUnless {
+		case "manual":
+			disabled = nativeHTTPProxyMode(m) != "manual"
+		case "authenticated":
+			disabled = !nativeHTTPProxyAuthenticationEnabled(m)
+		}
+	}
 	switch field.kind {
 	case nativeSettingsToggle:
 		value := nativeSettingsBool(m, page, field.key)
 		if field.invert {
 			value = !value
 		}
-		if ui.Checkbox(c, &value, field.label).Changed() {
+		if ui.Checkbox(c, &value, field.label).Disabled(disabled).Opacity(opacityForDisabled(disabled)).Changed() {
 			if field.invert {
 				value = !value
 			}
@@ -1703,7 +1767,18 @@ func (m *Model) renderNativeSettingsField(c *ui.Context, oi oiColors, page strin
 		ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
 			settingsFormLabel(c, oi, field.label, 230)
 			value := nativeSettingsString(m, page, field.key)
-			input := ui.TextInput(c, &value).Grow(1).Placeholder(field.placeholder)
+			input := ui.TextInput(c, &value).Grow(1).Placeholder(field.placeholder).
+				Disabled(disabled).Opacity(opacityForDisabled(disabled))
+			if input.Changed() {
+				m.setNativeSettingsValue(page, field.key, value)
+			}
+		})
+	case nativeSettingsPassword:
+		ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+			settingsFormLabel(c, oi, field.label, 230)
+			value := nativeSettingsString(m, page, field.key)
+			input := ui.TextInput(c, &value).Grow(1).Password().
+				Disabled(disabled).Opacity(opacityForDisabled(disabled))
 			if input.Changed() {
 				m.setNativeSettingsValue(page, field.key, value)
 			}
@@ -1712,7 +1787,8 @@ func (m *Model) renderNativeSettingsField(c *ui.Context, oi oiColors, page strin
 		ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
 			settingsFormLabel(c, oi, field.label, 230)
 			value := nativeSettingsNumberValue(m, page, field.key)
-			input := ui.NumberInput(c, &value, field.min, field.max, field.step).Width(120)
+			input := ui.NumberInput(c, &value, field.min, field.max, field.step).
+				Width(120).Disabled(disabled).Opacity(opacityForDisabled(disabled))
 			if input.Changed() {
 				m.setNativeSettingsValue(page, field.key, value)
 			}
@@ -1736,11 +1812,17 @@ func (m *Model) renderNativeSettingsField(c *ui.Context, oi oiColors, page strin
 					label = choice.label
 				}
 			}
-			selector := ui.Select(c, &label, labels).Grow(1)
+			selectorDisabled := field.disabledUnless != "" && disabled
+			selector := ui.Select(c, &label, labels).Grow(1).
+				Disabled(selectorDisabled).Opacity(opacityForDisabled(selectorDisabled))
 			if selector.Changed() {
 				for _, choice := range field.choices {
 					if choice.label == label {
-						m.setNativeSettingsValue(page, field.key, choice.value)
+						if page == settingsPageHTTPProxy && field.key == "proxy.kind" {
+							m.setNativeHTTPProxyKind(choice.value)
+						} else {
+							m.setNativeSettingsValue(page, field.key, choice.value)
+						}
 						break
 					}
 				}
@@ -1785,6 +1867,13 @@ func nativeSettingsJSONText(value any) string {
 		return ""
 	}
 	return string(encoded)
+}
+
+func opacityForDisabled(disabled bool) float32 {
+	if disabled {
+		return 0.55
+	}
+	return 1
 }
 
 func nativeCMakeProfileList(value any) []map[string]any {

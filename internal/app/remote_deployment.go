@@ -1008,7 +1008,7 @@ func (m *Model) deploymentPickerDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := state.pickerOpen
-	dialog := ui.Modal(c.Key("deployment-server-picker"), &open, func() {
+	dialog := nativeModal(c.Key("deployment-server-picker"), &open, func() {
 		ui.Column(c).Width(520).Padding(18).Gap(8).Children(func() {
 			ui.Text(c, state.pickerTitle).FontSize(14).Bold().TextColor(p.Text).SingleLine()
 			for _, server := range state.eligible {
@@ -1034,7 +1034,7 @@ func (m *Model) deploymentSettingsDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := state.editorOpen
-	dialog := ui.Modal(c.Key("deployment-settings"), &open, func() {
+	dialog := nativeModal(c.Key("deployment-settings"), &open, func() {
 		ui.Column(c).Width(820).MaxHeight(720).Padding(18).Gap(10).Children(func() {
 			ui.Row(c).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "Deployment").FontSize(14).Bold().TextColor(p.Text).SingleLine()
@@ -1279,7 +1279,7 @@ func (m *Model) deploymentAuthDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := state.authOpen
-	dialog := ui.Modal(c.Key("deployment-auth"), &open, func() {
+	dialog := nativeModal(c.Key("deployment-auth"), &open, func() {
 		ui.Column(c).Width(560).Padding(18).Gap(10).Children(func() {
 			ui.Text(c, state.authTitle).FontSize(14).Bold().TextColor(p.Text).SingleLine()
 			if state.authTrust {
@@ -1512,7 +1512,7 @@ func (m *Model) deploymentSyncDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := state.syncOpen
-	dialog := ui.Modal(c.Key("deployment-sync"), &open, func() {
+	dialog := nativeModal(c.Key("deployment-sync"), &open, func() {
 		ui.Column(c).Width(900).MaxHeight(760).Padding(18).Gap(8).Children(func() {
 			ui.Text(c, "Sync with Deployed to "+state.syncServer.Label()).FontSize(14).Bold().
 				TextColor(p.Text).SingleLine()

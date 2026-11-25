@@ -3061,7 +3061,8 @@ func (m *Model) settingsDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := m.settingsOpen
-	dlg := ui.Modal(c, &open, func() {
+	dlg := nativeSurfaceModal(c, &open, func() {
+		setNativeModalDefault(m.applySettingsAndClose)
 		m.settingsSheet(c, p)
 	})
 	if dlg.Dismissed() || !open {
@@ -3077,7 +3078,8 @@ func (m *Model) settingsDialog(c *ui.Context, p *ui.Theme) {
 func (m *Model) settingsSheet(c *ui.Context, p *ui.Theme) {
 	oi := oiPaletteOf(p)
 	ui.Column(c).Width(settingsDialogWidth).Height(m.settingsDialogHeight()).
-		Background(oi.elev).Radius(6).Children(func() {
+		Background(oi.elev).Border(1, oi.border).Radius(6).
+		Shadow(0, 10, 30, 0, ui.RGBA(0, 0, 0, 0.30)).Children(func() {
 		m.settingsTitle(c, oi)
 		// Stretch, not the Row default of centering: a short page would
 		// otherwise float in the middle instead of filling its side.

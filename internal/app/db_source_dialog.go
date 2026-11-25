@@ -553,7 +553,7 @@ func (m *Model) dbSourceFormDialog(c *ui.Context, p *ui.Theme) {
 	}
 	f := v.sourceForm
 	open := f.open
-	ui.Modal(c, &open, func() {
+	nativeModal(c, &open, func() {
 		ui.Column(c).Width(760).Height(600).Gap(10).Children(func() {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "Data Sources and Drivers").FontSize(13).Bold().TextColor(p.Text).SingleLine()

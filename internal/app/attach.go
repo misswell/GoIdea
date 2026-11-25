@@ -696,7 +696,7 @@ func (m *Model) attachDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := d.open
-	ui.Modal(c, &open, func() {
+	nativeModal(c, &open, func() {
 		ui.Column(c).Width(620).Gap(8).Children(func() {
 			ui.Text(c, "Attach to Process").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			in := ui.TextInput(c, &d.query).AutoFocus()

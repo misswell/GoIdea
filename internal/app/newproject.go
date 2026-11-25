@@ -256,7 +256,7 @@ func (m *Model) newProjectDialog(c *ui.Context, p *ui.Theme) {
 	open := st.open
 	nameErr := projectNameError(st.name)
 	path := m.NewProjectPath()
-	ui.Modal(c, &open, func() {
+	nativeModal(c, &open, func() {
 		ui.Column(c).Width(760).Gap(12).Children(func() {
 			ui.Text(c, "New Project").FontSize(13).Bold().TextColor(p.Text).SingleLine()
 			m.newProjectScaffoldPanel(c, p)
@@ -311,6 +311,17 @@ func (m *Model) newProjectDialog(c *ui.Context, p *ui.Theme) {
 				if st.busy {
 					ui.Text(c, "Creating…").FontSize(12).TextColor(p.TextMuted).SingleLine()
 				}
+			})
+			setNativeModalDefault(func() {
+				if nameErr != "" || path == "" || st.busy {
+					return
+				}
+				for _, f := range st.fields {
+					if e := st.scaffoldFieldError(f); e != "" {
+						return
+					}
+				}
+				m.CreateNewProject()
 			})
 		})
 	})

@@ -685,7 +685,7 @@ func (m *Model) runChooserDialog(c *ui.Context, p *ui.Theme) {
 	if ch.sel < 0 {
 		ch.sel = 0
 	}
-	ui.Modal(c, &open, func() {
+	nativeModal(c, &open, func() {
 		ui.Column(c).Width(560).Gap(8).Children(func() {
 			if ch.mode != "select" {
 				caption := "Run"
