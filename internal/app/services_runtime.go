@@ -510,42 +510,9 @@ func (m *Model) runViewedServicePanel(c *ui.Context, p *ui.Theme) {
 	if child == nil {
 		return
 	}
-	ui.Row(c).Height(30).Shrink(0).Padding(0, 8).Gap(8).AlignItems(ui.Center).
-		BorderWidth(0, 0, 1, 0).BorderColor(p.Border).Children(func() {
-		ui.Text(c, "Run").FontSize(12).Bold().TextColor(p.Text)
-		ui.Text(c, child.name).FontSize(12).TextColor(p.Text).
-			SingleLine().Ellipsis("…").Grow(1)
-		ui.Text(c, serviceExecutionDetail(child)).FontSize(12).
-			TextColor(serviceStatusColor(p, child)).SingleLine()
-		if child.live() {
-			if ui.Button(c, "Rerun").Clicked() {
-				m.startServiceConfig(child.config.ID, true)
-			}
-			if ui.Button(c, "Stop").Clicked() {
-				m.stopRunChild(child)
-			}
-		} else if ui.Button(c, "Run").Clicked() {
-			m.startServiceConfig(child.config.ID, false)
-		}
-		if ui.Button(c, "Show in Services").Clicked() {
-			m.run.viewChild = nil
-			m.selectOnlyServiceKey(serviceConfigKey(child.config.ID))
-			m.ShowServices()
-		}
-	})
-	ui.Scroll(c).Grow(1).Children(func() {
-		ui.Column(c).Padding(10, 12).Children(func() {
-			if child.truncated {
-				ui.Text(c, "(Output truncated: earlier lines were omitted)").
-					FontSize(12).TextColor(p.TextMuted)
-			}
-			if len(child.output) == 0 {
-				ui.Text(c, "No output yet.").FontSize(12).TextColor(p.TextMuted)
-			} else {
-				ui.Text(c, child.renderText()).FontSize(12).TextColor(p.Text)
-			}
-		})
-	})
+	session := m.serviceRunSession(child)
+	m.runViewedServiceTabs(c, p, session)
+	m.runSessionPanel(c, p, session)
 }
 
 func serviceURLsFromPorts(ports map[string]string) []string {

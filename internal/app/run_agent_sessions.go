@@ -20,20 +20,23 @@ const (
 )
 
 type agentRunSession struct {
-	id       uint64
-	request  agentRunRequest
-	runID    uint32
-	channel  uint32
-	running  bool
-	awaiting bool
-	pid      *int32
-	exitCode *int32
-	started  time.Time
-	ended    time.Time
-	err      string
+	id          uint64
+	request     agentRunRequest
+	runID       uint32
+	channel     uint32
+	running     bool
+	awaiting    bool
+	stopped     bool
+	stdinClosed bool
+	pid         *int32
+	exitCode    *int32
+	started     time.Time
+	ended       time.Time
+	err         string
 
 	output    []outputLine
 	truncated bool
+	dropped   int
 }
 
 func (r *agentRunSession) live() bool {
@@ -187,6 +190,8 @@ func (m *Model) newAgentRunSession(request agentRunRequest) *agentRunSession {
 func (m *Model) beginAgentRun(run *agentRunSession) {
 	run.running = false
 	run.awaiting = true
+	run.stopped = false
+	run.stdinClosed = false
 	run.runID = 0
 	run.channel = m.nextChannel()
 	run.pid = nil
@@ -196,6 +201,7 @@ func (m *Model) beginAgentRun(run *agentRunSession) {
 	run.err = ""
 	run.output = nil
 	run.truncated = false
+	run.dropped = 0
 	m.run.agentActive = run.id
 }
 
@@ -283,6 +289,7 @@ func (r *agentRunSession) append(chunk openidea.OutputChunk) {
 	if over := len(r.output) - maxRunLines; over > 0 {
 		r.output = append(r.output[:0], r.output[over:]...)
 		r.truncated = true
+		r.dropped += over
 	}
 }
 
@@ -291,7 +298,9 @@ func (m *Model) selectAgentRun(id uint64) {
 		if run != nil && run.id == id {
 			m.run.agentActive = id
 			m.run.activeChild = 0
-			m.stackTrace = nil
+			if m.stackTrace != nil {
+				m.stackTrace.active = -1
+			}
 			m.invalidate()
 			return
 		}
@@ -305,10 +314,7 @@ func (m *Model) clearActiveAgentRun() bool {
 	}
 	run.output = nil
 	run.truncated = false
-	run.exitCode = nil
-	if !run.live() {
-		run.err = ""
-	}
+	run.dropped = 0
 	m.invalidate()
 	return true
 }
@@ -331,6 +337,7 @@ func (m *Model) stopActiveAgentRun() bool {
 	if run == nil || !run.live() {
 		return false
 	}
+	run.stopped = true
 	if run.runID == 0 {
 		run.err = "The agent command has not started"
 		m.invalidate()

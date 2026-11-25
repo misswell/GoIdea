@@ -68,7 +68,7 @@ release can be called today.
 | Profiler | `profiler` | 3 | 0 | 3 |
 | Refactoring | `refactor` | 5 | 0 | 4 |
 | Remote development | `remote_dev` | 0 | 11 | 0 |
-| Run configurations | `run` | 28 | 0 | 21 |
+| Run configurations | `run` | 28 | 0 | 23 |
 | scaffold | `scaffold` | 4 | 0 | 3 |
 | SDKs | `sdk` | 13 | 0 | 13 |
 | Search | `search` | 4 | 0 | 3 |
@@ -88,7 +88,7 @@ release can be called today.
 ## Served by `openidea-server --stdio`
 
 549 commands. `GoIDEA` marks the ones a non-test Go source invokes today
-(434 of 549).
+(436 of 549).
 
 | Command | Domain | Arguments | GoIDEA |
 | --- | --- | --- | --- |
@@ -467,7 +467,7 @@ release can be called today.
 | `run_application_build` | Run configurations | `config`, `module` | yes |
 | `run_application_publish` | Run configurations | `classPaths`, `config`, `mainClass` | yes |
 | `run_apply_settings` | Run configurations | `configs` | yes |
-| `run_close_stdin` | Run configurations | `id` | — |
+| `run_close_stdin` | Run configurations | `id` | yes |
 | `run_configs` | Run configurations | — | yes |
 | `run_dotnet_resolve` | Run configurations | `config`, `debug` | yes |
 | `run_env_files` | Run configurations | `files` | yes |
@@ -480,7 +480,7 @@ release can be called today.
 | `run_save_configs` | Run configurations | — | yes |
 | `run_save_templates` | Run configurations | `templates` | yes |
 | `run_start` | Run configurations | `config`, `onOutput`, `request` | yes |
-| `run_stdin` | Run configurations | `id` | — |
+| `run_stdin` | Run configurations | `id` | yes |
 | `run_stop` | Run configurations | `id` | yes |
 | `run_system_env` | Run configurations | — | — |
 | `run_templates` | Run configurations | — | yes |
@@ -792,7 +792,7 @@ GoIDEA needs to do for each:
 
 ## What this means for GoIDEA
 
-549 remote commands are available today; GoIDEA uses 434. The parity work is
+549 remote commands are available today; GoIDEA uses 436. The parity work is
 first to cover the remote surface OpenIDEA's own frontend uses, then to move
 `shared-op`/`host`/`crate` commands onto stdio through the OpenIDEA fork
 (a submodule bump and a server release), and to implement `desktop` commands

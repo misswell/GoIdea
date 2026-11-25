@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -328,20 +327,14 @@ func (m *Model) traceSourcePath(ctx context.Context, root string, loc adapter.Te
 	return first
 }
 
-// renderStackTraces draws the Run tabs and, when selected, the trace console.
+// renderStackTraces draws the selected analyzed stack trace. Session and
+// trace tabs share the Run window's compact strip; this body renders only
+// when a trace is the current tab, as upstream's RunView does.
 func (m *Model) renderStackTraces(c *ui.Context, p *ui.Theme) bool {
 	s := m.stackTrace
 	if s == nil || len(s.tabs) == 0 {
 		return false
 	}
-	ui.Row(c).Gap(4).Children(func() {
-		ui.Button(c, "Run Output").OnClick(func() { s.active = -1; m.invalidate() })
-		for i, tab := range s.tabs {
-			i, tab := i, tab
-			ui.Button(c.Key(fmt.Sprintf("trace-tab:%d", i)), tab.title).OnClick(func() { s.active = i; m.invalidate() })
-			ui.Button(c.Key(fmt.Sprintf("trace-close:%d", i)), "×").OnClick(func() { m.closeStackTraceTab(i) })
-		}
-	})
 	if s.active < 0 || s.active >= len(s.tabs) {
 		return false
 	}

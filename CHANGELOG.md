@@ -3,6 +3,13 @@
 The GitHub release notes, which **Help › What's New** shows, come from the
 `## <version>` section here. Every release needs one, or its build fails.
 
+## Unreleased
+
+- **Run** now uses OpenIDEA's compact session tabs, close controls and vertical action rail.
+- **Run** consoles color normal, error and system output and support find, follow and soft-wrap.
+- **Run** test sessions show the native results split, filters and selected-test output.
+- **Run** empty windows show OpenIDEA's three ways to start a configuration.
+
 ## 0.1.39
 
 - Settings import/export and JetBrains IDE imports now use real backend RPCs.

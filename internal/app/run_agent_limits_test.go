@@ -125,7 +125,7 @@ func TestAgentRunLimitsArchiveOldestFinishedTabsAndNeverLiveOnes(t *testing.T) {
 		}
 	})
 
-	tester := ui.NewTester(func(c *ui.Context) { m.runAgentTabs(c, c.Theme()) }, 700, 80)
+	tester := ui.NewTester(func(c *ui.Context) { m.runSessionTabs(c, c.Theme()) }, 700, 80)
 	text := strings.Join(tester.Texts(), "\n")
 	if !strings.Contains(text, "delta") || !strings.Contains(text, "Archived (1)") {
 		t.Fatalf("native agent tabs = %q", tester.Texts())

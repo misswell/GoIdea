@@ -85,14 +85,18 @@ type RunPane struct {
 	// Debug tab when run.confirmTerminate is enabled.
 	terminateAsk *runTerminateAsk
 
-	busy     bool
-	running  bool
-	awaiting bool
-	runID    uint32
-	channel  uint32
-	pid      *int32
-	exitCode *int32
-	err      string
+	busy        bool
+	running     bool
+	awaiting    bool
+	stopped     bool
+	runID       uint32
+	channel     uint32
+	pid         *int32
+	exitCode    *int32
+	err         string
+	started     time.Time
+	ended       time.Time
+	stdinClosed bool
 
 	// lastID/lastRaw/lastName remember the configuration this pane started,
 	// so Rerun launches it as saved now (upstream rerunConfig).
@@ -102,6 +106,15 @@ type RunPane struct {
 
 	output    []outputLine
 	truncated bool
+	dropped   int
+
+	// RunView keeps each session tab's find, follow and wrapping controls.
+	// The map is keyed by the stable tab identity, so switching sessions
+	// preserves those settings as OpenIDEA's SessionPanel does.
+	console map[string]*runConsoleState
+	// The test tree's show-passed/show-ignored toggles are Run-window state.
+	showPassedTests  bool
+	hideIgnoredTests bool
 	// The hidden performance action owns a synthetic console stream. It never
 	// calls run_start, but Stop still cancels it through the same command.
 	sampleOutputBusy       bool
@@ -724,12 +737,17 @@ func (m *Model) startRunWithBeforeLaunch(
 	m.run.pendingChildExits = map[uint32]*int32{}
 	m.run.awaiting = true
 	m.run.running = false
+	m.run.stopped = false
 	m.run.runID = 0
 	m.run.channel = 0
 	m.run.exitCode = nil
 	m.run.err = ""
+	m.run.stdinClosed = false
 	m.run.output = nil
 	m.run.truncated = false
+	m.run.dropped = 0
+	m.run.started = time.Now()
+	m.run.ended = time.Time{}
 	m.run.lastID = cfg.ID
 	m.run.lastRaw = append(json.RawMessage(nil), raw...)
 	m.run.lastName = name
@@ -885,12 +903,14 @@ func (m *Model) startRunWithCoverageNow(
 	m.run.busy = true
 	m.run.awaiting = true
 	m.run.running = false
+	m.run.stopped = false
 	m.run.runID = 0
 	m.run.coverage = coverage
 	m.run.channel = ch
 	m.run.pid = nil
 	m.run.exitCode = nil
 	m.run.err = ""
+	m.run.stdinClosed = configured != nil && configured.StdinFile != nil
 	m.run.earlyExit = false
 	if !keepChildren {
 		m.run.children = nil
@@ -900,6 +920,9 @@ func (m *Model) startRunWithCoverageNow(
 	m.run.preparingGroup = false
 	m.run.output = nil
 	m.run.truncated = false
+	m.run.dropped = 0
+	m.run.started = time.Now()
+	m.run.ended = time.Time{}
 	m.status = "Starting " + name + "…"
 	m.invalidate()
 
@@ -1058,6 +1081,7 @@ func (m *Model) StopRun() {
 	if !m.run.running && !m.run.awaiting {
 		return
 	}
+	m.run.stopped = true
 	id := m.run.runID
 	if id == 0 {
 		m.run.err = "The process has not started"
@@ -1169,16 +1193,23 @@ func (m *Model) ClearRun() {
 	if m.clearActiveAgentRun() {
 		return
 	}
+	if child := m.activeChild(); child != nil {
+		child.output = nil
+		child.truncated = false
+		child.dropped = 0
+		m.invalidate()
+		return
+	}
 	m.run.output = nil
 	m.run.truncated = false
+	m.run.dropped = 0
 	for _, child := range m.run.children {
 		if !child.live() {
 			child.output = nil
 			child.truncated = false
+			child.dropped = 0
 		}
 	}
-	m.run.exitCode = nil
-	m.run.err = ""
 	m.invalidate()
 }
 
@@ -1392,6 +1423,7 @@ func (p *RunPane) append(c openidea.OutputChunk) {
 	if over := len(p.output) - maxRunLines; over > 0 {
 		p.output = append(p.output[:0], p.output[over:]...)
 		p.truncated = true
+		p.dropped += over
 	}
 }
 
@@ -1601,6 +1633,7 @@ func (m *Model) acceptExit(e openidea.RunExitedEvent) {
 	m.run.awaiting = false
 	m.run.running = false
 	m.run.busy = false
+	m.run.ended = time.Now()
 	m.run.exitCode = e.Code
 	// The test results tree finishes with the process (results.ts finish).
 	if m.run.tests != nil {

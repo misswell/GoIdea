@@ -29,17 +29,21 @@ type runChild struct {
 	service bool
 	root    string
 
-	pid      *int32
-	starting bool
-	running  bool
-	stopped  bool
-	exitCode *int32
-	err      string
-	finished bool
-	done     chan error
+	pid         *int32
+	starting    bool
+	running     bool
+	stopped     bool
+	exitCode    *int32
+	err         string
+	finished    bool
+	started     time.Time
+	ended       time.Time
+	stdinClosed bool
+	done        chan error
 
 	output    []outputLine
 	truncated bool
+	dropped   int
 
 	tests        *adapter.TestResults
 	testParser   *adapter.JvmParser
@@ -70,6 +74,7 @@ func (r *runChild) append(c openidea.OutputChunk) {
 	if over := len(r.output) - maxRunLines; over > 0 {
 		r.output = append(r.output[:0], r.output[over:]...)
 		r.truncated = true
+		r.dropped += over
 	}
 }
 
@@ -260,6 +265,7 @@ func (m *Model) finishRunChild(child *runChild, code *int32, errText string) {
 	child.starting = false
 	child.running = false
 	child.finished = true
+	child.ended = time.Now()
 	child.exitCode = code
 	child.err = errText
 	testCode := 0
@@ -615,14 +621,16 @@ func (m *Model) startOwnedChildRun(
 	}
 	root := m.Root()
 	child := &runChild{
-		channel:  m.nextChannel(),
-		name:     cfg.Name,
-		config:   *cfg,
-		groupID:  groupID,
-		service:  service,
-		root:     root,
-		starting: true,
-		done:     make(chan error, 1),
+		channel:     m.nextChannel(),
+		name:        cfg.Name,
+		config:      *cfg,
+		groupID:     groupID,
+		service:     service,
+		root:        root,
+		starting:    true,
+		started:     time.Now(),
+		stdinClosed: cfg.StdinFile != nil,
+		done:        make(chan error, 1),
 	}
 	m.initChildTests(child, dotnetReports)
 	m.post(func() {
@@ -879,6 +887,9 @@ func (m *Model) stopSelectedChildren() bool {
 
 func (m *Model) selectRunChild(channel uint32) {
 	m.run.agentActive = 0
+	if m.stackTrace != nil {
+		m.stackTrace.active = -1
+	}
 	if channel == 0 {
 		m.run.activeChild = 0
 	} else if m.childByChannel(channel) != nil {

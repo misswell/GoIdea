@@ -54,9 +54,13 @@ func (m *Model) requestCloseRunChild(channel uint32) {
 	}
 	if !child.live() {
 		m.closeRunChild(channel)
+		m.hideRunWhenEmpty()
 		return
 	}
-	m.requestRunTermination(child.name, func() { m.closeRunChild(channel) })
+	m.requestRunTermination(child.name, func() {
+		m.closeRunChild(channel)
+		m.hideRunWhenEmpty()
+	})
 }
 
 func (m *Model) requestCloseAgentRun(id uint64) {
@@ -66,9 +70,13 @@ func (m *Model) requestCloseAgentRun(id uint64) {
 	}
 	if !run.live() {
 		m.closeAgentRun(id)
+		m.hideRunWhenEmpty()
 		return
 	}
-	m.requestRunTermination(run.request.Name, func() { m.closeAgentRun(id) })
+	m.requestRunTermination(run.request.Name, func() {
+		m.closeAgentRun(id)
+		m.hideRunWhenEmpty()
+	})
 }
 
 func (m *Model) requestCloseDebugSessionTab(id uint32) {

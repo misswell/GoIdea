@@ -7,6 +7,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"image/png"
@@ -268,6 +269,41 @@ func (m *Model) SmokeShots(ctx context.Context, dir string) (map[string]any, err
 	}, 60*time.Second)
 	shot("maven")
 	m.post(func() { m.CloseMaven() })
+
+	// The Run window's native session strip, action rail and colored console.
+	// This uses a real detected configuration and synthetic process output so
+	// the visual state never needs to stop a backend user's existing process.
+	m.post(func() {
+		cfg := m.run.current()
+		if cfg == nil {
+			return
+		}
+		m.run.visible = true
+		m.occupyBottom("run")
+		m.run.trusted = true
+		m.run.lastID = cfg.ID
+		m.run.lastRaw = append(json.RawMessage(nil), cfg.Raw()...)
+		m.run.lastName = cfg.Name
+		m.run.channel = m.nextChannel()
+		m.run.runID = 1
+		m.run.running = true
+		m.run.stdinClosed = true
+		m.run.started = time.Now().Add(-1200 * time.Millisecond)
+		m.run.output = []outputLine{
+			{kind: "stdout", text: "Starting " + cfg.Name + "…"},
+			{kind: "stdout", text: "Connected to https://example.test/application"},
+			{kind: "stderr", text: "warning: development profile is active"},
+			{kind: "stdout", text: "Application started in 1.2 seconds"},
+		}
+		m.invalidate()
+	})
+	wait(func() bool { return m.run.visible && m.run.hasPrimarySession() }, 30*time.Second)
+	shot("run-window")
+	m.post(func() {
+		m.dropPrimaryRunSession()
+		m.hideRunWhenEmpty()
+	})
+	wait(func() bool { return !m.run.visible }, 30*time.Second)
 
 	// The Debug window with no session, and the terminal with a live shell.
 	m.post(func() { m.ShowDebug() })

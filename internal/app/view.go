@@ -8,7 +8,6 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
 
-	"mayoi/internal/adapter"
 	"mayoi/internal/openidea"
 )
 
@@ -799,107 +798,18 @@ func (m *Model) runPanel(c *ui.Context, p *ui.Theme) {
 			m.runViewedServicePanel(c, p)
 			return
 		}
+		if !m.hasRunContent() {
+			m.runEmptyState(c, p)
+			return
+		}
+		m.runSessionTabs(c, p)
 		if m.renderStackTraces(c, p) {
 			return
 		}
-		m.runHeader(c, p)
-		m.runAgentTabs(c, p)
-		m.runChildTabs(c, p)
-		err := m.run.err
-		if agent := m.activeAgentRun(); agent != nil {
-			err = agent.err
+		session := m.activeRunSession()
+		if session != nil {
+			m.runSessionPanel(c, p, session)
 		}
-		if err != "" {
-			ui.Row(c).Height(24).Padding(0, 10).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, err).FontSize(12).TextColor(p.Warning).SingleLine().Ellipsis("…")
-			})
-		}
-		// The test results tree, above the console like upstream RunView's
-		// test tree: status mark, name and duration per node, and a failed
-		// node's details render under the tree when selected.
-		activeChild := m.activeChild()
-		tree := m.run.treeLines()
-		selTest := m.run.selTest
-		var tests *adapter.TestResults
-		if m.activeAgentRun() != nil {
-			tree = nil
-			tests = nil
-		} else if activeChild != nil {
-			tree = childTreeLines(activeChild)
-			selTest = activeChild.selTest
-			tests = activeChild.tests
-		} else {
-			tests = m.run.tests
-		}
-		if len(tree) > 0 {
-			ui.Scroll(c).Height(150).Children(func() {
-				ui.Column(c).Padding(4, 10).Children(func() {
-					for i, line := range tree {
-						i, line := i, line
-						row := ui.Row(c.Key(fmt.Sprintf("testtree:%d", i))).Height(20).Padding(0, 4).Gap(6).AlignItems(ui.Center)
-						if line.id == selTest {
-							row.Background(p.SurfaceHover)
-						}
-						row.OnClick(func() {
-							if activeChild != nil {
-								activeChild.selTest = line.id
-							} else {
-								m.run.selTest = line.id
-							}
-							m.invalidate()
-						})
-						// A double click jumps to the test's source position,
-						// as IDEA's test tree opens the failing test.
-						if row.DoubleClicked() {
-							m.openTestLocation(line.loc)
-						}
-						row.Children(func() {
-							ui.Text(c, line.mark+" "+line.text).FontSize(12).TextColor(p.Text).SingleLine().Ellipsis("…")
-						})
-					}
-				})
-			})
-			if node := tests.Get(selTest); node != nil && len(node.Output) > 0 {
-				ui.Row(c).Padding(4, 10).Children(func() {
-					ui.Text(c, adapter.NodeOutputText(node)).FontSize(12).TextColor(p.TextMuted)
-				})
-			}
-		}
-		ui.Scroll(c).Grow(1).Children(func() {
-			ui.Column(c).Padding(8, 10).Children(func() {
-				if !m.run.trusted {
-					ui.Text(c, "This project is not trusted: building and running are disabled.").
-						FontSize(12).TextColor(p.TextMuted)
-					if m.run.trustErr != "" {
-						ui.Text(c, m.run.trustErr).FontSize(12).TextColor(p.Warning)
-					}
-					ui.Row(c).Padding(6, 0).Children(func() {
-						ui.Button(c, "Trust Project").OnClick(func() { m.TrustProject() })
-					})
-					return
-				}
-				output := m.run.output
-				truncated := m.run.truncated
-				if activeChild != nil {
-					output = activeChild.output
-					truncated = activeChild.truncated
-				}
-				if agent := m.activeAgentRun(); agent != nil {
-					output = agent.output
-					truncated = agent.truncated
-				}
-				if len(output) == 0 {
-					ui.Text(c, "No output yet. Press Run to start.").
-						FontSize(12).TextColor(p.TextMuted)
-					return
-				}
-				if truncated {
-					ui.Text(c, "(Output truncated: earlier lines were omitted)").
-						FontSize(12).TextColor(p.TextMuted)
-				}
-				m.renderRunOutput(c, p, output)
-			})
-		})
 	})
 }
 
@@ -987,45 +897,6 @@ func (m *Model) buildSummaryText() string {
 		return "Succeeded · " + formatBuildDuration(b.duration)
 	}
 	return fmt.Sprintf("Failed · %d errors · %d warnings", b.errors, b.warnings)
-}
-
-func (m *Model) runHeader(c *ui.Context, p *ui.Theme) {
-	if agent := m.activeAgentRun(); agent != nil {
-		m.runAgentHeader(c, p, agent)
-		return
-	}
-	ui.Row(c).Height(30).Padding(0, 8).Gap(8).AlignItems(ui.Center).
-		BorderWidth(0, 0, 1, 0).BorderColor(p.Border).Children(func() {
-		ui.Text(c, "Run").FontSize(12).Bold().TextColor(p.Text)
-		// The section-8 readiness: when a state is missing, the header names
-		// it instead of failing silently.
-		if reason := m.readyFor(); reason != "" && m.run.trusted {
-			ui.Text(c, reason).FontSize(12).TextColor(p.TextMuted).SingleLine().Grow(1)
-		} else if m.run.trusted {
-			ui.Button(c, "‹").OnClick(func() { m.CycleRunConfig(-1) })
-			name := "Reading configurations…"
-			if cfg := m.run.current(); cfg != nil {
-				name = cfg.Name
-			}
-			ui.Text(c, name).FontSize(12).TextColor(p.Text).SingleLine().Ellipsis("…").Grow(1)
-			ui.Button(c, "›").OnClick(func() { m.CycleRunConfig(1) })
-		} else {
-			ui.Text(c, "An untrusted project does not build or run").
-				FontSize(12).TextColor(p.TextMuted).SingleLine().Ellipsis("…").Grow(1)
-		}
-		if m.run.running || m.run.awaiting {
-			ui.Button(c, "Stop").OnClick(func() { m.StopRun() })
-		} else {
-			// The failed-tests rerun sits next to Run, as upstream RunView's
-			// toolbar does when the run reported tests.
-			if m.run.tests != nil && len(adapter.FailedTestPaths(m.run.tests)) > 0 {
-				ui.Button(c, "Rerun Failed Tests").OnClick(func() { m.RerunFailedTests() })
-			}
-			ui.Button(c, "Run").OnClick(func() { m.Run() })
-		}
-		ui.Button(c, "Clear").OnClick(func() { m.ClearRun() })
-		ui.Button(c, "Collapse").OnClick(func() { m.ShowRun() })
-	})
 }
 
 // renderText is the output as one string; empty lines keep their height.
