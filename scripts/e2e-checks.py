@@ -26,7 +26,7 @@ def get(data, dotted, default=None):
 # The states every run renders; the right-hierarchy shot needs the language
 # server, so only the online phases add it.
 SHOT_STATES = {
-    "workbench", "left-packages", "editor", "bottom-todo", "split", "settings", "palette",
+    "workbench", "project-popup", "left-packages", "editor", "bottom-todo", "split", "settings", "palette",
     "popup-quick-files", "search-everywhere", "balloons", "notifications",
     "left-structure", "services", "new-project", "dialog", "welcome-empty", "welcome",
     "welcome-customize", "welcome-plugins", "run-configs", "attach", "commit", "diff",

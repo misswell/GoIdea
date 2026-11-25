@@ -7,15 +7,17 @@ import (
 )
 
 type fakeWorkspaceHost struct {
-	windows       int
-	openProject   []string
-	openEmpty     int
-	focusPrevious []bool
-	merge         int
-	quit          int
-	relaunch      int
-	immediate     int
-	menuChanges   int
+	windows        int
+	openProject    []string
+	openEmpty      int
+	focusPrevious  []bool
+	merge          int
+	quit           int
+	relaunch       int
+	immediate      int
+	menuChanges    int
+	openProjects   []WorkspaceWindow
+	focusedProject string
 }
 
 func (h *fakeWorkspaceHost) OpenProjectInNewWindow(path string, files []string) bool {
@@ -46,6 +48,15 @@ func (h *fakeWorkspaceHost) MergeProjectWindows(*Model) bool {
 }
 
 func (h *fakeWorkspaceHost) WorkspaceWindows(*Model) []WorkspaceWindow { return nil }
+
+func (h *fakeWorkspaceHost) OpenProjects(*Model) []WorkspaceWindow {
+	return append([]WorkspaceWindow(nil), h.openProjects...)
+}
+
+func (h *fakeWorkspaceHost) FocusOpenProject(_ *Model, path string) bool {
+	h.focusedProject = path
+	return true
+}
 
 func (h *fakeWorkspaceHost) FocusWorkspaceWindow(string) bool { return false }
 

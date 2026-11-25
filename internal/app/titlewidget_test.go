@@ -69,6 +69,17 @@ func TestToolbarDrawsAnAddedAction(t *testing.T) {
 	m.prefs.MainToolbar = nil
 }
 
+func TestTitleBarLeavesRoomForHiddenWindowControls(t *testing.T) {
+	m := &Model{}
+	tt := workbenchTester(t, m)
+	tt.SetTitleBar(ui.TitleBar{Height: 28, Left: 68, Right: 0})
+	tt.Frame()
+	project, ok := tt.Find("Projects")
+	if !ok || project.X < 78 || project.Y >= 40 {
+		t.Fatalf("project widget = %+v, found=%v; want it after the hidden traffic lights", project, ok)
+	}
+}
+
 func TestTokensMatchTheWorkbenchConstants(t *testing.T) {
 	tk := oiTokensOf(nil)
 	if tk.TitleBarHeight != oiTitleBarHeight || tk.StatusBarHeight != oiStatusBarHeight ||

@@ -73,7 +73,7 @@ func TestWorkbenchStripeTogglesTheIsland(t *testing.T) {
 	if !m.leftHidden {
 		t.Fatalf("the Project stripe button did not hide the island")
 	}
-	if tt.HasText("Project") {
+	if _, ok := tt.Find("Project"); ok {
 		t.Fatalf("the left island kept its header: %q", tt.Texts())
 	}
 	tt.ClickAt(25, 60)
@@ -184,7 +184,10 @@ func TestWorkbenchLeftWidthDragPastTheMinimumClosesTheSide(t *testing.T) {
 	if m.leftShown() || m.leftSplit != "" {
 		t.Fatalf("the side stayed: hidden=%v split=%q", m.leftHidden, m.leftSplit)
 	}
-	if tt.HasText("Project") || tt.HasText("Structure") {
+	if project, ok := tt.Find("Project"); ok || project.W > 0 {
+		t.Fatalf("the closed side kept its Project island: %q", tt.Texts())
+	}
+	if structure, ok := tt.Find("Structure"); ok || structure.W > 0 {
 		t.Fatalf("the side kept its islands: %q", tt.Texts())
 	}
 	if got := m.leftWidth; got != 0 {

@@ -4,8 +4,24 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/egoist/mygo"
+
 	"mayoi/internal/app"
 )
+
+func TestGoideaWindowUsesOpenIDEAChrome(t *testing.T) {
+	options := goideaWindowOptions("main", true, nil)
+	if options.TitleBarStyle != mygo.TitleBarHidden || options.TitleBarHeight != 40 {
+		t.Fatalf("window title bar = %q height %d", options.TitleBarStyle, options.TitleBarHeight)
+	}
+	if options.TrafficLightPosition == nil ||
+		options.TrafficLightPosition.X != 14 || options.TrafficLightPosition.Y != 13 {
+		t.Fatalf("traffic light position = %+v", options.TrafficLightPosition)
+	}
+	if options.Title != "GoIDEA" || options.Width != 1280 || options.Height != 820 {
+		t.Fatalf("window defaults = %+v", options)
+	}
+}
 
 func TestWorkspaceWindowsOnlyIncludesTheModelsGroup(t *testing.T) {
 	first, second, other, standalone := &app.Model{}, &app.Model{}, &app.Model{}, &app.Model{}

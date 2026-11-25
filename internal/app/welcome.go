@@ -512,34 +512,40 @@ func (m *Model) welcomeName(c *ui.Context, oi oiColors, name string, indices []i
 
 // welcomeRecentMenu is the row's menu, from the hover button and the
 // context menu alike.
-func (m *Model) welcomeRecentMenu(menu *ui.Menu, dir string) {
+func (m *Model) welcomeRecentMenu(menu *ui.Menu, dir string, before ...func()) {
+	run := func(action func()) {
+		for _, callback := range before {
+			callback()
+		}
+		action()
+	}
 	if menu.Item("Open").Chosen() {
-		m.confirmSwitch(dir)
+		run(func() { m.confirmSwitch(dir) })
 	}
 	menu.Submenu("Move to Group", func(sub *ui.Menu) {
 		if sub.Item("No Group").Chosen() {
-			m.MoveRecentToGroup(dir, "")
+			run(func() { m.MoveRecentToGroup(dir, "") })
 		}
 		for _, g := range m.recentGroups {
 			g := g
 			if sub.Item(g.Name).Chosen() {
-				m.MoveRecentToGroup(dir, g.Name)
+				run(func() { m.MoveRecentToGroup(dir, g.Name) })
 			}
 		}
 		sub.Separator()
 		if sub.Item("New Group…").Chosen() {
-			m.openRecentGroupDialogForPath(dir)
+			run(func() { m.openRecentGroupDialogForPath(dir) })
 		}
 	})
 	if menu.Item(revealLabel()).Chosen() {
-		revealPath(dir)
+		run(func() { revealPath(dir) })
 	}
 	if menu.Item("Copy Path").Chosen() {
-		mygo.Clipboard.WriteText(dir)
+		run(func() { mygo.Clipboard.WriteText(dir) })
 	}
 	menu.Separator()
 	if menu.Item("Remove from Recent Projects…").Chosen() {
-		m.askRemoveRecent(dir)
+		run(func() { m.askRemoveRecent(dir) })
 	}
 }
 

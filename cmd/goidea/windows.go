@@ -144,21 +144,13 @@ func (h *nativeWindowHost) addWindow(id, root string, files []string, fresh bool
 	for _, err := range h.startupErrs {
 		model.Notify(err.Error())
 	}
-	win := mygo.NewWindow(mygo.WindowOptions{
-		Title:     "GoIDEA",
-		Width:     1280,
-		Height:    820,
-		MinWidth:  900,
-		MinHeight: 560,
-		StateKey:  id,
-		Hidden:    h.headless,
-		Content: ui.View(func(c *ui.Context) {
-			if h.firstFrame.Load() == 0 {
-				h.firstFrame.CompareAndSwap(0, time.Since(h.startedAt).Milliseconds())
-			}
-			model.View(c)
-		}),
+	content := ui.View(func(c *ui.Context) {
+		if h.firstFrame.Load() == 0 {
+			h.firstFrame.CompareAndSwap(0, time.Since(h.startedAt).Milliseconds())
+		}
+		model.View(c)
 	})
+	win := mygo.NewWindow(goideaWindowOptions(id, h.headless, content))
 	if win.IsDestroyed() {
 		if logFile != nil && id != "main" {
 			_ = logFile.Close()
@@ -172,6 +164,25 @@ func (h *nativeWindowHost) addWindow(id, root string, files []string, fresh bool
 	h.WindowFocused(model)
 	model.Start()
 	return entry
+}
+
+func goideaWindowOptions(id string, hidden bool, content mygo.Content) mygo.WindowOptions {
+	return mygo.WindowOptions{
+		Title:     "GoIDEA",
+		Width:     1280,
+		Height:    820,
+		MinWidth:  900,
+		MinHeight: 560,
+		StateKey:  id,
+		Hidden:    hidden,
+		// GoIDEA draws OpenIDEA's 40 DIP workbench bar in its content. Hiding
+		// AppKit's title bar removes the extra native row while keeping the
+		// traffic lights over the start of that bar.
+		TitleBarStyle:        mygo.TitleBarHidden,
+		TitleBarHeight:       40,
+		TrafficLightPosition: &mygo.Point{X: 14, Y: 13},
+		Content:              content,
+	}
 }
 
 func seedWindowSession(source, target string) {
@@ -558,12 +569,53 @@ func (h *nativeWindowHost) WorkspaceWindows(model *app.Model) []app.WorkspaceWin
 		windows = append(windows, app.WorkspaceWindow{
 			ID:       entry.id,
 			Title:    entry.model.WorkspaceTitle(),
+			Root:     entry.model.Root(),
+			Branch:   entry.model.WorkspaceBranch(),
 			Group:    entry.group,
 			Selected: selected,
 			Dirty:    entry.model.WorkspaceDirty(),
 		})
 	}
 	return windows
+}
+
+func (h *nativeWindowHost) OpenProjects(_ *app.Model) []app.WorkspaceWindow {
+	windows := make([]app.WorkspaceWindow, 0, len(h.windows))
+	for _, entry := range h.windows {
+		if entry == nil || entry.model == nil || entry.model.Root() == "" {
+			continue
+		}
+		selected := entry.model == h.active
+		windows = append(windows, app.WorkspaceWindow{
+			ID: entry.id, Title: entry.model.WorkspaceTitle(),
+			Root: entry.model.Root(), Branch: entry.model.WorkspaceBranch(),
+			Selected: selected,
+		})
+	}
+	return windows
+}
+
+func (h *nativeWindowHost) FocusOpenProject(_ *app.Model, path string) bool {
+	clean := filepath.Clean(path)
+	for _, entry := range h.windows {
+		if entry == nil || entry.model == nil || filepath.Clean(entry.model.Root()) != clean {
+			continue
+		}
+		if entry.group != 0 {
+			h.showGroupWindow(entry)
+			return true
+		}
+		if !h.headless {
+			entry.win.Show()
+			entry.win.Focus()
+		}
+		h.WindowFocused(entry.model)
+		for _, member := range h.groupedWindows(entry.group) {
+			member.model.RefreshWorkspaceWindows()
+		}
+		return true
+	}
+	return false
 }
 
 func (h *nativeWindowHost) WindowStateChanged(model *app.Model) {

@@ -132,6 +132,14 @@ func (m *Model) SmokeShots(ctx context.Context, dir string) (map[string]any, err
 	wait(func() bool { return m.tab() != nil }, 60*time.Second)
 	shot("workbench")
 
+	// The title-bar Projects popup: actions, open windows and recent projects.
+	m.post(func() {
+		m.openProjectPopup(ui.Rect{X: 20, Y: 0, W: 220, H: oiTitleBarHeight})
+	})
+	wait(func() bool { return m.projectPopup != nil }, 30*time.Second)
+	shot("project-popup")
+	m.post(func() { m.closeProjectPopup() })
+
 	// The project tree with the source chain open: OpenIDEA compacts
 	// com/example into one package row.
 	m.post(func() {

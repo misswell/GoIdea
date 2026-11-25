@@ -49,9 +49,13 @@ func (m *Model) titleBar(c *ui.Context, p *ui.Theme) {
 	}
 	oi := oiPaletteOf(p)
 	tk := oiTokensFor(m, p)
+	room := c.TitleBar()
+	height := max(tk.TitleBarHeight, room.Height)
+	titleLeft := room.Left + 10
+	titleRight := room.Right + 8
 	left, right := resolveToolbar(m.prefs.MainToolbar)
-	bar := ui.Row(c).Height(tk.TitleBarHeight).Shrink(0).Gap(4).AlignItems(ui.Center).
-		Padding(0, 8, 0, 10)
+	bar := ui.Row(c).Height(height).Shrink(0).Gap(4).AlignItems(ui.Center).
+		Padding(0, titleRight, 0, titleLeft).DragWindow()
 	bar.ContextMenu(func(menu *ui.Menu) { m.toolbarCustomizeItems(menu) })
 	bar.Children(func() {
 		for _, id := range left {
@@ -79,8 +83,11 @@ func (m *Model) compactTitleBar(c *ui.Context, p *ui.Theme) {
 			title += " – " + project
 		}
 	}
-	bar := ui.Row(c).Height(30).Shrink(0).AlignItems(ui.Center).Justify(ui.Center).
-		Padding(0, 72)
+	room := c.TitleBar()
+	bar := ui.Row(c).Height(max(float32(30), room.Height)).Shrink(0).
+		AlignItems(ui.Center).Justify(ui.Center).
+		Padding(0, max(float32(72), room.Right+8), 0, max(float32(72), room.Left+10)).
+		DragWindow()
 	bar.ContextMenu(func(menu *ui.Menu) { m.toolbarCustomizeItems(menu) })
 	bar.Children(func() {
 		ui.Text(c, title).FontSize(13).TextColor(p.Text).SingleLine().Ellipsis("…")
@@ -133,7 +140,7 @@ func (m *Model) projectWidget(c *ui.Context, p *ui.Theme, oi oiColors) {
 	name := m.projectLabel()
 	tk := oiTokensFor(m, p)
 	w := ui.ButtonBase(c.Key("title:project")).Height(tk.StripeButton).Padding(0, tk.SpaceL).Gap(tk.SpaceM).
-		Radius(8).AlignItems(ui.Center).Cursor(ui.CursorPointer)
+		Radius(8).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label("Projects")
 	if w.Hovered() {
 		w.Background(oi.toolbarHover)
 	}
@@ -159,17 +166,9 @@ func (m *Model) projectWidget(c *ui.Context, p *ui.Theme, oi oiColors) {
 		ui.Text(c, name).FontSize(13).TextColor(oi.textStrong).SingleLine().Ellipsis("…")
 		oiIconEl(c, "general/chevronDown", 12, oi, oi.textMuted)
 	})
-	w.Menu(func(menu *ui.Menu) {
-		if menu.Item("New Project…").Chosen() {
-			m.RunCommand("file.newProject")
-		}
-		if menu.Item("Open…").Chosen() {
-			m.RunCommand("file.openProject")
-		}
-		if menu.Item("Manage Projects…").Chosen() {
-			m.RunCommand("welcome.manageProjects")
-		}
-	})
+	if w.Clicked() {
+		m.openProjectPopup(w.Bounds())
+	}
 }
 
 // branchWidget is VCS's branch widget: the branch glyph, the branch name and

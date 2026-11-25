@@ -3,6 +3,11 @@
 The GitHub release notes, which **Help › What's New** shows, come from the
 `## <version>` section here. Every release needs one, or its build fails.
 
+## Unreleased
+
+- The project title-bar menu now lists actions, open projects and recent projects with filtering.
+- The native macOS title row is gone, leaving OpenIDEA's integrated window toolbar.
+
 ## 0.1.40
 
 - **Run** now uses OpenIDEA's compact session tabs, close controls and vertical action rail.

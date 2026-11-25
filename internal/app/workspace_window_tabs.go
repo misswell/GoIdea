@@ -36,6 +36,15 @@ func (m *Model) WorkspaceDirty() bool {
 	return false
 }
 
+// WorkspaceBranch is the branch shown for this project in the title-bar
+// project switcher.
+func (m *Model) WorkspaceBranch() string {
+	if m == nil {
+		return ""
+	}
+	return m.branchLabel()
+}
+
 // RefreshWorkspaceWindows redraws the project-tab strip after group order or
 // selection changes in another native window.
 func (m *Model) RefreshWorkspaceWindows() {

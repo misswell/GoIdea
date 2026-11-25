@@ -2979,7 +2979,7 @@
     },
     "feature:welcome": {
       "status": "integrated",
-      "evidence": "internal/app/welcome.go, welcome_recents.go and recent_projects.go implement OpenIDEA's Welcome rail, Recent Projects, groups, search, remove, Customize and Plugins pages; internal/app/welcome_test.go and the welcome-empty, welcome, welcome-customize, welcome-plugins and recent-projects screenshots cover the surface"
+      "evidence": "internal/app/welcome.go, welcome_recents.go, recent_projects.go and project_popup.go implement OpenIDEA's Welcome rail, Recent Projects, groups, title-bar Projects popup, actions, open projects, type-to-filter, keyboard selection, remove, Customize and Plugins pages. TestProjectPopupMatchesOpenIDEAEntryGroupsAndSelection, TestProjectPopupTypeToFilterAndNoMatch, TestProjectPopupRendersNativeSectionsAndTitleWidgetOpensIt, TestProjectPopupTypingAndEnterOpenTheFilteredProject and TestProjectPopupRemovesOnlyRecentProjects cover the title-bar surface. cmd/goidea/windows.go now hides the separate macOS title bar and places the traffic lights over OpenIDEA's integrated toolbar; TestGoideaWindowUsesOpenIDEAChrome covers the window options. The welcome-empty, welcome, welcome-customize, welcome-plugins, recent-projects and project-popup screenshots cover the visuals"
     },
     "action:file.openRecent": {
       "status": "integrated",

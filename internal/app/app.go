@@ -660,6 +660,9 @@ type Model struct {
 	// recentProjectsPopup is File › Open Recent's compact chooser over the
 	// Welcome screen's recent projects, or nil while closed.
 	recentProjectsPopup *recentProjectsPopup
+	// projectPopup is the title-bar Projects popup, which can switch to any
+	// open window or reopen a recent project without a native menu.
+	projectPopup *projectPopup
 
 	// plugins is Welcome › Plugins, made on first use, nil before.
 	plugins *pluginPage

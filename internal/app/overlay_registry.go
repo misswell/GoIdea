@@ -43,6 +43,9 @@ func init() {
 	reg("welcome.recentProjects", overlayLayerDialog, 36, false,
 		func(m *Model) bool { return m.recentProjectsPopup != nil },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.recentProjectsDialog(c, p) })
+	reg("workbench.projectPopup", overlayLayerPopup, 39, false,
+		func(m *Model) bool { return m.projectPopup != nil },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.projectPopupDialog(c, p) })
 	reg("coverage.manageReports", overlayLayerDialog, 258, true,
 		func(m *Model) bool { return m.coverage.manage },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.coverageManageDialog(c, p) })

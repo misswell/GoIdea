@@ -13,9 +13,18 @@ import (
 type WorkspaceWindow struct {
 	ID       string `json:"id"`
 	Title    string `json:"title"`
+	Root     string `json:"root,omitempty"`
+	Branch   string `json:"branch,omitempty"`
 	Group    int    `json:"group,omitempty"`
 	Selected bool   `json:"selected,omitempty"`
 	Dirty    bool   `json:"dirty,omitempty"`
+}
+
+// openProjectHost is the title-bar project chooser's access to every open
+// project window, including windows outside the current native tab group.
+type openProjectHost interface {
+	OpenProjects(*Model) []WorkspaceWindow
+	FocusOpenProject(*Model, string) bool
 }
 
 // TabSnapshot is the complete editor state needed to move a file tab between
@@ -154,6 +163,45 @@ func (m *Model) workspaceWindows() []WorkspaceWindow {
 		return nil
 	}
 	return m.workspaceHost.WorkspaceWindows(m)
+}
+
+func (m *Model) openProjectWindows() []WorkspaceWindow {
+	if m == nil {
+		return nil
+	}
+	if host, ok := m.workspaceHost.(openProjectHost); ok {
+		if windows := host.OpenProjects(m); len(windows) > 0 {
+			return windows
+		}
+	}
+	if windows := m.workspaceWindows(); len(windows) > 0 {
+		return windows
+	}
+	if root := m.Root(); root != "" {
+		return []WorkspaceWindow{{
+			ID: "current", Title: m.projectLabel(), Root: root,
+			Branch: m.branchLabel(), Selected: true,
+		}}
+	}
+	return nil
+}
+
+func (m *Model) focusOpenProject(path string) bool {
+	if m == nil || strings.TrimSpace(path) == "" {
+		return false
+	}
+	if host, ok := m.workspaceHost.(openProjectHost); ok {
+		return host.FocusOpenProject(m, path)
+	}
+	for _, window := range m.openProjectWindows() {
+		if window.Root == path {
+			if window.ID != "current" {
+				return m.focusWorkspaceWindow(window.ID)
+			}
+			return true
+		}
+	}
+	return false
 }
 
 func (m *Model) focusWorkspaceWindow(id string) bool {
