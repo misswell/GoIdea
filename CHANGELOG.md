@@ -3,7 +3,7 @@
 The GitHub release notes, which **Help › What's New** shows, come from the
 `## <version>` section here. Every release needs one, or its build fails.
 
-## Unreleased
+## 0.1.40
 
 - **Run** now uses OpenIDEA's compact session tabs, close controls and vertical action rail.
 - **Run** consoles color normal, error and system output and support find, follow and soft-wrap.
