@@ -3,7 +3,7 @@
 The GitHub release notes, which **Help › What's New** shows, come from the
 `## <version>` section here. Every release needs one, or its build fails.
 
-## Unreleased
+## 0.1.45
 
 - Project windows now return to Welcome after the last project closes and preserve state on backend failure.
 - Welcome recents, groups, startup restore, file drops and New Project now follow OpenIDEA's window lifecycle.
