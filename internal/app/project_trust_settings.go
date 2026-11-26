@@ -28,7 +28,7 @@ type projectTrustSettingsState struct {
 // loadProjectTrust reads the user-owned decisions behind Settings › Security ›
 // Project Trust. The response is a snapshot; every mutation asks for a new one.
 func (m *Model) loadProjectTrust() {
-	if m.mgr == nil {
+	if m.mgr == nil && m.invokeHook == nil {
 		m.projectTrust.loaded = true
 		return
 	}
@@ -44,7 +44,7 @@ func (m *Model) loadProjectTrust() {
 	go func() {
 		callCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
-		raw, err := m.mgr.Invoke(callCtx, Window, "project_trust_list", map[string]any{})
+		raw, err := m.invoke(callCtx, "project_trust_list", map[string]any{})
 		var decisions projectTrustDecisions
 		if err == nil {
 			err = json.Unmarshal(raw, &decisions)

@@ -15,6 +15,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
 
+	"mayoi/internal/openidea"
 	"mayoi/internal/textdiff"
 )
 
@@ -69,31 +70,15 @@ func init() {
 		"diff data", func(m *Model, arg any) { m.OpenDiffArg(arg) })
 	register("vcs.showDiffInNewWindow", "Show Diff in New Window", "Git",
 		"diff window", func(m *Model, arg any) {
-			if path := firstActionPath(arg); path != "" {
-				m.ShowDiff(path)
-				return
-			}
-			if t := m.tab(); t != nil && t.doc != nil {
-				m.ShowDiff(t.doc.Path())
-			}
+			m.showDiffInAuxiliaryWindow(arg)
 		})
 	register("vcs.nextChange", "Next Change", "Git",
 		"next diff change", func(m *Model, _ any) {
-			if m.diff == nil {
-				m.status = "Open a diff or editor with changes first"
-				m.invalidate()
-				return
-			}
-			m.StepDiffChange(1)
+			m.StepEditorOrDiffChange(1)
 		})
 	register("vcs.prevChange", "Previous Change", "Git",
 		"previous diff change", func(m *Model, _ any) {
-			if m.diff == nil {
-				m.status = "Open a diff or editor with changes first"
-				m.invalidate()
-				return
-			}
-			m.StepDiffChange(-1)
+			m.StepEditorOrDiffChange(-1)
 		})
 
 	if builtinShortcuts == nil {
@@ -215,6 +200,115 @@ func (m *Model) StepDiffChange(delta int) {
 	m.revealDiffChange(d, d.changes[d.selected])
 	m.status = fmt.Sprintf("Change %d of %d", d.selected+1, len(d.changes))
 	m.invalidate()
+}
+
+// editorChangePositions returns the first line of each separate changed hunk
+// in a normal editor, using the backend's Git line hunks.
+func editorChangePositions(hunks []openidea.LineHunk) []int {
+	var positions []int
+	for _, hunk := range hunks {
+		line := int(hunk.Start)
+		if len(positions) == 0 || positions[len(positions)-1] != line {
+			positions = append(positions, line)
+		}
+	}
+	return positions
+}
+
+// StepEditorOrDiffChange prefers the focused diff navigator, then navigates
+// the active editor's Git changes. The backend supplies hunks against HEAD so
+// this works without an open GoIDEA diff view.
+func (m *Model) StepEditorOrDiffChange(delta int) {
+	if m.diff != nil {
+		m.StepDiffChange(delta)
+		return
+	}
+	t := m.tab()
+	if t == nil || t.doc == nil || t.state == nil || t.state.Buffer == nil {
+		m.status = "Open a file or diff with changes first"
+		m.invalidate()
+		return
+	}
+	path := t.doc.Path()
+	text := t.state.Buffer.Snapshot().String()
+	caretLine := t.state.Buffer.Snapshot().LineOf(t.state.Cursor())
+	root := m.Root()
+	go func() {
+		ctx, cancel := context.WithTimeout(modelContext(m), 30*time.Second)
+		defer cancel()
+		raw, err := m.invoke(ctx, "vcs_file_at", map[string]any{
+			"path": path, "rev": "HEAD",
+		})
+		var head *string
+		if err == nil {
+			err = json.Unmarshal(raw, &head)
+		}
+		var hunks []openidea.LineHunk
+		if err == nil && head != nil && *head != text {
+			raw, err = m.invoke(ctx, "vcs_diff_hunks", map[string]any{
+				"oldText": *head, "newText": text,
+			})
+		}
+		if err == nil {
+			err = json.Unmarshal(raw, &hunks)
+		}
+		m.post(func() {
+			if m.Root() != root || m.diff != nil {
+				return
+			}
+			current := m.tab()
+			if current == nil || current.doc == nil || current.doc.Path() != path ||
+				current.state.Buffer.Snapshot().String() != text {
+				return
+			}
+			if err != nil {
+				m.status = "Could not read editor changes: " + err.Error()
+				m.invalidate()
+				return
+			}
+			positions := editorChangePositions(hunks)
+			if len(positions) == 0 {
+				m.status = "There are no differences from HEAD"
+				m.invalidate()
+				return
+			}
+			target := positions[0]
+			switch {
+			case delta > 0:
+				for _, line := range positions {
+					if line > caretLine {
+						target = line
+						break
+					}
+				}
+			case delta < 0:
+				target = positions[len(positions)-1]
+				for i := len(positions) - 1; i >= 0; i-- {
+					if positions[i] < caretLine {
+						target = positions[i]
+						break
+					}
+				}
+			}
+			snapshot := current.state.Buffer.Snapshot()
+			line := max(0, min(target, snapshot.LineCount()-1))
+			current.state.GoTo(editor.Pos{Line: line, Col: 0})
+			current.state.ScrollTo(line)
+			m.status = fmt.Sprintf(
+				"Change %d of %d", indexOfLine(positions, target)+1, len(positions),
+			)
+			m.invalidate()
+		})
+	}()
+}
+
+func indexOfLine(lines []int, target int) int {
+	for i, line := range lines {
+		if line == target {
+			return i
+		}
+	}
+	return 0
 }
 
 func (m *Model) revealDiffChange(d *diffView, change diffChange) {
@@ -864,6 +958,9 @@ func (m *Model) CompareTextsArg(arg any) {
 		m.invalidate()
 		return
 	}
+	if m.diff != nil && m.diff.surface == diffSurfaceNewTab {
+		m.closeDiff()
+	}
 	title, _ := data["title"].(string)
 	d := &diffView{
 		open: true, path: path, inline: true, leftLabel: left.label, rightLabel: right.label,
@@ -926,8 +1023,15 @@ func (m *Model) OpenDiffArg(arg any) {
 	}
 	leftBuffered, leftVersion, leftOpen := m.bufferTextVersion(left.path)
 	rightBuffered, rightVersion, rightOpen := m.bufferTextVersion(right.path)
+	primaryPath := right.path
+	if primaryPath == "" {
+		primaryPath = left.path
+	}
+	if primaryPath == "" {
+		primaryPath = path
+	}
 	d := &diffView{
-		open: true, path: path, inline: true,
+		open: true, path: primaryPath, inline: true,
 		leftPath: left.path, rightPath: right.path,
 		leftLabel: left.label, rightLabel: right.label,
 		leftText: left.text, rightText: right.text, loading: true,
@@ -951,7 +1055,31 @@ func (m *Model) OpenDiffArg(arg any) {
 	m.diff = d
 	m.invalidate()
 	go func() {
+		ctx, cancel := context.WithTimeout(modelContext(m), time.Minute)
+		defer cancel()
 		var err error
+		readRevision := func(side diffInputSideValue) string {
+			sidePath := side.path
+			if sidePath == "" {
+				sidePath = primaryPath
+			}
+			raw, readErr := m.invoke(ctx, "vcs_file_at", map[string]any{
+				"path": sidePath, "rev": side.rev,
+			})
+			if readErr != nil {
+				err = readErr
+				return ""
+			}
+			var text *string
+			if readErr = json.Unmarshal(raw, &text); readErr != nil {
+				err = readErr
+				return ""
+			}
+			if text == nil {
+				return ""
+			}
+			return *text
+		}
 		read := func(side diffInputSideValue) string {
 			if side.path == "" {
 				return side.text
@@ -964,11 +1092,15 @@ func (m *Model) OpenDiffArg(arg any) {
 			return string(data)
 		}
 		leftText, rightText := read(left), ""
-		if left.path != "" && leftOpen {
+		if left.rev != "" {
+			leftText = readRevision(left)
+		} else if left.path != "" && leftOpen {
 			leftText = leftBuffered
 		}
 		if err == nil {
-			if right.path != "" && rightOpen {
+			if right.rev != "" {
+				rightText = readRevision(right)
+			} else if right.path != "" && rightOpen {
 				rightText = rightBuffered
 			} else {
 				rightText = read(right)
@@ -996,6 +1128,7 @@ type diffInputSideValue struct {
 	text  string
 	label string
 	path  string
+	rev   string
 }
 
 func diffInputSide(value any) (diffInputSideValue, bool) {
@@ -1009,6 +1142,10 @@ func diffInputSide(value any) (diffInputSideValue, bool) {
 	case "text":
 		text, ok := side["text"].(string)
 		return diffInputSideValue{text: text, label: label}, ok
+	case "rev":
+		rev, ok := side["rev"].(string)
+		path, _ := side["path"].(string)
+		return diffInputSideValue{label: label, path: path, rev: rev}, ok && rev != ""
 	case "worktree", "file":
 		path, ok := side["path"].(string)
 		if !ok {
@@ -1112,6 +1249,18 @@ func (m *Model) loadDiffFile(chain []diffFileTarget, index int) {
 		fileChain: append([]diffFileTarget(nil), chain...), fileIndex: index,
 		loading: true, options: m.diffPrefs(),
 		leftEditable: true, rightEditable: true,
+	}
+	if target.textLoaded {
+		d.loading = false
+		d.leftPath, d.rightPath = "", ""
+		d.leftText, d.rightText = target.leftText, target.rightText
+		d.leftLabel, d.rightLabel = target.leftLabel, target.rightLabel
+		d.leftEditable, d.rightEditable = target.editable, target.editable
+		m.diff = d
+		d.resetDiffEditors()
+		d.setDiffRows(d.leftText, d.rightText)
+		m.invalidate()
+		return
 	}
 	m.diff = d
 	m.invalidate()

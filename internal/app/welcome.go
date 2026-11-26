@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -59,6 +60,7 @@ func (m *Model) welcome(c *ui.Context, p *ui.Theme) {
 	})
 	m.welcomeCloneDialog(c, oi)
 	m.welcomeRemoveDialog(c, oi)
+	m.recentGroupDialog(c, p)
 }
 
 // welcomeSidebar is the 240px rail: the brand, the tagline, the pages, and
@@ -90,6 +92,34 @@ func (m *Model) welcomeSidebar(c *ui.Context, oi oiColors) {
 				m.welcomeGear(c, oi)
 			})
 		})
+}
+
+func (m *Model) welcomeGearEntries() []menuEntry {
+	entries := []menuEntry{
+		action("Run Anything…", "runAnything.show", ""),
+		rule(),
+		action("Settings…", "file.settings", "CmdOrCtrl+,"),
+		action("Plugins…", "plugins.settings", ""),
+		rule(),
+		submenu("Theme",
+			actionChecked("Light", "app.themeLight", func(mm *Model) bool { return mm.prefs.Theme == "light" }),
+			actionChecked("Dark", "app.themeDark", func(mm *Model) bool { return mm.prefs.Theme == "dark" }),
+			actionChecked("Use System Settings", "app.themeSystem", func(mm *Model) bool {
+				return mm.prefs.Theme == "" || mm.prefs.Theme == "system"
+			}),
+			rule(),
+			action("Appearance…", "settings.appearance", ""),
+		),
+		submenu("Keymap", keymapPresetMenuEntries()...),
+		submenu("View Mode",
+			menuEntry{label: zenTitle(m), command: "editor.toggleZen"},
+			action("Toggle Full Screen", "window.toggleFullScreen", "CmdOrCtrl+Ctrl+F"),
+		),
+		rule(),
+		submenu("Customize Main Toolbar", m.customizeToolbarEntries()...),
+	}
+	entries = append(entries, rule(), action("Check for Updates…", "app.checkForUpdates", ""))
+	return entries
 }
 
 // welcomeNavItem is one page of the rail, selected with OpenIDEA's rounded
@@ -140,19 +170,38 @@ func (m *Model) welcomeGear(c *ui.Context, oi oiColors) {
 		panel.Width(240).Padding(4).Background(oi.popup).
 			BorderWidth(1).BorderColor(oi.borderStrong).Radius(8)
 		panel.Children(func() {
-			m.welcomeGearItem(c, oi, "Settings…", func() {
-				m.welcomeGearOpen = false
-				m.OpenSettings()
-			})
-			m.welcomeGearItem(c, oi, "Command Palette…", func() {
-				m.welcomeGearOpen = false
-				m.OpenCommands()
-			})
-			menuSeparator(c, oi)
-			m.welcomeGearItem(c, oi, "Show Git Log", func() {
-				m.welcomeGearOpen = false
-				m.ShowLog()
-			})
+			for _, entry := range m.welcomeGearEntries() {
+				if entry.sep {
+					menuSeparator(c, oi)
+					continue
+				}
+				row := ui.Row(c.Key("welcomeGear:"+entry.label)).Height(28).Shrink(0).
+					Padding(0, 10).Radius(4).AlignItems(ui.Center).Cursor(ui.CursorPointer)
+				if row.Hovered() {
+					row.Background(oi.hoverTint)
+				}
+				row.Children(func() {
+					ui.Text(c, entry.label).FontSize(13).TextColor(oi.text).Grow(1).SingleLine()
+					if len(entry.sub) > 0 {
+						oiIconEl(c, "general/chevronRight", 12, oi, oi.icon)
+					}
+				})
+				if len(entry.sub) > 0 {
+					row.Menu(func(menu *ui.Menu) {
+						addMenuEntries(menu, m, entry.sub)
+					})
+					continue
+				}
+				if row.Clicked() {
+					m.welcomeGearOpen = false
+					switch {
+					case entry.run != nil:
+						entry.run(m)
+					case entry.command != "":
+						m.RunCommand(entry.command)
+					}
+				}
+			}
 		})
 	})
 	if !open {
@@ -183,59 +232,42 @@ func menuSeparator(c *ui.Context, oi oiColors) {
 // ProjectsPage.tsx has it.
 func (m *Model) welcomeProjects(c *ui.Context, oi oiColors) {
 	if len(m.recents) == 0 {
-		m.welcomeLanding(c, oi)
+		area := ui.Column(c).Grow(1).MinHeight(0)
+		area.Children(func() { m.welcomeLanding(c, oi) })
+		m.welcomeDropTarget(area, oi)
 		return
 	}
 	m.welcomeHeader(c, oi)
-	ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
+	area := ui.Scroll(c).Grow(1).MinHeight(0)
+	area.Children(func() {
 		ui.Column(c).Padding(14, 16, 14, 24).Children(func() {
-			list := m.filteredRecents()
-			if len(list) == 0 {
-				ui.Text(c, "No matching projects").FontSize(13).TextColor(oi.textFaint).
-					Padding(8, 10)
+			rows := m.recentRows()
+			if len(rows) == 0 {
+				text := "No recent projects"
+				if strings.TrimSpace(m.welcomeQuery) != "" {
+					text = "No matching projects"
+				}
+				ui.Text(c, text).FontSize(13).TextColor(oi.textFaint).Padding(8, 10)
 				return
 			}
-			if m.welcomeSel >= len(list) {
-				m.welcomeSel = len(list) - 1
+			projectRows := m.recentProjectRows()
+			if len(projectRows) == 0 {
+				m.welcomeSel = 0
+			} else if m.welcomeSel >= len(projectRows) {
+				m.welcomeSel = len(projectRows) - 1
 			}
-			// Ungrouped projects first, then each group with its heading.
-			index := 0
-			for _, mt := range list {
-				if mt.project.Group != "" {
+			projectIndex := 0
+			for _, row := range rows {
+				if row.group != nil {
+					m.welcomeGroupRow(c, oi, *row.group, row.count, false)
 					continue
 				}
-				m.welcomeRecentRow(c, oi, mt, index == m.welcomeSel)
-				index++
-			}
-			for _, g := range m.recentGroups {
-				shown := make([]recentMatch, 0, 4)
-				for _, mt := range list {
-					if mt.project.Group == g.Name {
-						shown = append(shown, mt)
-					}
-				}
-				if len(shown) == 0 {
-					continue
-				}
-				m.welcomeGroupRow(c, oi, g, len(shown))
-				if g.Collapsed {
-					continue
-				}
-				for _, mt := range shown {
-					m.welcomeRecentRow(c, oi, mt, index == m.welcomeSel)
-					index++
-				}
-			}
-			// Projects in a group the user deleted again land ungrouped.
-			for _, mt := range list {
-				if mt.project.Group == "" || m.groupExists(mt.project.Group) {
-					continue
-				}
-				m.welcomeRecentRow(c, oi, mt, index == m.welcomeSel)
-				index++
+				m.welcomeRecentRow(c, oi, *row.match, projectIndex == m.welcomeSel)
+				projectIndex++
 			}
 		})
 	})
+	m.welcomeDropTarget(area, oi)
 }
 
 // groupExists reports a stored group by name.
@@ -246,10 +278,10 @@ func (m *Model) groupExists(name string) bool {
 
 // welcomeGroupRow is one group heading: the caret, the name, its project
 // count, and the menu that renames or deletes it.
-func (m *Model) welcomeGroupRow(c *ui.Context, oi oiColors, g RecentGroup, count int) {
+func (m *Model) welcomeGroupRow(c *ui.Context, oi oiColors, g RecentGroup, count int, selected bool) {
 	r := ui.Row(c.Key("welcomeGroup:"+g.Name)).Height(28).Padding(8, 10).Gap(6).
 		AlignItems(ui.Center).Radius(6).Cursor(ui.CursorPointer)
-	if r.Hovered() {
+	if selected || r.Hovered() {
 		r.Background(oi.hoverTint)
 	}
 	moreClicked := false
@@ -265,17 +297,15 @@ func (m *Model) welcomeGroupRow(c *ui.Context, oi oiColors, g RecentGroup, count
 		ui.Text(c, fmt.Sprintf("%d", count)).FontSize(13).TextColor(oi.textFaint).SingleLine()
 		more := ui.ButtonBase(c.Key("welcomeGroupMore:"+g.Name)).Size(24, 24).Radius(6).
 			Justify(ui.Center).AlignItems(ui.Center).Cursor(ui.CursorPointer)
-		if r.Hovered() {
-			if more.Hovered() {
-				more.Background(oi.hoverTint)
-			}
-			more.Children(func() {
-				oiIconEl(c, "general/moreVertical", 16, oi, oi.icon)
-			})
-			more.Menu(func(menu *ui.Menu) { m.welcomeGroupMenu(menu, g.Name) })
-			if more.Clicked() {
-				moreClicked = true
-			}
+		if more.Hovered() {
+			more.Background(oi.hoverTint)
+		}
+		more.Children(func() {
+			oiIconEl(c, "general/moreVertical", 16, oi, oi.icon)
+		})
+		more.Menu(func(menu *ui.Menu) { m.welcomeGroupMenu(menu, g.Name) })
+		if more.Clicked() {
+			moreClicked = true
 		}
 	})
 	if r.Clicked() && !moreClicked {
@@ -286,10 +316,14 @@ func (m *Model) welcomeGroupRow(c *ui.Context, oi oiColors, g RecentGroup, count
 
 // welcomeGroupMenu is the group's menu, shared by the row and its More button.
 func (m *Model) welcomeGroupMenu(menu *ui.Menu, name string) {
-	if menu.Item("Rename Group…").Chosen() {
+	if menu.Item("Rename Project Group…").Chosen() {
 		m.openRecentGroupDialog(name)
 	}
-	if menu.Item("Delete Group").Chosen() {
+	if menu.Item("New Project Group…").Chosen() {
+		m.openRecentGroupDialog("")
+	}
+	menu.Separator()
+	if menu.Item("Remove Group").Chosen() {
 		m.DeleteRecentGroup(name)
 	}
 }
@@ -367,7 +401,16 @@ func (m *Model) welcomeLanding(c *ui.Context, oi oiColors) {
 			ui.Text(c, "Open a folder").FontSize(13).TextColor(oi.textFaint)
 			ui.Text(c, openAccelerator()).FontSize(12).TextColor(oi.textFaint)
 		})
+		ui.Text(c, "You can also drop a folder or file here").
+			FontSize(12).TextColor(oi.textFaint).Margin(4, 0, 0, 0)
 	})
+}
+
+func (m *Model) welcomeDropTarget(area ui.Element, oi oiColors) {
+	if dropped := area.DroppedFiles(); len(dropped) > 0 {
+		m.openPaths(dropped)
+	}
+	welcomeDropAffordance(area.FileDragOver(), oi)(area)
 }
 
 // welcomeLandingAction is one of the landing's tiles: the icon in its
@@ -453,7 +496,7 @@ func (m *Model) welcomeRecentRow(c *ui.Context, oi oiColors, mt recentMatch, sel
 	})
 	r.ContextMenu(func(menu *ui.Menu) { m.welcomeRecentMenu(menu, dir) })
 	if r.Clicked() && !moreClicked {
-		m.confirmSwitch(dir)
+		m.OpenRecentProject(dir)
 	}
 }
 
@@ -467,6 +510,17 @@ func recentProjectTile(c *ui.Context, name string) {
 		ui.Text(c, projectInitials(name)).FontSize(11).Bold().
 			TextColor(ui.Hex("#ffffff")).LetterSpacing(0.02).SingleLine()
 	})
+}
+
+// welcomeDropAffordance is shared by the landing and project list. The native
+// drop registration stays in cmd/goidea; this hook only presents its state.
+func welcomeDropAffordance(active bool, oi oiColors) func(ui.Element) {
+	return func(area ui.Element) {
+		if active {
+			area.Background(oi.accent.Alpha(0.08)).
+				Border(1, oi.accent.Alpha(0.6))
+		}
+	}
 }
 
 // welcomeName draws the project name, with the search's matched letters in
@@ -522,22 +576,38 @@ func (m *Model) welcomeRecentMenu(menu *ui.Menu, dir string, before ...func()) {
 	if menu.Item("Open").Chosen() {
 		run(func() { m.confirmSwitch(dir) })
 	}
-	menu.Submenu("Move to Group", func(sub *ui.Menu) {
-		if sub.Item("No Group").Chosen() {
-			run(func() { m.MoveRecentToGroup(dir, "") })
-		}
-		for _, g := range m.recentGroups {
-			g := g
-			if sub.Item(g.Name).Chosen() {
-				run(func() { m.MoveRecentToGroup(dir, g.Name) })
+	if menu.Item("Open in New Window").Chosen() {
+		run(func() { m.OpenRecentInNewWindow(dir) })
+	}
+	if _, _, remote := parseRemoteProjectLocation(dir); !remote {
+		current := ""
+		for _, project := range m.recents {
+			if project.Path == dir {
+				current = project.Group
+				break
 			}
 		}
-		sub.Separator()
-		if sub.Item("New Group…").Chosen() {
-			run(func() { m.openRecentGroupDialogForPath(dir) })
-		}
-	})
-	if menu.Item(revealLabel()).Chosen() {
+		menu.Submenu("Move to Group", func(sub *ui.Menu) {
+			for _, g := range m.recentGroups {
+				g := g
+				if g.Name != current && sub.Item(g.Name).Chosen() {
+					run(func() { m.MoveRecentToGroup(dir, g.Name) })
+				}
+			}
+			if len(m.recentGroups) > 0 {
+				sub.Separator()
+			}
+			if sub.Item("New Project Group…").Chosen() {
+				run(func() { m.openRecentGroupDialogForPath(dir) })
+			}
+			if current != "" {
+				if sub.Item("Remove from '" + current + "'").Chosen() {
+					run(func() { m.MoveRecentToGroup(dir, "") })
+				}
+			}
+		})
+	}
+	if _, _, remote := parseRemoteProjectLocation(dir); !remote && menu.Item(revealLabel()).Chosen() {
 		run(func() { revealPath(dir) })
 	}
 	if menu.Item("Copy Path").Chosen() {
@@ -686,13 +756,13 @@ func (m *Model) welcomeCustomize(c *ui.Context, oi oiColors) {
 				})
 			})
 			m.welcomeSection(c, oi, "Accessibility", func() {
-				m.welcomeField(c, oi, "Editor font", func() {
-					size := fmt.Sprintf("%.0f", m.prefs.fontSize())
-					sel := ui.Select(c, &size, editorFontSizes()).Width(120)
+				m.welcomeField(c, oi, "IDE font", func() {
+					size := fmt.Sprintf("%d", int(m.prefs.uiFontSize()))
+					sel := ui.Select(c, &size, uiFontSizes()).Width(120)
 					if sel.Changed() {
 						var n int
 						if _, err := fmt.Sscanf(size, "%d", &n); err == nil {
-							m.setFontSize(n)
+							m.SetWelcomeUIFontSize(n)
 						}
 					}
 				})
@@ -731,12 +801,33 @@ func themeChoiceLabel(theme string) string {
 	return "Sync with OS"
 }
 
-func editorFontSizes() []string {
-	out := make([]string, 0, maxFontSize-minFontSize+1)
-	for size := minFontSize; size <= maxFontSize; size++ {
+func uiFontSizes() []string {
+	out := make([]string, 0, 9)
+	for size := 10; size <= 18; size++ {
 		out = append(out, fmt.Sprintf("%d", size))
 	}
+	sort.Strings(out)
 	return out
+}
+
+// SetWelcomeUIFontSize writes OpenIDEA's IDE font size and enables the custom
+// UI font unless the user already chose a non-default family.
+func (m *Model) SetWelcomeUIFontSize(size int) {
+	size = max(10, min(size, 18))
+	keepFamily := m.prefs.Appearance.UseCustomFont &&
+		strings.TrimSpace(m.prefs.Appearance.UIFontFamily) != "" &&
+		m.prefs.Appearance.UIFontFamily != oiFontUI
+	useCustom := size != 13 || keepFamily
+	if m.prefs.Appearance.UIFontSize == size &&
+		m.prefs.Appearance.UseCustomFont == useCustom {
+		return
+	}
+	m.prefs.Appearance.UIFontSize = size
+	m.prefs.Appearance.UseCustomFont = useCustom
+	m.applyPreferences()
+	m.savePreferences()
+	m.status = fmt.Sprintf("IDE font size %d", size)
+	m.invalidate()
 }
 
 // welcomePlugins is Welcome › Plugins, over the real plugin registry.
@@ -996,6 +1087,7 @@ func (m *Model) forgetProject(dir string) {
 	m.recents = kept
 	delete(m.welcomeBranches, dir)
 	delete(m.welcomeBranchLoading, dir)
+	m.windowMenuChanged()
 	m.saveRecents()
 	m.invalidate()
 }
@@ -1013,10 +1105,26 @@ func (m *Model) rememberProject(dir string) {
 	}
 	dir = filepath.Clean(dir)
 	entry := RecentProject{Path: dir, Name: filepath.Base(dir), OpenedAt: time.Now().UnixMilli()}
+	known := false
 	for _, p := range m.recents {
 		if p.Path == dir {
 			entry.Branch, entry.Remote, entry.Group = p.Branch, p.Remote, p.Group
+			known = true
 			break
+		}
+	}
+	if !known {
+		if _, _, remote := parseRemoteProjectLocation(dir); !remote {
+			info, err := os.Stat(dir)
+			if err != nil || !info.IsDir() {
+				return
+			}
+		}
+	}
+	entry.Group = strings.TrimSpace(entry.Group)
+	if entry.Group != "" {
+		if _, _, ok := m.recentGroupNamed(entry.Group); !ok {
+			m.recentGroups = append(m.recentGroups, RecentGroup{Name: entry.Group})
 		}
 	}
 	list := []RecentProject{entry}
@@ -1025,13 +1133,14 @@ func (m *Model) rememberProject(dir string) {
 			list = append(list, p)
 		}
 	}
-	m.recents = normalizeRecentProjects(list)
+	m.setRecentGroupsAndProjects(m.recentGroups, list)
 }
 
 // openRecentGroupDialog asks for a group name: a new group, or a new name for
 // rename.
 func (m *Model) openRecentGroupDialog(rename string) {
 	m.welcomeGroupDlg = welcomeGroupDialog{open: true, rename: rename, text: rename}
+	m.welcomeGroupPath = ""
 	m.invalidate()
 }
 
@@ -1050,15 +1159,16 @@ func (m *Model) recentGroupDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := d.open
-	title := "New Group"
+	title := "New Project Group"
 	if d.rename != "" {
-		title = "Rename Group"
+		title = "Rename Project Group"
 	}
 	nativeModal(c, &open, func() {
 		ui.Column(c).Width(420).Gap(12).Children(func() {
 			ui.Text(c, title).FontSize(13).Bold().TextColor(p.Text).SingleLine()
-			in := ui.TextInput(c, &d.text).AutoFocus()
-			in.Placeholder("Group name")
+			in := ui.Field(c, "Group name:", func() {
+				ui.TextInput(c, &d.text).AutoFocus().Placeholder("Group name")
+			}).Error(m.groupNameError(d.text, d.rename))
 			if in.Submitted() {
 				m.commitRecentGroupDialog()
 			}
@@ -1067,7 +1177,11 @@ func (m *Model) recentGroupDialog(c *ui.Context, p *ui.Theme) {
 					d.open = false
 					m.invalidate()
 				}
-				if ui.PrimaryButton(c, "OK").Clicked() {
+				label := "Create"
+				if d.rename != "" {
+					label = "Rename"
+				}
+				if ui.PrimaryButton(c, label).Disabled(m.groupNameError(d.text, d.rename) != "").Clicked() {
 					m.commitRecentGroupDialog()
 				}
 			})
@@ -1095,6 +1209,7 @@ func (m *Model) commitRecentGroupDialog() {
 		}
 	}
 	d.open = false
+	m.welcomeGroupPath = ""
 	m.invalidate()
 }
 

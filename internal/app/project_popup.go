@@ -264,7 +264,7 @@ func (m *Model) chooseProjectPopup() {
 		m.invalidate()
 		return
 	}
-	m.confirmSwitch(entry.project.Path)
+	m.OpenRecentProject(entry.project.Path)
 }
 
 func (m *Model) projectPopupDialog(c *ui.Context, p *ui.Theme) {

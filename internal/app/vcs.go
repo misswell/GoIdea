@@ -122,6 +122,8 @@ func (m *Model) resetVCS() {
 		}
 	}
 	m.vcs = VCSPane{}
+	m.vcsMore = vcsMoreState{}
+	m.recentHistory = recentChangesState{}
 }
 
 // RefreshVCS discovers all repositories in the project and reloads their

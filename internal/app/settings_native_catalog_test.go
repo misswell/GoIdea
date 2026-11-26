@@ -217,9 +217,7 @@ func TestNativeSettingsSearchFindsSelectChoices(t *testing.T) {
 
 func TestNativeSettingsPagesExplainUnsupportedBehavior(t *testing.T) {
 	for page, note := range map[string]string{
-		settingsPageRichTextCopy:     "native copy currently uses plain text",
-		settingsPageStickyLines:      "native editor does not show sticky lines yet",
-		settingsPagePythonDocstrings: "Python generation does not yet support every format",
+		settingsPageStickyLines: "native editor does not show sticky lines yet",
 	} {
 		t.Run(page, func(t *testing.T) {
 			def, ok := nativeSettingsDefinition(page)

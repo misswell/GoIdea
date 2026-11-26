@@ -142,6 +142,66 @@ func TestOpenFileActionsFollowOpenIDEAEntrances(t *testing.T) {
 	}
 }
 
+func TestOpenProjectPathStringFollowsPolicy(t *testing.T) {
+	current, next := t.TempDir(), t.TempDir()
+	host := &fakeWorkspaceHost{windows: 1, openProjectOK: true}
+	m := &Model{workspaceHost: host, postHook: func(fn func()) { fn() }}
+	m.setRoot(current)
+	m.prefs.System.OpenProjectIn = "new"
+	m.openProjectPath(next)
+	if len(host.openProject) != 1 || host.openProject[0] != next || m.Root() != current {
+		t.Fatalf("policy new window = host %v current %q", host.openProject, m.Root())
+	}
+}
+
+func TestOpenProjectPathNewWindowIsExplicit(t *testing.T) {
+	current, next := t.TempDir(), t.TempDir()
+	host := &fakeWorkspaceHost{windows: 1, openProjectOK: true}
+	m := &Model{workspaceHost: host, postHook: func(fn func()) { fn() }}
+	m.setRoot(current)
+	m.projectPathRequest(openProjectPathRequest{
+		path: next, newWindow: boolPointer(true),
+	})
+	if len(host.openProject) != 1 || host.openProject[0] != next || m.Root() != current {
+		t.Fatalf("explicit new window = host %v current %q", host.openProject, m.Root())
+	}
+}
+
+func TestOpenProjectPathCurrentWindowUsesOrdinaryGuard(t *testing.T) {
+	current, next := t.TempDir(), t.TempDir()
+	on := true
+	m := &Model{
+		prefs:    Preferences{Run: &RunPrefs{ConfirmTerminate: &on}},
+		postHook: func(fn func()) { fn() },
+	}
+	m.setRoot(current)
+	m.run.running = true
+	if !m.RunActionWithArg("file.openProjectPath", map[string]any{
+		"path": next, "newWindow": false,
+	}) {
+		t.Fatal("object action did not run")
+	}
+	if m.run.terminateAsk == nil {
+		t.Fatal("explicit current window bypassed the running-work guard")
+	}
+	if m.Root() != current || m.showingWelcome {
+		t.Fatalf("guard moved project: root %q welcome %v", m.Root(), m.showingWelcome)
+	}
+	m.CancelRunTerminate()
+}
+
+func TestOpenProjectPathRequestRequiresBooleanNewWindow(t *testing.T) {
+	request := openProjectPathRequestArg(map[string]any{
+		"path": "/p", "newWindow": "true",
+	})
+	if request.path != "/p" || request.newWindow != nil {
+		t.Fatalf("malformed object = %+v", request)
+	}
+	if got := projectPathArg(map[string]any{"path": "/p", "newWindow": true}); got != "/p" {
+		t.Fatalf("legacy path helper = %q", got)
+	}
+}
+
 func TestHelpMenuFollowsOpenIDEA(t *testing.T) {
 	groups := mainMenuGroups()
 	var help []string

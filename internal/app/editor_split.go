@@ -177,6 +177,20 @@ func (m *Model) duplicateTab(t *Tab) *Tab {
 		return m.newDockerLogTab(t.doc.Path(), t.pageTitle, text)
 	case tabKindNotebook:
 		return m.newNotebookTab(t.pagePath, t.pageTitle, t.preview)
+	case tabKindVCSDiff:
+		if m.diff != nil && m.diff.tab == t {
+			copyView := *m.diff
+			copyView.tab = nil
+			m.diff = &copyView
+			m.keepDiffSurfacePresented(m.diff)
+			return m.diff.tab
+		}
+	case tabKindPluginContent:
+		session := m.pluginContentTabFor(t)
+		if session == nil {
+			return nil
+		}
+		return m.duplicatePluginContentTab(t, session)
 	}
 	doc, err := m.reg.Open(context.Background(), t.doc.Path())
 	if err != nil {

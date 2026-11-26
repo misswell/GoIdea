@@ -15,6 +15,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
 
+	"mayoi/internal/docbridge"
 	"mayoi/internal/linediff"
 	"mayoi/internal/openidea"
 	"mayoi/internal/textdiff"
@@ -34,6 +35,18 @@ type diffView struct {
 	rows  []textdiff.Row
 	added int
 	gone  int
+	// surface names the distinct native presentation that owns this diff.
+	// Normal editor diffs leave it empty, the aux-window action uses
+	// diffSurfaceWindow, and the shelf's explicit new-tab action uses
+	// diffSurfaceNewTab.
+	surface string
+	// auxiliaryClose closes the detached native diff window that presents
+	// this preview. A nil value is the normal in-workbench surface.
+	auxiliaryClose func()
+	// tab is the built-in editor page that presents a diffSurfaceNewTab
+	// comparison. A window-host implementation can reuse the same tab when
+	// it opens an independent native window.
+	tab *Tab
 	// leftText and rightText are the complete sides. Keeping them lets the
 	// compare view navigate hunks and apply either side without re-reading a
 	// file or guessing from the context-trimmed rows.
@@ -106,6 +119,11 @@ type diffView struct {
 	message string
 }
 
+const (
+	diffSurfaceWindow = "auxiliaryWindow"
+	diffSurfaceNewTab = "newTab"
+)
+
 // diffChange is one non-overlapping edit in the full texts. Starts and ends
 // are zero-based and end is exclusive.
 type diffChange struct {
@@ -118,9 +136,15 @@ type diffChange struct {
 // diffFileTarget is one file of a multi-file compare such as Compare
 // Directories. Previous/Next File moves through this list.
 type diffFileTarget struct {
-	left  string
-	right string
-	label string
+	left       string
+	right      string
+	label      string
+	leftText   string
+	rightText  string
+	textLoaded bool
+	leftLabel  string
+	rightLabel string
+	editable   bool
 }
 
 // diffPaneRow is one row of one side. source is its index in diffView.rows,
@@ -664,6 +688,9 @@ func (m *Model) ShowDiff(path string) {
 	if path == "" || m.Root() == "" {
 		return
 	}
+	if m.diff != nil && m.diff.surface == diffSurfaceNewTab {
+		m.closeDiff()
+	}
 	path = realPath(path)
 	// The buffer, not the saved file, is what the user is looking at.
 	cur, curVersion, fromTab := m.bufferTextVersion(path)
@@ -677,7 +704,7 @@ func (m *Model) ShowDiff(path string) {
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 		defer cancel()
-		raw, err := m.mgr.Invoke(ctx, Window, "vcs_file_at", map[string]any{"path": path})
+		raw, err := m.invoke(ctx, "vcs_file_at", map[string]any{"path": path})
 		var base *string
 		if err == nil {
 			err = json.Unmarshal(raw, &base)
@@ -965,6 +992,12 @@ func (m *Model) CompareActive() {
 // A staged result goes through the same save/apply/discard prompt as the
 // modal's close control.
 func (m *Model) closeDiff() {
+	if m.diff != nil && m.diff.tab != nil {
+		tab := m.diff.tab
+		m.diff = nil
+		m.removeTab(tab)
+		return
+	}
 	if m.diff == nil {
 		return
 	}
@@ -982,6 +1015,279 @@ func (m *Model) closeDiffNow() {
 	}
 	m.diff = nil
 	m.invalidate()
+}
+
+// showDiffInAuxiliaryWindow creates the native analogue of OpenIDEA's diff
+// window. A host may provide a dedicated window; standalone models retain the
+// diff in a separately marked surface so ordinary Show Diff is never replaced
+// by the same presentation.
+func (m *Model) showDiffInAuxiliaryWindow(arg any) {
+	data, _ := arg.(map[string]any)
+	path := firstActionPath(arg)
+	if path == "" {
+		path, _ = data["path"].(string)
+	}
+	if path == "" {
+		path = actionPathOrDefault(m, nil)
+	}
+	if path == "" {
+		m.status = "Select a changed file to show its diff"
+		m.invalidate()
+		return
+	}
+	if host, ok := m.workspaceHost.(diffWindowHost); ok {
+		launch := make(map[string]any, len(data)+1)
+		for key, value := range data {
+			launch[key] = value
+		}
+		launch["path"] = path
+		hosted := host.ShowDiffInAuxiliaryWindow(m, launch,
+			func(c *ui.Context, p *ui.Theme, invalidate, closeWindow func()) {
+				m.renderAuxiliaryDiffWindow(c, p, launch, invalidate, closeWindow)
+			})
+		if hosted {
+			m.invalidate()
+			return
+		}
+	}
+	m.ShowDiff(path)
+	if m.diff == nil {
+		return
+	}
+	m.diff.surface = diffSurfaceWindow
+	if data["left"] != nil || data["right"] != nil {
+		_, leftOK := diffInputSide(data["left"])
+		_, rightOK := diffInputSide(data["right"])
+		if leftOK && rightOK {
+			launch := make(map[string]any, len(data)+1)
+			for key, value := range data {
+				launch[key] = value
+			}
+			launch["path"] = path
+			m.OpenDiffArg(launch)
+			if m.diff != nil {
+				m.diff.surface = diffSurfaceWindow
+			}
+		}
+	}
+	if m.workspaceHost != nil {
+		m.status = "Diff opened in the auxiliary diff surface"
+	}
+	m.invalidate()
+}
+
+// renderAuxiliaryDiffWindow draws one isolated diff surface for a native
+// child window. It owns its own preview so the workbench's current compare
+// stays intact when this window is opened.
+func (m *Model) renderAuxiliaryDiffWindow(
+	c *ui.Context,
+	p *ui.Theme,
+	data map[string]any,
+	invalidate func(),
+	closeWindow func(),
+) {
+	host := ui.Column(c).Role(ui.RoleDialog).Label("Diff")
+	storedPreview := ui.Local(host, "auxiliary-diff", func() *diffView {
+		preview := &diffView{open: true, surface: diffSurfaceWindow, options: m.diffPrefs(), loading: true}
+		path, _ := data["path"].(string)
+		preview.path = realPath(path)
+		preview.auxiliaryClose = func() {
+			closeWindow()
+			m.openAuxiliaryDiffInEditor(preview)
+		}
+		left, leftOK := diffInputSide(data["left"])
+		right, rightOK := diffInputSide(data["right"])
+		if !leftOK || !rightOK {
+			m.loadAuxiliaryWorkingDiff(preview, realPath(path), invalidate)
+		} else {
+			m.loadAuxiliaryDiff(preview, left, right, invalidate)
+		}
+		return preview
+	})
+	if storedPreview == nil || *storedPreview == nil {
+		return
+	}
+	preview := *storedPreview
+	host.Children(func() {
+		ui.Column(c).Fill().Background(p.Background).Children(func() {
+			ui.Row(c).Height(38).Shrink(0).Padding(0, 12).AlignItems(ui.Center).
+				BorderWidth(0, 0, 1, 0).BorderColor(p.Border).Children(func() {
+				ui.Text(c, diffTitle(preview)).FontSize(13).Bold().TextColor(p.Text).SingleLine()
+			})
+			ui.Column(c).Padding(12).Gap(8).Children(func() {
+				switch {
+				case preview.loading:
+					ui.Text(c, "Comparing…").FontSize(12).TextColor(p.TextMuted)
+				case preview.err != "":
+					ui.Text(c, preview.err).FontSize(12).TextColor(p.Danger).Wrap()
+				case preview.message != "":
+					ui.Text(c, preview.message).FontSize(12).TextColor(p.TextMuted).Wrap()
+				}
+				if !preview.loading && preview.err == "" {
+					ui.Button(c, "Open in Editor").OnClick(func() { m.openAuxiliaryDiffInEditor(preview) })
+					if preview.auxiliaryClose != nil {
+						ui.Button(c, "Open in Main Window").OnClick(preview.auxiliaryClose)
+					}
+					ui.ScrollBoth(c).Grow(1).MinHeight(0).MinWidth(0).Children(func() {
+						ui.Column(c).Children(func() {
+							for _, row := range preview.rows {
+								ui.Text(c, diffSign(row.Kind)+" "+row.Text).Font(oiFontMono).
+									FontSize(12).TextColor(diffColor(row.Kind, p)).NoWrap()
+							}
+						})
+					})
+				}
+			})
+		})
+	})
+}
+
+func (m *Model) loadAuxiliaryWorkingDiff(
+	preview *diffView,
+	path string,
+	invalidate func(),
+) {
+	root := m.Root()
+	current, _, fromTab := m.bufferTextVersion(path)
+	go func() {
+		ctx, cancel := context.WithTimeout(modelContext(m), 30*time.Second)
+		defer cancel()
+		raw, err := m.invoke(ctx, "vcs_file_at", map[string]any{"path": path})
+		var base *string
+		if err == nil {
+			err = json.Unmarshal(raw, &base)
+		}
+		if err == nil && !fromTab {
+			var onDisk []byte
+			if onDisk, err = os.ReadFile(path); err == nil {
+				current = string(onDisk)
+			}
+		}
+		m.post(func() {
+			if m.Root() != root || !preview.open {
+				return
+			}
+			preview.loading = false
+			if err != nil {
+				preview.err = diffErrorText(err)
+				invalidate()
+				return
+			}
+			preview.leftText = optionalText(base)
+			preview.rightText = current
+			preview.leftLabel = "HEAD"
+			preview.rightLabel = m.diffPathLabel(path)
+			preview.setDiffRows(preview.leftText, preview.rightText)
+			if preview.added == 0 && preview.gone == 0 {
+				preview.message = "Identical to HEAD"
+			}
+			invalidate()
+		})
+	}()
+}
+
+func (m *Model) loadAuxiliaryDiff(
+	preview *diffView,
+	left, right diffInputSideValue,
+	invalidate func(),
+) {
+	root := m.Root()
+	leftBuffered, _, leftOpen := m.bufferTextVersion(left.path)
+	rightBuffered, _, rightOpen := m.bufferTextVersion(right.path)
+	go func() {
+		ctx, cancel := context.WithTimeout(modelContext(m), time.Minute)
+		defer cancel()
+		var err error
+		readRevision := func(side diffInputSideValue) string {
+			raw, readErr := m.invoke(ctx, "vcs_file_at", map[string]any{
+				"path": side.path, "rev": side.rev,
+			})
+			if readErr != nil {
+				err = readErr
+				return ""
+			}
+			var text *string
+			if readErr = json.Unmarshal(raw, &text); readErr != nil {
+				err = readErr
+				return ""
+			}
+			return optionalText(text)
+		}
+		read := func(side diffInputSideValue, buffered string, open bool) string {
+			if side.rev != "" {
+				return readRevision(side)
+			}
+			if side.path == "" {
+				return side.text
+			}
+			if open {
+				return buffered
+			}
+			data, readErr := os.ReadFile(side.path)
+			if readErr != nil {
+				err = readErr
+				return ""
+			}
+			return string(data)
+		}
+		leftText := read(left, leftBuffered, leftOpen)
+		rightText := ""
+		if err == nil {
+			rightText = read(right, rightBuffered, rightOpen)
+		}
+		m.post(func() {
+			if m.Root() != root || !preview.open {
+				return
+			}
+			preview.loading = false
+			if err != nil {
+				preview.err = "Reading the compared file failed: " + err.Error()
+				invalidate()
+				return
+			}
+			preview.leftText, preview.rightText = leftText, rightText
+			preview.leftLabel, preview.rightLabel = left.label, right.label
+			preview.setDiffRows(leftText, rightText)
+			invalidate()
+		})
+	}()
+}
+
+func (m *Model) openAuxiliaryDiffInEditor(preview *diffView) {
+	if preview == nil || preview.path == "" {
+		return
+	}
+	m.OpenDiffArg(map[string]any{
+		"path": preview.path,
+		"left": map[string]any{
+			"type": "text", "text": preview.leftText, "label": preview.leftLabel,
+		},
+		"right": map[string]any{
+			"type": "text", "text": preview.rightText, "label": preview.rightLabel,
+		},
+	})
+}
+
+// keepDiffSurfacePresented ensures a dedicated new-tab diff owns an actual
+// editor tab after the surface is installed.
+func (m *Model) keepDiffSurfacePresented(d *diffView) {
+	if d == nil || d.surface != diffSurfaceNewTab || d.tab != nil {
+		return
+	}
+	doc := docbridge.Virtual("diff:"+d.path, "")
+	t := &Tab{
+		doc: doc, state: m.newReadOnlyEditorState(doc),
+		kind: tabKindVCSDiff, pageTitle: diffTitle(d),
+	}
+	t.state.Font = ui.Font{Family: oiFontUI, Size: m.prefs.fontSize()}
+	t.synced = doc.Buffer().Version()
+	t.seen = t.synced
+	d.tab = t
+	m.noteTabUse(t)
+	m.insertTab(t)
+	m.active = m.tabIndex(t)
+	m.showingWelcome = false
+	m.applyActive()
 }
 
 // diffErrorText turns the backend's refusal for a project without Git into

@@ -6,6 +6,10 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/egoist/mygo/ui/editor"
+
+	"mayoi/internal/docbridge"
 )
 
 func setNativeAppliedTestValue(m *Model, page, key string, value any) {
@@ -232,6 +236,8 @@ func TestNativeRuntimeCatalogMapsOnlyConsumedKeys(t *testing.T) {
 		"appearance.theme":                        "dark",
 		"editor.fontFamily":                       "Iosevka",
 		"editor.fontSize":                         float64(15),
+		"editor.tabSize":                          float64(2),
+		"editor.insertSpaces":                     false,
 		"editor.general.wheelZoom":                true,
 		"editor.tabs.tabLimit":                    float64(20),
 		"editor.inlay.codeVisionUsages":           false,
@@ -277,6 +283,7 @@ func TestNativeRuntimeCatalogMapsOnlyConsumedKeys(t *testing.T) {
 		t.Fatalf("agent runtime mapping = %+v", m.agentPrefs())
 	}
 	if m.prefs.Font.Family != "Iosevka" || m.prefs.fontSize() != 15 ||
+		m.prefs.Editor.TabSize != 2 || !m.prefs.Editor.UseTabCharacter ||
 		!m.prefs.General.WheelZoom ||
 		m.prefs.Tabs.limit() != 20 ||
 		m.prefs.Inlay.CodeVisionUsages() {
@@ -341,5 +348,34 @@ func TestNativeRuntimeCatalogUsesAppliedVisiblePageValues(t *testing.T) {
 	}
 	if m.prefs.fontSize() != 19 {
 		t.Fatalf("visible applied font size = %v, want 19", m.prefs.fontSize())
+	}
+}
+
+func TestCodeStyleRuntimeAppliesGlobalAndLanguageTabIndentation(t *testing.T) {
+	markdownDoc := docbridge.Virtual("/project/README.md", "")
+	javaDoc := docbridge.Virtual("/project/Main.java", "")
+	markdownTab := &Tab{doc: markdownDoc, state: &editor.State{Buffer: markdownDoc.Buffer()}}
+	javaTab := &Tab{doc: javaDoc, state: &editor.State{Buffer: javaDoc.Buffer()}}
+	m := &Model{tabs: []*Tab{markdownTab, javaTab}}
+	m.prefs.Editor.TabSize = 2
+	m.prefs.Editor.UseTabCharacter = true
+	m.nativeSettings.pages = map[string]nativeSettingsPageState{
+		settingsPageCodeStyle: {
+			loaded: true,
+			applied: map[string]any{
+				"editor.codeStyle.languages": map[string]any{
+					"java": map[string]any{"tabSize": float64(6), "useTab": false},
+				},
+			},
+		},
+	}
+
+	m.applyCodeStyleToTab(markdownTab)
+	if markdownTab.state.TabSize != 2 || markdownTab.state.Indent != editor.IndentTabs {
+		t.Fatalf("global code style = %d/%v", markdownTab.state.TabSize, markdownTab.state.Indent)
+	}
+	m.applyCodeStyleToTab(javaTab)
+	if javaTab.state.TabSize != 6 || javaTab.state.Indent != editor.IndentSpaces {
+		t.Fatalf("Java code style = %d/%v", javaTab.state.TabSize, javaTab.state.Indent)
 	}
 }

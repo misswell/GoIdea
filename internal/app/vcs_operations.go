@@ -114,6 +114,13 @@ type VCSOperationPane struct {
 	// preferredStart is the branch/tag selected by a Git Log or Branches pane
 	// action before the shared revision chooser finishes loading.
 	preferredStart string
+	// pushRevision is the selected Git Log boundary for "Push All up to
+	// Here"; it is sent as pushBranch.revision rather than replacing HEAD.
+	pushRevision string
+	// pushRepository is the repository that owned the selected Git Log
+	// commit when Push All up to Here opened. It prevents a stale selection
+	// from being retargeted after the repository list is refreshed.
+	pushRepository string
 }
 
 type vcsPushRejectedState struct {
@@ -352,10 +359,26 @@ func (m *Model) OpenGitPush() {
 
 func (m *Model) OpenGitPushAtSelectedCommit() {
 	repo := m.gitLogRepositoryRoot()
+	revision := ""
 	if m.log.selected >= 0 && m.log.selected < len(m.log.commits) {
 		repo = m.logCommitRepository(m.log.selected)
+		revision = m.log.commits[m.log.selected].ID
+	}
+	if revision == "" {
+		m.status = "Select a commit in the Git Log"
+		m.invalidate()
+		return
 	}
 	m.openVCSOperationAt(vcsOpPush, repo)
+	m.vcsOps.pushRevision = revision
+	m.vcsOps.pushRepository = repo
+	m.vcsOps.title = "Push All up to Here"
+	m.vcsOps.hint = "Push " + repo + " up to " + shortID(revision) + "."
+	m.vcsOps.busy = false
+	if !m.vcsRepositoryHasRoot(repo) {
+		m.vcsOps.err = "The selected commit's repository is no longer open"
+	}
+	m.invalidate()
 }
 
 func (m *Model) OpenGitReset() {
@@ -796,6 +819,69 @@ func (m *Model) submitVCSOperation() {
 			m.runVCSRemoteAt(repoArg, vcsOpPull, "Pull", op)
 		}
 	case vcsOpPush:
+		if state.pushRevision != "" {
+			selectedRepo, _ := repoArg.(string)
+			if state.pushRepository != selectedRepo ||
+				!m.vcsRepositoryHasRoot(state.pushRepository) {
+				state.err = "The selected commit's repository is no longer open"
+				m.invalidate()
+				return
+			}
+			root := m.Root()
+			revision := state.pushRevision
+			force := state.force
+			request := m.nextRequest()
+			state.request = request
+			state.busy = true
+			state.err = ""
+			m.invalidate()
+			go func() {
+				ctx, cancel := context.WithTimeout(modelContext(m), 2*time.Minute)
+				defer cancel()
+				infoRaw, err := m.invoke(ctx, "vcs_branch_info", map[string]any{
+					"repo": repoArg,
+				})
+				var info openidea.BranchInfo
+				if err == nil {
+					err = json.Unmarshal(infoRaw, &info)
+				}
+				if err != nil || info.Head == nil || strings.TrimSpace(*info.Head) == "" {
+					if err == nil {
+						err = errors.New("the selected repository has no current branch")
+					}
+					m.post(func() {
+						if m.Root() != root || !m.vcsOps.open || m.vcsOps.kind != vcsOpPush ||
+							m.vcsOps.request != request || m.vcsOps.pushRevision != revision {
+							return
+						}
+						m.vcsOps.busy = false
+						m.vcsOps.err = "Could not resolve the branch for this push: " + err.Error()
+						m.invalidate()
+					})
+					return
+				}
+				branch := strings.TrimSpace(*info.Head)
+				op, err := m.revisionPushOptions(
+					selectedRepo, branch, revision, info.Upstream, force,
+				)
+				m.post(func() {
+					if m.Root() != root || !m.vcsOps.open || m.vcsOps.kind != vcsOpPush ||
+						m.vcsOps.request != request || m.vcsOps.pushRevision != revision ||
+						!m.vcsRepositoryHasRoot(selectedRepo) {
+						return
+					}
+					if err != nil {
+						m.vcsOps.busy = false
+						m.vcsOps.err = err.Error()
+						m.invalidate()
+						return
+					}
+					m.vcsOps.busy = false
+					m.runVCSRemoteAt(repoArg, vcsOpPush, "Push All up to Here", op)
+				})
+			}()
+			return
+		}
 		if state.allRepositories {
 			m.runVCSMultiRepoPush("Push", state.force, state.setUpstream)
 			return
@@ -1423,6 +1509,78 @@ func (m *Model) invokeVCSRemoteAttemptForRequest(
 	return err
 }
 
+func (m *Model) vcsPushDestination(
+	repo, branch string,
+	upstream *string,
+) (remote, target string) {
+	target = strings.TrimSpace(branch)
+	upstreamRemote, upstreamTarget := "", ""
+	hasParsedUpstream := false
+	if upstream != nil && strings.TrimSpace(*upstream) != "" {
+		value := strings.TrimSpace(*upstream)
+		if scope, name, ok := strings.Cut(value, "/"); ok && scope != "" && name != "" {
+			upstreamRemote, upstreamTarget = scope, name
+			target = name
+			hasParsedUpstream = true
+		}
+		if value != "" && !hasParsedUpstream {
+			target = value
+		}
+	}
+	ctx, cancel := context.WithTimeout(modelContext(m), 30*time.Second)
+	defer cancel()
+	raw, err := m.invoke(ctx, "vcs_remotes", map[string]any{
+		"repo": vcsRepositoryArgFor(repo),
+	})
+	if err != nil {
+		return "", target
+	}
+	var remotes []openidea.Remote
+	if json.Unmarshal(raw, &remotes) != nil {
+		return "", target
+	}
+	if hasParsedUpstream {
+		for _, candidate := range remotes {
+			if candidate.Name == upstreamRemote {
+				return upstreamRemote, upstreamTarget
+			}
+		}
+		return "", target
+	}
+	for _, candidate := range remotes {
+		if candidate.Name == "origin" {
+			return candidate.Name, target
+		}
+	}
+	if len(remotes) > 0 {
+		return remotes[0].Name, target
+	}
+	return "", target
+}
+
+func (m *Model) revisionPushOptions(
+	repo, branch, revision string,
+	upstream *string,
+	force bool,
+) (map[string]any, error) {
+	remote, target := m.vcsPushDestination(repo, branch, upstream)
+	if remote == "" {
+		return nil, errors.New("no Git remote is configured")
+	}
+	target = strings.TrimSpace(target)
+	if target == "" {
+		return nil, errors.New("could not resolve the remote branch")
+	}
+	if force && (m.vcsProtectedBranch(branch) || m.vcsProtectedBranch(target)) {
+		return nil, errors.New("Force push is not allowed to protected branches")
+	}
+	return map[string]any{
+		"op": "pushBranch", "branch": branch, "revision": revision,
+		"force_with_lease": force, "target": target, "remote": remote,
+		"force": false, "set_upstream": false, "no_verify": false,
+	}, nil
+}
+
 func (m *Model) handleRejectedPush(
 	ctx context.Context,
 	root string,
@@ -1781,6 +1939,10 @@ func (m *Model) acceptVCSOperationOutput(id uint32, data json.RawMessage) bool {
 }
 
 func (m *Model) refreshAfterVCSWrite() {
+	if m.refreshAfterVCSWriteHook != nil {
+		m.refreshAfterVCSWriteHook()
+		return
+	}
 	m.RefreshVCS()
 	m.RefreshBranch()
 	if m.log.visible {

@@ -3,6 +3,7 @@ package app
 import (
 	"sort"
 
+	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
 )
 
@@ -160,6 +161,61 @@ func (m *Model) editorBindings() []editor.Binding {
 		bindings = append(bindings, candidate.Entry)
 	}
 	return bindings
+}
+
+// dispatchEditorActionGapShortcuts claims OpenIDEA editor actions that do not
+// map to a MyGo editor.Command before the editor's intrinsic keymap. A matching
+// application binding would otherwise be shadowed by a same-key default.
+func (m *Model) dispatchEditorActionGapShortcuts(c *ui.Context) bool {
+	if c == nil {
+		return false
+	}
+	for _, actionID := range editorActionGapShortcutIDs {
+		action, ok := actionGet(actionID)
+		if !ok || !action.usable(m) || action.KeyWhen != nil && !action.KeyWhen(m) {
+			continue
+		}
+		for _, binding := range m.KeymapBindings(actionID) {
+			strokes, ok := keymapInputStrokes(binding)
+			if !ok || len(strokes) != 1 {
+				continue
+			}
+			stroke := strokes[0]
+			if stroke.Mods != 0 && c.Shortcut(stroke.Mods, stroke.Key) {
+				if m.RunCommand(actionID) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+var editorActionGapShortcutIDs = []string{
+	"find.popup.nextResult",
+	"find.popup.previousResult",
+	"find.popup.openResult",
+	"find.popup.recentSearches",
+	"navigate.customRegion",
+	"navigate.gotoTest",
+	"navigate.nextMethod",
+	"navigate.previousMethod",
+	"navigate.relatedSymbol",
+	"navigate.superMethod",
+	"refactor.pullMembersUp",
+	"refactor.pushMembersDown",
+	"code.autoIndentLines",
+	"code.completeStatement",
+	"code.cyclicExpandWord",
+	"code.cyclicExpandWordBackward",
+	"code.moveElementLeft",
+	"code.moveElementRight",
+	"code.unwrap",
+	"code.reformatDialog",
+	"editor.contextInfo",
+	"editor.toggleInsertState",
+	"code.moveStatementUp",
+	"code.moveStatementDown",
 }
 
 // intellijEditorBindings keeps the focused editor helper tests independent of

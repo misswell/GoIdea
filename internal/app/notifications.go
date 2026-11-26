@@ -55,10 +55,11 @@ type ideNotification struct {
 	userInitiated bool
 	// balloon is whether it still shows in the corner. sticky controls the
 	// long timeout; stickySet preserves an explicit false for error balloons.
-	balloon   bool
-	sticky    bool
-	stickySet bool
-	hover     bool
+	balloon    bool
+	sticky     bool
+	stickySet  bool
+	persistent bool
+	hover      bool
 
 	timer     func()
 	deadline  time.Time
@@ -112,12 +113,13 @@ func (m *Model) notifySticky(key, level, title, body string, userInitiated bool,
 }
 
 // notifyStickyProgress draws a background task's live message and progress
-// bar in a sticky balloon.
+// bar in a balloon that stays until the user dismisses or replaces it. Long
+// downloads must remain visible even after OpenIDEA's ordinary sticky timeout.
 func (m *Model) notifyStickyProgress(key, level, title string, taskID string,
 	userInitiated bool, actions ...notifyAction) {
 	m.postNotification(ideNotification{key: key, level: level, title: title,
 		actions: actions, userInitiated: userInitiated, sticky: true, stickySet: true,
-		progressTask: taskID})
+		persistent: true, progressTask: taskID})
 }
 
 // notifyPlugin posts text supplied by a plugin. It is user-initiated because
@@ -237,6 +239,9 @@ func (m *Model) restoreNotificationHistory(items []StoredNotification) {
 // after 10 seconds; sticky balloons fade after five minutes only when listed,
 // and otherwise stay until dismissed.
 func notificationTimeout(n ideNotification) (time.Duration, bool) {
+	if n.persistent {
+		return 0, false
+	}
 	if n.sticky {
 		if !n.logged {
 			return 0, false
@@ -406,12 +411,14 @@ func (m *Model) markNotificationsRead() {
 	changed := false
 	for i := range m.notify.items {
 		it := &m.notify.items[i]
-		if it.logged && (!it.read || it.balloon) {
+		if it.logged && it.balloon {
 			changed = true
 		}
 		if it.logged {
 			stopNotifyTimer(it)
-			it.read = true
+			if !it.persistent {
+				it.read = true
+			}
 			it.balloon = false
 			it.remaining = 0
 			it.deadline = time.Time{}
@@ -869,7 +876,7 @@ func (m *Model) loggedNotifications() []ideNotification {
 // canSuppress reports whether a balloon offers "Don't Show Again": errors
 // always show, and a group already silenced has no balloon to offer it on.
 func (m *Model) canSuppress(n ideNotification) bool {
-	return n.key != updateKey && n.level != "error" && m.notifyPrefsFor(n.group).Display != "none"
+	return n.level != "error" && m.notifyPrefsFor(n.group).Display != "none"
 }
 
 // SuppressGroup is "Don't Show Again": the group stops popping up but keeps

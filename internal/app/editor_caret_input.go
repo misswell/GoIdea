@@ -21,6 +21,9 @@ func (m *Model) editorCaretInput(t *Tab, ev ui.InputEvent) bool {
 	if t == nil || t.state == nil {
 		return false
 	}
+	if m.overwriteEditorInput(t, ev) {
+		return true
+	}
 	m.scheduleParameterInfoForInput(t, ev)
 	if autoImportInputMayEdit(ev) {
 		m.markAutoImportDirty(t)
@@ -73,6 +76,11 @@ func (m *Model) editorCaretInput(t *Tab, ev ui.InputEvent) bool {
 			// this editor callback. Recording here preserves the pre-cut text
 			// for either dispatch order; the history deduplicates a second call.
 			m.rememberActiveEditorClipboard()
+			if ev.Key == ui.KeyC &&
+				m.nativeRuntimeBool(settingsPageRichTextCopy, "editor.general.richTextCopy") &&
+				m.copyEditorRichText(t) {
+				return true
+			}
 		}
 		if ev.Key == ui.KeyEnter && (ev.Mods == ui.Cmd || ev.Mods == ui.Ctrl) &&
 			t.doc != nil && isHTTPRequestFile(t.doc.Path()) {

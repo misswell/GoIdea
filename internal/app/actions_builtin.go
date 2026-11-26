@@ -28,7 +28,7 @@ func init() {
 		case "file.newScratchFile":
 			a.When = func(m *Model) bool { return m.Root() != "" && !m.showingWelcome }
 		case "file.openProjectPath":
-			a.RunWithArg = func(m *Model, arg any) { m.openProjectPath(projectPathArg(arg)) }
+			a.RunWithArg = func(m *Model, arg any) { m.openProjectPathArg(arg) }
 		case "file.openRecentProject":
 			a.RunWithArg = func(m *Model, arg any) { m.openProjectPath(projectPathArg(arg)) }
 		case "build.compileFile":
@@ -319,6 +319,7 @@ func init() {
 		workspaceActionState(a)
 		_ = registerAction(a)
 	}
+	installEditorActionGapActions()
 	registerFileTypeActions()
 }
 

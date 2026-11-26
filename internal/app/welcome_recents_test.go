@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -147,5 +148,148 @@ func TestWelcomeRendersAGroupAndItsProjects(t *testing.T) {
 	}
 	if !tt.HasText("shop") {
 		t.Fatalf("the grouped project did not draw: %q", tt.Texts())
+	}
+}
+
+func TestRecentRowsPutGroupsFirstAndSearchStaysFlat(t *testing.T) {
+	m := &Model{
+		recents: []RecentProject{
+			{Path: "/work/a", Name: "a", OpenedAt: 3},
+			{Path: "/work/b", Name: "b", OpenedAt: 2, Group: "Work"},
+			{Path: "/work/c", Name: "c", OpenedAt: 1},
+		},
+		recentGroups: []RecentGroup{{Name: "Work"}},
+	}
+	rows := m.recentRows()
+	if len(rows) != 4 || rows[0].group == nil || rows[0].group.Name != "Work" ||
+		rows[1].match == nil || rows[1].match.project.Path != "/work/b" ||
+		rows[2].match == nil || rows[2].match.project.Path != "/work/a" ||
+		rows[3].match == nil || rows[3].match.project.Path != "/work/c" {
+		t.Fatalf("grouped rows = %+v", rows)
+	}
+	m.welcomeQuery = "a"
+	rows = m.recentRows()
+	if len(rows) != 1 || rows[0].group != nil || rows[0].match.project.Path != "/work/a" {
+		t.Fatalf("query rows = %+v", rows)
+	}
+}
+
+func TestRecentRetentionOnlyCapsUngroupedProjects(t *testing.T) {
+	base := t.TempDir()
+	projects := make([]RecentProject, 0, maxRecentProjects+4)
+	for i := 0; i < maxRecentProjects+2; i++ {
+		path := filepath.Join(base, "open"+string(rune('a'+i)))
+		if err := os.Mkdir(path, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		projects = append(projects, RecentProject{Path: path, Name: path})
+	}
+	for i := 0; i < 2; i++ {
+		path := filepath.Join(base, "grouped"+string(rune('a'+i)))
+		if err := os.Mkdir(path, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		projects = append(projects, RecentProject{Path: path, Name: path, Group: "Keep"})
+	}
+	m := &Model{}
+	m.setRecentGroupsAndProjects([]RecentGroup{{Name: "Keep"}}, projects)
+	ungrouped, grouped := 0, 0
+	for _, project := range m.recents {
+		if project.Group == "" {
+			ungrouped++
+		} else {
+			grouped++
+		}
+	}
+	if ungrouped != maxRecentProjects || grouped != 2 {
+		t.Fatalf("retained = ungrouped %d grouped %d, want %d and 2", ungrouped, grouped, maxRecentProjects)
+	}
+}
+
+func TestRecentGroupsNormalizeNamesAndMembership(t *testing.T) {
+	m := &Model{}
+	m.setRecentGroupsAndProjects(
+		[]RecentGroup{{Name: " Work "}, {Name: "Work"}, {Name: " "}},
+		[]RecentProject{
+			{Path: "/work/a", Name: "a", Group: " Work "},
+			{Path: "/work/b", Name: "b", Group: "Missing"},
+		},
+	)
+	if len(m.recentGroups) != 1 || m.recentGroups[0].Name != "Work" {
+		t.Fatalf("groups = %+v", m.recentGroups)
+	}
+	if len(m.recents) != 2 {
+		t.Fatalf("recents = %+v", m.recents)
+	}
+	if m.recents[0].Group != "Work" || m.recents[1].Group != "" {
+		t.Fatalf("memberships = %+v", m.recents)
+	}
+	if got := m.groupNameError("Work", ""); got != "A group named 'Work' already exists" {
+		t.Fatalf("duplicate error = %q", got)
+	}
+	if got := m.groupNameError("Work", "Work"); got != "" {
+		t.Fatalf("unchanged rename error = %q", got)
+	}
+}
+
+func TestOpenRecentInNewWindowUsesNativeHost(t *testing.T) {
+	host := &fakeWorkspaceHost{windows: 1, openProjectOK: true}
+	m := &Model{workspaceHost: host}
+	m.OpenRecentInNewWindow("/projects/local")
+	if !reflect.DeepEqual(host.openProject, []string{"/projects/local"}) {
+		t.Fatalf("local window = %q", host.openProject)
+	}
+	host.openProject = nil
+	// URL-escaped text is not a usable remote target and must not create a
+	// window with an unnormalized path.
+	m.OpenRecentInNewWindow("ssh://host")
+	if len(host.openProject) != 0 {
+		t.Fatalf("invalid remote opened a window: %q", host.openProject)
+	}
+	host.openProject = nil
+	m.OpenRecentInNewWindow("ssh://host/srv/app")
+	if !reflect.DeepEqual(host.openProject, []string{"ssh://host/srv/app"}) {
+		t.Fatalf("remote window = %q", host.openProject)
+	}
+}
+
+func TestWelcomeUIFontWritesIDEAppearance(t *testing.T) {
+	dir := t.TempDir()
+	settingsPath := filepath.Join(dir, "settings.json")
+	m := &Model{
+		cfg:   Config{SettingsPath: settingsPath},
+		prefs: Preferences{FontSize: 20},
+	}
+	m.SetWelcomeUIFontSize(15)
+	if m.prefs.FontSize != 20 {
+		t.Fatalf("editor font changed to %v", m.prefs.FontSize)
+	}
+	if m.prefs.Appearance.UIFontSize != 15 || !m.prefs.Appearance.UseCustomFont {
+		t.Fatalf("UI appearance = %+v", m.prefs.Appearance)
+	}
+	stored := LoadPreferences(settingsPath)
+	if stored.Appearance.UIFontSize != 15 || !stored.Appearance.UseCustomFont {
+		t.Fatalf("stored UI appearance = %+v", stored.Appearance)
+	}
+	m.SetWelcomeUIFontSize(99)
+	if m.prefs.Appearance.UIFontSize != 18 {
+		t.Fatalf("size above range = %d", m.prefs.Appearance.UIFontSize)
+	}
+	m.SetWelcomeUIFontSize(1)
+	if m.prefs.Appearance.UIFontSize != 10 {
+		t.Fatalf("size below range = %d", m.prefs.Appearance.UIFontSize)
+	}
+}
+
+func TestWelcomeGearMatchesSharedGearOrder(t *testing.T) {
+	got := (&Model{}).welcomeGearEntries()
+	want := gearGroup(&Model{})
+	if len(got) != len(want) {
+		t.Fatalf("Welcome gear has %d items, shared gear has %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i].label != want[i].label || got[i].sep != want[i].sep || got[i].command != want[i].command {
+			t.Fatalf("Welcome gear[%d] = %+v, want %+v", i, got[i], want[i])
+		}
 	}
 }

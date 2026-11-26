@@ -44,6 +44,12 @@ func (m *Model) tabLabelIn(tabs []*Tab, t *Tab) (name, dir string) {
 			if t.pageTitle != "" {
 				return t.pageTitle, ""
 			}
+		case tabKindVCSDiff:
+			if t.pageTitle != "" {
+				return t.pageTitle, ""
+			}
+		case tabKindPluginContent:
+			return m.pluginContentTitle(t), ""
 		case tabKindAgentSession, tabKindAgentHome:
 			return m.agentEditorTitle(t), ""
 		}
@@ -87,7 +93,8 @@ func tabLabelFor(path string, prefs TabPrefs, dirty bool, siblings []string) (na
 // case as sortTabs avoids case deciding the order.
 func tabSortKey(t *Tab) string {
 	if t != nil && (t.kind == tabKindAgentSession || t.kind == tabKindAgentHome ||
-		t.kind == tabKindDockerLog || t.kind == tabKindNotebook) {
+		t.kind == tabKindDockerLog || t.kind == tabKindNotebook || t.kind == tabKindVCSDiff ||
+		t.kind == tabKindPluginContent) {
 		if t.pageTitle != "" {
 			return strings.ToLower(t.pageTitle)
 		}
@@ -458,6 +465,55 @@ func (m *Model) closeTabThen(t *Tab, then func()) {
 		}
 		return
 	}
+	if t.kind == tabKindPluginContent {
+		session := m.pluginContentTabFor(t)
+		if session != nil {
+			session.closing = true
+		}
+		if session == nil || !session.dirty() {
+			if session != nil {
+				m.closePluginContentSession(session)
+			} else {
+				m.removeTabNow(t)
+			}
+			if then != nil {
+				then()
+			}
+			return
+		}
+		name := m.pluginContentTitle(t)
+		go func() {
+			res, err := mygo.Dialog.Message(mygo.MessageOptions{
+				Parent: m.win, Type: mygo.MessageWarning, Title: "Close Plugin Content",
+				Message: "Do you want to save changes to " + name + "?",
+				Buttons: []string{"Save", "Don't Save", "Cancel"}, DefaultButton: 0, CancelButton: 2,
+			})
+			if err != nil {
+				return
+			}
+			m.post(func() {
+				switch res.Button {
+				case 0:
+					m.savePluginContentThen(session, true, func() {
+						if then != nil {
+							then()
+						}
+					})
+				case 1:
+					t.state.Buffer.Set(session.baseline)
+					m.closePluginContentSession(session)
+					if then != nil {
+						then()
+					}
+				default:
+					session.closing = false
+					session.busy = false
+					m.invalidate()
+				}
+			})
+		}()
+		return
+	}
 	if !t.unsaved() {
 		m.removeTab(t)
 		if then != nil {
@@ -575,6 +631,9 @@ func closeUnmodifiedTargets(tabs []*Tab, modified func(*Tab) bool) []*Tab {
 // tabModifiedForClose is IDEA's modified tab: unsaved text, or VCS changes
 // shown in the gutter. A file Git cannot answer for is not called modified.
 func tabModifiedForClose(t *Tab) bool {
+	if t != nil && t.kind == tabKindPluginContent && t.owner != nil {
+		return t.owner.pluginContentDirty(t) || (!t.gitOff && len(t.gitMarks) > 0)
+	}
 	return t.unsaved() || (!t.gitOff && len(t.gitMarks) > 0)
 }
 

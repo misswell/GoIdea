@@ -155,6 +155,19 @@ func (h *nativeWindowHost) addWindow(id, root string, files []string, fresh bool
 		}
 		return nil
 	}
+	win.OnFileDrop(func(event *mygo.FileDropEvent) {
+		if event == nil || len(event.Paths) == 0 {
+			return
+		}
+		paths := append([]string(nil), event.Paths...)
+		mygo.RunOnMain(func() {
+			entry := h.windowByID(id)
+			if entry == nil || entry.model != model {
+				return
+			}
+			model.OpenDroppedPaths(paths)
+		})
+	})
 	entry := &nativeProjectWindow{
 		id:         id,
 		root:       root,
@@ -263,6 +276,70 @@ func goideaWindowOptions(id string, hidden bool, content mygo.Content) mygo.Wind
 		TrafficLightPosition: &mygo.Point{X: 14, Y: 13},
 		Content:              content,
 	}
+}
+
+func auxiliaryDiffWindowOptions(
+	title string,
+	parent *mygo.Window,
+	content mygo.Content,
+) mygo.WindowOptions {
+	return mygo.WindowOptions{
+		Title:                title,
+		Width:                1080,
+		Height:               720,
+		MinWidth:             520,
+		MinHeight:            320,
+		Parent:               parent,
+		TitleBarStyle:        mygo.TitleBarHidden,
+		TitleBarHeight:       40,
+		TrafficLightPosition: &mygo.Point{X: 14, Y: 13},
+		Content:              content,
+	}
+}
+
+// ShowDiffInAuxiliaryWindow opens OpenIDEA's detached diff surface as a
+// non-modal native child window. The surface is transient and shares the
+// parent's model and backend, so it adds no project window or backend process.
+func (h *nativeWindowHost) ShowDiffInAuxiliaryWindow(
+	owner *app.Model,
+	data map[string]any,
+	render func(*ui.Context, *ui.Theme, func(), func()),
+) bool {
+	if h.headless || h.preparingQuit || h.shuttingDown || !mygo.App.IsReady() {
+		return false
+	}
+	entry := h.windowForModel(owner)
+	if entry == nil || entry.win == nil || entry.win.IsDestroyed() {
+		return false
+	}
+	title := "Diff"
+	if path, _ := data["path"].(string); path != "" {
+		title += " – " + filepath.Base(path)
+	}
+	var window *mygo.Window
+	content := ui.View(func(c *ui.Context) {
+		render(
+			c,
+			c.Theme(),
+			func() {
+				if window != nil && !window.IsDestroyed() {
+					window.Invalidate()
+				}
+			},
+			func() {
+				if window != nil && !window.IsDestroyed() {
+					window.Close()
+				}
+			},
+		)
+	})
+	options := auxiliaryDiffWindowOptions(title, entry.win, content)
+	window = mygo.NewWindow(options)
+	if window == nil || window.IsDestroyed() {
+		return false
+	}
+	window.Show()
+	return true
 }
 
 func seedWindowSession(source, target string) {
@@ -676,26 +753,66 @@ func (h *nativeWindowHost) OpenProjects(_ *app.Model) []app.WorkspaceWindow {
 }
 
 func (h *nativeWindowHost) FocusOpenProject(_ *app.Model, path string) bool {
-	clean := filepath.Clean(path)
+	entry := h.projectWindowAt(path)
+	if entry == nil {
+		return false
+	}
+	h.focusProjectWindow(entry, nil)
+	return true
+}
+
+func canonicalProjectPath(path string) string {
+	root, err := filepath.Abs(path)
+	if err != nil {
+		return filepath.Clean(path)
+	}
+	if resolved, err := filepath.EvalSymlinks(root); err == nil {
+		root = resolved
+	}
+	return filepath.Clean(root)
+}
+
+func (h *nativeWindowHost) projectWindowAt(path string) *nativeProjectWindow {
+	clean := canonicalProjectPath(path)
+	if clean == "." || clean == "" {
+		return nil
+	}
 	for _, entry := range h.windows {
-		if entry == nil || entry.model == nil || filepath.Clean(entry.model.Root()) != clean {
+		if entry == nil || entry.model == nil || entry.win == nil || entry.win.IsDestroyed() {
 			continue
 		}
-		if entry.group != 0 {
-			h.showGroupWindow(entry)
-			return true
+		if canonicalProjectPath(entry.model.Root()) == clean {
+			return entry
 		}
+	}
+	return nil
+}
+
+func (h *nativeWindowHost) focusProjectWindow(entry *nativeProjectWindow, files []string) {
+	if entry == nil || entry.win == nil || entry.win.IsDestroyed() {
+		return
+	}
+	if entry.group != 0 {
+		h.showGroupWindow(entry)
+	} else {
 		if !h.headless {
 			entry.win.Show()
 			entry.win.Focus()
 		}
 		h.WindowFocused(entry.model)
-		for _, member := range h.groupedWindows(entry.group) {
-			member.model.RefreshWorkspaceWindows()
-		}
-		return true
 	}
-	return false
+	if len(files) > 0 {
+		paths := append([]string(nil), files...)
+		mygo.RunOnMain(func() {
+			if h.projectWindowAt(entry.model.Root()) != entry {
+				return
+			}
+			entry.model.OpenDroppedPaths(paths)
+		})
+	}
+	for _, member := range h.groupedWindows(entry.group) {
+		member.model.RefreshWorkspaceWindows()
+	}
 }
 
 func (h *nativeWindowHost) WindowStateChanged(model *app.Model) {
@@ -749,10 +866,15 @@ func (h *nativeWindowHost) saveWorkspace() {
 }
 
 func (h *nativeWindowHost) OpenProjectInNewWindow(path string, files []string) bool {
-	if filepath.Clean(path) == "." || filepath.Clean(path) == "" {
+	root := canonicalProjectPath(path)
+	if root == "." || root == "" {
 		return false
 	}
-	entry := h.addWindow("", filepath.Clean(path), files, false)
+	if entry := h.projectWindowAt(root); entry != nil {
+		h.focusProjectWindow(entry, files)
+		return true
+	}
+	entry := h.addWindow("", root, files, false)
 	if entry == nil {
 		return false
 	}

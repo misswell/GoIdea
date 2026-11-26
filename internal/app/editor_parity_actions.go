@@ -133,46 +133,6 @@ func init() {
 			"Fold Code Block", "Folding", "Cmd+Shift+.", editorAvailable, editor.Fold,
 		},
 		{
-			"code.expandToLevel1",
-			"Expand to Level 1", "Folding", "", editorAvailable, editor.FoldLevel1,
-		},
-		{
-			"code.expandToLevel2",
-			"Expand to Level 2", "Folding", "", editorAvailable, editor.FoldLevel2,
-		},
-		{
-			"code.expandToLevel3",
-			"Expand to Level 3", "Folding", "", editorAvailable, editor.FoldLevel3,
-		},
-		{
-			"code.expandToLevel4",
-			"Expand to Level 4", "Folding", "", editorAvailable, editor.FoldLevel4,
-		},
-		{
-			"code.expandToLevel5",
-			"Expand to Level 5", "Folding", "", editorAvailable, editor.FoldLevel5,
-		},
-		{
-			"code.expandAllToLevel1",
-			"Expand All to Level 1", "Folding", "", editorAvailable, editor.FoldLevel1,
-		},
-		{
-			"code.expandAllToLevel2",
-			"Expand All to Level 2", "Folding", "", editorAvailable, editor.FoldLevel2,
-		},
-		{
-			"code.expandAllToLevel3",
-			"Expand All to Level 3", "Folding", "", editorAvailable, editor.FoldLevel3,
-		},
-		{
-			"code.expandAllToLevel4",
-			"Expand All to Level 4", "Folding", "", editorAvailable, editor.FoldLevel4,
-		},
-		{
-			"code.expandAllToLevel5",
-			"Expand All to Level 5", "Folding", "", editorAvailable, editor.FoldLevel5,
-		},
-		{
 			"code.completion",
 			"Code Completion", "Code", "Ctrl+Space", editorEditable, editor.ShowCompletions,
 		},

@@ -25,6 +25,11 @@ func (m *Model) ToggleHighlightUsages() {
 	if t == nil || t.state == nil || t.doc == nil || !m.tabOpen(t) {
 		return
 	}
+	if !m.editorCodeEditingBool("highlightUsages") {
+		m.status = "Highlight Usages is off in Editor › Code Editing"
+		m.invalidate()
+		return
+	}
 	caret := t.state.Cursor()
 	if t.usageHighlightSticky && usageHighlightAt(t.usageHighlights, caret) >= 0 {
 		m.clearUsageHighlights(t)

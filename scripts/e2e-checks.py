@@ -3,7 +3,7 @@
 
 Usage: e2e-checks.py <phase> <smoke.json> [<smoke.json> ...]
        e2e-checks.py --list
-Phases: agents | featureparity | toolchains | extendedToolchains | windows | base | libraries | projectstructure | filetypes | vcsoperations | tools | debugimport | fresh | lsp | analysis | debug | hotswap | spring | rerunfail | gorerun | cargorun | pyrerun | jsrerun | profiler | profilerallocations | profilerlive | readiness | negjdtls | runswitch | runkill | dbgcfg | attach
+Phases: agents | featureparity | toolchains | extendedToolchains | windows | rollback | base | libraries | projectstructure | filetypes | vcsoperations | tools | debugimport | fresh | lsp | analysis | debug | hotswap | spring | rerunfail | gorerun | cargorun | pyrerun | jsrerun | profiler | profilerallocations | profilerlive | readiness | negjdtls | runswitch | runkill | dbgcfg | attach
 Every check has an id. REGRESSION_INDEX.json names the same ids, and --list
 lets scripts/check-regression-index.py prove the two never drift apart, so a
 check cannot be deleted without the index noticing. Every failed assertion is
@@ -73,6 +73,46 @@ CHECKS = {
         ("sharedServerHome", "project windows shared one backend data root for installed tools", lambda d: (get(d, "sharedServerHome") is True, get(d, "serverHomes"))),
         ("isolatedClose", "closing one window stopped only its backend and left its sibling healthy", lambda d: (get(d, "onlyClosedWindowStopped") is True, {"before": get(d, "beforeClose"), "after": get(d, "afterClose")})),
         ("noServers", "all backend processes were gone after the smoke process exited", lambda d: (all(process_gone(pid) for pid in (get(d, "windowPIDs") or [])), get(d, "windowPIDs"))),
+    ],
+    "rollback": [
+        ("rollbackError", *absent("rollbackError")),
+        ("uiRoot", "the rejected switch kept the current project in the UI", lambda d: (
+            get(d, "rollback.rootAfter") == get(d, "rollback.rootBefore"),
+            get(d, "rollback"),
+        )),
+        ("backendRoot", "the rejected switch kept project_current on the original project", lambda d: (
+            get(d, "rollback.backendRootBefore") == get(d, "rollback.rootBefore")
+            and get(d, "rollback.backendRootAfter") == get(d, "rollback.rootBefore"),
+            get(d, "rollback"),
+        )),
+        ("tabs", "the rejected switch restored the tab count and document", lambda d: (
+            get(d, "rollback.tabsAfter") == get(d, "rollback.tabsBefore")
+            and get(d, "rollback.docAlive") is True,
+            get(d, "rollback"),
+        )),
+        ("groups", "the rejected switch restored the active and split groups", lambda d: (
+            get(d, "rollback.activeAfter") == get(d, "rollback.activeBefore")
+            and get(d, "rollback.splitAfter") == get(d, "rollback.splitBefore")
+            and get(d, "rollback.splitDownAfter") == get(d, "rollback.splitDownBefore")
+            and get(d, "rollback.splitActiveAfter") == get(d, "rollback.splitActiveBefore"),
+            get(d, "rollback"),
+        )),
+        ("recents", "the rejected switch did not mutate recent projects", lambda d: (
+            get(d, "rollback.recentPathsAfter") == get(d, "rollback.recentPathsBefore"),
+            get(d, "rollback"),
+        )),
+        ("session", "the rejected switch kept the saved project and window group", lambda d: (
+            get(d, "rollback.sessionRootAfter") == get(d, "rollback.sessionRootBefore")
+            and get(d, "rollback.sessionActiveAfter") == get(d, "rollback.sessionActiveBefore")
+            and get(d, "rollback.sessionSplitAfter") == get(d, "rollback.sessionSplitBefore")
+            and get(d, "rollback.sessionSplitActiveAfter") == get(d, "rollback.sessionSplitActiveBefore")
+            and get(d, "rollback.sessionRecentPathsAfter") == get(d, "rollback.sessionRecentPathsBefore"),
+            get(d, "rollback"),
+        )),
+        ("error", "the rejected switch reported the backend error", lambda d: (
+            bool(get(d, "rollback.banner")),
+            get(d, "rollback.banner"),
+        )),
     ],
     "agents": [
         ("agentsError", *absent("agentsError")),

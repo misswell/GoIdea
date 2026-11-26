@@ -1,8 +1,10 @@
 package app
 
 import (
+	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -12,6 +14,42 @@ func terminalSettingsModel(values map[string]any) *Model {
 		settingsPageTerminal: {loaded: true, applied: values, draft: values},
 	}
 	return m
+}
+
+func TestTerminalActivatesConfiguredPythonVirtualenv(t *testing.T) {
+	root := t.TempDir()
+	m := terminalSettingsModel(map[string]any{
+		"terminal.env": map[string]string{"PATH": "/usr/bin", "KEEP": "1"},
+	})
+	m.setRoot(root)
+	pythonPage := nativeSettingsPageState{
+		loaded: true,
+		scope:  "project",
+		applied: map[string]any{
+			"languages.python.interpreter":        filepath.Join(root, ".venv", "bin", "python"),
+			"languages.python.activateVirtualenv": true,
+		},
+		draft: map[string]any{},
+	}
+	m.nativeSettings.pages[settingsPagePythonDeps] = pythonPage
+	options := m.terminalSpawnOptions("/bin/zsh", nil)
+	env, ok := options["env"].(map[string]string)
+	if !ok {
+		t.Fatalf("terminal environment = %#v", options["env"])
+	}
+	wantBin := filepath.Join(root, ".venv", "bin")
+	if env["VIRTUAL_ENV"] != filepath.Join(root, ".venv") ||
+		env["KEEP"] != "1" ||
+		!strings.HasPrefix(env["PATH"], wantBin+string(os.PathListSeparator)) {
+		t.Fatalf("activated Python environment = %#v", env)
+	}
+	pythonPage.applied["languages.python.activateVirtualenv"] = false
+	m.nativeSettings.pages[settingsPagePythonDeps] = pythonPage
+	options = m.terminalSpawnOptions("/bin/zsh", nil)
+	env = options["env"].(map[string]string)
+	if _, exists := env["VIRTUAL_ENV"]; exists || env["PATH"] != "/usr/bin" {
+		t.Fatalf("disabled Python activation changed environment: %#v", env)
+	}
 }
 
 func TestTerminalStartDirectoryResolvesProjectRelativeAndAbsolutePaths(t *testing.T) {

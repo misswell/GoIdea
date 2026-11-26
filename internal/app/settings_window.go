@@ -1502,9 +1502,6 @@ func (m *Model) settingsSelectPage(key string) {
 	if key == settingsPageVim {
 		m.loadVimSettingsPage()
 	}
-	if key == settingsPageLiveTemplates || key == settingsPagePostfix || key == settingsPageFileTemplates {
-		m.loadTemplateSettingsPage(key)
-	}
 	m.loadBackendCatalogSettingsPage(key)
 	if m.settingsHistoryAt < 0 || m.settingsHistoryAt >= len(m.settingsHistory) {
 		m.settingsHistory = []string{key}
@@ -1553,6 +1550,9 @@ func (m *Model) settingsStepHistory(delta int) {
 	}
 	if key == settingsPageVim {
 		m.loadVimSettingsPage()
+	}
+	if key == settingsPageLiveTemplates || key == settingsPagePostfix || key == settingsPageFileTemplates {
+		m.loadTemplateSettingsPage(key)
 	}
 	m.loadBackendCatalogSettingsPage(key)
 	m.invalidate()

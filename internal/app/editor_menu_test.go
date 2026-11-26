@@ -1,15 +1,79 @@
 package app
 
 import (
+	"errors"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
+	"github.com/egoist/mygo/transfer"
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
 
 	"mayoi/internal/docbridge"
 )
+
+func TestCopyEditorRichTextProvidesHTMLAndPlainText(t *testing.T) {
+	doc := docbridge.Virtual("/Rich.java", `if (x < y) { "ok"; }`)
+	state := &editor.State{Buffer: doc.Buffer()}
+	state.Select(4, 9)
+	m := &Model{tabs: []*Tab{{doc: doc, state: state}}, active: 0}
+	var written transfer.Data
+	original := clipboardWriteData
+	originalHTML := clipboardWriteHTML
+	t.Cleanup(func() {
+		clipboardWriteData = original
+		clipboardWriteHTML = originalHTML
+	})
+	clipboardWriteData = func(data transfer.Data) error {
+		written = data
+		return nil
+	}
+	clipboardWriteHTML = func(markup string) {
+		t.Fatalf("HTML fallback used after a successful multi-format write: %q", markup)
+	}
+	if !m.copyEditorRichText(m.tab()) {
+		t.Fatal("copyEditorRichText rejected a selection")
+	}
+	html, err := written.Read(transfer.HTML)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain, err := written.Read(transfer.Text)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(plain) != "x < y" {
+		t.Fatalf("plain text = %q", plain)
+	}
+	if !strings.Contains(string(html), "x &lt; y") ||
+		!strings.HasPrefix(string(html), "<pre") {
+		t.Fatalf("HTML = %q", html)
+	}
+}
+
+func TestCopyEditorRichTextFallsBackToHTML(t *testing.T) {
+	doc := docbridge.Virtual("/Rich.java", "value")
+	state := &editor.State{Buffer: doc.Buffer()}
+	state.Select(0, len("value"))
+	m := &Model{tabs: []*Tab{{doc: doc, state: state}}, active: 0}
+	var fallback string
+	original := clipboardWriteData
+	originalHTML := clipboardWriteHTML
+	t.Cleanup(func() {
+		clipboardWriteData = original
+		clipboardWriteHTML = originalHTML
+	})
+	clipboardWriteData = func(transfer.Data) error { return errors.New("no multi-format clipboard") }
+	clipboardWriteHTML = func(markup string) { fallback = markup }
+	if !m.copyEditorRichText(m.tab()) {
+		t.Fatal("copyEditorRichText rejected a selection")
+	}
+	if !strings.Contains(fallback, "value") {
+		t.Fatalf("fallback HTML = %q", fallback)
+	}
+}
 
 func TestEditorPathFlavours(t *testing.T) {
 	got := editorPathFlavours("/work/demo", "/work/demo/src/Main.java", 7)

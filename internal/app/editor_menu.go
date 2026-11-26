@@ -6,10 +6,17 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/transfer"
 	"github.com/egoist/mygo/ui"
 )
 
-var clipboardWriteText = mygo.Clipboard.WriteText
+var (
+	clipboardWriteText = mygo.Clipboard.WriteText
+	clipboardWriteHTML = mygo.Clipboard.WriteHTML
+	clipboardWriteData = func(data transfer.Data) error {
+		return mygo.Clipboard.Write(data)
+	}
+)
 
 // editorPathFlavour is one row of OpenIDEA's Copy Path/Reference chooser.
 type editorPathFlavour struct {
@@ -188,4 +195,60 @@ func (m *Model) copyEditorText(text string) {
 	clipboardWriteText(text)
 	m.status = "Copied " + text
 	m.invalidate()
+}
+
+func (m *Model) copyEditorRichText(t *Tab) bool {
+	if t == nil || t.state == nil || t.doc == nil {
+		return false
+	}
+	selections := t.state.Selections()
+	if len(selections) == 0 {
+		return false
+	}
+	text := t.doc.Text()
+	var plain strings.Builder
+	var markup strings.Builder
+	for index, selection := range selections {
+		start, end := selection.Anchor, selection.Head
+		if start > end {
+			start, end = end, start
+		}
+		if start < 0 || end < start || end > len(text) {
+			return false
+		}
+		if index > 0 {
+			plain.WriteByte('\n')
+			markup.WriteString("\n<br>\n")
+		}
+		value := text[start:end]
+		plain.WriteString(value)
+		markup.WriteString(richTextHTMLEscape(value))
+	}
+	if plain.Len() == 0 {
+		return false
+	}
+	html := `<pre style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap">` +
+		markup.String() + `</pre>`
+	if err := clipboardWriteData(
+		transfer.New(transfer.NewItem(
+			transfer.Bytes(transfer.HTML, []byte(html)),
+			transfer.Bytes(transfer.Text, []byte(plain.String())),
+		)),
+	); err != nil {
+		clipboardWriteHTML(html)
+	}
+	m.status = "Copied as rich text"
+	m.invalidate()
+	return true
+}
+
+func richTextHTMLEscape(value string) string {
+	replacer := strings.NewReplacer(
+		"&", "&amp;",
+		"<", "&lt;",
+		">", "&gt;",
+		`"`, "&#34;",
+		"'", "&#39;",
+	)
+	return replacer.Replace(value)
 }

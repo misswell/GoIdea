@@ -37,7 +37,7 @@ release can be called today.
 | AI agent sessions | `agent` | 36 | 3 | 35 |
 | Code analysis | `analysis` | 5 | 0 | 5 |
 | Android devices | `android` | 2 | 0 | 2 |
-| Application and projects | `app` | 19 | 8 | 18 |
+| Application and projects | `app` | 19 | 8 | 19 |
 | Maven/Gradle builds | `build` | 12 | 0 | 12 |
 | Binary file reads | `bytes` | 3 | 0 | 0 |
 | Caches and restart | `caches` | 0 | 4 | 0 |
@@ -59,12 +59,12 @@ release can be called today.
 | hotkeys | `hotkeys` | 0 | 1 | 0 |
 | HTTP client | `http` | 10 | 1 | 9 |
 | Java | `java` | 3 | 0 | 3 |
-| Language services | `lsp` | 43 | 1 | 31 |
+| Language services | `lsp` | 43 | 1 | 33 |
 | MCP | `mcp` | 7 | 0 | 7 |
 | Navigation and index | `nav` | 16 | 0 | 7 |
 | Notebooks | `notebook` | 12 | 0 | 12 |
 | Performance | `perf` | 0 | 2 | 0 |
-| Plugins | `plugin` | 44 | 24 | 26 |
+| Plugins | `plugin` | 44 | 24 | 27 |
 | Profiler | `profiler` | 3 | 0 | 3 |
 | Refactoring | `refactor` | 5 | 0 | 4 |
 | Remote development | `remote_dev` | 0 | 11 | 0 |
@@ -74,10 +74,10 @@ release can be called today.
 | Search | `search` | 4 | 0 | 4 |
 | Spelling | `spell` | 2 | 0 | 0 |
 | SSH | `ssh` | 7 | 3 | 3 |
-| Syntax trees | `syntax` | 9 | 0 | 3 |
+| Syntax trees | `syntax` | 9 | 0 | 4 |
 | Terminal | `term` | 8 | 0 | 6 |
 | Toolchains | `tools` | 8 | 0 | 8 |
-| Version control | `vcs` | 83 | 0 | 64 |
+| Version control | `vcs` | 83 | 0 | 65 |
 | Web preview | `web` | 1 | 2 | 1 |
 | Window and menu | `window` | 0 | 35 | 0 |
 | Window drag | `window_drag` | 0 | 1 | 0 |
@@ -88,7 +88,7 @@ release can be called today.
 ## Served by `openidea-server --stdio`
 
 549 commands. `GoIDEA` marks the ones a non-test Go source invokes today
-(440 of 549).
+(446 of 549).
 
 | Command | Domain | Arguments | GoIDEA |
 | --- | --- | --- | --- |
@@ -137,7 +137,7 @@ release can be called today.
 | `build_run` | Maven/Gradle builds | `clear`, `cmake`, `file`, `kind`, `onEvent`, `request` | yes |
 | `build_sync` | Maven/Gradle builds | `buildDir`, `offline`, `onProgress`, `profiles`, `request`, `tool` | yes |
 | `cancel_request` | Application and projects | — | yes |
-| `cancel_task` | Application and projects | — | — |
+| `cancel_task` | Application and projects | — | yes |
 | `close_project` | Application and projects | — | yes |
 | `coverage_collect` | Coverage | `report` | yes |
 | `coverage_import` | Coverage | `path` | yes |
@@ -333,8 +333,8 @@ release can be called today.
 | `lsp_format` | Language services | `doc`, `options`, `range` | yes |
 | `lsp_goto` | Language services | `doc`, `kind`, `pos` | yes |
 | `lsp_goto_implementation` | Language services | `doc`, `onPartial`, `pos`, `request` | yes |
-| `lsp_hierarchy_members` | Language services | `doc`, `kind`, `pos`, `request` | — |
-| `lsp_hierarchy_refactor` | Language services | `choices`, `doc`, `kind`, `pos`, `request`, `target` | — |
+| `lsp_hierarchy_members` | Language services | `doc`, `kind`, `pos`, `request` | yes |
+| `lsp_hierarchy_refactor` | Language services | `choices`, `doc`, `kind`, `pos`, `request`, `target` | yes |
 | `lsp_hover` | Language services | `doc`, `pos`, `request` | yes |
 | `lsp_implementations` | Language services | `doc`, `positions`, `request` | — |
 | `lsp_inlay_hints` | Language services | `doc`, `range` | yes |
@@ -383,7 +383,7 @@ release can be called today.
 | `notebook_undo` | Notebooks | `id` | yes |
 | `open_project` | Application and projects | `path` | yes |
 | `path_completions` | Navigation and index | `from`, `prefix` | yes |
-| `plugin_answer_command` | Plugins | `answer` | — |
+| `plugin_answer_command` | Plugins | `answer` | yes |
 | `plugin_answer_commit` | Plugins | `answer` | — |
 | `plugin_answer_prompt` | Plugins | `answer` | — |
 | `plugin_answer_run_target` | Plugins | `id`, `useTarget` | — |
@@ -531,7 +531,7 @@ release can be called today.
 | `structural_languages` | Code analysis | — | yes |
 | `structural_search` | Code analysis | `onEvent`, `query`, `request`, `scope` | yes |
 | `structural_validate` | Code analysis | `query` | yes |
-| `syntax_errors` | Syntax trees | `doc`, `request` | — |
+| `syntax_errors` | Syntax trees | `doc`, `request` | yes |
 | `syntax_expression_at` | Syntax trees | `doc`, `range`, `request` | — |
 | `syntax_identifiers` | Syntax trees | `doc`, `name`, `request` | yes |
 | `syntax_identifiers_in_files` | Syntax trees | `name`, `paths`, `request` | — |
@@ -555,7 +555,7 @@ release can be called today.
 | `vcs_add_worktree` | Version control | `commitish`, `newBranch`, `path`, `repo` | yes |
 | `vcs_apply_patch` | Version control | `patch`, `repo` | yes |
 | `vcs_blame` | Version control | `path`, `revision`, `text` | yes |
-| `vcs_block_history` | Version control | `lines`, `path`, `request`, `text` | — |
+| `vcs_block_history` | Version control | `lines`, `path`, `request`, `text` | yes |
 | `vcs_branch_info` | Version control | `repo` | yes |
 | `vcs_branches` | Version control | `repo` | yes |
 | `vcs_changelists_load` | Version control | — | yes |
@@ -792,7 +792,7 @@ GoIDEA needs to do for each:
 
 ## What this means for GoIDEA
 
-549 remote commands are available today; GoIDEA uses 440. The parity work is
+549 remote commands are available today; GoIDEA uses 446. The parity work is
 first to cover the remote surface OpenIDEA's own frontend uses, then to move
 `shared-op`/`host`/`crate` commands onto stdio through the OpenIDEA fork
 (a submodule bump and a server release), and to implement `desktop` commands

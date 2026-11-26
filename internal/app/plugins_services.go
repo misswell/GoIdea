@@ -283,9 +283,7 @@ func registerPluginContentController(key string, controller pluginContentControl
 }
 
 func pluginContentControllerFor(target string) pluginContentController {
-	pluginContentControllers.RLock()
-	items := append([]pluginContentControllerBinding(nil), pluginContentControllers.items...)
-	pluginContentControllers.RUnlock()
+	items := pluginContentControllerSnapshot()
 	if target != "" {
 		for _, item := range items {
 			if item.key == target {
@@ -300,6 +298,12 @@ func pluginContentControllerFor(target string) pluginContentController {
 		}
 	}
 	return nil
+}
+
+func pluginContentControllerSnapshot() []pluginContentControllerBinding {
+	pluginContentControllers.RLock()
+	defer pluginContentControllers.RUnlock()
+	return append([]pluginContentControllerBinding(nil), pluginContentControllers.items...)
 }
 
 type pluginActionArgument struct {
@@ -491,6 +495,11 @@ func (m *Model) runPluginContentAction(arg any, actionID string) {
 	}
 	decoded := decodePluginActionArgument(arg)
 	controller := pluginContentControllerFor(decoded.target)
+	if decoded.target == "" && m.pluginContentActive() {
+		if session := m.pluginContentTabFor(m.tab()); session != nil {
+			controller = session
+		}
+	}
 	if controller == nil {
 		if decoded.target != "" {
 			m.status = "The plugin content editor is no longer available."
@@ -502,6 +511,12 @@ func (m *Model) runPluginContentAction(arg any, actionID string) {
 	}
 	switch actionID {
 	case pluginServicesContentFindActionID:
+		if m.pluginContentActive() {
+			if session := m.pluginContentTabFor(m.tab()); session != nil {
+				session.Find()
+				break
+			}
+		}
 		controller.Find()
 	case pluginServicesContentActionID:
 		if decoded.id == "" {

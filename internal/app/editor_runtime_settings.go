@@ -46,6 +46,214 @@ func (m *Model) autoImportOptimizeOnTheFly() bool {
 	return m.nativeRuntimeBool(settingsPageAutoImport, "editor.autoImport.optimizeOnTheFly")
 }
 
+func (m *Model) editorCodeEditingBool(key string) bool {
+	return m.nativeRuntimeBool(settingsPageCodeEditing, "editor.codeEditing."+key)
+}
+
+func (m *Model) editorCodeEditingNumber(key string) float64 {
+	return m.nativeRuntimeNumber(settingsPageCodeEditing, "editor.codeEditing."+key)
+}
+
+func (m *Model) editorTextBackgrounds(t *Tab) []editor.TextBackground {
+	if t == nil || t.doc == nil || t.state == nil {
+		return nil
+	}
+	out := append([]editor.TextBackground(nil), m.selectionOccurrenceBackgrounds(t)...)
+	oi := oiPaletteOf(m.theme)
+	if m.editorCodeEditingBool("highlightBraces") {
+		if start, end, ok := editorBracePairAt(t); ok {
+			out = append(out, editor.TextBackground{
+				Start: start,
+				End:   end,
+				Color: oi.accent.Alpha(0.16),
+			})
+		}
+	}
+	if m.editorCodeEditingBool("highlightUsages") && !m.usageHighlightSessionValid(t) {
+		out = append(out, m.caretWordUsageBackgrounds(t)...)
+	}
+	return out
+}
+
+func (m *Model) selectionOccurrenceBackgrounds(t *Tab) []editor.TextBackground {
+	if t == nil || t.state == nil || t.doc == nil ||
+		!m.editorCodeEditingBool("highlightSelection") {
+		return nil
+	}
+	selections := t.state.Selections()
+	if len(selections) != 1 {
+		return nil
+	}
+	start, end := selections[0].Anchor, selections[0].Head
+	if start > end {
+		start, end = end, start
+	}
+	text := t.doc.Text()
+	if start < 0 || start >= end || end > len(text) || end-start > 1024 {
+		return nil
+	}
+	needle := text[start:end]
+	if strings.ContainsAny(needle, "\r\n") {
+		return nil
+	}
+	oi := oiPaletteOf(m.theme)
+	backgrounds := make([]editor.TextBackground, 0, 8)
+	for offset := 0; offset <= len(text)-len(needle) && len(backgrounds) < 256; {
+		found := strings.Index(text[offset:], needle)
+		if found < 0 {
+			break
+		}
+		found += offset
+		if found != start {
+			backgrounds = append(backgrounds, editor.TextBackground{
+				Start: found,
+				End:   found + len(needle),
+				Color: oi.accent.Alpha(0.12),
+			})
+		}
+		offset = found + max(1, len(needle))
+	}
+	return backgrounds
+}
+
+func (m *Model) caretWordUsageBackgrounds(t *Tab) []editor.TextBackground {
+	if t == nil || t.state == nil || t.doc == nil ||
+		len(t.state.Selections()) != 1 {
+		return nil
+	}
+	text := t.doc.Text()
+	cursor := t.state.Cursor()
+	start, end := templateWordAt(text, cursor)
+	if start < 0 || end <= start || end-start > 256 {
+		return nil
+	}
+	word := text[start:end]
+	if !templateWordIsIdentifier(word) {
+		return nil
+	}
+	oi := oiPaletteOf(m.theme)
+	backgrounds := make([]editor.TextBackground, 0, 8)
+	for offset := 0; offset <= len(text)-len(word) && len(backgrounds) < 256; {
+		found := strings.Index(text[offset:], word)
+		if found < 0 {
+			break
+		}
+		found += offset
+		wordEnd := found + len(word)
+		leftBoundary := found == 0 || !isTemplateIdentifierByte(text[found-1])
+		rightBoundary := wordEnd == len(text) || !isTemplateIdentifierByte(text[wordEnd])
+		if found != start && leftBoundary && rightBoundary {
+			backgrounds = append(backgrounds, editor.TextBackground{
+				Start: found,
+				End:   wordEnd,
+				Color: oi.accent.Alpha(0.10),
+			})
+		}
+		offset = wordEnd
+	}
+	return backgrounds
+}
+
+func templateWordAt(text string, offset int) (int, int) {
+	if offset < 0 || offset > len(text) {
+		return -1, -1
+	}
+	start := offset
+	if start == len(text) || start > 0 && !isTemplateIdentifierByte(text[start]) {
+		start--
+	}
+	if start < 0 || !isTemplateIdentifierByte(text[start]) {
+		return -1, -1
+	}
+	end := start
+	for start > 0 && isTemplateIdentifierByte(text[start-1]) {
+		start--
+	}
+	for end < len(text) && isTemplateIdentifierByte(text[end]) {
+		end++
+	}
+	return start, end
+}
+
+func templateWordIsIdentifier(word string) bool {
+	if word == "" {
+		return false
+	}
+	for i := 0; i < len(word); i++ {
+		if !isTemplateIdentifierByte(word[i]) {
+			return false
+		}
+	}
+	return word[0] < '0' || word[0] > '9'
+}
+
+func editorBracePairAt(t *Tab) (int, int, bool) {
+	if t == nil || t.state == nil || t.doc == nil {
+		return 0, 0, false
+	}
+	text := t.doc.Text()
+	cursor := t.state.Cursor()
+	if cursor < 0 || cursor > len(text) {
+		return 0, 0, false
+	}
+	at := cursor
+	if at == len(text) || !editorIsBracketByte(text[at]) {
+		at--
+	}
+	if at < 0 || !editorIsBracketByte(text[at]) {
+		return 0, 0, false
+	}
+	open, close := text[at], byte(0)
+	forward := true
+	switch open {
+	case '(':
+		close, forward = ')', true
+	case '[':
+		close, forward = ']', true
+	case '{':
+		close, forward = '}', true
+	case ')':
+		open, close, forward = '(', ')', false
+	case ']':
+		open, close, forward = '[', ']', false
+	case '}':
+		open, close, forward = '{', '}', false
+	default:
+		return 0, 0, false
+	}
+	depth := 0
+	if forward {
+		for i := at; i < len(text); i++ {
+			switch text[i] {
+			case open:
+				depth++
+			case close:
+				depth--
+				if depth == 0 {
+					return min(at, i), max(at, i) + 1, true
+				}
+			}
+		}
+		return 0, 0, false
+	}
+	for i := at; i >= 0; i-- {
+		switch text[i] {
+		case close:
+			depth++
+		case open:
+			depth--
+			if depth == 0 {
+				return min(at, i), max(at, i) + 1, true
+			}
+		}
+	}
+	return 0, 0, false
+}
+
+func editorIsBracketByte(value byte) bool {
+	return strings.ContainsRune("()[]{}", rune(value))
+}
+
 // editorPaste applies Smart Keys' string escaping and paste indentation in the
 // native editor. It consumes the paste only when the text changes; ordinary
 // pastes keep MyGo's caret, selection and undo behavior.

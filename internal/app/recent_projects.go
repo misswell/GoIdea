@@ -27,6 +27,9 @@ func (m *Model) closeRecentProjectsPopup() {
 }
 
 func (m *Model) recentProjectsMatches() []recentMatch {
+	if m.recentProjectsPopup == nil {
+		return nil
+	}
 	return m.filteredRecentsFor(m.recentProjectsPopup.query, m.Root())
 }
 
@@ -52,7 +55,7 @@ func (m *Model) stepRecentProjects(delta int) {
 
 func (m *Model) chooseRecentProjectsPopup() {
 	p := m.recentProjectsPopup
-	if p == nil {
+	if m == nil || p == nil {
 		return
 	}
 	list := m.recentProjectsMatches()
@@ -62,7 +65,7 @@ func (m *Model) chooseRecentProjectsPopup() {
 	p.index = min(max(p.index, 0), len(list)-1)
 	path := list[p.index].project.Path
 	m.closeRecentProjectsPopup()
-	m.confirmSwitch(path)
+	m.OpenRecentProject(path)
 }
 
 func (m *Model) removeSelectedRecentProject() {
@@ -178,7 +181,9 @@ func (m *Model) recentProjectsRows(c *ui.Context, oi oiColors, p *recentProjects
 				more.Children(func() {
 					oiIconEl(c, "general/moreVertical", 14, oi, oi.icon)
 				})
-				more.Menu(func(menu *ui.Menu) { m.welcomeRecentMenu(menu, project.Path) })
+				more.Menu(func(menu *ui.Menu) {
+					m.welcomeRecentMenu(menu, project.Path, m.closeRecentProjectsPopup)
+				})
 				if more.Clicked() {
 					moreClicked = true
 				}
@@ -196,7 +201,7 @@ func (m *Model) recentProjectsRows(c *ui.Context, oi oiColors, p *recentProjects
 		}
 		row.ContextMenu(func(menu *ui.Menu) {
 			p.index = i
-			m.welcomeRecentMenu(menu, project.Path)
+			m.welcomeRecentMenu(menu, project.Path, m.closeRecentProjectsPopup)
 		})
 	}
 }

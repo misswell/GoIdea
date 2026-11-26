@@ -80,9 +80,26 @@ func (m *Model) problemRows() []Problem {
 	return rows
 }
 
+func (m *Model) navigationProblemRows() []Problem {
+	rows := m.problemRows()
+	if !m.nativeRuntimeBool(
+		settingsPageCodeEditing,
+		"editor.codeEditing.nextErrorErrorsOnly",
+	) {
+		return rows
+	}
+	filtered := make([]Problem, 0, len(rows))
+	for _, problem := range rows {
+		if problem.Severity == "error" || problem.Severity == "warning" {
+			filtered = append(filtered, problem)
+		}
+	}
+	return filtered
+}
+
 // nextProblem advances the step and returns the row, wrapping at both ends.
 func (m *Model) nextProblem(dir int) (Problem, bool) {
-	rows := m.problemRows()
+	rows := m.navigationProblemRows()
 	if len(rows) == 0 {
 		return Problem{}, false
 	}

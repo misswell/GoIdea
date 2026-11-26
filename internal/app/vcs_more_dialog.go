@@ -8,6 +8,8 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+
+	"mayoi/internal/openidea"
 )
 
 // acceptVCSMoreOutput appends Clone progress without letting a closed or
@@ -113,6 +115,8 @@ func (m *Model) submitVCSMore() {
 		m.submitCompareWithRevision()
 	case "compare.revisions":
 		m.submitCompareRevisions()
+	case "file.revisions":
+		m.chooseFileRevision()
 	case "apply.patch":
 		m.applyPatch()
 	case "commit.undo":
@@ -170,6 +174,11 @@ func (m *Model) chooseVCSCloneDestination() {
 }
 
 func (m *Model) cancelVCSMore() {
+	if m.vcsMore.kind == vcsMoreSelectionHistory && m.vcsMore.selectionHistory.cancel != nil {
+		m.vcsMore.selectionHistory.cancel()
+		m.closeVCSMore()
+		return
+	}
 	if m.vcsMore.action == "clone" && m.vcsMore.busy && m.vcsMore.request != 0 {
 		m.cancelRequest(m.vcsMore.request)
 		m.vcsMore.status = "Cancelling Clone…"
@@ -206,7 +215,7 @@ func (m *Model) activateVCSMoreItem(index int) {
 	case m.vcsMore.kind == vcsMoreChanges && item.Kind == "shelf":
 		m.showShelfFileDiff(shelfDiffFile{
 			Path: item.Path, Before: textPointer(item.Before), After: textPointer(item.After),
-		}, false)
+		}, false, item.Revision)
 	case m.vcsMore.kind == vcsMoreChanges && item.Revision != "":
 		m.openRevisionFileDiff(item)
 	case m.vcsMore.action == "current.revision":
@@ -309,7 +318,7 @@ func (m *Model) vcsMorePrimaryLabel() string {
 		return "Save Message"
 	case vcsMoreActionCheckout:
 		return "Checkout"
-	case "compare.revision", "compare.revisions":
+	case "compare.revision", "compare.revisions", "file.revisions":
 		return "Compare"
 	case "apply.patch":
 		return "Apply Patch"
@@ -697,8 +706,17 @@ func (m *Model) vcsMoreDialog(c *ui.Context, p *ui.Theme) {
 						OnClick(m.applyPatch)
 				})
 			case vcsMoreChanges:
-				m.drawVCSMoreItems(c, p)
+				if m.vcsMore.action == "file.revisions" {
+					m.drawFileRevisionChooser(c, p)
+				} else {
+					m.drawVCSMoreItems(c, p)
+				}
 				ui.Row(c).Gap(6).Children(func() {
+					if m.vcsMore.action == "file.revisions" {
+						ui.Button(c, "Compare").Disabled(len(m.vcsMore.items) == 0).
+							OnClick(m.chooseFileRevision)
+						return
+					}
 					ui.Button(c, "Show Diff").Disabled(len(m.vcsMore.items) == 0).
 						OnClick(func() { m.activateVCSMoreItem(m.vcsMore.choice) })
 					if m.vcsMore.action == "commit.local" || m.vcsMore.action == "current.revision" {
@@ -709,6 +727,8 @@ func (m *Model) vcsMoreDialog(c *ui.Context, p *ui.Theme) {
 							})
 					}
 				})
+			case vcsMoreSelectionHistory:
+				m.drawSelectionHistory(c, p)
 			case vcsMoreConflicts:
 				m.drawVCSMoreConflicts(c, p)
 			case vcsMoreMessage:
@@ -750,4 +770,100 @@ func (m *Model) vcsMoreDialog(c *ui.Context, p *ui.Theme) {
 	if (dialog.Dismissed() || !open) && !m.vcsMore.busy {
 		m.closeVCSMore()
 	}
+}
+
+func (m *Model) drawFileRevisionChooser(c *ui.Context, p *ui.Theme) {
+	if m.vcsMore.loading {
+		ui.Text(c, "Reading file revisions…").FontSize(12).TextColor(p.TextMuted)
+		return
+	}
+	if len(m.vcsMore.items) == 0 {
+		ui.Text(c, "No commits").FontSize(12).TextColor(p.TextMuted)
+		return
+	}
+	ui.Scroll(c).Height(300).Children(func() {
+		ui.Column(c).Children(func() {
+			for i, item := range m.vcsMore.items {
+				i, item := i, item
+				row := ui.Row(c.Key(fmt.Sprintf("file-revision:%d", i))).
+					Height(28).Padding(0, 8).Gap(8).AlignItems(ui.Center)
+				if i == m.vcsMore.choice {
+					row.Background(p.Selection)
+				} else if row.Hovered() {
+					row.Background(p.SurfaceHover)
+				}
+				row.Children(func() {
+					ui.Text(c, item.Label).FontSize(13).TextColor(p.Text).
+						SingleLine().Ellipsis("…")
+					ui.Spacer(c)
+					ui.Text(c, item.Detail).FontSize(11).TextColor(p.TextMuted).SingleLine()
+				})
+				if row.Clicked() {
+					m.vcsMore.choice = i
+				}
+				if row.DoubleClicked() {
+					m.vcsMore.choice = i
+					m.chooseFileRevision()
+				}
+			}
+		})
+	})
+}
+
+func (m *Model) chooseFileRevision() {
+	if m.vcsMore.choice < 0 || m.vcsMore.choice >= len(m.vcsMore.items) {
+		return
+	}
+	item := m.vcsMore.items[m.vcsMore.choice]
+	m.compareFileWithRevision(openidea.Commit{
+		ID: item.ID, ShortID: shortID(item.ID), Summary: item.Label,
+	})
+}
+
+func (m *Model) drawSelectionHistory(c *ui.Context, p *ui.Theme) {
+	state := &m.vcsMore.selectionHistory
+	if state == nil || state.loading {
+		ui.Text(c, "Reading line history…").FontSize(12).TextColor(p.TextMuted)
+		return
+	}
+	if state.err != "" {
+		ui.Text(c, state.err).FontSize(12).TextColor(p.Danger)
+		return
+	}
+	count := selectionHistoryRowCount(state)
+	if count == 0 {
+		message := "No commits changed these lines"
+		if !state.committed {
+			message = "These lines are not committed yet"
+		}
+		ui.Text(c, message).FontSize(12).TextColor(p.TextMuted)
+		return
+	}
+	ui.Scroll(c).Height(280).Children(func() {
+		ui.Column(c).Children(func() {
+			for i := 0; i < count; i++ {
+				i := i
+				label, detail := selectionHistoryRowLabel(state, i)
+				row := ui.Row(c.Key(fmt.Sprintf("selection-history:%d", i))).
+					Height(42).Padding(0, 8).Gap(8).AlignItems(ui.Center)
+				if i == state.selected {
+					row.Background(p.Selection)
+				} else if row.Hovered() {
+					row.Background(p.SurfaceHover)
+				}
+				row.Children(func() {
+					ui.Column(c).Grow(1).MinWidth(0).Gap(1).Children(func() {
+						ui.Text(c, label).FontSize(13).TextColor(p.Text).
+							SingleLine().Ellipsis("…")
+						ui.Text(c, detail).FontSize(11).TextColor(p.TextMuted).
+							SingleLine().Ellipsis("…")
+					})
+				})
+				if row.Clicked() || row.DoubleClicked() {
+					state.selected = i
+					m.showSelectedSelectionHistory()
+				}
+			}
+		})
+	})
 }

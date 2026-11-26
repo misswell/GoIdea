@@ -246,6 +246,10 @@ func (m *Model) gearButton(c *ui.Context, p *ui.Theme, oi oiColors) {
 // the gear, the project widget and the menu bar run the same actions.
 func addMenuEntries(menu *ui.Menu, m *Model, entries []menuEntry) {
 	for _, e := range entries {
+		if e.dynamic != nil {
+			addMenuEntries(menu, m, e.dynamic(m))
+			continue
+		}
 		switch {
 		case e.sep:
 			menu.Separator()
@@ -262,6 +266,9 @@ func addMenuEntries(menu *ui.Menu, m *Model, entries []menuEntry) {
 					e.run(m)
 				case e.command != "":
 					m.RunCommand(e.command)
+				}
+				if m.welcomeGearOpen {
+					m.welcomeGearOpen = false
 				}
 			}
 		}

@@ -9,6 +9,7 @@ import (
 type fakeWorkspaceHost struct {
 	windows        int
 	openProject    []string
+	openProjectOK  bool
 	openEmpty      int
 	focusPrevious  []bool
 	merge          int
@@ -23,8 +24,11 @@ type fakeWorkspaceHost struct {
 func (h *fakeWorkspaceHost) OpenProjectInNewWindow(path string, files []string) bool {
 	h.openProject = []string{path}
 	h.openProject = append(h.openProject, files...)
-	h.windows++
-	return true
+	if h.openProjectOK || h.windows == 0 {
+		h.windows++
+		return true
+	}
+	return false
 }
 
 func (h *fakeWorkspaceHost) OpenNewWindow() bool {
@@ -100,7 +104,7 @@ func TestNativeProjectWindowActionsUseTheWorkspaceHost(t *testing.T) {
 func TestNewProjectPolicyCreatesANativeWindowAndCurrentPolicyDoesNot(t *testing.T) {
 	root := t.TempDir()
 	next := t.TempDir()
-	host := &fakeWorkspaceHost{windows: 1}
+	host := &fakeWorkspaceHost{windows: 1, openProjectOK: true}
 	m := &Model{
 		root:          root,
 		workspaceHost: host,
@@ -123,6 +127,50 @@ func TestNewProjectPolicyCreatesANativeWindowAndCurrentPolicyDoesNot(t *testing.
 		t.Fatalf("Current policy moved the project while busy: %q", m.Root())
 	}
 }
+
+func TestClosePolicyUsesLiveWindowCount(t *testing.T) {
+	root := t.TempDir()
+	host := &fakeWorkspaceHost{windows: 1}
+	m := &Model{workspaceHost: host, postHook: func(fn func()) { fn() }}
+	m.setRoot(root)
+	if !m.returnLastSessionToWelcome() {
+		t.Fatal("one live window did not follow Close Project")
+	}
+	if m.Root() != "" || !m.showingWelcome {
+		t.Fatalf("one live window = root %q welcome %v", m.Root(), m.showingWelcome)
+	}
+	m.setRoot(root)
+	host.windows = 2
+	if m.returnLastSessionToWelcome() {
+		t.Fatal("two live windows returned to Welcome")
+	}
+}
+
+func TestClosePolicyLeavesOneModelOfManyOpen(t *testing.T) {
+	root := t.TempDir()
+	first := &Model{postHook: func(fn func()) { fn() }}
+	second := &Model{postHook: func(fn func()) { fn() }}
+	host := &workspaceHostPair{first: first, second: second}
+	host.windows = 2
+	first.workspaceHost, second.workspaceHost = host, host
+	first.setRoot(root)
+	second.setRoot(t.TempDir())
+	if first.returnLastSessionToWelcome() {
+		t.Fatal("one model treated a two-window session as last")
+	}
+	host.windows = 1
+	if !second.returnLastSessionToWelcome() || second.Root() != "" || !second.showingWelcome {
+		t.Fatalf("last model = root %q welcome %v", second.Root(), second.showingWelcome)
+	}
+}
+
+type workspaceHostPair struct {
+	fakeWorkspaceHost
+	first, second *Model
+	windows       int
+}
+
+func (h *workspaceHostPair) WindowCount() int { return h.windows }
 
 func TestMainMenuExposesNativeProjectWindowCommands(t *testing.T) {
 	menu := (&Model{}).MainMenu()

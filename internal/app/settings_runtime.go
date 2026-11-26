@@ -6,6 +6,8 @@ import (
 	"errors"
 	"reflect"
 	"strings"
+
+	"github.com/egoist/mygo/ui/editor"
 )
 
 // loadNativeRuntimeSettings reads the scopes used by native runtime consumers.
@@ -452,6 +454,15 @@ func (m *Model) applyNativePreferenceRuntimeSettings(
 	m.prefs.Editor.SoftWrapFiles = strings.Join(
 		nativeSettingStringList(values, "editor.general.softWrapFiles"), ";",
 	)
+	tabSize := int(nativeSettingNumber(
+		values, "editor.tabSize", float64(m.prefs.Editor.TabSize),
+	))
+	if tabSize >= 1 && tabSize <= 16 {
+		m.prefs.Editor.TabSize = tabSize
+	}
+	m.prefs.Editor.UseTabCharacter = !nativeSettingBool(
+		values, "editor.insertSpaces", !m.prefs.Editor.UseTabCharacter,
+	)
 	m.prefs.General.WheelZoom = nativeSettingBool(
 		values, "editor.general.wheelZoom", m.prefs.General.WheelZoom,
 	)
@@ -552,6 +563,9 @@ func (m *Model) applyNativePreferenceRuntimeSettings(
 	}
 	m.prefs.Tabs = nativeTabPrefs(values, m.prefs.Tabs)
 	m.prefs.Inlay = nativeInlayPrefs(values, m.prefs.Inlay)
+	for _, tab := range m.allTabs() {
+		m.applyCodeStyleToTab(tab)
+	}
 
 	confirmExit := nativeSettingBool(
 		values, "general.confirmExit", m.prefs.System.confirmExit(),
@@ -568,6 +582,67 @@ func (m *Model) applyNativePreferenceRuntimeSettings(
 	}
 	m.applyPreferences()
 	return true
+}
+
+// applyCodeStyleToTab gives an editor the global Other File Types indentation
+// and, when the language has an entry, its language-specific override.
+func (m *Model) applyCodeStyleToTab(tab *Tab) {
+	if tab == nil || tab.state == nil || tab.doc == nil {
+		return
+	}
+	tabSize := m.prefs.Editor.TabSize
+	hasTabSize := tabSize >= 1 && tabSize <= 16
+	useTab := m.prefs.Editor.UseTabCharacter
+	hasIndent := hasTabSize
+	if styles, ok := m.nativeRuntimeValue(
+		settingsPageCodeStyle, "editor.codeStyle.languages",
+	).(map[string]any); ok {
+		if style, ok := codeStyleForDocumentPath(styles, tab.doc.Path()).(map[string]any); ok {
+			if value, ok := codeStyleNumber(style["tabSize"]); ok && value >= 1 && value <= 16 {
+				tabSize = int(value)
+				hasTabSize = true
+			}
+			if value, ok := style["useTab"].(bool); ok {
+				useTab = value
+				hasIndent = true
+			}
+		}
+	}
+	if hasTabSize {
+		tab.state.TabSize = tabSize
+	}
+	if !hasIndent {
+		return
+	}
+	if useTab {
+		tab.state.Indent = editor.IndentTabs
+	} else {
+		tab.state.Indent = editor.IndentSpaces
+	}
+}
+
+func codeStyleForDocumentPath(styles map[string]any, path string) any {
+	language := templateLanguage(path)
+	for id, style := range styles {
+		if mygoLanguageID(id) == mygoLanguageID(language) {
+			return style
+		}
+	}
+	return nil
+}
+
+func codeStyleNumber(value any) (float64, bool) {
+	switch number := value.(type) {
+	case float64:
+		return number, true
+	case int:
+		return float64(number), true
+	case json.Number:
+		parsed, err := number.Float64()
+		return parsed, err == nil
+	default:
+		return 0, false
+	}
 }
 
 func nativeTabPrefs(values map[string]any, fallback TabPrefs) TabPrefs {

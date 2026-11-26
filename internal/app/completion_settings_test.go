@@ -1,9 +1,13 @@
 package app
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
+
+	"mayoi/internal/docbridge"
 )
 
 func completionSettingsModel(values map[string]any) *Model {
@@ -75,5 +79,22 @@ func TestCompletionSettingsSortAlphabetically(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("alphabetical order = %v, want %v", got, want)
 		}
+	}
+}
+
+func TestCompletionTabExpandsAnExactLiveTemplateAfterPopupIsClosed(t *testing.T) {
+	prefs := defaultTemplatePrefs()
+	prefs.Live.ShowInCompletion = false
+	prefs.Live.ExpandWithTab = true
+	doc := docbridge.Virtual("/Example.go", "iferr")
+	state := &editor.State{Buffer: doc.Buffer()}
+	state.Select(len("iferr"), len("iferr"))
+	tab := &Tab{doc: doc, state: state}
+	m := &Model{templatePrefs: &prefs, tabs: []*Tab{tab}, active: 0}
+	if !m.tabTemplateInput(tab, ui.InputEvent{Kind: ui.InputKeyDown, Key: ui.KeyTab}) {
+		t.Fatal("Tab did not expand an exact live template outside the completion popup")
+	}
+	if !strings.Contains(tab.state.Buffer.String(), "if err != nil") {
+		t.Fatalf("expanded text = %q", tab.state.Buffer.String())
 	}
 }

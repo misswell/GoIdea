@@ -447,8 +447,9 @@ func TestGraphQLRunGreysRangesOutsideTheSentOperation(t *testing.T) {
 	context := graphqlQueryContext(text, &graphqlRange{From: second, To: second})
 	m.markGraphQLSent(tab, context.Ranges)
 	wantRanges := graphqlOutsideRanges(len(text), context.Ranges)
-	gotRanges := make([]graphqlRange, 0, len(tab.state.TextBackgrounds))
-	for _, background := range tab.state.TextBackgrounds {
+	unsent := m.graphqlUnsentTextBackgrounds(tab)
+	gotRanges := make([]graphqlRange, 0, len(unsent))
+	for _, background := range unsent {
 		gotRanges = append(gotRanges, graphqlRange{
 			From: background.Start, To: background.End,
 		})

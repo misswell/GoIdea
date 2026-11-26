@@ -155,6 +155,10 @@ func builtinCommands() []appCommand {
 				return
 			}
 			m.rememberActiveEditorClipboard()
+			if m.nativeRuntimeBool(settingsPageRichTextCopy, "editor.general.richTextCopy") &&
+				m.copyEditorRichText(m.tab()) {
+				return
+			}
 			m.runEditorCommand(editor.Copy)
 		}},
 		{"edit.paste", "Paste", "Edit", "Cmd+V", "paste clipboard", func(m *Model) {
@@ -373,8 +377,8 @@ func builtinCommands() []appCommand {
 		{"code.deleteLine", "Delete Line", "Code", "Cmd+Backspace", "delete line", func(m *Model) { m.runEditorCommand(editor.DeleteLine) }},
 		{"code.moveLineUp", "Move Line Up", "Code", "Alt+Shift+Up", "move line up", func(m *Model) { m.runEditorCommand(editor.MoveLinesUp) }},
 		{"code.moveLineDown", "Move Line Down", "Code", "Alt+Shift+Down", "move line down", func(m *Model) { m.runEditorCommand(editor.MoveLinesDown) }},
-		{"code.moveStatementUp", "Move Statement Up", "Code", "Cmd+Shift+Up", "move statement up", func(m *Model) { m.runEditorCommand(editor.MoveLinesUp) }},
-		{"code.moveStatementDown", "Move Statement Down", "Code", "Cmd+Shift+Down", "move statement down", func(m *Model) { m.runEditorCommand(editor.MoveLinesDown) }},
+		{"code.moveStatementUp", "Move Statement Up", "Code", "Cmd+Shift+Up", "move statement up", func(m *Model) { m.moveEditorStatement(true) }},
+		{"code.moveStatementDown", "Move Statement Down", "Code", "Cmd+Shift+Down", "move statement down", func(m *Model) { m.moveEditorStatement(false) }},
 		{"code.joinLines", "Join Lines", "Code", "Ctrl+Shift+J", "join lines", func(m *Model) { m.runEditorCommand(editor.JoinLines) }},
 		{"run.start", "Run", "Run", "F5", "run main class", func(m *Model) { m.Run() }},
 		{"run.runContext", "Run Context Configuration", "Run", "Ctrl+Shift+R", "run file test main context active", func(m *Model) { m.RunContextConfiguration() }},

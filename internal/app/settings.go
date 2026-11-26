@@ -126,8 +126,20 @@ type SearchScope struct {
 }
 
 // normalizeRecentProjects drops missing, duplicate and unnamed projects,
-// caps the list, and fills the name when a session left it out.
+// caps only ungrouped projects, and fills the name when a session left it
+// out. Grouped projects stay until their group is removed.
 func normalizeRecentProjects(list []RecentProject) []RecentProject {
+	return normalizeRecentProjectsOnDisk(list, true)
+}
+
+// normalizeRecentRows normalizes state already held by the model. Current
+// rows may belong to a temporarily unavailable path and are kept; the load
+// path uses normalizeRecentProjects so stale session entries are dropped.
+func normalizeRecentRows(list []RecentProject) []RecentProject {
+	return normalizeRecentProjectsOnDisk(list, false)
+}
+
+func normalizeRecentProjectsOnDisk(list []RecentProject, checkDisk bool) []RecentProject {
 	seen := map[string]bool{}
 	out := make([]RecentProject, 0, len(list))
 	for _, p := range list {
@@ -137,7 +149,7 @@ func normalizeRecentProjects(list []RecentProject) []RecentProject {
 		remote := strings.HasPrefix(p.Path, "ssh://") ||
 			strings.HasPrefix(p.Path, "wsl://") ||
 			strings.HasPrefix(p.Path, "devcontainer://")
-		if !remote {
+		if checkDisk && !remote {
 			if st, err := os.Stat(p.Path); err != nil || !st.IsDir() {
 				continue
 			}
@@ -149,14 +161,25 @@ func normalizeRecentProjects(list []RecentProject) []RecentProject {
 			}
 			p.Name = name
 		}
-		seen[p.Path] = true
 		if p.Name == "" {
 			p.Name = filepath.Base(p.Path)
 		}
-		out = append(out, p)
-		if len(out) == maxRecentProjects {
-			break
+		if p.Name == "" || p.Name == "." || p.Name == "/" {
+			continue
 		}
+		seen[p.Path] = true
+		if p.Group == "" {
+			ungrouped := 0
+			for _, kept := range out {
+				if kept.Group == "" {
+					ungrouped++
+				}
+			}
+			if ungrouped >= maxRecentProjects {
+				continue
+			}
+		}
+		out = append(out, p)
 	}
 	return out
 }
@@ -477,6 +500,12 @@ func LoadSession(path string) Session {
 	var s Session
 	if json.Unmarshal(raw, &s) != nil {
 		return Session{}
+	}
+	if len(s.Recents) > 0 || len(s.RecentGroups) > 0 {
+		s.RecentGroups, s.Recents = normalizeRecentGroups(s.RecentGroups, s.Recents)
+		s.Recents = normalizeRecentProjects(s.Recents)
+		s.RecentGroups, s.Recents = normalizeRecentGroups(s.RecentGroups, s.Recents)
+		s.RecentProjects = recentPaths(s.Recents)
 	}
 	return s
 }
@@ -1468,6 +1497,10 @@ type EditorAppearance struct {
 	SoftWrap      bool   `json:"softWrap,omitempty"`
 	SoftWrapFiles string `json:"softWrapFiles,omitempty"`
 	ScrollPastEnd bool   `json:"scrollPastEnd,omitempty"`
+	// TabSize and UseTabCharacter are Other File Types' code-style fallback.
+	// Language entries in editor.codeStyle.languages override them.
+	TabSize         int  `json:"tabSize,omitempty"`
+	UseTabCharacter bool `json:"useTabCharacter,omitempty"`
 }
 
 const (

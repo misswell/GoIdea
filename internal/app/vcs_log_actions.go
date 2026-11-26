@@ -33,7 +33,7 @@ func init() {
 	}
 
 	add("localHistory.recentChanges", "Recent Changes", "View", "local history", func(m *Model, _ any) {
-		m.ShowHistory(m.Root())
+		m.OpenRecentChanges()
 	})
 	add("vcs.showCommit", "Show Commit in Git Log", "Git", "reveal commit", func(m *Model, arg any) {
 		m.ShowCommitInGitLog(arg)
@@ -111,6 +111,206 @@ func init() {
 			m.ShowSelectedLogChangeDiff()
 		}
 		m.invalidate()
+	})
+}
+
+type recentHistoryChange struct {
+	entry historyEntry
+	label string
+}
+
+type recentChangesState struct {
+	open     bool
+	loading  bool
+	err      string
+	busy     bool
+	root     string
+	entries  []recentHistoryChange
+	selected int
+	focus    ui.Handle
+	list     ui.ListState
+}
+
+func (m *Model) OpenRecentChanges() {
+	root := m.Root()
+	if root == "" {
+		return
+	}
+	m.recentHistory = recentChangesState{
+		open: true, loading: true, root: realPath(root),
+	}
+	m.invalidate()
+	go func() {
+		ctx, cancel := context.WithTimeout(modelContext(m), time.Minute)
+		defer cancel()
+		raw, err := m.invoke(ctx, "history_list_dir", map[string]any{"path": root})
+		var history directoryHistory
+		if err == nil {
+			err = json.Unmarshal(raw, &history)
+		}
+		entries := collapseRecentHistory(history.Entries, 40)
+		m.post(func() {
+			if !m.recentHistory.open || m.Root() != root ||
+				m.recentHistory.root != realPath(root) {
+				return
+			}
+			m.recentHistory.loading = false
+			if err != nil {
+				m.recentHistory.err = "Cannot read Local History: " + err.Error()
+				m.invalidate()
+				return
+			}
+			m.recentHistory.entries = make([]recentHistoryChange, 0, len(entries))
+			for _, entry := range entries {
+				m.recentHistory.entries = append(m.recentHistory.entries, recentHistoryChange{
+					entry: entry, label: recentHistoryLabel(root, entry),
+				})
+			}
+			m.invalidate()
+		})
+	}()
+}
+
+func collapseRecentHistory(entries []historyEntry, limit int) []historyEntry {
+	sorted := append([]historyEntry(nil), entries...)
+	sortHistoryNewestFirst(sorted)
+	out := make([]historyEntry, 0, min(len(sorted), max(0, limit)))
+	for _, entry := range sorted {
+		if len(out) > 0 {
+			previous := out[len(out)-1]
+			if previous.Kind != "label" && entry.Kind != "label" &&
+				previous.Path == entry.Path && previous.Label == entry.Label {
+				continue
+			}
+		}
+		out = append(out, entry)
+		if limit > 0 && len(out) >= limit {
+			break
+		}
+	}
+	return out
+}
+
+func recentHistoryLabel(root string, entry historyEntry) string {
+	if entry.Kind == "label" {
+		return entry.Label
+	}
+	relative := entry.Path
+	if value, err := filepath.Rel(root, entry.Path); err == nil {
+		relative = value
+	}
+	label := filepath.ToSlash(relative)
+	if entry.Label != "" {
+		label += " — " + entry.Label
+	}
+	return label
+}
+
+func (m *Model) chooseRecentHistory() {
+	state := &m.recentHistory
+	if !state.open || state.busy || state.loading ||
+		state.selected < 0 || state.selected >= len(state.entries) {
+		return
+	}
+	entry := state.entries[state.selected].entry
+	path := entry.Path
+	if entry.Kind == "label" {
+		path = state.root
+	}
+	state.busy = true
+	m.invalidate()
+	m.recentHistory = recentChangesState{}
+	m.ShowHistory(path)
+}
+
+func (m *Model) closeRecentChanges() {
+	if !m.recentHistory.open {
+		return
+	}
+	m.recentHistory = recentChangesState{}
+	m.invalidate()
+}
+
+func (m *Model) recentChangesDialog(c *ui.Context, p *ui.Theme) {
+	state := &m.recentHistory
+	if state == nil || !state.open {
+		return
+	}
+	oi := oiPaletteOf(p)
+	width, height := c.Size()
+	w := min(float32(560), width-16)
+	h := min(float32(430), height-16)
+	x := (width - w) / 2
+	y := max(float32(16), min(float32(96), height-h-16))
+	state.selected = min(max(state.selected, 0), max(0, len(state.entries)-1))
+	state.list.Selected = &state.selected
+	ui.Overlay(c, func() {
+		box := ui.Column(c.Key("local-history-recent-popup")).Role(ui.RolePopup).
+			Label("Recent Changes").Focusable().AutoFocus().Bind(&state.focus).
+			Absolute().Left(x).Top(y).Width(w).Height(h).Clip().
+			Background(oi.popup).Border(1, oi.borderStrong).Radius(8).
+			Shadow(0, 12, 30, 0, ui.RGBA(0, 0, 0, 0.3))
+		box.Children(func() {
+			ui.Row(c).Height(38).Shrink(0).Padding(0, 12).AlignItems(ui.Center).
+				BorderWidth(0, 0, 1, 0).BorderColor(oi.border).Children(func() {
+				ui.Text(c, "Recent Changes").FontSize(13).Bold().TextColor(oi.textStrong)
+			})
+			switch {
+			case state.err != "":
+				ui.Text(c, state.err).Padding(12).FontSize(12).TextColor(p.Danger)
+			case state.loading:
+				ui.Text(c, "Reading Local History…").Padding(12).FontSize(12).TextColor(oi.textMuted)
+			case len(state.entries) == 0:
+				ui.Text(c, "No recent changes").Padding(12).FontSize(12).TextColor(oi.textMuted)
+			default:
+				list := ui.List(c.Key("local-history-recent-list"), &state.list, len(state.entries), func(i int) {
+					entry := state.entries[i]
+					row := ui.Row(c.Key(fmt.Sprintf("recent-history:%d", i))).Height(48).
+						Padding(0, 10).Gap(8).AlignItems(ui.Center)
+					row.Children(func() {
+						if entry.entry.Kind == "label" {
+							oiIconEl(c, "general/bookmark", 14, oi, oi.textMuted)
+						} else {
+							oiIconEl(c, "general/history", 14, oi, oi.textMuted)
+						}
+						ui.Column(c).Grow(1).MinWidth(0).Gap(1).Children(func() {
+							ui.Text(c, entry.label).FontSize(13).TextColor(oi.textStrong).
+								SingleLine().Ellipsis("…")
+							ui.Text(c, filepath.ToSlash(entry.entry.Path)).FontSize(11).
+								TextColor(oi.textSubtle).SingleLine().Ellipsis("…")
+						})
+						ui.Text(c, historyTime(m.prefs.dateFormatPrefs(), c.Region(), entry.entry.Ms)).
+							FontSize(11).TextColor(oi.textSubtle).SingleLine()
+					})
+					row.OnClick(func() {
+						state.selected = i
+					})
+				}).Grow(1).MinHeight(0).MinWidth(0)
+				if list.Changed() {
+					m.invalidate()
+				}
+				if list.Submitted() {
+					m.chooseRecentHistory()
+				}
+			}
+			ui.Row(c).Height(30).Shrink(0).Padding(0, 10).AlignItems(ui.Center).
+				BorderWidth(1, 0, 0, 0).BorderColor(oi.border).Children(func() {
+				oiIconEl(c, "general/history", 13, oi, oi.textMuted)
+				ui.Text(c, "Enter open · Esc close").FontSize(11).TextColor(oi.textMuted)
+			})
+		})
+		switch {
+		case box.PressedOutside() || box.OverlayShortcut(0, ui.KeyEscape):
+			m.closeRecentChanges()
+		case box.OverlayShortcut(0, ui.KeyUp):
+			state.selected = max(0, state.selected-1)
+			m.invalidate()
+		case box.OverlayShortcut(0, ui.KeyDown):
+			state.selected = min(max(0, len(state.entries)-1), state.selected+1)
+			m.invalidate()
+		case box.OverlayShortcut(0, ui.KeyEnter):
+			m.chooseRecentHistory()
+		}
 	})
 }
 

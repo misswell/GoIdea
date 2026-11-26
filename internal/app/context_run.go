@@ -164,7 +164,13 @@ func (m *Model) contextRunConfig() (*openidea.RunConfig, error) {
 	if err != nil {
 		return nil, err
 	}
-	_ = m.resolveContextRunTool(cfg, tab.doc.Path())
+	if err := m.resolveContextRunTool(cfg, tab.doc.Path()); err != nil {
+		// Tool lookup only improves a context command. A backend tooling
+		// catalogue that is unavailable must not prevent an otherwise valid
+		// run from starting; preserve the already resolved run configuration.
+		m.status = "Could not resolve the context tool; using " + cfg.Command
+	}
+	m.applyContextLanguageSettings(cfg)
 	return cfg, nil
 }
 
@@ -220,6 +226,64 @@ func (m *Model) resolveContextRunTool(cfg *openidea.RunConfig, near string) erro
 		break
 	}
 	return nil
+}
+
+func (m *Model) applyContextLanguageSettings(cfg *openidea.RunConfig) {
+	if cfg == nil {
+		return
+	}
+	if cfg.Env == nil {
+		cfg.Env = map[string]string{}
+	}
+	switch strings.ToLower(strings.TrimSpace(cfg.Kind)) {
+	case "python", "pytest", "django-test":
+		if python := strings.TrimSpace(m.nativeRuntimeString(
+			settingsPagePythonDeps, "languages.python.interpreter",
+		)); python != "" {
+			if !filepath.IsAbs(python) && m.Root() != "" {
+				python = filepath.Join(m.Root(), python)
+			}
+			cfg.Command = filepath.Clean(python)
+		}
+	case "node", "npm", "pnpm", "yarn", "bun":
+		if node := strings.TrimSpace(m.nativeRuntimeString(
+			settingsPageNode, "languages.node.interpreter",
+		)); node != "" && strings.EqualFold(cfg.Command, "node") {
+			if !filepath.IsAbs(node) && m.Root() != "" {
+				node = filepath.Join(m.Root(), node)
+			}
+			cfg.Command = filepath.Clean(node)
+		}
+	case "php":
+		if php := strings.TrimSpace(m.nativeRuntimeString(
+			settingsPagePHP, "languages.php.interpreter",
+		)); php != "" {
+			if !filepath.IsAbs(php) && m.Root() != "" {
+				php = filepath.Join(m.Root(), php)
+			}
+			cfg.Command = filepath.Clean(php)
+		}
+	case "ruby":
+		if ruby := strings.TrimSpace(m.nativeRuntimeString(
+			settingsPageRuby, "languages.ruby.interpreter",
+		)); ruby != "" {
+			if !filepath.IsAbs(ruby) && m.Root() != "" {
+				ruby = filepath.Join(m.Root(), ruby)
+			}
+			cfg.Command = filepath.Clean(ruby)
+		}
+	case "go":
+		if goRoot := strings.TrimSpace(m.nativeRuntimeString(
+			settingsPageGo, "languages.go.goroot",
+		)); goRoot != "" {
+			cfg.Env["GOROOT"] = goRoot
+		}
+		if goPath := strings.TrimSpace(m.nativeRuntimeString(
+			settingsPageGo, "languages.go.gopath",
+		)); goPath != "" {
+			cfg.Env["GOPATH"] = goPath
+		}
+	}
 }
 
 type contextFileRole string

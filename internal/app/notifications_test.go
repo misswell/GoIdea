@@ -217,11 +217,37 @@ func TestUpdateBalloonUsesTheLiveTaskProgress(t *testing.T) {
 	if withProgress := m.notifyHeight(n, 0); withProgress <= withoutProgress {
 		t.Fatalf("progress height = %v, plain height = %v", withProgress, withoutProgress)
 	}
+	if timeout, ok := notificationTimeout(n); ok || timeout != 0 {
+		t.Fatalf("download timeout = %v, %v; want no timer", timeout, ok)
+	}
 	m.tasks[0].Message = "9.0 MB of 60.0 MB"
 	m.tasks[0].Fraction = 0.9
 	if task, ok := m.notificationTask(n); !ok ||
 		task.Fraction != 0.9 || task.Message != "9.0 MB of 60.0 MB" {
 		t.Fatalf("live notification task = %+v, %v", task, ok)
+	}
+}
+
+func TestUpdateDownloadBalloonStaysUntilDismissedAndOffersSuppression(t *testing.T) {
+	m := &Model{}
+	m.notifyStickyProgress(updateKey, "info", "Downloading GoIDEA 0.1.44",
+		updateInstallTaskID, true,
+		notifyAction{label: "Cancel", run: func(*Model) {}})
+	if len(m.notify.items) != 1 || !m.notify.items[0].balloon {
+		t.Fatalf("download notification = %+v", m.notify.items)
+	}
+	n := m.notify.items[0]
+	if timeout, ok := notificationTimeout(n); ok || timeout != 0 {
+		t.Fatalf("download timeout = %v, %v; want no timer", timeout, ok)
+	}
+	actions := m.balloonActions(n)
+	if len(actions) != 2 || actions[0].label != "Cancel" ||
+		actions[1].label != "Don't Show Again" {
+		t.Fatalf("download actions = %+v", actions)
+	}
+	m.dismissBalloon(n.id)
+	if len(m.notify.items) != 1 || m.notify.items[0].balloon {
+		t.Fatalf("manual close left %+v", m.notify.items)
 	}
 }
 

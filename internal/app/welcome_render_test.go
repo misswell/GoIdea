@@ -81,8 +81,8 @@ func TestWelcomeCustomizeAndPluginsRender(t *testing.T) {
 	m := &Model{welcomePage: "customize"}
 	tt := welcomeTester(t, m, false)
 	for _, text := range []string{
-		"Color theme", "Theme", "Sync with OS",
-		"Accessibility", "Editor font", "All settings…",
+		"Color theme", "Theme", "Sync with OS", "Accent color", "Keymap",
+		"Accessibility", "IDE font", "Startup", "All settings…",
 	} {
 		if !tt.HasText(text) {
 			t.Fatalf("%q is not on the customize page: %q", text, tt.Texts())

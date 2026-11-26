@@ -24,20 +24,34 @@ type TemplatePrefs struct {
 }
 
 type LiveTemplatePrefs struct {
-	Enabled       bool           `json:"enabled"`
-	CaseSensitive bool           `json:"caseSensitive"`
-	Disabled      []string       `json:"disabled,omitempty"`
-	Custom        []LiveTemplate `json:"custom,omitempty"`
+	Enabled          bool           `json:"enabled"`
+	CaseSensitive    bool           `json:"caseSensitive"`
+	ExpandWithTab    bool           `json:"expandWithTab"`
+	ShowInCompletion bool           `json:"showInCompletion"`
+	Disabled         []string       `json:"disabled,omitempty"`
+	Deleted          []string       `json:"deleted,omitempty"`
+	Custom           []LiveTemplate `json:"custom,omitempty"`
 }
 
 type LiveTemplate struct {
-	ID           string   `json:"id"`
-	Abbreviation string   `json:"abbreviation"`
-	Name         string   `json:"name"`
-	Description  string   `json:"description,omitempty"`
-	Body         string   `json:"body"`
-	Contexts     []string `json:"contexts,omitempty"`
-	Surround     bool     `json:"surround,omitempty"`
+	ID           string                 `json:"id"`
+	Group        string                 `json:"group,omitempty"`
+	Abbreviation string                 `json:"abbreviation"`
+	Name         string                 `json:"name"`
+	Description  string                 `json:"description,omitempty"`
+	Body         string                 `json:"body"`
+	Contexts     []string               `json:"contexts,omitempty"`
+	Surround     bool                   `json:"surround,omitempty"`
+	Scope        string                 `json:"scope,omitempty"`
+	Variables    []liveTemplateVariable `json:"variables,omitempty"`
+	PluginOrigin string                 `json:"pluginOrigin,omitempty"`
+}
+
+type liveTemplateVariable struct {
+	Name          string `json:"name"`
+	Expression    string `json:"expression,omitempty"`
+	DefaultValue  string `json:"defaultValue,omitempty"`
+	SkipIfDefined bool   `json:"skipIfDefined,omitempty"`
 }
 
 type PostfixTemplatePrefs struct {
@@ -58,13 +72,16 @@ type FileTemplateSchemeSet struct {
 type FileTemplateScheme struct {
 	Templates []projectNewTemplate `json:"templates"`
 	Includes  map[string]string    `json:"includes,omitempty"`
+	Code      map[string]string    `json:"code,omitempty"`
 }
 
 func defaultTemplatePrefs() TemplatePrefs {
 	return TemplatePrefs{
 		Version: 1,
 		Live: LiveTemplatePrefs{
-			Enabled: true,
+			Enabled:          true,
+			ExpandWithTab:    true,
+			ShowInCompletion: true,
 		},
 		Postfix: PostfixTemplatePrefs{Enabled: true},
 		Emmet:   EmmetTemplatePrefs{Enabled: true},
@@ -80,12 +97,15 @@ func defaultFileTemplateScheme() FileTemplateScheme {
 	templates := make([]projectNewTemplate, len(projectNewTemplates))
 	for i := range projectNewTemplates {
 		templates[i] = cloneProjectNewTemplate(projectNewTemplates[i])
+		templates[i].enabled = true
+		templates[i].reformat = true
+		templates[i].preferencesSet = true
 	}
 	includes := make(map[string]string, len(projectNewIncludes))
 	for name, body := range projectNewIncludes {
 		includes[name] = body
 	}
-	return FileTemplateScheme{Templates: templates, Includes: includes}
+	return FileTemplateScheme{Templates: templates, Includes: includes, Code: map[string]string{}}
 }
 
 func cloneProjectNewTemplate(t projectNewTemplate) projectNewTemplate {
@@ -98,12 +118,16 @@ func cloneFileTemplateScheme(s FileTemplateScheme) FileTemplateScheme {
 	out := FileTemplateScheme{
 		Templates: make([]projectNewTemplate, len(s.Templates)),
 		Includes:  make(map[string]string, len(s.Includes)),
+		Code:      make(map[string]string, len(s.Code)),
 	}
 	for i := range s.Templates {
 		out.Templates[i] = cloneProjectNewTemplate(s.Templates[i])
 	}
 	for name, body := range s.Includes {
 		out.Includes[name] = body
+	}
+	for name, body := range s.Code {
+		out.Code[name] = body
 	}
 	return out
 }
@@ -116,6 +140,8 @@ func normalizeTemplatePrefs(p TemplatePrefs) TemplatePrefs {
 	}
 	if newPrefs {
 		p.Live.Enabled = true
+		p.Live.ExpandWithTab = true
+		p.Live.ShowInCompletion = true
 		p.Postfix.Enabled = true
 		p.Emmet.Enabled = true
 	}
@@ -139,6 +165,7 @@ func normalizeTemplatePrefs(p TemplatePrefs) TemplatePrefs {
 	}
 	p.Postfix.Disabled = uniqueStrings(p.Postfix.Disabled)
 	p.Live.Disabled = uniqueStrings(p.Live.Disabled)
+	p.Live.Deleted = uniqueStrings(p.Live.Deleted)
 	return p
 }
 
@@ -150,11 +177,18 @@ func normalizeFileTemplateScheme(s FileTemplateScheme) FileTemplateScheme {
 	if s.Includes == nil {
 		s.Includes = map[string]string{}
 	}
+	if s.Code == nil {
+		s.Code = map[string]string{}
+	}
 	seen := map[string]bool{}
 	out := s.Templates[:0]
 	for _, t := range s.Templates {
 		t.id = strings.TrimSpace(t.id)
 		t.name = strings.TrimSpace(t.name)
+		if !t.preferencesSet {
+			t.enabled, t.reformat = true, true
+			t.preferencesSet = true
+		}
 		if t.id == "" {
 			t.id = fileTemplateID(t.name)
 		}
@@ -208,6 +242,98 @@ func (s *FileTemplateSchemeSet) effectiveScheme(root string) FileTemplateScheme 
 		scheme = defaultFileTemplateScheme()
 	}
 	return cloneFileTemplateScheme(normalizeFileTemplateScheme(scheme))
+}
+
+// languageTemplates adds enabled backend language descriptors that have no
+// native template yet. Existing templates keep their ids, order and edits.
+func (s FileTemplateSchemeSet) languageTemplates(
+	root string,
+	languages []openIDEALanguageInfo,
+) FileTemplateScheme {
+	return appendLanguageFileTemplates(s.effectiveScheme(root), languages)
+}
+
+func appendLanguageFileTemplates(
+	scheme FileTemplateScheme,
+	languages []openIDEALanguageInfo,
+) FileTemplateScheme {
+	seen := map[string]bool{}
+	for _, template := range scheme.Templates {
+		seen[strings.ToLower(template.id)] = true
+		seen[strings.ToLower(template.name)] = true
+	}
+	for _, language := range languages {
+		id := strings.TrimSpace(language.ID)
+		name := strings.TrimSpace(language.Name)
+		if id == "" || name == "" || seen[strings.ToLower(id)] ||
+			seen[strings.ToLower(name+" file")] {
+			continue
+		}
+		extension := fileTemplateLanguageExtension(language)
+		body := projectNewIncludes["File Header"]
+		if !strings.Contains(strings.ToLower(language.ScratchTemplate), "$end$") {
+			body = language.ScratchTemplate
+		}
+		if body == "" {
+			body = "$END$"
+		}
+		scheme.Templates = append(scheme.Templates, projectNewTemplate{
+			id:   "language." + fileTemplateID(id),
+			name: name + " File",
+			keywords: strings.Join(appendedNonEmpty(
+				name, id, extension,
+				strings.Join(language.Extensions, " "),
+				strings.Join(language.Filenames, " "),
+				language.FirstLine,
+			), " "),
+			extension: extension,
+			nameStyle: "asis",
+			enabled:   true,
+			reformat:  true,
+			kinds: []projectNewKind{{
+				id: "default", label: name + " File", body: body,
+			}},
+		})
+		seen[strings.ToLower(id)] = true
+		seen[strings.ToLower(name+" file")] = true
+	}
+	return scheme
+}
+
+func fileTemplateLanguageExtension(language openIDEALanguageInfo) string {
+	extensions := append([]string(nil), language.Extensions...)
+	sort.SliceStable(extensions, func(i, j int) bool {
+		if extensions[i] == language.ID {
+			return true
+		}
+		if extensions[j] == language.ID {
+			return false
+		}
+		return len(extensions[i]) < len(extensions[j])
+	})
+	for _, extension := range extensions {
+		extension = strings.TrimPrefix(strings.TrimSpace(extension), ".")
+		if extension != "" {
+			return extension
+		}
+	}
+	for _, filename := range language.Filenames {
+		filename = strings.TrimSpace(filename)
+		if i := strings.LastIndexByte(filename, '.'); i > 0 && i < len(filename)-1 {
+			return strings.TrimPrefix(filename[i+1:], ".")
+		}
+	}
+	return ""
+}
+
+func appendedNonEmpty(values ...string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" {
+			out = append(out, value)
+		}
+	}
+	return out
 }
 
 // ensureProjectScheme snapshots the current Default scheme the first time a
@@ -270,39 +396,39 @@ type templateExpansion struct {
 }
 
 var defaultLiveTemplates = []LiveTemplate{
-	{ID: "live.sout", Abbreviation: "sout", Name: "Print to standard output", Contexts: []string{"java"},
+	{ID: "live.sout", Group: "Java", Abbreviation: "sout", Name: "Print to standard output", Contexts: []string{"java"},
 		Body: `System.out.println($END$);`},
-	{ID: "live.serr", Abbreviation: "serr", Name: "Print to standard error", Contexts: []string{"java"},
+	{ID: "live.serr", Group: "Java", Abbreviation: "serr", Name: "Print to standard error", Contexts: []string{"java"},
 		Body: `System.err.println($END$);`},
-	{ID: "live.psvm", Abbreviation: "psvm", Name: "Main method", Contexts: []string{"java"},
+	{ID: "live.psvm", Group: "Java", Abbreviation: "psvm", Name: "Main method", Contexts: []string{"java"},
 		Body: "public static void main(String[] args) {\n    $END$\n}"},
-	{ID: "live.ifn", Abbreviation: "ifn", Name: "If null", Contexts: []string{"java", "kotlin"},
+	{ID: "live.ifn", Group: "Java", Abbreviation: "ifn", Name: "If null", Contexts: []string{"java", "kotlin"},
 		Body: "if ($EXPR$ == null) {\n    $END$\n}"},
-	{ID: "live.inn", Abbreviation: "inn", Name: "If not null", Contexts: []string{"java", "kotlin"},
+	{ID: "live.inn", Group: "Java", Abbreviation: "inn", Name: "If not null", Contexts: []string{"java", "kotlin"},
 		Body: "if ($EXPR$ != null) {\n    $END$\n}"},
-	{ID: "live.fori", Abbreviation: "fori", Name: "Indexed for loop", Contexts: []string{"java", "kotlin", "javascript", "typescript"},
+	{ID: "live.fori", Group: "Java", Abbreviation: "fori", Name: "Indexed for loop", Contexts: []string{"java", "kotlin", "javascript", "typescript"},
 		Body: "for (int $I$ = 0; $I$ < $LIMIT$; $I$++) {\n    $END$\n}"},
-	{ID: "live.for", Abbreviation: "for", Name: "For each", Contexts: []string{"java", "kotlin", "javascript", "typescript"},
+	{ID: "live.for", Group: "Java", Abbreviation: "for", Name: "For each", Contexts: []string{"java", "kotlin", "javascript", "typescript"},
 		Body: "for ($ITEM$ : $COLLECTION$) {\n    $END$\n}"},
-	{ID: "live.func", Abbreviation: "func", Name: "Function", Contexts: []string{"go"},
+	{ID: "live.func", Group: "Go", Abbreviation: "func", Name: "Function", Contexts: []string{"go"},
 		Body: "func $NAME$($PARAMS$) $RETURN$ {\n\t$END$\n}"},
-	{ID: "live.iferr", Abbreviation: "iferr", Name: "If error", Contexts: []string{"go"},
+	{ID: "live.iferr", Group: "Go", Abbreviation: "iferr", Name: "If error", Contexts: []string{"go"},
 		Body: "if err != nil {\n\treturn $END$err\n}"},
-	{ID: "live.forr", Abbreviation: "forr", Name: "Range loop", Contexts: []string{"go"},
+	{ID: "live.forr", Group: "Go", Abbreviation: "forr", Name: "Range loop", Contexts: []string{"go"},
 		Body: "for $INDEX$, $VALUE$ := range $COLLECTION$ {\n\t$END$\n}"},
-	{ID: "live.test", Abbreviation: "test", Name: "Test function", Contexts: []string{"go"},
+	{ID: "live.test", Group: "Go", Abbreviation: "test", Name: "Test function", Contexts: []string{"go"},
 		Body: "func Test$NAME$(t *testing.T) {\n\t$END$\n}"},
-	{ID: "live.log", Abbreviation: "log", Name: "Log", Contexts: []string{"javascript", "typescript"},
+	{ID: "live.log", Group: "JavaScript / TypeScript", Abbreviation: "log", Name: "Log", Contexts: []string{"javascript", "typescript"},
 		Body: `console.log($END$);`},
-	{ID: "live.af", Abbreviation: "af", Name: "Arrow function", Contexts: []string{"javascript", "typescript"},
+	{ID: "live.af", Group: "JavaScript / TypeScript", Abbreviation: "af", Name: "Arrow function", Contexts: []string{"javascript", "typescript"},
 		Body: "($PARAMS$) => {\n  $END$\n}"},
-	{ID: "live.imr", Abbreviation: "imr", Name: "Import React", Contexts: []string{"javascript", "typescript", "tsx"},
+	{ID: "live.imr", Group: "JavaScript / TypeScript", Abbreviation: "imr", Name: "Import React", Contexts: []string{"javascript", "typescript", "tsx"},
 		Body: "import React from \"react\";\n$END$"},
-	{ID: "live.html5", Abbreviation: "html5", Name: "HTML document", Contexts: []string{"html"},
+	{ID: "live.html5", Group: "HTML", Abbreviation: "html5", Name: "HTML document", Contexts: []string{"html"},
 		Body: "<!doctype html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n  <title>$TITLE$</title>\n</head>\n<body>\n$END$\n</body>\n</html>"},
-	{ID: "live.php", Abbreviation: "php", Name: "PHP block", Contexts: []string{"php"},
+	{ID: "live.php", Group: "PHP", Abbreviation: "php", Name: "PHP block", Contexts: []string{"php"},
 		Body: "<?php\n$END$"},
-	{ID: "live.fn", Abbreviation: "fn", Name: "Function", Contexts: []string{"rust"},
+	{ID: "live.fn", Group: "Rust", Abbreviation: "fn", Name: "Function", Contexts: []string{"rust"},
 		Body: "fn $NAME$($PARAMS$) $RETURN$ {\n    $END$\n}"},
 }
 
@@ -332,6 +458,7 @@ func (p TemplatePrefs) liveTemplates() []LiveTemplate {
 		return nil
 	}
 	disabled := stringSet(p.Live.Disabled)
+	deleted := stringSet(p.Live.Deleted)
 	byID := map[string]LiveTemplate{}
 	for _, t := range defaultLiveTemplates {
 		byID[t.ID] = t
@@ -344,7 +471,7 @@ func (p TemplatePrefs) liveTemplates() []LiveTemplate {
 	}
 	out := make([]LiveTemplate, 0, len(byID))
 	for _, t := range byID {
-		if !disabled[t.ID] && strings.TrimSpace(t.Abbreviation) != "" && t.Body != "" {
+		if !disabled[t.ID] && !deleted[t.ID] && strings.TrimSpace(t.Abbreviation) != "" && t.Body != "" {
 			out = append(out, t)
 		}
 	}
@@ -357,8 +484,52 @@ func (p TemplatePrefs) liveTemplates() []LiveTemplate {
 	return out
 }
 
+func (p TemplatePrefs) liveTemplateByID(id string) (LiveTemplate, bool) {
+	for _, template := range p.liveTemplates() {
+		if template.ID == id {
+			return template, true
+		}
+	}
+	return LiveTemplate{}, false
+}
+
+func (p TemplatePrefs) liveTemplatesForSettings() []LiveTemplate {
+	byID := map[string]LiveTemplate{}
+	deleted := stringSet(p.Live.Deleted)
+	for _, template := range defaultLiveTemplates {
+		if !deleted[template.ID] {
+			byID[template.ID] = template
+		}
+	}
+	for _, template := range p.Live.Custom {
+		if !deleted[template.ID] {
+			byID[template.ID] = template
+		}
+	}
+	out := make([]LiveTemplate, 0, len(byID))
+	for _, template := range byID {
+		out = append(out, template)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Group != out[j].Group {
+			return out[i].Group < out[j].Group
+		}
+		if out[i].Abbreviation == out[j].Abbreviation {
+			return out[i].Name < out[j].Name
+		}
+		return out[i].Abbreviation < out[j].Abbreviation
+	})
+	return out
+}
+
 func (p TemplatePrefs) surroundTemplates() []LiveTemplate {
-	out := append([]LiveTemplate(nil), defaultSurroundTemplates...)
+	deleted := stringSet(p.Live.Deleted)
+	out := make([]LiveTemplate, 0, len(defaultSurroundTemplates)+len(p.Live.Custom))
+	for _, t := range defaultSurroundTemplates {
+		if !deleted[t.ID] {
+			out = append(out, t)
+		}
+	}
 	for _, t := range p.Live.Custom {
 		if t.Surround {
 			out = append(out, t)
@@ -381,6 +552,11 @@ var templateVariableRE = regexp.MustCompile(`\$([A-Za-z_][A-Za-z0-9_]*)\$|\$\{([
 // same field, $END$ chooses the final caret, and an unset value uses the
 // variable's readable name so the inserted code remains editable.
 func expandTemplate(body string, ctx liveTemplateContext) templateExpansion {
+	return expandLiveTemplate(LiveTemplate{Body: body}, ctx, false)
+}
+
+func expandLiveTemplate(template LiveTemplate, ctx liveTemplateContext, postfix bool) templateExpansion {
+	body := template.Body
 	body = strings.ReplaceAll(body, "\r\n", "\n")
 	if ctx.Now.IsZero() {
 		ctx.Now = time.Now()
@@ -438,6 +614,17 @@ func expandTemplate(body string, ctx liveTemplateContext) templateExpansion {
 		if !ok || value == "" {
 			value = defaultValue
 		}
+		if !ok && value == "" {
+			value = defaultValue
+		}
+		if value == "" {
+			for _, variable := range template.Variables {
+				if variable.Name == name {
+					value = liveTemplateVariableValue(template, variable, ctx)
+					break
+				}
+			}
+		}
 		if value == "" {
 			value = templateReadableName(name)
 		}
@@ -456,6 +643,137 @@ func expandTemplate(body string, ctx liveTemplateContext) templateExpansion {
 		}
 	}
 	return templateExpansion{Text: text, Caret: caret, Fields: fields}
+}
+
+func liveTemplateVariableValue(
+	template LiveTemplate,
+	variable liveTemplateVariable,
+	ctx liveTemplateContext,
+) string {
+	expression := strings.TrimSpace(variable.Expression)
+	defaultValue := liveTemplateLiteral(variable.DefaultValue)
+	switch expression {
+	case "":
+		return defaultValue
+	case "className()":
+		if ctx.ClassName != "" {
+			return ctx.ClassName
+		}
+	case "methodName()":
+		if method := liveTemplateFunctionName(ctx.Selection); method != "" {
+			return method
+		}
+	case "fileName()":
+		if name := filepath.Base(ctx.FileName); name != "" && name != "." {
+			return name
+		}
+	case "fileNameWithoutExtension()":
+		if name := filepath.Base(ctx.FileName); name != "" && name != "." {
+			return strings.TrimSuffix(name, filepath.Ext(name))
+		}
+	case "date()":
+		return ctx.Now.Format("2006-01-02")
+	case "time()":
+		return ctx.Now.Format("15:04")
+	case "user()":
+		if ctx.User != "" {
+			return ctx.User
+		}
+	case "clipboard()":
+		if ctx.Clipboard != "" {
+			return ctx.Clipboard
+		}
+	case "suggestVariableName()":
+		if name := projectNewInferGoPackage(filepath.Dir(ctx.FileName), ctx.Project); name != "" {
+			return name
+		}
+	case "capitalize()", "capitalize":
+		return defaultValue
+	}
+	if strings.HasPrefix(expression, "capitalize(") && strings.HasSuffix(expression, ")") {
+		return uppercaseFirst(liveTemplateNestedVariable(expression, template, ctx))
+	}
+	if strings.HasPrefix(expression, "camelCase(") && strings.HasSuffix(expression, ")") {
+		return camelCase(liveTemplateNestedVariable(expression, template, ctx))
+	}
+	if strings.HasPrefix(expression, "snakeCase(") && strings.HasSuffix(expression, ")") {
+		words := projectNewWords(liveTemplateNestedVariable(expression, template, ctx))
+		for i := range words {
+			words[i] = strings.ToLower(words[i])
+		}
+		return strings.Join(words, "_")
+	}
+	if strings.HasPrefix(expression, "date(") && strings.HasSuffix(expression, ")") {
+		layout := strings.TrimSuffix(strings.TrimPrefix(expression, "date("), ")")
+		layout = liveTemplateLiteral(layout)
+		if strings.Contains(layout, "yyyy") {
+			layout = strings.ReplaceAll(layout, "yyyy", "2006")
+		}
+		if layout != "" {
+			return ctx.Now.Format(layout)
+		}
+	}
+	return defaultValue
+}
+
+func liveTemplateNestedVariable(expression string, template LiveTemplate, ctx liveTemplateContext) string {
+	value := strings.TrimSuffix(strings.TrimPrefix(expression, "("), ")")
+	if open := strings.IndexByte(expression, '('); open >= 0 {
+		inner := strings.TrimSpace(expression[open+1 : len(expression)-1])
+		value = liveTemplateLiteral(inner)
+		for _, variable := range template.Variables {
+			if variable.Name == inner {
+				value = liveTemplateVariableValue(template, variable, ctx)
+				break
+			}
+		}
+	}
+	return value
+}
+
+func liveTemplateLiteral(value string) string {
+	value = strings.TrimSpace(value)
+	value = strings.Trim(value, `"`)
+	value = strings.Trim(value, "'")
+	if value == `""` || value == `''` {
+		return ""
+	}
+	return value
+}
+
+func liveTemplateFunctionName(text string) string {
+	open := strings.IndexByte(text, '(')
+	if open <= 0 {
+		return ""
+	}
+	fields := strings.FieldsFunc(strings.TrimSpace(text[:open]), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_'
+	})
+	if len(fields) == 0 {
+		return ""
+	}
+	return fields[len(fields)-1]
+}
+
+func uppercaseFirst(value string) string {
+	runes := []rune(value)
+	if len(runes) > 0 {
+		runes[0] = unicode.ToUpper(runes[0])
+	}
+	return string(runes)
+}
+
+func camelCase(value string) string {
+	words := projectNewWords(value)
+	for i := range words {
+		lower := strings.ToLower(words[i])
+		if i == 0 {
+			words[i] = lower
+			continue
+		}
+		words[i] = uppercaseFirst(lower)
+	}
+	return strings.Join(words, "")
 }
 
 func templateReadableName(name string) string {
@@ -1013,37 +1331,45 @@ type persistedProjectTemplate struct {
 	Name           string             `json:"name"`
 	Keywords       string             `json:"keywords,omitempty"`
 	Extension      string             `json:"extension,omitempty"`
+	Icon           string             `json:"icon,omitempty"`
 	NameStyle      string             `json:"nameStyle,omitempty"`
 	PackageStyle   string             `json:"packageStyle,omitempty"`
 	DottedPackages bool               `json:"dottedPackages,omitempty"`
 	DefaultName    string             `json:"defaultName,omitempty"`
 	FixedName      string             `json:"fixedName,omitempty"`
+	Enabled        *bool              `json:"enabled,omitempty"`
+	Reformat       *bool              `json:"reformat,omitempty"`
 	Kinds          []persistedNewKind `json:"kinds,omitempty"`
 }
 
 type persistedNewKind struct {
-	ID        string `json:"id"`
-	Label     string `json:"label"`
-	Body      string `json:"body"`
-	Extension string `json:"extension,omitempty"`
+	ID          string `json:"id"`
+	Label       string `json:"label"`
+	Body        string `json:"body"`
+	Extension   string `json:"extension,omitempty"`
+	Description string `json:"description,omitempty"`
 }
 
 func (s FileTemplateScheme) MarshalJSON() ([]byte, error) {
 	type persistedScheme struct {
 		Templates []persistedProjectTemplate `json:"templates"`
 		Includes  map[string]string          `json:"includes,omitempty"`
+		Code      map[string]string          `json:"code,omitempty"`
 	}
-	out := persistedScheme{Includes: s.Includes}
+	out := persistedScheme{Includes: s.Includes, Code: s.Code}
 	for _, template := range s.Templates {
+		enabled, reformat := template.enabled, template.reformat
 		item := persistedProjectTemplate{
 			ID: template.id, Name: template.name, Keywords: template.keywords,
-			Extension: template.extension, NameStyle: template.nameStyle,
+			Extension: template.extension, Icon: template.icon, NameStyle: template.nameStyle,
 			PackageStyle: template.packageStyle, DottedPackages: template.dottedPackages,
 			DefaultName: template.defaultName, FixedName: template.fixedName,
+			Enabled: &enabled, Reformat: &reformat,
 		}
 		for _, kind := range template.kinds {
 			item.Kinds = append(item.Kinds, persistedNewKind{
 				ID: kind.id, Label: kind.label, Body: kind.body, Extension: kind.extension,
+				Description: kind.description,
 			})
 		}
 		out.Templates = append(out.Templates, item)
@@ -1055,22 +1381,36 @@ func (s *FileTemplateScheme) UnmarshalJSON(raw []byte) error {
 	var stored struct {
 		Templates []persistedProjectTemplate `json:"templates"`
 		Includes  map[string]string          `json:"includes,omitempty"`
+		Code      map[string]string          `json:"code,omitempty"`
 	}
 	if err := json.Unmarshal(raw, &stored); err != nil {
 		return err
 	}
 	s.Includes = stored.Includes
+	s.Code = stored.Code
+	if s.Code == nil {
+		s.Code = map[string]string{}
+	}
 	s.Templates = make([]projectNewTemplate, 0, len(stored.Templates))
 	for _, item := range stored.Templates {
+		enabled, reformat := true, true
+		if item.Enabled != nil {
+			enabled = *item.Enabled
+		}
+		if item.Reformat != nil {
+			reformat = *item.Reformat
+		}
 		template := projectNewTemplate{
 			id: item.ID, name: item.Name, keywords: item.Keywords,
-			extension: item.Extension, nameStyle: item.NameStyle,
+			extension: item.Extension, icon: item.Icon, nameStyle: item.NameStyle,
 			packageStyle: item.PackageStyle, dottedPackages: item.DottedPackages,
 			defaultName: item.DefaultName, fixedName: item.FixedName,
+			enabled: enabled, reformat: reformat, preferencesSet: true,
 		}
 		for _, kind := range item.Kinds {
 			template.kinds = append(template.kinds, projectNewKind{
 				id: kind.ID, label: kind.Label, body: kind.Body, extension: kind.Extension,
+				description: kind.Description,
 			})
 		}
 		s.Templates = append(s.Templates, template)

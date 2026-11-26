@@ -21,6 +21,15 @@ func gutterSettingsModel(values map[string]any) *Model {
 	return m
 }
 
+func editorCodeEditingModel(values map[string]any) *Model {
+	page := nativeSettingsPageState{
+		loaded: true, scope: "global", applied: values, draft: map[string]any{},
+	}
+	return &Model{nativeSettings: nativeSettingsCatalogState{
+		pages: map[string]nativeSettingsPageState{settingsPageCodeEditing: page},
+	}}
+}
+
 func TestGutterMasterAndGroupSwitches(t *testing.T) {
 	m := gutterSettingsModel(map[string]any{
 		"editor.showGutterIcons":     true,
@@ -40,6 +49,33 @@ func TestGutterMasterAndGroupSwitches(t *testing.T) {
 	m = gutterSettingsModel(map[string]any{"editor.showGutterIcons": false})
 	if m.gutterGroupEnabled("colors") {
 		t.Fatal("group remained enabled with the gutter master switch off")
+	}
+}
+
+func TestCodeEditingHighlightsBracesWordsAndSelectionOccurrences(t *testing.T) {
+	doc := docbridge.Virtual("/Demo.go", "func f(value int) {\n\tvalue := value\n}")
+	state := &editor.State{Buffer: doc.Buffer()}
+	state.Select(7, 12)
+	tab := &Tab{doc: doc, state: state}
+	m := editorCodeEditingModel(map[string]any{
+		"editor.codeEditing.highlightUsages":    true,
+		"editor.codeEditing.highlightBraces":    true,
+		"editor.codeEditing.highlightSelection": true,
+	})
+	backgrounds := m.editorTextBackgrounds(tab)
+	if len(backgrounds) < 2 {
+		t.Fatalf("highlights = %+v", backgrounds)
+	}
+	m.setNativeSettingsValue(settingsPageCodeEditing, "editor.codeEditing.highlightBraces", false)
+	m.setNativeSettingsValue(settingsPageCodeEditing, "editor.codeEditing.highlightSelection", false)
+	m.nativeSettingsMu.Lock()
+	page := m.nativeSettings.pages[settingsPageCodeEditing]
+	page.applied["editor.codeEditing.highlightBraces"] = false
+	page.applied["editor.codeEditing.highlightSelection"] = false
+	m.nativeSettings.pages[settingsPageCodeEditing] = page
+	m.nativeSettingsMu.Unlock()
+	if got := m.selectionOccurrenceBackgrounds(tab); len(got) != 0 {
+		t.Fatalf("selection occurrences with switch off = %+v", got)
 	}
 }
 

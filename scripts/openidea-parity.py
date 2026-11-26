@@ -19,6 +19,7 @@ Usage:
 """
 
 import importlib.util
+import glob
 import json
 import os
 import re
@@ -865,7 +866,7 @@ def events():
         m = re.search(r"pub enum " + enum + r"\s*\{(.*?)\n\}", text, re.S)
         if not m:
             continue
-        for vm in re.finditer(r"^\s{4}([A-Z][A-Za-z0-9_]*)\s*(?:\{|\()", m.group(1), re.M):
+        for vm in re.finditer(r"^\s{4}([A-Z][A-Za-z0-9_]*)\s*(?:\{|\()?", m.group(1), re.M):
             variant = vm.group(1)
             out.append(
                 {
@@ -923,9 +924,34 @@ def plugin_surface():
 
 
 def channel_commands(remote):
+    """Commands with real stdio channel arguments from the pinned dispatcher."""
+    files = {}
+    consts = {}
+    for source_path in glob.glob(os.path.join(
+        str(OPENIDEA / "crates" / "ide-host" / "src"), "**", "*.rs"
+    ), recursive=True):
+        text = read(source_path)
+        files[source_path] = text
+        consts.update(re.findall(
+            r'const\s+([A-Z_][A-Z0-9_]*)\s*:\s*&str\s*=\s*"([^"]+)"', text
+        ))
+    registered = {}
+    for source_path, text in files.items():
+        marks = list(re.finditer(
+            r'\.add\(\s*(?:"([a-zA-Z0-9_]+)"|([A-Z_][A-Z0-9_]*))', text
+        ))
+        for index, mark in enumerate(marks):
+            name = mark.group(1) or consts.get(mark.group(2))
+            if not name:
+                continue
+            end = marks[index + 1].start() if index + 1 < len(marks) else len(text)
+            registered[name] = text[mark.end():end]
+
     out = []
     for cmd, args in remote.items():
-        streaming = [a for a in args if a in ("channel", "sender") or a.startswith("on")]
+        block = registered.get(cmd, "")
+        actual = set(re.findall(r'c\.(?:sender|channel)\(\s*"([^"]+)"', block))
+        streaming = [arg for arg in args if arg in actual]
         if streaming:
             out.append((cmd, streaming))
     return sorted(out)

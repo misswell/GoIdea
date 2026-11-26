@@ -97,6 +97,180 @@ func TestTemplatePrefsRoundTripAndProjectSeed(t *testing.T) {
 	}
 }
 
+func TestTemplatePrefsPersistAdvancedTemplateState(t *testing.T) {
+	dir := t.TempDir()
+	prefs := defaultTemplatePrefs()
+	prefs.Live.ExpandWithTab = false
+	prefs.Live.ShowInCompletion = false
+	prefs.Live.Deleted = []string{"live.sout"}
+	prefs.Live.Custom = append(prefs.Live.Custom, LiveTemplate{
+		ID: "live.custom.variables", Group: "Team", Abbreviation: "team",
+		Name: "Team method", Body: "team($NAME$)$END$", Scope: "any",
+		Variables: []liveTemplateVariable{{
+			Name: "NAME", Expression: "className()", DefaultValue: `"value"`,
+			SkipIfDefined: true,
+		}},
+	})
+	scheme := prefs.Files.Schemes[prefs.Files.Default]
+	scheme.Templates[0].enabled = false
+	scheme.Templates[0].reformat = false
+	scheme.Templates[0].preferencesSet = true
+	scheme.Code = map[string]string{"License": "Copyright $YEAR$"}
+	prefs.Files.Schemes[prefs.Files.Default] = scheme
+	m := &Model{cfg: Config{SettingsPath: filepath.Join(dir, "settings.json")}}
+	if err := m.saveTemplates(prefs); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded := loadTemplatePrefs(m.templateRestorePath())
+	if loaded.Live.ExpandWithTab || loaded.Live.ShowInCompletion {
+		t.Fatalf("template options did not persist: %+v", loaded.Live)
+	}
+	if len(loaded.Live.Deleted) != 1 || loaded.Live.Deleted[0] != "live.sout" {
+		t.Fatalf("deleted templates = %v", loaded.Live.Deleted)
+	}
+	if len(loaded.Live.Custom) != 1 || len(loaded.Live.Custom[0].Variables) != 1 ||
+		loaded.Live.Custom[0].Variables[0].Expression != "className()" ||
+		!loaded.Live.Custom[0].Variables[0].SkipIfDefined {
+		t.Fatalf("template variables = %+v", loaded.Live.Custom)
+	}
+	loadedScheme := loaded.Files.Schemes[loaded.Files.Default]
+	if loadedScheme.Templates[0].enabled || loadedScheme.Templates[0].reformat {
+		t.Fatalf("file template options = %+v", loadedScheme.Templates[0])
+	}
+	if loadedScheme.Code["License"] != "Copyright $YEAR$" {
+		t.Fatalf("code templates = %+v", loadedScheme.Code)
+	}
+}
+
+func TestBackendLanguageMetadataAddsNativeFileTemplates(t *testing.T) {
+	prefs := defaultTemplatePrefs()
+	scheme := prefs.Files.effectiveScheme("")
+	got := appendLanguageFileTemplates(scheme, []openIDEALanguageInfo{
+		{
+			ID: "zig", Name: "Zig", Extensions: []string{"zig"},
+			ScratchTemplate: "const std = @import(\"std\");\n@end$",
+		},
+		{
+			ID: "makefile", Name: "Makefile", Filenames: []string{"Makefile"},
+			ScratchTemplate: "$end$",
+		},
+		{
+			ID: "go", Name: "Go", Extensions: []string{"go"},
+		},
+	})
+	var zig, makefile projectNewTemplate
+	for _, template := range got.Templates {
+		switch template.id {
+		case "language.zig":
+			zig = template
+		case "language.makefile":
+			makefile = template
+		}
+	}
+	if zig.extension != "zig" || zig.enabled != true || zig.reformat != true ||
+		!strings.Contains(zig.kinds[0].body, "@import") {
+		t.Fatalf("Zig language template = %+v", zig)
+	}
+	if makefile.extension != "" || makefile.name != "Makefile File" ||
+		!strings.Contains(makefile.keywords, "Makefile") {
+		t.Fatalf("filename language template = %+v", makefile)
+	}
+	count := 0
+	for _, template := range got.Templates {
+		if template.id == "language.go" {
+			count++
+		}
+	}
+	if count != 0 {
+		t.Fatal("backend metadata duplicated an existing native Go template")
+	}
+}
+
+func TestBackendLanguageTemplateEditMaterializesTheSelectedTemplate(t *testing.T) {
+	root := t.TempDir()
+	prefs := defaultTemplatePrefs()
+	m := &Model{templatePrefs: &prefs}
+	m.setRoot(root)
+	m.settingsDraft.templates = cloneTemplatePrefs(prefs)
+	m.fileTypesSettings.languages = []openIDEALanguageInfo{{
+		ID: "zig", Name: "Zig", Extensions: []string{"zig"},
+		ScratchTemplate: "$end$",
+	}}
+
+	view := m.settingsFileTemplateView()
+	index := fileTemplateIndexByID(view.Templates, "language.zig")
+	if index < 0 {
+		t.Fatal("backend language template is absent from the settings view")
+	}
+	before := len(prefs.Files.Schemes[prefs.Files.Default].Templates)
+	m.settingsTemplates.fileID = "language.zig"
+	m.mutateSettingsFileTemplateByID("language.zig", func(template *projectNewTemplate) {
+		template.name = "Custom Zig"
+		template.enabled = false
+	})
+
+	scheme := m.settingsDraft.templates.Files.Schemes[m.settingsDraft.templates.Files.Default]
+	if len(scheme.Templates) != before+1 {
+		t.Fatalf("materialized templates = %d, want %d", len(scheme.Templates), before+1)
+	}
+	index = fileTemplateIndexByID(scheme.Templates, "language.zig")
+	if index < 0 || scheme.Templates[index].name != "Custom Zig" ||
+		scheme.Templates[index].enabled {
+		t.Fatalf("materialized language template = %+v", scheme.Templates[index])
+	}
+	if scheme.Templates[0].name == "Custom Zig" {
+		t.Fatal("editing the dynamic template changed the first persisted template")
+	}
+}
+
+func TestDeletedLiveTemplateAndCompletionOptionAreRuntimeVisible(t *testing.T) {
+	prefs := defaultTemplatePrefs()
+	prefs.Live.Deleted = []string{"live.sout"}
+	if _, ok := prefs.liveTemplateByID("live.sout"); ok {
+		t.Fatal("deleted built-in live template remained active")
+	}
+	prefs.Live.ShowInCompletion = false
+	doc := docbridge.Virtual("/Example.java", "s")
+	m := &Model{
+		templatePrefs: &prefs,
+		tabs:          []*Tab{{doc: doc, state: &editor.State{Buffer: doc.Buffer()}}},
+	}
+	req := editor.CompletionRequest{Offset: 1, Prefix: "s", Version: doc.Buffer().Version()}
+	if _, items, _ := m.liveTemplateCompletionItems(m.tab(), req); len(items) != 0 {
+		t.Fatalf("completion-hidden templates = %+v", items)
+	}
+	prefs.Live.ShowInCompletion = true
+	if _, items, _ := m.liveTemplateCompletionItems(m.tab(), req); len(items) == 0 {
+		t.Fatal("live templates did not return after enabling completion")
+	}
+}
+
+func TestLiveTemplateTabExpansionNeedsAnExactUnambiguousAbbreviation(t *testing.T) {
+	prefs := defaultTemplatePrefs()
+	doc := docbridge.Virtual("/Example.go", "iferr\n")
+	state := &editor.State{Buffer: doc.Buffer()}
+	state.Select(len("iferr"), len("iferr"))
+	tab := &Tab{doc: doc, state: state}
+	m := &Model{templatePrefs: &prefs, tabs: []*Tab{tab}, active: 0}
+	if !m.expandTemplateAtCaret(tab, false) {
+		t.Fatal("Tab did not expand an exact live-template abbreviation")
+	}
+	if got := tab.state.Buffer.String(); !strings.Contains(got, "if err != nil") {
+		t.Fatalf("expanded Go template = %q", got)
+	}
+	prefs.Live.ExpandWithTab = false
+	doc2 := docbridge.Virtual("/Other.go", "iferr")
+	state2 := &editor.State{Buffer: doc2.Buffer()}
+	state2.Select(len("iferr"), len("iferr"))
+	tab2 := &Tab{doc: doc2, state: state2}
+	m.tabs = []*Tab{tab2}
+	m.active = 0
+	if m.tabTemplateInput(tab2, ui.InputEvent{Kind: ui.InputKeyDown, Key: ui.KeyTab}) {
+		t.Fatal("Tab expanded a template while the option was disabled")
+	}
+}
+
 func TestTemplateAbbreviationsHonorCaseSensitivity(t *testing.T) {
 	prefs := defaultTemplatePrefs()
 	prefs.Live.Custom = append(prefs.Live.Custom, LiveTemplate{

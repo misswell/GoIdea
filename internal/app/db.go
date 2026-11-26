@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -246,7 +247,7 @@ func (m *Model) closeDatabase() {
 // RefreshDBSources rereads the project's data sources and which are connected.
 func (m *Model) RefreshDBSources() {
 	v := m.db
-	if v == nil {
+	if v == nil || (m.mgr == nil && m.invokeHook == nil) {
 		return
 	}
 	v.loading = true
@@ -254,8 +255,15 @@ func (m *Model) RefreshDBSources() {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
-		sources, err := m.mgr.DBSources(ctx, Window)
-		connected, _ := m.mgr.DBConnected(ctx, Window)
+		raw, err := m.invoke(ctx, "db_sources", nil)
+		var sources []openidea.DataSource
+		if err == nil {
+			err = json.Unmarshal(raw, &sources)
+		}
+		var connected []string
+		if raw, connectedErr := m.invoke(ctx, "db_connected", nil); connectedErr == nil {
+			_ = json.Unmarshal(raw, &connected)
+		}
 		m.post(func() {
 			if m.db != v {
 				return

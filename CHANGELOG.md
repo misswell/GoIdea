@@ -3,6 +3,22 @@
 The GitHub release notes, which **Help › What's New** shows, come from the
 `## <version>` section here. Every release needs one, or its build fails.
 
+## Unreleased
+
+- Project windows now return to Welcome after the last project closes and preserve state on backend failure.
+- Welcome recents, groups, startup restore, file drops and New Project now follow OpenIDEA's window lifecycle.
+- `file.openProjectPath` now honors explicit current- and new-window requests with the ordinary guards.
+- Tool-window drag previews no longer leave the status bar stuck on “Release to dock…”.
+- Update downloads stay visible until dismissed and offer **Don't Show Again**, matching OpenIDEA.
+- Plugin content tabs now open editable or read-only native editors with Save, actions and diff results.
+- Project trust, indexing, VCS, language-server, notification and settings events now update native state live.
+- VCS diff windows, shelf diffs, selected-line history, revision compare and push-to-commit now match OpenIDEA.
+- Find, navigation, refactor, folding, statement, word, element and overwrite actions now have native handlers.
+- File and Live Templates now support native add, edit, copy, remove, scopes and expansion.
+- Inspections, code-editing highlights and code-style indentation now honor their settings at runtime.
+- Rich-text copy now places HTML and plain text together on the clipboard.
+- Python docstring formats and interpreter virtualization now apply to documentation, runs and terminals.
+
 ## 0.1.44
 
 - Java and other language tools are installed once and reused by every project window.

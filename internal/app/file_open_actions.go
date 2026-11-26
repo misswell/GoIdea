@@ -37,6 +37,45 @@ func (m *Model) OpenFile() {
 // openPaths handles files and dropped folders like OpenIDEA: files open as
 // documents, and the first folder opens as the current project.
 func (m *Model) openPaths(paths []string) {
+	m.openPathsThen(paths, nil)
+}
+
+// OpenDroppedPaths is the OS drop entry point. A folder opens with the same
+// project choice as other open actions. Files open as LightEdit documents;
+// project files use the same editor and document registry.
+func (m *Model) OpenDroppedPaths(paths []string) {
+	m.openDroppedPathsWithFiles(paths, func(files []string) {
+		m.openPathsThen(files, nil)
+	})
+}
+
+func (m *Model) openDroppedPathsWithFiles(paths []string, openFiles func([]string)) {
+	var files []string
+	for _, path := range paths {
+		if strings.TrimSpace(path) == "" {
+			continue
+		}
+		clean := realPath(path)
+		if info, err := os.Stat(clean); err == nil && info.IsDir() {
+			m.openDroppedFolder(clean)
+			return
+		}
+		files = append(files, clean)
+	}
+	if len(files) > 0 {
+		openFiles(files)
+	}
+}
+
+func (m *Model) openDroppedFolder(dir string) {
+	if m.openDroppedFolderHook != nil {
+		m.openDroppedFolderHook(dir)
+		return
+	}
+	m.confirmSwitch(dir)
+}
+
+func (m *Model) openPathsThen(paths []string, done func()) {
 	var files []string
 	var dir string
 	seen := make(map[string]bool)
@@ -71,12 +110,18 @@ func (m *Model) openPaths(paths []string) {
 		m.openBatch(files, func() {
 			if dir != "" {
 				m.confirmSwitch(dir)
+			} else if done != nil {
+				done()
 			}
 		})
 		return
 	}
 	if dir != "" {
 		m.confirmSwitch(dir)
+		return
+	}
+	if done != nil {
+		done()
 	}
 }
 
@@ -106,10 +151,36 @@ func (m *Model) openBatch(paths []string, done func()) {
 	next(0)
 }
 
-func (m *Model) openProjectPath(path string) {
-	if strings.TrimSpace(path) != "" {
-		m.confirmSwitch(realPath(path))
+type openProjectPathRequest struct {
+	path      string
+	newWindow *bool
+}
+
+// openProjectPath preserves the upstream action's two forms. A string follows
+// the Open Project In policy; an object with a boolean newWindow is explicit:
+// true always creates a window, false replaces this window after the normal
+// unsaved and running-work guards.
+func (m *Model) projectPathRequest(request openProjectPathRequest) {
+	path := strings.TrimSpace(request.path)
+	if path == "" {
+		return
 	}
+	clean := strings.TrimSpace(path)
+	if abs, err := filepath.Abs(clean); err == nil {
+		clean = filepath.Clean(abs)
+	}
+	if request.newWindow == nil {
+		m.confirmSwitch(clean)
+		return
+	}
+	if *request.newWindow {
+		if !m.openProjectInNativeWindow(clean, nil) && m.workspaceHost != nil {
+			m.status = "Could not open another project window"
+			m.invalidate()
+		}
+		return
+	}
+	m.confirmSwitchDirect(clean, nil)
 }
 
 func stringPaths(arg any) []string {
@@ -133,13 +204,22 @@ func stringPaths(arg any) []string {
 }
 
 func projectPathArg(arg any) string {
+	return openProjectPathRequestArg(arg).path
+}
+
+func openProjectPathRequestArg(arg any) openProjectPathRequest {
 	switch value := arg.(type) {
 	case string:
-		return value
+		return openProjectPathRequest{path: value}
 	case map[string]any:
 		path, _ := value["path"].(string)
-		return path
+		newWindow, ok := value["newWindow"].(bool)
+		request := openProjectPathRequest{path: path}
+		if ok {
+			request.newWindow = &newWindow
+		}
+		return request
 	default:
-		return ""
+		return openProjectPathRequest{}
 	}
 }

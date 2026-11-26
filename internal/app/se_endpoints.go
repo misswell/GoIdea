@@ -142,6 +142,9 @@ func (m *Model) seQueryEndpoints(seq int, query string) {
 // acceptPluginEvent refreshes the native contributions whose backend state
 // changed.
 func (m *Model) acceptPluginEvent(data json.RawMessage) {
+	if m.acceptPluginContentEvent(data) {
+		return
+	}
 	var event struct {
 		Type string `json:"type"`
 	}

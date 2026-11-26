@@ -4,9 +4,11 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/ui"
 
 	"mayoi/internal/app"
 )
@@ -113,6 +115,30 @@ func TestGoideaWindowUsesOpenIDEAChrome(t *testing.T) {
 	}
 }
 
+func TestAuxiliaryDiffWindowIsTransientChildSurface(t *testing.T) {
+	parent := &mygo.Window{}
+	options := auxiliaryDiffWindowOptions(
+		"Diff – A.java",
+		parent,
+		ui.View(func(*ui.Context) {}),
+	)
+	if options.Parent != parent || options.Title != "Diff – A.java" {
+		t.Fatalf("auxiliary diff owner/title = %p %q", options.Parent, options.Title)
+	}
+	if options.Width != 1080 || options.Height != 720 ||
+		options.MinWidth != 520 || options.MinHeight != 320 {
+		t.Fatalf("auxiliary diff bounds = %dx%d min %dx%d",
+			options.Width, options.Height, options.MinWidth, options.MinHeight)
+	}
+	if options.TitleBarStyle != mygo.TitleBarHidden || options.TrafficLightPosition == nil ||
+		options.Content == nil {
+		t.Fatalf("auxiliary diff chrome/content = %+v", options)
+	}
+	if !strings.Contains(options.Title, filepath.Base("A.java")) {
+		t.Fatalf("auxiliary diff title lost the file: %q", options.Title)
+	}
+}
+
 func TestWorkspaceWindowsOnlyIncludesTheModelsGroup(t *testing.T) {
 	first, second, other, standalone := &app.Model{}, &app.Model{}, &app.Model{}, &app.Model{}
 	host := &nativeWindowHost{
@@ -184,5 +210,36 @@ func TestWindowGroupActionsOnNativeHost(t *testing.T) {
 	}
 	if a.model.ActionEnabled("window.closeTab") || a.model.ActionEnabled("window.detachTab") {
 		t.Fatal("standalone project still has group actions")
+	}
+}
+
+func TestProjectWindowAtResolvesSymlinkedRoot(t *testing.T) {
+	dir := t.TempDir()
+	root := filepath.Join(dir, "project")
+	link := filepath.Join(dir, "project-link")
+	if err := os.Mkdir(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(root, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	model := app.New(app.Config{DataDir: t.TempDir(), FreshSession: true})
+	t.Cleanup(model.QuitImmediately)
+	model.SetRootForTest(root)
+	entry := &nativeProjectWindow{id: "main", model: model, win: &mygo.Window{}}
+	host := &nativeWindowHost{windows: []*nativeProjectWindow{entry}}
+	if got := host.projectWindowAt(link); got != entry {
+		t.Fatalf("symlink resolved to %+v, want %+v", got, entry)
+	}
+	if got := host.projectWindowAt(filepath.Join(dir, "missing")); got != nil {
+		t.Fatalf("missing project resolved to %+v", got)
+	}
+}
+
+func TestCanonicalProjectPathIsAbsoluteAndStable(t *testing.T) {
+	root := t.TempDir()
+	got := canonicalProjectPath(filepath.Join(root, ".", "child", ".."))
+	if got != canonicalProjectPath(root) || !filepath.IsAbs(got) {
+		t.Fatalf("canonical path = %q from %q", got, root)
 	}
 }

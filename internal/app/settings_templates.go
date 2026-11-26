@@ -16,15 +16,20 @@ type templateSettingsUI struct {
 	fileID          string
 	fileKind        int
 	fileIncludes    bool
+	fileCode        bool
 	projectFileView bool
 }
 
 func cloneTemplatePrefs(prefs TemplatePrefs) TemplatePrefs {
 	prefs = normalizeTemplatePrefs(prefs)
 	prefs.Live.Disabled = append([]string(nil), prefs.Live.Disabled...)
+	prefs.Live.Deleted = append([]string(nil), prefs.Live.Deleted...)
 	prefs.Live.Custom = append([]LiveTemplate(nil), prefs.Live.Custom...)
 	for i := range prefs.Live.Custom {
 		prefs.Live.Custom[i].Contexts = append([]string(nil), prefs.Live.Custom[i].Contexts...)
+		prefs.Live.Custom[i].Variables = append(
+			[]liveTemplateVariable(nil), prefs.Live.Custom[i].Variables...,
+		)
 	}
 	prefs.Postfix.Disabled = append([]string(nil), prefs.Postfix.Disabled...)
 	schemes := make(map[string]FileTemplateScheme, len(prefs.Files.Schemes))
@@ -79,6 +84,43 @@ func (m *Model) settingsFileTemplateScheme() *FileTemplateScheme {
 	return &scheme
 }
 
+func (m *Model) settingsFileTemplateView() FileTemplateScheme {
+	scheme := cloneFileTemplateScheme(*m.settingsFileTemplateScheme())
+	return appendLanguageFileTemplates(scheme, m.fileTypesSettings.languages)
+}
+
+func (m *Model) materializeSettingsFileTemplate(id string) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return
+	}
+	view := m.settingsFileTemplateView()
+	index := fileTemplateIndexByID(view.Templates, id)
+	if index < 0 {
+		return
+	}
+	template := cloneProjectNewTemplate(view.Templates[index])
+	m.mutateSettingsFileTemplateScheme(func(scheme *FileTemplateScheme) {
+		if fileTemplateIndexByID(scheme.Templates, id) >= 0 {
+			return
+		}
+		scheme.Templates = append(scheme.Templates, template)
+	})
+}
+
+func (m *Model) mutateSettingsFileTemplateByID(
+	id string,
+	edit func(*projectNewTemplate),
+) {
+	m.materializeSettingsFileTemplate(id)
+	m.mutateSettingsFileTemplateScheme(func(scheme *FileTemplateScheme) {
+		index := fileTemplateIndexByID(scheme.Templates, id)
+		if index >= 0 {
+			edit(&scheme.Templates[index])
+		}
+	})
+}
+
 // mutateSettingsFileTemplateScheme edits the chosen view rather than a copy.
 func (m *Model) mutateSettingsFileTemplateScheme(edit func(*FileTemplateScheme)) {
 	m.ensureSettingsFileTemplateScheme()
@@ -119,6 +161,16 @@ func (m *Model) settingsLiveTemplatesBody(c *ui.Context, oi oiColors) {
 		remove.Disabled(m.settingsTemplates.liveID == "")
 		remove.OnClick(m.removeSettingsLiveTemplate)
 	})
+	expandWithTab := prefs.ExpandWithTab
+	if ui.Checkbox(c, &expandWithTab, "Expand abbreviations with Tab").Changed() {
+		prefs.ExpandWithTab = expandWithTab
+		m.invalidate()
+	}
+	showInCompletion := prefs.ShowInCompletion
+	if ui.Checkbox(c, &showInCompletion, "Show live templates in code completion").Changed() {
+		prefs.ShowInCompletion = showInCompletion
+		m.invalidate()
+	}
 	templates := m.settingsLiveTemplateRows()
 	m.ensureSettingsLiveSelection(templates)
 	ui.Row(c).MinHeight(24).Gap(8).AlignItems(ui.Center).PaddingStart(4).Children(func() {
@@ -169,6 +221,7 @@ func (m *Model) settingsLiveTemplatesBody(c *ui.Context, oi oiColors) {
 	settingsSectionTitle(c, oi, "Template Text")
 	changed := templateFieldChanged(c, oi, "Abbreviation", &edit.Abbreviation, "sout")
 	changed = templateFieldChanged(c, oi, "Description", &edit.Name, "Print expression") || changed
+	changed = templateFieldChanged(c, oi, "Group", &edit.Group, "Java") || changed
 	changed = templateFieldChanged(c, oi, "Template text", &edit.Body, "$END$") || changed
 	contexts := strings.Join(edit.Contexts, ", ")
 	if templateFieldChanged(c, oi, "Contexts", &contexts, "java, go, html (empty = all)") {
@@ -177,6 +230,35 @@ func (m *Model) settingsLiveTemplatesBody(c *ui.Context, oi oiColors) {
 	}
 	if changed {
 		m.commitSettingsLiveTemplate(edit)
+	}
+	scopeAny := edit.Scope == "any"
+	if ui.Checkbox(c, &scopeAny, "Also expand in comments and strings").Changed() {
+		if scopeAny {
+			edit.Scope = "any"
+		} else {
+			edit.Scope = "code"
+		}
+		m.commitSettingsLiveTemplate(edit)
+	}
+	if len(edit.Variables) > 0 {
+		settingsSectionTitle(c, oi, "Variables")
+		for index := range edit.Variables {
+			variable := &edit.Variables[index]
+			variableChanged := templateFieldChanged(c, oi, variable.Name+" expression",
+				&variable.Expression, "className()")
+			variableChanged = templateFieldChanged(c, oi, variable.Name+" default",
+				&variable.DefaultValue, `"value"`) || variableChanged
+			skip := variable.SkipIfDefined
+			if ui.Checkbox(c, &skip, "Skip "+variable.Name+" if defined").Changed() {
+				variable.SkipIfDefined = skip
+				variableChanged = true
+			}
+			if variableChanged {
+				edit.Variables[index] = *variable
+				m.commitSettingsLiveTemplate(edit)
+				edit, _ = m.settingsLiveTemplate(edit.ID)
+			}
+		}
 	}
 	ui.Text(c, "Use $END$ for the final caret and $SELECTION$ in surround templates. "+
 		"Repeated variables select the same field after explicit expansion.").
@@ -254,9 +336,8 @@ func (m *Model) settingsFileTemplatesBody(c *ui.Context, oi oiColors) {
 	ui.Text(c, "A project scheme is copied from Default when first opened and then keeps its own edits.").
 		FontSize(11).TextColor(oi.textMuted).MaxWidth(760).Wrap()
 
-	m.ensureSettingsFileTemplateScheme()
-	scheme := m.settingsFileTemplateScheme()
-	m.ensureSettingsFileSelection(scheme)
+	scheme := m.settingsFileTemplateView()
+	m.ensureSettingsFileSelection(&scheme)
 	settingsSectionTitle(c, oi, "Files")
 	ui.Row(c).MinHeight(30).Gap(6).AlignItems(ui.Center).Children(func() {
 		ui.Button(c, "＋ File").OnClick(m.addSettingsFileTemplate)
@@ -267,6 +348,7 @@ func (m *Model) settingsFileTemplatesBody(c *ui.Context, oi oiColors) {
 		remove.Disabled(m.settingsTemplates.fileID == "")
 		remove.OnClick(m.removeSettingsFileTemplate)
 		ui.Button(c, "＋ Include").OnClick(m.addSettingsFileInclude)
+		ui.Button(c, "＋ Code").OnClick(m.addSettingsFileCodeTemplate)
 	})
 	ui.Row(c).Height(150).Gap(10).AlignItems(ui.Stretch).Children(func() {
 		ui.Scroll(c).Width(250).Border(1, oi.border).Children(func() {
@@ -281,6 +363,12 @@ func (m *Model) settingsFileTemplatesBody(c *ui.Context, oi oiColors) {
 						row.Background(oi.hover)
 					}
 					row.Children(func() {
+						on := template.enabled
+						if ui.Checkbox(c, &on, "").Changed() {
+							m.mutateSettingsFileTemplateByID(template.id, func(updated *projectNewTemplate) {
+								updated.enabled = on
+							})
+						}
 						fileIconEl(c, oi, "file."+template.extension, 15, oi.textMuted)
 						ui.Text(c, template.name).FontSize(11.5).TextColor(oi.text).
 							Grow(1).SingleLine().Ellipsis("…")
@@ -288,6 +376,7 @@ func (m *Model) settingsFileTemplatesBody(c *ui.Context, oi oiColors) {
 					if row.Clicked() {
 						m.settingsTemplates.fileID = template.id
 						m.settingsTemplates.fileIncludes = false
+						m.settingsTemplates.fileCode = false
 						m.settingsTemplates.fileKind = 0
 						m.invalidate()
 					}
@@ -301,7 +390,8 @@ func (m *Model) settingsFileTemplatesBody(c *ui.Context, oi oiColors) {
 					name := name
 					row := ui.Row(c.Key("settings:file-include:"+name)).Height(26).
 						Padding(0, 7).AlignItems(ui.Center)
-					if m.settingsTemplates.fileIncludes && m.settingsTemplates.fileID == name {
+					if m.settingsTemplates.fileIncludes && !m.settingsTemplates.fileCode &&
+						m.settingsTemplates.fileID == name {
 						row.Background(oi.selected)
 					} else if row.Hovered() {
 						row.Background(oi.hover)
@@ -314,6 +404,34 @@ func (m *Model) settingsFileTemplatesBody(c *ui.Context, oi oiColors) {
 					if row.Clicked() {
 						m.settingsTemplates.fileID = name
 						m.settingsTemplates.fileIncludes = true
+						m.settingsTemplates.fileCode = false
+						m.invalidate()
+					}
+				}
+				codeNames := make([]string, 0, len(scheme.Code))
+				for name := range scheme.Code {
+					codeNames = append(codeNames, name)
+				}
+				sort.Strings(codeNames)
+				for _, name := range codeNames {
+					name := name
+					row := ui.Row(c.Key("settings:file-code:"+name)).Height(26).
+						Padding(0, 7).AlignItems(ui.Center)
+					if m.settingsTemplates.fileIncludes && m.settingsTemplates.fileCode &&
+						m.settingsTemplates.fileID == name {
+						row.Background(oi.selected)
+					} else if row.Hovered() {
+						row.Background(oi.hover)
+					}
+					row.Children(func() {
+						oiIconEl(c, "nodes/template", 15, oi, oi.textMuted)
+						ui.Text(c, name).FontSize(11.5).Font("monospace").TextColor(oi.text).
+							Grow(1).SingleLine().Ellipsis("…")
+					})
+					if row.Clicked() {
+						m.settingsTemplates.fileID = name
+						m.settingsTemplates.fileIncludes = true
+						m.settingsTemplates.fileCode = true
 						m.invalidate()
 					}
 				}
@@ -321,9 +439,9 @@ func (m *Model) settingsFileTemplatesBody(c *ui.Context, oi oiColors) {
 		})
 		ui.Column(c).Grow(1).MinWidth(0).Children(func() {
 			if m.settingsTemplates.fileIncludes {
-				m.settingsFileIncludeEditor(c, oi, scheme)
+				m.settingsFileIncludeEditor(c, oi, &scheme)
 			} else {
-				m.settingsFileTemplateEditor(c, oi, scheme)
+				m.settingsFileTemplateEditor(c, oi, &scheme)
 			}
 		})
 	})
@@ -337,16 +455,13 @@ func (m *Model) settingsFileTemplateEditor(c *ui.Context, oi oiColors, scheme *F
 		return
 	}
 	template := &scheme.Templates[index]
+	templateID := template.id
 	if template.kinds == nil {
 		template.kinds = []projectNewKind{{id: "file", label: "File", body: "$END$"}}
 	}
 	m.settingsTemplates.fileKind = min(max(0, m.settingsTemplates.fileKind), len(template.kinds)-1)
 	updateTemplate := func(label, value string) {
-		m.mutateSettingsFileTemplateScheme(func(updated *FileTemplateScheme) {
-			if index >= len(updated.Templates) {
-				return
-			}
-			target := &updated.Templates[index]
+		m.mutateSettingsFileTemplateByID(templateID, func(target *projectNewTemplate) {
 			switch label {
 			case "Name":
 				target.name = value
@@ -373,6 +488,18 @@ func (m *Model) settingsFileTemplateEditor(c *ui.Context, oi oiColors, scheme *F
 	row("Name", template.name, "Java File")
 	row("Extension", template.extension, "java")
 	row("Default name", template.defaultName, "Main")
+	enabled := template.enabled
+	if ui.Checkbox(c, &enabled, "Enabled").Changed() {
+		m.mutateSettingsFileTemplateByID(templateID, func(target *projectNewTemplate) {
+			target.enabled = enabled
+		})
+	}
+	reformat := template.reformat
+	if ui.Checkbox(c, &reformat, "Reformat according to style").Changed() {
+		m.mutateSettingsFileTemplateByID(templateID, func(target *projectNewTemplate) {
+			target.reformat = reformat
+		})
+	}
 	ui.Row(c).MinHeight(30).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Name style", 120)
 		style := template.nameStyle
@@ -381,10 +508,8 @@ func (m *Model) settingsFileTemplateEditor(c *ui.Context, oi oiColors, scheme *F
 		}
 		selectInput := ui.Select(c, &style, []string{"asis", "snake", "pascal"}).Width(140)
 		if selectInput.Changed() {
-			m.mutateSettingsFileTemplateScheme(func(updated *FileTemplateScheme) {
-				if index < len(updated.Templates) {
-					updated.Templates[index].nameStyle = style
-				}
+			m.mutateSettingsFileTemplateByID(templateID, func(target *projectNewTemplate) {
+				target.nameStyle = style
 			})
 		}
 	})
@@ -393,10 +518,8 @@ func (m *Model) settingsFileTemplateEditor(c *ui.Context, oi oiColors, scheme *F
 		style := template.packageStyle
 		selectInput := ui.Select(c, &style, []string{"", "jvm", "go", "php"}).Width(140)
 		if selectInput.Changed() {
-			m.mutateSettingsFileTemplateScheme(func(updated *FileTemplateScheme) {
-				if index < len(updated.Templates) {
-					updated.Templates[index].packageStyle = style
-				}
+			m.mutateSettingsFileTemplateByID(templateID, func(target *projectNewTemplate) {
+				target.packageStyle = style
 			})
 		}
 	})
@@ -417,12 +540,9 @@ func (m *Model) settingsFileTemplateEditor(c *ui.Context, oi oiColors, scheme *F
 			}
 		}
 		ui.Button(c, "＋").OnClick(func() {
-			m.mutateSettingsFileTemplateScheme(func(updated *FileTemplateScheme) {
-				if index >= len(updated.Templates) {
-					return
-				}
-				updated.Templates[index].kinds = append(updated.Templates[index].kinds, projectNewKind{
-					id:    fmt.Sprintf("kind-%d", len(updated.Templates[index].kinds)+1),
+			m.mutateSettingsFileTemplateByID(templateID, func(target *projectNewTemplate) {
+				target.kinds = append(target.kinds, projectNewKind{
+					id:    fmt.Sprintf("kind-%d", len(target.kinds)+1),
 					label: "New kind", body: "$END$",
 				})
 			})
@@ -430,13 +550,13 @@ func (m *Model) settingsFileTemplateEditor(c *ui.Context, oi oiColors, scheme *F
 		remove := ui.Button(c, "−")
 		remove.Disabled(len(template.kinds) == 1)
 		remove.OnClick(func() {
-			m.mutateSettingsFileTemplateScheme(func(updated *FileTemplateScheme) {
-				if index >= len(updated.Templates) || len(updated.Templates[index].kinds) <= 1 {
+			m.mutateSettingsFileTemplateByID(templateID, func(target *projectNewTemplate) {
+				if len(target.kinds) <= 1 {
 					return
 				}
-				kinds := updated.Templates[index].kinds
+				kinds := target.kinds
 				kind := m.settingsTemplates.fileKind
-				updated.Templates[index].kinds = append(kinds[:kind], kinds[kind+1:]...)
+				target.kinds = append(kinds[:kind], kinds[kind+1:]...)
 			})
 			m.settingsTemplates.fileKind = 0
 		})
@@ -452,9 +572,9 @@ func (m *Model) settingsFileTemplateEditor(c *ui.Context, oi oiColors, scheme *F
 			}
 			if mutateText != *value {
 				valueCopy := mutateText
-				m.mutateSettingsFileTemplateScheme(func(updated *FileTemplateScheme) {
-					if index < len(updated.Templates) && m.settingsTemplates.fileKind < len(updated.Templates[index].kinds) {
-						mutateKindField(&updated.Templates[index].kinds[m.settingsTemplates.fileKind], label, valueCopy)
+				m.mutateSettingsFileTemplateByID(templateID, func(target *projectNewTemplate) {
+					if m.settingsTemplates.fileKind < len(target.kinds) {
+						mutateKindField(&target.kinds[m.settingsTemplates.fileKind], label, valueCopy)
 					}
 				})
 			}
@@ -466,12 +586,21 @@ func (m *Model) settingsFileTemplateEditor(c *ui.Context, oi oiColors, scheme *F
 	body := kind.body
 	area := ui.TextArea(c, &body).Height(130).Font("monospace").FontSize(11.5)
 	if area.Changed() {
-		m.mutateSettingsFileTemplateScheme(func(updated *FileTemplateScheme) {
-			if index < len(updated.Templates) && m.settingsTemplates.fileKind < len(updated.Templates[index].kinds) {
-				updated.Templates[index].kinds[m.settingsTemplates.fileKind].body = body
+		m.mutateSettingsFileTemplateByID(templateID, func(target *projectNewTemplate) {
+			if m.settingsTemplates.fileKind < len(target.kinds) {
+				target.kinds[m.settingsTemplates.fileKind].body = body
 			}
 		})
 	}
+}
+
+func fileTemplateIndexByID(templates []projectNewTemplate, id string) int {
+	for i := range templates {
+		if templates[i].id == id {
+			return i
+		}
+	}
+	return -1
 }
 
 func mutateKindField(kind *projectNewKind, label, value string) {
@@ -486,6 +615,9 @@ func mutateKindField(kind *projectNewKind, label, value string) {
 func (m *Model) settingsFileIncludeEditor(c *ui.Context, oi oiColors, scheme *FileTemplateScheme) {
 	name := m.settingsTemplates.fileID
 	body, ok := scheme.Includes[name]
+	if m.settingsTemplates.fileCode {
+		body, ok = scheme.Code[name]
+	}
 	if !ok {
 		return
 	}
@@ -495,24 +627,42 @@ func (m *Model) settingsFileIncludeEditor(c *ui.Context, oi oiColors, scheme *Fi
 		ui.TextInput(c, &newName)
 		if newName != name && strings.TrimSpace(newName) != "" {
 			m.mutateSettingsFileTemplateScheme(func(updated *FileTemplateScheme) {
-				value := updated.Includes[name]
-				delete(updated.Includes, name)
-				updated.Includes[strings.TrimSpace(newName)] = value
+				if m.settingsTemplates.fileCode {
+					value := updated.Code[name]
+					delete(updated.Code, name)
+					updated.Code[strings.TrimSpace(newName)] = value
+				} else {
+					value := updated.Includes[name]
+					delete(updated.Includes, name)
+					updated.Includes[strings.TrimSpace(newName)] = value
+				}
 			})
 			m.settingsTemplates.fileID = strings.TrimSpace(newName)
 		}
 		ui.Button(c, "Remove").OnClick(func() {
 			m.mutateSettingsFileTemplateScheme(func(updated *FileTemplateScheme) {
-				delete(updated.Includes, name)
+				if m.settingsTemplates.fileCode {
+					delete(updated.Code, name)
+				} else {
+					delete(updated.Includes, name)
+				}
 			})
 			m.settingsTemplates.fileID = ""
 			m.settingsTemplates.fileIncludes = false
+			m.settingsTemplates.fileCode = false
 		})
 	})
 	area := ui.TextArea(c, &body).Grow(1).MinHeight(120).Font("monospace").FontSize(11.5)
 	if area.Changed() {
 		m.mutateSettingsFileTemplateScheme(func(updated *FileTemplateScheme) {
-			updated.Includes[name] = body
+			if m.settingsTemplates.fileCode {
+				if updated.Code == nil {
+					updated.Code = map[string]string{}
+				}
+				updated.Code[name] = body
+			} else {
+				updated.Includes[name] = body
+			}
 		})
 	}
 	ui.Text(c, "Reference this text in a kind with #parse(\"Include name\").").
@@ -547,24 +697,7 @@ func splitTemplateContexts(value string) []string {
 }
 
 func (m *Model) settingsLiveTemplateRows() []LiveTemplate {
-	byID := map[string]LiveTemplate{}
-	for _, template := range defaultLiveTemplates {
-		byID[template.ID] = template
-	}
-	for _, template := range m.settingsDraft.templates.Live.Custom {
-		byID[template.ID] = template
-	}
-	out := make([]LiveTemplate, 0, len(byID))
-	for _, template := range byID {
-		out = append(out, template)
-	}
-	sort.SliceStable(out, func(i, j int) bool {
-		if out[i].Abbreviation == out[j].Abbreviation {
-			return out[i].Name < out[j].Name
-		}
-		return out[i].Abbreviation < out[j].Abbreviation
-	})
-	return out
+	return m.settingsDraft.templates.liveTemplatesForSettings()
 }
 
 func (m *Model) ensureSettingsLiveSelection(templates []LiveTemplate) {
@@ -630,7 +763,14 @@ func (m *Model) commitSettingsLiveTemplate(edited LiveTemplate) {
 
 func (m *Model) addSettingsLiveTemplate() {
 	id := fmt.Sprintf("live.custom.%d", len(m.settingsDraft.templates.Live.Custom)+1)
-	template := LiveTemplate{ID: id, Abbreviation: "tpl", Name: "New live template", Body: "$END$"}
+	group := "User"
+	if selected, ok := m.settingsLiveTemplate(m.settingsTemplates.liveID); ok && selected.Group != "" {
+		group = selected.Group
+	}
+	template := LiveTemplate{
+		ID: id, Group: group, Abbreviation: "tpl", Name: "New live template",
+		Body: "$END$", Scope: "code",
+	}
 	m.settingsDraft.templates.Live.Custom = append(m.settingsDraft.templates.Live.Custom, template)
 	m.settingsTemplates.liveID = id
 	m.invalidate()
@@ -654,16 +794,36 @@ func (m *Model) removeSettingsLiveTemplate() {
 	if id == "" {
 		return
 	}
-	custom := m.settingsDraft.templates.Live.Custom
+	live := &m.settingsDraft.templates.Live
+	custom := live.Custom
 	for i := range custom {
 		if custom[i].ID == id {
-			m.settingsDraft.templates.Live.Custom = append(custom[:i], custom[i+1:]...)
+			live.Custom = append(custom[:i], custom[i+1:]...)
 			m.settingsTemplates.liveID = ""
 			m.invalidate()
 			return
 		}
 	}
-	m.setSettingsTemplateEnabled(m.settingsDraft.templates.Live.Disabled, id, false)
+	for _, template := range defaultLiveTemplates {
+		if template.ID == id {
+			live.Deleted = uniqueStrings(append(live.Deleted, id))
+			live.Disabled = removeTemplateID(live.Disabled, id)
+			m.settingsTemplates.liveID = ""
+			m.invalidate()
+			return
+		}
+	}
+	m.setSettingsTemplateEnabled(live.Disabled, id, false)
+}
+
+func removeTemplateID(values []string, id string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if value != id {
+			out = append(out, value)
+		}
+	}
+	return out
 }
 
 func (m *Model) setSettingsTemplateEnabled(disabled []string, id string, enabled bool) {
@@ -691,8 +851,13 @@ func (m *Model) setSettingsTemplateEnabled(disabled []string, id string, enabled
 
 func (m *Model) ensureSettingsFileSelection(scheme *FileTemplateScheme) {
 	if m.settingsTemplates.fileIncludes {
-		if _, ok := scheme.Includes[m.settingsTemplates.fileID]; !ok {
+		fragments := scheme.Includes
+		if m.settingsTemplates.fileCode {
+			fragments = scheme.Code
+		}
+		if _, ok := fragments[m.settingsTemplates.fileID]; !ok {
 			m.settingsTemplates.fileIncludes = false
+			m.settingsTemplates.fileCode = false
 			m.settingsTemplates.fileID = ""
 		}
 	}
@@ -720,28 +885,33 @@ func (m *Model) addSettingsFileTemplate() {
 	m.mutateSettingsFileTemplateScheme(func(scheme *FileTemplateScheme) {
 		scheme.Templates = append(scheme.Templates, projectNewTemplate{
 			id: id, name: "New File", extension: "txt", nameStyle: "asis",
+			enabled: true, reformat: true, preferencesSet: true,
 			kinds: []projectNewKind{{id: "file", label: "File", body: "$END$"}},
 		})
 	})
 	m.settingsTemplates.fileID = id
 	m.settingsTemplates.fileIncludes = false
+	m.settingsTemplates.fileCode = false
 	m.settingsTemplates.fileKind = 0
 	m.invalidate()
 }
 
 func (m *Model) copySettingsFileTemplate() {
-	scheme := m.settingsFileTemplateScheme()
-	index := m.settingsFileTemplateIndex(scheme)
+	scheme := m.settingsFileTemplateView()
+	index := fileTemplateIndexByID(scheme.Templates, m.settingsTemplates.fileID)
 	if index < 0 {
 		return
 	}
 	clone := cloneProjectNewTemplate(scheme.Templates[index])
 	clone.id = fmt.Sprintf("%s-copy-%d", clone.id, len(scheme.Templates)+1)
 	clone.name += " (copy)"
+	m.materializeSettingsFileTemplate(scheme.Templates[index].id)
 	m.mutateSettingsFileTemplateScheme(func(updated *FileTemplateScheme) {
 		updated.Templates = append(updated.Templates, clone)
 	})
 	m.settingsTemplates.fileID = clone.id
+	m.settingsTemplates.fileIncludes = false
+	m.settingsTemplates.fileCode = false
 	m.invalidate()
 }
 
@@ -750,6 +920,7 @@ func (m *Model) removeSettingsFileTemplate() {
 	if id == "" {
 		return
 	}
+	m.materializeSettingsFileTemplate(id)
 	m.mutateSettingsFileTemplateScheme(func(scheme *FileTemplateScheme) {
 		for i := range scheme.Templates {
 			if scheme.Templates[i].id == id && len(scheme.Templates) > 1 {
@@ -759,6 +930,8 @@ func (m *Model) removeSettingsFileTemplate() {
 		}
 	})
 	m.settingsTemplates.fileID = ""
+	m.settingsTemplates.fileIncludes = false
+	m.settingsTemplates.fileCode = false
 	m.invalidate()
 }
 
@@ -779,6 +952,28 @@ func (m *Model) addSettingsFileInclude() {
 	})
 	m.settingsTemplates.fileID = name
 	m.settingsTemplates.fileIncludes = true
+	m.settingsTemplates.fileCode = false
+	m.invalidate()
+}
+
+func (m *Model) addSettingsFileCodeTemplate() {
+	name := "New Code Template"
+	scheme := m.settingsFileTemplateScheme()
+	for index := 2; ; index++ {
+		if _, exists := scheme.Code[name]; !exists {
+			break
+		}
+		name = fmt.Sprintf("New Code Template %d", index)
+	}
+	m.mutateSettingsFileTemplateScheme(func(updated *FileTemplateScheme) {
+		if updated.Code == nil {
+			updated.Code = map[string]string{}
+		}
+		updated.Code[name] = ""
+	})
+	m.settingsTemplates.fileID = name
+	m.settingsTemplates.fileIncludes = true
+	m.settingsTemplates.fileCode = true
 	m.invalidate()
 }
 
@@ -825,6 +1020,7 @@ func (m *Model) resetTemplateSettingsPage(key string) {
 		}
 		m.settingsTemplates.fileID = ""
 		m.settingsTemplates.fileIncludes = false
+		m.settingsTemplates.fileCode = false
 		m.settingsTemplates.fileKind = 0
 	}
 	m.invalidate()

@@ -98,6 +98,11 @@ smoke "$WINDOWS_JSON" GOIDEA_SMOKE_WINDOWS=1 \
     GOIDEA_SMOKE_WINDOW_FILES="$WINDOW_JAVA"
 python3 "$CHECKS" windows "$WINDOWS_JSON"
 
+say "阶段 0a：failed project switch 保持项目、recent 与窗口工作区"
+ROLLBACK_JSON="$WORK/rollback.json"
+smoke "$ROLLBACK_JSON" GOIDEA_SMOKE_ROLLBACK=1
+python3 "$CHECKS" rollback "$ROLLBACK_JSON"
+
 say "阶段 1：编辑、搜索、Git、设置、外观、Maven 构建运行"
 BASE="$WORK/base.json"
 COVERAGE="$WORK/coverage.info"

@@ -651,6 +651,14 @@ func (m *Model) editorArea(c *ui.Context, p *ui.Theme, g groupView) {
 		m.notebookPage(c, p, t)
 		return
 	}
+	if t.kind == tabKindVCSDiff {
+		m.vcsDiffPage(c, p, t)
+		return
+	}
+	if t.kind == tabKindPluginContent {
+		m.pluginContentPage(c, p, t)
+		return
+	}
 	if t.kind == tabKindImageViewer {
 		m.imageViewerPage(c, p, oiPaletteOf(p), t)
 		return

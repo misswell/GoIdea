@@ -121,6 +121,18 @@ func init() {
 	reg("intentions", overlayLayerPopup, 30, false,
 		func(m *Model) bool { return m.intents != nil },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.intentionsDialog(c, p) })
+	reg("editor.customRegions", overlayLayerPopup, 31, false,
+		func(m *Model) bool { return m.customRegions != nil && m.customRegions.open },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.customRegionsDialog(c, p) })
+	reg("editor.testNavigation", overlayLayerPopup, 32, false,
+		func(m *Model) bool { return m.testNav != nil && m.testNav.open },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.testNavigationDialog(c, p) })
+	reg("editor.unwrap", overlayLayerPopup, 33, false,
+		func(m *Model) bool { return m.unwrap != nil && m.unwrap.open },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.unwrapDialog(c, p) })
+	reg("refactor.hierarchy", overlayLayerDialog, 34, true,
+		func(m *Model) bool { return m.hierarchyRefactor != nil && m.hierarchyRefactor.open },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.hierarchyRefactorDialog(c, p) })
 	reg("quickFiles", overlayLayerPopup, 40, false,
 		func(m *Model) bool { return m.files != nil },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.filesDialog(c, p) })
@@ -303,8 +315,11 @@ func init() {
 		func(m *Model) bool { return m.merge != nil && m.merge.open },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.mergeDialog(c, p) })
 	reg("diff", overlayLayerDialog, 190, false,
-		func(m *Model) bool { return m.diff != nil },
+		func(m *Model) bool { return m.diff != nil && m.diff.surface != diffSurfaceNewTab },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.diffDialog(c, p) })
+	reg("localHistory.recentChanges", overlayLayerPopup, 191, true,
+		func(m *Model) bool { return m.recentHistory.open },
+		func(m *Model, c *ui.Context, p *ui.Theme) { m.recentChangesDialog(c, p) })
 	reg("annotate", overlayLayerDialog, 200, false,
 		func(m *Model) bool { return m.annotate != nil },
 		func(m *Model, c *ui.Context, p *ui.Theme) { m.annotateDialog(c, p) })

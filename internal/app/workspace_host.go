@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
 )
 
@@ -47,7 +48,8 @@ type TabSnapshot struct {
 // in-memory host.
 type WorkspaceHost interface {
 	// OpenProjectInNewWindow creates an independent model, backend server and
-	// native window for the project. It reports whether the window was made.
+	// native window for the project. An existing live root is focused and
+	// receives files. It reports whether the request was completed.
 	OpenProjectInNewWindow(path string, files []string) bool
 	// OpenNewWindow creates a native window at Welcome.
 	OpenNewWindow() bool
@@ -89,6 +91,17 @@ type projectTabHost interface {
 	DetachWorkspaceWindow(caller *Model) bool
 }
 
+// diffWindowHost is implemented by the desktop host when a VCS diff can open
+// in its own native child window. The test host retains the in-window
+// auxiliary fallback.
+type diffWindowHost interface {
+	ShowDiffInAuxiliaryWindow(
+		owner *Model,
+		data map[string]any,
+		render func(*ui.Context, *ui.Theme, func(), func()),
+	) bool
+}
+
 // nativeMenuHost is implemented by the desktop host when the shared menu bar
 // needs rebuilding after a window changes the active keymap.
 type nativeMenuHost interface {
@@ -103,6 +116,13 @@ func (m *Model) setWorkspaceHost(host WorkspaceHost) {
 // constructed and before its window starts.
 func (m *Model) SetWorkspaceHost(host WorkspaceHost) {
 	m.setWorkspaceHost(host)
+}
+
+// SetRootForTest changes the root without starting a backend.
+func (m *Model) SetRootForTest(root string) {
+	if m != nil {
+		m.setRoot(root)
+	}
 }
 
 func (m *Model) windowMenuChanged() {
@@ -121,6 +141,35 @@ func (m *Model) ProjectWindowCount() int {
 		return 1
 	}
 	return max(1, m.workspaceHost.WindowCount())
+}
+
+// isLastProjectWindow answers the close policy's window-count input. A
+// standalone model is the only window, as OpenIDEA's single-window build.
+func (m *Model) isLastProjectWindow() bool {
+	return m != nil && (m.workspaceHost == nil || m.workspaceHost.WindowCount() <= 1)
+}
+
+// returnLastSessionToWelcome closes the last project or LightEdit window by
+// following Close Project -> Welcome. The native host calls it from the close
+// guard; a sibling window or the closeWithoutWelcome preference keeps the
+// normal close path.
+func (m *Model) returnLastSessionToWelcome() bool {
+	if m == nil || m.applicationQuit || m.forceQuit || !m.isLastProjectWindow() ||
+		m.prefs.System.CloseWithoutWelcome {
+		return false
+	}
+	if m.Root() != "" {
+		m.closeProjectNow()
+		return true
+	}
+	if len(m.allTabs()) > 0 {
+		return false
+	}
+	m.showingWelcome = true
+	m.status = "Open a file"
+	m.saveSession()
+	m.invalidate()
+	return true
 }
 
 func (m *Model) openProjectInNativeWindow(path string, files []string) bool {
@@ -165,6 +214,32 @@ func (m *Model) workspaceWindows() []WorkspaceWindow {
 	return m.workspaceHost.WorkspaceWindows(m)
 }
 
+// recentProjectHost exposes the Welcome screen's failed-open removal action
+// without making the Welcome UI own project opening.
+func (m *Model) recentProjectHost() interface {
+	OpenRecentProject(string)
+	RemoveRecentProject(string)
+} {
+	if m == nil {
+		return nil
+	}
+	return recentProjectCallbacks{m}
+}
+
+type recentProjectCallbacks struct{ model *Model }
+
+func (h recentProjectCallbacks) OpenRecentProject(path string) {
+	if h.model != nil {
+		h.model.OpenRecentProject(path)
+	}
+}
+
+func (h recentProjectCallbacks) RemoveRecentProject(path string) {
+	if h.model != nil {
+		h.model.removeRecentProject(path)
+	}
+}
+
 func (m *Model) openProjectWindows() []WorkspaceWindow {
 	if m == nil {
 		return nil
@@ -194,7 +269,7 @@ func (m *Model) focusOpenProject(path string) bool {
 		return host.FocusOpenProject(m, path)
 	}
 	for _, window := range m.openProjectWindows() {
-		if window.Root == path {
+		if workspacePathEqual(window.Root, path) {
 			if window.ID != "current" {
 				return m.focusWorkspaceWindow(window.ID)
 			}
@@ -223,9 +298,14 @@ func (m *Model) requestApplicationQuit() {
 		return
 	}
 	if m.workspaceHost != nil {
-		m.workspaceHost.RequestApplicationQuit()
+		if m.restartPending {
+			m.workspaceHost.RequestRelaunch()
+		} else {
+			m.workspaceHost.RequestApplicationQuit()
+		}
 		return
 	}
+	m.applicationQuit = true
 	m.requestQuit(func() {})
 }
 
@@ -254,6 +334,11 @@ func (m *Model) CloseWorkspaceTab(done func(bool)) {
 		done(false)
 	}
 	closeWindow := func() {
+		if m.returnLastSessionToWelcome() {
+			m.cancelQuitPreparation()
+			done(false)
+			return
+		}
 		m.shutdown(false, func() {
 			m.win.Destroy()
 			done(true)

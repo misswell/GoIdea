@@ -85,48 +85,233 @@ func (m *Model) SmokeRecovery(ctx context.Context) (map[string]any, error) {
 	return out, nil
 }
 
-// SmokeRollback opens a folder that cannot be a project and reports that the
-// open project's tabs and documents survived the failed switch, for the
-// real-server acceptance run.
+// rollbackSnapshot is the lifecycle state a failed switch must preserve.
+type rollbackSnapshot struct {
+	root        string
+	tabs        int
+	active      string
+	split       bool
+	splitDown   bool
+	splitActive int
+	document    string
+	splitDoc    string
+	recents     []RecentProject
+	recentPaths []string
+}
+
+func (m *Model) rollbackSnapshot() rollbackSnapshot {
+	var snapshot rollbackSnapshot
+	m.post(func() {
+		snapshot.root = realPath(m.Root())
+		if snapshot.root == "." {
+			snapshot.root = ""
+		}
+		snapshot.tabs = len(m.tabs)
+		snapshot.active = tabPath(m.tab())
+		if snapshot.active != "" {
+			snapshot.active = realPath(snapshot.active)
+		}
+		if m.split != nil {
+			snapshot.split = true
+			snapshot.splitDown = m.splitDown
+			snapshot.splitActive = m.split.active
+			if i := m.split.active; i >= 0 && i < len(m.split.tabs) {
+				snapshot.splitDoc = tabPath(m.split.tabs[i])
+			}
+		}
+		if t := m.tab(); t != nil && t.kind == "" {
+			snapshot.document = t.doc.Path()
+		}
+		if snapshot.document != "" {
+			snapshot.document = realPath(snapshot.document)
+		}
+		if snapshot.splitDoc != "" {
+			snapshot.splitDoc = realPath(snapshot.splitDoc)
+		}
+		snapshot.recents = append([]RecentProject(nil), m.recents...)
+		snapshot.recentPaths = recentPaths(snapshot.recents)
+	})
+	return snapshot
+}
+
+func sameProjectRoot(a, b string) bool {
+	if a == "" || b == "" {
+		return a == b
+	}
+	return layoutKey(a) == layoutKey(b)
+}
+
+func sameRecentProjects(a, b []RecentProject) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func sameStringOrder(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// SmokeRollback restores a rejected project and reports that the UI, backend,
+// recents, active/split groups and saved session all remained on the open one.
+// It is used by the real-server acceptance run.
 func (m *Model) SmokeRollback(ctx context.Context) (map[string]any, error) {
 	out := map[string]any{}
-	root := m.Root()
-	if root == "" {
+	m.post(func() {
+		if m.split == nil {
+			if t := m.tab(); t != nil {
+				if duplicate := m.duplicateTab(t); duplicate != nil {
+					m.split = &splitGroup{tabs: []*Tab{duplicate}}
+					m.splitDown = true
+				}
+			}
+		}
+		m.saveSessionNow()
+	})
+	before := m.rollbackSnapshot()
+	if before.root == "" {
 		return out, fmt.Errorf("No project is open")
 	}
-	var tabs int
-	var firstDoc string
-	m.post(func() {
-		tabs = len(m.tabs)
-		if t := m.tab(); t != nil {
-			firstDoc = t.doc.Path()
+	savedBefore := Session{}
+	if m.cfg.SessionPath != "" {
+		savedBefore = LoadSession(m.cfg.SessionPath)
+	}
+	savedRecentPathsBefore := recentPaths(sessionRecents(savedBefore))
+	savedActiveBefore := savedBefore.Focus
+	if savedActiveBefore != "" {
+		savedActiveBefore = realPath(savedActiveBefore)
+	}
+	savedSplitDocBefore := ""
+	if i := savedBefore.SplitActive; i >= 0 && i < len(savedBefore.SplitFiles) {
+		savedSplitDocBefore = realPath(savedBefore.SplitFiles[i])
+	}
+	var current string
+	raw, err := m.invoke(ctx, "project_current", nil)
+	if err == nil {
+		var info struct {
+			Root string `json:"root"`
 		}
-	})
-	out["rootBefore"], out["tabsBefore"], out["docBefore"] = root, tabs, firstDoc
-	bad := filepath.Join(os.TempDir(), "goidea-no-such-project-4d2c", "missing")
+		if json.Unmarshal(raw, &info) == nil {
+			current = realPath(info.Root)
+		}
+	}
+	out["rootBefore"] = before.root
+	out["tabsBefore"] = before.tabs
+	out["docBefore"] = before.document
+	out["activeBefore"] = before.active
+	out["splitBefore"] = before.split
+	out["splitDownBefore"] = before.splitDown
+	out["splitActiveBefore"] = before.splitActive
+	out["backendRootBefore"] = current
+	out["recentPathsBefore"] = before.recentPaths
+	out["sessionRootBefore"] = realPath(savedBefore.Root)
+	out["sessionActiveBefore"] = savedActiveBefore
+	out["sessionSplitBefore"] = len(savedBefore.SplitFiles) > 0
+	out["sessionSplitActiveBefore"] = savedBefore.SplitActive
+	out["sessionRecentPathsBefore"] = savedRecentPathsBefore
+
+	rollbackDir, err := os.MkdirTemp("", "goidea-rollback-")
+	if err != nil {
+		return out, err
+	}
+	defer os.RemoveAll(rollbackDir)
+	bad := filepath.Join(rollbackDir, "not-a-project-directory")
 	m.post(func() { m.openProject(bad, nil) })
 	deadline := time.Now().Add(90 * time.Second)
 	for {
 		var busy bool
-		var after int
-		var rootAfter, banner string
-		var docAlive bool
+		var banner string
+		after := m.rollbackSnapshot()
 		m.post(func() {
-			busy, after, rootAfter = m.busy, len(m.tabs), m.Root()
+			busy = m.busy
 			banner = m.banner
-			docAlive = firstDoc != "" && m.reg.Get(firstDoc) != nil
 		})
 		if !busy {
-			out["rootAfter"], out["tabsAfter"], out["docAlive"], out["banner"] = rootAfter, after, docAlive, banner
+			var currentAfter string
+			raw, err := m.invoke(ctx, "project_current", nil)
+			if err == nil {
+				var info struct {
+					Root string `json:"root"`
+				}
+				if json.Unmarshal(raw, &info) == nil {
+					currentAfter = realPath(info.Root)
+				}
+			}
+			savedAfter := Session{}
+			if m.cfg.SessionPath != "" {
+				savedAfter = LoadSession(m.cfg.SessionPath)
+			}
+			savedRecentPathsAfter := recentPaths(sessionRecents(savedAfter))
+			savedActiveAfter := savedAfter.Focus
+			if savedActiveAfter != "" {
+				savedActiveAfter = realPath(savedActiveAfter)
+			}
+			savedSplitDocAfter := ""
+			if i := savedAfter.SplitActive; i >= 0 && i < len(savedAfter.SplitFiles) {
+				savedSplitDocAfter = realPath(savedAfter.SplitFiles[i])
+			}
+			out["rootAfter"] = after.root
+			out["tabsAfter"] = after.tabs
+			out["docAlive"] = after.document != "" && m.reg.Get(after.document) != nil
+			out["banner"] = banner
+			out["activeAfter"] = after.active
+			out["splitAfter"] = after.split
+			out["splitDownAfter"] = after.splitDown
+			out["splitActiveAfter"] = after.splitActive
+			out["backendRootAfter"] = currentAfter
+			out["recentPathsAfter"] = after.recentPaths
+			out["sessionRootAfter"] = realPath(savedAfter.Root)
+			out["sessionActiveAfter"] = savedActiveAfter
+			out["sessionSplitAfter"] = len(savedAfter.SplitFiles) > 0
+			out["sessionSplitActiveAfter"] = savedAfter.SplitActive
+			out["sessionDocumentAfter"] = savedSplitDocAfter
+			out["sessionRecentPathsAfter"] = savedRecentPathsAfter
+			recentsSame := sameRecentProjects(before.recents, after.recents)
+			sessionRecentsSame := sameStringOrder(savedRecentPathsBefore, savedRecentPathsAfter)
 			switch {
-			case layoutKey(rootAfter) != layoutKey(root):
+			case !sameProjectRoot(after.root, before.root):
 				return out, fmt.Errorf("The failed switch left the original project")
 			case banner == "":
 				return out, fmt.Errorf("The failed switch reported no error")
-			case after != tabs:
-				return out, fmt.Errorf("The tabs were not restored: %d → %d", tabs, after)
-			case firstDoc != "" && !docAlive:
+			case after.tabs != before.tabs:
+				return out, fmt.Errorf("The tabs were not restored: %d to %d", before.tabs, after.tabs)
+			case after.active != before.active:
+				return out, fmt.Errorf("The active tab changed from %s to %s", before.active, after.active)
+			case after.split != before.split:
+				return out, fmt.Errorf("The split group changed state")
+			case after.splitDown != before.splitDown:
+				return out, fmt.Errorf("The split group changed orientation")
+			case after.split && after.splitActive != before.splitActive:
+				return out, fmt.Errorf("The split active tab changed from %d to %d", before.splitActive, after.splitActive)
+			case after.document != "" && !out["docAlive"].(bool):
 				return out, fmt.Errorf("The original project's documents were closed")
+			case !sameProjectRoot(current, before.root) || !sameProjectRoot(currentAfter, before.root):
+				return out, fmt.Errorf("The backend did not remain on the original project")
+			case !recentsSame || !sessionRecentsSame:
+				return out, fmt.Errorf("The failed switch mutated the recent projects")
+			case m.cfg.SessionPath != "" && !sameProjectRoot(savedAfter.Root, savedBefore.Root):
+				return out, fmt.Errorf("The failed switch mutated the saved session root")
+			case m.cfg.SessionPath != "" && savedActiveBefore != "" &&
+				!sameProjectRoot(savedActiveAfter, savedActiveBefore):
+				return out, fmt.Errorf("The failed switch mutated the saved active document")
+			case m.cfg.SessionPath != "" && len(savedBefore.SplitFiles) > 0 &&
+				(len(savedAfter.SplitFiles) == 0 ||
+					savedAfter.SplitActive != savedBefore.SplitActive ||
+					!sameProjectRoot(savedSplitDocAfter, savedSplitDocBefore)):
+				return out, fmt.Errorf("The failed switch mutated the saved split group")
 			}
 			return out, nil
 		}

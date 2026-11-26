@@ -9,6 +9,7 @@ type ProjectTrustChangedEvent struct {
 	Root    string `json:"root"`
 	Trusted bool   `json:"trusted"`
 }
+type DBSourcesChangedEvent struct{}
 type ExcludedDirsChangedEvent struct {
 	Dirs []string `json:"dirs"`
 }
@@ -81,6 +82,8 @@ func DecodeIDEEvent(raw json.RawMessage) (string, any, error) {
 		event = &McpRequestClosedEvent{}
 	case "projectTrustChanged":
 		event = &ProjectTrustChangedEvent{}
+	case "dbSourcesChanged":
+		event = &DBSourcesChangedEvent{}
 	case "fsChanged":
 		event = &FsChangedEvent{}
 	case "excludedDirsChanged":

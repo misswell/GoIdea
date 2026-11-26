@@ -30,6 +30,7 @@ func TestDockDropSlotChoosesTheEdgeAndSplit(t *testing.T) {
 func TestDockDragGhostMovesOnRelease(t *testing.T) {
 	m := toolModel()
 	m.ShowProblems()
+	m.status = "Indexing"
 	m.dockDragGhost("problems", 600, 300, 1200, 800, true)
 	if m.dockDragArmed {
 		t.Fatal("a drop in the middle armed a move")
@@ -43,12 +44,41 @@ func TestDockDragGhostMovesOnRelease(t *testing.T) {
 	if !m.dockDragArmed || !strings.Contains(m.status, "Left Top") {
 		t.Fatalf("the edge was not previewed: %q", m.status)
 	}
+	m.dockDragGhost("problems", 600, 300, 1200, 800, true)
+	if m.dockDragArmed || m.status != "Indexing" {
+		t.Fatalf("leaving the target did not restore the status: armed=%v status=%q",
+			m.dockDragArmed, m.status)
+	}
+	m.dockDragGhost("problems", 600, 300, 1200, 800, false)
+	if m.dock.slots[dockBottom] != "problems" {
+		t.Fatalf("a cancelled drag moved the window: %v", m.dock.slots)
+	}
+	m.dockDragGhost("problems", 10, 100, 1200, 800, true)
 	m.dockDragGhost("problems", 10, 100, 1200, 800, false)
 	if m.dock.slots[dockLeft] != "problems" {
 		t.Fatalf("the release did not dock left: %v", m.dock.slots)
 	}
+	if m.status != "Indexing" {
+		t.Fatalf("a successful move kept the drag preview: %q", m.status)
+	}
 	if !m.problems.visible {
 		t.Fatal("the moved window lost its content")
+	}
+}
+
+func TestDockDragReleaseOnTheCurrentSlotRestoresStatus(t *testing.T) {
+	m := toolModel()
+	m.ShowProblems()
+	m.DockMove("problems", dockRight)
+	m.status = "Indexed"
+	m.dockDragGhost("problems", 1190, 100, 1200, 800, true)
+	m.dockDragGhost("problems", 1190, 100, 1200, 800, false)
+	if m.status != "Indexed" {
+		t.Fatalf("same-slot release kept the drag preview: %q", m.status)
+	}
+	if m.dock.slots[dockRight] != "problems" || m.dockDragArmed || m.dockDragID != "" {
+		t.Fatalf("same-slot release state = slots %v armed %v id %q",
+			m.dock.slots, m.dockDragArmed, m.dockDragID)
 	}
 }
 

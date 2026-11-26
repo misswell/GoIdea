@@ -160,10 +160,30 @@ func (m *Model) CreateNewProject() {
 			}
 			m.newProject.open = false
 			m.rememberProject(path)
-			m.confirmSwitch(path)
+			m.openCreatedProject(path)
 			m.invalidate()
 		})
 	}()
+}
+
+// openCreatedProject follows OpenIDEA's New Project completion. Once this
+// window already has a project, the generated folder opens in an independent
+// native window. Without a host, the existing-project leave guards still run
+// before this window is replaced.
+func (m *Model) openCreatedProject(path string) {
+	if m.Root() == "" {
+		m.confirmSwitch(path)
+		return
+	}
+	if m.openProjectInNativeWindow(path, nil) {
+		return
+	}
+	if m.workspaceHost != nil {
+		m.status = "Could not open another project window"
+		m.invalidate()
+		return
+	}
+	m.confirmSwitchDirect(path, nil)
 }
 
 // createProjectFolder creates path, or reuses it when the folder is empty, and

@@ -451,7 +451,18 @@ func (m *Model) dockDragGhost(id string, x, y, w, h float32, held bool) {
 	if held {
 		slot, ok := dockDropSlot(x, y, w, h)
 		if !ok {
+			if m.dockDragArmed && m.dockDragID == id {
+				m.dockDragArmed = false
+				m.dockDragID = ""
+				m.dockDragSlot = 0
+				m.status = m.dockDragStatus
+				m.dockDragStatus = ""
+				m.invalidate()
+			}
 			return
+		}
+		if !m.dockDragArmed || m.dockDragID != id {
+			m.dockDragStatus = m.status
 		}
 		m.dockDragID, m.dockDragSlot, m.dockDragArmed = id, slot, true
 		m.status = "Release to dock into " + dockSlotLabel(slot)
@@ -461,9 +472,14 @@ func (m *Model) dockDragGhost(id string, x, y, w, h float32, held bool) {
 	if !m.dockDragArmed || m.dockDragID != id {
 		return
 	}
+	target := m.dockDragSlot
+	status := m.dockDragStatus
 	m.dockDragArmed = false
 	m.dockDragID = ""
-	m.DockMove(id, m.dockDragSlot)
+	m.dockDragSlot = 0
+	m.dockDragStatus = ""
+	m.status = status
+	m.DockMove(id, target)
 }
 
 // toolViewMode is OpenIDEA v0.1.44's per-window View Mode: "dockPinned" by

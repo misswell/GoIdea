@@ -1,6 +1,10 @@
 package app
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/egoist/mygo"
+)
 
 // walkMenu calls visit for every entry, submenus included.
 func walkMenu(entries []menuEntry, visit func(menuEntry)) {
@@ -216,4 +220,42 @@ func TestRunCommandRunsKnownAndRejectsUnknown(t *testing.T) {
 	if m.welcomePage != "plugins" {
 		t.Fatalf("plugins.settings opened page %q", m.welcomePage)
 	}
+}
+
+func TestOpenRecentNativeSubmenuCarriesPathsAndPlaceholder(t *testing.T) {
+	m := &Model{recents: []RecentProject{
+		{Path: "/work/a", Name: "Alpha"},
+		{Path: "/work/b", Name: "Beta"},
+	}}
+	menu := m.MainMenu()
+	file := menu.Items()[1]
+	if file.Label != "File" {
+		t.Fatalf("second top-level menu = %q", file.Label)
+	}
+	var openRecent *mygo.MenuItem
+	for _, item := range file.Submenu {
+		if item.Label == "Open Recent" {
+			openRecent = item
+			break
+		}
+	}
+	if openRecent == nil || len(openRecent.Submenu) < 4 {
+		t.Fatalf("Open Recent = %+v", openRecent)
+	}
+	first := openRecent.Submenu[0]
+	if first.Label != "Alpha" || first.ID != "menu.file.openRecentProject" || first.Click == nil {
+		t.Fatalf("first recent = %+v", first)
+	}
+
+	empty := (&Model{}).MainMenu().Items()[1].Submenu
+	for _, item := range empty {
+		if item.Label != "Open Recent" {
+			continue
+		}
+		if len(item.Submenu) == 0 || item.Submenu[0].Label != "No Recent Projects" || !item.Submenu[0].Disabled {
+			t.Fatalf("empty Open Recent = %+v", item.Submenu)
+		}
+		return
+	}
+	t.Fatal("empty menu lacks Open Recent")
 }

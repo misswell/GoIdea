@@ -48,6 +48,9 @@ func (m *Model) requestEditorHover(t *Tab, req editor.HoverRequest) {
 	if m.gradleVersionCatalogHover(t, req) {
 		return
 	}
+	if !m.editorCodeEditingBool("quickDocOnHover") {
+		return
+	}
 	m.requestHover(t, req)
 }
 

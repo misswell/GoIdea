@@ -46,19 +46,24 @@ type projectNewTemplate struct {
 	name           string
 	keywords       string
 	extension      string
+	icon           string
 	nameStyle      string
 	packageStyle   string
 	dottedPackages bool
 	defaultName    string
 	fixedName      string
+	enabled        bool
+	reformat       bool
+	preferencesSet bool
 	kinds          []projectNewKind
 }
 
 type projectNewKind struct {
-	id        string
-	label     string
-	body      string
-	extension string
+	id          string
+	label       string
+	body        string
+	extension   string
+	description string
 }
 
 type projectNewPlan struct {
@@ -376,7 +381,7 @@ func projectNewEntriesForCatalog(templates []projectNewTemplate) []projectNewEnt
 	firstTemplate := true
 	for index := range templates {
 		template := &templates[index]
-		if template.id == "file" || template.id == "http-request" {
+		if template.id == "file" || template.id == "http-request" || !template.enabled {
 			continue
 		}
 		entries = append(entries, projectNewEntry{
@@ -388,7 +393,7 @@ func projectNewEntriesForCatalog(templates []projectNewTemplate) []projectNewEnt
 	}
 	for index := range templates {
 		template := &templates[index]
-		if template.id != "http-request" {
+		if template.id != "http-request" || !template.enabled {
 			continue
 		}
 		entries = append(entries, projectNewEntry{
@@ -407,9 +412,12 @@ func projectNewEntriesForCatalog(templates []projectNewTemplate) []projectNewEnt
 }
 
 func projectNewTemplateKeywords(template *projectNewTemplate) []string {
-	keywords := []string{"new", "create", "template", template.extension, template.defaultName}
+	keywords := []string{
+		"new", "create", "template", template.extension, template.icon,
+		template.nameStyle, template.packageStyle, template.defaultName, template.keywords,
+	}
 	for _, kind := range template.kinds {
-		keywords = append(keywords, kind.extension)
+		keywords = append(keywords, kind.extension, kind.label, kind.description)
 	}
 	seen := make(map[string]bool, len(keywords))
 	out := keywords[:0]
@@ -447,14 +455,31 @@ func (m *Model) SelectProjectNewTemplate(index int) {
 		return
 	}
 	t := &templates[index]
+	if !t.enabled {
+		return
+	}
 	name := t.defaultName
 	m.projectNew = nil
 	m.treeOp = &treeOpState{
 		kind: treeOpNewFile, path: v.dir, dir: true, name: name, open: true,
-		projectTemplate: t, projectIncludes: scheme.Includes,
+		projectTemplate: t, projectIncludes: templateSchemeFragments(scheme),
 	}
 	m.refreshProjectNewTarget(m.treeOp)
 	m.invalidate()
+}
+
+func templateSchemeFragments(scheme FileTemplateScheme) map[string]string {
+	out := make(map[string]string, len(projectNewIncludes)+len(scheme.Includes)+len(scheme.Code))
+	for name, body := range projectNewIncludes {
+		out[name] = body
+	}
+	for name, body := range scheme.Includes {
+		out[name] = body
+	}
+	for name, body := range scheme.Code {
+		out[name] = body
+	}
+	return out
 }
 
 func (m *Model) selectCurrentProjectNewTemplate() {

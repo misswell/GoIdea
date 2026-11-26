@@ -109,6 +109,70 @@
    "doc": "OPENIDEA_PARITY_MATRIX.md"
   },
   {
+   "id": "rollback.rollbackError",
+   "label": "rollbackError is absent",
+   "feature": "Failed project switch completes against the real backend",
+   "area": "project-lifecycle",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "rollback.uiRoot",
+   "label": "the rejected switch kept the current project in the UI",
+   "feature": "Failed project switch keeps the open project",
+   "area": "project-lifecycle",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "rollback.backendRoot",
+   "label": "the rejected switch kept project_current on the original project",
+   "feature": "Failed project switch keeps the backend project current",
+   "area": "project-lifecycle",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "rollback.tabs",
+   "label": "the rejected switch restored the tab count and document",
+   "feature": "Failed project switch restores the editor and documents",
+   "area": "project-lifecycle",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "rollback.groups",
+   "label": "the rejected switch restored the active and split groups",
+   "feature": "Failed project switch restores active and split editor groups",
+   "area": "project-lifecycle",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "rollback.recents",
+   "label": "the rejected switch did not mutate recent projects",
+   "feature": "Failed project switch does not enter Welcome recents",
+   "area": "project-lifecycle",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "rollback.session",
+   "label": "the rejected switch kept the saved project and window group",
+   "feature": "Failed project switch leaves the saved lifecycle state unchanged",
+   "area": "project-lifecycle",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
+   "id": "rollback.error",
+   "label": "the rejected switch reported the backend error",
+   "feature": "Failed project switch reports the backend failure",
+   "area": "project-lifecycle",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
    "id": "database.databaseError",
    "label": "databaseError is absent",
    "feature": "Database table editing completes against a real SQLite source",

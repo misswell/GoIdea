@@ -219,6 +219,59 @@ func TestContextRunFallsBackToImplicitPytest(t *testing.T) {
 	}
 }
 
+func TestContextRunUsesSelectedLanguageInterpretersAndGoEnvironment(t *testing.T) {
+	root := t.TempDir()
+	m := &Model{}
+	m.setRoot(root)
+	m.nativeSettings.pages = map[string]nativeSettingsPageState{
+		settingsPagePythonDeps: {
+			loaded: true, applied: map[string]any{
+				"languages.python.interpreter": filepath.Join(root, ".venv", "bin", "python"),
+			},
+		},
+		settingsPageNode: {
+			loaded: true, applied: map[string]any{
+				"languages.node.interpreter": filepath.Join(root, ".tools", "node"),
+			},
+		},
+		settingsPagePHP: {
+			loaded: true, applied: map[string]any{
+				"languages.php.interpreter": "/opt/php/bin/php",
+			},
+		},
+		settingsPageRuby: {
+			loaded: true, applied: map[string]any{
+				"languages.ruby.interpreter": "/opt/ruby/bin/ruby",
+			},
+		},
+		settingsPageGo: {
+			loaded: true, applied: map[string]any{
+				"languages.go.goroot": "/opt/go",
+				"languages.go.gopath": filepath.Join(root, ".gopath"),
+			},
+		},
+	}
+	for _, test := range []struct {
+		kind, command, want string
+	}{
+		{"python", "python3", filepath.Join(root, ".venv", "bin", "python")},
+		{"node", "node", filepath.Join(root, ".tools", "node")},
+		{"php", "php", "/opt/php/bin/php"},
+		{"ruby", "ruby", "/opt/ruby/bin/ruby"},
+	} {
+		cfg := &openidea.RunConfig{Kind: test.kind, Command: test.command}
+		m.applyContextLanguageSettings(cfg)
+		if cfg.Command != test.want {
+			t.Fatalf("%s context command = %q, want %q", test.kind, cfg.Command, test.want)
+		}
+	}
+	goCfg := &openidea.RunConfig{Kind: "go", Command: "go"}
+	m.applyContextLanguageSettings(goCfg)
+	if goCfg.Env["GOROOT"] != "/opt/go" || goCfg.Env["GOPATH"] != filepath.Join(root, ".gopath") {
+		t.Fatalf("Go context environment = %#v", goCfg.Env)
+	}
+}
+
 func TestContextRunWithCoveragePreparesLaunchesAndCollects(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()

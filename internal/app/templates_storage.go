@@ -57,10 +57,12 @@ func (m *Model) saveTemplates(prefs TemplatePrefs) error {
 
 func (m *Model) effectiveFileTemplateScheme() FileTemplateScheme {
 	root := ""
+	var languages []openIDEALanguageInfo
 	if m != nil {
 		root = m.Root()
+		languages = m.fileTypesSettings.languages
 	}
-	return m.templates().Files.effectiveScheme(root)
+	return m.templates().Files.languageTemplates(root, languages)
 }
 
 func (m *Model) projectFileTemplateScheme() FileTemplateScheme {

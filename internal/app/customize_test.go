@@ -1,10 +1,14 @@
 package app
 
 import (
+	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
+
+	"mayoi/internal/openidea"
 )
 
 func TestAccentReachesThemeAndIslands(t *testing.T) {
@@ -72,6 +76,101 @@ func TestStartupReopensUnlessWelcomeIsChosen(t *testing.T) {
 	m.SetStartupPref("reopen")
 	if !m.startupReopensProject() {
 		t.Fatal("the reopen choice is not read")
+	}
+}
+
+func TestChooseStartupMatrix(t *testing.T) {
+	dir := t.TempDir()
+	project := filepath.Join(dir, "project")
+	other := filepath.Join(dir, "other")
+	explicit := filepath.Join(dir, "explicit")
+	for _, path := range []string{project, other, explicit} {
+		if err := os.Mkdir(path, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	inside := filepath.Join(project, "src", "Main.java")
+	insideOther := filepath.Join(other, "Other.java")
+	loose := filepath.Join(dir, "Loose.java")
+	explicitInside := filepath.Join(explicit, "App.java")
+	explicitOutside := filepath.Join(project, "Outside.java")
+	for _, path := range []string{inside, insideOther, loose, explicitInside, explicitOutside} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("fixture\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	session := Session{
+		Root:  project,
+		Files: []string{inside, insideOther},
+	}
+
+	tests := []struct {
+		name          string
+		explicitRoot  string
+		explicitFiles []string
+		session       Session
+		reopen        bool
+		fresh         bool
+		want          startupChoice
+	}{
+		{
+			name:         "explicit root wins",
+			explicitRoot: explicit, explicitFiles: []string{explicitInside, explicitOutside},
+			session: session, reopen: true,
+			want: startupChoice{root: realPath(explicit), files: []string{realPath(explicitInside)}},
+		},
+		{
+			name:          "explicit loose files suppress reopen",
+			explicitFiles: []string{inside}, session: session, reopen: true,
+			want: startupChoice{looseFiles: []string{realPath(inside)}},
+		},
+		{
+			name:    "reopen disabled stays at welcome",
+			session: session, reopen: false,
+			want: startupChoice{},
+		},
+		{
+			name:    "fresh session stays at welcome",
+			session: session, reopen: true, fresh: true,
+			want: startupChoice{},
+		},
+		{
+			name:    "reopen filters files outside root",
+			session: session, reopen: true,
+			want: startupChoice{root: project, files: normalizeFiles([]string{inside})},
+		},
+		{
+			name:         "relative explicit root is ignored",
+			explicitRoot: "project", session: session, reopen: true,
+			want: startupChoice{root: project, files: normalizeFiles([]string{inside})},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := chooseStartup(tc.explicitRoot, tc.explicitFiles, tc.session, tc.reopen, tc.fresh)
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("choice = %+v, want %+v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestChooseStartupRestoresRemoteOnlyForSessionReopen(t *testing.T) {
+	remote := &openidea.RemoteSession{
+		Target: openidea.RemoteTarget{Kind: openidea.RemoteTargetSSH, Config: "dev"},
+		Root:   "/srv/app",
+	}
+	session := Session{Root: "/srv/app", Remote: remote, Files: []string{"/srv/app/Main.java"}}
+	got := chooseStartup("", nil, session, true, false)
+	if got.remote != remote || got.root != session.Root || !reflect.DeepEqual(got.files, session.Files) {
+		t.Fatalf("remote choice = %+v", got)
+	}
+	got = chooseStartup("", []string{filepath.Join(os.TempDir(), "Loose.java")}, session, true, false)
+	if got.remote != nil || got.files != nil || len(got.looseFiles) != 1 {
+		t.Fatalf("loose file restored remote session: %+v", got)
 	}
 }
 

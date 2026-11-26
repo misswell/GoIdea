@@ -184,7 +184,10 @@ func (m *Model) QuickDocumentation() {
 		}
 		var entry documentationEntry
 		if hover != nil {
-			entry = documentationEntry{blocks: documentationBlocks(hover.Contents, source.doc.Info().Language), source: &source}
+			entry = documentationEntry{
+				blocks: m.documentationBlocksForLanguage(hover.Contents, source.doc.Info().Language),
+				source: &source,
+			}
 		}
 		m.post(func() {
 			if d.request != id || m.Root() != root {
@@ -729,7 +732,7 @@ func (m *Model) documentationAtText(ctx context.Context, request uint32, target 
 		target.pos.Col = col
 		hover, err := m.documentationHover(ctx, request, doc, target.pos)
 		if err == nil && hover != nil {
-			if blocks := documentationBlocks(hover.Contents, language); len(blocks) > 0 {
+			if blocks := m.documentationBlocksForLanguage(hover.Contents, language); len(blocks) > 0 {
 				return &documentationEntry{blocks: blocks, source: &target}
 			}
 		}
@@ -869,6 +872,18 @@ func documentationBlocks(markup openidea.Markup, language ...string) []documenta
 	p.walk(tree, documentationRun{})
 	p.flush()
 	return p.blocks
+}
+
+func (m *Model) documentationBlocksForLanguage(
+	markup openidea.Markup,
+	language string,
+) []documentationBlock {
+	value := markup.Value
+	if markup.Kind == "markdown" &&
+		strings.EqualFold(strings.TrimSpace(language), "python") {
+		value = pythonDocstringMarkdown(value, m.pythonDocstringFormat())
+	}
+	return documentationBlocks(openidea.Markup{Kind: markup.Kind, Value: value}, language)
 }
 
 type documentationParser struct {

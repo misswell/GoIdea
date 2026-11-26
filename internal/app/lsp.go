@@ -34,6 +34,10 @@ func (m *Model) requestCompletion(t *Tab, req editor.CompletionRequest) {
 	if !req.Explicit && !m.completionAutoPopup() {
 		return
 	}
+	if !req.Explicit && !m.templates().Live.ShowInCompletion &&
+		!m.templates().Postfix.Enabled {
+		return
+	}
 	if m.requestPostfixCompletion(t, req) {
 		return
 	}
@@ -117,7 +121,22 @@ func (m *Model) requestHover(t *Tab, req editor.HoverRequest) {
 	id := m.nextRequest()
 	t.hoverGen++
 	gen := t.hoverGen
+	delay := time.Duration(max(0, m.editorCodeEditingNumber("quickDocDelay"))) * time.Millisecond
 	go func() {
+		if delay > 0 {
+			timer := time.NewTimer(delay)
+			defer timer.Stop()
+			select {
+			case <-m.ctx.Done():
+				return
+			case <-timer.C:
+			}
+		}
+		if !m.tabOpen(t) || t.hoverGen != gen || t.doc == nil ||
+			t.doc.ID() != docID || t.doc.Buffer().Version() != req.Version ||
+			t.state.Cursor() != req.Offset {
+			return
+		}
 		ctx, cancel := context.WithTimeout(m.ctx, lspTimeout)
 		defer cancel()
 		raw, err := m.mgr.Invoke(ctx, Window, "lsp_hover", map[string]any{

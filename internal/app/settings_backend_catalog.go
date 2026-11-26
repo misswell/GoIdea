@@ -482,6 +482,9 @@ func (m *Model) loadBackendCatalogSettingsPage(page string) {
 	switch page {
 	case settingsPageFileTypes:
 		m.loadFileTypesSettings()
+	case settingsPageFileTemplates:
+		m.loadTemplateLanguageCatalog()
+		m.loadTemplateSettingsPage(page)
 	case settingsPageInspections:
 		m.loadInspectionsSettings()
 	case settingsPageSpelling:
@@ -493,6 +496,32 @@ func (m *Model) loadBackendCatalogSettingsPage(page string) {
 			m.loadNativeSettingsPage(page)
 		}
 	}
+}
+
+func (m *Model) loadTemplateLanguageCatalog() {
+	state := &m.fileTypesSettings
+	if len(state.languages) > 0 || state.loading {
+		return
+	}
+	if m.mgr == nil && m.invokeHook == nil {
+		return
+	}
+	root := m.Root()
+	go func() {
+		ctx, cancel := context.WithTimeout(modelContext(m), 20*time.Second)
+		defer cancel()
+		languages, err := m.toolLanguages(ctx)
+		if err != nil {
+			return
+		}
+		m.post(func() {
+			if m.Root() != root {
+				return
+			}
+			m.fileTypesSettings.languages = languages
+			m.invalidate()
+		})
+	}()
 }
 
 func decodeFileTypesSettings(raw json.RawMessage) (fileTypesSettings, error) {

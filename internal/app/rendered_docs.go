@@ -150,7 +150,9 @@ func (m *Model) showRenderedDocumentationComment(t *Tab) bool {
 	if t.doc != nil {
 		language = t.doc.Info().Language
 	}
-	blocks := documentationBlocks(openidea.Markup{Kind: "markdown", Value: comment}, language)
+	blocks := m.documentationBlocksForLanguage(
+		openidea.Markup{Kind: "markdown", Value: comment}, language,
+	)
 	if len(blocks) == 0 {
 		return false
 	}

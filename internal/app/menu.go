@@ -1,6 +1,7 @@
 package app
 
 import (
+	"path/filepath"
 	"strings"
 
 	"github.com/egoist/mygo"
@@ -16,8 +17,11 @@ type menuEntry struct {
 	arg     any
 	role    mygo.MenuRole
 	sep     bool
-	check   func(*Model) bool
-	dynamic func(*Model) []menuEntry
+	// disabled marks a native placeholder, as Open Recent does with no
+	// remembered projects.
+	disabled bool
+	check    func(*Model) bool
+	dynamic  func(*Model) []menuEntry
 	// run is the entry's action when it is not a registry command, as the
 	// toolbar checkboxes and the theme and keymap picks are.
 	run func(*Model)
@@ -174,6 +178,8 @@ func mainMenuGroups() []menuEntry {
 				action("Disconnect from Remote Host", "remote.disconnect", ""),
 			),
 			submenu("Open Recent",
+				menuEntry{label: "Recent Project Entries", dynamic: recentProjectMenuEntries},
+				rule(),
 				action("Recent Projects…", "welcome.recentProjects", ""),
 				action("Manage Projects…", "welcome.manageProjects", ""),
 			),
@@ -538,6 +544,29 @@ func mainMenuGroups() []menuEntry {
 	}
 }
 
+func recentProjectMenuEntries(m *Model) []menuEntry {
+	if len(m.recents) == 0 {
+		return []menuEntry{{
+			label:    "No Recent Projects",
+			disabled: true,
+		}}
+	}
+	entries := make([]menuEntry, 0, len(m.recents))
+	for _, project := range m.recents {
+		project := project
+		name := project.Name
+		if name == "" {
+			name = filepath.Base(project.Path)
+		}
+		entries = append(entries, menuEntry{
+			label:   name,
+			command: "file.openRecentProject",
+			arg:     project.Path,
+		})
+	}
+	return entries
+}
+
 // gearGroup is the gear menu of OpenIDEA's TitleBar.tsx gearMenuItems: Run
 // Anything, Settings and Plugins, then the Theme, Keymap and View Mode quick
 // switches, then the toolbar customization and the update check.
@@ -649,6 +678,7 @@ func menuItems(m *Model, groups []menuEntry) []*mygo.MenuItem {
 			Label:       g.label,
 			Role:        g.role,
 			Accelerator: menuAccelerator(m, g),
+			Disabled:    g.disabled,
 		}
 		if len(g.sub) > 0 {
 			it.Submenu = menuItems(m, g.sub)

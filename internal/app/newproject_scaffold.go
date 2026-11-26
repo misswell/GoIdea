@@ -280,7 +280,8 @@ func (m *Model) createScaffoldProject() {
 			}
 			m.newProject.open = false
 			m.newProject.seq++
-			m.openProject(dir, nil)
+			m.rememberProject(dir)
+			m.openCreatedProject(dir)
 			m.invalidate()
 		})
 	}()

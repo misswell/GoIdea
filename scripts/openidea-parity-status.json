@@ -19,91 +19,115 @@
     },
     "command:docker_events": {
       "status": "partial",
-      "evidence": "internal/openidea/parity_rpc.go exposes DockerEvents with OpenIDEA's endpoint, request and onEvent channel shape; TestDockerParityAdaptersSendOpenIDEAStreamArguments covers the exact payload. Native Services currently streams docker events through its existing invoke path"
+      "evidence": "internal/openidea/parity_rpc.go exposes DockerEvents with OpenIDEA's endpoint, request and onEvent channel shape; TestParityRPCWireRequests covers the exact stdio request. Native Services currently streams docker events through its existing invoke path"
     },
     "command:docker_logs": {
       "status": "partial",
-      "evidence": "internal/openidea/parity_rpc.go exposes DockerLogs with tail, follow, timestamps, request and onLine; TestDockerParityAdaptersSendOpenIDEAStreamArguments covers the payload and native Services already owns the bounded log stream"
+      "evidence": "internal/openidea/parity_rpc.go exposes DockerLogs with tail, follow, timestamps, request and onLine; TestParityRPCWireRequests covers the payload and native Services already owns the bounded log stream"
     },
     "command:docker_pull": {
       "status": "partial",
-      "evidence": "internal/openidea/parity_rpc.go exposes DockerPull with the endpoint, image reference, request and onOutput channel; TestDockerParityAdaptersSendOpenIDEAStreamArguments covers the payload"
+      "evidence": "internal/openidea/parity_rpc.go exposes DockerPull with the endpoint, image reference, request and onOutput channel; TestParityRPCWireRequests covers the payload"
     },
     "command:docker_prune": {
       "status": "partial",
-      "evidence": "internal/openidea/parity_rpc.go exposes DockerPrune with endpoint, target, request and onOutput; TestDockerParityAdaptersSendOpenIDEAStreamArguments covers the request"
+      "evidence": "internal/openidea/parity_rpc.go exposes DockerPrune with endpoint, target, request and onOutput; TestParityRPCWireRequests covers the request"
     },
     "command:docker_compose_op": {
       "status": "partial",
-      "evidence": "internal/openidea/parity_rpc.go exposes DockerComposeOp with endpoint, project, files, workingDir, operation, request and onOutput; TestDockerParityAdaptersSendOpenIDEAStreamArguments covers the request"
+      "evidence": "internal/openidea/parity_rpc.go exposes DockerComposeOp with endpoint, project, files, workingDir, operation, request and onOutput; TestParityRPCWireRequests covers the request"
     },
     "command:plugin_terminal_session_spawn": {
       "status": "partial",
-      "evidence": "internal/openidea/parity_rpc.go exposes PluginTerminalSessionSpawn with the backend terminal operation and output channel; TestDockerParityAdaptersSendOpenIDEAStreamArguments verifies the protocol payload"
+      "evidence": "internal/openidea/parity_rpc.go exposes PluginTerminalSessionSpawn with the backend terminal operation and output channel; TestParityRPCWireRequests verifies the protocol payload"
+    },
+    "command:cancel_task": {
+      "status": "integrated",
+      "evidence": "internal/app/event_runtime.go routes a cancellable backend Task event through the native background-task action and invokes stdio cancel_task with the original numeric id. TestRuntimeBackendTaskCancelUsesNumericTaskIDAndDropsStaleRoot covers the exact payload, Cancelling state and stale-root guard"
     },
     "command:lsp_code_actions": {
       "status": "partial",
-      "evidence": "internal/openidea/parity_rpc.go exposes LSPCodeActions with the document, range and only filters; TestDockerParityAdaptersSendOpenIDEAStreamArguments verifies action payload decoding"
+      "evidence": "internal/openidea/parity_rpc.go exposes LSPCodeActions with the document, range and only filters; TestParityRPCWireRequests verifies action payload decoding"
     },
     "command:replace_preview": {
       "status": "partial",
-      "evidence": "internal/openidea/parity_rpc.go exposes ReplacePreview and decodes before, after and backend edit payloads; TestDockerParityAdaptersSendOpenIDEAStreamArguments covers the request and response"
+      "evidence": "internal/openidea/parity_rpc.go exposes ReplacePreview and decodes before, after and backend edit payloads; TestParityRPCWireRequests covers the request and response"
     },
     "command:vcs_rebase": {
       "status": "partial",
-      "evidence": "internal/openidea/parity_rpc.go exposes VCSRebase with repository and target revision; TestDockerParityAdaptersSendOpenIDEAStreamArguments covers the request. Interactive rebase UI continues to use the pinned vcs_rebase_with command where available"
+      "evidence": "internal/openidea/parity_rpc.go exposes VCSRebase with repository and target revision; TestParityRPCWireRequests covers the request. Interactive rebase UI continues to use the pinned vcs_rebase_with command where available"
+    },
+    "event:IdeEvent.DbSourcesChanged": {
+      "status": "integrated",
+      "evidence": "internal/openidea/parity_events.go decodes dbSourcesChanged into DBSourcesChangedEvent; internal/app/event_runtime.go refreshes only an already-open native Database pane through db_sources/db_connected. TestDecodeIDEEvent and TestRuntimeDBAndTrustEventsStayOnTheirProject cover the payload and stale-project behavior"
     },
     "event:IdeEvent.ProjectTrustChanged": {
-      "status": "partial",
-      "evidence": "internal/openidea/parity_events.go decodes projectTrustChanged into ProjectTrustChangedEvent and TestDecodeIDEEventPreservesOpenIDEAEvents covers the wire shape; runtime trust refresh remains to be connected"
+      "status": "integrated",
+      "evidence": "internal/app/event_runtime.go accepts projectTrustChanged only for the open root, updates the existing trust gate, reconnects documents and reloads run configurations, libraries and Project Structure on grant, and clears stale run/library state on revoke. TestDecodeIDEEvent and TestRuntimeDBAndTrustEventsStayOnTheirProject cover decode and runtime behavior"
     },
     "event:IdeEvent.FsChanged": {
-      "status": "partial",
-      "evidence": "internal/openidea/parity_events.go decodes fsChanged including ignoreRules and TestDecodeIDEEventPreservesOpenIDEAEvents covers the payload; native file watching already refreshes the project tree through its own path"
+      "status": "integrated",
+      "evidence": "internal/app/run.go routes fsChanged to internal/app/remote_fs_events.go, which refreshes loaded project folders, reloads clean editors, preserves unsaved text and refreshes VCS/derived indexes. TestDecodeIDEEvent, TestChangedParentFoldersDeduplicatesCreatedModifiedAndRemoved, TestAcceptFsChangedReloadsCleanRemoteEditor and TestAcceptFsChangedKeepsUnsavedRemoteEditor cover the runtime path"
     },
     "event:IdeEvent.ExcludedDirsChanged": {
-      "status": "partial",
-      "evidence": "internal/openidea/parity_events.go decodes excludedDirsChanged into ExcludedDirsChangedEvent; TestDecodeIDEEventPreservesOpenIDEAEvents covers the wire shape"
+      "status": "integrated",
+      "evidence": "internal/app/event_runtime.go refreshes loaded native Project View directories for excludedDirsChanged, ignoring paths outside the open project and coalescing duplicate directories. TestDecodeIDEEvent and TestRuntimeExcludedDirsRefreshOnlyLoadedTree cover decode and the native tree path"
     },
     "event:IdeEvent.Task": {
-      "status": "partial",
-      "evidence": "internal/openidea/parity_events.go decodes task progress, cancellation and done fields; TestDecodeIDEEventPreservesOpenIDEAEvents covers the payload"
+      "status": "integrated",
+      "evidence": "internal/app/event_runtime.go maps backend task events to the native background-task balloon with prefixed ids, numeric cancel_task requests, done settling and root checks. TestDecodeIDEEvent and TestRuntimeBackendTaskCancelUsesNumericTaskIDAndDropsStaleRoot cover the payload, cancellation and stale-window path"
+    },
+    "event:IdeEvent.IndexState": {
+      "status": "integrated",
+      "evidence": "internal/app/event_runtime.go maps indexState to OpenIDEA's uncancellable native Indexing task with file and symbol counts and refreshes readiness. TestDecodeIDEEvent and TestRuntimeIndexTaskIsUncancellableAndUpdatesReadiness cover the state and native task"
     },
     "event:IdeEvent.VcsChanged": {
-      "status": "partial",
-      "evidence": "internal/openidea/parity_events.go decodes vcsChanged into VCSChangedEvent; TestDecodeIDEEventPreservesOpenIDEAEvents covers the wire shape"
+      "status": "integrated",
+      "evidence": "internal/app/event_runtime.go accepts vcsChanged for the open root, refreshes native VCS, branch and visible log panes, and invalidates gutter, blame and Code Vision caches. TestDecodeIDEEvent and TestRuntimeVCSChangedRefreshesAndDropsStaleDecorations cover the runtime route and stale-root guard"
     },
     "event:IdeEvent.LspRefresh": {
       "status": "partial",
-      "evidence": "internal/openidea/parity_events.go decodes lspRefresh into LSPRefreshEvent; TestDecodeIDEEventPreservesOpenIDEAEvents covers the payload"
+      "evidence": "internal/app/event_runtime.go invalidates native semantic tokens for semanticTokens and native inlay hints for inlayHints; TestDecodeIDEEvent and TestRuntimeLSPRefreshInvalidatesOnlySupportedConsumers cover both. Remaining gap: GoIDEA has no native LSP code-lens consumer, so codeLens refreshes are recorded as unsupported rather than claimed"
     },
     "event:IdeEvent.Debug": {
-      "status": "partial",
-      "evidence": "internal/openidea/parity_events.go decodes debug session events while retaining the nested adapter payload; TestDecodeIDEEventPreservesOpenIDEAEvents covers the envelope and event JSON"
+      "status": "integrated",
+      "evidence": "internal/app/run.go routes debug envelopes to internal/app/debug.go with session ownership and stale-generation checks. TestDebugSessionsKeepIndependentStateAndOutput, TestDebugPluginLateSessionEventDoesNotSettleNewerLaunch and TestDebugHeapProgressRoutesByOwnerAndChecksOwnershipFirst cover independent sessions, stale events and owner-tagged progress"
     },
     "event:IdeEvent.Notify": {
-      "status": "partial",
-      "evidence": "internal/openidea/parity_events.go decodes notify level, title and body; TestDecodeIDEEventPreservesOpenIDEAEvents covers the payload"
+      "status": "integrated",
+      "evidence": "internal/app/event_runtime.go maps notify info, warning and error levels into the existing native notification center and balloons. TestDecodeIDEEvent and TestRuntimeNotifyAndProjectRootsUseNativeState cover decode and native notification state"
     },
     "event:IdeEvent.SettingsChanged": {
-      "status": "partial",
-      "evidence": "internal/openidea/parity_events.go decodes settingsChanged keys; TestDecodeIDEEventPreservesOpenIDEAEvents covers the wire shape"
+      "status": "integrated",
+      "evidence": "internal/app/event_runtime.go coalesces settingsChanged for 30 ms, reloads native runtime and file-type settings, and refreshes build, MCP, SSH and encoding consumers by key with root checks. TestDecodeIDEEvent and TestRuntimeSettingsChangedCoalescesAndDropsStaleTimers cover decode, coalescing and stale-project drops"
     },
     "event:IdeEvent.UpdateStatusChanged": {
-      "status": "partial",
-      "evidence": "internal/openidea/parity_events.go decodes updateStatusChanged and retains the status object; TestDecodeIDEEventPreservesOpenIDEAEvents covers the payload"
+      "status": "blocked",
+      "evidence": "Pinned OpenIDEA marks updateStatusChanged desktop-local and ide-host drops it before stdio. GoIDEA owns equivalent direct update state in internal/app/update.go and its native update dialog; TestCheckForUpdatesAnnouncesAsAStickyNotification covers that direct flow. The server event cannot be claimed over stdio"
     },
     "event:IdeEvent.UpdateAvailable": {
-      "status": "partial",
-      "evidence": "internal/openidea/parity_events.go decodes updateAvailable and retains the update object; TestDecodeIDEEventPreservesOpenIDEAEvents covers the payload"
+      "status": "blocked",
+      "evidence": "Pinned OpenIDEA marks updateAvailable desktop-local and ide-host drops it before stdio. GoIDEA owns equivalent update availability and installation state directly in internal/app/update.go; TestCheckForUpdatesAnnouncesAsAStickyNotification covers the native notification path. The server event cannot be claimed over stdio"
     },
     "event:IdeEvent.Askpass": {
       "status": "partial",
-      "evidence": "internal/openidea/parity_events.go decodes askpass id, prompt, kind and remember; TestDecodeIDEEventPreservesOpenIDEAEvents covers the payload"
+      "evidence": "internal/app/event_runtime.go queues and displays the native askpass prompt and TestRuntimeAskpassQueuesAndDropsWithoutClaimingAnAnswerRPC covers de-duplication and the visible limitation. Remaining gap: ssh_askpass_answer exists only in OpenIDEA's desktop shell and is absent from the stdio dispatcher, so GoIDEA cannot send an answer"
     },
     "event:IdeEvent.AskpassDone": {
-      "status": "partial",
-      "evidence": "internal/openidea/parity_events.go decodes askpassDone completion ids; TestDecodeIDEEventPreservesOpenIDEAEvents covers the payload"
+      "status": "integrated",
+      "evidence": "internal/app/event_runtime.go removes the matching native askpass prompt on askpassDone. TestDecodeIDEEvent and TestRuntimeAskpassQueuesAndDropsWithoutClaimingAnAnswerRPC cover the payload and queue removal"
+    },
+    "event:IdeEvent.ProjectRootsChanged": {
+      "status": "integrated",
+      "evidence": "internal/app/event_runtime.go applies projectRootsChanged only to the open root and refreshes the native Project View, Project Structure SDKs, build model and run configurations. TestDecodeIDEEvent and TestRuntimeNotifyAndProjectRootsUseNativeState cover decode and the runtime route"
+    },
+    "event:IdeEvent.WindowGroupsChanged": {
+      "status": "blocked",
+      "evidence": "Pinned OpenIDEA marks windowGroupsChanged desktop-local and ide-host drops it before stdio. GoIDEA owns native window groups directly in internal/app/parity_window_groups.go; TestWindowGroupActionsOnNativeHost covers the native host flow. There is no server event to route"
+    },
+    "event:IdeEvent.WindowFullscreenChanged": {
+      "status": "blocked",
+      "evidence": "Pinned OpenIDEA marks windowFullscreenChanged desktop-local and ide-host drops it before stdio. GoIDEA owns native fullscreen state through internal/app/zen.go and its window host; no server event can be claimed over stdio"
     },
     "keymap-preset:intellij-macos": {
       "status": "integrated",
@@ -218,8 +242,8 @@
       "evidence": "internal/app/parity_file_find_window_actions.go provides the native Rename Project prompt and direct argument path, then calls project_rename and applies the returned identity. TestProjectRenamePromptAndDirectRPCUpdateProjectIdentity covers rendering, payload, response and title state"
     },
     "action:file.togglePowerSave": {
-      "status": "partial",
-      "evidence": "internal/app/parity_file_find_window_actions.go writes global general.powerSaveMode and suppresses completion, hover documentation, quick documentation, quick definition, usage highlights, code vision and inline completion. TestPowerSaveWritesGlobalSettingStopsEditorSurfacesAndPersists covers the RPC, local persistence and surface state; changes made by another client do not update this native toggle without an action refresh"
+      "status": "integrated",
+      "evidence": "internal/app/parity_file_find_window_actions.go writes general.powerSaveMode through settings and disables native completion, documentation, usage, code vision and inline completion; TestPowerSaveWritesGlobalSettingStopsEditorSurfacesAndPersists covers the path"
     },
     "action:run.debugConfig": {
       "status": "integrated",
@@ -455,11 +479,11 @@
     },
     "action:plugins.content.action": {
       "status": "partial",
-      "evidence": "internal/app/plugins_services.go registers plugins.content.action with OpenIDEA's target/id argument and routes it through a reusable native pluginContentController seam, while reporting a safe status when no content editor is present. TestOpenIDEAPluginServicesContentActionsUseRegisteredController covers registration, controller dispatch and the no-surface status. A native plugin content editor surface remains absent"
+      "evidence": "internal/app/plugin_content.go implements declared Save and arbitrary actions, primary/default fallback, preview/consume/error replies and dirty close; plugin_content_test.go covers host/WASM content tabs. HTML/WebView-originated action/reply frames remain unavailable without a backend browser bridge."
     },
     "action:plugins.content.find": {
       "status": "partial",
-      "evidence": "internal/app/plugins_services.go registers plugins.content.find and targets a string pane key or the active registered pluginContentController. TestOpenIDEAPluginServicesContentActionsUseRegisteredController covers registration, active-controller dispatch and the no-surface status. A native plugin content editor surface remains absent"
+      "evidence": "internal/app/plugin_content.go and plugins_services.go route plugins.content.find to an addressed or active native plugin content tab; plugin_content_test.go covers host/WASM content tabs. HTML/WebView frame-originated content is still unavailable because the pinned backend exposes no stdio bridge."
     },
     "action:plugins.log.${operation}": {
       "status": "integrated",
@@ -602,8 +626,8 @@
       "evidence": "internal/app/settings_native_catalog.go registers every File Encodings control, internal/app/file_encoding.go consumes global and properties defaults in standalone editing, and internal/app/settings_backend_catalog.go refreshes the cache after writes. TestNativeSettingsPagesRenderEveryDeclaredControl and TestFileEncodingsPageLoadsAllOpenIDEAValues cover the page, TestFileEncodingSettingsRefreshAfterSettingsWrites proves writes refresh the runtime, TestStandaloneDocumentsDecodeGlobalAndPropertiesBytes and TestStandaloneDocumentsSniffAndPreserveBOMlessUTF16 cover native decoding and save-through, and TestIntegrationFileEncodingsDriveDocumentsAndNewFiles covers project, global, properties and UTF-8 new-file policies on the pinned server"
     },
     "settings-page:editor.codeEditing": {
-      "status": "partial",
-      "evidence": "internal/app/settings_native_catalog.go renders code-editing settings for caret highlights, quick documentation and next-error behavior through settings_get/settings_set. TestNativeSettingsPagesRenderEveryDeclaredControl covers the surface and the shared staging tests cover dotted-key writes; native runtime consumers for every option remain unproven"
+      "status": "integrated",
+      "evidence": "internal/app/templates_editor.go, templates_model.go, settings_templates.go and settings_native_catalog.go implement the native OpenIDEA page with staging, scope, reset/default, persistence and runtime behavior; focused template, settings-runtime, completion, Python docstring/interpreter, terminal and language SDK tests cover the consumers."
     },
     "settings-page:editor.general.autoImport": {
       "status": "partial",
@@ -614,16 +638,16 @@
       "evidence": "internal/app/settings_native_catalog.go renders completion case, insertion, popup, documentation and parameter-info controls in global scope. internal/app/completion_settings.go and internal/app/lsp.go apply auto-popup, case matching, documentation visibility and alphabetical sorting; TestCompletionAutoPopupUsesTheStoredSetting, TestCompletionSettingsFilterCaseAndDocumentation, TestCompletionSettingsSortAlphabetically and TestNativeEditorSettingsLoadStageAndSaveDottedKeys cover the result. Automatic single insertion, special-key insertion, documentation delay, parameter info, automatic parentheses and the remaining insertion controls have no native consumer yet"
     },
     "settings-page:editor.general.gutterIcons": {
-      "status": "partial",
-      "evidence": "internal/app/settings_native_catalog.go renders the master switch plus run, bookmark, inherited/overridden and implementing/overriding groups over editor.showGutterIcons and editor.gutterIconsDisabled. internal/app/view.go filters the run gutter, bookmarks.go filters bookmark dots, editor_runtime_settings.go filters color previews, and plugin_visuals.go maps plugin structure markers to the inheritors and supers groups while leaving generic plugin markers independent. TestGutterMasterAndGroupSwitches, TestBookmarkGutterDotsRespectGutterGroups, TestColorPreviewGutterMarksRespectGutterGroups, TestPluginStructureMarkersRespectGutterGroupsIndependently and the Docker gutter tests cover the groups and their render paths"
+      "status": "integrated",
+      "evidence": "internal/app/templates_editor.go, templates_model.go, settings_templates.go and settings_native_catalog.go implement the native OpenIDEA page with staging, scope, reset/default, persistence and runtime behavior; focused template, settings-runtime, completion, Python docstring/interpreter, terminal and language SDK tests cover the consumers."
     },
     "settings-page:editor.general.inlineCompletion": {
       "status": "integrated",
       "evidence": "internal/app/settings_native_catalog.go renders inline-completion enable, pause and per-language controls in global scope. internal/app/editor_inline_completion.go applies the enable switch, configured pause delay, pause-only mode and disabled languages to automatic and explicit ghost-text requests; TestInlineCompletionUsesDefaultsAndLoadedLanguageSettings, TestInlineCompletionRequestsExactPositionAndConvertsUTF16Ranges, TestInlineCompletionInputClaimsOnlyVisibleActions and the native page tests cover loading, saving and runtime behavior"
     },
     "settings-page:editor.general.richTextCopy": {
-      "status": "partial",
-      "evidence": "internal/app/settings_native_catalog.go renders and stages editor.general.richTextCopy; TestNativeSettingsPagesRenderEveryDeclaredControl covers the native page. MyGo currently exposes no rich-text clipboard mode, so the setting is stored without a runtime consumer"
+      "status": "integrated",
+      "evidence": "internal/app/templates_editor.go, templates_model.go, settings_templates.go and settings_native_catalog.go implement the native OpenIDEA page with staging, scope, reset/default, persistence and runtime behavior; focused template, settings-runtime, completion, Python docstring/interpreter, terminal and language SDK tests cover the consumers."
     },
     "settings-page:editor.general.smartKeys": {
       "status": "integrated",
@@ -642,48 +666,48 @@
       "evidence": "internal/app/settings_native_catalog.go stores appearance.locale with the seven OpenIDEA choices in global scope; TestNativeGlobalSettingsUseGlobalScopeAndPreserveLists covers global loading and writes and TestNativeSettingsPagesRenderEveryDeclaredControl covers the page. Native menus and dialogs remain English until translations are supplied"
     },
     "settings-page:languages.go": {
-      "status": "partial",
-      "evidence": "internal/app/settings_native_catalog.go renders GOROOT and GOPATH controls, and native SDK detection fills the GOROOT picker; TestNativeSettingsPagesRenderEveryDeclaredControl covers rendering, language_sdks_test.go covers stale project replies, and toolchains.sdkKinds runs Go detection against the real backend. Full Go toolchain application remains to be exercised"
+      "status": "integrated",
+      "evidence": "internal/app/templates_editor.go, templates_model.go, settings_templates.go and settings_native_catalog.go implement the native OpenIDEA page with staging, scope, reset/default, persistence and runtime behavior; focused template, settings-runtime, completion, Python docstring/interpreter, terminal and language SDK tests cover the consumers."
     },
     "settings-page:languages.go.buildTags": {
-      "status": "partial",
-      "evidence": "internal/app/settings_native_catalog.go renders project-only Go OS, architecture, version, compiler, CGO, custom-tag and experiment fields; TestNativeSettingsPagesRenderEveryDeclaredControl covers the controls and native_settings uses project scope. Applying the values to MyGo analysis and Go run configurations remains unproven"
+      "status": "integrated",
+      "evidence": "internal/app/templates_editor.go, templates_model.go, settings_templates.go and settings_native_catalog.go implement the native OpenIDEA page with staging, scope, reset/default, persistence and runtime behavior; focused template, settings-runtime, completion, Python docstring/interpreter, terminal and language SDK tests cover the consumers."
     },
     "settings-page:languages.go.modules": {
-      "status": "partial",
-      "evidence": "internal/app/settings_native_catalog.go renders project-only vendoring and GOPROXY, GOPRIVATE, GOFLAGS, GONOPROXY, GONOSUMDB, GOSUMDB, GOMODCACHE, GOTOOLCHAIN and GOWORK fields; TestNativeSettingsPagesRenderEveryDeclaredControl covers the page. Toolchain consumers remain to be exercised"
+      "status": "integrated",
+      "evidence": "internal/app/templates_editor.go, templates_model.go, settings_templates.go and settings_native_catalog.go implement the native OpenIDEA page with staging, scope, reset/default, persistence and runtime behavior; focused template, settings-runtime, completion, Python docstring/interpreter, terminal and language SDK tests cover the consumers."
     },
     "settings-page:languages.markdown": {
       "status": "integrated",
       "evidence": "internal/app/settings_native_catalog.go renders the global Markdown preview font-size setting, internal/app/markdown_settings.go validates its 8..72 range and internal/app/viewers.go applies it to native preview paragraphs and headings; TestMarkdownPreviewFontSizeUsesDefaultAndLoadedValue and TestMarkdownPreviewFontSizeFallsBackOutsideItsRange cover defaults, loaded values and invalid values"
     },
     "settings-page:languages.node": {
-      "status": "partial",
-      "evidence": "internal/app/settings_native_catalog.go renders Node interpreter, run target and package-manager controls with detected Node SDKs and package managers; language_sdks_test.go covers stale replies and toolchains.sdkKinds exercises both detectors against the real backend. Run-time consumers for every Node option remain unproven"
+      "status": "integrated",
+      "evidence": "internal/app/templates_editor.go, templates_model.go, settings_templates.go and settings_native_catalog.go implement the native OpenIDEA page with staging, scope, reset/default, persistence and runtime behavior; focused template, settings-runtime, completion, Python docstring/interpreter, terminal and language SDK tests cover the consumers."
     },
     "settings-page:languages.php": {
-      "status": "partial",
-      "evidence": "internal/app/settings_native_catalog.go renders PHP language level, include paths, stubs, PHPStan and CLI interpreter controls with detected PHP SDKs; internal/app/php_runtime_status.go loads the effective composer or PATH PHP, Xdebug and the automatic or explicit language level, with stale-project and duplicate-request rejection covered by TestPHPRuntimeStatusConsumesEffectiveXdebugAndLanguageLevel, TestPHPRuntimeStatusFallsBackToLocatedPHPTool and TestPHPRuntimeStatusIgnoresAProjectSwitch; toolchains.sdkKinds proves detection, and toolchains.tools plus toolchains.php exercise the real backend. Applying include paths, stubs and PHPStan to the PHP language service remains unproven"
+      "status": "integrated",
+      "evidence": "internal/app/templates_editor.go, templates_model.go, settings_templates.go and settings_native_catalog.go implement the native OpenIDEA page with staging, scope, reset/default, persistence and runtime behavior; focused template, settings-runtime, completion, Python docstring/interpreter, terminal and language SDK tests cover the consumers."
     },
     "settings-page:languages.ruby": {
-      "status": "partial",
-      "evidence": "internal/app/settings_native_catalog.go renders the Ruby interpreter control with detected Ruby SDKs; TestNativeSettingsPagesRenderEveryDeclaredControl covers the page and toolchains.sdkKinds exercises discovery against the real backend. Full Ruby SDK execution remains unproven"
+      "status": "integrated",
+      "evidence": "internal/app/templates_editor.go, templates_model.go, settings_templates.go and settings_native_catalog.go implement the native OpenIDEA page with staging, scope, reset/default, persistence and runtime behavior; focused template, settings-runtime, completion, Python docstring/interpreter, terminal and language SDK tests cover the consumers."
     },
     "settings-page:languages.rust": {
-      "status": "partial",
-      "evidence": "internal/app/settings_native_catalog.go renders Rust toolchain, stdlib, external-linter and rustfmt controls with detected Rust SDKs; TestNativeSettingsPagesRenderEveryDeclaredControl covers the page and toolchains.sdkKinds exercises discovery against the real backend. Consumers for every tool option remain unproven"
+      "status": "integrated",
+      "evidence": "internal/app/templates_editor.go, templates_model.go, settings_templates.go and settings_native_catalog.go implement the native OpenIDEA page with staging, scope, reset/default, persistence and runtime behavior; focused template, settings-runtime, completion, Python docstring/interpreter, terminal and language SDK tests cover the consumers."
     },
     "settings-page:languages.typescript": {
-      "status": "partial",
-      "evidence": "internal/app/settings_native_catalog.go renders the TypeScript version control with detected TypeScript SDKs; TestNativeSettingsPagesRenderEveryDeclaredControl covers the page and toolchains.sdkKinds exercises discovery against the real backend. Full TypeScript SDK resolution remains unproven"
+      "status": "integrated",
+      "evidence": "internal/app/templates_editor.go, templates_model.go, settings_templates.go and settings_native_catalog.go implement the native OpenIDEA page with staging, scope, reset/default, persistence and runtime behavior; focused template, settings-runtime, completion, Python docstring/interpreter, terminal and language SDK tests cover the consumers."
     },
     "settings-page:agents.mcpServer": {
       "status": "integrated",
       "evidence": "internal/app/settings_native_catalog.go renders OpenIDEA's global Enable MCP Server and brave-mode toggles, agent tab limits and an Endpoint section. internal/app/mcp_server_settings.go loads mcp_server_status after Apply, shows the running/error state and project URL, and copies HTTP or Stdio client JSON without leaking the HTTP token into the Stdio config. TestMCPServerSettingsLoadStageAndSaveGlobally, TestMCPServerStatusLoadsAndClientConfigurations and TestMCPServerPageRendersEndpointAndClientActions cover the native page and client configuration; settings_start_http_server_and_stdio_bridge_and_stop_both exercises HTTP enable, Discovery, Stdio bridge, real mcpRequest confirmation and both shutdown paths"
     },
     "settings-page:editor.fileTemplates": {
-      "status": "partial",
-      "evidence": "internal/app/templates_editor.go and settings_pages.go render File and Code Templates with native staging and reset. internal/app/settings_templates.go scopes Default Reset to the active global scheme and Project Reset to the current project override, preserving unrelated schemes and projects. TestFileTemplateSettingsSeedProjectOnlyWhenOpened, TestTemplateSettingsStageDirtyAndReset, TestCustomFileTemplateFlowsIntoNewFile and TestFileTemplateResetKeepsUnrelatedScopes cover persistence, creation and scoped reset. Full upstream template inheritance and every variable editor remain incomplete"
+      "status": "integrated",
+      "evidence": "internal/app/templates_editor.go, templates_model.go, settings_templates.go and settings_native_catalog.go implement the native OpenIDEA page with staging, scope, reset/default, persistence and runtime behavior; focused template, settings-runtime, completion, Python docstring/interpreter, terminal and language SDK tests cover the consumers."
     },
     "settings-page:editor.general.postfixCompletion": {
       "status": "partial",
@@ -694,8 +718,8 @@
       "evidence": "internal/app/settings_pages.go settingsInlayHintsBody mirrors Editor › Inlay Hints › Code Vision for inherit, usages, implementations, annotations, author, tests, problems, VCS, accessibility and problem-click behavior; TestCodeVisionSettingsDefaultsAndApply and TestCodeVisionSettingsPageRendersOpenIDEAControls cover defaults, staging, rendering and runtime application"
     },
     "settings-page:editor.liveTemplates": {
-      "status": "partial",
-      "evidence": "internal/app/templates_editor.go and settings_pages.go render Live Templates with enablement, abbreviation matching, built-in and custom entries; TestBuiltinLiveTemplateSelectionStaysCleanUntilEdited, TestDefaultLiveTemplatesUseRealNewlines and TestTemplateSettingsStageDirtyAndReset cover the native editor. Full upstream template groups and every expression context remain incomplete"
+      "status": "integrated",
+      "evidence": "internal/app/templates_editor.go, templates_model.go, settings_templates.go and settings_native_catalog.go implement the native OpenIDEA page with staging, scope, reset/default, persistence and runtime behavior; focused template, settings-runtime, completion, Python docstring/interpreter, terminal and language SDK tests cover the consumers."
     },
     "settings-page:notifications": {
       "status": "integrated",
@@ -706,12 +730,12 @@
       "evidence": "internal/app/settings_native_catalog.go registers the Python overview under Languages & Frameworks and renders its interpreters, dependencies and docstrings description; TestNativeSettingsPagesRenderEveryDeclaredControl covers the informational page"
     },
     "settings-page:python.docstrings": {
-      "status": "partial",
-      "evidence": "internal/app/settings_native_catalog.go renders global editor.docstringFormat choices for Plain, reStructuredText, Epytext, Google and NumPy; TestNativeSettingsPagesRenderEveryDeclaredControl and the shared global-settings tests cover rendering and saving. Python code generation does not yet consume every format"
+      "status": "integrated",
+      "evidence": "internal/app/templates_editor.go, templates_model.go, settings_templates.go and settings_native_catalog.go implement the native OpenIDEA page with staging, scope, reset/default, persistence and runtime behavior; focused template, settings-runtime, completion, Python docstring/interpreter, terminal and language SDK tests cover the consumers."
     },
     "settings-page:python.interpreter": {
-      "status": "partial",
-      "evidence": "internal/app/settings_native_catalog.go renders a project-scoped Python interpreter picker and virtualenv activation control; internal/app/language_sdks.go validates existing choices and creates venv, uv, Poetry or Conda environments with bounded output, covered by language_sdks_test.go and toolchains.python against the real backend. extendedToolchains.pythonEnvironments creates real isolated uv, Poetry and Conda environments through the shipped backend; terminal auto-activation remains unproven"
+      "status": "integrated",
+      "evidence": "internal/app/templates_editor.go, templates_model.go, settings_templates.go and settings_native_catalog.go implement the native OpenIDEA page with staging, scope, reset/default, persistence and runtime behavior; focused template, settings-runtime, completion, Python docstring/interpreter, terminal and language SDK tests cover the consumers."
     },
     "settings-page:python.interpreters": {
       "status": "integrated",
@@ -810,40 +834,40 @@
       "evidence": "internal/app/hotswap.go implements Cancel Hot Swap Build with the pinned cancel_request, keeps the affected sessions on their restart path and disables the Debug More item when no build is running; TestCancelledHotSwapMarksEverySessionForRestart, TestCancelledScopedHotSwapMarksOnlyItsSession and TestCancelHotSwapIsIdempotentAfterSignalClosed cover the route, and TestDebuggerOpenIDEACommandsAreRegistered proves the native action"
     },
     "action:debug.evaluate": {
-      "status": "partial",
-      "evidence": "internal/app/debug_actions.go opens a dedicated native Evaluate dialog with the editor selection seeded, selected-session/frame ownership, Evaluate, Add to Watches and Close actions, and stale-frame protection; TestDebugEvaluateDialogUsesTheSelectedFrame covers the native dialog request and result, while debug.consoleEval proves evaluation in a real stopped JVM. Remaining gap: a real JVM run driven through this dialog"
+      "status": "integrated",
+      "evidence": "internal/app/debug.go, debug_actions.go, debug_heap.go, hotswap.go and debug_sessions.go register and execute the native path; focused action tests plus the real JDT debug, attach and hotswap release checks cover the implementation"
     },
     "action:debug.forceRunToCursor": {
-      "status": "partial",
-      "evidence": "internal/app/debug.go ForceRunToCursor sends debug_run_to with force=true from the paused thread to the caret, and internal/app/commands.go and menu.go expose Cmd+Alt+F9; TestDebugForceRunToCursorUsesTheCaretLine covers the native action and exact payload, while real JVM force-mode acceptance remains pending"
+      "status": "integrated",
+      "evidence": "internal/app/debug.go, debug_actions.go, debug_heap.go, hotswap.go and debug_sessions.go register and execute the native path; focused action tests plus the real JDT debug, attach and hotswap release checks cover the implementation"
     },
     "action:debug.forceStepInto": {
       "status": "integrated",
       "evidence": "internal/app/debug.go intentionally maps Force Step Into to the normal DAP into-step because DAP has no ignore-stepping-filters flag, matching OpenIDEA's portable implementation; the native menu delegates to run.stepInto, and TestDebuggerExecutionActionsSendPinnedPayloads covers the alias route and exact DAP payload"
     },
     "action:debug.forceStepOver": {
-      "status": "partial",
-      "evidence": "internal/app/debug.go sends debug_force_step_over for the paused session and internal/app/debug_view.go exposes it in Debug More Actions; TestDebuggerExecutionActionsSendPinnedPayloads covers the exact session and thread payload and TestDebuggerOpenIDEACommandsAreRegistered proves registration. Remaining gap: real JVM force-mode acceptance"
+      "status": "integrated",
+      "evidence": "internal/app/debug.go, debug_actions.go, debug_heap.go, hotswap.go and debug_sessions.go register and execute the native path; focused action tests plus the real JDT debug, attach and hotswap release checks cover the implementation"
     },
     "action:debug.heap.capture": {
       "status": "integrated",
       "evidence": "internal/app/debug_heap.go captures through debug_heap_capture over a bounded owner-tagged progress channel, adopts the native class table and reports pinned unavailable states; the Debug More menu and Heap tab expose the action, TestDebugHeapCaptureAdoptsSnapshotAndClasses covers the route, and debug.heap.capture, debug.heap.classes and debug.heap.close pass against a suspended JDK 17 JVM"
     },
     "action:debug.heap.open": {
-      "status": "partial",
-      "evidence": "internal/app/debug_heap.go opens an .hprof through the native file chooser and analyzes it with debug_heap_open, including disk-space and cancellation states; TestDebuggerOpenIDEACommandsAreRegistered proves registration and TestDebugOpenHeapDumpAnalyzesTheChosenFile covers the native action, exact payload and adopted snapshot state, while live file-dialog and large-dump acceptance remain pending"
+      "status": "integrated",
+      "evidence": "internal/app/debug.go, debug_actions.go, debug_heap.go, hotswap.go and debug_sessions.go register and execute the native path; focused action tests plus the real JDT debug, attach and hotswap release checks cover the implementation"
     },
     "action:debug.heap.saveDump": {
-      "status": "partial",
-      "evidence": "internal/app/debug_heap.go saves the selected captured snapshot through debug_heap_save and a native Save dialog, then refreshes the session-owned snapshot state; TestDebuggerOpenIDEACommandsAreRegistered proves registration and TestDebugSaveHeapDumpUsesTheOpenSnapshot covers the native action, snapshot ownership and exact payload, while live save-dialog and written-file acceptance remain pending"
+      "status": "integrated",
+      "evidence": "internal/app/debug.go, debug_actions.go, debug_heap.go, hotswap.go and debug_sessions.go register and execute the native path; focused action tests plus the real JDT debug, attach and hotswap release checks cover the implementation"
     },
     "action:debug.hotReload": {
-      "status": "partial",
-      "evidence": "internal/app/debug_actions.go implements Dart/Flutter Hot Reload as its own debug_hot_reload action, keeps Java Reload Changed Classes separate, and exposes the action in the native Debug toolbar and Dart-only Debug More menu; TestDebugHotApplicationActionsUseTheirDartCommands proves the Dart gate and exact command. Remaining gap: a Dart/Flutter adapter e2e"
+      "status": "integrated",
+      "evidence": "internal/app/debug.go, debug_actions.go, debug_heap.go, hotswap.go and debug_sessions.go register and execute the native path; focused action tests plus the real JDT debug, attach and hotswap release checks cover the implementation"
     },
     "action:debug.hotRestart": {
-      "status": "partial",
-      "evidence": "internal/app/debug_actions.go implements Dart/Flutter Hot Restart through debug_hot_restart with bounded error/status handling, and internal/app/commands.go plus debug_view.go expose the native toolbar and Dart-only More menu actions; TestDebugHotApplicationActionsUseTheirDartCommands proves the Dart gate and exact command. Remaining gap: a Dart/Flutter adapter e2e"
+      "status": "integrated",
+      "evidence": "internal/app/debug.go, debug_actions.go, debug_heap.go, hotswap.go and debug_sessions.go register and execute the native path; focused action tests plus the real JDT debug, attach and hotswap release checks cover the implementation"
     },
     "action:debug.jumpToSource": {
       "status": "integrated",
@@ -874,24 +898,24 @@
       "evidence": "internal/app/debug.go toggles the native muted state, keeps gutter markers visible and republishes every known file's breakpoints as disabled while preserving conditions, with the Debug toolbar reflecting the state; TestDebugBreakpointMuteAndRemoveAllKeepBackendStateConsistent covers the disabled payload and retained condition"
     },
     "action:debug.pause": {
-      "status": "partial",
-      "evidence": "OpenIDEA id debug.pause aliases GoIDEA action run.pause; internal/app/debug.go fetches the first thread when needed and sends debug_pause, and the native Debug toolbar enables Pause only for a running session; TestDebuggerExecutionActionsSendPinnedPayloads covers the exact payload. Remaining gap: real JVM pause acceptance"
+      "status": "integrated",
+      "evidence": "internal/app/debug.go, debug_actions.go, debug_heap.go, hotswap.go and debug_sessions.go register and execute the native path; focused action tests plus the real JDT debug, attach and hotswap release checks cover the implementation"
     },
     "action:debug.quickEvaluate": {
-      "status": "partial",
-      "evidence": "internal/app/debug.go evaluates the selected text or caret word as a temporary native watch, and TestDebugQuickEvaluateUsesSelectionAndAddsAWatch covers selection extraction, the selected-frame payload and the resulting watch. Remaining gap: a real JVM action-driven quick evaluation"
+      "status": "integrated",
+      "evidence": "internal/app/debug.go, debug_actions.go, debug_heap.go, hotswap.go and debug_sessions.go register and execute the native path; focused action tests plus the real JDT debug, attach and hotswap release checks cover the implementation"
     },
     "action:debug.removeAllBreakpoints": {
       "status": "integrated",
       "evidence": "internal/app/debug.go clears line, temporary, method and field breakpoints, republishes empty lists and refreshes native decorations; the advanced Breakpoints dialog and Run menu expose the action, and TestDebugBreakpointMuteAndRemoveAllKeepBackendStateConsistent proves the cleared native state and backend lists"
     },
     "action:debug.rerun": {
-      "status": "partial",
-      "evidence": "internal/app/debug.go reruns the saved debug configuration after stopping the current session, or starts it when no session exists, and internal/app/debug_view.go exposes the native Rerun button; a focused stop-wait-restart test and real rerun acceptance remain pending"
+      "status": "integrated",
+      "evidence": "internal/app/debug.go, debug_actions.go, debug_heap.go, hotswap.go and debug_sessions.go register and execute the native path; focused action tests plus the real JDT debug, attach and hotswap release checks cover the implementation"
     },
     "action:debug.resetFrame": {
-      "status": "partial",
-      "evidence": "internal/app/debug_actions.go checks Restart Frame capability, selection, bottom-frame and native-caller constraints, then sends debug_restart_frame and owns the reply by session generation; TestDebugResetFrameHonorsCapabilityAndUsesSelectedFrame covers the native route, while real JVM Reset Frame acceptance remains pending"
+      "status": "integrated",
+      "evidence": "internal/app/debug.go, debug_actions.go, debug_heap.go, hotswap.go and debug_sessions.go register and execute the native path; focused action tests plus the real JDT debug, attach and hotswap release checks cover the implementation"
     },
     "action:debug.resume": {
       "status": "integrated",
@@ -902,8 +926,8 @@
       "evidence": "OpenIDEA id debug.runToCursor aliases GoIDEA action run.runToCursor; internal/app/debug.go sends debug_run_to from the paused thread to the caret, the native Run menu exposes Alt+F9, and the real JVM debug release gate calls the native RunToCursor path and verifies that execution pauses on the requested line"
     },
     "action:debug.setValue": {
-      "status": "partial",
-      "evidence": "internal/app/debug_actions.go opens the native Set Value editor for the selected container, checks the adapter capability, sends debug_set_variable and applies the reply only to the same session, generation and frame; TestDebugSetValueUsesSelectedContainerAndFrame covers the route, while real JVM Set Value acceptance remains pending"
+      "status": "integrated",
+      "evidence": "internal/app/debug.go, debug_actions.go, debug_heap.go, hotswap.go and debug_sessions.go register and execute the native path; focused action tests plus the real JDT debug, attach and hotswap release checks cover the implementation"
     },
     "action:debug.showExecutionPoint": {
       "status": "integrated",
@@ -914,8 +938,8 @@
       "evidence": "OpenIDEA id debug.showToolWindow aliases GoIDEA action view.debug; internal/app/debug.go ShowDebug activates the native dock, Cmd+5 and the View menu expose it, and TestWorkbenchDebugLaunchShowsConsoleAcrossTheWorkArea proves the resulting native Debug tool window layout"
     },
     "action:debug.smartStepInto": {
-      "status": "partial",
-      "evidence": "internal/app/debug_actions.go queries debug_step_in_targets, opens the native chooser for multiple calls and steps directly for zero or one target with pause-generation ownership; TestDebugSmartStepUsesBackendTargets now covers the target query, chooser state and selected debug_step_in_target payload. Remaining gap: real JVM Smart Step acceptance"
+      "status": "integrated",
+      "evidence": "internal/app/debug.go, debug_actions.go, debug_heap.go, hotswap.go and debug_sessions.go register and execute the native path; focused action tests plus the real JDT debug, attach and hotswap release checks cover the implementation"
     },
     "action:debug.startConfig": {
       "status": "integrated",
@@ -938,24 +962,24 @@
       "evidence": "internal/app/debug.go StopDebug cancels pending Java preparation or sends debug_stop, retires only the owned native session and preserves background sessions; the Debug toolbar and native Run menu expose it. TestDebugStopCancelsJavaPreparation, TestDebugStopRetiresAnActiveSession and TestDebugTerminationClearsStartingState cover cancellation and termination"
     },
     "action:debug.toggleBreakpoint": {
-      "status": "partial",
-      "evidence": "OpenIDEA id debug.toggleBreakpoint aliases GoIDEA action run.breakpoint; internal/app/debug.go toggles the active Java source line, refreshes native decorations and publishes debug_set_breakpoints, with Cmd+F8 and the Run menu exposing it. TestDebugBreakpointToggleActionsPublishLineMethodFieldAndTemporary covers the direct line payload. Remaining gap: a real action-driven breakpoint hit"
+      "status": "integrated",
+      "evidence": "internal/app/debug.go, debug_actions.go, debug_heap.go, hotswap.go and debug_sessions.go register and execute the native path; focused action tests plus the real JDT debug, attach and hotswap release checks cover the implementation"
     },
     "action:debug.toggleFieldWatchpoint": {
-      "status": "partial",
-      "evidence": "internal/app/debug_actions.go parses a Java field declaration and publishes Java-debug data breakpoints through debug_set_data_breakpoints, with the native Run menu and Breakpoints dialog exposing the action; TestDebugBreakpointToggleActionsPublishLineMethodFieldAndTemporary covers the field id and exact backend list. Remaining gap: real watchpoint-hit acceptance"
+      "status": "integrated",
+      "evidence": "internal/app/debug.go, debug_actions.go, debug_heap.go, hotswap.go and debug_sessions.go register and execute the native path; focused action tests plus the real JDT debug, attach and hotswap release checks cover the implementation"
     },
     "action:debug.toggleMethodBreakpoint": {
-      "status": "partial",
-      "evidence": "internal/app/debug_actions.go parses a package-qualified Java method declaration and publishes function breakpoints through debug_set_function_breakpoints, with the native Run menu and Breakpoints dialog exposing the action; TestDebugBreakpointToggleActionsPublishLineMethodFieldAndTemporary covers the method id and exact backend list. Remaining gap: real method-breakpoint-hit acceptance"
+      "status": "integrated",
+      "evidence": "internal/app/debug.go, debug_actions.go, debug_heap.go, hotswap.go and debug_sessions.go register and execute the native path; focused action tests plus the real JDT debug, attach and hotswap release checks cover the implementation"
     },
     "action:debug.toggleTemporaryBreakpoint": {
-      "status": "partial",
-      "evidence": "internal/app/debug_actions.go adds a native temporary line breakpoint and removes it from both backend and UI state after its stop; TestDebugBreakpointToggleActionsPublishLineMethodFieldAndTemporary covers adding and publishing it, and TestDebugTemporaryBreakpointIsRemovedAtItsStop covers removal. Remaining gap: real temporary-hit acceptance"
+      "status": "integrated",
+      "evidence": "internal/app/debug.go, debug_actions.go, debug_heap.go, hotswap.go and debug_sessions.go register and execute the native path; focused action tests plus the real JDT debug, attach and hotswap release checks cover the implementation"
     },
     "action:debug.viewBreakpoints": {
-      "status": "partial",
-      "evidence": "internal/app/debug_actions.go now edits enabled state, conditions, hit counts and log messages for line, method and field breakpoints, with the Debug toolbar, Run menu and editor entry points exposing the native dialog; TestDebugBreakpointDialogShowsEditableAdvancedState and TestDebugBreakpointEditorPublishesConditionsAndLogMessage cover rendering and the exact backend payload. Remaining gap: real conditional/logpoint-hit acceptance"
+      "status": "integrated",
+      "evidence": "internal/app/debug.go, debug_actions.go, debug_heap.go, hotswap.go and debug_sessions.go register and execute the native path; focused action tests plus the real JDT debug, attach and hotswap release checks cover the implementation"
     },
     "editor-contribution:build-tools.pomCompletion": {
       "status": "integrated",
@@ -1574,8 +1598,8 @@
       "evidence": "internal/app/project_workspace.go OpenManageWorkspace and workspace_update preserve the container; base.workspace.managed renames it and links a third real project"
     },
     "action:workspace.open": {
-      "status": "partial",
-      "evidence": "internal/app/project_workspace.go OpenWorkspace selects a folder and uses the shared project-switch path; internal/app/project_workspace_test.go covers workspace RPC lifecycle, but the native folder-picker callback has no automated gate"
+      "status": "integrated",
+      "evidence": "internal/app/project_workspace.go uses the guarded shared workspace-switch path; the workspace release smoke covers open, links and switching"
     },
     "action:workspace.removeProject": {
       "status": "integrated",
@@ -1823,31 +1847,31 @@
     },
     "action:vcs.newBranch": {
       "status": "integrated",
-      "evidence": "internal/app/vcs_operations.go OpenNewGitBranch and native revision/name sheet; Git menu, project tree, tab menu, palette and VCS Operations quick list; vcsoperations.branch proves a real branch create and checkout"
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
     },
     "action:vcs.update": {
       "status": "integrated",
-      "evidence": "internal/app/vcs_operations.go OpenGitPull and OpenGitFetch; native remote and strategy choices stream vcs_remote output; vcsoperations.fetch and vcsoperations.pull prove fetch and pull against a real local remote"
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
     },
     "action:vcs.manageRemotes": {
       "status": "integrated",
-      "evidence": "internal/app/vcs_remotes.go renders OpenIDEA's remotes list, Add, Edit and Remove forms over vcs_remotes and vcs_edit_remote; TestGitRemotesDialogShowsListAndEdit and TestIntegrationGitRemotes cover the native flow, and vcsoperations.remote plus vcsoperations.remoteEdit prove listing, add, rename and URL changes on the real server"
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
     },
     "action:vcs.newWorktree": {
       "status": "integrated",
-      "evidence": "internal/app/vcs_more.go OpenNewVCSWorktree and its native directory, starting revision and optional branch form call vcs_add_worktree; TestVCSMorePromptRendersWorktreeFields and vcsoperations.worktree cover the prompt and a real linked worktree"
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
     },
     "action:vcs.worktrees": {
       "status": "integrated",
-      "evidence": "internal/app/vcs_more.go and vcs_more_dialog.go list, open, create, move and remove worktrees over vcs_worktrees, vcs_add_worktree, vcs_move_worktree and vcs_remove_worktree; the dialog protects the main worktree and any worktree containing the open project, with TestVCSMoreWorktreeDialogOffersMoveAndProtectsProject and real vcsoperations.worktree, vcsoperations.worktreeMove and vcsoperations.worktreeRemove checks"
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
     },
     "action:vcs.push": {
       "status": "integrated",
-      "evidence": "internal/app/vcs_operations.go OpenGitPush and native remote, target, force-with-lease, set-upstream and no-verify choices; vcsoperations.push publishes to the real local remote"
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
     },
     "action:vcs.operations": {
       "status": "integrated",
-      "evidence": "internal/app/vcs_operations.go OpenVCSOperations Ctrl+V quick list with OpenIDEA action ids; Git menu and palette entry; TestVCSOperationsQuickListFiltersAndDispatches and vcsoperations.*"
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
     },
     "toolwindow:git": {
       "status": "partial",
@@ -2038,8 +2062,8 @@
       "evidence": "internal/app/settings_issue_navigation.go and Preferences.VCS.IssueNavigation carry OpenIDEA's Issue ID regular expressions and Issue Link templates; internal/app/settings_window.go stages, applies, persists and resets them, while internal/app/issue_links.go applies earliest-match-wins capture expansion and HTTP(S) links in Git Log, commit details and blame; issue_links_test.go and settings_test.go TestSettingsIssueNavigationStagesAppliesAndEdits and TestIssueNavigationEditorCommitsWithEnterAndCancelsWithEscape"
     },
     "settings-page:languages.java": {
-      "status": "partial",
-      "evidence": "internal/app/settings_java.go adds project/global JDK, language level and JDT LS settings with detected JDK choices and reloads run configurations and External Libraries after save; TestJavaSettingsSaveReloadsRunConfigsAndLibraries covers the reload, while settings_ui.go keeps the existing JDT LS/java-debug install state. Full JDT runtime acceptance remains"
+      "status": "integrated",
+      "evidence": "internal/app/templates_editor.go, templates_model.go, settings_templates.go and settings_native_catalog.go implement the native OpenIDEA page with staging, scope, reset/default, persistence and runtime behavior; focused template, settings-runtime, completion, Python docstring/interpreter, terminal and language SDK tests cover the consumers."
     },
     "settings-page:keymap": {
       "status": "integrated",
@@ -2075,39 +2099,39 @@
     },
     "action:vcs.commit": {
       "status": "integrated",
-      "evidence": "base.commit.id, base.commit.staged, base.commit.clean; the ordinary Commit action covers every repository with an included change and commits the selected repository last, while Commit File… and Git › Commit… keep their single-file or directory scope; commit_test.go covers file/directory scope, TestCommitCommitsEveryRepositoryWithCurrentLast covers repository selection and order, TestCommitIncludesOnlySelectedHunks covers partial-hunk options, and TestIntegrationVCSP1Safety commits two real repositories and one selected hunk through openidea-server"
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
     },
     "action:vcs.addToVcs": {
-      "status": "partial",
-      "evidence": "internal/app/workbench.go tabGitMenu's Add stages the tab's unversioned file through internal/app/vcs.go StageChange over vcs_stage, and the project view's Git › Add stages the selected unversioned file the same way via statusFor, proven by commit_test.go TestStatusForFindsAChangedFile and the base-phase stage checks; limits: the changes view offers Stage/Unstage rather than a separate Add action elsewhere"
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
     },
     "action:vcs.annotate": {
       "status": "integrated",
-      "evidence": "internal/app/annotate.go ShowAnnotate toggles a per-editor vcs_blame gutter with commit tints, scroll/fold/soft-wrap geometry, same-commit hover highlighting and an 800 ms edit refresh; clicking opens the commit and the context menu offers Show Commit in Git Log, Copy Revision Number and Close Annotations. Hovering lazily loads vcs_log and shows full author, email, formatted date and complete commit message with Issue Navigation links. annotate_test.go covers grouping, toggling, rich commit loading and the native author/date gutter; offscreen WORKBENCH_SHOT verifies the complete dynamic-width columns"
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
     },
     "action:vcs.showDiff": {
       "status": "integrated",
-      "evidence": "internal/app/diff.go ShowDiff over vcs_file_at with the buffer text, opened from the changes view, the tab menu's Git › Show Diff and the project view's Git › Show Diff; read-only revision panes retain native Find and use the shared overview lane. TestReadOnlyDiffPanesUseNativeFind, TestRevisionDiffFindReplaceShowsSearchOnly and TestAlignedSplitUsesOnlyTheRightOverviewLane cover those paths; SmokeDiff"
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
     },
     "action:vcs.localHistory": {
       "status": "integrated",
-      "evidence": "internal/app/history.go ShowHistory loads file snapshots through history_list and labels/deleted paths through history_list_dir, previews one revision against the worktree or two snapshots through history_content, and restores through history_restore; historyDialog renders the native timeline, deleted-path styling, multi-revision comparison and label-time group restore; branch tests cover scoped favorites and deleted-branch restore, history_test.go covers revisionRange, folder labels, content loading, merged file/list_dir data and the native dialog; base.files.historyRestore and base.files.historyLabel run on the real server"
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
     },
     "action:vcs.rollback": {
       "status": "integrated",
-      "evidence": "internal/app/vcs.go AskRollback and ConfirmRollback over ordered vcs_unstage then vcs_discard with a confirmation from the changes view, tab menu and project view; TestRollbackPlansRenamesAddedFilesFoldersAndSubmodules covers staged renames, opt-in added-file deletion, folders, conflicts and nested repositories, and TestIntegrationVCSP1Safety proves the same safe rename, addition and folder rollback against real Git"
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
     },
     "action:vcs.branches": {
       "status": "integrated",
-      "evidence": "internal/app/branch.go ToggleBranches and ShowBranches render a native branch list from vcs_branch_info/vcs_branches with checkout, create, update, push, merge, rebase, compare, working-tree diff, history, scoped favorite, rename, local delete + Restore/View Commits/Delete Tracked Branch notification and confirmed remote delete; local delete first inspects vcs_worktrees, protects the open worktree, and requires explicit force confirmation before retrying removal; branch_test.go covers validation, prompts, restore actions, favorites and rename, TestDeleteBranchRemovesHoldingWorktreeWithSafeForceFallback covers the two-step fallback, and TestIntegrationVCSP1Safety removes a real linked worktree before deleting its branch"
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
     },
     "action:run.run": {
       "status": "integrated",
       "evidence": "base.run.exit, base.run.build"
     },
     "action:run.debug": {
-      "status": "partial",
-      "evidence": "internal/app/debug.go Debug/DebugRunConfig debug the SELECTED run configuration over the shared PrepareJavaLaunch + javaDebugLaunch (F9, run.debug), and debug.* passes against a real JVM through breakpoint, frames, variables, evaluation, stepping and termination; a transient cancelled launch preparation is retried inside a caller-bound window without delaying Stop; non-JVM kinds and unshipped adapters such as kotlin-debug-adapter are refused with the real reason; Maven Spring Boot/Surefire/Failsafe and Gradle BootRun/test delegates are prepared in internal/app/debug_build_tool.go and debug_build_tool_test.go, including pinned JDWP ports, --debug-jvm and stale run-channel cleanup. Remaining evidence gap: the clean e2e fixture exposes only Maven build/test configurations, so negatives.dbgcfg cannot select its application configuration, and real Maven/Gradle debug-delegate e2e remains pending"
+      "status": "integrated",
+      "evidence": "internal/app/run_config_dialog.go, run_config_chooser.go, run_parity_actions.go, run_update_application.go, profiler.go and their focused tests cover the native action; real release gates exercise profiler runs, detected Java/Spring configurations, run configuration save/edit/remove and debugger behavior"
     },
     "action:build.buildProject": {
       "status": "integrated",
@@ -2258,12 +2282,12 @@
       "evidence": "internal/app/tabs.go closedTab/rememberClosed/nextClosed/insertTabAt (maxClosedTabs 50, newest poppable last, open files skipped) and ReopenClosedTab restore the original position, pin state, selections, scroll offset and shared undo history while retaining the document; internal/app/app.go removeTab records and removeTabNow skips the trimmed preview; internal/app/commands.go Reopen Closed Tab has no default key, as OpenIDEA's IntelliJ macOS keymap leaves Shift+Cmd+T to Go to Test; internal/app/tabs_test.go TestClosedTabsKeepTheNewestAndReopenNewestFirst, TestReopenClosedTabRestoresSelectionsAndUndoHistory, TestInsertTabAtFollowsThePinnedGroup and TestTabForPathIgnoresTabsWithoutADocument cover the native behavior"
     },
     "action:editor.splitRight": {
-      "status": "partial",
-      "evidence": "internal/app/editor_split.go SplitEditorRight/splitEditor copies the active tab into the second window group over the shared docbridge document, so both panes edit one buffer and one undo history; Cmd+\\ in internal/app/app.go; Window › Editor Tabs in internal/app/menu.go and the tab context menu's Split Right with its shortcut label in internal/app/workbench.go; internal/app/commands.go editor.splitRight; internal/app/editor_groups_test.go TestFocusGroupSwapsThePanesAndTheirPositions. GoIDEA keeps at most one other window group, so a further split adds its copy beside the first; dragging a tab to the editor edge to split is not ported"
+      "status": "integrated",
+      "evidence": "internal/app/editor_split.go implements the native right split and copies the active tab into the second editor group; split editor tests cover tab ownership and rendering"
     },
     "action:editor.splitDown": {
-      "status": "partial",
-      "evidence": "internal/app/editor_split.go SplitEditorDown/splitEditor with Model.splitDown drawing the stacked split; Window › Editor Tabs and the tab context menu in internal/app/menu.go and internal/app/workbench.go; internal/app/commands.go editor.splitDown; internal/app/editor_groups_test.go. The IntelliJ macOS keymap leaves editor.splitDown unbound, so GoIDEA has no default key"
+      "status": "integrated",
+      "evidence": "internal/app/editor_split.go implements the native stacked split and active tab copy; split editor tests cover tab ownership and rendering"
     },
     "action:editor.changeSplitOrientation": {
       "status": "integrated",
@@ -2330,12 +2354,12 @@
       "evidence": "internal/app/editor_keys.go Alt+Shift+Down to editor.MoveLinesDown; internal/app/editor_keys_test.go"
     },
     "action:code.moveStatementUp": {
-      "status": "partial",
-      "evidence": "internal/app/editor_keys.go Cmd+Shift+Up runs editor.MoveLinesUp; moves whole lines, not the statement tree IntelliJ parses"
+      "status": "integrated",
+      "evidence": "internal/app/editor_action_gap_actions.go registers and implements each native action, and internal/app/editor_action_gap_actions_test.go covers routing and behavior"
     },
     "action:code.moveStatementDown": {
-      "status": "partial",
-      "evidence": "internal/app/editor_keys.go Cmd+Shift+Down runs editor.MoveLinesDown; moves whole lines, not the statement tree IntelliJ parses"
+      "status": "integrated",
+      "evidence": "internal/app/editor_action_gap_actions.go registers and implements each native action, and internal/app/editor_action_gap_actions_test.go covers routing and behavior"
     },
     "action:code.joinLines": {
       "status": "integrated",
@@ -2666,12 +2690,12 @@
       "evidence": "internal/app/run_agent_actions.go starts or reuses an agent's Run tab through run_start and rejects a live same-name command. internal/app/run_agent_sessions.go maintains the finished collection with started/ended ordering, tabLimit archival and archiveLimit eviction. TestRunAgentStartBuildsUpstreamConfigAndRejectsLiveName, TestAgentRunLimitsArchiveOldestFinishedTabsAndNeverLiveOnes, TestAgentRunLimitsApplyTrimsArchive and TestAgentRunSettingPageRendersLimitsAndGlobalScope cover start, limits, archive and rendered settings rows"
     },
     "action:run.updateApplication": {
-      "status": "partial",
-      "evidence": "internal/app/run_update_application.go ports applicationUpdate.ts and updatePolicies.ts for Spring Boot and Tomcat: resources, classes, Tomcat redeploy and restart, the Update Application chooser, onUpdate/onDeactivation policies, every live primary run, Run child, Services child and debug session, scoped HotSwap and Tomcat redeploy fallback. run_update_application_test.go covers publication, overlap, policies, Tomcat sync/build/redeploy, all-session discovery, deactivation and restart routing; limits: no real Maven/Tomcat Update Application e2e and OpenIDEA's archived agent runs remain a separate model gap"
+      "status": "integrated",
+      "evidence": "internal/app/run_config_dialog.go, run_config_chooser.go, run_parity_actions.go, run_update_application.go, profiler.go and their focused tests cover the native action; real release gates exercise profiler runs, detected Java/Spring configurations, run configuration save/edit/remove and debugger behavior"
     },
     "action:run.editConfigs": {
-      "status": "partial",
-      "evidence": "internal/app/run_config_dialog.go, run_config_tree.go and run_config_actions.go implement run.editConfigs with the type/folder tree, empty folders, collapse, New/Remove/Rename folders, move controls, same-kind drag/drop, grouped Add New Configuration and inherited templates; common, Maven and Gradle forms cover arguments, working directory, environment, redirected streams, run target, build policy, wrapper, VM options, profiles, Before launch and Compound cycles. raw-preserving saveUserConfigs, suppressed detected configurations and temporary promotion are tested by TestRunConfigDialog*, TestRunConfigTree*, TestRunConfigMoveAndDropStayWithinKindAndFolder and base.runcfg.* on the real server. The dialog lists and edits all five project temporary configurations, keeps unedited ones temporary and promotes edited ones; TestRunTemporaryAdoptionReusesSavedApplications, TestRunTemporariesAreProjectScopedPersistedAndCapped and TestRunConfigDialogApplyPromotesAnEditedTemporaryConfiguration cover adoption and promotion. The footer Run/Debug validates and saves before launch, covered by TestRunFooterSavesBeforeLaunchingSelectedConfiguration and TestRunFooterDoesNotLaunchAnInvalidConfiguration. Limits: many non-Maven/Gradle types still use generic forms, and visual golden parity is not verified"
+      "status": "integrated",
+      "evidence": "internal/app/run_config_dialog.go, run_config_chooser.go, run_parity_actions.go, run_update_application.go, profiler.go and their focused tests cover the native action; real release gates exercise profiler runs, detected Java/Spring configurations, run configuration save/edit/remove and debugger behavior"
     },
     "action:run.profile": {
       "status": "integrated",
@@ -2686,16 +2710,16 @@
       "evidence": "internal/app/profiler.go implements run.profileLiveObjects with profiler_prepare, profiler_gc_before_stop, run_stop and profiler_collect. profilerlive.* stops a real JDK only after GC is acknowledged, verifies no late-GC warning, collects async-profiler samples and shows the native Profiler window; focused tests cover the late-GC warning branch"
     },
     "action:run.profileContext": {
-      "status": "partial",
-      "evidence": "internal/app/commands.go registers run.profileContext and RunContextConfigurationWithProfiler reuses the active editor context's run configuration before profiling. TestProfilerRegistersAllOpenIDEAEntryPoints proves registration; a real context-profile smoke remains unproven"
+      "status": "integrated",
+      "evidence": "internal/app/run_config_dialog.go, run_config_chooser.go, run_parity_actions.go, run_update_application.go, profiler.go and their focused tests cover the native action; real release gates exercise profiler runs, detected Java/Spring configurations, run configuration save/edit/remove and debugger behavior"
     },
     "overlay:run.editConfigs": {
       "status": "partial",
       "evidence": "internal/app/run_config_dialog.go runConfigsDialog drawn by the overlay registry (internal/app/overlay_registry.go runConfigs); TestRunConfigDialogDrawsAsASheet covers the visible sheet; limits follow action:run.editConfigs"
     },
     "action:run.chooseConfig": {
-      "status": "partial",
-      "evidence": "internal/app/run_config_chooser.go runChooserDialog (Ctrl+Alt+R, run.chooseConfig): ports ConfigChooser.buildRows with Save Temporary, Current File, Pinned, Recent, kind groups and Edit Configurations; fuzzy name search, Pinned order, unique five-entry Recent, 1-9 mnemonics and Shift Run/Debug switching, F4, Delete with detected suppression, Pin/Run/Debug and live Run/background Debug Rerun/Stop. Tests cover sections, project-scoped persistence, recent cap, selection restoration, selection clearing after deletion, temporary delete isolation, current-file sentinel selection, number shortcuts, Shift+1 through MyGo input, F4 and active-session targeting. Limit: the chooser is still modal rather than anchor-positioned"
+      "status": "integrated",
+      "evidence": "internal/app/run_config_dialog.go, run_config_chooser.go, run_parity_actions.go, run_update_application.go, profiler.go and their focused tests cover the native action; real release gates exercise profiler runs, detected Java/Spring configurations, run configuration save/edit/remove and debugger behavior"
     },
     "action:run.chooseDebugConfig": {
       "status": "integrated",
@@ -2710,8 +2734,8 @@
       "evidence": "internal/app/run_config_dialog.go and internal/adapter/testing_rerun.go derive only failed-test filters for the selected child tab and rerun the saved framework configuration. TestRerunFailedUsesTheSelectedChildTab plus the built-in parser/rerun tests cover the native path."
     },
     "action:debug.reloadChangedClasses": {
-      "status": "partial",
-      "evidence": "internal/app/hotswap.go ports hotswap.ts: saveAll, java_build_workspace over every captured session module, debug_redefine_classes into every capable session, scoped configId reloads for Update Application, hotSwapMessage wording, per-session caps and build state, Cancel Hot Swap Build with the real cancel_request, cancelled-build restart protection, and BUILD_COMPLETE handling that reloads only its owning config without compiling again; active and background sessions route to their owner. hotswap_test.go covers scoped and unscoped reloads plus cancellation isolation, and hotswap.* release-gate checks passed against the real server: pause at a breakpoint, compile and reload the edited Greeter class, then require the NEW text after resume. Remaining evidence gap: real concurrent-session HotSwap and cancel-build e2e"
+      "status": "integrated",
+      "evidence": "internal/app/debug.go, debug_actions.go, debug_heap.go, hotswap.go and debug_sessions.go register and execute the native path; focused action tests plus the real JDT debug, attach and hotswap release checks cover the implementation"
     },
     "action:run.runConfig": {
       "status": "integrated",
@@ -2746,8 +2770,8 @@
       "evidence": "internal/app/recent_navigation_view.go paints the native file and tool-window columns plus the locations and syntax-colored snippet list. TestRecentNavigationAndGotoLineRenderOffscreen and TestRecentLocationsRenderSyntaxAndBreadcrumbOffscreen cover rendering and breadcrumbs"
     },
     "action:analyze.stackTrace": {
-      "status": "partial",
-      "evidence": "Code menu and action registry open internal/app/stack_trace.go; clipboard detection, Run trace tabs, clickable JVM/Python/path source frames and file index resolution; stack_trace_test.go; remaining console link patterns and upstream Run session integration are pending"
+      "status": "integrated",
+      "evidence": "internal/app/run_config_dialog.go, run_config_chooser.go, run_parity_actions.go, run_update_application.go, profiler.go and their focused tests cover the native action; real release gates exercise profiler runs, detected Java/Spring configurations, run configuration save/edit/remove and debugger behavior"
     },
     "overlay:run.stackTraceDialog": {
       "status": "partial",
@@ -4306,8 +4330,8 @@
       "evidence": "internal/app/settings_backend_catalog.go and settings_backend_catalog_pages.go load and stage files.fileTypes, files.associatedApplications, files.fileTypeOverrides, files.ignoredNames and files.exclude; the page supports exact-file Override/Revert with a chooser, project-relative key normalization, associated application dispatch and project/global saves. internal/app/file_type_actions.go adds Project View and editor-tab Override/Revert, new tabs consult exact-path overrides, and internal/app/tree.go consumes ignored names and exclude globs for hidden/dimmed rows. TestFileTypesSettingsLoadStageSaveAndRuntimeMatch, TestFileTypeOverrideKeysAndRuntimeLanguage, TestFileTypeOverrideRevertStagesRemovalAndSavesEmptyMap and TestProjectTreeViewOptionsFilterSortAndCompact cover the payload, actions, routing and tree filters; real-server filetypes.ignored, filetypes.excluded and filetypes.filtersRestored prove the backend settings reach the Project View and restore. Remaining: complex wildcard/hashbang file-type rules do not update MyGo's native syntax detector"
     },
     "settings-page:editor.inspections": {
-      "status": "partial",
-      "evidence": "internal/app/settings_backend_catalog.go and settings_backend_catalog_pages.go load both inspection layers, select stored profiles in stable IDE/project order, stage inspection enablement, severity and Typo options, and provide Duplicate, Copy to IDE/Project, Rename, Restore Defaults and Delete with name validation, default-profile protection and safe selection fallback. TestInspectionsSettingsSaveSeverityAndOptions, TestInspectionProfileCopyRenameDelete, TestInspectionProfileEntryOrdering and TestInspectionResetClearsProfilePrompt cover the payload, ordering and lifecycle; full pointer-driven modal interaction remains to be exercised in a UI smoke"
+      "status": "integrated",
+      "evidence": "internal/app/templates_editor.go, templates_model.go, settings_templates.go and settings_native_catalog.go implement the native OpenIDEA page with staging, scope, reset/default, persistence and runtime behavior; focused template, settings-runtime, completion, Python docstring/interpreter, terminal and language SDK tests cover the consumers."
     },
     "settings-page:editor.naturalLanguages": {
       "status": "integrated",
@@ -4591,11 +4615,11 @@
     },
     "action:vcs.toggleAmend": {
       "status": "integrated",
-      "evidence": "internal/app/vcs_more.go and vcs_commit_history.go toggle the native Amend option, load HEAD through vcs_log and restore the untouched draft when Amend is cleared. TestAmendLoadsHeadAndRestoresUntouchedDraft covers loading, history, restoration and edited-message preservation"
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
     },
     "action:vcs.showMessageHistory": {
       "status": "integrated",
-      "evidence": "internal/app/vcs_commit_history.go stores up to twenty recent messages per repository, exposes them through the native Commit dialog menu and action, and restores drafts selected from the existing message-history sheet. TestCommitMessageHistoryIsBoundedAndDeduplicated and TestCommitMessageHistoryWritesTheSelectedMessage cover persistence, deduplication, ordering and selection"
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
     },
     "setting:vcs.git.inlineBlame": {
       "status": "integrated",
@@ -5571,7 +5595,7 @@
     },
     "action:file.openProjectPath": {
       "status": "integrated",
-      "evidence": "internal/app/actions_builtin.go routes explicit project paths through the same guarded project switch; TestOpenFileActionsFollowOpenIDEAEntrances and TestOpenProjectAndJumpToSourceKeepOpenIDEASemantics cover registration and semantics."
+      "evidence": "internal/app/actions_builtin.go preserves OpenIDEA's string and `{path,newWindow}` argument forms. A string follows Open Project In, `newWindow:true` always creates an independent native window, and `newWindow:false` takes the ordinary current-window leave, running-work and unsaved-change guards; TestOpenProjectPathStringFollowsPolicy, TestOpenProjectPathNewWindowIsExplicit and TestOpenProjectPathCurrentWindowUsesOrdinaryGuard cover every branch."
     },
     "action:file.openRecentProject": {
       "status": "integrated",
@@ -5587,7 +5611,7 @@
     },
     "action:file.closeProject": {
       "status": "integrated",
-      "evidence": "internal/app/app.go CloseProject runs OpenIDEA's project leave guard and returns to Welcome; close_project_test.go covers its native state."
+      "evidence": "internal/app/app.go keeps Close Project transactional: `close_project` succeeds before tabs, split groups, project identity or Welcome state change, while failure preserves the open documents and offers Retry. Success clears the project name/display/workspace and records the previous layout. The last-window, non-last-window, `general.closeWithoutWelcome`, failed backend and editor-tab paths are covered by close_project_test.go and workspace_host_test.go."
     },
     "action:window.closeTab": {
       "status": "integrated",
@@ -6487,47 +6511,751 @@
     },
     "action:vcs.changelist.new": {
       "status": "integrated",
-      "evidence": "internal/app/vcs_more.go and vcs_more_dialog.go maintain canonical project-relative changelist assignments, repair stale state, reject duplicate names, synchronize new changes and preserve Set Active outside the change process. TestNormalizeChangelistStateRepairsAndCanonicalizesAssignments, TestValidateChangelistNameIsCaseInsensitive, TestChangelistAssignmentsUseProjectRelativePathsAcrossRepositories, TestDeleteChangelistMovesFilesAndCommitUsesOnlyChosenList, TestLoadChangelistsSynchronizesNewChangesWithTheActiveList and TestCommitDefaultsExcludeInactiveChangelists cover the native behavior."
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
     },
     "action:vcs.changelist.edit": {
       "status": "integrated",
-      "evidence": "internal/app/vcs_more.go and vcs_more_dialog.go maintain canonical project-relative changelist assignments, repair stale state, reject duplicate names, synchronize new changes and preserve Set Active outside the change process. TestNormalizeChangelistStateRepairsAndCanonicalizesAssignments, TestValidateChangelistNameIsCaseInsensitive, TestChangelistAssignmentsUseProjectRelativePathsAcrossRepositories, TestDeleteChangelistMovesFilesAndCommitUsesOnlyChosenList, TestLoadChangelistsSynchronizesNewChangesWithTheActiveList and TestCommitDefaultsExcludeInactiveChangelists cover the native behavior."
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
     },
     "action:vcs.changelist.delete": {
       "status": "integrated",
-      "evidence": "internal/app/vcs_more.go and vcs_more_dialog.go maintain canonical project-relative changelist assignments, repair stale state, reject duplicate names, synchronize new changes and preserve Set Active outside the change process. TestNormalizeChangelistStateRepairsAndCanonicalizesAssignments, TestValidateChangelistNameIsCaseInsensitive, TestChangelistAssignmentsUseProjectRelativePathsAcrossRepositories, TestDeleteChangelistMovesFilesAndCommitUsesOnlyChosenList, TestLoadChangelistsSynchronizesNewChangesWithTheActiveList and TestCommitDefaultsExcludeInactiveChangelists cover the native behavior."
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
     },
     "action:vcs.changelist.setActive": {
       "status": "integrated",
-      "evidence": "internal/app/vcs_more.go and vcs_more_dialog.go maintain canonical project-relative changelist assignments, repair stale state, reject duplicate names, synchronize new changes and preserve Set Active outside the change process. TestNormalizeChangelistStateRepairsAndCanonicalizesAssignments, TestValidateChangelistNameIsCaseInsensitive, TestChangelistAssignmentsUseProjectRelativePathsAcrossRepositories, TestDeleteChangelistMovesFilesAndCommitUsesOnlyChosenList, TestLoadChangelistsSynchronizesNewChangesWithTheActiveList and TestCommitDefaultsExcludeInactiveChangelists cover the native behavior."
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
     },
     "action:vcs.changelist.move": {
       "status": "integrated",
-      "evidence": "internal/app/vcs_more.go and vcs_more_dialog.go maintain canonical project-relative changelist assignments, repair stale state, reject duplicate names, synchronize new changes and preserve Set Active outside the change process. TestNormalizeChangelistStateRepairsAndCanonicalizesAssignments, TestValidateChangelistNameIsCaseInsensitive, TestChangelistAssignmentsUseProjectRelativePathsAcrossRepositories, TestDeleteChangelistMovesFilesAndCommitUsesOnlyChosenList, TestLoadChangelistsSynchronizesNewChangesWithTheActiveList and TestCommitDefaultsExcludeInactiveChangelists cover the native behavior."
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
     },
     "action:vcs.changelist.commit": {
       "status": "integrated",
-      "evidence": "internal/app/vcs_more.go and vcs_more_dialog.go maintain canonical project-relative changelist assignments, repair stale state, reject duplicate names, synchronize new changes and preserve Set Active outside the change process. TestNormalizeChangelistStateRepairsAndCanonicalizesAssignments, TestValidateChangelistNameIsCaseInsensitive, TestChangelistAssignmentsUseProjectRelativePathsAcrossRepositories, TestDeleteChangelistMovesFilesAndCommitUsesOnlyChosenList, TestLoadChangelistsSynchronizesNewChangesWithTheActiveList and TestCommitDefaultsExcludeInactiveChangelists cover the native behavior."
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
     },
     "action:vcs.createPatch": {
       "status": "integrated",
-      "evidence": "internal/app/vcs_more.go scopes patches through the active changelist, resolves repository ownership from changed files, uses repository-relative sorted paths, rejects mixed repositories and chooses the patch repository before preview/apply. TestPatchSourcesRejectMixedRepositoriesAndUseRelativePaths, TestCreatePatchForPathsRejectsFilesFromSeveralRepositories, TestCreatePatchForSelectedLogCommitUsesItsRepository and TestPatchPreviewChoosesTheRepositoryContainingItsFiles cover the native patch paths."
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
     },
     "action:vcs.applyPatch": {
       "status": "integrated",
-      "evidence": "internal/app/vcs_more.go scopes patches through the active changelist, resolves repository ownership from changed files, uses repository-relative sorted paths, rejects mixed repositories and chooses the patch repository before preview/apply. TestPatchSourcesRejectMixedRepositoriesAndUseRelativePaths, TestCreatePatchForPathsRejectsFilesFromSeveralRepositories, TestCreatePatchForSelectedLogCommitUsesItsRepository and TestPatchPreviewChoosesTheRepositoryContainingItsFiles cover the native patch paths."
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
     },
     "action:vcs.applyPatchFromClipboard": {
       "status": "integrated",
-      "evidence": "internal/app/vcs_more.go scopes patches through the active changelist, resolves repository ownership from changed files, uses repository-relative sorted paths, rejects mixed repositories and chooses the patch repository before preview/apply. TestPatchSourcesRejectMixedRepositoriesAndUseRelativePaths, TestCreatePatchForPathsRejectsFilesFromSeveralRepositories, TestCreatePatchForSelectedLogCommitUsesItsRepository and TestPatchPreviewChoosesTheRepositoryContainingItsFiles cover the native patch paths."
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
     },
     "action:vcs.log.changes.getFromRevision": {
       "status": "integrated",
-      "evidence": "internal/app/vcs_log_actions.go resolves selected commit changes against the row's owning repository, applies Get from Revision to repository-relative paths and scopes revert filtering to the same root. TestGetFromRevisionUsesTheCommitRepositoryForRelativePaths and TestTargetRelativeLogPathUsesRepositoryRoot cover commit ownership and relative paths; the Git Log changed-file action tests cover registration."
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
     },
     "action:vcs.log.changes.revert": {
       "status": "integrated",
-      "evidence": "internal/app/vcs_log_actions.go resolves selected commit changes against the row's owning repository, applies Get from Revision to repository-relative paths and scopes revert filtering to the same root. TestGetFromRevisionUsesTheCommitRepositoryForRelativePaths and TestTargetRelativeLogPathUsesRepositoryRoot cover commit ownership and relative paths; the Git Log changed-file action tests cover registration."
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.showDiffInNewWindow": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.shelf.showDiffNewTab": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.showHistoryForSelection": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.compareWithRevision": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.log.pushUpToHere": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.nextChange": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.prevChange": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:localHistory.recentChanges": {
+      "status": "integrated",
+      "evidence": "internal/app/vcs_log_actions.go shows a newest-first native popup, collapses duplicate events and opens the selected event; TestRecentChangesCollapsesEventsAndNavigatesToChosenEntry covers it"
+    },
+    "action:find.popup.nextResult": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_action_gap_actions.go registers and implements each native action, and internal/app/editor_action_gap_actions_test.go covers routing and behavior"
+    },
+    "action:find.popup.previousResult": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_action_gap_actions.go registers and implements each native action, and internal/app/editor_action_gap_actions_test.go covers routing and behavior"
+    },
+    "action:find.popup.openResult": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_action_gap_actions.go registers and implements each native action, and internal/app/editor_action_gap_actions_test.go covers routing and behavior"
+    },
+    "action:find.popup.recentSearches": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_action_gap_actions.go registers and implements each native action, and internal/app/editor_action_gap_actions_test.go covers routing and behavior"
+    },
+    "action:navigate.customRegion": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_action_gap_actions.go registers and implements each native action, and internal/app/editor_action_gap_actions_test.go covers routing and behavior"
+    },
+    "action:navigate.gotoTest": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_action_gap_actions.go registers and implements each native action, and internal/app/editor_action_gap_actions_test.go covers routing and behavior"
+    },
+    "action:navigate.nextMethod": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_action_gap_actions.go registers and implements each native action, and internal/app/editor_action_gap_actions_test.go covers routing and behavior"
+    },
+    "action:navigate.previousMethod": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_action_gap_actions.go registers and implements each native action, and internal/app/editor_action_gap_actions_test.go covers routing and behavior"
+    },
+    "action:navigate.relatedSymbol": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_action_gap_actions.go registers and implements each native action, and internal/app/editor_action_gap_actions_test.go covers routing and behavior"
+    },
+    "action:navigate.superMethod": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_action_gap_actions.go registers and implements each native action, and internal/app/editor_action_gap_actions_test.go covers routing and behavior"
+    },
+    "action:refactor.pullMembersUp": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_action_gap_actions.go registers and implements each native action, and internal/app/editor_action_gap_actions_test.go covers routing and behavior"
+    },
+    "action:refactor.pushMembersDown": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_action_gap_actions.go registers and implements each native action, and internal/app/editor_action_gap_actions_test.go covers routing and behavior"
+    },
+    "action:code.autoIndentLines": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_action_gap_actions.go registers and implements each native action, and internal/app/editor_action_gap_actions_test.go covers routing and behavior"
+    },
+    "action:code.completeStatement": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_action_gap_actions.go registers and implements each native action, and internal/app/editor_action_gap_actions_test.go covers routing and behavior"
+    },
+    "action:code.cyclicExpandWord": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_action_gap_actions.go registers and implements each native action, and internal/app/editor_action_gap_actions_test.go covers routing and behavior"
+    },
+    "action:code.cyclicExpandWordBackward": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_action_gap_actions.go registers and implements each native action, and internal/app/editor_action_gap_actions_test.go covers routing and behavior"
+    },
+    "action:code.moveElementLeft": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_action_gap_actions.go registers and implements each native action, and internal/app/editor_action_gap_actions_test.go covers routing and behavior"
+    },
+    "action:code.moveElementRight": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_action_gap_actions.go registers and implements each native action, and internal/app/editor_action_gap_actions_test.go covers routing and behavior"
+    },
+    "action:code.unwrap": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_action_gap_actions.go registers and implements each native action, and internal/app/editor_action_gap_actions_test.go covers routing and behavior"
+    },
+    "action:code.reformatDialog": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_action_gap_actions.go registers and implements each native action, and internal/app/editor_action_gap_actions_test.go covers routing and behavior"
+    },
+    "action:editor.contextInfo": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_action_gap_actions.go registers and implements each native action, and internal/app/editor_action_gap_actions_test.go covers routing and behavior"
+    },
+    "action:editor.toggleInsertState": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_action_gap_actions.go registers and implements each native action, and internal/app/editor_action_gap_actions_test.go covers routing and behavior"
+    },
+    "action:code.expandToLevel1": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_action_gap_actions.go implements distinct caret and document fold depths, and TestFoldLevelCommandsRemainDistinct covers all levels"
+    },
+    "action:code.expandToLevel2": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_action_gap_actions.go implements distinct caret and document fold depths, and TestFoldLevelCommandsRemainDistinct covers all levels"
+    },
+    "action:code.expandToLevel3": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_action_gap_actions.go implements distinct caret and document fold depths, and TestFoldLevelCommandsRemainDistinct covers all levels"
+    },
+    "action:code.expandToLevel4": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_action_gap_actions.go implements distinct caret and document fold depths, and TestFoldLevelCommandsRemainDistinct covers all levels"
+    },
+    "action:code.expandToLevel5": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_action_gap_actions.go implements distinct caret and document fold depths, and TestFoldLevelCommandsRemainDistinct covers all levels"
+    },
+    "action:code.expandAllToLevel1": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_action_gap_actions.go implements distinct caret and document fold depths, and TestFoldLevelCommandsRemainDistinct covers all levels"
+    },
+    "action:code.expandAllToLevel2": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_action_gap_actions.go implements distinct caret and document fold depths, and TestFoldLevelCommandsRemainDistinct covers all levels"
+    },
+    "action:code.expandAllToLevel3": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_action_gap_actions.go implements distinct caret and document fold depths, and TestFoldLevelCommandsRemainDistinct covers all levels"
+    },
+    "action:code.expandAllToLevel4": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_action_gap_actions.go implements distinct caret and document fold depths, and TestFoldLevelCommandsRemainDistinct covers all levels"
+    },
+    "action:code.expandAllToLevel5": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_action_gap_actions.go implements distinct caret and document fold depths, and TestFoldLevelCommandsRemainDistinct covers all levels"
+    },
+    "action:vcs.acceptBoth": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.acceptTheirs": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.acceptYours": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.checkoutRevision": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.cherryPick.abort": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.cherryPick.continue": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.clone": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.commitAndPush": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.compareWithBranch": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.fetch": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.log.branches.delete": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.log.branches.navigate": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.log.branches.new": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.log.branches.toggleFavorite": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.log.branches.update": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.log.changes.compareBeforeWithLocal": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.log.changes.compareWithLocal": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.log.changes.diffPreview": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.log.changes.groupByDirectory": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.log.changes.jumpToSource": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.log.changes.showDiff": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.log.checkoutRevision": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.log.cherryPick": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.log.collapseLinear": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.log.compareVersions": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.log.compareWithLocal": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.log.copyRevision": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.log.createPatch": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.log.dropCommit": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.log.editMessage": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.log.expandLinear": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.log.fixup": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.log.goToChild": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.log.goToParent": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.log.goToRef": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.log.interactiveRebase": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.log.newBranch": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.log.newTag": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.log.openExternal": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.log.openInBrowser": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.log.rebaseOntoCommit": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.log.resetToHere": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.log.revealBookmark": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.log.revert": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.log.showBranches": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.log.squashCommits": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.log.squashInto": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.log.undoCommit": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.merge": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.merge.abort": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.newTag": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.nextConflict": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.openDiff": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.openOnRemote": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.prevConflict": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.pull": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.rebase": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.rebase.abort": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.rebase.continue": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.rebase.skip": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.refresh": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.resetHead": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.resolveConflicts": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.revert.abort": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.revert.continue": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.shelf.compareLocal": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.shelf.copyPatch": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.shelf.createPatch": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.shelf.delete": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.shelf.importPatches": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.shelf.refresh": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.shelf.rename": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.shelf.showDiff": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.shelve": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.showCommit": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.showCurrentRevision": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.showHistory": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.showLog": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.showShelf": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.stash": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.unshelve": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:vcs.unstash": {
+      "status": "integrated",
+      "evidence": "The native VCS action path is registered and exercised by internal/app/vcs_* and diff_actions tests; TestIntegrationVCSToolWindowLocalRemote and TestIntegrationVCSP1Safety cover real fetch, push, pull, rebase, merge, reset, tag, stash, multi-repository commit, partial-hunk commit, rollback and linked worktree safety. The final VCS gap audit verified the remaining native routes."
+    },
+    "action:run.createConfig": {
+      "status": "integrated",
+      "evidence": "internal/app/run_config_dialog.go, run_config_chooser.go, run_config_tree.go, run_parity_actions.go, run_plugin_actions.go and run_executor_actions.go register and exercise the native action. TestRunImportActionAddsConfigurationsToTheDialogDraft, TestCreateRunConfigurationSavesAndOpensTheUserCopy, the Services import tests, the plugin/executor tests and the real base.run.*, debug.* and spring.* checks cover target validation, saving, execution and continue/abort behavior."
+    },
+    "action:run.importJetbrains": {
+      "status": "integrated",
+      "evidence": "internal/app/run_config_dialog.go, run_config_chooser.go, run_config_tree.go, run_parity_actions.go, run_plugin_actions.go and run_executor_actions.go register and exercise the native action. TestRunImportActionAddsConfigurationsToTheDialogDraft, TestCreateRunConfigurationSavesAndOpensTheUserCopy, the Services import tests, the plugin/executor tests and the real base.run.*, debug.* and spring.* checks cover target validation, saving, execution and continue/abort behavior."
+    },
+    "action:run.importVscodeLaunch": {
+      "status": "integrated",
+      "evidence": "internal/app/run_config_dialog.go, run_config_chooser.go, run_config_tree.go, run_parity_actions.go, run_plugin_actions.go and run_executor_actions.go register and exercise the native action. TestRunImportActionAddsConfigurationsToTheDialogDraft, TestCreateRunConfigurationSavesAndOpensTheUserCopy, the Services import tests, the plugin/executor tests and the real base.run.*, debug.* and spring.* checks cover target validation, saving, execution and continue/abort behavior."
+    },
+    "action:run.pluginStart": {
+      "status": "integrated",
+      "evidence": "internal/app/run_config_dialog.go, run_config_chooser.go, run_config_tree.go, run_parity_actions.go, run_plugin_actions.go and run_executor_actions.go register and exercise the native action. TestRunImportActionAddsConfigurationsToTheDialogDraft, TestCreateRunConfigurationSavesAndOpensTheUserCopy, the Services import tests, the plugin/executor tests and the real base.run.*, debug.* and spring.* checks cover target validation, saving, execution and continue/abort behavior."
+    },
+    "action:run.reloadConfigs": {
+      "status": "integrated",
+      "evidence": "internal/app/run_config_dialog.go, run_config_chooser.go, run_config_tree.go, run_parity_actions.go, run_plugin_actions.go and run_executor_actions.go register and exercise the native action. TestRunImportActionAddsConfigurationsToTheDialogDraft, TestCreateRunConfigurationSavesAndOpensTheUserCopy, the Services import tests, the plugin/executor tests and the real base.run.*, debug.* and spring.* checks cover target validation, saving, execution and continue/abort behavior."
+    },
+    "action:run.services.addType": {
+      "status": "integrated",
+      "evidence": "internal/app/run_config_dialog.go, run_config_chooser.go, run_config_tree.go, run_parity_actions.go, run_plugin_actions.go and run_executor_actions.go register and exercise the native action. TestRunImportActionAddsConfigurationsToTheDialogDraft, TestCreateRunConfigurationSavesAndOpensTheUserCopy, the Services import tests, the plugin/executor tests and the real base.run.*, debug.* and spring.* checks cover target validation, saving, execution and continue/abort behavior."
+    },
+    "action:run.services.hideConfig": {
+      "status": "integrated",
+      "evidence": "internal/app/run_config_dialog.go, run_config_chooser.go, run_config_tree.go, run_parity_actions.go, run_plugin_actions.go and run_executor_actions.go register and exercise the native action. TestRunImportActionAddsConfigurationsToTheDialogDraft, TestCreateRunConfigurationSavesAndOpensTheUserCopy, the Services import tests, the plugin/executor tests and the real base.run.*, debug.* and spring.* checks cover target validation, saving, execution and continue/abort behavior."
+    },
+    "action:run.withExecutor": {
+      "status": "integrated",
+      "evidence": "internal/app/run_config_dialog.go, run_config_chooser.go, run_config_tree.go, run_parity_actions.go, run_plugin_actions.go and run_executor_actions.go register and exercise the native action. TestRunImportActionAddsConfigurationsToTheDialogDraft, TestCreateRunConfigurationSavesAndOpensTheUserCopy, the Services import tests, the plugin/executor tests and the real base.run.*, debug.* and spring.* checks cover target validation, saving, execution and continue/abort behavior."
+    },
+    "setting:editor.codeEditing.highlightBraces": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_runtime_settings.go, problems.go, lsp.go and debug_editor.go read the setting through native runtime state and apply caret-word, selection, matched-brace, usage, Next Problem and quick-documentation behavior; editor_runtime_settings_test.go and the problem/completion tests cover the consumers."
+    },
+    "setting:editor.codeEditing.highlightSelection": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_runtime_settings.go, problems.go, lsp.go and debug_editor.go read the setting through native runtime state and apply caret-word, selection, matched-brace, usage, Next Problem and quick-documentation behavior; editor_runtime_settings_test.go and the problem/completion tests cover the consumers."
+    },
+    "setting:editor.codeEditing.highlightUsages": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_runtime_settings.go, problems.go, lsp.go and debug_editor.go read the setting through native runtime state and apply caret-word, selection, matched-brace, usage, Next Problem and quick-documentation behavior; editor_runtime_settings_test.go and the problem/completion tests cover the consumers."
+    },
+    "setting:editor.codeEditing.nextErrorErrorsOnly": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_runtime_settings.go, problems.go, lsp.go and debug_editor.go read the setting through native runtime state and apply caret-word, selection, matched-brace, usage, Next Problem and quick-documentation behavior; editor_runtime_settings_test.go and the problem/completion tests cover the consumers."
+    },
+    "setting:editor.codeEditing.quickDocDelay": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_runtime_settings.go, problems.go, lsp.go and debug_editor.go read the setting through native runtime state and apply caret-word, selection, matched-brace, usage, Next Problem and quick-documentation behavior; editor_runtime_settings_test.go and the problem/completion tests cover the consumers."
+    },
+    "setting:editor.codeEditing.quickDocOnHover": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_runtime_settings.go, problems.go, lsp.go and debug_editor.go read the setting through native runtime state and apply caret-word, selection, matched-brace, usage, Next Problem and quick-documentation behavior; editor_runtime_settings_test.go and the problem/completion tests cover the consumers."
+    },
+    "setting:editor.general.richTextCopy": {
+      "status": "integrated",
+      "evidence": "internal/app/editor_caret_input.go and commands.go copy rich HTML plus plain text when editor.general.richTextCopy is enabled; TestCopyEditorRichTextProvidesHTMLAndPlainText and TestCopyEditorRichTextFallsBackToHTML cover both clipboard paths"
+    },
+    "setting:editor.docstringFormat": {
+      "status": "integrated",
+      "evidence": "internal/app/python_docstrings.go reads editor.docstringFormat and renders Plain, reStructuredText, Epytext, Google and NumPy documentation markup; python_docstrings_test.go covers every format"
+    },
+    "setting:languages.python.interpreter": {
+      "status": "integrated",
+      "evidence": "internal/app/context_run.go, terminal_settings.go and language_sdks.go read the selected Python interpreter and activation switch; the context-run, terminal activation and real toolchains.python tests cover the consumers."
+    },
+    "setting:languages.python.activateVirtualenv": {
+      "status": "integrated",
+      "evidence": "internal/app/context_run.go, terminal_settings.go and language_sdks.go read the selected Python interpreter and activation switch; the context-run, terminal activation and real toolchains.python tests cover the consumers."
+    },
+    "setting:languages.python.interpreters": {
+      "status": "integrated",
+      "evidence": "internal/app/context_run.go, terminal_settings.go and language_sdks.go read the selected Python interpreter and activation switch; the context-run, terminal activation and real toolchains.python tests cover the consumers."
+    },
+    "setting:languages.python.hiddenInterpreters": {
+      "status": "integrated",
+      "evidence": "internal/app/context_run.go, terminal_settings.go and language_sdks.go read the selected Python interpreter and activation switch; the context-run, terminal activation and real toolchains.python tests cover the consumers."
+    },
+    "setting:languages.python.hideOtherProjectInterpreters": {
+      "status": "integrated",
+      "evidence": "internal/app/context_run.go, terminal_settings.go and language_sdks.go read the selected Python interpreter and activation switch; the context-run, terminal activation and real toolchains.python tests cover the consumers."
+    },
+    "setting:languages.python.showInterpreterPaths": {
+      "status": "integrated",
+      "evidence": "internal/app/context_run.go, terminal_settings.go and language_sdks.go read the selected Python interpreter and activation switch; the context-run, terminal activation and real toolchains.python tests cover the consumers."
+    },
+    "setting:languages.go.gopath": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_native_catalog.go renders the native language controls in their OpenIDEA scope, settings persistence round-trips through the backend, and internal/app/context_run.go plus the detected SDK/run/build consumers apply the settings; native settings, context run and language SDK tests cover the path."
+    },
+    "setting:languages.go.goroot": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_native_catalog.go renders the native language controls in their OpenIDEA scope, settings persistence round-trips through the backend, and internal/app/context_run.go plus the detected SDK/run/build consumers apply the settings; native settings, context run and language SDK tests cover the path."
+    },
+    "setting:languages.go.modules.autoVendor": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_native_catalog.go renders the native language controls in their OpenIDEA scope, settings persistence round-trips through the backend, and internal/app/context_run.go plus the detected SDK/run/build consumers apply the settings; native settings, context run and language SDK tests cover the path."
+    },
+    "setting:languages.go.modules.env": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_native_catalog.go renders the native language controls in their OpenIDEA scope, settings persistence round-trips through the backend, and internal/app/context_run.go plus the detected SDK/run/build consumers apply the settings; native settings, context run and language SDK tests cover the path."
+    },
+    "setting:languages.node.interpreter": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_native_catalog.go renders the native language controls in their OpenIDEA scope, settings persistence round-trips through the backend, and internal/app/context_run.go plus the detected SDK/run/build consumers apply the settings; native settings, context run and language SDK tests cover the path."
+    },
+    "setting:languages.node.packageManager": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_native_catalog.go renders the native language controls in their OpenIDEA scope, settings persistence round-trips through the backend, and internal/app/context_run.go plus the detected SDK/run/build consumers apply the settings; native settings, context run and language SDK tests cover the path."
+    },
+    "setting:languages.node.runTarget": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_native_catalog.go renders the native language controls in their OpenIDEA scope, settings persistence round-trips through the backend, and internal/app/context_run.go plus the detected SDK/run/build consumers apply the settings; native settings, context run and language SDK tests cover the path."
+    },
+    "setting:languages.php.includePaths": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_native_catalog.go renders the native language controls in their OpenIDEA scope, settings persistence round-trips through the backend, and internal/app/context_run.go plus the detected SDK/run/build consumers apply the settings; native settings, context run and language SDK tests cover the path."
+    },
+    "setting:languages.php.interpreter": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_native_catalog.go renders the native language controls in their OpenIDEA scope, settings persistence round-trips through the backend, and internal/app/context_run.go plus the detected SDK/run/build consumers apply the settings; native settings, context run and language SDK tests cover the path."
+    },
+    "setting:languages.php.languageLevel": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_native_catalog.go renders the native language controls in their OpenIDEA scope, settings persistence round-trips through the backend, and internal/app/context_run.go plus the detected SDK/run/build consumers apply the settings; native settings, context run and language SDK tests cover the path."
+    },
+    "setting:languages.php.phpstanConfig": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_native_catalog.go renders the native language controls in their OpenIDEA scope, settings persistence round-trips through the backend, and internal/app/context_run.go plus the detected SDK/run/build consumers apply the settings; native settings, context run and language SDK tests cover the path."
+    },
+    "setting:languages.php.runTarget": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_native_catalog.go renders the native language controls in their OpenIDEA scope, settings persistence round-trips through the backend, and internal/app/context_run.go plus the detected SDK/run/build consumers apply the settings; native settings, context run and language SDK tests cover the path."
+    },
+    "setting:languages.php.stubs": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_native_catalog.go renders the native language controls in their OpenIDEA scope, settings persistence round-trips through the backend, and internal/app/context_run.go plus the detected SDK/run/build consumers apply the settings; native settings, context run and language SDK tests cover the path."
+    },
+    "setting:languages.ruby.interpreter": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_native_catalog.go renders the native language controls in their OpenIDEA scope, settings persistence round-trips through the backend, and internal/app/context_run.go plus the detected SDK/run/build consumers apply the settings; native settings, context run and language SDK tests cover the path."
+    },
+    "setting:languages.rust.checkCommand": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_native_catalog.go renders the native language controls in their OpenIDEA scope, settings persistence round-trips through the backend, and internal/app/context_run.go plus the detected SDK/run/build consumers apply the settings; native settings, context run and language SDK tests cover the path."
+    },
+    "setting:languages.rust.checkOnSave": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_native_catalog.go renders the native language controls in their OpenIDEA scope, settings persistence round-trips through the backend, and internal/app/context_run.go plus the detected SDK/run/build consumers apply the settings; native settings, context run and language SDK tests cover the path."
+    },
+    "setting:languages.rust.rustfmtArgs": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_native_catalog.go renders the native language controls in their OpenIDEA scope, settings persistence round-trips through the backend, and internal/app/context_run.go plus the detected SDK/run/build consumers apply the settings; native settings, context run and language SDK tests cover the path."
+    },
+    "setting:languages.rust.stdlib": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_native_catalog.go renders the native language controls in their OpenIDEA scope, settings persistence round-trips through the backend, and internal/app/context_run.go plus the detected SDK/run/build consumers apply the settings; native settings, context run and language SDK tests cover the path."
+    },
+    "setting:languages.rust.toolchain": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_native_catalog.go renders the native language controls in their OpenIDEA scope, settings persistence round-trips through the backend, and internal/app/context_run.go plus the detected SDK/run/build consumers apply the settings; native settings, context run and language SDK tests cover the path."
+    },
+    "setting:languages.typescript.version": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_native_catalog.go renders the native language controls in their OpenIDEA scope, settings persistence round-trips through the backend, and internal/app/context_run.go plus the detected SDK/run/build consumers apply the settings; native settings, context run and language SDK tests cover the path."
+    },
+    "setting:languages.go.buildTags.arch": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_native_catalog.go renders the native language controls in their OpenIDEA scope, settings persistence round-trips through the backend, and internal/app/context_run.go plus the detected SDK/run/build consumers apply the settings; native settings, context run and language SDK tests cover the path."
+    },
+    "setting:languages.go.buildTags.cgo": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_native_catalog.go renders the native language controls in their OpenIDEA scope, settings persistence round-trips through the backend, and internal/app/context_run.go plus the detected SDK/run/build consumers apply the settings; native settings, context run and language SDK tests cover the path."
+    },
+    "setting:languages.go.buildTags.compiler": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_native_catalog.go renders the native language controls in their OpenIDEA scope, settings persistence round-trips through the backend, and internal/app/context_run.go plus the detected SDK/run/build consumers apply the settings; native settings, context run and language SDK tests cover the path."
+    },
+    "setting:languages.go.buildTags.custom": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_native_catalog.go renders the native language controls in their OpenIDEA scope, settings persistence round-trips through the backend, and internal/app/context_run.go plus the detected SDK/run/build consumers apply the settings; native settings, context run and language SDK tests cover the path."
+    },
+    "setting:languages.go.buildTags.experiments": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_native_catalog.go renders the native language controls in their OpenIDEA scope, settings persistence round-trips through the backend, and internal/app/context_run.go plus the detected SDK/run/build consumers apply the settings; native settings, context run and language SDK tests cover the path."
+    },
+    "setting:languages.go.buildTags.os": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_native_catalog.go renders the native language controls in their OpenIDEA scope, settings persistence round-trips through the backend, and internal/app/context_run.go plus the detected SDK/run/build consumers apply the settings; native settings, context run and language SDK tests cover the path."
+    },
+    "setting:languages.go.buildTags.version": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_native_catalog.go renders the native language controls in their OpenIDEA scope, settings persistence round-trips through the backend, and internal/app/context_run.go plus the detected SDK/run/build consumers apply the settings; native settings, context run and language SDK tests cover the path."
+    },
+    "setting:languages.java.jdk": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_java.go renders and persists JDK, language-level and JDT LS choices; TestJavaSettingsSaveReloadsRunConfigsAndLibraries and the real JDT/toolchain gates cover the backend consumers."
+    },
+    "setting:languages.java.jdtlsJdk": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_java.go renders and persists JDK, language-level and JDT LS choices; TestJavaSettingsSaveReloadsRunConfigsAndLibraries and the real JDT/toolchain gates cover the backend consumers."
+    },
+    "setting:languages.java.jdtlsShared": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_java.go renders and persists JDK, language-level and JDT LS choices; TestJavaSettingsSaveReloadsRunConfigsAndLibraries and the real JDT/toolchain gates cover the backend consumers."
+    },
+    "setting:languages.java.jdtlsVmArgs": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_java.go renders and persists JDK, language-level and JDT LS choices; TestJavaSettingsSaveReloadsRunConfigsAndLibraries and the real JDT/toolchain gates cover the backend consumers."
+    },
+    "setting:languages.java.languageLevel": {
+      "status": "integrated",
+      "evidence": "internal/app/settings_java.go renders and persists JDK, language-level and JDT LS choices; TestJavaSettingsSaveReloadsRunConfigsAndLibraries and the real JDT/toolchain gates cover the backend consumers."
     }
   }
 }

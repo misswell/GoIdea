@@ -10,6 +10,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -50,14 +51,99 @@ type Config struct {
 	FreshSession bool
 }
 
+// startupChoice is the pure decision behind Start. It names the project root
+// and the files reopened with it; looseFiles are the explicit paths a launch
+// must open as LightEdit instead of restoring a project.
+type startupChoice struct {
+	root       string
+	files      []string
+	looseFiles []string
+	remote     *openidea.RemoteSession
+}
+
+func chooseStartup(
+	explicitRoot string,
+	explicitFiles []string,
+	session Session,
+	reopen bool,
+	freshSession bool,
+) startupChoice {
+	explicitFiles = explicitLaunchPaths(explicitFiles)
+	root := strings.TrimSpace(explicitRoot)
+	if root != "" && filepath.IsAbs(root) {
+		root = realPath(filepath.Clean(root))
+	} else {
+		root = ""
+	}
+	if root == "." {
+		root = ""
+	}
+	if root != "" {
+		return startupChoice{root: root, files: filesInsideProject(root, explicitFiles)}
+	}
+	if len(explicitFiles) > 0 {
+		return startupChoice{looseFiles: explicitFiles}
+	}
+	if freshSession || !reopen || session.Root == "" {
+		return startupChoice{}
+	}
+	if session.Remote != nil {
+		return startupChoice{
+			root:   session.Root,
+			files:  append([]string(nil), session.Files...),
+			remote: session.Remote,
+		}
+	}
+	return startupChoice{
+		root:  session.Root,
+		files: filesInsideProject(session.Root, session.Files),
+	}
+}
+
+// explicitLaunchPaths keeps every path named by the launch command. A missing
+// file still suppresses project restore; openPaths reports the later failure
+// instead of silently opening the previous session.
+func explicitLaunchPaths(paths []string) []string {
+	out := make([]string, 0, len(paths))
+	seen := make(map[string]bool, len(paths))
+	for _, path := range paths {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			continue
+		}
+		path = realPath(path)
+		if seen[path] {
+			continue
+		}
+		seen[path] = true
+		out = append(out, path)
+	}
+	slices.Sort(out)
+	return out
+}
+
+func filesInsideProject(root string, paths []string) []string {
+	files := make([]string, 0, len(paths))
+	for _, path := range paths {
+		if inProject(root, path) {
+			files = append(files, path)
+		}
+	}
+	return normalizeFiles(files)
+}
+
 // Tab is one open file: its backend document, the editor state editing the
 // document's buffer, and how much of that buffer the backend has.
 type Tab struct {
-	doc    *docbridge.Document
-	state  *editor.State
-	caret  *caretClickState
-	synced uint64 // buffer version the backend was last given
-	seen   uint64 // buffer version last looked at, for the sync debounce
+	// owner is the window that shows this tab. Virtual pages use it to find
+	// their model without a shared document registry.
+	owner   *Model
+	content *pluginContentSession
+	doc     *docbridge.Document
+	state   *editor.State
+	caret   *caretClickState
+	synced  uint64 // buffer version the backend was last given
+	seen    uint64 // buffer version last looked at, for the sync debounce
 	// inline is the backend's latest inline completion at this tab's caret.
 	inline inlineCompletionState
 	// columnMode makes Shift+arrows extend a rectangular selection one row at a
@@ -152,6 +238,18 @@ type Tab struct {
 	// caret has moved on to another request.
 	quickFixGen uint64
 
+	// insertOverwrite is Editor › Toggle Insert/Overwrite for this tab. Typed
+	// characters replace what follows the caret when it is on.
+	insertOverwrite bool
+	// wordExpand is the current Cyclic Expand Word cycle. It ends when the
+	// buffer version, caret or document changes.
+	wordExpand editorWordExpansion
+	// testNavGen drops a Go to Test reply after a newer request or edit.
+	testNavGen uint64
+	// hierarchyGen drops hierarchy-member replies when another refactoring
+	// starts or the document moves on.
+	hierarchyGen uint64
+
 	// signatureGen drops parameter information after an edit or caret move.
 	signatureGen uint64
 
@@ -196,6 +294,8 @@ type Tab struct {
 	viewer *fileViewerState
 }
 
+const tabKindVCSDiff = "vcsDiff"
+
 // Model is the app's state.
 type Model struct {
 	cfg Config
@@ -207,22 +307,31 @@ type Model struct {
 	// invokeHook replaces the manager's invoke surface in tests; nil means
 	// the live server.
 	invokeHook func(ctx context.Context, cmd string, args any) (json.RawMessage, error)
+	// openRecentHook replaces the backend probe and open call in recent-project
+	// tests. Production uses the same model RPC surface as other project opens.
+	openRecentHook func(path string, remove func()) bool
 	// postHook replaces RunOnMain in tests, which run without the event
 	// loop; nil means the real main-thread hop.
 	postHook func(fn func())
-	reg      *docbridge.Registry
-	ctx      context.Context
-	cancel   context.CancelFunc
-	remote   remoteDevelopmentState
+	// refreshAfterVCSWriteHook lets focused operation tests observe a
+	// completed remote call without starting the live refresh RPCs.
+	refreshAfterVCSWriteHook func()
+	reg                      *docbridge.Registry
+	ctx                      context.Context
+	cancel                   context.CancelFunc
+	remote                   remoteDevelopmentState
 	// fileEncodings caches the global/properties defaults used by standalone
 	// LightEdit documents. Project documents receive the same defaults from
 	// openidea-server's project settings.
 	fileEncodings fileEncodingRuntime
 
-	rootMu             sync.RWMutex
-	root               string
-	projectName        string
-	projectDisplayName string
+	rootMu              sync.RWMutex
+	root                string
+	workspaceGeneration uint64
+	pluginContentMu     sync.RWMutex
+	pluginContent       pluginContentModelState
+	projectName         string
+	projectDisplayName  string
 	// workspace is project_current's manifest for this folder. Nil means the
 	// folder is an ordinary single project.
 	workspace *openidea.Workspace
@@ -302,6 +411,11 @@ type Model struct {
 
 	// symbols is the open Go to Symbol picker, or nil.
 	symbols *symbolPicker
+	// These native popups share the editor action-gap implementation.
+	customRegions     *customRegionPopup
+	testNav           *testNavigationPopup
+	unwrap            *unwrapPopupState
+	hierarchyRefactor *hierarchyRefactorState
 
 	// files is the open Quick Open picker, or nil.
 	files           *filePicker
@@ -342,12 +456,16 @@ type Model struct {
 
 	// dockDragID, dockDragSlot and dockDragArmed carry a dragged tool window
 	// button: the slot under the pointer and whether letting go moves it.
-	dockDragID    string
-	dockDragSlot  dockSlot
-	dockDragArmed bool
+	dockDragID     string
+	dockDragSlot   dockSlot
+	dockDragArmed  bool
+	dockDragStatus string
 
 	// notify is the notification center: the balloons and their history.
 	notify notifier
+	// eventRuntime owns backend-event queues, timers and unsupported-consumer
+	// markers so each received event stays with this model's project window.
+	eventRuntime eventRuntimeState
 
 	// services is the Services bottom window.
 	services servicesPane
@@ -747,6 +865,7 @@ type Model struct {
 	vcsOps        VCSOperationPane
 	vcsQuick      vcsQuickList
 	vcsMore       vcsMoreState
+	recentHistory recentChangesState
 	branch        BranchPane
 	log           LogPane
 	problems      ProblemsPane
@@ -884,6 +1003,17 @@ type Model struct {
 	welcomeCloneSeq      int
 	welcomeRemoveOpen    bool
 	welcomeRemovePath    string
+	// recentOpenInFlight prevents repeated row activation while a failed recent
+	// project is waiting for the user to remove it.
+	recentOpenInFlight string
+	// openRecentDialog lets a test exercise the missing-folder prompt without
+	// opening a native window.
+	openRecentDialog func(string, error) (bool, error)
+	// applicationQuit distinguishes the app-wide close from a single-window
+	// close preflight, which shares the quitting guard.
+	applicationQuit bool
+	// openDroppedFolderHook keeps drop-routing assertions off the live backend.
+	openDroppedFolderHook func(string)
 }
 
 // New returns a model; Start opens the last session.
@@ -1121,44 +1251,33 @@ func (m *Model) start() {
 	runtimeCtx, cancelRuntime := context.WithTimeout(m.ctx, 20*time.Second)
 	_ = m.loadNativeRuntimeSettings(runtimeCtx)
 	cancelRuntime()
-	root := m.startupRoot
+	s := m.session()
+	choice := chooseStartup(
+		m.startupRoot,
+		m.startupFiles,
+		s,
+		m.startupReopensProject(),
+		m.cfg.FreshSession,
+	)
 	m.startUpdateChecks()
-	var files []string
-	if root == "" && !m.cfg.FreshSession && m.startupReopensProject() {
-		s := m.session()
-		root = s.Root
-		if s.Remote != nil && root != "" {
-			m.remote.restoreFiles = append([]string(nil), s.Files...)
-			m.setStartPhase("opening")
-			m.post(func() {
-				m.openRemoteLocation(s.Remote.Target, s.Remote.Root)
-			})
-			return
-		}
-		if root != "" {
-			for _, p := range s.Files {
-				if inProject(root, p) {
-					files = append(files, p)
-				}
-			}
-		}
-	} else if root != "" {
-		for _, p := range m.startupFiles {
-			if inProject(root, p) {
-				files = append(files, p)
-			}
-		}
+	if choice.remote != nil {
+		m.remote.restoreFiles = append([]string(nil), choice.files...)
+		m.setStartPhase("opening")
+		m.post(func() {
+			m.openRemoteLocation(choice.remote.Target, choice.remote.Root)
+		})
+		return
 	}
-	if root == "" {
+	if choice.root == "" {
 		runtimeCtx, cancelRuntime := context.WithTimeout(m.ctx, 20*time.Second)
 		m.refreshFileTypeRuntime(runtimeCtx)
 		cancelRuntime()
 		m.setStartPhase("ready")
 		m.post(func() {
 			m.busy = false
-			if len(m.startupFiles) > 0 {
+			if len(choice.looseFiles) > 0 {
 				m.status = "Opening standalone files…"
-				m.openPaths(m.startupFiles)
+				m.openPaths(choice.looseFiles)
 			} else {
 				m.status = "Open a Java project"
 			}
@@ -1166,8 +1285,8 @@ func (m *Model) start() {
 		return
 	}
 	m.setStartPhase("opening")
-	m.setRoot(root)
-	m.openProject(root, files)
+	m.setRoot(choice.root)
+	m.openProject(choice.root, choice.files)
 }
 
 func (m *Model) session() Session {
@@ -1289,6 +1408,169 @@ func (m *Model) confirmSwitch(dir string) {
 	m.confirmSwitchWithFiles(dir, nil)
 }
 
+// OpenRecentProject applies OpenIDEA's recent-project routing before the
+// normal switch policy. A folder that no longer exists is offered for removal.
+// An ordinary open failure is reported with the same removal action, while the
+// project already on screen remains untouched.
+func (m *Model) OpenRecentProject(dir string) {
+	m.openRecentProject(dir)
+}
+
+func (m *Model) openRecentProject(dir string) {
+	if m == nil || strings.TrimSpace(dir) == "" || m.recentOpenInFlight != "" {
+		return
+	}
+	clean := realPath(dir)
+	m.recentOpenInFlight = clean
+	m.status = "Opening " + filepath.Base(clean) + "…"
+	m.invalidate()
+	if m.openRecentHook != nil {
+		ok := m.openRecentHook(clean, func() { m.removeRecentProject(clean) })
+		m.recentOpenInFlight = ""
+		if !ok {
+			m.status = ""
+			m.invalidate()
+		}
+		return
+	}
+	ctx, cancel := context.WithTimeout(m.workspaceContext(), 8*time.Second)
+	go func() {
+		defer cancel()
+		if m.mgr != nil {
+			if raw, err := m.mgr.Invoke(ctx, Window, "fs_read_dir", map[string]any{"path": clean}); err == nil {
+				var entries []json.RawMessage
+				if json.Unmarshal(raw, &entries) == nil {
+					m.post(func() {
+						m.recentOpenInFlight = ""
+						m.confirmSwitch(clean)
+					})
+					return
+				}
+			} else if recentProjectNotFound(err) {
+				m.post(func() {
+					m.recentOpenInFlight = ""
+					m.status = ""
+					m.confirmRemoveMissingRecent(clean, err)
+				})
+				return
+			}
+		}
+		info, err := os.Stat(clean)
+		if err != nil || !info.IsDir() {
+			if err == nil {
+				err = fmt.Errorf("%s is not a folder", clean)
+			}
+			m.post(func() {
+				m.recentOpenInFlight = ""
+				m.status = ""
+				m.confirmRemoveMissingRecent(clean, err)
+			})
+			return
+		}
+		m.post(func() {
+			m.recentOpenInFlight = ""
+			m.confirmSwitchRecent(clean)
+		})
+	}()
+}
+
+func (m *Model) confirmSwitchRecent(dir string) {
+	if m.focusOpenProject(realPath(dir)) {
+		return
+	}
+	m.confirmSwitch(dir)
+}
+
+func recentProjectNotFound(err error) bool {
+	if err == nil {
+		return false
+	}
+	kind := strings.ToLower(openidea.ErrorKind(err))
+	message := strings.ToLower(err.Error())
+	return kind == "notfound" || strings.Contains(kind, "not_found") ||
+		strings.Contains(message, "not found") || strings.Contains(message, "no such file")
+}
+
+func (m *Model) confirmRemoveMissingRecent(dir string, err error) {
+	message := "Project folder not found: " + filepath.Base(dir)
+	body := dir
+	if err != nil {
+		body += "\n" + err.Error()
+	}
+	if m.openRecentDialog != nil {
+		remove, dialogErr := m.openRecentDialog(message, errors.New(body))
+		if dialogErr != nil {
+			m.notifyRecentOpenFailure(dir, dialogErr)
+			return
+		}
+		if remove {
+			m.removeRecentProject(dir)
+		}
+		return
+	}
+	go func() {
+		res, dialogErr := mygo.Dialog.Message(mygo.MessageOptions{
+			Parent: m.win, Type: mygo.MessageError, Title: message, Message: body,
+			Buttons:       []string{"Remove from Recent Projects", "Cancel"},
+			DefaultButton: 0, CancelButton: 1,
+		})
+		if dialogErr != nil {
+			m.post(func() { m.notifyRecentOpenFailure(dir, dialogErr) })
+			return
+		}
+		m.post(func() {
+			if res.Button == 0 {
+				m.removeRecentProject(dir)
+			}
+		})
+	}()
+}
+
+func (m *Model) notifyRecentOpenFailure(dir string, err error) {
+	body := ""
+	if err != nil {
+		body = notifySuffix(err.Error())
+	}
+	remove := func(model *Model) { model.removeRecentProject(dir) }
+	m.notifyError(
+		"recent.open:"+dir,
+		"Cannot open "+filepath.Base(dir),
+		body,
+		notifyAction{label: "Remove from Recent Projects", run: remove},
+	)
+}
+
+func (m *Model) notifyProjectOpenFailure(dir string, err error) {
+	if m == nil || dir == "" || err == nil {
+		return
+	}
+	remove := func(model *Model) { model.removeRecentProject(dir) }
+	m.notifyError(
+		"project.open:"+dir,
+		"Cannot open "+filepath.Base(dir),
+		notifySuffix(err.Error()),
+		notifyAction{label: "Remove from Recent Projects", run: remove},
+	)
+}
+
+func (m *Model) removeRecentProject(dir string) {
+	if dir == "" {
+		return
+	}
+	clean := realPath(dir)
+	kept := m.recents[:0]
+	for _, project := range m.recents {
+		if realPath(project.Path) != clean {
+			kept = append(kept, project)
+		}
+	}
+	m.recents = kept
+	delete(m.welcomeBranches, dir)
+	delete(m.welcomeBranchLoading, dir)
+	m.saveRecents()
+	m.invalidate()
+}
+
 // confirmSwitchWithFiles is confirmSwitch with files to reopen after the
 // project switch. LightEdit uses it to turn the current standalone file's
 // directory into a project without losing the file from the editor.
@@ -1312,6 +1594,14 @@ func (m *Model) confirmSwitchWithFiles(dir string, files []string) {
 		}
 	}
 	m.confirmSwitchDirect(dir, files)
+}
+
+func (m *Model) openProjectPath(path string) {
+	m.projectPathRequest(openProjectPathRequest{path: path})
+}
+
+func (m *Model) openProjectPathArg(arg any) {
+	m.projectPathRequest(openProjectPathRequestArg(arg))
 }
 
 // askOpenProjectWindow is OpenIDEA's Ask policy: the user chooses when an
@@ -1448,7 +1738,13 @@ func (m *Model) openProjectSavingWithFiles(dir string, files []string) {
 // tabs, terminals, tool windows, searches and their caches — and reports
 // whether Maven was visible, so a new project can load its build model.
 func (m *Model) resetProjectState(dir string) (buildToolsVisible bool) {
+	m.workspaceGeneration++
+	m.pluginContentProjectReset(dir, m.workspaceGeneration)
+	m.projectName = ""
+	m.projectDisplayName = ""
+	m.setProjectWorkspace(nil)
 	m.clearProjectNotifications()
+	m.resetEventRuntime()
 	m.resetDocumentation()
 	m.resetAnalysisState()
 	m.coverage = coverageState{}
@@ -1526,7 +1822,7 @@ func (m *Model) CloseProject() {
 	if m.busy {
 		return
 	}
-	if m.Root() == "" || m.showingWelcome {
+	if m.Root() == "" {
 		m.showWelcome()
 		m.invalidate()
 		return
@@ -1574,9 +1870,9 @@ func (m *Model) closeProjectSaving() {
 	}()
 }
 
-// closeProjectNow stops the project's processes, closes it in the backend and
-// shows Welcome. A backend failure is only reported: this window has already
-// left the project.
+// closeProjectNow verifies the backend can release the project before changing
+// this window. A failed call leaves every tab, document and layout in place and
+// offers an immediate retry.
 func (m *Model) closeProjectNow() {
 	if remoteConnected(m) {
 		m.disconnectRemoteNow()
@@ -1586,11 +1882,61 @@ func (m *Model) closeProjectNow() {
 	if prev == "" {
 		return
 	}
-	if m.prefs.System.CloseWithoutWelcome && !m.quitting {
+	var oldTerms []uint32
+	for gi := range m.term.groups {
+		for _, tab := range m.term.groups[gi].tabs {
+			if tab.id != 0 {
+				oldTerms = append(oldTerms, tab.id)
+			}
+		}
+	}
+	if m.mgr == nil && m.invokeHook == nil {
+		m.closeProjectCommitted(prev, oldTerms)
+		return
+	}
+	m.busy = true
+	m.status = "Closing " + filepath.Base(prev) + "…"
+	m.invalidate()
+	go func() {
+		ctx, cancel := context.WithTimeout(m.workspaceContext(), 30*time.Second)
+		defer cancel()
+		if _, err := m.invoke(ctx, "close_project", nil); err != nil {
+			m.post(func() {
+				m.busy = false
+				message := "Closing the project in the backend failed: " + err.Error()
+				m.banner = message
+				m.bannerPath = ""
+				retry := func(model *Model) {
+					model.banner = ""
+					model.bannerPath = ""
+					model.invalidate()
+					model.CloseProject()
+				}
+				m.notifyError(
+					"project.close",
+					"Could not close the project",
+					notifySuffix(err.Error()),
+					notifyAction{label: "Retry", run: retry},
+				)
+				m.cancelQuitPreparation()
+				m.invalidate()
+			})
+			return
+		}
+		m.post(func() {
+			m.closeProjectCommitted(prev, oldTerms)
+		})
+	}()
+}
+
+// closeProjectCommitted applies the local reset only after the backend has
+// released the project.
+func (m *Model) closeProjectCommitted(prev string, oldTerms []uint32) {
+	if m.Root() != prev {
+		return
+	}
+	if m.prefs.System.CloseWithoutWelcome && !m.applicationQuit && m.isLastProjectWindow() {
 		if m.win != nil {
-			// Close Project already ran this window's process and dirty
-			// guards. Finish only this native window so sibling project
-			// windows and their backend servers keep running.
 			m.finishWindowClose(false)
 		} else {
 			m.finishQuit(false)
@@ -1601,15 +1947,6 @@ func (m *Model) closeProjectNow() {
 		m.layouts = map[string]Layout{}
 	}
 	m.layouts[layoutKey(prev)] = m.currentLayout()
-	var oldTerms []uint32
-	for gi := range m.term.groups {
-		tabs := m.term.groups[gi].tabs
-		for ti := range tabs {
-			if id := tabs[ti].id; id != 0 {
-				oldTerms = append(oldTerms, id)
-			}
-		}
-	}
 	m.mcpProjectClosed()
 	m.resetProjectState("")
 	m.setRoot("")
@@ -1617,22 +1954,17 @@ func (m *Model) closeProjectNow() {
 	m.welcomePage = ""
 	m.busy = false
 	m.status = "Open a Java project"
+	m.applyActive()
 	m.saveSession()
 	m.invalidate()
-	if m.mgr == nil {
+	if m.mgr == nil || len(oldTerms) == 0 {
 		return
 	}
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		for _, id := range oldTerms {
 			_, _ = m.mgr.Invoke(ctx, Window, "term_kill", map[string]any{"id": id})
-		}
-		if _, err := m.mgr.Invoke(ctx, Window, "close_project", nil); err != nil {
-			m.post(func() {
-				m.banner = "Closing the project in the backend failed: " + err.Error()
-				m.invalidate()
-			})
 		}
 	}()
 }
@@ -1657,15 +1989,7 @@ func (m *Model) openProject(dir string, files []string) {
 		}
 		dir = resolved
 	}
-	if prev := m.Root(); prev != "" && layoutKey(prev) != layoutKey(dir) {
-		if m.layouts == nil {
-			m.layouts = map[string]Layout{}
-		}
-		m.layouts[layoutKey(prev)] = m.currentLayout()
-	}
 	prevRoot := m.Root()
-	prevTabs, prevActive := m.tabs, m.active
-	prevSplit, prevSplitDown, prevSplitFirst := m.split, m.splitDown, m.splitFirst
 	old := m.allTabs()
 	pinned := map[string]bool{}
 	for _, p := range m.session().Pinned {
@@ -1699,36 +2023,16 @@ func (m *Model) openProject(dir string, files []string) {
 			}
 		}
 	}
-	if prevRoot != "" {
-		m.mcpProjectClosed()
-	}
-	buildToolsVisible := m.resetProjectState(dir)
 	m.busy = true
 	m.status = "Opening " + filepath.Base(dir) + "…"
-	m.setRoot(dir)
-	if buildToolsVisible {
-		m.loadBuildModel()
-	}
 	m.invalidate()
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
-		for _, id := range oldTerms {
-			_, _ = m.mgr.Invoke(ctx, Window, "term_kill", map[string]any{"id": id})
-		}
 		projectInfo, err := m.openBackendProjectAt(ctx, dir, prevRoot)
 		if err != nil {
 			m.post(func() {
-				// The backend and the UI stay on the project that was open:
-				// documents were not closed yet, so the tabs come back as they
-				// were and the failure only reports itself.
-				m.tabs, m.active = prevTabs, prevActive
-				m.split, m.splitDown, m.splitFirst = prevSplit, prevSplitDown, prevSplitFirst
-				if prevRoot != "" {
-					m.setRoot(prevRoot)
-					m.mcpProjectReady()
-				}
 				m.busy = false
 				name := "Welcome"
 				if prevRoot != "" {
@@ -1737,9 +2041,30 @@ func (m *Model) openProject(dir string, files []string) {
 				m.status = "Opening " + filepath.Base(dir) + " failed; still in " + name
 				m.banner = "Opening the project failed: " + err.Error()
 				m.bannerPath = ""
+				m.notifyProjectOpenFailure(dir, err)
 				m.invalidate()
 			})
 			return
+		}
+		m.post(func() {
+			if prevRoot != "" && layoutKey(prevRoot) != layoutKey(dir) {
+				if m.layouts == nil {
+					m.layouts = map[string]Layout{}
+				}
+				m.layouts[layoutKey(prevRoot)] = m.currentLayout()
+			}
+			if prevRoot != "" {
+				m.mcpProjectClosed()
+			}
+			buildToolsVisible := m.resetProjectState(dir)
+			m.setRoot(dir)
+			if buildToolsVisible {
+				m.loadBuildModel()
+			}
+			m.invalidate()
+		})
+		for _, id := range oldTerms {
+			_, _ = m.mgr.Invoke(ctx, Window, "term_kill", map[string]any{"id": id})
 		}
 		_ = m.loadNativeRuntimeSettings(ctx)
 		fileRuntime := m.refreshFileTypeRuntime(ctx)
@@ -2000,7 +2325,8 @@ func (m *Model) newTab(doc *docbridge.Document) *Tab {
 	fontSize := m.editorFontSize()
 	font := m.prefs.Font
 	t := &Tab{
-		doc: doc,
+		owner: m,
+		doc:   doc,
 		state: &editor.State{
 			Buffer:     doc.Buffer(),
 			LineHeight: font.lineHeightPixels(fontSize) / fontSize,
@@ -2286,12 +2612,18 @@ func (m *Model) applyActive() {
 			if t.kind == tabKindNotebook && t.pageTitle != "" {
 				name = t.pageTitle
 			}
+			if t.kind == tabKindPluginContent {
+				name = m.pluginContentTitle(t)
+			}
 			if name == "" {
 				name = t.doc.Path()
 			}
 			m.win.SetTitle(m.windowTitle(name))
 			m.win.SetRepresentedFile("")
-			m.win.SetDocumentEdited(t.kind == tabKindNotebook && t.pageDirty)
+			m.win.SetDocumentEdited(
+				(t.kind == tabKindNotebook && t.pageDirty) ||
+					(t.kind == tabKindPluginContent && t.unsaved()),
+			)
 			return
 		}
 		m.win.SetTitle(m.windowTitle(name))
@@ -2329,6 +2661,13 @@ func (m *Model) removeTab(t *Tab) {
 		m.requestCloseNotebook(t)
 		return
 	}
+	if t != nil && t.kind == tabKindPluginContent {
+		if session := m.pluginContentTabFor(t); session != nil {
+			pluginContents.remove(session)
+		}
+		m.removeTabNow(t)
+		return
+	}
 	if g, ok := m.groupOf(t); ok && t.doc != nil && t.kind == "" {
 		entry := closedTab{
 			path: t.doc.Path(), index: tabIndexIn(m.groupTabsAt(g), t),
@@ -2341,6 +2680,9 @@ func (m *Model) removeTab(t *Tab) {
 		m.rememberClosed(entry)
 		m.removeTabFromWindow(t, false)
 		return
+	}
+	if m.diff != nil && m.diff.tab == t {
+		m.diff = nil
 	}
 	m.removeTabNow(t)
 }
@@ -2377,6 +2719,15 @@ func (m *Model) removeTabFromWindow(t *Tab, closeDoc bool) {
 		m.active = 0
 	}
 	if m.Root() == "" && len(m.allTabs()) == 0 {
+		// The final editor tab follows the window close policy: the last
+		// session returns to Welcome, while a non-last window closes and an
+		// explicit closeWithoutWelcome keeps its normal close path.
+		if !m.returnLastSessionToWelcome() && !m.isLastProjectWindow() {
+			if m.win != nil {
+				m.finishWindowClose(false)
+			}
+			return
+		}
 		m.showingWelcome = true
 		m.status = "Open a file"
 	}
@@ -2390,6 +2741,12 @@ func (m *Model) removeTabFromWindow(t *Tab, closeDoc bool) {
 func (m *Model) SaveActive() {
 	if t := m.tab(); t != nil && t.kind == tabKindNotebook {
 		m.saveNotebook(t)
+		return
+	}
+	if t := m.tab(); t != nil && t.kind == tabKindPluginContent {
+		if session := m.pluginContentTabFor(t); session != nil {
+			m.savePluginContentThen(session, false, nil)
+		}
 		return
 	}
 	if t := m.tab(); t != nil && t.kind == "" {
@@ -2446,6 +2803,12 @@ func (m *Model) saveTabAsyncMode(t *Tab, explicit bool, done func()) {
 func saveAll(ctx context.Context, tabs []*Tab, p SavePrefs) error {
 	var first error
 	for _, t := range tabs {
+		if t != nil && t.kind == tabKindPluginContent && t.owner != nil && t.unsaved() {
+			if err := t.owner.pluginContentSaveForLifecycle(ctx, t); err != nil && first == nil {
+				first = err
+			}
+			continue
+		}
 		if t == nil || t.kind != "" || t.doc == nil || !t.unsaved() {
 			continue
 		}
@@ -2478,6 +2841,12 @@ func (m *Model) saveOpenTabs(ctx context.Context, tabs []*Tab) error {
 	for _, t := range tabs {
 		if t != nil && t.kind == tabKindNotebook {
 			if err := m.saveNotebookSync(ctx, t); err != nil && first == nil {
+				first = err
+			}
+			continue
+		}
+		if t != nil && t.kind == tabKindPluginContent {
+			if err := m.pluginContentSaveForLifecycle(ctx, t); err != nil && first == nil {
 				first = err
 			}
 			continue
@@ -2595,6 +2964,9 @@ func (t *Tab) unsaved() bool {
 	if t == nil {
 		return false
 	}
+	if t.kind == tabKindPluginContent && t.owner != nil {
+		return t.owner.pluginContentDirty(t)
+	}
 	if t.kind == tabKindNotebook {
 		return t.pageDirty
 	}
@@ -2614,7 +2986,11 @@ func (m *Model) dirtyPaths() []string {
 	var out []string
 	for _, t := range m.tabs {
 		if t.unsaved() {
-			out = append(out, t.doc.Path())
+			name := t.doc.Path()
+			if t.kind == tabKindPluginContent {
+				name = m.pluginContentTitle(t)
+			}
+			out = append(out, name)
 		}
 	}
 	return out
@@ -2921,23 +3297,25 @@ func (m *Model) requestQuit(prevent func()) {
 	}
 	prevent()
 	if m.workspaceHost != nil {
-		if m.restartPending {
-			m.workspaceHost.RequestRelaunch()
-		} else {
-			m.workspaceHost.RequestApplicationQuit()
-		}
+		m.requestApplicationQuit()
 		return
 	}
 	if m.quitting {
 		return
 	}
 	m.quitting = true
+	m.applicationQuit = true
 	m.requestRunningWorkTermination(m.quitAfterProcessGuard, func() {
 		m.cancelQuitPreparation()
 	})
 }
 
 func (m *Model) quitAfterProcessGuard() {
+	if m.workspaceHost != nil {
+		m.requestApplicationQuit()
+		return
+	}
+	m.applicationQuit = false
 	if !m.hasDirty() {
 		m.confirmQuitWithoutChanges()
 		return
@@ -2952,12 +3330,14 @@ func (m *Model) quitAfterProcessGuard() {
 		if err != nil {
 			m.post(func() {
 				m.quitting = false
+				m.applicationQuit = false
 				m.restartPending = false
 			})
 			return
 		}
 		m.post(func() {
 			m.quitting = false
+			m.applicationQuit = false
 			switch res.Button {
 			case 0:
 				m.finishQuit(true)
@@ -2981,12 +3361,18 @@ func (m *Model) requestWindowClose(prevent func()) {
 		return
 	}
 	m.quitting = true
+	m.applicationQuit = false
 	m.requestRunningWorkTermination(m.windowCloseAfterProcessGuard, m.cancelQuitPreparation)
 }
 
 func (m *Model) windowCloseAfterProcessGuard() {
+	m.applicationQuit = false
 	if !m.hasDirty() {
-		m.finishWindowClose(false)
+		if !m.returnLastSessionToWelcome() {
+			m.finishWindowClose(false)
+		} else {
+			m.cancelQuitPreparation()
+		}
 		return
 	}
 	detail := strings.Join(m.dirtyPaths(), "\n")
@@ -3003,9 +3389,17 @@ func (m *Model) windowCloseAfterProcessGuard() {
 		m.post(func() {
 			switch res.Button {
 			case 0:
-				m.finishWindowClose(true)
+				if !m.returnLastSessionToWelcome() {
+					m.finishWindowClose(true)
+				} else {
+					m.cancelQuitPreparation()
+				}
 			case 1:
-				m.finishWindowClose(false)
+				if !m.returnLastSessionToWelcome() {
+					m.finishWindowClose(false)
+				} else {
+					m.cancelQuitPreparation()
+				}
 			default:
 				m.cancelQuitPreparation()
 			}
@@ -3026,6 +3420,7 @@ func (m *Model) cancelQuitPreparation() {
 		return
 	}
 	m.quitting = false
+	m.applicationQuit = false
 	m.restartPending = false
 }
 
@@ -3045,6 +3440,7 @@ func (m *Model) PrepareApplicationQuit(done func(save, ok bool)) {
 		return
 	}
 	m.quitting = true
+	m.applicationQuit = true
 	m.requestRunningWorkTermination(func() {
 		if !m.hasDirty() {
 			done(false, true)
@@ -3304,6 +3700,21 @@ func (m *Model) welcomeVisible() bool {
 }
 
 func (m *Model) shortcuts(c *ui.Context) {
+	if m.customRegions != nil && m.customRegions.open {
+		if m.customRegionShortcut(c) {
+			return
+		}
+	}
+	if m.testNav != nil && m.testNav.open {
+		if m.testNavigationShortcut(c) {
+			return
+		}
+	}
+	if m.unwrap != nil && m.unwrap.open {
+		if m.unwrapShortcut(c) {
+			return
+		}
+	}
 	if !m.overlayOpen() &&
 		m.keymapHasBinding("navigate.searchEverywhere", "Shift Shift") &&
 		m.doubleShift.observeDoubleShift(c.Modifiers(), c.Now()) {
@@ -3371,6 +3782,9 @@ func (m *Model) shortcuts(c *ui.Context) {
 	}
 	// A modal sheet owns the keyboard; only its own dismiss keys apply.
 	if m.modalOverlayOpen() {
+		return
+	}
+	if m.dispatchEditorActionGapShortcuts(c) {
 		return
 	}
 	// Preset bindings run through the same action registry as menus and the

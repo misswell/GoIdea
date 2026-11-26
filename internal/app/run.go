@@ -1242,6 +1242,9 @@ func (m *Model) watchBackend(ctx context.Context) {
 				if env.Window != nil && *env.Window != Window {
 					continue
 				}
+				if m.acceptRuntimeEvent(openidea.EventType(env.Event), env.Event) {
+					continue
+				}
 				switch openidea.EventType(env.Event) {
 				case "mcpRequest":
 					var e openidea.McpRequestEvent

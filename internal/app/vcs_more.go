@@ -15,9 +15,11 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/transfer"
+	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
 
 	"mayoi/internal/openidea"
+	"mayoi/internal/textdiff"
 )
 
 const (
@@ -65,6 +67,46 @@ type shelvedChangeList struct {
 	Branch *string                   `json:"branch"`
 	Repo   *string                   `json:"repo"`
 	Files  []openidea.RevisionChange `json:"files"`
+}
+
+type blockRevision struct {
+	ID         string  `json:"id"`
+	ShortID    string  `json:"shortId"`
+	Author     string  `json:"author"`
+	Email      string  `json:"email"`
+	TimeMs     float64 `json:"timeMs"`
+	Summary    string  `json:"summary"`
+	Path       string  `json:"path"`
+	Before     string  `json:"before"`
+	After      string  `json:"after"`
+	BeforeLine uint32  `json:"beforeLine"`
+	AfterLine  uint32  `json:"afterLine"`
+}
+
+type blockHistory struct {
+	HeadLines *[2]uint32      `json:"headLines"`
+	Revisions []blockRevision `json:"revisions"`
+}
+
+const (
+	vcsMoreSelectionHistory = "selectionHistory"
+)
+
+type selectionHistoryState struct {
+	loading   bool
+	err       string
+	committed bool
+	rows      []selectionHistoryRow
+	selected  int
+	cancel    context.CancelFunc
+}
+
+type selectionHistoryRow struct {
+	label  string
+	detail string
+	left   string
+	right  string
+	target string
 }
 
 type shelfDiffFile struct {
@@ -157,6 +199,8 @@ type vcsMoreState struct {
 	rebaseActions  []string
 	rebaseMessages []string
 	rebaseBase     string
+
+	selectionHistory selectionHistoryState
 }
 
 func init() {
@@ -205,9 +249,9 @@ func init() {
 	add("vcs.checkoutRevision", "Checkout Tag or Revision…", "Git", "checkout tag revision", true,
 		func(m *Model, arg any) { m.OpenCheckoutRevision(arg) })
 	add("vcs.compareWithBranch", "Compare with Branch or Revision…", "Git", "diff branch revision", true,
-		func(m *Model, arg any) { m.OpenCompareWithRevision(arg) })
+		func(m *Model, arg any) { m.OpenCompareWithBranch(arg) })
 	add("vcs.compareWithRevision", "Compare with Revision…", "Git", "file revision history", true,
-		func(m *Model, arg any) { m.OpenCompareWithRevision(arg) })
+		func(m *Model, arg any) { m.OpenCompareWithFileRevision(arg) })
 	add("vcs.showLog", "Show Git Log", "Git", "history commits", true,
 		func(m *Model, arg any) { m.ShowLogWithArg(arg) })
 	add("vcs.showHistory", "Show History for File", "Git", "history file commits", true,
@@ -215,7 +259,7 @@ func init() {
 	add("vcs.showCurrentRevision", "Show Current Revision", "Git", "current revision", true,
 		func(m *Model, arg any) { m.ShowCurrentRevision(arg) })
 	add("vcs.showHistoryForSelection", "Show History for Selection", "Git", "line history block", true,
-		func(m *Model, _ any) { m.ShowHistoryForSelection() })
+		func(m *Model, arg any) { m.ShowHistoryForSelection() })
 	add("vcs.shelve", "Shelve Changes…", "Git", "shelf stash", true,
 		func(m *Model, arg any) { m.OpenShelveChanges(arg) })
 	add("vcs.showShelf", "Show Shelf", "Git", "shelf", true,
@@ -231,7 +275,7 @@ func init() {
 	add("vcs.shelf.showDiff", "Show Shelved Diff", "Git", "shelf diff", true,
 		func(m *Model, arg any) { m.ShowShelfDiffArg(arg, false) })
 	add("vcs.shelf.showDiffNewTab", "Show Diff in a New Tab", "Git", "shelf diff", true,
-		func(m *Model, arg any) { m.ShowShelfDiffArg(arg, false) })
+		func(m *Model, arg any) { m.ShowShelfDiffInNewTab(arg) })
 	add("vcs.shelf.compareLocal", "Compare Shelved Changes with Local", "Git", "shelf local diff", true,
 		func(m *Model, arg any) { m.ShowShelfDiffArg(arg, true) })
 	add("vcs.shelf.createPatch", "Create Patch from Shelved Changes…", "Git", "shelf patch save", true,
@@ -313,6 +357,9 @@ func init() {
 }
 
 func (m *Model) closeVCSMore() {
+	if m.vcsMore.kind == vcsMoreSelectionHistory && m.vcsMore.selectionHistory.cancel != nil {
+		m.vcsMore.selectionHistory.cancel()
+	}
 	m.vcsMore = vcsMoreState{}
 	m.invalidate()
 }
@@ -1037,22 +1084,34 @@ func (m *Model) submitShelfRename() {
 }
 
 func (m *Model) ShowShelfDiffArg(arg any, compareLocal bool) {
+	m.showShelfDiff(arg, compareLocal, "")
+}
+
+func (m *Model) ShowShelfDiffInNewTab(arg any) {
+	m.showShelfDiff(arg, false, diffSurfaceNewTab)
+}
+
+func (m *Model) showShelfDiff(arg any, compareLocal bool, surface string) {
 	shelf, path, ok := m.selectedShelf(arg)
 	if !ok {
 		m.OpenVCSShelf()
 		return
 	}
+	projectRoot := m.Root()
 	m.vcsMore.loading, m.vcsMore.err = true, ""
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(modelContext(m), time.Minute)
 		defer cancel()
-		raw, err := m.mgr.Invoke(ctx, Window, "vcs_shelf_diff", map[string]any{"id": shelf.ID})
+		raw, err := m.invoke(ctx, "vcs_shelf_diff", map[string]any{"id": shelf.ID})
 		var files []shelfDiffFile
 		if err == nil {
 			err = json.Unmarshal(raw, &files)
 		}
 		m.post(func() {
+			if m.Root() != projectRoot {
+				return
+			}
 			m.vcsMore.loading = false
 			if err != nil {
 				m.vcsMore.err = "Could not read the shelved diff: " + err.Error()
@@ -1062,11 +1121,19 @@ func (m *Model) ShowShelfDiffArg(arg any, compareLocal bool) {
 			}
 			if path != "" {
 				for _, file := range files {
-					if file.Path == path || filepath.Base(file.Path) == filepath.Base(path) {
-						m.showShelfFileDiff(file, compareLocal)
+					if pathMatchesShelfItem(file.Path, path) {
+						if surface == diffSurfaceNewTab {
+							m.showShelfDiffInTab(file, compareLocal, shelf)
+						} else {
+							m.showShelfFileDiff(file, compareLocal, surface)
+						}
 						return
 					}
 				}
+			}
+			if surface == diffSurfaceNewTab {
+				m.openShelfDiffTab(files, compareLocal, shelf)
+				return
 			}
 			items := make([]vcsMoreItem, 0, len(files))
 			for _, file := range files {
@@ -1092,7 +1159,120 @@ func (m *Model) ShowShelfDiffArg(arg any, compareLocal bool) {
 	}()
 }
 
-func (m *Model) showShelfFileDiff(file shelfDiffFile, compareLocal bool) {
+func pathMatchesShelfItem(filePath, selected string) bool {
+	if filePath == selected || realPath(filePath) == realPath(selected) {
+		return true
+	}
+	fileBase, selectedBase := filepath.Base(filePath), filepath.Base(selected)
+	return fileBase == selectedBase &&
+		(strings.HasSuffix(filepath.ToSlash(filePath), "/"+filepath.ToSlash(selected)) ||
+			strings.HasSuffix(filepath.ToSlash(selected), "/"+filepath.ToSlash(filePath)))
+}
+
+func (m *Model) showShelfDiffInTab(file shelfDiffFile, compareLocal bool, shelf shelvedChangeList) {
+	m.openShelfDiffTab([]shelfDiffFile{file}, compareLocal, shelf)
+}
+
+func (m *Model) openShelfDiffTab(files []shelfDiffFile, compareLocal bool, shelf shelvedChangeList) {
+	projectRoot := m.Root()
+	var targets []diffFileTarget
+	for _, file := range files {
+		before, after := "", ""
+		if file.Before != nil {
+			before = *file.Before
+		}
+		if file.After != nil {
+			after = *file.After
+		}
+		leftLabel, rightLabel := "Shelved", "After Unshelve"
+		path := realPath(file.Path)
+		label := file.Path
+		if path == realPath(label) {
+			label = path
+		}
+		rightPath := path
+		if compareLocal {
+			rightLabel = "Local"
+			rightPath = path
+			if current, ok := m.bufferText(path); ok {
+				after = current
+			} else if data, err := os.ReadFile(path); err == nil {
+				after = string(data)
+			} else {
+				continue
+			}
+		}
+		targets = append(targets, diffFileTarget{
+			left: path, right: rightPath, label: label,
+			leftText: before, rightText: after, textLoaded: true,
+			leftLabel: leftLabel, rightLabel: rightLabel,
+			editable: false,
+		})
+	}
+	if len(targets) == 0 {
+		return
+	}
+	m.closeVCSMore()
+	d := &diffView{
+		open: true, surface: diffSurfaceNewTab,
+		path:       realPath(targets[0].label),
+		leftLabel:  targets[0].leftLabel,
+		rightLabel: targets[0].rightLabel,
+		leftText:   targets[0].leftText, rightText: targets[0].rightText,
+		fileChain: targets, options: m.diffPrefs(),
+		label:        "Shelf · " + shelf.Name,
+		leftEditable: false, rightEditable: false,
+	}
+	m.diff = d
+	d.resetDiffEditors()
+	d.setDiffRows(d.leftText, d.rightText)
+	m.keepDiffSurfacePresented(d)
+	if m.Root() != projectRoot {
+		m.closeDiff()
+		return
+	}
+	m.invalidate()
+}
+
+func (m *Model) vcsDiffPage(c *ui.Context, p *ui.Theme, t *Tab) {
+	d := m.diff
+	if d == nil || d.tab != t {
+		ui.Text(c, "This diff is no longer available.").FontSize(12).TextColor(p.TextMuted)
+		return
+	}
+	ui.Text(c, diffTitle(d)).FontSize(13).Bold().TextColor(p.Text).SingleLine()
+	if len(d.fileChain) > 1 {
+		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+			ui.Button(c, "‹ Previous File").Disabled(d.fileIndex <= 0).OnClick(func() { m.StepDiffFile(-1) })
+			ui.Text(c, fmt.Sprintf("%d of %d", d.fileIndex+1, len(d.fileChain))).
+				FontSize(11).TextColor(p.TextMuted).SingleLine()
+			ui.Button(c, "Next File ›").Disabled(d.fileIndex >= len(d.fileChain)-1).OnClick(func() { m.StepDiffFile(1) })
+		})
+	}
+	diffToolbar(c, m, p)
+	leftName, rightName := diffBanner(d)
+	ui.Row(c).Gap(8).Children(func() {
+		ui.Text(c, leftName).FontSize(12).TextColor(p.TextMuted).SingleLine()
+		ui.Spacer(c)
+		ui.Text(c, rightName).FontSize(12).TextColor(p.TextMuted).SingleLine()
+	})
+	ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
+		ui.Column(c).Padding(8, 0).Children(func() {
+			for _, row := range d.rows {
+				ui.Row(c).Height(20).Gap(8).Children(func() {
+					ui.Text(c, lineNumber(row.Old)).Width(46).Font(oiFontMono).FontSize(11).
+						TextColor(p.TextMuted)
+					ui.Text(c, lineNumber(row.New)).Width(46).Font(oiFontMono).FontSize(11).
+						TextColor(p.TextMuted)
+					ui.Text(c, diffSign(row.Kind)+" "+row.Text).Font(oiFontMono).FontSize(12).
+						TextColor(diffColor(row.Kind, p)).SingleLine()
+				})
+			}
+		})
+	})
+}
+
+func (m *Model) showShelfFileDiff(file shelfDiffFile, compareLocal bool, surface string) {
 	left := ""
 	if file.Before != nil {
 		left = *file.Before
@@ -1113,6 +1293,9 @@ func (m *Model) showShelfFileDiff(file shelfDiffFile, compareLocal bool) {
 		"left":  map[string]any{"text": left, "label": "Shelved"},
 		"right": map[string]any{"text": right, "label": map[bool]string{true: "Local", false: "After Unshelve"}[compareLocal]},
 	})
+	if m.diff != nil {
+		m.diff.surface = surface
+	}
 }
 
 func (m *Model) CreateShelfPatchArg(arg any) {
@@ -2440,12 +2623,182 @@ func (m *Model) ShowHistoryForFile(arg any) {
 
 func (m *Model) ShowHistoryForSelection() {
 	t := m.tab()
-	if t == nil || t.doc == nil {
-		m.status = "Open a file first"
+	if t == nil || t.doc == nil || t.state == nil || t.state.Buffer == nil || t.kind != "" {
+		m.status = "Open a file to show the history of its selection"
 		m.invalidate()
 		return
 	}
-	m.ShowHistoryForFile(map[string]any{"path": t.doc.Path()})
+	repository := vcsRepositoryContainingPath(realPath(t.doc.Path()), m.vcs.repositories)
+	if repository == "" {
+		m.status = "The file is not in a Git repository"
+		m.invalidate()
+		return
+	}
+	selection := t.state.Selection()
+	snapshot := t.state.Buffer.Snapshot()
+	first := snapshot.LineOf(selection.Start())
+	last := snapshot.LineOf(selection.End())
+	if selection.End() > selection.Start() && last > first &&
+		snapshot.LineStart(last) == selection.End() {
+		last--
+	}
+	history := selectionHistoryState{
+		loading:  true,
+		selected: 0,
+	}
+	path := realPath(t.doc.Path())
+	text := snapshot.String()
+	lines := [2]int{first, last}
+	request := m.nextRequest()
+	cancelableCtx, cancel := context.WithCancel(modelContext(m))
+	history.cancel = cancel
+	m.vcsMore = vcsMoreState{
+		open: true, kind: vcsMoreSelectionHistory, action: "selection.history",
+		title: "History for Selection", hint: "Choose a revision that changed the selected lines.",
+		request: request, selectionHistory: history,
+	}
+	m.loadSelectionHistory(path, text, lines, request, cancelableCtx)
+	m.invalidate()
+}
+
+func (m *Model) loadSelectionHistory(
+	path, text string,
+	lines [2]int,
+	request uint32,
+	ctx context.Context,
+) {
+	projectRoot := m.Root()
+	repository := vcsRepositoryContainingPath(realPath(path), m.vcs.repositories)
+	go func() {
+		timeoutCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+		defer cancel()
+		args := map[string]any{
+			"request": request, "path": path, "lines": [2]int{lines[0], lines[1]},
+		}
+		// The pinned server's vcs_block_history wrapper currently accepts
+		// request, path and lines. Keep sending the editor text when a server
+		// understands it, but omit fallback fields after an explicit
+		// invalid-argument refusal.
+		args["text"] = text
+		raw, err := m.invoke(timeoutCtx, "vcs_block_history", args)
+		if err != nil && strings.Contains(strings.ToLower(err.Error()), "text") {
+			if timeoutCtx.Err() == nil {
+				delete(args, "text")
+				raw, err = m.invoke(timeoutCtx, "vcs_block_history", args)
+			}
+		}
+		var history blockHistory
+		if err == nil {
+			err = json.Unmarshal(raw, &history)
+		}
+		m.post(func() {
+			state := &m.vcsMore.selectionHistory
+			if m.Root() != projectRoot || m.vcsMore.kind != vcsMoreSelectionHistory ||
+				m.vcsMore.request != request ||
+				vcsRepositoryContainingPath(realPath(path), m.vcs.repositories) != repository {
+				return
+			}
+			state.loading = false
+			state.cancel = nil
+			if err != nil {
+				state.err = "Could not read the selection history: " + err.Error()
+				m.invalidate()
+				return
+			}
+			state.committed = history.HeadLines != nil
+			state.rows = selectionHistoryRows(history, path, text, lines)
+			state.selected = 0
+			if len(state.rows) > 0 {
+				m.showSelectedSelectionHistory()
+			}
+		})
+	}()
+}
+
+func selectionHistoryBlock(text string, lines [2]int) string {
+	rows := textdiff.SplitLines(text)
+	if len(rows) == 0 {
+		return ""
+	}
+	from := max(0, min(lines[0], len(rows)-1))
+	to := max(from, min(lines[1], len(rows)-1))
+	var out strings.Builder
+	for _, line := range rows[from : to+1] {
+		out.WriteString(strings.TrimSuffix(line, "\r"))
+		out.WriteByte('\n')
+	}
+	return out.String()
+}
+
+func selectionHistoryRows(
+	history blockHistory,
+	_ string,
+	text string,
+	lines [2]int,
+) []selectionHistoryRow {
+	var rows []selectionHistoryRow
+	head := ""
+	if len(history.Revisions) > 0 {
+		head = history.Revisions[0].After
+	}
+	current := selectionHistoryBlock(text, lines)
+	if history.HeadLines != nil && len(history.Revisions) > 0 && head != current {
+		rows = append(rows, selectionHistoryRow{
+			label: "Local Changes", detail: "Not committed yet",
+			left: head, right: current, target: "HEAD",
+		})
+	}
+	for _, revision := range history.Revisions {
+		rows = append(rows, selectionHistoryRow{
+			label:  revision.Summary,
+			detail: revision.ShortID + " · " + revision.Author,
+			left:   revision.Before, right: revision.After, target: revision.ShortID + "^",
+		})
+	}
+	return rows
+}
+
+func (m *Model) showSelectedSelectionHistory() {
+	state := &m.vcsMore.selectionHistory
+	if state == nil || state.loading || len(state.rows) == 0 {
+		return
+	}
+	index := clampSymbolSel(state.selected, len(state.rows))
+	state.selected = index
+	row := state.rows[index]
+	m.diff = &diffView{
+		open: true, inline: true,
+		leftLabel: row.target, rightLabel: row.label,
+		leftText: row.left, rightText: row.right,
+		options: m.diffPrefs(),
+	}
+	m.diff.resetDiffEditors()
+	m.diff.setDiffRows(m.diff.leftText, m.diff.rightText)
+	m.invalidate()
+}
+
+func selectionHistoryRowCount(state *selectionHistoryState) int {
+	if state == nil {
+		return 0
+	}
+	return len(state.rows)
+}
+
+func selectionHistoryRowLabel(state *selectionHistoryState, index int) (string, string) {
+	if state == nil || index < 0 || index >= selectionHistoryRowCount(state) {
+		return "", ""
+	}
+	row := state.rows[index]
+	return row.label, row.detail
+}
+
+func (m *Model) CloseSelectionHistory() {
+	if m.vcsMore.kind == vcsMoreSelectionHistory {
+		if m.vcsMore.selectionHistory.cancel != nil {
+			m.vcsMore.selectionHistory.cancel()
+		}
+		m.closeVCSMore()
+	}
 }
 
 // AskRollbackAction bridges OpenIDEA's vcs.rollback action to the native
@@ -2608,6 +2961,29 @@ func (m *Model) submitCheckout() {
 }
 
 func (m *Model) OpenCompareWithRevision(arg any) {
+	m.openCompareWithBranch(arg)
+}
+
+func (m *Model) OpenCompareWithBranch(arg any) {
+	m.openCompareWithBranch(arg)
+}
+
+func (m *Model) OpenCompareWithFileRevision(arg any) {
+	path := firstActionPath(arg)
+	if path == "" {
+		path = actionPathOrDefault(m, nil)
+	}
+	if path != "" {
+		if info, err := os.Stat(path); err == nil && !info.IsDir() &&
+			vcsRepositoryContainingPath(realPath(path), m.vcs.repositories) != "" {
+			m.openFileRevisionChooser(path)
+			return
+		}
+	}
+	m.openCompareWithBranch(arg)
+}
+
+func (m *Model) openCompareWithBranch(arg any) {
 	paths := m.vcsActionPaths(arg, false)
 	if len(paths) == 0 {
 		m.status = "Open or select a file or folder to compare"
@@ -2617,6 +2993,114 @@ func (m *Model) OpenCompareWithRevision(arg any) {
 	m.openVCSMore(vcsMorePrompt, "compare.revision", "Compare with Branch or Revision",
 		"Enter the branch or revision used as the left side.")
 	m.vcsMore.input2 = strings.Join(paths, "\x00")
+}
+
+func (m *Model) openFileRevisionChooser(path string) {
+	repository := vcsRepositoryContainingPath(realPath(path), m.vcs.repositories)
+	if repository == "" {
+		m.status = "The file is not in a Git repository"
+		m.invalidate()
+		return
+	}
+	m.vcsMore = vcsMoreState{
+		open: true, kind: vcsMoreChanges, action: "file.revisions",
+		title: "Compare with Revision…", hint: "Choose a revision of this file.",
+		loading: true, input: realPath(path), input3: repository,
+	}
+	m.invalidate()
+	projectRoot := m.Root()
+	go func() {
+		ctx, cancel := context.WithTimeout(modelContext(m), 2*time.Minute)
+		defer cancel()
+		request := m.nextRequest()
+		raw, err := m.invoke(ctx, "vcs_log", map[string]any{
+			"repo": repository,
+			"query": map[string]any{
+				"branch": nil, "path": path, "author": nil, "text": nil,
+				"skip": 0, "limit": 0, "follow": true, "summaryOnly": true,
+				"request": request,
+			},
+		})
+		var commits []openidea.Commit
+		if err == nil {
+			err = json.Unmarshal(raw, &commits)
+		}
+		m.post(func() {
+			if m.Root() != projectRoot || !m.vcsMore.open ||
+				m.vcsMore.action != "file.revisions" ||
+				m.vcsMore.input != realPath(path) ||
+				vcsRepositoryKey(m.vcsMore.input3) != repository {
+				return
+			}
+			m.vcsMore.loading = false
+			if err != nil {
+				m.vcsMore.err = "Could not read the file history: " + err.Error()
+				m.invalidate()
+				return
+			}
+			for _, commit := range commits {
+				m.vcsMore.items = append(m.vcsMore.items, vcsMoreItem{
+					ID: commit.ID, Revision: commit.ID, Path: path,
+					Label:  shortID(commit.ID) + " · " + commit.Summary,
+					Detail: commit.Author,
+					After:  "worktree",
+				})
+			}
+			m.vcsMore.choice = 0
+			m.invalidate()
+		})
+	}()
+}
+
+func (m *Model) compareFileWithRevision(commit openidea.Commit) {
+	path := realPath(m.vcsMore.input)
+	repository := vcsRepositoryKey(m.vcsMore.input3)
+	projectRoot := m.Root()
+	if path == "" || repository == "" || !m.vcsRepositoryHasRoot(repository) {
+		return
+	}
+	m.vcsMore.busy = true
+	go func() {
+		ctx, cancel := context.WithTimeout(modelContext(m), 2*time.Minute)
+		defer cancel()
+		raw, err := m.invoke(ctx, "vcs_file_at", map[string]any{
+			"path": path, "rev": commit.ID,
+		})
+		var left *string
+		if err == nil {
+			err = json.Unmarshal(raw, &left)
+		}
+		m.post(func() {
+			if m.Root() != projectRoot || !m.vcsMore.open ||
+				m.vcsMore.action != "file.revisions" ||
+				m.vcsMore.input != path ||
+				vcsRepositoryKey(m.vcsMore.input3) != repository {
+				return
+			}
+			if err != nil {
+				m.vcsMore.busy = false
+				m.vcsMore.err = "Could not read revision " + shortID(commit.ID) + ": " + err.Error()
+				m.invalidate()
+				return
+			}
+			m.vcsMore.busy = false
+			m.closeVCSMore()
+			m.OpenDiffArg(map[string]any{
+				"path": path,
+				"left": map[string]any{
+					"type": "text", "text": optionalText(left), "label": shortID(commit.ID),
+				},
+				"right": map[string]any{"type": "worktree", "path": path},
+			})
+		})
+	}()
+}
+
+func optionalText(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }
 
 func (m *Model) submitCompareWithRevision() {

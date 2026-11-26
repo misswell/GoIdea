@@ -213,11 +213,16 @@ func (m *Model) confirmQuitWithoutChanges() {
 			Buttons: []string{"Quit", "Cancel"}, DefaultButton: 1, CancelButton: 1,
 		})
 		if err != nil {
-			m.post(func() { m.quitting = false; m.restartPending = false })
+			m.post(func() {
+				m.quitting = false
+				m.applicationQuit = false
+				m.restartPending = false
+			})
 			return
 		}
 		m.post(func() {
 			m.quitting = false
+			m.applicationQuit = false
 			if res.Button == 0 {
 				m.finishQuit(false)
 			} else {

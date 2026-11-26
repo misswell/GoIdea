@@ -42,10 +42,17 @@ func (m *Model) terminalSpawnOptions(
 	if rows <= 0 {
 		rows = defaultTerminalRows
 	}
+	env := m.nativeRuntimeStringMap(settingsPageTerminal, "terminal.env")
+	env = cloneTerminalEnvironment(env)
+	if m.pythonActivateVirtualenvInTerminal() {
+		activateTerminalPython(m.Root(), m.nativeRuntimeString(
+			settingsPagePythonDeps, "languages.python.interpreter",
+		), env)
+	}
 	opts := map[string]any{
 		"cwd":  "",
 		"args": append([]string{}, args...),
-		"env":  m.nativeRuntimeStringMap(settingsPageTerminal, "terminal.env"),
+		"env":  env,
 		"cols": cols,
 		"rows": rows,
 		"shellIntegration": m.nativeRuntimeBool(
@@ -57,6 +64,64 @@ func (m *Model) terminalSpawnOptions(
 		opts["shell"] = program
 	}
 	return opts
+}
+
+func cloneTerminalEnvironment(values map[string]string) map[string]string {
+	out := make(map[string]string, len(values)+4)
+	for key, value := range values {
+		out[key] = value
+	}
+	return out
+}
+
+func (m *Model) pythonActivateVirtualenvInTerminal() bool {
+	return m.nativeRuntimeBool(settingsPagePythonDeps, "languages.python.activateVirtualenv")
+}
+
+func activateTerminalPython(root, python string, env map[string]string) {
+	if root == "" || env == nil {
+		return
+	}
+	python = strings.TrimSpace(python)
+	if python == "" {
+		return
+	}
+	if !filepath.IsAbs(python) {
+		python = filepath.Join(root, python)
+	}
+	python = filepath.Clean(python)
+	envDir := pythonVirtualenvRoot(python)
+	if envDir == "" {
+		return
+	}
+	binDir := filepath.Dir(python)
+	path := env["PATH"]
+	if path == "" {
+		path = os.Getenv("PATH")
+	}
+	parts := filepath.SplitList(path)
+	already := false
+	for _, part := range parts {
+		if filepath.Clean(part) == binDir {
+			already = true
+			break
+		}
+	}
+	if !already {
+		parts = append([]string{binDir}, parts...)
+	}
+	env["PATH"] = strings.Join(parts, string(os.PathListSeparator))
+	env["VIRTUAL_ENV"] = envDir
+	env["PYTHONHOME"] = ""
+}
+
+func pythonVirtualenvRoot(python string) string {
+	dir := filepath.Dir(python)
+	parent := filepath.Dir(dir)
+	if filepath.Base(dir) == "bin" || filepath.Base(dir) == "Scripts" {
+		return parent
+	}
+	return ""
 }
 
 func (m *Model) terminalDefaultTabName() string {

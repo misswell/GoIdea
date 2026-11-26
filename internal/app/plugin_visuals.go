@@ -570,7 +570,8 @@ func (m *Model) composeTextBackgrounds(tab *Tab, base []editor.TextBackground) [
 	out = append(out, m.rainbowBracketBackgrounds(tab)...)
 	out = append(out, m.semanticTokenBackgrounds(tab)...)
 	out = append(out, m.graphqlUnsentTextBackgrounds(tab)...)
-	return append(out, m.usageHighlightBackgrounds(tab)...)
+	out = append(out, m.usageHighlightBackgrounds(tab)...)
+	return append(out, m.editorTextBackgrounds(tab)...)
 }
 
 func (m *Model) pluginDecorationBackgrounds(tab *Tab) ([]editor.LineBackground, []editor.TextBackground) {

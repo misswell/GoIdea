@@ -906,12 +906,8 @@ func nativeSettingsDefinitions() []nativeSettingsPageSpec {
 	pageDefs = append(pageDefs, vcsNativeSettingsPages()...)
 	for i := range pageDefs {
 		switch pageDefs[i].page.id {
-		case settingsPageRichTextCopy:
-			pageDefs[i].note = "Saved for compatibility; native copy currently uses plain text."
 		case settingsPageStickyLines:
 			pageDefs[i].note = "Saved for compatibility; the native editor does not show sticky lines yet."
-		case settingsPagePythonDocstrings:
-			pageDefs[i].note = "Saved for compatibility; Python generation does not yet support every format."
 		}
 	}
 	return pageDefs

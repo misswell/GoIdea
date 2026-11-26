@@ -72,6 +72,19 @@ func vcsRepositoryKey(root string) string {
 	return root
 }
 
+func (m *Model) vcsRepositoryHasRoot(root string) bool {
+	root = vcsRepositoryKey(root)
+	if root == "" {
+		return false
+	}
+	for _, repository := range m.vcs.repositories {
+		if vcsRepositoryKey(repository.Root) == root {
+			return true
+		}
+	}
+	return false
+}
+
 func (m *Model) vcsContentFor(root string) vcsContentTab {
 	if tab, ok := m.vcs.content[vcsRepositoryKey(root)]; ok {
 		return tab

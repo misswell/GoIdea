@@ -95,7 +95,7 @@ func (m *Model) liveTemplateCompletionItems(
 		return req.Offset, nil, nil
 	}
 	prefs := m.templates()
-	if !prefs.Live.Enabled {
+	if !prefs.Live.Enabled || !prefs.Live.ShowInCompletion {
 		return req.Offset, nil, nil
 	}
 	language := templateLanguage(t.doc.Path())
@@ -372,10 +372,87 @@ func (m *Model) tabTemplateInput(t *Tab, ev ui.InputEvent) bool {
 	if ev.Kind != ui.InputKeyDown || ev.Key != ui.KeyTab || ev.Mods != 0 {
 		return false
 	}
-	if _, ok := m.currentSelectedCompletion(t); !ok {
+	if _, ok := m.currentSelectedCompletion(t); ok {
+		return m.acceptCurrentCompletion(t, "")
+	}
+	if !m.templates().Live.ExpandWithTab {
 		return false
 	}
-	return m.acceptCurrentCompletion(t, "")
+	return m.expandTemplateAtCaret(t, false)
+}
+
+func (m *Model) expandTemplateAtCaret(t *Tab, postfix bool) bool {
+	if t == nil || t.doc == nil || t.state == nil {
+		return false
+	}
+	text := t.doc.Text()
+	cursor := t.state.Cursor()
+	if cursor < 0 || cursor > len(text) {
+		return false
+	}
+	language := templateLanguage(t.doc.Path())
+	if postfix {
+		candidates := postfixExpansionCandidates(
+			text, cursor, language, m.templates().Postfix, m.templateContext(t, ""),
+		)
+		if len(candidates) == 0 {
+			return false
+		}
+		start := cursor
+		for _, candidate := range candidates {
+			start = min(start, candidate.From)
+		}
+		chosen := candidates[0]
+		for _, candidate := range candidates {
+			if candidate.From == start {
+				chosen = candidate
+				break
+			}
+		}
+		m.applyTemplateAction(t, templateCompletionAction{
+			TemplateID: chosen.TemplateID, From: chosen.From, To: cursor,
+			Expansion: chosen.Text, Postfix: true,
+		})
+		return true
+	}
+	prefs := m.templates()
+	if !prefs.Live.Enabled {
+		return false
+	}
+	var matches []LiveTemplate
+	for _, template := range prefs.liveTemplates() {
+		if !templateContextApplies(template, language) {
+			continue
+		}
+		start := cursor - len(template.Abbreviation)
+		if start < 0 || !templatePrefixMatches(
+			template.Abbreviation, text[start:cursor], prefs.Live.CaseSensitive,
+		) {
+			continue
+		}
+		if start > 0 && isTemplateIdentifierByte(text[start-1]) {
+			continue
+		}
+		if start != cursor-len(template.Abbreviation) {
+			continue
+		}
+		matches = append(matches, template)
+	}
+	if len(matches) != 1 {
+		return false
+	}
+	template := matches[0]
+	from := cursor - len(template.Abbreviation)
+	m.applyTemplateAction(t, templateCompletionAction{
+		TemplateID: template.ID, From: from, To: cursor,
+		Expansion: expandTemplate(template.Body, m.templateContext(t, "")),
+	})
+	return true
+}
+
+func isTemplateIdentifierByte(value byte) bool {
+	return value == '_' || value >= 'a' && value <= 'z' ||
+		value >= 'A' && value <= 'Z' || value >= '0' && value <= '9'
 }
 
 func (m *Model) applyTemplateAction(t *Tab, action templateCompletionAction) {
