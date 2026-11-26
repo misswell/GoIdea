@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/ui"
 )
 
 const (
@@ -42,8 +43,9 @@ type EditorSchemePrefs struct {
 }
 
 // CustomColorScheme is the subset of an IntelliJ .icls scheme that GoIDEA can
-// store and round-trip. MyGo currently has no per-token foreground API, so the
-// attributes are retained for later rendering and export.
+// store and round-trip. MyGo themes edit token categories and editor surfaces;
+// attributes outside those categories are retained only for later rendering
+// and export.
 type CustomColorScheme struct {
 	Name       string                     `json:"name"`
 	Parent     string                     `json:"parent"`
@@ -130,6 +132,9 @@ var iclsAttributeTargets = map[string][]string{
 	"DEFAULT_PARENTHS":              {"operator"},
 	"DEFAULT_BRACES":                {"operator"},
 	"DEFAULT_BRACKETS":              {"operator"},
+	"DEFAULT_PREDEFINED_SYMBOL":     {"predefined"},
+	"DEFAULT_MARKUP_TAG":            {"markupTag"},
+	"DEFAULT_MARKUP_ATTRIBUTE":      {"markupAttribute"},
 	"BAD_CHARACTER":                 {"invalid"},
 	"TODO_DEFAULT_ATTRIBUTES":       {"todo"},
 	"ERRORS_ATTRIBUTES":             {"error"},
@@ -150,6 +155,7 @@ var iclsAttributeTargets = map[string][]string{
 	"JAVA_FUNCTION_DECLARATION":     {"java.functionDeclaration"},
 	"JAVA_FUNCTION_CALL":            {"java.functionCall"},
 	"JAVA_OPERATION_SIGN":           {"java.operator"},
+	"JAVA_DOC_TAG":                  {"java.docCommentTag"},
 	"PY.KEYWORD":                    {"pyKeyword"},
 	"PY.NUMBER":                     {"pyNumber"},
 	"PY.STRING":                     {"pyString"},
@@ -158,6 +164,7 @@ var iclsAttributeTargets = map[string][]string{
 	"PY.FUNC_DEFINITION":            {"pyFunctionDeclaration"},
 	"PY.PARAMETER":                  {"pyParameter"},
 	"PY.OPERATION_SIGN":             {"pyOperationSign"},
+	"REGEXP":                        {"regexp"},
 }
 
 var iclsExportKeys = map[string]string{
@@ -179,10 +186,15 @@ var iclsExportKeys = map[string]string{
 	"java.parameter": "JAVA_PARAMETER", "java.field": "JAVA_INSTANCE_FIELD",
 	"java.constant": "JAVA_STATIC_FIELD", "java.functionDeclaration": "JAVA_FUNCTION_DECLARATION",
 	"java.functionCall": "JAVA_FUNCTION_CALL", "java.operator": "JAVA_OPERATION_SIGN",
-	"pyKeyword": "PY.KEYWORD", "pyNumber": "PY.NUMBER", "pyString": "PY.STRING",
+	"java.docCommentTag": "JAVA_DOC_TAG",
+	"pyKeyword":          "PY.KEYWORD", "pyNumber": "PY.NUMBER", "pyString": "PY.STRING",
 	"pyLineComment": "PY.LINE_COMMENT", "pyDocstring": "PY.DOC_COMMENT",
 	"pyFunctionDeclaration": "PY.FUNC_DEFINITION", "pyParameter": "PY.PARAMETER",
 	"pyOperationSign": "PY.OPERATION_SIGN",
+	"predefined":      "DEFAULT_PREDEFINED_SYMBOL",
+	"markupTag":       "DEFAULT_MARKUP_TAG",
+	"markupAttribute": "DEFAULT_MARKUP_ATTRIBUTE",
+	"regexp":          "REGEXP",
 }
 
 func decodeBackendEditorSchemeSettings(raw json.RawMessage) (backendEditorSchemeSettings, error) {
@@ -549,6 +561,7 @@ func parseICLS(text, fallbackName string) (parsedColorScheme, error) {
 		outerOption  int
 		attrNames    []string
 		attrOverride ColorAttributes
+		effectType   string
 		applied      int
 		skipped      int
 	)
@@ -578,6 +591,7 @@ func parseICLS(text, fallbackName string) (parsedColorScheme, error) {
 		outerOption = 0
 		attrNames = nil
 		attrOverride = ColorAttributes{}
+		effectType = ""
 	}
 	for {
 		token, err := decoder.Token()
@@ -628,6 +642,11 @@ func parseICLS(text, fallbackName string) (parsedColorScheme, error) {
 						skipped++
 						resetAttribute()
 					} else {
+						if iclsTargetsUseTokenStyle(attrNames) {
+							plain := false
+							attrOverride.Bold = &plain
+							attrOverride.Italic = &plain
+						}
 						if strings.HasPrefix(optionName, "PY.") {
 							attrOverride.Effect = "none"
 						}
@@ -671,14 +690,11 @@ func parseICLS(text, fallbackName string) (parsedColorScheme, error) {
 					case "EFFECT_TYPE":
 						switch raw {
 						case "1", "4", "5":
-							attrOverride.Effect = "underline"
-							applied++
+							effectType = "underline"
 						case "2":
-							attrOverride.Effect = "wave"
-							applied++
+							effectType = "wave"
 						case "3":
-							attrOverride.Effect = "strikeout"
-							applied++
+							effectType = "strikeout"
 						default:
 							skipped++
 						}
@@ -688,6 +704,14 @@ func parseICLS(text, fallbackName string) (parsedColorScheme, error) {
 		case xml.EndElement:
 			if item.Name.Local == "option" && outerOption > 0 &&
 				len(stack) == outerOption && section == "attributes" {
+				if effectType != "" {
+					if attrOverride.EffectColor != "" {
+						attrOverride.Effect = effectType
+						applied++
+					} else {
+						skipped++
+					}
+				}
 				merge(attrNames, attrOverride)
 				resetAttribute()
 			}
@@ -725,15 +749,19 @@ func firstNonEmpty(current, next string) string {
 
 func normalizedICLSCColor(value string) string {
 	value = strings.TrimSpace(strings.TrimPrefix(value, "#"))
-	if len(value) != 3 && len(value) != 6 {
+	if len(value) == 0 || len(value) > 6 {
 		return ""
 	}
-	if _, err := hex.DecodeString(value); err != nil {
+	decodeValue := value
+	if len(decodeValue)%2 != 0 {
+		decodeValue = "0" + decodeValue
+	}
+	if _, err := hex.DecodeString(decodeValue); err != nil {
 		return ""
 	}
 	value = strings.ToLower(value)
-	if len(value) == 3 {
-		value = string([]byte{value[0], value[0], value[1], value[1], value[2], value[2]})
+	if len(value) < 6 {
+		value = strings.Repeat("0", 6-len(value)) + value
 	}
 	return "#" + value
 }
@@ -747,6 +775,15 @@ func resolveICLSTargets(name string) []string {
 		return []string{id}
 	}
 	return nil
+}
+
+func iclsTargetsUseTokenStyle(ids []string) bool {
+	for _, id := range ids {
+		if _, ok := editorSchemeAttributeKind(id); ok {
+			return true
+		}
+	}
+	return false
 }
 
 func sanitizeColorAttributes(values map[string]ColorAttributes) map[string]ColorAttributes {
@@ -1010,7 +1047,7 @@ func (m *Model) ExportColorScheme(arg any) {
 	if strings.TrimSpace(path) == "" {
 		return
 	}
-	raw, err := exportICLS(id, prefs)
+	raw, err := exportICLSWithBase(id, prefs, m.theme)
 	if err != nil {
 		m.editorSchemeError("Cannot export the color scheme", err)
 		return
@@ -1049,31 +1086,18 @@ func colorSchemeFileName(name string) string {
 }
 
 func exportICLS(id string, prefs EditorSchemePrefs) (string, error) {
+	return exportICLSWithBase(id, prefs, openideaTheme(false))
+}
+
+func exportICLSWithBase(id string, prefs EditorSchemePrefs, base *ui.Theme) (string, error) {
 	name, found := colorSchemeDisplayName(prefs, id)
 	if !found && id != themeDefaultColorScheme {
 		return "", fmt.Errorf("color scheme %q was not found", id)
 	}
 	parent := "dark"
-	attributes := map[string]ColorAttributes{}
+	attributes := editorSchemeExportAttributes(prefs, id, base)
 	if custom, ok := prefs.CustomSchemes[id]; ok {
 		parent = normalizeSchemeParent(custom.Parent, custom.Attributes)
-		for key, value := range custom.Attributes {
-			attributes[key] = cloneColorAttributes(value)
-		}
-	}
-	for key, value := range prefs.ColorOverrides[id] {
-		current := attributes[key]
-		current.Foreground = firstNonEmpty(current.Foreground, value.Foreground)
-		current.Background = firstNonEmpty(current.Background, value.Background)
-		current.EffectColor = firstNonEmpty(current.EffectColor, value.EffectColor)
-		if value.Bold != nil {
-			current.Bold = value.Bold
-		}
-		if value.Italic != nil {
-			current.Italic = value.Italic
-		}
-		current.Effect = firstNonEmpty(current.Effect, value.Effect)
-		attributes[key] = current
 	}
 	var output strings.Builder
 	output.WriteString(`<scheme name="`)

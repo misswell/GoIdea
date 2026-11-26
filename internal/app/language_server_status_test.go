@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/editor"
 
 	"mayoi/internal/openidea"
 )
@@ -117,6 +118,35 @@ func TestLanguageServerEventsAndSnapshotKeepTheNewestState(t *testing.T) {
 		ID: 3, Status: "missing", Languages: []string{"go"},
 	}) {
 		t.Fatal("a removed server still serves fallback languages")
+	}
+}
+
+func TestLanguageServerReadyRefreshesSemanticTokens(t *testing.T) {
+	tab := &Tab{
+		state:              &editor.State{},
+		semanticLoaded:     true,
+		semanticLoading:    false,
+		semanticVersion:    7,
+		semanticRetryAt:    time.Now().Add(time.Minute),
+		semanticGeneration: 3,
+		semanticRanges:     []semanticTokenSpan{{Start: 0, End: 3, Name: "arg"}},
+	}
+	m := &Model{
+		tabs: []*Tab{tab},
+		languageServers: map[uint32]languageServerInfo{
+			1: {
+				ID: 1, Name: "gopls", Tool: "gopls", Status: "starting",
+				Languages: []string{"go"},
+			},
+		},
+	}
+	m.acceptLanguageServerStatus(openidea.LanguageServerEvent{
+		Server: 1, Name: "gopls", Status: "ready",
+	})
+	if tab.semanticLoaded || tab.semanticLoading || tab.semanticVersion != 0 ||
+		!tab.semanticRetryAt.IsZero() || tab.semanticGeneration <= 3 ||
+		len(tab.semanticRanges) != 0 {
+		t.Fatalf("ready server retained semantic state: %+v", tab)
 	}
 }
 

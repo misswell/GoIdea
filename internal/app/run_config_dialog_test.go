@@ -9,6 +9,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
+	"mayoi/internal/adapter"
 	"mayoi/internal/openidea"
 )
 
@@ -368,5 +369,69 @@ func TestRerunAsksWhileRunningAndRemembersDoNotAsk(t *testing.T) {
 	m.Rerun()
 	if m.rerunAsk != nil {
 		t.Fatalf("the stored choice skips the confirm")
+	}
+}
+
+func TestRerunFailedUsesTheSelectedChildTab(t *testing.T) {
+	main := &serialMainThread{}
+	m := &Model{
+		ctx:      context.Background(),
+		postHook: main.post,
+	}
+	m.setRoot(t.TempDir())
+	m.run.trusted, m.run.loaded = true, true
+	base := openidea.RunConfig{
+		ID: "maven:selected", Name: "Selected tests", Kind: "maven",
+		Command: "mvn", Args: []string{"test"}, IsTest: true,
+	}
+	other := openidea.RunConfig{
+		ID: "maven:other", Name: "Other tests", Kind: "maven",
+		Command: "mvn", Args: []string{"test"}, IsTest: true,
+	}
+	results := adapter.NewTestResults()
+	results.Apply([]adapter.TestEvent{{
+		Kind: "result", Path: []string{"demo.SelectedTest", "passes"}, Status: adapter.TestPassed,
+	}, {
+		Kind: "result", Path: []string{"demo.SelectedTest", "fails"}, Status: adapter.TestFailed,
+	}})
+	exit := int32(1)
+	selected := &runChild{
+		channel: 21, runID: 41, name: base.Name, config: base,
+		finished: true, exitCode: &exit, started: time.Now(), ended: time.Now(),
+		tests: results,
+	}
+	otherResults := adapter.NewTestResults()
+	otherResults.Apply([]adapter.TestEvent{{
+		Kind: "result", Path: []string{"demo.OtherTest", "fails"}, Status: adapter.TestFailed,
+	}})
+	otherChild := &runChild{
+		channel: 22, runID: 42, name: other.Name, config: other,
+		finished: true, exitCode: &exit, started: time.Now(), ended: time.Now(),
+		tests: otherResults,
+	}
+	m.run.children = []*runChild{selected, otherChild}
+	m.run.activeChild = selected.channel
+	m.run.agentActive = 0
+
+	var launched openidea.RunConfig
+	m.invokeHook = func(_ context.Context, command string, args any) (json.RawMessage, error) {
+		if command != "run_start" {
+			return json.RawMessage(`null`), nil
+		}
+		raw, _ := json.Marshal(args.(map[string]any)["config"])
+		if err := json.Unmarshal(raw, &launched); err != nil {
+			return nil, err
+		}
+		return json.RawMessage(`{"id":43,"running":true,"name":"Selected tests"} `), nil
+	}
+
+	m.RerunFailedTestsFor("run")
+	waitForSerialMainThread(t, main, time.Second, func() bool {
+		return launched.ID != ""
+	})
+	if !sameStringSlice(launched.Args, []string{
+		"test", "-Dtest=demo.SelectedTest#fails",
+	}) {
+		t.Fatalf("selected child rerun args = %q", launched.Args)
 	}
 }

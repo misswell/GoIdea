@@ -7,12 +7,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/editor"
 
 	"mayoi/internal/openidea"
 )
@@ -52,6 +54,7 @@ type dbView struct {
 	collapsed          bool
 	renamingResult     int
 	actionPrompt       *dbActionPrompt
+	pendingRun         *dbPendingRun
 	sourceForm         *dbSourceForm
 	tableForm          *dbTableForm
 	importForm         *dbImportForm
@@ -61,6 +64,8 @@ type dbView struct {
 
 	loading  bool
 	running  bool
+	runGen   uint64
+	runID    uint32
 	err      string
 	outcomes []openidea.DBOutcome
 	// results are the run result tabs (v0.1.44's result tabs); active is the
@@ -96,6 +101,34 @@ type dbActionPrompt struct {
 	ifExists    bool
 	cascade     bool
 	restartID   bool
+}
+
+// dbSQLParam is one query parameter in a console statement. From and To are
+// byte offsets within the statement text.
+type dbSQLParam struct {
+	Name string
+	From int
+	To   int
+}
+
+type dbParamInput struct {
+	name  string
+	value string
+}
+
+// dbPendingRun is a console run waiting for its named parameters.
+type dbPendingRun struct {
+	view       *dbView
+	gen        uint64
+	mode       string
+	source     string
+	schema     string
+	title      string
+	text       string
+	driver     string
+	statements []openidea.DBStatement
+	params     [][]dbSQLParam
+	inputs     []dbParamInput
 }
 
 // dbResult is one run's result tab.
@@ -191,11 +224,22 @@ func (m *Model) closeDatabase() {
 	if m.db == nil || !m.db.open {
 		return
 	}
+	m.db.runGen++
+	if request := m.db.runID; request != 0 && m.mgr != nil {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_, _ = m.mgr.Invoke(ctx, Window, "cancel_request", map[string]any{"id": request})
+		}()
+	}
 	m.db.open = false
 	m.dbTable = nil
 	m.dbHist = nil
 	m.dbPlan = nil
 	m.db.exportDialog = nil
+	m.db.pendingRun = nil
+	m.db.running = false
+	m.db.runID = 0
 	m.invalidate()
 }
 
@@ -264,6 +308,8 @@ func (m *Model) ConnectDBSource(id string) {
 	if v == nil || id == "" || v.connected[id] {
 		return
 	}
+	source, _ := m.dbSourceByID(dbBaseTarget(id))
+	manualAllowed := !strings.EqualFold(source.Driver, "clickhouse")
 	v.err = ""
 	v.loading = true
 	go func() {
@@ -283,9 +329,11 @@ func (m *Model) ConnectDBSource(id string) {
 					if fmt.Sprint(source["id"]) != dbBaseTarget(id) {
 						continue
 					}
-					if options, ok := source["options"].(map[string]any); ok &&
-						fmt.Sprint(options["transaction"]) == "manual" {
-						manual = true
+					if manualAllowed {
+						if options, ok := source["options"].(map[string]any); ok &&
+							fmt.Sprint(options["transaction"]) == "manual" {
+							manual = true
+						}
 					}
 					break
 				}
@@ -524,7 +572,7 @@ func (m *Model) loadDBTables(id, schema string) {
 // outcomes of each statement.
 func (m *Model) RunDB() {
 	v := m.db
-	if v == nil || v.running {
+	if v == nil {
 		return
 	}
 	if v.source == "" {
@@ -547,7 +595,7 @@ func (m *Model) RunDB() {
 		m.invalidate()
 		return
 	}
-	v.running = true
+	gen := m.dbBeginRun(v)
 	v.err = ""
 	v.outcomes = nil
 	v.active = 0
@@ -555,19 +603,14 @@ func (m *Model) RunDB() {
 	if len(v.outLog) > 200 {
 		v.outLog = v.outLog[len(v.outLog)-200:]
 	}
-	request := m.chanSeq.Add(1)
 	id, schema := target, v.schema
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
 		statements, err := m.mgr.DBStatements(ctx, Window, id, sql, 0, utf16Len(sql))
-		var outcomes []openidea.DBOutcome
-		if err == nil && len(statements) > 0 {
-			outcomes, err = m.mgr.DBExecute(ctx, Window, request, id, statements, dbMaxRows, schema)
-		}
 		m.post(func() {
-			if m.db != v {
+			if m.db != v || v.runGen != gen {
 				return
 			}
 			v.running = false
@@ -580,39 +623,21 @@ func (m *Model) RunDB() {
 				v.addDBResult(title, id, nil, "Execution failed: "+err.Error())
 				v.outLog = append(v.outLog, "Execution failed: "+err.Error())
 			case len(statements) == 0:
-				v.addDBResult(title, id, outcomes, "There is no statement to execute")
+				v.addDBResult(title, id, nil, "There is no statement to execute")
 				v.outLog = append(v.outLog, "There is no statement to execute")
 			default:
-				v.addDBResult(title, id, outcomes, "")
-				for _, o := range outcomes {
-					v.outLog = append(v.outLog, oneLine(o.Statement.Text)+" · "+dbOutcomeSummary(o))
-				}
-				if v.manualCommit[id] {
-					for _, outcome := range outcomes {
-						if outcome.Error == "" && !dbReadOnlyStatement(outcome.Statement.Text) {
-							v.pendingTx[id] = true
-							break
-						}
-					}
-				}
+				m.dbStartOrPrompt(v, gen, id, schema, title, sql, statements)
 			}
 			if len(v.outLog) > 200 {
 				v.outLog = v.outLog[len(v.outLog)-200:]
 			}
-			m.loadDBTables(id, schema)
 			m.invalidate()
 		})
 	}()
 }
 
 func dbReadOnlyStatement(text string) bool {
-	text = strings.TrimSpace(strings.ToLower(text))
-	for _, prefix := range []string{"select", "show", "pragma", "explain", "describe", "desc", "values", "table", "with"} {
-		if strings.HasPrefix(text, prefix+" ") || text == prefix {
-			return true
-		}
-	}
-	return false
+	return regexp.MustCompile(`(?is)^\s*(select|show|pragma|explain|describe|desc|values|table)\b`).MatchString(text)
 }
 
 // utf16Len is the length of s in UTF-16 code units, the offsets the backend
@@ -1457,10 +1482,21 @@ func (m *Model) OpenDBTable(schema, table string) {
 	if schema == "" {
 		schema = m.db.schema
 	}
-	source, _ := m.dbSourceByID(m.db.activeTarget())
+	if current := m.dbTable; current != nil {
+		if current.source == m.db.activeTarget() && current.schema == schema && current.table == table {
+			m.invalidate()
+			return
+		}
+		if dbTableHasChanges(current) {
+			current.err = "Submit or revert the open table's changes before opening another table."
+			m.invalidate()
+			return
+		}
+	}
+	source, _ := m.dbSourceByID(dbBaseTarget(m.db.activeTarget()))
 	m.dbTable = &dbTableSheet{
 		open: true, source: m.db.activeTarget(), schema: schema, table: table,
-		driver: source.Driver, readOnly: source.ReadOnly, limit: 100,
+		driver: source.Driver, readOnly: source.ReadOnly, limit: 500,
 		selectedRow: -1, selectedCol: -1, editRow: -1, editCol: -1,
 		pending: map[string]*string{}, deletes: map[int]bool{},
 	}
@@ -1683,7 +1719,7 @@ func (m *Model) dbTableDialog(c *ui.Context, p *ui.Theme) {
 				ui.Button(c, "Next").Disabled(!s.page.Result.HasMore || s.loading).
 					OnClick(func() { m.DBTableStepPage(1) })
 				pageSize := strconv.Itoa(s.limit)
-				if choice := ui.Select(c, &pageSize, []string{"50", "100", "200", "500"}).Width(76); choice.Changed() {
+				if choice := ui.Select(c, &pageSize, []string{"100", "500", "1000", "5000"}).Width(76); choice.Changed() {
 					if m.dbBlockTableNavigation("Changing the page size") {
 						if size, err := strconv.Atoi(pageSize); err == nil {
 							s.limit = size
@@ -1988,10 +2024,14 @@ func (m *Model) dbTableDialog(c *ui.Context, p *ui.Theme) {
 type dbHistoryPane struct {
 	open    bool
 	loading bool
+	busy    bool
 	err     string
 	items   []openidea.DBHistoryEntry
 	sel     int
+	filter  string
 	gen     uint64
+	source  string
+	path    string
 }
 
 // dbPlanPane is the open execution plan of one statement.
@@ -2015,11 +2055,25 @@ func (m *Model) OpenDBHistory() {
 	if m.db == nil || m.db.source == "" {
 		return
 	}
-	h := &dbHistoryPane{open: true, loading: true}
+	path := ""
+	if tab := m.tab(); tab != nil && tab.doc != nil && dbSQLPath(tab.doc.Path()) {
+		path = tab.doc.Path()
+	}
+	m.openDBHistoryAt(m.db.activeTarget(), path)
+}
+
+func (m *Model) openDBHistory(source string) {
+	m.openDBHistoryAt(source, "")
+}
+
+func (m *Model) openDBHistoryAt(source, path string) {
+	if m.db == nil || source == "" {
+		return
+	}
+	h := &dbHistoryPane{open: true, loading: true, source: source, path: path}
 	m.dbHist = h
 	h.gen++
 	gen := h.gen
-	source := m.db.source
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
@@ -2043,10 +2097,18 @@ func (m *Model) OpenDBHistory() {
 // StepDBHistory moves the history selection, wrapping around.
 func (m *Model) StepDBHistory(delta int) {
 	h := m.dbHist
-	if h == nil || len(h.items) == 0 {
+	indices := dbHistoryIndices(h)
+	if h == nil || len(indices) == 0 {
 		return
 	}
-	h.sel = (h.sel + delta + len(h.items)) % len(h.items)
+	at := 0
+	for i, index := range indices {
+		if index == h.sel {
+			at = i
+			break
+		}
+	}
+	h.sel = indices[(at+delta+len(indices))%len(indices)]
 	m.invalidate()
 }
 
@@ -2057,7 +2119,36 @@ func (m *Model) ChooseDBHistory(i int) {
 		return
 	}
 	text := h.items[i].Text
+	source, path := h.source, h.path
 	m.closeDBHistory()
+	if path != "" {
+		for _, tab := range m.allTabs() {
+			if tab == nil || tab.doc == nil || tab.state == nil || tab.doc.Path() != realPath(path) {
+				continue
+			}
+			selection := tab.state.Selection()
+			start := minInt(selection.Anchor, selection.Head)
+			end := maxInt(selection.Anchor, selection.Head)
+			if err := tab.doc.ApplyEdits(context.Background(), editor.Edit{
+				Start: start,
+				End:   end,
+				Text:  text,
+			}); err != nil {
+				if m.db != nil {
+					m.db.err = "Could not paste the statement: " + err.Error()
+					m.invalidate()
+				}
+				return
+			}
+			tab.state.SetSelections(editor.Selection{Anchor: start, Head: start + len(text)})
+			m.invalidate()
+			return
+		}
+	}
+	if source != "" {
+		m.DBPutSQLTemplate(dbActionTarget{Source: source}, text)
+		return
+	}
 	if m.db != nil {
 		m.db.sql = text
 		m.invalidate()
@@ -2067,11 +2158,93 @@ func (m *Model) ChooseDBHistory(i int) {
 // closeDBHistory drops the history list.
 func (m *Model) closeDBHistory() { m.dbHist = nil; m.invalidate() }
 
+func dbHistoryIndices(h *dbHistoryPane) []int {
+	if h == nil {
+		return nil
+	}
+	filter := strings.ToLower(strings.TrimSpace(h.filter))
+	indices := make([]int, 0, len(h.items))
+	for i, entry := range h.items {
+		if filter == "" || strings.Contains(strings.ToLower(entry.Text), filter) {
+			indices = append(indices, i)
+		}
+	}
+	return indices
+}
+
+func (m *Model) DBDeleteHistory() {
+	h := m.dbHist
+	if h == nil || h.busy || h.sel < 0 || h.sel >= len(h.items) {
+		return
+	}
+	text := h.items[h.sel].Text
+	h.busy = true
+	h.err = ""
+	source := h.source
+	m.invalidate()
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
+		defer cancel()
+		err := m.mgr.DBRemoveHistory(ctx, Window, source, []string{text})
+		m.post(func() {
+			if m.dbHist != h {
+				return
+			}
+			h.busy = false
+			if err != nil {
+				h.err = "Could not delete the history entry: " + err.Error()
+			} else {
+				next := h.items[:0]
+				for _, entry := range h.items {
+					if entry.Text != text {
+						next = append(next, entry)
+					}
+				}
+				h.items = next
+				if h.sel >= len(h.items) {
+					h.sel = len(h.items) - 1
+				}
+			}
+			m.invalidate()
+		})
+	}()
+}
+
+func (m *Model) DBClearHistory() {
+	h := m.dbHist
+	if h == nil || h.busy || len(h.items) == 0 {
+		return
+	}
+	h.busy = true
+	h.err = ""
+	source := h.source
+	m.invalidate()
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
+		defer cancel()
+		err := m.mgr.DBRemoveHistory(ctx, Window, source, nil)
+		m.post(func() {
+			if m.dbHist != h {
+				return
+			}
+			h.busy = false
+			if err != nil {
+				h.err = "Could not clear the history: " + err.Error()
+			} else {
+				h.items = nil
+				h.sel = 0
+			}
+			m.invalidate()
+		})
+	}()
+}
+
 // ExplainDB shows the plan of the console's first statement.
 func (m *Model) ExplainDB() {
 	if m.db == nil || m.db.source == "" || strings.TrimSpace(m.db.sql) == "" {
 		return
 	}
+	v := m.db
 	p := &dbPlanPane{open: true, loading: true, statement: m.db.sql}
 	m.dbPlan = p
 	m.invalidate()
@@ -2085,22 +2258,35 @@ func (m *Model) ExplainDB() {
 		if err == nil && len(stmts) == 0 {
 			err = fmt.Errorf("There is no statement to explain")
 		}
-		var nodes []openidea.DBPlanNode
 		if err == nil {
+			stmts = stmts[:1]
 			p.statement = stmts[0].Text
-			nodes, err = m.mgr.DBExplain(ctx, Window, m.nextRequest(), source, stmts[0].Text, schema)
 		}
 		m.post(func() {
 			if m.dbPlan != p {
 				return
 			}
-			p.loading = false
 			if err != nil {
+				p.loading = false
 				p.err = "Could not read the plan: " + err.Error()
-			} else {
-				p.nodes = nodes
-				p.rows = dbPlanRows(nodes)
+				m.invalidate()
+				return
 			}
+			params, names := dbPrepareSQLParams(stmts, m.dbDriver(source))
+			if len(names) == 0 {
+				m.dbExplainStatement(p, source, schema, stmts[0].Text)
+				return
+			}
+			inputs := make([]dbParamInput, len(names))
+			for i, name := range names {
+				inputs[i].name = name
+			}
+			v.pendingRun = &dbPendingRun{
+				view: v, mode: "explain", source: source, schema: schema,
+				title: p.statement, text: text, driver: m.dbDriver(source),
+				statements: stmts, params: params, inputs: inputs,
+			}
+			v.actionPrompt = &dbActionPrompt{kind: "params", title: "Parameters", source: source}
 			m.invalidate()
 		})
 	}()
@@ -2152,8 +2338,24 @@ func (m *Model) dbHistoryDialog(c *ui.Context, p *ui.Theme) {
 	open := h.open
 	jump := -1
 	nativeModal(c, &open, func() {
-		ui.Column(c).Width(620).Gap(8).Children(func() {
-			ui.Text(c, "Execution History").FontSize(13).Bold().TextColor(p.Text).SingleLine()
+		ui.Column(c).Width(760).Height(520).Gap(8).Children(func() {
+			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, "Execution History").FontSize(13).Bold().TextColor(p.Text).SingleLine()
+				ui.Spacer(c)
+				ui.Button(c, "Delete").Disabled(h.busy || h.sel < 0 || h.sel >= len(h.items)).
+					OnClick(func() { m.DBDeleteHistory() })
+				ui.Button(c, "Clear All").Disabled(h.busy || len(h.items) == 0).
+					OnClick(func() { m.DBClearHistory() })
+			})
+			ui.TextArea(c, &h.filter).Height(28).SingleLine().AutoFocus().
+				OnChange(func() {
+					if indices := dbHistoryIndices(h); len(indices) > 0 {
+						h.sel = indices[0]
+					} else {
+						h.sel = 0
+					}
+					m.invalidate()
+				})
 			if h.loading {
 				ui.Text(c, "Loading…").FontSize(12).TextColor(p.TextMuted).SingleLine()
 			} else if h.err != "" {
@@ -2161,21 +2363,28 @@ func (m *Model) dbHistoryDialog(c *ui.Context, p *ui.Theme) {
 			} else if len(h.items) == 0 {
 				ui.Text(c, "No SQL has been executed yet.").FontSize(12).TextColor(p.TextMuted).SingleLine()
 			} else {
-				ui.Text(c, fmt.Sprintf("%s · Enter puts it in the console · Esc closes", count(len(h.items), "statement", "statements"))).
+				indices := dbHistoryIndices(h)
+				ui.Text(c, fmt.Sprintf("%s · Enter pastes it into the console · Esc closes",
+					count(len(indices), "statement", "statements"))).
 					FontSize(12).TextColor(p.TextMuted).SingleLine()
+				if len(indices) == 0 {
+					ui.Text(c, "No statements match the search.").FontSize(12).TextColor(p.TextMuted).SingleLine()
+					return
+				}
 				// The list hugs its rows up to the cap; a fixed box left a
 				// mostly empty sheet for a handful of statements.
-				historyHeight := float32(len(h.items) * 24)
+				historyHeight := float32(len(indices) * 24)
 				if historyHeight > 320 {
 					historyHeight = 320
 				}
 				ui.Scroll(c).Height(historyHeight).Children(func() {
 					ui.Column(c).Children(func() {
-						for i, e := range h.items {
-							i, e := i, e
-							row := ui.Row(c.Key(fmt.Sprintf("dbhist:%d", i))).Height(24).Padding(0, 8).
+						for _, index := range indices {
+							index := index
+							e := h.items[index]
+							row := ui.Row(c.Key(fmt.Sprintf("dbhist:%d", index))).Height(24).Padding(0, 8).
 								AlignItems(ui.Center)
-							if i == h.sel || row.Hovered() {
+							if index == h.sel || row.Hovered() {
 								row.Background(p.SurfaceHover)
 							}
 							row.Children(func() {
@@ -2183,8 +2392,8 @@ func (m *Model) dbHistoryDialog(c *ui.Context, p *ui.Theme) {
 									SingleLine().Ellipsis("…")
 							})
 							if row.Clicked() {
-								jump = i
-								h.sel = i
+								jump = index
+								h.sel = index
 							}
 						}
 					})

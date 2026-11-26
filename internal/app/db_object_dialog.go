@@ -647,6 +647,18 @@ func (m *Model) dbTableFormProperties(c *ui.Context, p *ui.Theme, form *dbTableF
 }
 
 func (m *Model) DBModifyTable(arg any) {
+	t := dbTargetFrom(m, arg)
+	v := m.dbEnsureOpen()
+	if dbObjectKind(t) != "table" {
+		v.err = "Only tables can be modified."
+		m.invalidate()
+		return
+	}
+	if !dbCanModifyTable(m.dbDriver(t.Source)) {
+		v.err = "This data source does not support modifying table columns."
+		m.invalidate()
+		return
+	}
 	m.openDBTableForm(arg, false, false)
 }
 
@@ -655,6 +667,18 @@ func (m *Model) DBNewTable(arg any) {
 }
 
 func (m *Model) DBNewColumn(arg any) {
+	t := dbTargetFrom(m, arg)
+	v := m.dbEnsureOpen()
+	if dbObjectKind(t) != "table" {
+		v.err = "Columns can only be added to tables."
+		m.invalidate()
+		return
+	}
+	if !dbCanModifyTable(m.dbDriver(t.Source)) {
+		v.err = "This data source does not support modifying table columns."
+		m.invalidate()
+		return
+	}
 	m.openDBTableForm(arg, false, true)
 }
 
@@ -664,6 +688,16 @@ func (m *Model) DBImportData(arg any) {
 		return
 	}
 	v := m.dbEnsureOpen()
+	if dbObjectKind(t) != "table" {
+		v.err = "Import Data is available for tables."
+		m.invalidate()
+		return
+	}
+	if strings.EqualFold(m.dbDriver(t.Source), "clickhouse") {
+		v.err = "Use the query console to import ClickHouse data."
+		m.invalidate()
+		return
+	}
 	form := &dbImportForm{
 		open: true, loading: true, source: t.Source, schema: t.Schema, table: t.Table,
 		separator: "Comma", header: true, emptyAsNull: true,
@@ -707,16 +741,14 @@ func dbSeparatorValue(label string) rune {
 
 func dbGuessSeparator(text string) string {
 	first := strings.SplitN(strings.TrimPrefix(text, "\ufeff"), "\n", 2)[0]
-	switch {
-	case strings.Contains(first, "\t"):
-		return "Tab"
-	case strings.Contains(first, ";"):
-		return "Semicolon"
-	case strings.Contains(first, "|"):
-		return "Pipe"
-	default:
-		return "Comma"
+	best, count := "Comma", strings.Count(first, ",")
+	if tabs := strings.Count(first, "\t"); tabs > count {
+		best, count = "Tab", tabs
 	}
+	if semicolons := strings.Count(first, ";"); semicolons > count {
+		best = "Semicolon"
+	}
+	return best
 }
 
 func (m *Model) refreshDBImportForm() {

@@ -1,8 +1,13 @@
 package app
 
 import (
+	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 
@@ -145,6 +150,362 @@ func TestVCSMoreDialogRendersNativeCommands(t *testing.T) {
 		if !tester.HasText(text) {
 			t.Errorf("VCS More dialog does not contain %q", text)
 		}
+	}
+}
+
+func TestNormalizeChangelistStateRepairsAndCanonicalizesAssignments(t *testing.T) {
+	state := normalizeChangelistState(changelistState{
+		Lists: []changelistEntry{
+			{ID: "", Name: "ignored"},
+			{ID: "feature", Name: " Feature ", Comment: " ticket "},
+			{ID: "feature", Name: "duplicate"},
+		},
+		Active: "missing",
+		Files: map[string]string{
+			"./src/../src/Main.java": "feature",
+			"orphan.java":            "missing",
+		},
+	})
+	if len(state.Lists) != 1 || state.Lists[0].ID != "feature" ||
+		state.Lists[0].Name != "Feature" || state.Lists[0].Comment != "ticket" {
+		t.Fatalf("normalized lists = %+v", state.Lists)
+	}
+	if state.Active != "feature" {
+		t.Fatalf("active list = %q, want feature", state.Active)
+	}
+	if got := state.Files["src/Main.java"]; got != "feature" {
+		t.Fatalf("canonical assignment = %q, want feature", got)
+	}
+	if len(state.Files) != 1 {
+		t.Fatalf("invalid assignments remain: %+v", state.Files)
+	}
+
+	empty := normalizeChangelistState(changelistState{})
+	if len(empty.Lists) != 1 || empty.Lists[0].ID != defaultChangelistID ||
+		empty.Active != defaultChangelistID || empty.Files == nil {
+		t.Fatalf("empty state = %+v", empty)
+	}
+}
+
+func TestValidateChangelistNameIsCaseInsensitive(t *testing.T) {
+	state := changelistState{Lists: []changelistEntry{
+		{ID: "default", Name: "Changes"},
+		{ID: "feature", Name: "Feature"},
+	}}
+	if err := validateChangelistName(state, " feature ", ""); err == nil {
+		t.Fatal("duplicate name was accepted")
+	}
+	if err := validateChangelistName(state, "feature", "feature"); err != nil {
+		t.Fatalf("renaming a list to its own name failed: %v", err)
+	}
+	if err := validateChangelistName(state, " ", ""); err == nil {
+		t.Fatal("empty name was accepted")
+	}
+}
+
+func TestChangelistAssignmentsUseProjectRelativePathsAcrossRepositories(t *testing.T) {
+	root := filepath.Clean("/project")
+	first := filepath.Join(root, "app")
+	second := filepath.Join(root, "orders")
+	firstFile := filepath.Join(first, "src", "Main.java")
+	secondFile := filepath.Join(second, "Order.java")
+	m := &Model{vcs: VCSPane{
+		repositories: []vcsRepository{{Root: first}, {Root: second}},
+		files: []openidea.FileStatus{
+			{Path: firstFile, RelPath: "src/Main.java", Unstaged: str("modified")},
+			{Path: secondFile, RelPath: "Order.java", Unstaged: str("modified")},
+		},
+	}}
+	m.setRoot(root)
+	state := changelistState{
+		Lists: []changelistEntry{
+			{ID: "default", Name: "Changes"},
+			{ID: "feature", Name: "Feature"},
+		},
+		Active: "default",
+		Files: map[string]string{
+			filepath.ToSlash(firstFile): "feature",
+		},
+	}
+	m.syncVCSChangelistAssignments(&state, false)
+	if state.Files["app/src/Main.java"] != "feature" {
+		t.Fatalf("nested repository assignment = %#v", state.Files)
+	}
+	if state.Files["orders/Order.java"] != "default" {
+		t.Fatalf("new active-list assignment = %#v", state.Files)
+	}
+	if m.changelistForPath(state, firstFile) != "feature" ||
+		m.changelistForPath(state, secondFile) != "default" {
+		t.Fatalf("path lookup did not use canonical assignments: %#v", state.Files)
+	}
+}
+
+func TestDeleteChangelistMovesFilesAndCommitUsesOnlyChosenList(t *testing.T) {
+	first := "/project/a.java"
+	second := "/project/b.java"
+	m := &Model{vcs: VCSPane{
+		files: []openidea.FileStatus{
+			{Path: first, RelPath: "a.java", Unstaged: str("modified")},
+			{Path: second, RelPath: "b.java", Unstaged: str("modified")},
+		},
+	}}
+	m.setRoot("/project")
+	m.ctx = context.Background()
+	m.invokeHook = func(_ context.Context, command string, _ any) (json.RawMessage, error) {
+		if command != "vcs_changelists_save" {
+			t.Fatalf("unexpected command %q", command)
+		}
+		return json.RawMessage(`null`), nil
+	}
+	m.postHook = func(fn func()) { fn() }
+	m.vcsMore.lists = changelistState{
+		Lists: []changelistEntry{
+			{ID: "default", Name: "Changes"},
+			{ID: "feature", Name: "Feature"},
+		},
+		Active: "default",
+		Files: map[string]string{
+			"a.java": "feature",
+		},
+	}
+	m.vcsMore.changelistsLoaded = true
+	m.deleteChangelist("feature")
+	if m.vcsMore.lists.Files["a.java"] != "default" {
+		t.Fatalf("deleted list assignment = %#v", m.vcsMore.lists.Files)
+	}
+}
+
+func TestLoadChangelistsSynchronizesNewChangesWithTheActiveList(t *testing.T) {
+	file := "/project/src/Main.java"
+	loaded := make(chan struct{}, 1)
+	m := &Model{
+		ctx: context.Background(),
+		vcs: VCSPane{
+			repositories: []vcsRepository{{Root: "/project"}},
+			files: []openidea.FileStatus{{
+				Path: file, RelPath: "src/Main.java", Unstaged: str("modified"),
+			}},
+		},
+		invokeHook: func(_ context.Context, command string, _ any) (json.RawMessage, error) {
+			if command != "vcs_changelists_load" {
+				t.Fatalf("unexpected command %q", command)
+			}
+			return mustVCSJSON(t, changelistState{
+				Lists: []changelistEntry{
+					{ID: "default", Name: "Changes"},
+					{ID: "feature", Name: "Feature"},
+				},
+				Active: "feature",
+				Files:  map[string]string{},
+			}), nil
+		},
+		postHook: func(fn func()) {
+			fn()
+			select {
+			case loaded <- struct{}{}:
+			default:
+			}
+		},
+	}
+	m.setRoot("/project")
+	m.loadChangelists(false)
+	select {
+	case <-loaded:
+	case <-time.After(2 * time.Second):
+		t.Fatal("changelists did not load")
+	}
+	if got := m.vcsMore.lists.Files["src/Main.java"]; got != "feature" {
+		t.Fatalf("new change assignment = %q, want feature; files=%#v", got, m.vcsMore.lists.Files)
+	}
+}
+
+func TestCommitDefaultsExcludeInactiveChangelists(t *testing.T) {
+	first := "/project/a.java"
+	second := "/project/b.java"
+	m := &Model{
+		vcs: VCSPane{files: []openidea.FileStatus{
+			{Path: first, RelPath: "a.java", Unstaged: str("modified")},
+			{Path: second, RelPath: "b.java", Unstaged: str("modified")},
+		}},
+		vcsMore: vcsMoreState{
+			changelistsLoaded: true,
+			lists: changelistState{
+				Lists: []changelistEntry{
+					{ID: "default", Name: "Changes"},
+					{ID: "feature", Name: "Feature"},
+				},
+				Active: "default",
+				Files:  map[string]string{"a.java": "feature"},
+			},
+		},
+	}
+	m.setRoot("/project")
+	c := &commitState{allRepositories: true, checks: map[string]bool{}}
+	if got := m.activeChangelistPaths(); len(got) != 1 || got[0] != second {
+		t.Fatalf("active changelist paths = %#v, want %q", got, second)
+	}
+	if m.commitIncluded(c, m.vcs.files[0]) {
+		t.Fatal("inactive changelist was included by default")
+	}
+	if !m.commitIncluded(c, m.vcs.files[1]) {
+		t.Fatal("active changelist was excluded by default")
+	}
+	plan := m.planCommit(c)
+	if len(plan.included) != 1 || plan.included[0] != second {
+		t.Fatalf("commit plan = %+v", plan)
+	}
+	c.checks[first] = true
+	if !m.commitIncluded(c, m.vcs.files[0]) {
+		t.Fatal("explicit inclusion did not override the active-list default")
+	}
+}
+
+func TestPatchSourcesRejectMixedRepositoriesAndUseRelativePaths(t *testing.T) {
+	root := filepath.Clean("/project")
+	first := filepath.Join(root, "app")
+	second := filepath.Join(root, "orders")
+	m := &Model{vcs: VCSPane{
+		repositories: []vcsRepository{{Root: first}, {Root: second}},
+		files: []openidea.FileStatus{
+			{Path: filepath.Join(first, "src", "Main.java"), RelPath: "src/Main.java", Unstaged: str("modified")},
+			{Path: filepath.Join(second, "Order.java"), RelPath: "Order.java", Unstaged: str("modified")},
+		},
+	}}
+	m.setRoot(root)
+	files, err := m.patchFilesForPaths([]string{filepath.Join(first, "src", "Main.java")})
+	if err != nil || len(files) != 1 || files[0].repository != first || files[0].path != filepath.Join(first, "src", "Main.java") {
+		t.Fatalf("single-repository patch source = %+v, %v", files, err)
+	}
+	files, err = m.patchFilesForPaths([]string{filepath.Join(first, "src", "Main.java"), filepath.Join(second, "Order.java")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	byRepository, err := patchSourcesByRepository(files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(byRepository) != 2 {
+		t.Fatalf("patch repositories = %#v", byRepository)
+	}
+}
+
+func TestCreatePatchForPathsRejectsFilesFromSeveralRepositories(t *testing.T) {
+	root := t.TempDir()
+	first := filepath.Join(root, "app")
+	second := filepath.Join(root, "orders")
+	if err := os.MkdirAll(first, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(second, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	firstFile := filepath.Join(first, "Main.java")
+	secondFile := filepath.Join(second, "Order.java")
+	for _, path := range []string{firstFile, secondFile} {
+		if err := os.WriteFile(path, []byte("changed\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	m := &Model{
+		ctx: context.Background(),
+		vcs: VCSPane{
+			repositories: []vcsRepository{{Root: first}, {Root: second}},
+			files: []openidea.FileStatus{
+				{Path: firstFile, RelPath: "Main.java", Unstaged: str("modified")},
+				{Path: secondFile, RelPath: "Order.java", Unstaged: str("modified")},
+			},
+		},
+		invokeHook: func(_ context.Context, command string, _ any) (json.RawMessage, error) {
+			t.Fatalf("mixed-repository patch unexpectedly invoked %s", command)
+			return nil, nil
+		},
+		postHook: func(fn func()) { fn() },
+	}
+	m.setRoot(root)
+	first, second = realPath(first), realPath(second)
+	firstFile, secondFile = realPath(firstFile), realPath(secondFile)
+	m.vcs.repositories = []vcsRepository{{Root: first}, {Root: second}}
+	m.vcs.files = []openidea.FileStatus{
+		{Path: firstFile, RelPath: "Main.java", Unstaged: str("modified")},
+		{Path: secondFile, RelPath: "Order.java", Unstaged: str("modified")},
+	}
+	files, err := m.patchFilesForPaths([]string{firstFile, secondFile})
+	if err != nil || len(files) != 2 {
+		t.Fatalf("mixed patch files = %+v, %v", files, err)
+	}
+	byRepository, err := patchSourcesByRepository(files)
+	if err != nil || len(byRepository) != 2 {
+		t.Fatalf("mixed patch repositories = %#v, %v", byRepository, err)
+	}
+	m.CreatePatchForPaths([]string{firstFile, secondFile})
+	if !strings.Contains(m.status, "one repository") {
+		t.Fatalf("mixed-repository status = %q", m.status)
+	}
+}
+
+func TestCreatePatchForSelectedLogCommitUsesItsRepository(t *testing.T) {
+	first := "/project/orders"
+	second := "/project/catalog"
+	requested := make(chan map[string]any, 1)
+	m := &Model{
+		ctx: context.Background(),
+		log: LogPane{
+			selected:    0,
+			commitRepos: []string{second},
+			commits: []openidea.Commit{{
+				ID: "222222222222", ShortID: "22222222", Summary: "Catalog commit",
+			}},
+		},
+	}
+	m.setRoot("/project")
+	m.vcs.current = first
+	m.vcs.repositories = []vcsRepository{{Root: first}, {Root: second}}
+	m.invokeHook = func(ctx context.Context, command string, args any) (json.RawMessage, error) {
+		if command == "vcs_create_patch" {
+			requested <- args.(map[string]any)
+			return json.RawMessage(`"diff --git a/a b/a\n"`), nil
+		}
+		return json.RawMessage(`null`), nil
+	}
+	m.CreatePatchForCommits(nil)
+	select {
+	case args := <-requested:
+		if args["repo"] != second {
+			t.Fatalf("commit patch repo = %#v, want %q", args["repo"], second)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("commit patch did not reach the backend")
+	}
+}
+
+func TestPatchPreviewChoosesTheRepositoryContainingItsFiles(t *testing.T) {
+	root := t.TempDir()
+	first := filepath.Join(root, "app")
+	second := filepath.Join(root, "orders")
+	for _, dir := range []string{filepath.Join(first, "src"), filepath.Join(second, "src")} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(second, "src", "Order.java"), []byte("class Order {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	first, second = realPath(first), realPath(second)
+	m := &Model{
+		ctx: context.Background(),
+		vcs: VCSPane{
+			repositories: []vcsRepository{{Root: first}, {Root: second}},
+			current:      first,
+		},
+	}
+	m.setRoot(root)
+	patch := "diff --git a/src/Order.java b/src/Order.java\n" +
+		"index 1111111..2222222 100644\n" +
+		"--- a/src/Order.java\n" +
+		"+++ b/src/Order.java\n" +
+		"@@ -1 +1 @@\n-old\n+new\n"
+	if got := m.patchRepositoryFromHeader(patch); got != second {
+		t.Fatalf("patch repository = %q, want %q", got, second)
 	}
 }
 

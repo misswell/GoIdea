@@ -24,9 +24,11 @@ const runAnythingGroupLimit = 8
 
 // runAnythingState is the open Run Anything popup.
 type runAnythingState struct {
-	open  bool
-	query string
-	rows  []runAnythingRow
+	open      bool
+	query     string
+	rows      []runAnythingRow
+	buildTool string
+	project   string
 	// sel is the chosen row among the item rows, -1 while Enter runs the line.
 	sel int
 }
@@ -71,7 +73,13 @@ func (m *Model) refreshRunAnything() {
 		return
 	}
 	v.rows = buildRunAnythingRows(strings.TrimSpace(v.query), m.runAnythingHistory(), m.run.configs)
-	if extra := m.buildToolCompletionRows(v.query); len(extra) > 0 {
+	var extra []runAnythingRow
+	if v.buildTool != "" {
+		extra = m.buildToolCompletionRowsFor(v.query, v.buildTool, v.project)
+	} else {
+		extra = m.buildToolCompletionRows(v.query)
+	}
+	if len(extra) > 0 {
 		at := len(v.rows)
 		for i, row := range v.rows {
 			if row.section == "Run Configurations" {
@@ -279,18 +287,23 @@ func (m *Model) runSelectedRunAnything() {
 	if v == nil {
 		return
 	}
+	project := v.project
 	if row := m.selectedRunAnythingRow(); row != nil {
-		m.runAnythingRow(*row)
+		m.runAnythingRowInProject(*row, project)
 		return
 	}
 	line := v.query
 	m.closeRunAnything()
-	m.runAnythingLine(line)
+	m.runAnythingLineInProject(line, project)
 }
 
 // runAnythingRow runs one row: a configuration starts as the selected one, a
 // recent command runs as a typed line.
 func (m *Model) runAnythingRow(r runAnythingRow) {
+	m.runAnythingRowInProject(r, "")
+}
+
+func (m *Model) runAnythingRowInProject(r runAnythingRow, project string) {
 	if r.config >= 0 {
 		if r.config >= len(m.run.configs) {
 			return
@@ -303,12 +316,16 @@ func (m *Model) runAnythingRow(r runAnythingRow) {
 		return
 	}
 	m.closeRunAnything()
-	m.runAnythingLine(r.line)
+	m.runAnythingLineInProject(r.line, project)
 }
 
 // runAnythingLine runs a command line: a configuration of exactly that name,
 // else the platform shell in the project folder.
 func (m *Model) runAnythingLine(line string) {
+	m.runAnythingLineInProject(line, "")
+}
+
+func (m *Model) runAnythingLineInProject(line, project string) {
 	line = strings.TrimSpace(line)
 	root := m.Root()
 	if line == "" || root == "" {
@@ -330,7 +347,7 @@ func (m *Model) runAnythingLine(line string) {
 			return
 		}
 	}
-	if m.executeBuildToolLine(line) {
+	if m.executeBuildToolLineFor(line, project) {
 		return
 	}
 	cfg, raw, err := runAnythingShellConfig(line, root)
@@ -463,8 +480,35 @@ func (m *Model) runAnythingDialog(c *ui.Context, p *ui.Theme) {
 					})
 				})
 			}
-			ui.Row(c).Padding(6, 10).BorderWidth(1, 0, 0, 0).BorderColor(p.Border).Children(func() {
-				ui.Text(c, "Enter to run, Tab to complete. Other commands run in the project directory.").
+			ui.Row(c).Padding(6, 10).Gap(10).AlignItems(ui.Center).
+				BorderWidth(1, 0, 0, 0).BorderColor(p.Border).Children(func() {
+				help := "Enter to run, Tab to complete. Other commands run in the project directory."
+				if v.buildTool != "" {
+					help = "Enter to run, Tab to complete."
+					projects := m.buildToolRunProjects(v.buildTool)
+					if len(projects) > 0 {
+						labels := make([]string, len(projects))
+						shown := projects[0].label
+						for i, project := range projects {
+							labels[i] = project.label
+							if project.value == v.project {
+								shown = project.label
+							}
+						}
+						ui.Text(c, "Project:").FontSize(12).TextColor(p.TextMuted).SingleLine()
+						if ui.Select(c, &shown, labels).Width(210).Changed() {
+							for _, project := range projects {
+								if project.label == shown {
+									v.project = project.value
+									m.refreshRunAnything()
+									m.invalidate()
+									break
+								}
+							}
+						}
+					}
+				}
+				ui.Text(c, help).
 					FontSize(12).TextColor(p.TextMuted).SingleLine().Ellipsis("…")
 			})
 		})

@@ -235,3 +235,62 @@ func TestDBTableCloseProtectsPendingEdits(t *testing.T) {
 		t.Fatal("discard did not close the table")
 	}
 }
+
+func TestDBTableOpenNeverDiscardsAnotherTableEdits(t *testing.T) {
+	s := dbEditableSheet()
+	changed := "Grace"
+	dbTableSetCellValue(s, 0, 2, &changed)
+	m := &Model{
+		db:      &dbView{open: true, source: "pg", schema: "public"},
+		dbTable: s,
+	}
+	m.OpenDBTable("public", "orders")
+	if m.dbTable != s || !strings.Contains(s.err, "Submit or revert") {
+		t.Fatalf("opening another table replaced pending edits: sheet=%p err=%q", m.dbTable, s.err)
+	}
+}
+
+func TestDBTableSortCyclesAscendingDescendingAndNone(t *testing.T) {
+	sort := dbNextTableSort(nil, "name", false)
+	if len(sort) != 1 || sort[0].Column != "name" || sort[0].Descending {
+		t.Fatalf("first click = %#v", sort)
+	}
+	sort = dbNextTableSort(sort, "name", false)
+	if len(sort) != 1 || sort[0].Column != "name" || !sort[0].Descending {
+		t.Fatalf("second click = %#v", sort)
+	}
+	sort = dbNextTableSort(sort, "name", false)
+	if len(sort) != 0 {
+		t.Fatalf("third click did not clear sort: %#v", sort)
+	}
+
+	sort = dbNextTableSort([]openidea.DBSortKey{{Column: "id"}}, "name", true)
+	if len(sort) != 2 || sort[0].Column != "id" || sort[1].Column != "name" {
+		t.Fatalf("additive sort = %#v", sort)
+	}
+}
+
+func TestDBTableMetadataAndCTEReadOnlyDetection(t *testing.T) {
+	s := dbEditableSheet()
+	s.page.Result.Columns[0].Name = "ID"
+	if column, ok := dbTableColumnInfo(s, 0); !ok || column.PrimaryKey != s.page.Details.Columns[0].PrimaryKey {
+		t.Fatalf("case-insensitive metadata lookup = %#v, %v", column, ok)
+	}
+	if dbReadOnlyStatement("WITH changed AS (UPDATE people SET name = 'x' RETURNING id) SELECT * FROM changed") {
+		t.Fatal("a data-changing CTE was treated as read-only")
+	}
+	if !dbReadOnlyStatement("  SELECT id FROM people") {
+		t.Fatal("a leading SELECT was not treated as read-only")
+	}
+	if !dbSchemaChanged([]openidea.DBOutcome{{
+		Statement: openidea.DBStatement{Text: "alter table people add column note text"},
+	}}) {
+		t.Fatal("successful DDL did not request a schema refresh")
+	}
+	if dbSchemaChanged([]openidea.DBOutcome{{
+		Statement: openidea.DBStatement{Text: "alter table people add column note text"},
+		Error:     "permission denied",
+	}}) {
+		t.Fatal("failed DDL requested a schema refresh")
+	}
+}

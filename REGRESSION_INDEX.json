@@ -85,6 +85,14 @@
    "doc": "OPENIDEA_PARITY_MATRIX.md"
   },
   {
+   "id": "windows.sharedServerHome",
+   "label": "project windows shared one backend data root for installed tools",
+   "feature": "JDT and other tools are installed once for all native project windows",
+   "area": "windows",
+   "gate": "main",
+   "doc": "OPENIDEA_PARITY_MATRIX.md"
+  },
+  {
    "id": "windows.isolatedClose",
    "label": "closing one window stopped only its backend and left its sibling healthy",
    "feature": "Window close is isolated from sibling project backends",

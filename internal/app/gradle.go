@@ -301,6 +301,70 @@ func gradleProjectKey(build *gradleModel, project *gradleProject) string {
 	return "gradle:" + build.Dir + ":" + project.Path
 }
 
+// selectGradleProject records the same per-window current project OpenIDEA
+// keeps for Execute Gradle Task and task completion. A task or saved run
+// configuration can replace it; currentGradleProject resolves this value onto
+// the latest model after a reload.
+func (m *Model) selectGradleProject(build *gradleModel, project *gradleProject) {
+	if build == nil || project == nil {
+		return
+	}
+	m.maven.gradleSel = gradleSelection{
+		kind: "gradleProject", build: build, project: project,
+	}
+	m.maven.gradleSelKey = gradleProjectKey(build, project)
+	m.maven.activeTool = "gradle"
+	m.invalidate()
+}
+
+func (m *Model) normalizeGradleSelection() {
+	selected := m.maven.gradleSel
+	if selected.project == nil {
+		return
+	}
+	taskName := ""
+	if selected.task != nil {
+		taskName = selected.task.Name
+	}
+	buildDir := ""
+	if selected.build != nil {
+		buildDir = selected.build.Dir
+	}
+	for i := range m.maven.model.Gradle {
+		build := &m.maven.model.Gradle[i]
+		if build.Dir != buildDir {
+			continue
+		}
+		for j := range build.Projects {
+			project := &build.Projects[j]
+			if project.Path != selected.project.Path {
+				continue
+			}
+			selected.build = build
+			selected.project = project
+			if taskName != "" {
+				selected.task = nil
+				for k := range project.Tasks {
+					if project.Tasks[k].Name == taskName {
+						selected.task = &project.Tasks[k]
+						break
+					}
+				}
+				if selected.task == nil {
+					m.maven.gradleSel = gradleSelection{}
+					m.maven.gradleSelKey = ""
+					return
+				}
+			}
+			m.maven.gradleSel = selected
+			m.maven.gradleSelKey = gradleProjectKey(build, project)
+			return
+		}
+	}
+	m.maven.gradleSel = gradleSelection{}
+	m.maven.gradleSelKey = ""
+}
+
 func (m *Model) gradleConfigsOf(build *gradleModel) []*openidea.RunConfig {
 	var out []*openidea.RunConfig
 	if build == nil {
@@ -507,6 +571,9 @@ func (m *Model) gradleRow(c *ui.Context, p *ui.Theme, row gradleRow) {
 			if m.maven.expanded == nil {
 				m.maven.expanded = map[string]bool{}
 			}
+			if row.kind == "gradleProject" && row.build != nil && row.project != nil {
+				m.selectGradleProject(row.build, row.project)
+			}
 			m.maven.expanded[row.key] = !m.maven.expanded[row.key]
 			m.invalidate()
 		})
@@ -533,6 +600,9 @@ func (m *Model) gradleRow(c *ui.Context, p *ui.Theme, row gradleRow) {
 	}
 	if row.kind == "gradleProject" || row.kind == "task" || row.kind == "runConfig" {
 		element.ContextMenu(func(menu *ui.Menu) {
+			if row.kind == "gradleProject" && row.build != nil && row.project != nil {
+				m.selectGradleProject(row.build, row.project)
+			}
 			m.selectGradleBuildRow(row)
 			m.gradleRowContextMenu(menu, row)
 		})

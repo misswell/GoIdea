@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"mayoi/internal/openidea"
 )
 
 func TestOpenIDEABuildToolActionsAreRegistered(t *testing.T) {
@@ -28,6 +30,64 @@ func TestOpenIDEABuildToolActionsAreRegistered(t *testing.T) {
 	}
 }
 
+func TestBuildToolActionsFollowOpenIDEAProjectAndModelGates(t *testing.T) {
+	m := &Model{}
+	for _, id := range []string{
+		"maven.addProjects", "maven.importExternal", "maven.unlinkProjects",
+		"maven.executeGoal", "maven.generateSources", "gradle.linkProjects",
+		"gradle.unlinkProjects", "gradle.executeTask",
+	} {
+		if m.ActionEnabled(id) {
+			t.Errorf("%s is enabled without an open project", id)
+		}
+	}
+	m.setRoot("/project")
+	for _, id := range []string{"maven.addProjects", "maven.importExternal", "gradle.linkProjects"} {
+		if !m.ActionEnabled(id) {
+			t.Errorf("%s is disabled in an ordinary project", id)
+		}
+	}
+	m.maven.model = buildModel{
+		Maven:  &mavenModel{Projects: []mavenProject{{Pom: "pom.xml"}}},
+		Gradle: []gradleModel{{Projects: []gradleProject{{Path: ":"}}}},
+	}
+	for _, id := range []string{
+		"maven.unlinkProjects", "maven.executeGoal", "maven.generateSources",
+		"gradle.unlinkProjects", "gradle.executeTask",
+	} {
+		if !m.ActionEnabled(id) {
+			t.Errorf("%s is disabled with its build model", id)
+		}
+	}
+	m.workspace = &openidea.Workspace{}
+	for _, id := range []string{
+		"maven.addProjects", "maven.importExternal", "maven.unlinkProjects",
+		"gradle.linkProjects", "gradle.unlinkProjects",
+	} {
+		if m.ActionEnabled(id) {
+			t.Errorf("%s is enabled in a workspace", id)
+		}
+	}
+}
+
+func TestBuildToolUnlinkDialogsUseOpenIDEACopy(t *testing.T) {
+	gradle := buildToolUnlinkOptions("gradle", false, nil)
+	if gradle.Title != "Unlink Gradle project?" ||
+		gradle.Message != "Remove this build from Gradle? Files remain in the Project view." ||
+		gradle.DefaultButton != 1 || gradle.CancelButton != 1 {
+		t.Fatalf("Gradle unlink dialog = %+v", gradle)
+	}
+	maven := buildToolUnlinkOptions("maven", false, nil)
+	if maven.Title != "Unlink Maven projects?" ||
+		maven.Message != "Files remain in the Project view." {
+		t.Fatalf("Maven unlink dialog = %+v", maven)
+	}
+	aggregated := buildToolUnlinkOptions("maven", true, nil)
+	if aggregated.Message != "The Java language server stops importing this module and its submodules. Files remain in the Project view." {
+		t.Fatalf("aggregated Maven unlink dialog = %+v", aggregated)
+	}
+}
+
 func TestClassifyMavenPOMsUsesContentRootAndAbsoluteExternalPaths(t *testing.T) {
 	root := t.TempDir()
 	inside := filepath.Join(root, "modules", "api", "pom.xml")
@@ -40,6 +100,15 @@ func TestClassifyMavenPOMsUsesContentRootAndAbsoluteExternalPaths(t *testing.T) 
 	}
 	if !reflect.DeepEqual(rejected, []string{notPOM}) {
 		t.Fatalf("rejected paths = %v, want %s", rejected, notPOM)
+	}
+}
+
+func TestMavenRejectedImportMessageFollowsOpenIDEA(t *testing.T) {
+	rejected := []string{"a.xml", "b.xml", "c.xml", "d.xml"}
+	got := buildToolRejectedBody(rejected)
+	want := "These files are not named pom.xml, so they were not added: a.xml, b.xml, c.xml (+1 more)"
+	if got != want {
+		t.Fatalf("rejected body = %q, want %q", got, want)
 	}
 }
 
@@ -269,7 +338,8 @@ func TestOpenIDEABuildToolCommandsReachNativeState(t *testing.T) {
 		if !m.RunCommand(tc.command) {
 			t.Fatalf("%s is unavailable", tc.command)
 		}
-		if m.runAnything == nil || m.runAnything.query != tc.want || m.maven.activeTool != tc.window {
+		if m.runAnything == nil || m.runAnything.query != tc.want || m.maven.activeTool != tc.window ||
+			m.runAnything.buildTool != tc.window || m.runAnything.project == "" {
 			t.Fatalf("%s opened query=%#v tool=%q", tc.command, m.runAnything, m.maven.activeTool)
 		}
 		if len(m.runAnything.rows) == 0 {
@@ -300,5 +370,26 @@ func TestOpenIDEABuildToolCommandsReachNativeState(t *testing.T) {
 		"buildDir": "tools", "gradlePath": ":app",
 	}) || m.maven.analyzer == nil || m.maven.analyzer.module != "gradle:tools\x00:app" {
 		t.Fatal("gradle.analyzeDependencies ignored its build/project argument")
+	}
+}
+
+func TestBuildToolExecutePopupRendersTheSelectedProject(t *testing.T) {
+	m := &Model{}
+	m.setRoot(t.TempDir())
+	m.run.trusted = true
+	m.run.loaded = true
+	m.maven.model = buildModel{Maven: &mavenModel{Projects: []mavenProject{
+		{Pom: "pom.xml", DisplayName: "demo", Dir: "."},
+		{Pom: "api/pom.xml", DisplayName: "api", Dir: "api"},
+	}}}
+	m.OpenBuildToolExecute("maven")
+	if m.runAnything == nil || m.runAnything.buildTool != "maven" || m.runAnything.project != "pom.xml" {
+		t.Fatalf("Maven Execute popup = %+v", m.runAnything)
+	}
+	tt := runAnythingTester(t, m)
+	for _, text := range []string{"Project:", "demo — ."} {
+		if !tt.HasText(text) {
+			t.Fatalf("%q is missing from Execute Maven Goal: %q", text, tt.Texts())
+		}
 	}
 }

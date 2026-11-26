@@ -52,6 +52,10 @@ func TestMavenProfilesDiffFromTheDefaults(t *testing.T) {
 	}
 	m.maven.profiles = map[string]bool{}
 	m.SetMavenProfile(mavenProfile{ProjectRoot: &root, ID: "it"}, true)
+	m.mavenInitTree()
+	if !m.mavenProfileChecked(mavenProfile{ProjectRoot: &root, ID: "it"}) {
+		t.Fatalf("a returned build model overwrote the profile choice with its default: %#v", m.maven.profiles)
+	}
 	// SyncMaven needs a backend; the arguments it would send are the contract.
 	m.maven.profiles[mavenProfileKey(mavenProfile{ProjectRoot: &root, ID: "prod"})] = false
 	m.maven.profiles[mavenProfileKey(mavenProfile{ProjectRoot: &root, ID: "it"})] = true
@@ -167,6 +171,113 @@ func TestMavenSettingsDriveGoalCommandArgumentsAndEnvironment(t *testing.T) {
 	}
 	if cfg.Env["JAVA_HOME"] != jre {
 		t.Fatalf("JAVA_HOME = %q, want %q", cfg.Env["JAVA_HOME"], jre)
+	}
+}
+
+func TestBuildToolSettingsPersistPerProject(t *testing.T) {
+	settingsPath := filepath.Join(t.TempDir(), "settings.json")
+	firstRoot := t.TempDir()
+	secondRoot := t.TempDir()
+
+	m := &Model{
+		cfg:   Config{SettingsPath: settingsPath},
+		prefs: LoadPreferences(settingsPath),
+	}
+	m.setRoot(firstRoot)
+	m.loadBuildModel()
+	firstProfile := mavenProfile{ProjectRoot: strPtr(firstRoot), ID: "integration"}
+	m.maven.model.Maven = &mavenModel{Profiles: []mavenProfile{firstProfile}}
+	m.maven.profiles = map[string]bool{}
+	m.SetMavenProfile(firstProfile, true)
+	m.ToggleMavenOffline()
+	m.ToggleMavenSkipTests()
+	m.ToggleGradleOffline()
+
+	restored := &Model{
+		cfg:   Config{SettingsPath: settingsPath},
+		prefs: LoadPreferences(settingsPath),
+	}
+	restored.setRoot(firstRoot)
+	restored.loadBuildModel()
+	if !restored.maven.offline || !restored.maven.skipTests || !restored.maven.gradleOffline {
+		t.Fatalf("first project's build-tool settings were not restored: %+v", restored.maven)
+	}
+	if restored.maven.gradleSkipTests {
+		t.Fatal("an unspecified Gradle skip-tests choice did not default to false")
+	}
+	if !restored.mavenProfileChecked(firstProfile) {
+		t.Fatal("first project's Maven profile choice was not restored")
+	}
+
+	restored.setRoot(secondRoot)
+	restored.loadBuildModel()
+	if restored.maven.offline || restored.maven.skipTests ||
+		restored.maven.gradleOffline || restored.maven.gradleSkipTests {
+		t.Fatalf("second project inherited another project's settings: %+v", restored.maven)
+	}
+	restored.ToggleGradleSkipTests()
+
+	restored.setRoot(firstRoot)
+	restored.loadBuildModel()
+	if !restored.maven.offline || !restored.maven.skipTests ||
+		!restored.maven.gradleOffline || restored.maven.gradleSkipTests {
+		t.Fatalf("switching back lost the first project's settings: %+v", restored.maven)
+	}
+
+	stored := LoadPreferences(settingsPath)
+	var settings buildToolsSettings
+	if err := json.Unmarshal(stored.Plugins[buildToolsSettingsKey], &settings); err != nil {
+		t.Fatalf("stored build-tool settings: %v", err)
+	}
+	if got := settings.Projects[buildToolsProjectKey(firstRoot)]; !got.Maven.Offline ||
+		!got.Maven.SkipTests || !got.Maven.Profiles[mavenProfileKey(firstProfile)] ||
+		!got.Gradle.Offline || got.Gradle.SkipTests {
+		t.Fatalf("stored first-project settings = %+v", got)
+	}
+	if got := settings.Projects[buildToolsProjectKey(secondRoot)]; got.Maven.Offline ||
+		got.Maven.SkipTests || got.Gradle.Offline || !got.Gradle.SkipTests {
+		t.Fatalf("stored second-project settings = %+v", got)
+	}
+}
+
+func TestMavenExecuteGoalUsesCurrentProjectProfilesAndNames(t *testing.T) {
+	firstRoot := t.TempDir()
+	secondRoot := t.TempDir()
+	first := mavenProject{
+		ProjectRoot: strPtr(firstRoot), Pom: "first/pom.xml", Dir: "first",
+		ArtifactID: "first", DisplayName: "first",
+	}
+	second := mavenProject{
+		ProjectRoot: strPtr(secondRoot), Pom: "second/pom.xml", Dir: "second",
+		ArtifactID: "second", DisplayName: "second",
+	}
+	firstProfile := mavenProfile{ProjectRoot: first.ProjectRoot, ID: "first-profile"}
+	secondProfile := mavenProfile{ProjectRoot: second.ProjectRoot, ID: "second-profile"}
+	m := &Model{}
+	m.maven.model.Maven = &mavenModel{
+		Projects: []mavenProject{first, second},
+		Profiles: []mavenProfile{firstProfile, secondProfile},
+	}
+	m.maven.profiles = map[string]bool{
+		mavenProfileKey(firstProfile):  true,
+		mavenProfileKey(secondProfile): true,
+	}
+	m.selectMavenProject(m.mavenProjectByPom(second.Pom))
+
+	project := m.mavenRootProject()
+	if project == nil || project.Pom != second.Pom {
+		t.Fatalf("current Maven project = %+v, want %s", project, second.Pom)
+	}
+	if m.maven.sel.kind != "project" || m.maven.sel.project == nil ||
+		m.maven.sel.project.Pom != second.Pom {
+		t.Fatalf("Maven selection = %+v, want the selected project", m.maven.sel)
+	}
+	cfg, name := m.mavenGoalRunConfig(project, []string{"-DskipTests=false", "verify"})
+	if name != "second [verify]" {
+		t.Fatalf("Maven goal name = %q, want %q", name, "second [verify]")
+	}
+	if !reflect.DeepEqual(cfg.Args, []string{"-P", "second-profile", "-DskipTests=false", "verify"}) {
+		t.Fatalf("Maven goal args = %#v, want only the current project's profile", cfg.Args)
 	}
 }
 

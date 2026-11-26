@@ -14,6 +14,8 @@ import (
 	"github.com/egoist/mygo"
 )
 
+var buildToolUnlinkDialog = mygo.Dialog.Message
+
 // OpenIDEA keeps project linkage and Execute Goal/Task in build-tool actions
 // rather than in the palette's static command list. These adapters expose the
 // same ids and arguments over GoIDEA's native Maven/Gradle window.
@@ -24,40 +26,53 @@ func init() {
 }
 
 func buildToolCompatibilityActions() []*Action {
-	action := func(id, title string, run func(*Model, any)) *Action {
+	action := func(id, title string, enabled func(*Model) bool, run func(*Model, any)) *Action {
 		return &Action{
 			ID: id, Title: title, Category: "Build",
 			Keywords:   "maven gradle build project task goal link unlink execute",
+			Enabled:    enabled,
 			RunWithArg: run,
 		}
 	}
 	return []*Action{
-		action("maven.addProjects", "Add Maven Projects", func(m *Model, _ any) {
+		action("maven.addProjects", "Add Maven Projects", projectBuildToolActionEnabled, func(m *Model, _ any) {
 			m.AddMavenProjects()
 		}),
-		action("maven.importExternal", "Import Module from Existing Sources", func(m *Model, _ any) {
+		action("maven.importExternal", "Import Module from Existing Sources", projectBuildToolActionEnabled, func(m *Model, _ any) {
 			m.ImportMavenModule()
 		}),
-		action("maven.unlinkProjects", "Unlink Maven Projects", func(m *Model, arg any) {
+		action("maven.unlinkProjects", "Unlink Maven Projects", mavenBuildToolActionEnabled, func(m *Model, arg any) {
 			m.UnlinkMavenProjects(buildToolArgString(arg, "pom"))
 		}),
-		action("maven.executeGoal", "Execute Maven Goal…", func(m *Model, _ any) {
+		action("maven.executeGoal", "Execute Maven Goal…", mavenBuildToolActionEnabled, func(m *Model, _ any) {
 			m.OpenBuildToolExecute("maven")
 		}),
-		action("maven.generateSources", "Generate Sources and Update Folders", func(m *Model, arg any) {
+		action("maven.generateSources", "Generate Sources and Update Folders", mavenBuildToolActionEnabled, func(m *Model, arg any) {
 			m.GenerateMavenSources(buildToolArgString(arg, "pom"))
 		}),
-		action("gradle.linkProjects", "Link Gradle Projects", func(m *Model, _ any) {
+		action("gradle.linkProjects", "Link Gradle Projects", projectBuildToolActionEnabled, func(m *Model, _ any) {
 			m.LinkGradleProjects()
 		}),
-		action("gradle.unlinkProjects", "Unlink Gradle Project", func(m *Model, arg any) {
+		action("gradle.unlinkProjects", "Unlink Gradle Project", gradleBuildToolActionEnabled, func(m *Model, arg any) {
 			m.UnlinkGradleProject(buildToolArgString(arg, "buildDir"))
 		}),
-		action("gradle.executeTask", "Execute Gradle Task…", func(m *Model, arg any) {
+		action("gradle.executeTask", "Execute Gradle Task…", gradleBuildToolActionEnabled, func(m *Model, arg any) {
 			m.selectGradleProjectKey(buildToolArgString(arg, "projectKey"))
 			m.OpenBuildToolExecute("gradle")
 		}),
 	}
+}
+
+func projectBuildToolActionEnabled(m *Model) bool {
+	return m != nil && m.Root() != "" && !m.showingWelcome && m.workspace == nil
+}
+
+func mavenBuildToolActionEnabled(m *Model) bool {
+	return projectBuildToolActionEnabled(m) && m.maven.model.Maven != nil
+}
+
+func gradleBuildToolActionEnabled(m *Model) bool {
+	return projectBuildToolActionEnabled(m) && len(m.maven.model.Gradle) > 0
 }
 
 func (m *Model) selectGradleProjectKey(key string) bool {
@@ -121,6 +136,18 @@ func (m *Model) OpenBuildToolExecute(tool string) {
 	m.OpenRunAnything()
 	if m.runAnything == nil {
 		return
+	}
+	m.runAnything.buildTool = tool
+	projects := m.buildToolRunProjects(tool)
+	m.runAnything.project = ""
+	for _, project := range projects {
+		if project.value == m.defaultBuildToolRunProject(tool) {
+			m.runAnything.project = project.value
+			break
+		}
+	}
+	if m.runAnything.project == "" && len(projects) > 0 {
+		m.runAnything.project = projects[0].value
 	}
 	command := strings.TrimSpace(tool)
 	if command == "maven" {
@@ -265,21 +292,65 @@ func (m *Model) ImportMavenModule() {
 		if len(paths) == 0 {
 			return
 		}
-		m.post(func() {
-			pom, ok := mavenPOMForImport(paths[0])
-			if !ok {
-				m.status = "The selected folder does not contain pom.xml"
-				m.invalidate()
-				return
-			}
-			m.linkMavenProjects([]string{pom}, true)
-		})
+		m.importMavenModulePath(paths[0], m.Root())
 	}()
 }
 
+func (m *Model) importMavenModulePath(path, root string) {
+	pom, _ := mavenPOMForImport(path)
+	ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
+	defer cancel()
+	raw, err := m.invoke(ctx, "fs_read_dir", map[string]any{
+		"path": filepath.Dir(pom),
+	})
+	var entries []struct {
+		Name       string  `json:"name"`
+		Kind       string  `json:"kind"`
+		TargetKind *string `json:"targetKind"`
+	}
+	if err == nil {
+		err = json.Unmarshal(raw, &entries)
+	}
+	if err != nil {
+		m.setBuildToolActionError("Could not inspect the Maven module", err)
+		return
+	}
+	hasPOM := false
+	for _, entry := range entries {
+		if !samePOMName(entry.Name) {
+			continue
+		}
+		hasPOM = entry.Kind == "file" ||
+			entry.Kind == "symlink" && entry.TargetKind != nil && *entry.TargetKind == "file"
+		if hasPOM {
+			break
+		}
+	}
+	m.post(func() {
+		if m.Root() != root || m.workspace != nil {
+			return
+		}
+		if !hasPOM {
+			m.status = "The selected folder does not contain pom.xml"
+			m.notifyBuildToolWarning(
+				"maven-import-no-pom",
+				"Maven project was not imported",
+				"This directory has no pom.xml, so it was not imported.",
+			)
+			m.invalidate()
+			return
+		}
+		m.linkMavenProjects([]string{pom}, true)
+	})
+}
+
 // UnlinkMavenProjects removes a module from the Maven model without touching
-// its files. The tree calls this with {pom}; the palette uses the selection.
+// its files. It asks first, stops an in-flight import and keeps a late reply
+// from changing another project.
 func (m *Model) UnlinkMavenProjects(pom string) {
+	if !mavenBuildToolActionEnabled(m) {
+		return
+	}
 	if pom == "" && m.maven.sel.project != nil {
 		pom = m.maven.sel.project.Pom
 	}
@@ -291,7 +362,30 @@ func (m *Model) UnlinkMavenProjects(pom string) {
 	if pom == "" {
 		return
 	}
-	m.linkMavenProjects([]string{pom}, false)
+	project := m.mavenProjectByPom(pom)
+	if project == nil {
+		return
+	}
+	root := m.Root()
+	parent := m.win
+	options := buildToolUnlinkOptions("maven", project.Aggregated, parent)
+	go func() {
+		result, err := buildToolUnlinkDialog(options)
+		if err != nil {
+			m.setBuildToolActionError("Could not confirm Maven unlink", err)
+			return
+		}
+		if result.Button != 0 {
+			return
+		}
+		m.post(func() {
+			if m.Root() != root || m.workspace != nil || m.mavenProjectByPom(pom) == nil {
+				return
+			}
+			m.CancelBuildToolReload("maven")
+			m.linkMavenProjects([]string{pom}, false)
+		})
+	}()
 }
 
 func (m *Model) linkMavenProjects(paths []string, linked bool) {
@@ -305,6 +399,9 @@ func (m *Model) linkMavenProjects(paths []string, linked bool) {
 		raw, err := m.invoke(ctx, "settings_get", nil)
 		if err != nil {
 			m.setBuildToolActionError("Could not read Maven settings", err)
+			return
+		}
+		if m.Root() != root {
 			return
 		}
 		var settings backendBuildToolSettings
@@ -322,6 +419,13 @@ func (m *Model) linkMavenProjects(paths []string, linked bool) {
 		}
 		if len(poms) == 0 {
 			m.status = "No pom.xml files were selected"
+			if len(rejected) > 0 {
+				m.notifyBuildToolWarning(
+					"maven-add-outside-root",
+					"Some Maven projects were not added",
+					buildToolRejectedBody(rejected),
+				)
+			}
 			m.invalidate()
 			return
 		}
@@ -345,13 +449,42 @@ func (m *Model) linkMavenProjects(paths []string, linked bool) {
 			}
 		}
 		m.post(func() {
+			if m.Root() != root || m.workspace != nil {
+				return
+			}
 			if warning != "" {
 				m.status = warning
+			}
+			if len(rejected) > 0 {
+				m.notifyBuildToolWarning(
+					"maven-add-outside-root",
+					"Some Maven projects were not added",
+					buildToolRejectedBody(rejected),
+				)
 			}
 			m.maven.loading = false
 			m.loadBuildModel()
 		})
 	}()
+}
+
+func (m *Model) notifyBuildToolWarning(key, title, body string) {
+	m.postNotification(ideNotification{
+		key: key, level: "warning", title: title, body: body, group: "tools",
+	})
+}
+
+func buildToolRejectedBody(rejected []string) string {
+	shown := rejected
+	if len(shown) > 3 {
+		shown = shown[:3]
+	}
+	body := "These files are not named pom.xml, so they were not added: " +
+		strings.Join(shown, ", ")
+	if len(rejected) > 3 {
+		body += fmt.Sprintf(" (+%d more)", len(rejected)-3)
+	}
+	return body
 }
 
 type backendBuildToolSettings struct {
@@ -464,7 +597,7 @@ func samePOMName(name string) bool {
 // LinkGradleProjects links independent build directories through the backend
 // operation OpenIDEA uses, then draws the returned model.
 func (m *Model) LinkGradleProjects() {
-	if m.Root() == "" || m.showingWelcome {
+	if !projectBuildToolActionEnabled(m) || !m.run.trusted {
 		return
 	}
 	parent, start := m.win, m.Root()
@@ -487,6 +620,9 @@ func (m *Model) LinkGradleProjects() {
 }
 
 func (m *Model) UnlinkGradleProject(buildDir string) {
+	if !gradleBuildToolActionEnabled(m) {
+		return
+	}
 	if buildDir == "" {
 		for _, build := range m.maven.model.Gradle {
 			if build.Dir != "" && strings.Contains(m.maven.selKey, build.Dir) {
@@ -498,15 +634,61 @@ func (m *Model) UnlinkGradleProject(buildDir string) {
 	if buildDir == "" && len(m.maven.model.Gradle) == 1 {
 		buildDir = m.maven.model.Gradle[0].Dir
 	}
-	if buildDir != "" {
-		m.updateGradleLinks([]string{buildDir}, false)
+	if !slices.ContainsFunc(m.maven.model.Gradle, func(build gradleModel) bool {
+		return build.Dir == buildDir
+	}) {
+		return
 	}
+	root := m.Root()
+	parent := m.win
+	options := buildToolUnlinkOptions("gradle", false, parent)
+	go func() {
+		result, err := buildToolUnlinkDialog(options)
+		if err != nil {
+			m.setBuildToolActionError("Could not confirm Gradle unlink", err)
+			return
+		}
+		if result.Button != 0 {
+			return
+		}
+		m.post(func() {
+			if m.Root() != root || m.workspace != nil ||
+				!slices.ContainsFunc(m.maven.model.Gradle, func(build gradleModel) bool {
+					return build.Dir == buildDir
+				}) {
+				return
+			}
+			m.CancelBuildToolReload("gradle")
+			m.updateGradleLinks([]string{buildDir}, false)
+		})
+	}()
+}
+
+func buildToolUnlinkOptions(tool string, aggregated bool, parent *mygo.Window) mygo.MessageOptions {
+	options := mygo.MessageOptions{
+		Parent: parent, Type: mygo.MessageWarning,
+		Buttons: []string{"Unlink", "Cancel"}, DefaultButton: 1, CancelButton: 1,
+	}
+	if tool == "gradle" {
+		options.Title = "Unlink Gradle project?"
+		options.Message = "Remove this build from Gradle? Files remain in the Project view."
+		return options
+	}
+	options.Title = "Unlink Maven projects?"
+	options.Message = "Files remain in the Project view."
+	if aggregated {
+		options.Message = "The Java language server stops importing this module and its submodules. Files remain in the Project view."
+	}
+	return options
 }
 
 func (m *Model) updateGradleLinks(paths []string, linked bool) {
 	if m.ctx == nil || (m.mgr == nil && m.invokeHook == nil) || len(paths) == 0 {
 		return
 	}
+	root := m.Root()
+	m.maven.gen++
+	generation := m.maven.gen
 	command := "gradle_unlink_projects"
 	if linked {
 		command = "gradle_link_projects"
@@ -525,8 +707,13 @@ func (m *Model) updateGradleLinks(paths []string, linked bool) {
 			return
 		}
 		m.post(func() {
+			if m.Root() != root || m.maven.gen != generation || m.workspace != nil {
+				return
+			}
+			m.maven.loading = false
 			m.maven.model = model
 			m.mavenInitTree()
+			m.refreshBuildToolRunConfigs()
 			m.invalidate()
 		})
 	}()

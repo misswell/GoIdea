@@ -1496,14 +1496,57 @@ func (m *Model) runConfigsDialog(c *ui.Context, p *ui.Theme) {
 // the failed tests of the pane's last run, in the same tab; the process
 // must have exited and a derived configuration must be supported.
 func (m *Model) RerunFailedTests() {
-	if m.run.busy || m.run.running || m.run.awaiting {
-		return
+	m.RerunFailedTestsFor(nil)
+}
+
+func (m *Model) RerunFailedTestsFor(arg any) {
+	session := selectedRunSurfaceSession(m)
+	if session == nil {
+		session = m.runWindowSession()
 	}
-	raw, _ := m.rerunTarget()
-	if raw == nil {
+	if session == nil {
+		session = m.preferredFailedRunSession()
+	}
+	if session == nil {
 		m.notifyInfo("run-rerun-failed", "No failed tests to rerun", "No configuration has run in this session")
 		m.invalidate()
 		return
+	}
+	if session.live {
+		// Upstream disables the action for a live test session.
+		return
+	}
+	if session.tests == nil {
+		m.notifyInfo("run-rerun-failed", "No failed tests to rerun", "This configuration's output is not a test report")
+		m.invalidate()
+		return
+	}
+	if len(adapter.FailedTestPaths(session.tests)) == 0 {
+		m.notifyInfo("run-rerun-failed", "No failed tests to rerun", "There are no failed tests to rerun")
+		m.invalidate()
+		return
+	}
+	if m.run.busy || m.run.running || m.run.awaiting {
+		return
+	}
+	baseConfig := *session.config
+	baseConfig.Kind = strings.TrimSpace(baseConfig.Kind)
+	baseConfig.Command = strings.TrimSpace(baseConfig.Command)
+	for i := range m.run.configs {
+		if m.run.configs[i].ID == baseConfig.ID {
+			baseConfig = m.run.configs[i]
+			break
+		}
+	}
+	raw := baseConfig.Raw()
+	if raw == nil {
+		var marshalErr error
+		raw, marshalErr = json.Marshal(baseConfig)
+		if marshalErr != nil {
+			m.notifyInfo("run-rerun-failed", "No failed tests to rerun", marshalErr.Error())
+			m.invalidate()
+			return
+		}
 	}
 	base, err := openidea.DecodeRunConfig(raw)
 	if err != nil {
@@ -1511,12 +1554,7 @@ func (m *Model) RerunFailedTests() {
 		m.invalidate()
 		return
 	}
-	if m.run.tests == nil {
-		m.notifyInfo("run-rerun-failed", "No failed tests to rerun", "This configuration's output is not a test report")
-		m.invalidate()
-		return
-	}
-	paths := adapter.FailedTestPaths(m.run.tests)
+	paths := adapter.FailedTestPaths(session.tests)
 	if configID := pluginTestConfigID(base); configID != "" {
 		if len(paths) == 0 {
 			m.notifyInfo("run-rerun-failed", "No failed tests to rerun", "There are no failed tests to rerun")
@@ -1533,6 +1571,25 @@ func (m *Model) RerunFailedTests() {
 		return
 	}
 	m.askOrStart(derived.Raw(), derived.Name)
+}
+
+func (m *Model) preferredFailedRunSession() *runSessionView {
+	if active := m.runWindowSession(); active != nil && !active.live && active.tests != nil &&
+		len(adapter.FailedTestPaths(active.tests)) > 0 {
+		return active
+	}
+	if primary := m.primaryRunSession(); primary != nil && !primary.live && primary.tests != nil &&
+		len(adapter.FailedTestPaths(primary.tests)) > 0 {
+		return primary
+	}
+	for i := len(m.run.children) - 1; i >= 0; i-- {
+		child := m.run.children[i]
+		if child != nil && !child.live() && child.tests != nil &&
+			len(adapter.FailedTestPaths(child.tests)) > 0 {
+			return m.childRunSession(child)
+		}
+	}
+	return nil
 }
 
 // askOrStart starts a configuration, applying the rerun confirm when it is

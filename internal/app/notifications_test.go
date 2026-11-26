@@ -4,9 +4,150 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 )
+
+func TestNotificationTimeoutMatchesOpenIDEA(t *testing.T) {
+	tests := []struct {
+		name    string
+		post    func(*Model)
+		want    time.Duration
+		hasTime bool
+	}{
+		{
+			name:    "info",
+			post:    func(m *Model) { m.notifyInfo("info", "Info", "") },
+			want:    notifyInfoTimeout,
+			hasTime: true,
+		},
+		{
+			name:    "warning",
+			post:    func(m *Model) { m.notifyWarning("warning", "Warning", "") },
+			want:    notifyInfoTimeout,
+			hasTime: true,
+		},
+		{
+			name:    "default error",
+			post:    func(m *Model) { m.notifyError("error", "Error", "") },
+			want:    notifyStickyTime,
+			hasTime: true,
+		},
+		{
+			name: "explicit non-sticky error",
+			post: func(m *Model) {
+				m.postNotification(ideNotification{
+					key: "error", level: "error", title: "Formatting failed",
+					sticky: false, stickySet: true,
+				})
+			},
+			want:    notifyInfoTimeout,
+			hasTime: true,
+		},
+		{
+			name: "sticky group",
+			post: func(m *Model) {
+				m.prefs.Notify = &NotifyPrefs{Groups: map[string]NotifyGroupPrefs{
+					"system": {Display: "sticky"},
+				}}
+				m.notifyInfo("sticky", "Sticky", "")
+			},
+			want:    notifyStickyTime,
+			hasTime: true,
+		},
+		{
+			name: "unlogged sticky",
+			post: func(m *Model) {
+				m.prefs.Notify = &NotifyPrefs{Groups: map[string]NotifyGroupPrefs{
+					"system": {NoLog: true},
+				}}
+				m.notifySticky("sticky-unlogged", "warning", "Sync failed", "", false)
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			m := &Model{}
+			test.post(m)
+			if len(m.notify.items) != 1 {
+				t.Fatalf("notifications = %+v", m.notify.items)
+			}
+			got, hasTime := notificationTimeout(m.notify.items[0])
+			if hasTime != test.hasTime || got != test.want {
+				t.Fatalf("timeout = %v, %v, want %v, %v", got, hasTime, test.want, test.hasTime)
+			}
+		})
+	}
+}
+
+func TestNotificationClockPausesOutsideTheActiveWindow(t *testing.T) {
+	oldNow, oldSchedule := notifyNow, notifySchedule
+	defer func() {
+		notifyNow, notifySchedule = oldNow, oldSchedule
+	}()
+	now := time.Unix(1_000, 0)
+	var waits []time.Duration
+	var callbacks []func()
+	notifyNow = func() time.Time { return now }
+	notifySchedule = func(wait time.Duration, fn func()) func() {
+		waits = append(waits, wait)
+		callbacks = append(callbacks, fn)
+		return func() {}
+	}
+	m := &Model{postHook: func(fn func()) { fn() }}
+	m.notify.active = true
+	m.notify.activeKnown = true
+	m.notifyInfo("indexed", "Indexed", "")
+	if len(waits) != 1 || waits[0] != notifyInfoTimeout {
+		t.Fatalf("initial wait = %v", waits)
+	}
+	now = now.Add(notifyInfoTimeout - time.Second)
+	m.SetWindowActive(false)
+	if got := m.notify.items[0].remaining; got != time.Second {
+		t.Fatalf("remaining asleep = %v, want 1s", got)
+	}
+	now = now.Add(time.Minute)
+	m.SetWindowActive(true)
+	if len(waits) != 2 || waits[1] != time.Second {
+		t.Fatalf("resumed wait = %v, want second 1s", waits)
+	}
+	callbacks[len(callbacks)-1]()
+	if m.notify.items[0].balloon {
+		t.Fatal("the balloon stayed after its active-window clock elapsed")
+	}
+}
+
+func TestNotificationHoverResumesTheRemainingTime(t *testing.T) {
+	oldNow, oldSchedule := notifyNow, notifySchedule
+	defer func() {
+		notifyNow, notifySchedule = oldNow, oldSchedule
+	}()
+	now := time.Unix(2_000, 0)
+	var waits []time.Duration
+	var callbacks []func()
+	notifyNow = func() time.Time { return now }
+	notifySchedule = func(wait time.Duration, fn func()) func() {
+		waits = append(waits, wait)
+		callbacks = append(callbacks, fn)
+		return func() {}
+	}
+	m := &Model{postHook: func(fn func()) { fn() }}
+	m.notifyInfo("hover", "Hover", "")
+	now = now.Add(notifyInfoTimeout - time.Second)
+	m.SetBalloonHover(m.notify.items[0].id, true)
+	if got := m.notify.items[0].remaining; got != time.Second {
+		t.Fatalf("remaining on hover = %v, want 1s", got)
+	}
+	m.SetBalloonHover(m.notify.items[0].id, false)
+	if len(waits) != 2 || waits[1] != time.Second {
+		t.Fatalf("resumed hover wait = %v, want second 1s", waits)
+	}
+	callbacks[len(callbacks)-1]()
+	if m.notify.items[0].balloon {
+		t.Fatal("the balloon stayed after its resumed hover clock elapsed")
+	}
+}
 
 func TestNotificationKeyReplacesAndErrorsStick(t *testing.T) {
 	m := &Model{}
@@ -169,11 +310,30 @@ func TestNotificationsWindowMarksRead(t *testing.T) {
 	if m.unreadNotifications() != 0 {
 		t.Fatalf("opening the window left %d unread", m.unreadNotifications())
 	}
+	if m.notify.items[0].balloon || m.notify.items[0].timer != nil {
+		t.Fatalf("the listed balloon did not defer to the tool window: %+v", m.notify.items[0])
+	}
 	m.CloseNotifications()
 	if m.notificationsShown() || !m.rightHidden {
 		t.Fatalf("closing left shown=%v hidden=%v", m.notificationsShown(), m.rightHidden)
 	}
 	m.ClearNotifications()
+}
+
+func TestUnloggedBalloonStaysVisibleBesideTheNotificationsWindow(t *testing.T) {
+	m := &Model{prefs: Preferences{Notify: &NotifyPrefs{Groups: map[string]NotifyGroupPrefs{
+		"system": {NoLog: true},
+	}}}}
+	m.notifyInfo("unlogged", "No history", "")
+	m.ShowNotifications()
+	items := m.balloonItems()
+	if len(items) != 1 || items[0].title != "No history" || m.notify.items[0].logged {
+		t.Fatalf("unlogged balloon = %+v, items = %+v", m.notify.items, items)
+	}
+	m.dismissBalloon(m.notify.items[0].id)
+	if len(m.notify.items) != 0 {
+		t.Fatalf("dismissing an unlogged balloon kept %+v", m.notify.items)
+	}
 }
 
 func TestNotificationsWindowRendersOpenIDEAHeader(t *testing.T) {
@@ -265,6 +425,21 @@ func TestNotificationGroupPrefsSilenceAndLog(t *testing.T) {
 		t.Fatalf("balloons stayed on with the global switch off")
 	}
 	m.ClearNotifications()
+}
+
+func TestProjectSwitchKeepsOnlyApplicationUpdateNotifications(t *testing.T) {
+	m := &Model{}
+	m.notifyInfo("build", "Build finished", "")
+	m.notifyWarning("vcs:push", "Push failed", "")
+	m.notifySticky(updateKey, "info", "GoIDEA is available", "", false)
+	m.notifyInfo("lsp:warning", "Language server stopped", "")
+	m.clearProjectNotifications()
+	if len(m.notify.items) != 1 {
+		t.Fatalf("project switch kept %+v", m.notify.items)
+	}
+	if got := m.notify.items[0]; got.key != updateKey || got.group != "updates" {
+		t.Fatalf("update notification = %+v", got)
+	}
 }
 
 func TestSuppressGroupKeepsHistory(t *testing.T) {

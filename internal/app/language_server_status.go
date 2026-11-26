@@ -139,6 +139,7 @@ func (m *Model) acceptLanguageServerStatus(e openidea.LanguageServerEvent) bool 
 	m.languageServerLastEvent[e.Server] = seq
 	delete(m.languageServerRemovedAt, e.Server)
 	previous, known := m.languageServers[e.Server]
+	becameReady := e.Status == "ready" && (!known || previous.Status != "ready")
 	if e.Status != "ready" && e.Status != "busy" {
 		delete(m.languageServerJavaReady, e.Server)
 	}
@@ -165,6 +166,9 @@ func (m *Model) acceptLanguageServerStatus(e openidea.LanguageServerEvent) bool 
 		return false
 	}
 	m.mergeLanguageServerEvent(e)
+	if becameReady {
+		m.invalidateSemanticTokens()
+	}
 	if !known {
 		m.RefreshLanguageServers()
 	}

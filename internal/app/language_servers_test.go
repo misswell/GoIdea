@@ -704,7 +704,7 @@ func TestPromptInstallLanguageToolOffersActionsWithoutInstalling(t *testing.T) {
 		t.Fatalf("install prompt count = %d", len(m.notify.items))
 	}
 	prompt := m.notify.items[0]
-	if prompt.key != "lsp-missing-java-debug" || !prompt.permanent ||
+	if prompt.key != "lsp-missing-java-debug" || !prompt.sticky ||
 		prompt.title != "Java Debug is not installed" ||
 		!strings.Contains(prompt.body, "Code insight for java needs java-debug") ||
 		len(prompt.actions) != 2 ||

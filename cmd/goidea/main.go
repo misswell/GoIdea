@@ -61,6 +61,9 @@ func main() {
 	if err := os.MkdirAll(home, 0o755); err != nil {
 		log.Fatalf("goidea: server home: %v", err)
 	}
+	if err := migrateLegacyWindowToolData(dataDir, home); err != nil {
+		startupErrs = append(startupErrs, fmt.Errorf("legacy language tools: %w", err))
+	}
 
 	serverPath, serverErr := resolveServer()
 	logFile := openLog(filepath.Join(dataDir, "openidea-server.log"))

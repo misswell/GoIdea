@@ -83,8 +83,8 @@ func (m *Model) submitVCSMore() {
 		m.deleteGitLogBranch(strings.TrimSpace(m.vcsMore.input))
 	case "changes.getFromRevision":
 		parts := strings.Split(m.vcsMore.input, "\x00")
-		if len(parts) == 2 {
-			m.getLogChangeFromRevision(parts[0], parts[1])
+		if len(parts) == 3 {
+			m.getLogChangeFromRevision(parts[0], parts[1], parts[2])
 		}
 	case "changes.deleteFiles":
 		m.deleteVCSFiles(strings.Split(m.vcsMore.input, "\x00"))
@@ -360,13 +360,19 @@ func (m *Model) drawVCSMorePrompt(c *ui.Context, p *ui.Theme) {
 		if len(m.vcsMore.items) > 0 {
 			ui.Text(c, m.vcsMore.items[0].Detail).FontSize(12).TextColor(p.TextMuted).SingleLine()
 		}
-	case vcsMoreActionChangelistEdit:
+	case vcsMoreActionChangelistNew, vcsMoreActionChangelistEdit:
 		ui.Text(c, "Name").FontSize(12).TextColor(p.TextMuted)
 		if in := ui.TextInput(c, &m.vcsMore.input).AutoFocus(); in.Submitted() {
 			m.submitVCSMore()
 		}
 		ui.Text(c, "Comment").FontSize(12).TextColor(p.TextMuted)
 		ui.TextArea(c, &m.vcsMore.input2).Height(72)
+		disabled := m.vcsMore.action == vcsMoreActionChangelistEdit &&
+			m.vcsMore.input3 == m.vcsMore.lists.Active
+		active := m.vcsMore.flag || disabled
+		if ui.Checkbox(c, &active, "Set active").Disabled(disabled).Changed() {
+			m.vcsMore.flag = active
+		}
 	case vcsMoreActionReword:
 		ui.Text(c, "Commit message").FontSize(12).TextColor(p.TextMuted)
 		ui.TextArea(c, &m.vcsMore.input).Height(150).AutoFocus()
@@ -541,6 +547,17 @@ func (m *Model) drawVCSMoreChangelists(c *ui.Context, p *ui.Theme) {
 					if list, ok := m.selectedVCSMoreChangelist(); ok {
 						m.DeleteChangelistArg(list.ID)
 					}
+				})
+			ui.Button(c, "Move…").Disabled(m.vcsMore.loading || m.vcsMore.busy || len(m.vcsMore.lists.Lists) == 0).
+				OnClick(func() {
+					m.vcsMore.kind = vcsMoreChangelists
+					m.vcsMore.action = "changelist.move"
+					m.vcsMore.hint = "Choose the target changelist for the selected files."
+					m.vcsMore.input = strings.Join(
+						m.vcsActionPaths(map[string]any{"path": m.vcs.selectedFiles[m.vcs.current]}, true),
+						"\x00",
+					)
+					m.invalidate()
 				})
 		}
 		ui.Button(c, "New…").Disabled(m.vcsMore.loading || m.vcsMore.busy).OnClick(m.OpenNewChangelist)

@@ -3,10 +3,12 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -83,6 +85,11 @@ type changelistState struct {
 	Active string            `json:"active"`
 	Files  map[string]string `json:"files"`
 }
+
+const (
+	defaultChangelistID   = "default"
+	defaultChangelistName = "Changes"
+)
 
 type patchPreviewFile struct {
 	Path    string  `json:"path"`
@@ -340,7 +347,7 @@ func (m *Model) AddPathsToVCS(arg any) {
 		return
 	}
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, 2*time.Minute)
+		ctx, cancel := context.WithTimeout(modelContext(m), 2*time.Minute)
 		defer cancel()
 		_, err := m.mgr.Invoke(ctx, Window, "vcs_stage", map[string]any{"paths": paths})
 		m.post(func() {
@@ -363,7 +370,7 @@ func (m *Model) IgnorePaths(arg any, destination string) {
 		return
 	}
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, 2*time.Minute)
+		ctx, cancel := context.WithTimeout(modelContext(m), 2*time.Minute)
 		defer cancel()
 		_, err := m.mgr.Invoke(ctx, Window, "vcs_add_to_ignore", map[string]any{
 			"paths": paths, "destination": destination,
@@ -493,7 +500,7 @@ func (m *Model) submitClone() {
 	state.request = request
 	m.invalidate()
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Minute)
+		ctx, cancel := context.WithTimeout(modelContext(m), 30*time.Minute)
 		defer cancel()
 		_, err := m.mgr.Invoke(ctx, Window, "vcs_clone", map[string]any{
 			"request": request, "url": url, "dest": dest, "depth": nil,
@@ -529,7 +536,7 @@ func (m *Model) loadVCSWorktrees() {
 	repoArg := m.vcsRepositoryArg()
 	m.invalidate()
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, time.Minute)
+		ctx, cancel := context.WithTimeout(modelContext(m), time.Minute)
 		defer cancel()
 		raw, err := m.invoke(ctx, "vcs_worktrees", map[string]any{"repo": repoArg})
 		var worktrees []openidea.Worktree
@@ -579,7 +586,7 @@ func (m *Model) submitNewWorktree() {
 	state.busy, state.err = true, ""
 	m.invalidate()
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, 3*time.Minute)
+		ctx, cancel := context.WithTimeout(modelContext(m), 3*time.Minute)
 		defer cancel()
 		_, err := m.invoke(ctx, "vcs_add_worktree", map[string]any{
 			"repo": repoArg, "path": path, "commitish": commitish, "newBranch": newBranch,
@@ -674,7 +681,7 @@ func (m *Model) removeVCSWorktree(path string) {
 	repoRoot := m.vcs.current
 	m.vcsMore.busy = true
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, 2*time.Minute)
+		ctx, cancel := context.WithTimeout(modelContext(m), 2*time.Minute)
 		defer cancel()
 		_, err := m.invoke(ctx, "vcs_remove_worktree", map[string]any{
 			"repo": repoArg, "path": path, "force": false,
@@ -740,7 +747,7 @@ func (m *Model) moveVCSWorktree(from, to string) {
 	m.vcsMore.busy, m.vcsMore.err = true, ""
 	m.invalidate()
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, 2*time.Minute)
+		ctx, cancel := context.WithTimeout(modelContext(m), 2*time.Minute)
 		defer cancel()
 		_, err := m.invoke(ctx, "vcs_move_worktree", map[string]any{
 			"repo": repoArg, "path": from, "to": to,
@@ -763,7 +770,11 @@ func (m *Model) moveVCSWorktree(from, to string) {
 func (m *Model) OpenShelveChanges(arg any) {
 	paths := m.vcsActionPaths(arg, true)
 	if len(paths) == 0 {
-		paths = m.allChangedPaths()
+		if active := m.activeChangelistPaths(); len(active) > 0 {
+			paths = active
+		} else {
+			paths = m.allChangedPaths()
+		}
 	}
 	m.openVCSMore(vcsMorePrompt, vcsMoreActionShelve, "Shelve Changes",
 		"Save the selected changes on the shelf and revert them.")
@@ -784,7 +795,7 @@ func (m *Model) submitShelve() {
 	state.busy, state.err = true, ""
 	m.invalidate()
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, 5*time.Minute)
+		ctx, cancel := context.WithTimeout(modelContext(m), 5*time.Minute)
 		defer cancel()
 		_, err := m.mgr.Invoke(ctx, Window, "vcs_shelve", map[string]any{
 			"name": name, "paths": paths,
@@ -821,7 +832,7 @@ func (m *Model) LoadVCSShelf() {
 	root := m.Root()
 	m.invalidate()
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, time.Minute)
+		ctx, cancel := context.WithTimeout(modelContext(m), time.Minute)
 		defer cancel()
 		raw, err := m.mgr.Invoke(ctx, Window, "vcs_shelves", nil)
 		var shelves []shelvedChangeList
@@ -914,7 +925,7 @@ func (m *Model) unshelve(id, path string, remove bool) {
 	m.vcsMore.busy, m.vcsMore.err = true, ""
 	m.invalidate()
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, 5*time.Minute)
+		ctx, cancel := context.WithTimeout(modelContext(m), 5*time.Minute)
 		defer cancel()
 		var pathArg any
 		if path != "" {
@@ -961,7 +972,7 @@ func (m *Model) ShelfDeleteArg(arg any) {
 func (m *Model) deleteShelf(id, path string) {
 	m.vcsMore.busy = true
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, time.Minute)
+		ctx, cancel := context.WithTimeout(modelContext(m), time.Minute)
 		defer cancel()
 		var pathArg any
 		if path != "" {
@@ -1007,7 +1018,7 @@ func (m *Model) submitShelfRename() {
 	}
 	m.vcsMore.busy = true
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, time.Minute)
+		ctx, cancel := context.WithTimeout(modelContext(m), time.Minute)
 		defer cancel()
 		_, err := m.mgr.Invoke(ctx, Window, "vcs_shelf_rename", map[string]any{
 			"id": id, "name": name,
@@ -1034,7 +1045,7 @@ func (m *Model) ShowShelfDiffArg(arg any, compareLocal bool) {
 	m.vcsMore.loading, m.vcsMore.err = true, ""
 	m.invalidate()
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, time.Minute)
+		ctx, cancel := context.WithTimeout(modelContext(m), time.Minute)
 		defer cancel()
 		raw, err := m.mgr.Invoke(ctx, Window, "vcs_shelf_diff", map[string]any{"id": shelf.ID})
 		var files []shelfDiffFile
@@ -1111,7 +1122,7 @@ func (m *Model) CreateShelfPatchArg(arg any) {
 	}
 	m.vcsMore.busy = true
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, time.Minute)
+		ctx, cancel := context.WithTimeout(modelContext(m), time.Minute)
 		defer cancel()
 		var pathArg any
 		if path != "" {
@@ -1142,7 +1153,7 @@ func (m *Model) CopyShelfPatchArg(arg any) {
 		return
 	}
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, time.Minute)
+		ctx, cancel := context.WithTimeout(modelContext(m), time.Minute)
 		defer cancel()
 		var pathArg any
 		if path != "" {
@@ -1170,21 +1181,55 @@ func (m *Model) CopyShelfPatchArg(arg any) {
 func (m *Model) CreatePatchForPaths(arg any) {
 	paths := m.vcsActionPaths(arg, true)
 	if len(paths) == 0 {
-		paths = m.allChangedPaths()
+		if active := m.activeChangelistPaths(); len(active) > 0 {
+			paths = active
+		} else {
+			paths = m.allChangedPaths()
+		}
 	}
 	if len(paths) == 0 {
 		m.status = "There are no changes to include in a patch"
 		m.invalidate()
 		return
 	}
-	repoArg := m.vcsRepositoryArgForPath(paths[0])
+	files, err := m.patchFilesForPaths(paths)
+	if err != nil {
+		m.status = err.Error()
+		m.invalidate()
+		return
+	}
+	byRepository, err := patchSourcesByRepository(files)
+	if err != nil {
+		m.status = err.Error()
+		m.invalidate()
+		return
+	}
+	repositories := make([]string, 0, len(byRepository))
+	for repository := range byRepository {
+		repositories = append(repositories, repository)
+	}
+	sort.Strings(repositories)
+	if len(repositories) > 1 {
+		m.status = "Select changes from one repository to create a patch"
+		m.invalidate()
+		return
+	}
+	if len(repositories) == 0 {
+		m.status = "There are no changes to include in a patch"
+		m.invalidate()
+		return
+	}
+	repository := repositories[0]
+	repoArg := vcsRepositoryArgFor(repository)
+	selected := byRepository[repository]
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, time.Minute)
+		ctx, cancel := context.WithTimeout(modelContext(m), time.Minute)
 		defer cancel()
-		raw, err := m.invoke(ctx, "vcs_create_patch", map[string]any{
+		var raw json.RawMessage
+		raw, err = m.invoke(ctx, "vcs_create_patch", map[string]any{
 			"repo": repoArg,
 			"source": map[string]any{
-				"from": "changes", "paths": paths, "reverse": false,
+				"from": "changes", "paths": selected, "reverse": false,
 			},
 		})
 		var patch string
@@ -1267,7 +1312,7 @@ func (m *Model) OpenApplyPatch(arg any) {
 		m.invalidate()
 		return
 	}
-	m.previewPatch(string(data), filepath.Base(path))
+	m.previewPatchForRepository(string(data), filepath.Base(path), m.patchRepositoryFromHeader(string(data)))
 }
 
 func (m *Model) OpenApplyPatchFromClipboard() {
@@ -1281,18 +1326,29 @@ func (m *Model) OpenApplyPatchFromClipboard() {
 		m.invalidate()
 		return
 	}
-	m.previewPatch(string(raw), "Clipboard")
+	m.previewPatchForRepository(string(raw), "Clipboard", m.patchRepositoryFromHeader(string(raw)))
 }
 
 func (m *Model) previewPatch(patch, name string) {
+	m.previewPatchForRepository(patch, name, m.vcsRepositoryRoot())
+}
+
+func (m *Model) previewPatchForRepository(patch, name, repository string) {
 	m.openVCSMore(vcsMorePatchPreview, "apply.patch", "Apply Patch",
 		"Review the files before applying "+name+".")
 	m.vcsMore.loading = true
 	m.vcsMore.patch = patch
-	repoArg := m.vcsRepositoryArg()
+	m.vcsMore.input3 = vcsRepositoryKey(repository)
+	if explicit := m.patchRepositoryFromHeader(patch); explicit != "" {
+		m.vcsMore.input3 = explicit
+	}
+	repoArg := vcsRepositoryArgFor(m.vcsMore.input3)
+	if repoArg == nil {
+		repoArg = m.vcsRepositoryArg()
+	}
 	m.invalidate()
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, time.Minute)
+		ctx, cancel := context.WithTimeout(modelContext(m), time.Minute)
 		defer cancel()
 		raw, err := m.invoke(ctx, "vcs_patch_preview", map[string]any{
 			"repo": repoArg, "patch": patch,
@@ -1329,16 +1385,49 @@ func (m *Model) previewPatch(patch, name string) {
 	}()
 }
 
+func (m *Model) patchRepositoryFromHeader(patch string) string {
+	for _, section := range unifiedPatchSections(patch) {
+		oldPath, newPath, ok := unifiedPatchHeaderPaths(section)
+		if !ok {
+			continue
+		}
+		for _, path := range []string{oldPath, newPath} {
+			for _, repository := range m.vcs.repositories {
+				root := filepath.Clean(repository.Root)
+				project := filepath.Clean(m.Root())
+				candidates := []string{
+					filepath.Join(root, filepath.FromSlash(path)),
+				}
+				if project != "" && project != "." {
+					candidates = append(candidates,
+						filepath.Join(project, filepath.FromSlash(path)))
+				}
+				for _, candidate := range candidates {
+					if _, err := os.Stat(candidate); err == nil &&
+						vcsRepositoryContainingPath(candidate, m.vcs.repositories) == root {
+						return root
+					}
+				}
+			}
+		}
+	}
+	return m.vcsRepositoryRoot()
+}
+
 func (m *Model) applyPatch() {
 	patch := m.vcsMore.patch
 	if patch == "" {
 		return
 	}
 	m.vcsMore.busy, m.vcsMore.err = true, ""
-	repoArg := m.vcsRepositoryArg()
+	repository := m.vcsMore.input3
+	if repository == "" {
+		repository = m.vcsRepositoryRoot()
+	}
+	repoArg := vcsRepositoryArgFor(repository)
 	m.invalidate()
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, 5*time.Minute)
+		ctx, cancel := context.WithTimeout(modelContext(m), 5*time.Minute)
 		defer cancel()
 		raw, err := m.invoke(ctx, "vcs_apply_patch", map[string]any{
 			"repo": repoArg, "patch": patch,
@@ -1387,7 +1476,7 @@ func (m *Model) ImportShelfPatches(arg any) {
 	repoArg := m.vcsRepositoryArg()
 	m.vcsMore.busy = true
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, 5*time.Minute)
+		ctx, cancel := context.WithTimeout(modelContext(m), 5*time.Minute)
 		defer cancel()
 		var err error
 		for _, path := range paths {
@@ -1426,6 +1515,12 @@ func (m *Model) loadChangelistsThen(open bool, loaded func()) {
 		m.openVCSMore(vcsMoreChangelists, "changelists", "Changelists",
 			"Group changed files and commit one list at a time.")
 	}
+	if m.mgr == nil && m.invokeHook == nil {
+		if loaded != nil {
+			loaded()
+		}
+		return
+	}
 	state := &m.vcsMore
 	state.kind, state.loading, state.err = vcsMoreChangelists, true, ""
 	request := m.nextRequest()
@@ -1433,12 +1528,15 @@ func (m *Model) loadChangelistsThen(open bool, loaded func()) {
 	root := m.Root()
 	m.invalidate()
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, time.Minute)
+		ctx, cancel := context.WithTimeout(modelContext(m), time.Minute)
 		defer cancel()
-		raw, err := m.mgr.Invoke(ctx, Window, "vcs_changelists_load", nil)
+		raw, err := m.invoke(ctx, "vcs_changelists_load", nil)
 		var lists changelistState
 		if err == nil {
 			err = json.Unmarshal(raw, &lists)
+		}
+		if err == nil {
+			lists = normalizeChangelistState(lists)
 		}
 		m.post(func() {
 			if m.Root() != root || m.vcsMore.loadID != request {
@@ -1452,6 +1550,7 @@ func (m *Model) loadChangelistsThen(open bool, loaded func()) {
 			}
 			m.vcsMore.lists = lists
 			m.vcsMore.changelistsLoaded = true
+			m.syncVCSChangelistAssignments(&m.vcsMore.lists, false)
 			m.vcsMore.choice = clampSymbolSel(m.vcsMore.choice, len(lists.Lists))
 			if loaded != nil {
 				loaded()
@@ -1530,12 +1629,14 @@ func (m *Model) OpenEditChangelist(arg any) {
 
 func (m *Model) saveChangelists(next changelistState, close bool) {
 	state := &m.vcsMore
+	next = normalizeChangelistState(next)
+	m.syncVCSChangelistAssignments(&next, false)
 	state.busy, state.err = true, ""
 	m.invalidate()
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, time.Minute)
+		ctx, cancel := context.WithTimeout(modelContext(m), time.Minute)
 		defer cancel()
-		_, err := m.mgr.Invoke(ctx, Window, "vcs_changelists_save", map[string]any{
+		_, err := m.invoke(ctx, "vcs_changelists_save", map[string]any{
 			"changelists": next,
 		})
 		m.post(func() {
@@ -1560,39 +1661,59 @@ func (m *Model) saveChangelists(next changelistState, close bool) {
 }
 
 func (m *Model) submitNewChangelist() {
+	next := normalizeChangelistState(m.vcsMore.lists)
 	name := strings.TrimSpace(m.vcsMore.input)
-	if name == "" {
-		m.vcsMore.err = "Enter a changelist name"
+	if err := validateChangelistName(next, name, ""); err != nil {
+		m.vcsMore.err = err.Error()
 		m.invalidate()
 		return
 	}
-	next := m.vcsMore.lists
 	id := "list-" + strconv.FormatInt(time.Now().UnixNano(), 36)
-	next.Lists = append(next.Lists, changelistEntry{ID: id, Name: name})
-	if next.Active == "" {
+	next.Lists = append(next.Lists, changelistEntry{
+		ID: id, Name: name, Comment: strings.TrimSpace(m.vcsMore.input2),
+	})
+	if m.vcsMore.flag {
 		next.Active = id
 	}
-	if next.Files == nil {
-		next.Files = map[string]string{}
+	paths := strings.Split(m.vcsMore.input3, "\x00")
+	for _, path := range paths {
+		if rel := m.vcsChangelistRelPath(path); rel != "" {
+			next.Files[rel] = id
+		}
 	}
 	m.saveChangelists(next, false)
 }
 
 func (m *Model) submitEditChangelist() {
 	id := m.vcsMore.input3
+	next := normalizeChangelistState(m.vcsMore.lists)
 	name := strings.TrimSpace(m.vcsMore.input)
-	if id == "" || name == "" {
-		m.vcsMore.err = "Enter a changelist name"
+	if id == "" {
+		m.vcsMore.err = "Choose a changelist to edit"
 		m.invalidate()
 		return
 	}
-	next := m.vcsMore.lists
+	if err := validateChangelistName(next, name, id); err != nil {
+		m.vcsMore.err = err.Error()
+		m.invalidate()
+		return
+	}
+	found := false
 	for i := range next.Lists {
 		if next.Lists[i].ID == id {
 			next.Lists[i].Name = name
 			next.Lists[i].Comment = strings.TrimSpace(m.vcsMore.input2)
+			found = true
 			break
 		}
+	}
+	if !found {
+		m.vcsMore.err = "Choose a changelist to edit"
+		m.invalidate()
+		return
+	}
+	if m.vcsMore.flag {
+		next.Active = id
 	}
 	m.saveChangelists(next, false)
 }
@@ -1622,7 +1743,7 @@ func (m *Model) DeleteChangelistArg(arg any) {
 }
 
 func (m *Model) deleteChangelist(id string) {
-	next := m.vcsMore.lists
+	next := normalizeChangelistState(m.vcsMore.lists)
 	filtered := next.Lists[:0]
 	for _, list := range next.Lists {
 		if list.ID != id {
@@ -1632,7 +1753,7 @@ func (m *Model) deleteChangelist(id string) {
 	next.Lists = filtered
 	for path, list := range next.Files {
 		if list == id {
-			delete(next.Files, path)
+			next.Files[path] = next.Active
 		}
 	}
 	m.saveChangelists(next, false)
@@ -1644,7 +1765,7 @@ func (m *Model) SetActiveChangelistArg(arg any) {
 		if !ok {
 			return
 		}
-		next := m.vcsMore.lists
+		next := normalizeChangelistState(m.vcsMore.lists)
 		next.Active = list.ID
 		m.saveChangelists(next, false)
 	}
@@ -1665,6 +1786,7 @@ func (m *Model) MoveToChangelist(arg any) {
 		return
 	}
 	openMove := func() {
+		m.syncVCSChangelistAssignments(&m.vcsMore.lists, false)
 		m.vcsMore.kind = vcsMoreChangelists
 		m.vcsMore.action = "changelist.move"
 		m.vcsMore.hint = "Choose the target changelist for the selected files."
@@ -1682,18 +1804,19 @@ func (m *Model) MoveToChangelist(arg any) {
 
 func (m *Model) movePathsToChangelist(listID string) {
 	paths := strings.Split(m.vcsMore.input, "\x00")
-	next := m.vcsMore.lists
-	if next.Files == nil {
-		next.Files = map[string]string{}
-	}
+	next := normalizeChangelistState(m.vcsMore.lists)
 	for _, path := range paths {
 		if path == "" {
 			continue
 		}
+		rel := m.vcsChangelistRelPath(path)
+		if rel == "" {
+			continue
+		}
 		if listID == next.Active {
-			delete(next.Files, path)
+			delete(next.Files, rel)
 		} else {
-			next.Files[path] = listID
+			next.Files[rel] = listID
 		}
 	}
 	m.saveChangelists(next, false)
@@ -1705,12 +1828,10 @@ func (m *Model) CommitChangelistArg(arg any) {
 		if !ok {
 			return
 		}
+		m.syncVCSChangelistAssignments(&m.vcsMore.lists, false)
 		paths := map[string]bool{}
 		for _, file := range m.vcs.files {
-			listID := m.vcsMore.lists.Files[file.Path]
-			if listID == "" {
-				listID = m.vcsMore.lists.Active
-			}
+			listID := m.changelistForPath(m.vcsMore.lists, file.Path)
 			if listID == list.ID {
 				paths[file.Path] = true
 			}
@@ -1719,6 +1840,14 @@ func (m *Model) CommitChangelistArg(arg any) {
 		m.OpenCommit()
 		if m.commit != nil {
 			m.commit.onlyPaths = paths
+			m.commit.allRepositories = false
+			repositories := map[string]bool{}
+			for _, file := range m.vcs.files {
+				if paths[file.Path] {
+					repositories[m.commitRepositoryForPath(m.commit, file.Path)] = true
+				}
+			}
+			m.commit.allRepositories = len(repositories) > 1
 			m.status = "Committing changelist " + list.Name
 			m.invalidate()
 		}
@@ -1730,6 +1859,212 @@ func (m *Model) CommitChangelistArg(arg any) {
 	m.openVCSMore(vcsMoreChangelists, "changelists", "Changelists",
 		"Group changed files and commit one list at a time.")
 	m.loadChangelistsThen(false, openCommit)
+}
+
+func normalizeChangelistState(state changelistState) changelistState {
+	if state.Files == nil {
+		state.Files = map[string]string{}
+	}
+	seen := make(map[string]bool, len(state.Lists))
+	lists := make([]changelistEntry, 0, len(state.Lists))
+	for _, list := range state.Lists {
+		list.ID = strings.TrimSpace(list.ID)
+		list.Name = strings.TrimSpace(list.Name)
+		list.Comment = strings.TrimSpace(list.Comment)
+		if list.ID == "" || seen[list.ID] {
+			continue
+		}
+		if list.Name == "" {
+			list.Name = list.ID
+		}
+		seen[list.ID] = true
+		lists = append(lists, list)
+	}
+	if len(lists) == 0 {
+		lists = []changelistEntry{{
+			ID: defaultChangelistID, Name: defaultChangelistName,
+		}}
+		seen = map[string]bool{defaultChangelistID: true}
+	}
+	state.Lists = lists
+	if !seen[state.Active] {
+		state.Active = lists[0].ID
+	}
+	for path, id := range state.Files {
+		clean := filepath.ToSlash(strings.TrimSpace(path))
+		clean = filepath.ToSlash(filepath.Clean(clean))
+		clean = strings.TrimPrefix(clean, "./")
+		if clean == "" || clean == "." || !seen[id] {
+			delete(state.Files, path)
+			continue
+		}
+		if clean != path {
+			delete(state.Files, path)
+			state.Files[clean] = id
+		}
+	}
+	return state
+}
+
+func validateChangelistName(state changelistState, name, exceptID string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return errors.New("Enter a changelist name")
+	}
+	for _, list := range state.Lists {
+		if list.ID != exceptID && strings.EqualFold(strings.TrimSpace(list.Name), name) {
+			return fmt.Errorf("A changelist named %q already exists", name)
+		}
+	}
+	return nil
+}
+
+func (m *Model) syncVCSChangelistAssignments(state *changelistState, keepGone bool) {
+	if state == nil {
+		return
+	}
+	normalized := normalizeChangelistState(*state)
+	normalized.Files = make(map[string]string, len(state.Files))
+	for path, id := range state.Files {
+		if rel := m.vcsChangelistRelPath(path); rel != "" {
+			normalized.Files[rel] = id
+		}
+	}
+	live := make(map[string]bool)
+	for _, file := range m.vcs.files {
+		rel := m.vcsChangelistRelPath(file.Path)
+		if rel != "" {
+			live[rel] = true
+		}
+	}
+	validLists := make(map[string]bool, len(normalized.Lists))
+	for _, list := range normalized.Lists {
+		validLists[list.ID] = true
+	}
+	for rel, id := range normalized.Files {
+		if !validLists[id] || !keepGone && !live[rel] {
+			delete(normalized.Files, rel)
+		}
+	}
+	for rel := range live {
+		if _, ok := normalized.Files[rel]; !ok {
+			normalized.Files[rel] = normalized.Active
+		}
+	}
+	*state = normalized
+}
+
+func (m *Model) vcsChangelistRelPath(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	if !filepath.IsAbs(path) {
+		clean := filepath.ToSlash(filepath.Clean(path))
+		clean = strings.TrimPrefix(clean, "./")
+		if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") {
+			return ""
+		}
+		return clean
+	}
+	absolute := realPath(path)
+	for _, repository := range m.vcs.repositories {
+		root := filepath.Clean(repository.Root)
+		if absolute != root && !strings.HasPrefix(absolute, root+string(filepath.Separator)) {
+			continue
+		}
+		project := filepath.Clean(m.Root())
+		if project != "" && project != "." &&
+			(absolute == project || strings.HasPrefix(absolute, project+string(filepath.Separator))) {
+			rel, err := filepath.Rel(project, absolute)
+			if err == nil && rel != "." {
+				return filepath.ToSlash(rel)
+			}
+		}
+		rel, err := filepath.Rel(root, absolute)
+		if err == nil && rel != "." {
+			return filepath.ToSlash(rel)
+		}
+	}
+	root := filepath.Clean(m.Root())
+	if root != "" && root != "." {
+		if absolute == root || strings.HasPrefix(absolute, root+string(filepath.Separator)) {
+			rel, err := filepath.Rel(root, absolute)
+			if err == nil && rel != "." {
+				return filepath.ToSlash(rel)
+			}
+		}
+	}
+	return ""
+}
+
+func (m *Model) changelistForPath(state changelistState, path string) string {
+	state = normalizeChangelistState(state)
+	if id := state.Files[m.vcsChangelistRelPath(path)]; id != "" {
+		return id
+	}
+	return state.Active
+}
+
+func (m *Model) activeChangelistPaths() []string {
+	if !m.vcsMore.changelistsLoaded || len(m.vcsMore.lists.Lists) < 2 {
+		return nil
+	}
+	m.syncVCSChangelistAssignments(&m.vcsMore.lists, false)
+	paths := make([]string, 0)
+	for _, file := range m.vcs.files {
+		if m.changelistForPath(m.vcsMore.lists, file.Path) == m.vcsMore.lists.Active {
+			paths = append(paths, file.Path)
+		}
+	}
+	sort.Strings(paths)
+	return paths
+}
+
+type patchSourceFile struct {
+	path       string
+	repository string
+}
+
+func (m *Model) patchFilesForPaths(paths []string) ([]patchSourceFile, error) {
+	files := make([]patchSourceFile, 0, len(paths))
+	seen := map[string]bool{}
+	for _, file := range m.vcs.files {
+		absolute := filepath.Clean(realPath(file.Path))
+		for _, selected := range paths {
+			selected = realPath(selected)
+			if strings.EqualFold(absolute, selected) ||
+				strings.EqualFold(absolute, filepath.Join(selected, filepath.Base(absolute))) {
+				repository := vcsRepositoryForPath(absolute, m.vcs.repositories)
+				key := vcsRepositoryKey(repository) + "\x00" + file.Path
+				if repository == "" || seen[key] {
+					continue
+				}
+				if effectiveVCSKind(file) == "ignored" {
+					continue
+				}
+				seen[key] = true
+				files = append(files, patchSourceFile{path: file.Path, repository: repository})
+				break
+			}
+		}
+	}
+	return files, nil
+}
+
+func patchSourcesByRepository(files []patchSourceFile) (map[string][]string, error) {
+	byRepository := map[string][]string{}
+	for _, file := range files {
+		repository := vcsRepositoryKey(file.repository)
+		if repository == "" {
+			return nil, errors.New("choose changed files from one Git repository")
+		}
+		byRepository[repository] = append(byRepository[repository], file.path)
+	}
+	for repository := range byRepository {
+		sort.Strings(byRepository[repository])
+	}
+	return byRepository, nil
 }
 
 type conflictBlock struct {
@@ -1872,7 +2207,7 @@ func (m *Model) AcceptConflictAtCaret(how string) {
 func (m *Model) resolveConflictBlock(t *Tab, block conflictBlock, how string) {
 	path := t.doc.Path()
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
+		ctx, cancel := context.WithTimeout(modelContext(m), 30*time.Second)
 		defer cancel()
 		raw, err := m.mgr.Invoke(ctx, Window, "vcs_conflict_versions", map[string]any{"path": path})
 		var versions mergeVersions
@@ -1911,7 +2246,7 @@ func (m *Model) resolveConflictBlock(t *Tab, block conflictBlock, how string) {
 				m.invalidate()
 				return
 			}
-			editCtx, editCancel := context.WithTimeout(m.ctx, 30*time.Second)
+			editCtx, editCancel := context.WithTimeout(modelContext(m), 30*time.Second)
 			defer editCancel()
 			if err := t.doc.ApplyEdits(editCtx, editor.Edit{
 				Start: block.from, End: block.to, Text: replacement,
@@ -1950,7 +2285,7 @@ func (m *Model) resolveAllConflicts(path, how string) {
 func (m *Model) resolveAllConflictBlocks(t *Tab, blocks []conflictBlock, how string) {
 	path := t.doc.Path()
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, time.Minute)
+		ctx, cancel := context.WithTimeout(modelContext(m), time.Minute)
 		defer cancel()
 		raw, err := m.mgr.Invoke(ctx, Window, "vcs_conflict_versions", map[string]any{"path": path})
 		var versions mergeVersions
@@ -1995,7 +2330,7 @@ func (m *Model) resolveAllConflictBlocks(t *Tab, blocks []conflictBlock, how str
 				pos = block.to
 			}
 			out.WriteString(text[pos:])
-			editCtx, editCancel := context.WithTimeout(m.ctx, time.Minute)
+			editCtx, editCancel := context.WithTimeout(modelContext(m), time.Minute)
 			defer editCancel()
 			if err := t.doc.ApplyEdits(editCtx, editor.Edit{
 				Start: 0, End: len(text), Text: out.String(),
@@ -2200,7 +2535,7 @@ func (m *Model) ShowCurrentRevision(arg any) {
 	repoArg := m.vcsRepositoryArgForPath(path)
 	m.invalidate()
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, time.Minute)
+		ctx, cancel := context.WithTimeout(modelContext(m), time.Minute)
 		defer cancel()
 		raw, err := m.invoke(ctx, "vcs_log", map[string]any{
 			"repo": repoArg,
@@ -2252,7 +2587,7 @@ func (m *Model) submitCheckout() {
 		repoArg = vcsRepositoryArgFor(m.vcsMore.input3)
 	}
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, 5*time.Minute)
+		ctx, cancel := context.WithTimeout(modelContext(m), 5*time.Minute)
 		defer cancel()
 		_, err := m.invoke(ctx, "vcs_checkout", map[string]any{
 			"repo": repoArg, "branch": revision, "create": false,
@@ -2294,7 +2629,7 @@ func (m *Model) submitCompareWithRevision() {
 	}
 	m.vcsMore.busy, m.vcsMore.err = true, ""
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, 5*time.Minute)
+		ctx, cancel := context.WithTimeout(modelContext(m), 5*time.Minute)
 		defer cancel()
 		request := m.nextRequest()
 		raw, err := m.mgr.Invoke(ctx, Window, "vcs_compare_paths", map[string]any{
@@ -2361,7 +2696,7 @@ func (m *Model) submitCompareWithRevision() {
 func (m *Model) openRevisionFileDiff(item vcsMoreItem) {
 	m.closeVCSMore()
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, time.Minute)
+		ctx, cancel := context.WithTimeout(modelContext(m), time.Minute)
 		defer cancel()
 		raw, err := m.mgr.Invoke(ctx, Window, "vcs_file_at", map[string]any{
 			"path": item.Path, "rev": item.Revision,
@@ -2490,9 +2825,16 @@ func (m *Model) CreatePatchForCommits(arg any) {
 		m.invalidate()
 		return
 	}
-	repoArg := vcsRepositoryArgFor(m.logRepositoryForCommitArg(arg))
+	repository := m.logRepositoryForCommitArg(arg)
+	repoArg := vcsRepositoryArgFor(repository)
+	if id, explicitRepository := logCommitArgParts(arg); id == "" || explicitRepository == "" {
+		if selected := m.log.selected; selected >= 0 && selected < len(m.log.commitRepos) {
+			repository = vcsRepositoryKey(m.log.commitRepos[selected])
+			repoArg = vcsRepositoryArgFor(repository)
+		}
+	}
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, time.Minute)
+		ctx, cancel := context.WithTimeout(modelContext(m), time.Minute)
 		defer cancel()
 		raw, err := m.invoke(ctx, "vcs_create_patch", map[string]any{
 			"repo": repoArg,
@@ -2538,7 +2880,7 @@ func (m *Model) CompareCommitWithLocal(arg any) {
 	repo := m.logRepositoryForCommitArg(arg)
 	repoArg := vcsRepositoryArgFor(repo)
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, 2*time.Minute)
+		ctx, cancel := context.WithTimeout(modelContext(m), 2*time.Minute)
 		defer cancel()
 		raw, err := m.invoke(ctx, "vcs_diff_with_worktree", map[string]any{
 			"repo": repoArg, "rev": commit.ID,
@@ -2603,7 +2945,7 @@ func (m *Model) compareRevisions(from, to string) {
 	}
 	repoArg := vcsRepositoryArgFor(repo)
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, 2*time.Minute)
+		ctx, cancel := context.WithTimeout(modelContext(m), 2*time.Minute)
 		defer cancel()
 		raw, err := m.invoke(ctx, "vcs_diff_revisions", map[string]any{
 			"repo": repoArg, "from": from, "to": to,
@@ -2705,7 +3047,7 @@ func (m *Model) undoCommit(id, repository string) {
 	repoArg := vcsRepositoryArgFor(repository)
 	m.vcsMore.busy = true
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, 2*time.Minute)
+		ctx, cancel := context.WithTimeout(modelContext(m), 2*time.Minute)
 		defer cancel()
 		raw, err := m.invoke(ctx, "vcs_undo_commit", map[string]any{
 			"repo": repoArg, "commit": id,
@@ -2757,7 +3099,7 @@ func (m *Model) rewordCommit(id, message, repository string) {
 	repoArg := vcsRepositoryArgFor(repository)
 	m.vcsMore.busy = true
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, 2*time.Minute)
+		ctx, cancel := context.WithTimeout(modelContext(m), 2*time.Minute)
 		defer cancel()
 		_, err := m.invoke(ctx, "vcs_reword", map[string]any{
 			"repo": repoArg, "commit": id, "message": message,
@@ -2834,7 +3176,7 @@ func (m *Model) runRebasePlan(targetID, targetAction, title, repository string) 
 	m.vcsMore.busy, m.vcsMore.err = true, ""
 	m.invalidate()
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, 2*time.Minute)
+		ctx, cancel := context.WithTimeout(modelContext(m), 2*time.Minute)
 		defer cancel()
 		raw, err := m.invoke(ctx, "vcs_log", map[string]any{
 			"repo": repoArg,
@@ -2891,7 +3233,7 @@ func (m *Model) RebaseOntoCommitArg(arg any) {
 	}
 	m.vcsOps.busy = true
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, 10*time.Minute)
+		ctx, cancel := context.WithTimeout(modelContext(m), 10*time.Minute)
 		defer cancel()
 		_, err := m.invoke(ctx, "vcs_rebase_with", map[string]any{
 			"repo": repoArg, "upstream": commit.ID, "options": map[string]any{},
@@ -2998,7 +3340,7 @@ func (m *Model) OpenCommitInBrowser(arg any) {
 	}
 	repoArg := vcsRepositoryArgFor(m.logRepositoryForCommitArg(arg))
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, time.Minute)
+		ctx, cancel := context.WithTimeout(modelContext(m), time.Minute)
 		defer cancel()
 		raw, err := m.invoke(ctx, "vcs_config_get", map[string]any{
 			"repo": repoArg, "key": "remote.origin.url",

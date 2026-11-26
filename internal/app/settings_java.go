@@ -268,11 +268,17 @@ func (m *Model) settingsJavaBody(c *ui.Context, p *ui.Theme, oi oiColors) {
 	ui.Row(c).Height(10)
 	settingsSectionTitle(c, oi, "Language Server")
 	shared := state.draft.JDTLSShared
-	if ui.Checkbox(c, &shared, "Share JDT LS across builds").Changed() {
+	sharedDisabled := m.javaSettingsSharedDisabled()
+	if ui.Checkbox(c, &shared, "Share JDT LS across builds").
+		Disabled(sharedDisabled).Opacity(opacityForDisabled(sharedDisabled)).Changed() {
 		state.draft.JDTLSShared = shared
 		m.invalidate()
 	}
-	ui.Text(c, "Uses one JDT LS process for linked builds in this project window.").
+	hint := "Uses one JDT LS process for linked builds in this project window."
+	if sharedDisabled {
+		hint = "Shared JDT LS is available only in local ordinary project windows. Open a workspace member as a project to change this setting for it."
+	}
+	ui.Text(c, hint).
 		FontSize(12).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
 	m.javaJdkRow(c, oi, "JDK", &state.draft.JDTLSJdk, "Auto")
 	ui.Text(c, "Runs only jdtls. Auto uses a suitable installed JDK or a managed runtime.").
@@ -287,6 +293,10 @@ func (m *Model) settingsJavaBody(c *ui.Context, p *ui.Theme, oi oiColors) {
 
 	ui.Row(c).Height(12)
 	m.javaToolsSection(c, p)
+}
+
+func (m *Model) javaSettingsSharedDisabled() bool {
+	return m != nil && m.javaSettings.scope == "project" && m.workspace != nil
 }
 
 // javaJdkRow is the native JDK picker: installed SDKs plus a path field for a

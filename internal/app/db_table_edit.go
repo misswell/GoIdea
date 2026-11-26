@@ -136,7 +136,7 @@ func dbTableColumnInfo(s *dbTableSheet, col int) (openidea.DBColumnInfo, bool) {
 	}
 	name := s.page.Result.Columns[col].Name
 	for _, column := range s.page.Details.Columns {
-		if column.Name == name {
+		if strings.EqualFold(column.Name, name) {
 			return column, true
 		}
 	}
@@ -602,13 +602,33 @@ func (m *Model) DBSortTableColumn(col int) {
 		return
 	}
 	name := s.page.Result.Columns[col].Name
-	next := []openidea.DBSortKey{{Column: name}}
-	for _, key := range s.sort {
-		if key.Column == name {
-			next[0].Descending = !key.Descending
-		}
-	}
-	s.sort = next
+	s.sort = dbNextTableSort(s.sort, name, false)
 	s.offset = 0
 	m.loadDBTablePage()
+}
+
+// dbNextTableSort implements OpenIDEA's asc -> desc -> none cycle. The UI
+// currently sends plain header clicks; add supports additional ORDER BY keys.
+func dbNextTableSort(sort []openidea.DBSortKey, column string, add bool) []openidea.DBSortKey {
+	rest := []openidea.DBSortKey{}
+	var current *openidea.DBSortKey
+	for _, key := range sort {
+		if key.Column == column {
+			copy := key
+			current = &copy
+			if add {
+				continue
+			}
+		}
+		if add {
+			rest = append(rest, key)
+		}
+	}
+	if current == nil {
+		return append(rest, openidea.DBSortKey{Column: column})
+	}
+	if current.Descending {
+		return rest
+	}
+	return append(rest, openidea.DBSortKey{Column: column, Descending: true})
 }

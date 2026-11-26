@@ -1320,6 +1320,7 @@ func (m *Model) saveBackendCatalogThenJava(closeAfter bool) {
 				m.applyRunRuntimeSettings(snapshot.native)
 				m.applyDebuggerRuntimeSettings(snapshot.native)
 				m.applyEditorSchemeNativePages(snapshot.native)
+				m.applyNativePreferenceRuntimeSettings(nativeRuntimeSettingsDefinitions())
 				m.trimAgentRuns()
 				m.refreshDecorations()
 				m.nativeSettings.saving = false

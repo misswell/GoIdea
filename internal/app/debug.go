@@ -1443,6 +1443,7 @@ func (m *Model) StopDebug() {
 		m.invalidate()
 		return
 	}
+	parent := m.debug.parent
 	m.debug.stopping = true
 	m.debug.status = "Stopping the debug session…"
 	m.invalidate()
@@ -1493,6 +1494,10 @@ func (m *Model) StopDebug() {
 			}
 			if m.debug.active == session {
 				m.refreshDecorations()
+			}
+			if parent != 0 && !m.debug.SessionSharesProcess(parent) {
+				m.debug.parent = 0
+				m.stopAssociatedRun(parent)
 			}
 			m.invalidate()
 		})

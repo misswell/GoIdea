@@ -252,6 +252,106 @@ func TestAttachKeepsConcurrentDebugSession(t *testing.T) {
 	}
 }
 
+func TestDebugAttachActionStartsJavaAndPythonIntegrationTargets(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		adapter   string
+		extra     map[string]any
+		command   string
+		wantExtra func(map[string]any)
+	}{
+		{
+			name: "Java JDWP", adapter: "java-debug",
+			extra:   map[string]any{"name": "JVM", "hostName": "127.0.0.1", "port": 5005},
+			command: "debug_start",
+			wantExtra: func(extra map[string]any) {
+				if _, ok := extra["debugServer"]; !ok {
+					t.Fatalf("Java attach extra = %#v", extra)
+				}
+				if _, ok := extra["hostName"]; !ok {
+					t.Fatalf("Java JDWP target is missing: %#v", extra)
+				}
+			},
+		},
+		{
+			name: "debugpy container", adapter: "debugpy",
+			extra: map[string]any{
+				"name": "API", "hostName": "127.0.0.1", "port": 5678,
+				"remoteRoot": "/workspace",
+			},
+			command: "debug_start",
+			wantExtra: func(extra map[string]any) {
+				if extra["debugServer"] != float64(5678) && extra["debugServer"] != 5678 {
+					t.Fatalf("debugpy attach extra = %#v", extra)
+				}
+				if _, ok := extra["pathMappings"]; !ok {
+					t.Fatalf("debugpy attach has no path mapping: %#v", extra)
+				}
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			main := &serialMainThread{}
+			started := make(chan openidea.DebugLaunchConfig, 1)
+			m := &Model{
+				ctx:      context.Background(),
+				postHook: main.post,
+			}
+			m.setRoot(t.TempDir())
+			m.run.trusted = true
+			m.run.loaded = true
+			m.run.configs = []openidea.RunConfig{{
+				ID: "attach:test", Name: test.name, Kind: "application",
+				Command: "java", Args: []string{"-cp", "${classpath}", "example.App"},
+			}}
+			m.run.sel = 0
+			m.invokeHook = func(_ context.Context, command string, args any) (stdjson.RawMessage, error) {
+				switch command {
+				case "java_debug_server":
+					return stdjson.RawMessage(`5006`), nil
+				case "debug_set_breakpoints":
+					return stdjson.RawMessage(`null`), nil
+				case "debug_start":
+					raw, err := stdjson.Marshal(args.(map[string]any)["config"])
+					if err != nil {
+						return nil, err
+					}
+					var launch openidea.DebugLaunchConfig
+					if err := stdjson.Unmarshal(raw, &launch); err != nil {
+						return nil, err
+					}
+					started <- launch
+					return stdjson.RawMessage(`71`), nil
+				}
+				return nil, fmt.Errorf("unexpected RPC %s: %s", command, m.debug.err)
+			}
+			args := map[string]any{
+				"adapter": test.adapter, "runConfigId": "attach:test",
+				"runConfig": m.run.configs[0], "show": false,
+			}
+			for key, value := range test.extra {
+				args[key] = value
+			}
+			if !m.RunActionWithArg("debug.attach", args) {
+				t.Fatalf("debug.attach did not run: %s", m.debug.err)
+			}
+			select {
+			case launch := <-started:
+				if launch.Adapter != test.adapter || launch.Request != "attach" || launch.ExtraJSON == nil {
+					t.Fatalf("debug.attach launch = %+v", launch)
+				}
+				var extra map[string]any
+				if err := stdjson.Unmarshal([]byte(*launch.ExtraJSON), &extra); err != nil {
+					t.Fatal(err)
+				}
+				test.wantExtra(extra)
+			case <-time.After(time.Second):
+				t.Fatalf("debug.attach did not start %s: %s", test.adapter, m.debug.err)
+			}
+		})
+	}
+}
+
 func TestRemoteAttachPayloadsMatchPinnedOpenIDEA(t *testing.T) {
 	root := t.TempDir()
 	m := &Model{ctx: context.Background()}

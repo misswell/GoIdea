@@ -2,7 +2,10 @@ package app
 
 import (
 	"reflect"
+	"strings"
 	"testing"
+
+	"github.com/egoist/mygo/ui"
 
 	"mayoi/internal/openidea"
 )
@@ -107,6 +110,36 @@ func TestDatabaseImportMapsHeadersAndNulls(t *testing.T) {
 	}
 }
 
+func TestDatabaseImportMatchesBOMBlankRowsAndRFCFields(t *testing.T) {
+	rows, err := dbParseDelimitedSeparator(
+		"\ufeffname,note\r\n Ada ,\"a,b\"\r\n\r\nBob,\"kept\"\n", ',',
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantRows := [][]string{
+		{"name", "note"},
+		{" Ada ", "a,b"},
+		{"Bob", "kept"},
+	}
+	if !reflect.DeepEqual(rows, wantRows) {
+		t.Fatalf("RFC rows = %#v, want %#v", rows, wantRows)
+	}
+	edits, mapped := dbImportEdits(
+		[][]string{{"name", "note"}, {"Ada", ""}, {"", ""}, {"Bob"}},
+		[]string{"name", "note"}, true, true,
+	)
+	if !reflect.DeepEqual(mapped, []string{"name", "note"}) || len(edits) != 2 {
+		t.Fatalf("mapped=%v edits=%#v", mapped, edits)
+	}
+	if edits[0].Values[1].Value != nil {
+		t.Fatalf("empty field was not NULL: %#v", edits[0])
+	}
+	if edits[1].Values[1].Value != nil {
+		t.Fatalf("missing trailing field was not NULL: %#v", edits[1])
+	}
+}
+
 func TestDatabaseSourceFormPreservesUnknownFields(t *testing.T) {
 	f := &dbSourceForm{
 		raw: map[string]any{
@@ -141,6 +174,15 @@ func TestDatabaseSQLScripts(t *testing.T) {
 	}
 	if target, current := dbBaseTarget("pg:shop"), "pg"; target != current {
 		t.Fatalf("database target = %q, want %q", target, current)
+	}
+	if issue := dbScriptIssue("clickhouse", "update", []openidea.DBColumnInfo{{Name: "id", PrimaryKey: true}}); issue == "" {
+		t.Fatal("ClickHouse sorting-key-only update did not fail")
+	}
+	if issue := dbScriptIssue(
+		"clickhouse", "update",
+		[]openidea.DBColumnInfo{{Name: "id", PrimaryKey: true}, {Name: "name"}},
+	); issue != "" {
+		t.Fatalf("writable ClickHouse update was rejected: %s", issue)
 	}
 }
 
@@ -186,6 +228,12 @@ func TestDatabaseIdentifierFoldingAndDelimitedParsing(t *testing.T) {
 	if got := dbQuoteIdent("sqlite", "select"); got != `"select"` {
 		t.Fatalf("reserved identifier = %q", got)
 	}
+	if got := dbQuoteIdent("sqlite", "Users"); got != "Users" {
+		t.Fatalf("sqlite mixed-case identifier = %q", got)
+	}
+	if got := dbQuoteIdent("clickhouse", "price$usd"); got != `"price$usd"` {
+		t.Fatalf("clickhouse dollar identifier = %q", got)
+	}
 	rows, err := dbParseDelimitedSeparator("name|age\nAda|37\n", '|')
 	if err != nil {
 		t.Fatal(err)
@@ -228,6 +276,230 @@ func TestDatabaseRenameDropAndTruncateSQL(t *testing.T) {
 	if got := m.dbTruncateSQL("pg", "public", "people", true, true); got !=
 		"truncate table public.people restart identity cascade;" {
 		t.Fatalf("postgres truncate = %q", got)
+	}
+}
+
+func TestDatabaseActionTargetsAndDialectGates(t *testing.T) {
+	pg := dbActionTarget{Source: "pg", Schema: "public", Table: "users", Kind: "table"}
+	mysqlIndex := dbActionTarget{
+		Source: "my", Schema: "shop", Table: "users",
+		ObjectKind: "index", ObjectName: "ix_users",
+	}
+	clickhouse := dbActionTarget{Source: "ch", Schema: "default", Table: "events", Kind: "table"}
+	snowflake := dbActionTarget{
+		Source: "sf", Schema: "HR", Table: "EMP",
+		ObjectKind: "trigger", ObjectName: "AUDIT",
+	}
+	cases := []struct {
+		name string
+		t    dbActionTarget
+		ren  bool
+		drop bool
+	}{
+		{"postgres table", pg, true, true},
+		{"mysql index", mysqlIndex, false, true},
+		{"clickhouse table", clickhouse, true, true},
+		{"snowflake trigger", snowflake, false, false},
+	}
+	for _, tc := range cases {
+		driver := map[string]string{
+			"pg": "postgres", "my": "mysql", "ch": "clickhouse", "sf": "snowflake",
+		}[tc.t.Source]
+		if got := dbCanRename(driver, dbObjectKind(tc.t)); got != tc.ren {
+			t.Errorf("%s rename = %v", tc.name, got)
+		}
+		if got := dbCanDrop(driver, dbObjectKind(tc.t)); got != tc.drop {
+			t.Errorf("%s drop = %v", tc.name, got)
+		}
+	}
+	if dbCanModifyTable("clickhouse") || !dbCanModifyTable("postgres") {
+		t.Fatal("modify-table gate does not follow OpenIDEA")
+	}
+
+	if !dbRawSourceTarget(map[string]any{"source": "pg"}) ||
+		dbRawSourceTarget(map[string]any{"source": "pg", "schema": "public"}) {
+		t.Fatal("source-only target was confused with a schema object")
+	}
+	if !dbRawDatabaseTarget(map[string]any{"source": "pg", "database": "shop"}) ||
+		dbRawDatabaseTarget(map[string]any{
+			"source": "pg", "database": "shop", "table": "users",
+		}) {
+		t.Fatal("database-only target was confused with a table")
+	}
+	if got := dbQuoteIdent("snowflake", "QUALIFY"); got != `"QUALIFY"` {
+		t.Fatalf("snowflake reserved identifier = %q", got)
+	}
+}
+
+func TestDatabaseSourceActionsDoNotInheritTheSelectedTable(t *testing.T) {
+	m := &Model{db: &dbView{
+		open: true, source: "pg", schema: "public",
+		selectedTable: openidea.DBTable{Name: "users", Kind: "table"},
+		sources:       []openidea.DataSource{{ID: "pg", Driver: "postgres"}},
+	}}
+	m.DBDrop(map[string]any{"source": "pg"})
+	if m.db.actionPrompt == nil || m.db.actionPrompt.title != "Remove Data Source" ||
+		m.db.actionPrompt.table != "" || m.db.actionPrompt.value != "pg" {
+		t.Fatalf("source drop prompt = %#v", m.db.actionPrompt)
+	}
+	m.db.actionPrompt = nil
+	m.DBRename(map[string]any{"source": "pg"})
+	if m.db.actionPrompt == nil || m.db.actionPrompt.title != "Rename Data Source" ||
+		m.db.actionPrompt.table != "" || m.db.actionPrompt.value != "pg" {
+		t.Fatalf("source rename prompt = %#v", m.db.actionPrompt)
+	}
+}
+
+func TestDatabaseViewAndReadOnlyActionGates(t *testing.T) {
+	m := &Model{db: &dbView{
+		open: true, source: "lite", schema: "main",
+		sources: []openidea.DataSource{{ID: "lite", Driver: "sqlite"}},
+	}}
+	view := map[string]any{"source": "lite", "schema": "main", "table": "summary", "kind": "view"}
+	m.DBTruncate(view)
+	if m.db.actionPrompt != nil || !strings.Contains(m.db.err, "Only tables") {
+		t.Fatalf("view truncate = prompt %#v err %q", m.db.actionPrompt, m.db.err)
+	}
+	m.db.err = ""
+	m.DBModifyTable(view)
+	if m.db.tableForm != nil || !strings.Contains(m.db.err, "Only tables") {
+		t.Fatalf("view modify = form %#v err %q", m.db.tableForm, m.db.err)
+	}
+	m.db.err = ""
+	m.DBImportData(view)
+	if m.db.importForm != nil || !strings.Contains(m.db.err, "available for tables") {
+		t.Fatalf("view import = form %#v err %q", m.db.importForm, m.db.err)
+	}
+}
+
+func TestDatabaseIntrospectionFilteringAndDDLOrder(t *testing.T) {
+	all := false
+	got := dbShownNames(
+		[]string{"app", "app_test", "billing", "postgres"},
+		&all, []string{"app*"}, "postgres",
+	)
+	if !reflect.DeepEqual(got, []string{"app", "app_test", "postgres"}) {
+		t.Fatalf("shown databases = %#v", got)
+	}
+	if !dbMatchesPattern("app_test", "app*") || dbMatchesPattern("app_test", "app?") {
+		t.Fatal("database wildcard matching differs from OpenIDEA")
+	}
+	tables := []openidea.DBTable{
+		{Name: "active_people", Kind: "view"},
+		{Name: "people", Kind: "table"},
+		{Name: "archived_people", Kind: "table"},
+	}
+	sorted := dbSortDDLTables(tables, "")
+	if sorted[0].Name != "people" || sorted[1].Name != "archived_people" || sorted[2].Name != "active_people" {
+		t.Fatalf("DDL order = %#v", sorted)
+	}
+	views := dbSortDDLTables(tables, "views")
+	if len(views) != 1 || views[0].Name != "active_people" {
+		t.Fatalf("view DDL filter = %#v", views)
+	}
+}
+
+func TestDatabaseSQLParametersMatchOpenIDEA(t *testing.T) {
+	type found struct {
+		text string
+		drv  string
+		n    int
+		want []string
+	}
+	cases := []found{
+		{
+			"select * from t where a = :id and b = ? and c = ?3 and d = @x and e = '?' -- ?",
+			"sqlite", 0, []string{":id", "?1", "?3", "@x"},
+		},
+		{"select @x := 1, @@version, ? from t", "mysql", 0, []string{"?1"}},
+		{
+			"select j ? 'k', $1, a::int from t where b = :name",
+			"postgres", 0, []string{"$1", ":name"},
+		},
+		{
+			"SELECT src:customer.name::string, $1 FROM @my_stage/path WHERE x = :id",
+			"snowflake", 0, []string{":id"},
+		},
+		{
+			"select {value:UInt64}, {label: Nullable(String)}, '{skip:String}'",
+			"clickhouse", 0, []string{"{value:UInt64}", "{label: Nullable(String)}"},
+		},
+	}
+	for _, tc := range cases {
+		params, next := dbFindSQLParams(tc.text, tc.drv, tc.n)
+		names := make([]string, len(params))
+		for i, param := range params {
+			names[i] = param.Name
+		}
+		if !reflect.DeepEqual(names, tc.want) {
+			t.Errorf("%s names = %#v, want %#v", tc.drv, names, tc.want)
+		}
+		if tc.drv == "sqlite" && next != 1 {
+			t.Errorf("bare positional counter = %d", next)
+		}
+	}
+
+	sql := "update t set a = :v where id = :id and b = :v"
+	params, _ := dbFindSQLParams(sql, "sqlite", 0)
+	got := dbBindSQLParams(sql, params, map[string]string{":v": "'x'", ":id": " 3 "})
+	if got != "update t set a = 'x' where id = 3 and b = 'x'" {
+		t.Fatalf("bound SQL = %q", got)
+	}
+	missing, _ := dbFindSQLParams("select ?", "sqlite", 0)
+	if got := dbBindSQLParams("select ?", missing, nil); got != "select NULL" {
+		t.Fatalf("missing parameter = %q", got)
+	}
+}
+
+func TestDatabaseParameterPromptRendersAndCancels(t *testing.T) {
+	v := &dbView{
+		open: true, source: "pg", sources: []openidea.DataSource{{ID: "pg", Driver: "postgres"}},
+	}
+	pending := &dbPendingRun{
+		view: v, mode: "execute", source: "pg",
+		inputs: []dbParamInput{{name: ":id"}, {name: "$1"}},
+	}
+	v.pendingRun = pending
+	v.actionPrompt = &dbActionPrompt{kind: "params", title: "Parameters"}
+	v.running = true
+	m := &Model{db: v}
+	tester := ui.NewTester(func(c *ui.Context) { m.dbActionPromptDialog(c, c.Theme()) }, 760, 560)
+	tester.Frame()
+	for _, want := range []string{"Parameters", ":id", "$1", "Execute", "Cancel"} {
+		if !tester.HasText(want) {
+			t.Fatalf("parameter prompt is missing %q: %v", want, tester.Texts())
+		}
+	}
+	if err := tester.Click("Cancel"); err != nil {
+		t.Fatal(err)
+	}
+	if v.actionPrompt != nil || v.pendingRun != nil || v.running {
+		t.Fatalf("cancel did not clear the pending run: %#v", v)
+	}
+}
+
+func TestDatabasePluginConnectRequiresTrustedProject(t *testing.T) {
+	m := &Model{db: &dbView{
+		open: true, source: "pg", sources: []openidea.DataSource{{ID: "pg", Driver: "postgres"}},
+	}}
+	m.DBConnectAction(map[string]any{"source": "pg"})
+	if !strings.Contains(m.db.err, "Trust this project") {
+		t.Fatalf("untrusted connect error = %q", m.db.err)
+	}
+}
+
+func TestDatabaseRunGenerationSupersedesOlderReplies(t *testing.T) {
+	v := &dbView{open: true, runGen: 7}
+	m := &Model{db: v}
+	gen := m.dbBeginRun(v)
+	if gen != 8 || v.runGen != 8 || !v.running {
+		t.Fatalf("new run generation = %d, view = %#v", gen, v)
+	}
+	v.pendingRun = &dbPendingRun{view: v}
+	v.actionPrompt = &dbActionPrompt{kind: "params"}
+	gen = m.dbBeginRun(v)
+	if gen != 9 || v.pendingRun != nil || v.actionPrompt != nil {
+		t.Fatalf("superseding run did not clear old state: %#v", v)
 	}
 }
 

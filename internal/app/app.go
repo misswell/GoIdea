@@ -1020,6 +1020,7 @@ func New(cfg Config) *Model {
 // Attach gives the model its window and registers the close prompt.
 func (m *Model) Attach(win *mygo.Window) {
 	m.win = win
+	m.SetWindowActive(win.IsFocused())
 	m.mcpReports.windowFocused = win.IsFocused()
 	win.OnClose(func(e *mygo.CloseEvent) {
 		if m.forceQuit {
@@ -1028,11 +1029,13 @@ func (m *Model) Attach(win *mygo.Window) {
 		m.requestWindowClose(e.PreventDefault)
 	})
 	win.OnBlur(func() {
+		m.SetWindowActive(false)
 		m.mcpSetWindowFocused(false)
 		m.autoSaveOnSwitch()
 		m.updateApplicationsOnDeactivation()
 	})
 	win.OnFocus(func() {
+		m.SetWindowActive(true)
 		if m.workspaceHost != nil {
 			m.workspaceHost.WindowFocused(m)
 		}
@@ -1445,6 +1448,7 @@ func (m *Model) openProjectSavingWithFiles(dir string, files []string) {
 // tabs, terminals, tool windows, searches and their caches — and reports
 // whether Maven was visible, so a new project can load its build model.
 func (m *Model) resetProjectState(dir string) (buildToolsVisible bool) {
+	m.clearProjectNotifications()
 	m.resetDocumentation()
 	m.resetAnalysisState()
 	m.coverage = coverageState{}

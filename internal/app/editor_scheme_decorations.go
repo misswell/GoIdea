@@ -186,7 +186,7 @@ func scanRainbowBrackets(text string, comments bracketCommentSyntax) []rainbowMa
 			continue
 		}
 		if ch == '"' || ch == '\'' || ch == '`' {
-			if ch == '\'' && index > 0 && isLetterOrDigit(text[index-1]) {
+			if ch == '\'' && !quoteStartsString(text, index) {
 				continue
 			}
 			mode = 3
@@ -236,6 +236,25 @@ func sortRainbowMarks(marks []rainbowMark) {
 
 func isLetterOrDigit(ch byte) bool {
 	return ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z' || ch >= '0' && ch <= '9' || ch == '_'
+}
+
+func quoteStartsString(text string, start int) bool {
+	if start < 0 || start >= len(text) || text[start] != '\'' {
+		return false
+	}
+	if start > 0 && isLetterOrDigit(text[start-1]) {
+		return false
+	}
+	lineEnd := strings.IndexByte(text[start+1:], '\n')
+	if lineEnd >= 0 {
+		lineEnd += start + 1
+	}
+	close := strings.IndexByte(text[start+1:], '\'')
+	if close < 0 {
+		return false
+	}
+	close += start + 1
+	return lineEnd < 0 || close < lineEnd
 }
 
 func (m *Model) semanticTokenBackgrounds(tab *Tab) []editor.TextBackground {
@@ -309,6 +328,32 @@ func (m *Model) requestSemanticTokens(tab *Tab, version uint64) {
 			m.invalidate()
 		})
 	}()
+}
+
+func (m *Model) invalidateSemanticTokens() {
+	if m == nil {
+		return
+	}
+	for _, tab := range m.allTabs() {
+		if tab == nil || tab.state == nil {
+			continue
+		}
+		tab.semanticGeneration++
+		tab.semanticLoading = false
+		tab.semanticLoaded = false
+		tab.semanticVersion = 0
+		tab.semanticRetryAt = time.Time{}
+		tab.semanticRanges = nil
+		if tab.doc == nil {
+			continue
+		}
+		theme := m.theme
+		if theme == nil {
+			theme = openideaTheme(false)
+		}
+		tab.state.TextBackgrounds = m.composeTextBackgrounds(tab, m.todoMarksOf(tab, theme))
+	}
+	m.invalidate()
 }
 
 func semanticTokenSpans(text string, tokens *semanticTokensPayload) []semanticTokenSpan {

@@ -382,6 +382,25 @@ func TestRainbowBracketsUseDepthColorsAndSkipStrings(t *testing.T) {
 	}
 }
 
+func TestRainbowBracketsDoNotTreatRustLifetimesAsStrings(t *testing.T) {
+	const source = "fn borrow<'a>(value: &str) { call([value]); }\n"
+	marks := scanRainbowBrackets(source, bracketCommentsFor("rust", "main.rs"))
+	if len(marks) != 8 {
+		t.Fatalf("rainbow marks = %+v, want all eight brackets after the lifetime", marks)
+	}
+	for _, mark := range marks {
+		if mark.Depth < 0 {
+			t.Fatalf("lifetime created an unmatched bracket: %+v", marks)
+		}
+	}
+	if quoteStartsString(source, strings.IndexByte(source, '\'')) {
+		t.Fatal("Rust lifetime quote started a string")
+	}
+	if !quoteStartsString("let c = '(';", strings.IndexByte("let c = '(';", '\'')) {
+		t.Fatal("character literal quote did not start a string")
+	}
+}
+
 func TestSemanticTokenSpansFilterLocalsAndUseUTF16Columns(t *testing.T) {
 	tokens := &semanticTokensPayload{
 		Data: []int{
@@ -407,6 +426,85 @@ func TestSemanticTokenSpansFilterLocalsAndUseUTF16Columns(t *testing.T) {
 	spans = semanticTokenSpans(text, tokens)
 	if len(spans) != 1 || spans[0].Name != "arg" || spans[0].Start != 5 {
 		t.Fatalf("UTF-16 semantic spans = %+v", spans)
+	}
+}
+
+func TestParseICLSAppliesTheAttributesMyGoCanRender(t *testing.T) {
+	raw := `<scheme name="Consumer Test" parent_scheme="Darcula">
+  <colors>
+    <option name="SELECTION_BACKGROUND" value="214283" />
+    <option name="LINE_NUMBERS_COLOR" value="a1a3ab" />
+  </colors>
+  <attributes>
+    <option name="TEXT"><value>
+      <option name="FOREGROUND" value="dddddd" />
+      <option name="BACKGROUND" value="101820" />
+    </value></option>
+    <option name="DEFAULT_KEYWORD"><value>
+      <option name="FOREGROUND" value="abc" />
+      <option name="EFFECT_TYPE" value="3" />
+    </value></option>
+    <option name="DEFAULT_STRING"><value>
+      <option name="FOREGROUND" value="12345" />
+    </value></option>
+    <option name="DEFAULT_MARKUP_TAG"><value>
+      <option name="FOREGROUND" value="e8c25b" />
+    </value></option>
+    <option name="DEFAULT_PREDEFINED_SYMBOL"><value>
+      <option name="FOREGROUND" value="d78bd6" />
+    </value></option>
+    <option name="REGEXP"><value>
+      <option name="FOREGROUND" value="4ea7f0" />
+    </value></option>
+    <option name="DEFAULT_LINE_COMMENT"><value>
+      <option name="FOREGROUND" value="777777" />
+    </value></option>
+    <option name="DEFAULT_DOC_COMMENT"><value>
+      <option name="FOREGROUND" value="888888" />
+    </value></option>
+    <option name="DEFAULT_NUMBER"><value>
+      <option name="FOREGROUND" value="667788" />
+      <option name="EFFECT_COLOR" value="334455" />
+      <option name="EFFECT_TYPE" value="2" />
+    </value></option>
+  </attributes>
+</scheme>`
+	parsed, err := parseICLS(raw, "fallback")
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyword := parsed.Scheme.Attributes["keyword"]
+	if keyword.Foreground != "#000abc" || keyword.Bold == nil || *keyword.Bold ||
+		keyword.Italic == nil || *keyword.Italic || keyword.Effect != "" {
+		t.Fatalf("keyword attributes = %+v; scheme=%+v applied=%d skipped=%d",
+			keyword, parsed.Scheme, parsed.Applied, parsed.Skipped)
+	}
+	if got := parsed.Scheme.Attributes["string"].Foreground; got != "#012345" {
+		t.Fatalf("short color = %q", got)
+	}
+	number := parsed.Scheme.Attributes["number"]
+	if number.Effect != "wave" || number.EffectColor != "#334455" {
+		t.Fatalf("number effect = %+v", number)
+	}
+	m := &Model{prefs: Preferences{EditorScheme: EditorSchemePrefs{
+		ColorScheme: "custom-consumer",
+		CustomSchemes: map[string]CustomColorScheme{
+			"custom-consumer": parsed.Scheme,
+		},
+	}}}
+	theme := m.editorColorSchemeTheme()
+	if theme == nil ||
+		theme.Background != ui.Hex("#101820") ||
+		theme.Text != ui.Hex("#dddddd") ||
+		theme.Selection != ui.Hex("#214283") ||
+		theme.LineNumber != ui.Hex("#a1a3ab") ||
+		theme.Tokens[editor.TokenKeyword].Color != ui.Hex("#000abc") ||
+		theme.Tokens[editor.TokenString].Color != ui.Hex("#012345") ||
+		theme.Tokens[editor.TokenTag].Color != ui.Hex("#e8c25b") ||
+		theme.Tokens[editor.TokenConstant].Color != ui.Hex("#d78bd6") ||
+		theme.Tokens[editor.TokenRegexp].Color != ui.Hex("#4ea7f0") ||
+		theme.Tokens[editor.TokenComment].Color != ui.Hex("#777777") {
+		t.Fatalf("native scheme theme = %+v", theme)
 	}
 }
 
@@ -542,6 +640,30 @@ func TestParseAndExportICLSRoundTripsSupportedAttributes(t *testing.T) {
 	}
 	if got := roundTrip.Scheme.Attributes["keyword"].Foreground; got != "#005cc5" {
 		t.Fatalf("round-trip keyword foreground = %q\n%s", got, exported)
+	}
+}
+
+func TestExportICLSIncludesTheVisibleMyGoPalette(t *testing.T) {
+	prefs := EditorSchemePrefs{ColorScheme: "dark"}
+	exported, err := exportICLSWithBase("dark", prefs, openideaTheme(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	roundTrip, err := parseICLS(exported, "dark")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := roundTrip.Scheme.Attributes["keyword"].Foreground; got != "#cf8e6d" {
+		t.Fatalf("exported keyword = %q\n%s", got, exported)
+	}
+	if got := roundTrip.Scheme.Attributes["text"].Background; got != "#191a1c" {
+		t.Fatalf("exported background = %q\n%s", got, exported)
+	}
+	if got := roundTrip.Scheme.Attributes["selection"].Background; got != "#214283" {
+		t.Fatalf("exported selection = %q\n%s", got, exported)
+	}
+	if got := roundTrip.Scheme.Attributes["caret"].Foreground; got != "#ced0d6" {
+		t.Fatalf("exported caret = %q\n%s", got, exported)
 	}
 }
 

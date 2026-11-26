@@ -15,6 +15,7 @@ import (
 	"sync"
 
 	"github.com/egoist/mygo/ui/editor"
+	"mayoi/internal/highlight"
 	"mayoi/internal/openidea"
 	"mayoi/internal/position"
 )
@@ -120,9 +121,10 @@ func Virtual(path, text string) *Document {
 func newDocument(backend Backend, window string, info openidea.DocInfo) *Document {
 	text := lf(info.Text)
 	buf := editor.NewBuffer(text)
-	// The language colors the text and drives comments, auto-close and
-	// indentation; MyGo knows the file by its name.
-	buf.SetLanguage(editor.LanguageFor(info.Path))
+	// The backend has already resolved File Types and framework markers. Use
+	// its language id when possible, then the full OpenIDEA contribution list
+	// for syntax and editing metadata.
+	buf.SetLanguage(languageForDocument(info))
 	d := &Document{
 		backend:  backend,
 		window:   window,
@@ -142,6 +144,16 @@ func newDocument(backend Backend, window string, info openidea.DocInfo) *Documen
 	d.baseBuf = d.base.Version()
 	d.indexed = d.base.Version()
 	return d
+}
+
+func languageForDocument(info openidea.DocInfo) *editor.Language {
+	if language := highlight.MyGoLanguage(highlight.LanguageByID(info.Language)); language != nil {
+		return language
+	}
+	if language := highlight.MyGoLanguage(highlight.LanguageFor(info.Path)); language != nil {
+		return language
+	}
+	return editor.LanguageFor(info.Path)
 }
 
 // lf normalizes line endings the way the backend and the editor both store
@@ -192,6 +204,17 @@ func (d *Document) SetReadOnly(readOnly bool) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.info.ReadOnly = readOnly
+}
+
+// LanguageChanged applies the backend's docLanguage result to the same shared
+// buffer, preserving text, cursor-independent state and unsaved edits.
+func (d *Document) LanguageChanged(id string) {
+	d.mu.Lock()
+	d.info.Language = id
+	language := languageForDocument(d.info)
+	d.mu.Unlock()
+	d.buf.SetLanguage(language)
+	d.signal()
 }
 
 // Buffer returns the shared editor buffer, for editors and views to read.
@@ -611,6 +634,7 @@ func (d *Document) Reopen(ctx context.Context) error {
 	d.id = info.ID
 	d.info = info
 	d.version = info.Version
+	d.buf.SetLanguage(languageForDocument(info))
 	if textEquals(cur, disk) {
 		d.markSynced()
 		return nil

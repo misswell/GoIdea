@@ -70,6 +70,7 @@ CHECKS = {
         ("windowNext", "window.next focused another native project window", lambda d: (get(d, "windowNext") is True, get(d, "windowNext"))),
         ("distinctProjects", "the windows opened different project roots", lambda d: (get(d, "distinctRoots") is True, get(d, "beforeClose"))),
         ("distinctBackends", "each project window owned a different openidea-server process", lambda d: (get(d, "distinctBackends") is True, get(d, "beforeClose"))),
+        ("sharedServerHome", "project windows shared one backend data root for installed tools", lambda d: (get(d, "sharedServerHome") is True, get(d, "serverHomes"))),
         ("isolatedClose", "closing one window stopped only its backend and left its sibling healthy", lambda d: (get(d, "onlyClosedWindowStopped") is True, {"before": get(d, "beforeClose"), "after": get(d, "afterClose")})),
         ("noServers", "all backend processes were gone after the smoke process exited", lambda d: (all(process_gone(pid) for pid in (get(d, "windowPIDs") or [])), get(d, "windowPIDs"))),
     ],

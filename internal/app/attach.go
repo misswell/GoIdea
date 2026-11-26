@@ -53,6 +53,168 @@ func (m *Model) OpenAttach() {
 	m.refreshAttachList()
 }
 
+// AttachDebugger implements OpenIDEA's hidden debug.attach integration
+// action. Its Java and Python payloads are what the Run debugger uses after a
+// JDWP listener or debugpy container becomes ready.
+func (m *Model) AttachDebugger(arg any) bool {
+	request, ok := debugAttachRequestArg(arg)
+	if !ok {
+		m.debug.err = "The attach request is invalid"
+		m.invalidate()
+		return false
+	}
+	root := m.Root()
+	if root == "" {
+		m.debug.err = "Open a project first: the sources and the debuggee share a workspace"
+		m.invalidate()
+		return false
+	}
+	if !m.run.trusted {
+		m.debug.err = "The project is not trusted: allow building and debugging first"
+		m.invalidate()
+		return false
+	}
+	request.keepProcessOnFailure = request.Process == 0 ||
+		m.sharedRunProcess(request.Process)
+	plan := debugStartPlan{
+		name: request.Name, config: request.Name,
+		lastID:   request.RunConfigID,
+		lastKind: debugAttachFirstNonEmpty(request.Adapter, request.Kind, "attach"),
+		lastRaw:  append(json.RawMessage(nil), request.RunConfig...),
+		parent:   request.Process, show: request.Show,
+		keepProcessOnFailure: request.keepProcessOnFailure,
+		status:               "Attaching to " + request.Name + "…",
+		prepare: func(ctx context.Context) (openidea.DebugLaunchConfig, error) {
+			return m.attachRequestLaunch(ctx, request, root)
+		},
+	}
+	if request.RunConfigID != "" {
+		for i := range m.run.configs {
+			if m.run.configs[i].ID == request.RunConfigID {
+				cfg := m.run.configs[i]
+				if raw := cfg.Raw(); raw != nil {
+					plan.lastRaw = append(json.RawMessage(nil), raw...)
+				}
+				break
+			}
+		}
+	}
+	if request.Show {
+		m.DockShow("debug")
+	}
+	m.startDebugPlan(root, plan)
+	return true
+}
+
+type debugAttachRequest struct {
+	Name                 string
+	Kind                 string
+	Adapter              string
+	Module               string
+	Host                 string
+	Port                 int
+	RemoteRoot           string
+	Process              uint32
+	RunConfig            json.RawMessage
+	RunConfigID          string
+	Show                 bool
+	HasShow              bool
+	keepProcessOnFailure bool
+}
+
+func debugAttachRequestArg(arg any) (debugAttachRequest, bool) {
+	var request debugAttachRequest
+	var fields map[string]json.RawMessage
+	raw, err := json.Marshal(arg)
+	if err != nil || json.Unmarshal(raw, &fields) != nil || fields == nil {
+		return request, false
+	}
+	text := func(name string) string {
+		var value string
+		_ = json.Unmarshal(fields[name], &value)
+		return strings.TrimSpace(value)
+	}
+	number := func(name string) int {
+		var value int
+		_ = json.Unmarshal(fields[name], &value)
+		return value
+	}
+	request.Name = text("name")
+	request.Kind = text("kind")
+	request.Adapter = text("adapter")
+	request.Module = text("module")
+	request.Host = text("hostName")
+	request.Port = number("port")
+	request.RemoteRoot = text("remoteRoot")
+	request.Process = uint32(max(0, number("process")))
+	request.keepProcessOnFailure = true
+	request.Show = true
+	if show, ok := fields["show"]; ok {
+		request.HasShow = true
+		request.Show = false
+		_ = json.Unmarshal(show, &request.Show)
+	}
+	request.RunConfig = append(json.RawMessage(nil), fields["runConfig"]...)
+	if value := text("runConfigId"); value != "" {
+		request.RunConfigID = value
+	} else if len(request.RunConfig) > 0 && string(request.RunConfig) != "null" {
+		var cfg openidea.RunConfig
+		if json.Unmarshal(request.RunConfig, &cfg) == nil {
+			request.RunConfigID = cfg.ID
+		}
+	}
+	if request.Name == "" {
+		request.Name = "Attach"
+	}
+	if request.Port < 1 || request.Port > 65535 {
+		return request, false
+	}
+	if request.Adapter == "" {
+		if request.RemoteRoot != "" {
+			request.Adapter = "debugpy"
+			request.Kind = "python"
+		} else {
+			request.Adapter = "java-debug"
+			request.Kind = "java"
+		}
+	}
+	return request, true
+}
+
+func debugAttachFirstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+func (m *Model) attachRequestLaunch(
+	ctx context.Context,
+	request debugAttachRequest,
+	root string,
+) (openidea.DebugLaunchConfig, error) {
+	host := request.Host
+	if host == "" {
+		host = "localhost"
+	}
+	if request.Adapter == "debugpy" || request.RemoteRoot != "" {
+		extra := map[string]any{
+			"debugServer": request.Port,
+			"justMyCode":  m.prefs.Debugger.SkipLibraryCode(),
+		}
+		m.addPythonDebuggerOptions(extra)
+		if request.RemoteRoot != "" {
+			extra["pathMappings"] = []map[string]string{{
+				"localRoot": root, "remoteRoot": request.RemoteRoot,
+			}}
+		}
+		return newDebugLaunch(request.Name, "debugpy", "attach", root, extra)
+	}
+	return m.javaAttachLaunch(ctx, request.Name, request.Module, host, request.Port, root, request.Adapter)
+}
+
 func (m *Model) closeAttach() {
 	m.attach = nil
 	m.invalidate()
@@ -175,13 +337,16 @@ func attachDetail(p openidea.AttachableProcess) string {
 }
 
 type debugStartPlan struct {
-	name     string
-	config   string
-	lastID   string
-	lastKind string
-	lastRaw  json.RawMessage
-	status   string
-	prepare  func(context.Context) (openidea.DebugLaunchConfig, error)
+	name                 string
+	config               string
+	lastID               string
+	lastKind             string
+	lastRaw              json.RawMessage
+	parent               uint32
+	show                 bool
+	keepProcessOnFailure bool
+	status               string
+	prepare              func(context.Context) (openidea.DebugLaunchConfig, error)
 }
 
 // startDebugPlan owns one pending content tab. Existing live tabs stay in the
@@ -226,6 +391,9 @@ func (m *Model) startDebugPlan(root string, plan debugStartPlan) {
 				m.debug.startCancel = nil
 				m.debug.err = message
 				m.debug.status = ""
+				if plan.parent != 0 && !plan.keepProcessOnFailure {
+					m.stopAssociatedRun(plan.parent)
+				}
 				m.invalidate()
 			})
 		}
@@ -279,6 +447,9 @@ func (m *Model) startDebugPlan(root string, plan debugStartPlan) {
 			m.debug.startCancel = nil
 			m.debug.retiredSession = 0
 			m.debug.session = session
+			if plan.parent != 0 {
+				m.debug.parent = plan.parent
+			}
 			m.debug.status = plan.status
 			m.recordRecentRunConfig(plan.lastID)
 			m.debug.rememberDebugSession()
@@ -288,6 +459,43 @@ func (m *Model) startDebugPlan(root string, plan debugStartPlan) {
 			m.invalidate()
 		})
 	}()
+}
+
+func (m *Model) stopAssociatedRun(runID uint32) {
+	if runID == 0 {
+		return
+	}
+	if child := m.childByRun(runID); child != nil && !child.finished {
+		m.stopRunChild(child)
+		return
+	}
+	if m.run.runID == runID && (m.run.running || m.run.awaiting) {
+		m.StopRun()
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(modelContext(m), 15*time.Second)
+		defer cancel()
+		_, _ = m.invoke(ctx, "run_stop", map[string]any{"id": runID})
+	}()
+}
+
+func (m *Model) sharedRunProcess(runID uint32) bool {
+	if runID == 0 {
+		return false
+	}
+	if child := m.childByRun(runID); child != nil && !child.finished {
+		return true
+	}
+	if m.run.runID == runID {
+		return m.run.running || m.run.awaiting
+	}
+	for _, state := range m.debug.sessions {
+		if state != nil && state.parent == runID && state.session != 0 && !state.ended {
+			return true
+		}
+	}
+	return false
 }
 
 func newDebugLaunch(

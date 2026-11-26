@@ -226,6 +226,15 @@ func (r *Registry) HandleNotification(ctx context.Context, n openidea.Notificati
 			doc.SetDirty(ev.Dirty)
 		}
 		return true
+	case "docLanguage":
+		var ev openidea.DocLanguageEvent
+		if err := json.Unmarshal(we.Event, &ev); err != nil {
+			return true
+		}
+		if doc := r.ByID(ev.Doc); doc != nil {
+			doc.LanguageChanged(ev.Language)
+		}
+		return true
 	case "diagnostics":
 		var ev openidea.DiagnosticsEvent
 		if err := json.Unmarshal(we.Event, &ev); err != nil {

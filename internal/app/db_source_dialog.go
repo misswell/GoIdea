@@ -502,6 +502,12 @@ func (m *Model) SaveDBDataSource() {
 	id := f.id
 	password := f.password
 	sshSecret := f.sshSecret
+	connectedTargets := []string{}
+	for target := range m.db.connected {
+		if dbBaseTarget(target) == id {
+			connectedTargets = append(connectedTargets, target)
+		}
+	}
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 		defer cancel()
@@ -526,6 +532,14 @@ func (m *Model) SaveDBDataSource() {
 		if err == nil && sshSecret != "" && f.sshEnabled {
 			err = m.mgr.DBSetSSHSecret(ctx, Window, id, &sshSecret, f.saveSecret)
 		}
+		if err == nil && len(connectedTargets) > 0 {
+			for _, target := range connectedTargets {
+				if disconnectErr := m.mgr.DBDisconnect(ctx, Window, target); disconnectErr != nil {
+					err = disconnectErr
+					break
+				}
+			}
+		}
 		m.post(func() {
 			if m.db == nil || m.db.sourceForm != f {
 				return
@@ -536,8 +550,11 @@ func (m *Model) SaveDBDataSource() {
 			} else {
 				m.db.sourceForm = nil
 				m.db.source = id
+				for _, target := range connectedTargets {
+					delete(m.db.connected, target)
+				}
 				m.RefreshDBSources()
-				if m.db.connected[id] {
+				if len(connectedTargets) > 0 {
 					m.ConnectDBSource(id)
 				}
 			}

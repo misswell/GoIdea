@@ -107,6 +107,21 @@ func TestDBHistoryLabel(t *testing.T) {
 	}
 }
 
+func TestDBHistorySearchFiltersCaseInsensitively(t *testing.T) {
+	h := &dbHistoryPane{
+		filter: "customer",
+		items: []openidea.DBHistoryEntry{
+			{Text: "SELECT * FROM ORDERS"},
+			{Text: "SELECT * FROM Customers WHERE id = 1"},
+			{Text: "UPDATE orders SET customer_id = 2"},
+		},
+	}
+	got := dbHistoryIndices(h)
+	if len(got) != 2 || got[0] != 1 || got[1] != 2 {
+		t.Fatalf("history matches = %v", got)
+	}
+}
+
 func TestDBTableDetailLines(t *testing.T) {
 	d := openidea.DBTableDetails{}
 	d.Columns = []openidea.DBColumnInfo{

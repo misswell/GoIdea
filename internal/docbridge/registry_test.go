@@ -124,6 +124,37 @@ func TestRegistryAppliesDocPatched(t *testing.T) {
 	}
 }
 
+func TestRegistryAppliesBackendLanguageChanges(t *testing.T) {
+	b := newFakeBackend()
+	disk := b.add("/tmp/demo/template.html", "<section>Hello</section>\n")
+	r := NewRegistry(b, "w1")
+	doc, err := r.Open(context.Background(), disk.path)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	if language := doc.Buffer().Language(); language == nil || language.Name != "Java" {
+		t.Fatalf("initial language = %v, want the fake backend's Java", language)
+	}
+	text := doc.Text()
+	version := doc.Version()
+	event := eventNotification(t, "w1", map[string]any{
+		"type": "docLanguage", "doc": disk.id, "language": "django-html",
+	})
+	if !r.HandleNotification(context.Background(), event) {
+		t.Fatal("docLanguage was not recognised")
+	}
+	language := doc.Buffer().Language()
+	if language == nil || language.Name != "Django Template" {
+		t.Fatalf("language = %v, want Django Template", language)
+	}
+	if doc.Info().Language != "django-html" || doc.Text() != text || doc.Version() != version {
+		t.Fatal("language change altered text or version")
+	}
+	if language.BlockComment != [2]string{"{#", "#}"} {
+		t.Fatalf("Django metadata = %#v", language)
+	}
+}
+
 func TestRegistryReopenAllKeepsUnsavedText(t *testing.T) {
 	b := newFakeBackend()
 	disk := b.add("/tmp/demo/Restart.java", sampleJava)

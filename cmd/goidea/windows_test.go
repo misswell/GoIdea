@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 
@@ -8,6 +10,94 @@ import (
 
 	"mayoi/internal/app"
 )
+
+func TestSecondaryProjectWindowsShareTheBackendDataRoot(t *testing.T) {
+	base := app.Config{
+		Home:         filepath.Join(t.TempDir(), "openidea-server"),
+		SessionPath:  "/shared/session.json",
+		SettingsPath: "/shared/settings.json",
+		DataDir:      "/shared",
+	}
+	firstDir := filepath.Join(base.DataDir, "windows", "window-2")
+	secondDir := filepath.Join(base.DataDir, "windows", "window-3")
+	first := secondaryProjectWindowConfig(base, firstDir, true)
+	second := secondaryProjectWindowConfig(base, secondDir, true)
+
+	if first.Home != base.Home || second.Home != base.Home {
+		t.Fatalf("backend homes = %q and %q, want shared %q", first.Home, second.Home, base.Home)
+	}
+	if first.SettingsPath != base.SettingsPath || second.SettingsPath != base.SettingsPath {
+		t.Fatalf("settings paths = %q and %q, want shared %q", first.SettingsPath, second.SettingsPath, base.SettingsPath)
+	}
+	if first.SessionPath == second.SessionPath || first.SessionPath == base.SessionPath {
+		t.Fatalf("session paths are not isolated: %q, %q, base %q", first.SessionPath, second.SessionPath, base.SessionPath)
+	}
+}
+
+func TestLegacyProjectWindowToolsMoveToTheSharedDataRoot(t *testing.T) {
+	base := t.TempDir()
+	sharedHome := filepath.Join(base, "openidea-server")
+	legacyHome := filepath.Join(base, "windows", "window-2", "openidea-server")
+	legacyTool := filepath.Join(legacyHome, "data", "tools", "jdtls", "config_linux")
+	legacyJDK := filepath.Join(legacyHome, "data", "jdks", "temurin-21", "bin", "java")
+	for path, contents := range map[string]string{
+		legacyTool: "jdtls",
+		legacyJDK:  "jdk",
+	} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(contents), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := migrateLegacyWindowToolData(base, sharedHome); err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]string{
+		filepath.Join(sharedHome, "data", "tools", "jdtls", "config_linux"):    "jdtls",
+		filepath.Join(sharedHome, "data", "jdks", "temurin-21", "bin", "java"): "jdk",
+	} {
+		got, err := os.ReadFile(name)
+		if err != nil {
+			t.Fatalf("read migrated %s: %v", name, err)
+		}
+		if string(got) != want {
+			t.Fatalf("migrated %s = %q, want %q", name, got, want)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(legacyHome, "data", "tools", "jdtls", "config_linux")); !os.IsNotExist(err) {
+		t.Fatalf("legacy tool was not moved: %v", err)
+	}
+}
+
+func TestLegacyToolMigrationPreservesSharedInstallations(t *testing.T) {
+	base := t.TempDir()
+	sharedHome := filepath.Join(base, "openidea-server")
+	legacyHome := filepath.Join(base, "windows", "window-3", "openidea-server")
+	sharedTool := filepath.Join(sharedHome, "data", "tools", "jdtls", "current")
+	legacyExtra := filepath.Join(legacyHome, "data", "tools", "jdtls", "legacy-extra")
+	for path, contents := range map[string]string{
+		sharedTool:  "new",
+		legacyExtra: "old",
+	} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(contents), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := migrateLegacyWindowToolData(base, sharedHome); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := os.ReadFile(sharedTool); err != nil || string(got) != "new" {
+		t.Fatalf("shared installation = %q, %v", got, err)
+	}
+	if got, err := os.ReadFile(filepath.Join(sharedHome, "data", "tools", "jdtls", "legacy-extra")); err != nil || string(got) != "old" {
+		t.Fatalf("legacy extra = %q, %v", got, err)
+	}
+}
 
 func TestGoideaWindowUsesOpenIDEAChrome(t *testing.T) {
 	options := goideaWindowOptions("main", true, nil)

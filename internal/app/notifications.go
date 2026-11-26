@@ -53,23 +53,33 @@ type ideNotification struct {
 	group         string
 	logged        bool
 	userInitiated bool
-	// balloon is whether it still shows in the corner; sticky is whether it
-	// may fade on its own at all, and permanent keeps it until dismissed.
+	// balloon is whether it still shows in the corner. sticky controls the
+	// long timeout; stickySet preserves an explicit false for error balloons.
 	balloon   bool
 	sticky    bool
-	permanent bool
+	stickySet bool
 	hover     bool
 
-	timer     *time.Timer
+	timer     func()
 	deadline  time.Time
 	remaining time.Duration
 }
 
 // notifier is the notification center's state.
 type notifier struct {
-	items []ideNotification
-	seq   int
+	items       []ideNotification
+	seq         int
+	active      bool
+	activeKnown bool
 }
+
+var (
+	notifyNow      = time.Now
+	notifySchedule = func(wait time.Duration, fn func()) func() {
+		timer := time.AfterFunc(wait, fn)
+		return func() { timer.Stop() }
+	}
+)
 
 // notifyInfo, notifyWarning and notifyError post a notification. A key
 // replaces the earlier notification with the same key, as OpenIDEA's
@@ -93,11 +103,12 @@ func (m *Model) notifyUser(key, level, title, body string, actions ...notifyActi
 		actions: actions, userInitiated: true})
 }
 
-// notifySticky posts a notification that stays until it is dismissed or
-// replaced, as upstream's update announcements do.
+// notifySticky posts a notification with OpenIDEA's sticky timeout. A logged
+// entry fades after five minutes of active-window time; an unlogged balloon
+// stays until dismissed or replaced.
 func (m *Model) notifySticky(key, level, title, body string, userInitiated bool, actions ...notifyAction) {
 	m.postNotification(ideNotification{key: key, level: level, title: title, body: body,
-		actions: actions, userInitiated: userInitiated, permanent: true})
+		actions: actions, userInitiated: userInitiated, sticky: true, stickySet: true})
 }
 
 // notifyStickyProgress draws a background task's live message and progress
@@ -105,7 +116,7 @@ func (m *Model) notifySticky(key, level, title, body string, userInitiated bool,
 func (m *Model) notifyStickyProgress(key, level, title string, taskID string,
 	userInitiated bool, actions ...notifyAction) {
 	m.postNotification(ideNotification{key: key, level: level, title: title,
-		actions: actions, userInitiated: userInitiated, permanent: true,
+		actions: actions, userInitiated: userInitiated, sticky: true, stickySet: true,
 		progressTask: taskID})
 }
 
@@ -140,11 +151,15 @@ var notifyBeep = func() { mygo.Shell.Beep() }
 func (m *Model) postNotification(n ideNotification) {
 	n.id = m.notify.seq + 1
 	m.notify.seq = n.id
-	n.at = time.Now()
+	n.at = notifyNow()
 	n.group = notifyGroupOf(n)
 	prefs := m.notifyPrefsFor(n.group)
 	n.balloon = n.userInitiated || (!m.notifyOff() && prefs.Display != "none")
-	n.sticky = n.sticky || prefs.Display == "sticky" || n.level == "error"
+	if prefs.Display == "sticky" {
+		n.sticky = true
+	} else if !n.stickySet && n.level == "error" {
+		n.sticky = true
+	}
 	n.logged = !prefs.NoLog
 	if n.balloon && m.prefs.Notify != nil && m.prefs.Notify.Sound {
 		notifyBeep()
@@ -171,6 +186,10 @@ func (m *Model) postNotification(n ideNotification) {
 			stopNotifyTimer(&old)
 		}
 		m.notify.items = m.notify.items[:notifyMaxHistory]
+	}
+	if n.logged && m.notificationsShown() {
+		m.notify.items[0].read = true
+		m.notify.items[0].balloon = false
 	}
 	m.startNotifyTimer(n.id)
 	m.invalidate()
@@ -214,36 +233,97 @@ func (m *Model) restoreNotificationHistory(items []StoredNotification) {
 	}
 }
 
-// startNotifyTimer arms the balloon's fade-out: 10 s for info and warnings,
-// 5 minutes for a listed sticky error, and never for an error the tool window
-// would not list (the store lists everything, so sticky errors fade at 5 min).
+// notificationTimeout is OpenIDEA's balloonTimeout: ordinary balloons fade
+// after 10 seconds; sticky balloons fade after five minutes only when listed,
+// and otherwise stay until dismissed.
+func notificationTimeout(n ideNotification) (time.Duration, bool) {
+	if n.sticky {
+		if !n.logged {
+			return 0, false
+		}
+		return notifyStickyTime, true
+	}
+	if n.level == "warning" {
+		return notifyInfoTimeout, true
+	}
+	// OpenIDEA also uses the info timeout for error balloons explicitly
+	// marked non-sticky and for every other level.
+	return notifyInfoTimeout, true
+}
+
+// startNotifyTimer arms the balloon's active-window fade-out.
 func (m *Model) startNotifyTimer(id int) {
 	for i := range m.notify.items {
 		it := &m.notify.items[i]
 		if it.id != id {
 			continue
 		}
-		if it.permanent {
-			// Stays until dismissed, as an update's announcement does.
+		wait, ok := notificationTimeout(*it)
+		if !ok {
+			stopNotifyTimer(it)
+			it.remaining = 0
+			it.deadline = time.Time{}
 			return
 		}
-		wait := notifyInfoTimeout
-		if it.sticky {
-			wait = notifyStickyTime
-		}
 		it.remaining = wait
-		it.deadline = time.Now().Add(wait)
-		it.timer = time.AfterFunc(wait, func() {
-			m.post(func() { m.fadeBalloon(id) })
-		})
+		m.armNotifyTimer(it)
 		return
+	}
+}
+
+func (m *Model) windowActive() bool {
+	return !m.notify.activeKnown || m.notify.active
+}
+
+func (m *Model) armNotifyTimer(it *ideNotification) {
+	stopNotifyTimer(it)
+	if !it.balloon || it.hover || !m.windowActive() || it.remaining <= 0 {
+		return
+	}
+	wait := it.remaining
+	id := it.id
+	it.deadline = notifyNow().Add(wait)
+	it.timer = notifySchedule(wait, func() {
+		m.post(func() { m.fadeBalloon(id) })
+	})
+}
+
+func pauseNotifyTimer(it *ideNotification) {
+	if it.timer == nil {
+		return
+	}
+	it.timer()
+	it.timer = nil
+	left := it.deadline.Sub(notifyNow())
+	it.remaining = max(time.Duration(1), left)
+}
+
+// SetWindowActive pauses or resumes every fade clock with the application
+// window's activation. OpenIDEA counts only active-window time.
+func (m *Model) SetWindowActive(active bool) {
+	wasActive := m.windowActive()
+	m.notify.active = active
+	m.notify.activeKnown = true
+	if wasActive == active {
+		return
+	}
+	for i := range m.notify.items {
+		it := &m.notify.items[i]
+		if !it.balloon {
+			continue
+		}
+		if active {
+			m.armNotifyTimer(it)
+		} else {
+			pauseNotifyTimer(it)
+		}
 	}
 }
 
 // stopNotifyTimer drops a timer whose entry is gone.
 func stopNotifyTimer(n *ideNotification) {
 	if n.timer != nil {
-		n.timer.Stop()
+		n.timer()
 		n.timer = nil
 	}
 }
@@ -263,24 +343,36 @@ func (m *Model) fadeBalloon(id int) {
 
 // hideBalloon hides one balloon; the notification stays in the history.
 func (m *Model) hideBalloon(id int, respectHover bool) {
+	kept := m.notify.items[:0]
 	for i := range m.notify.items {
 		it := &m.notify.items[i]
 		if it.id != id {
+			kept = append(kept, *it)
 			continue
 		}
-		if respectHover && it.hover {
+		if respectHover && (!m.windowActive() || it.hover) {
+			pauseNotifyTimer(it)
+			kept = append(kept, m.notify.items[i:]...)
+			m.notify.items = kept
 			return
 		}
 		stopNotifyTimer(it)
-		it.balloon = false
-		m.invalidate()
-		m.saveSession()
-		return
+		if it.logged {
+			it.balloon = false
+			it.remaining = 0
+			it.deadline = time.Time{}
+			kept = append(kept, *it)
+		}
 	}
+	m.notify.items = kept
+	m.invalidate()
+	m.saveSession()
+	return
 }
 
 // SetBalloonHover pauses a balloon's clock while the pointer rests on it, as
-// IDEA's smart fade-out does.
+// IDEA's smart fade-out does. The remaining time resumes from where it
+// stopped instead of restarting at the full timeout.
 func (m *Model) SetBalloonHover(id int, hover bool) {
 	for i := range m.notify.items {
 		it := &m.notify.items[i]
@@ -289,22 +381,9 @@ func (m *Model) SetBalloonHover(id int, hover bool) {
 		}
 		it.hover = hover
 		if hover {
-			if it.timer != nil {
-				it.timer.Stop()
-				it.timer = nil
-				it.remaining = max(time.Duration(1), it.deadline.Sub(time.Now()))
-			}
-			continue
-		}
-		if it.balloon {
-			wait := it.remaining
-			if wait <= 0 {
-				wait = notifyInfoTimeout
-			}
-			it.deadline = time.Now().Add(wait)
-			it.timer = time.AfterFunc(wait, func() {
-				m.post(func() { m.fadeBalloon(id) })
-			})
+			pauseNotifyTimer(it)
+		} else {
+			m.armNotifyTimer(it)
 		}
 		return
 	}
@@ -326,10 +405,17 @@ func (m *Model) unreadNotifications() int {
 func (m *Model) markNotificationsRead() {
 	changed := false
 	for i := range m.notify.items {
-		if !m.notify.items[i].read {
+		it := &m.notify.items[i]
+		if it.logged && (!it.read || it.balloon) {
 			changed = true
 		}
-		m.notify.items[i].read = true
+		if it.logged {
+			stopNotifyTimer(it)
+			it.read = true
+			it.balloon = false
+			it.remaining = 0
+			it.deadline = time.Time{}
+		}
 	}
 	if changed {
 		m.saveSession()
@@ -359,6 +445,21 @@ func (m *Model) ClearNotifications() {
 	m.saveSession()
 }
 
+// clearProjectNotifications drops the previous project's balloons and history
+// when the backend switches projects. Application-wide update notifications
+// remain, as OpenIDEA's clearProjectNotifications keeps the updates group.
+func (m *Model) clearProjectNotifications() {
+	kept := m.notify.items[:0]
+	for _, it := range m.notify.items {
+		if it.group == "updates" {
+			kept = append(kept, it)
+			continue
+		}
+		stopNotifyTimer(&it)
+	}
+	m.notify.items = kept
+}
+
 // notificationsShown reports whether the right area currently shows the list.
 func (m *Model) notificationsShown() bool {
 	return m.dockWindowShown("notifications")
@@ -367,9 +468,10 @@ func (m *Model) notificationsShown() bool {
 // balloonItems is the corner stack: the newest three notifications still
 // showing as balloons, newest at the bottom, as Balloons() draws them.
 func (m *Model) balloonItems() []ideNotification {
+	listOpen := m.notificationsShown()
 	var newest []ideNotification
 	for _, it := range m.notify.items {
-		if !it.balloon {
+		if !it.balloon || (listOpen && it.logged) {
 			continue
 		}
 		newest = append(newest, it)
@@ -728,6 +830,8 @@ func notifyGroupOf(n ideNotification) string {
 		return n.group
 	}
 	switch {
+	case strings.HasPrefix(n.key, updateKey):
+		return "updates"
 	case strings.HasPrefix(n.key, "build"), strings.HasPrefix(n.key, "run"):
 		return "run"
 	case strings.HasPrefix(n.key, "lsp"):

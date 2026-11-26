@@ -104,7 +104,7 @@ func TestMisconfiguredLanguageServerPromptsOnceForEachRequiredJDK(t *testing.T) 
 		t.Fatalf("JDK prompt count = %d, want 1", len(m.notify.items))
 	}
 	prompt := m.notify.items[0]
-	if prompt.level != "warning" || !prompt.permanent ||
+	if prompt.level != "warning" || !prompt.sticky ||
 		prompt.title != "jdtls needs JDK 25 to run" ||
 		len(prompt.actions) != 2 ||
 		prompt.actions[0].label != "Download JDK 25" ||

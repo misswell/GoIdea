@@ -309,7 +309,7 @@ func TestProfilerMissingToolAndUnsupportedAreActionable(t *testing.T) {
 				t.Fatalf("notification = %+v", notification)
 			}
 			if tc.name == "missing" {
-				if !notification.permanent || len(notification.actions) != 2 {
+				if !notification.sticky || len(notification.actions) != 2 {
 					t.Fatalf("missing-tool notification = %+v", notification)
 				}
 			}

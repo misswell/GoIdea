@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,12 +18,13 @@ import (
 const maxNativeProjectWindows = 12
 
 type nativeProjectWindow struct {
-	id    string
-	root  string
-	group int
-	model *app.Model
-	win   *mygo.Window
-	log   *os.File
+	id         string
+	root       string
+	group      int
+	model      *app.Model
+	win        *mygo.Window
+	log        *os.File
+	serverHome string
 }
 
 type nativeWindowHost struct {
@@ -119,11 +121,7 @@ func (h *nativeWindowHost) addWindow(id, root string, files []string, fresh bool
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return nil
 		}
-		cfg.Home = filepath.Join(dir, "openidea-server")
-		cfg.SessionPath = filepath.Join(dir, "session.json")
-		if err := os.MkdirAll(cfg.Home, 0o755); err != nil {
-			return nil
-		}
+		cfg = secondaryProjectWindowConfig(h.base, dir, fresh)
 		seedWindowSession(h.base.SessionPath, cfg.SessionPath)
 		logFile = openLog(filepath.Join(dir, "openidea-server.log"))
 		cfg.Log = logFile
@@ -157,13 +155,95 @@ func (h *nativeWindowHost) addWindow(id, root string, files []string, fresh bool
 		}
 		return nil
 	}
-	entry := &nativeProjectWindow{id: id, root: root, model: model, win: win, log: logFile}
+	entry := &nativeProjectWindow{
+		id:         id,
+		root:       root,
+		model:      model,
+		win:        win,
+		log:        logFile,
+		serverHome: cfg.Home,
+	}
 	h.windows = append(h.windows, entry)
 	win.OnClosed(func() { h.windowClosed(entry) })
 	model.Attach(win)
 	h.WindowFocused(model)
 	model.Start()
 	return entry
+}
+
+// OpenIDEA runs every project window against one application data root. Keep
+// each window's session and log separate, but share the backend's installed
+// tools and global settings so JDT is downloaded once instead of once per
+// project window.
+func secondaryProjectWindowConfig(base app.Config, dir string, fresh bool) app.Config {
+	cfg := base
+	cfg.SessionPath = filepath.Join(dir, "session.json")
+	cfg.FreshSession = fresh
+	return cfg
+}
+
+// migrateLegacyWindowToolData moves tools installed by older GoIDEA versions
+// from each window's private server home into the shared OpenIDEA-style home.
+// Existing shared entries win, so startup never replaces a newer installation.
+func migrateLegacyWindowToolData(dataDir, sharedHome string) error {
+	windowRoot := filepath.Join(dataDir, "windows")
+	entries, err := os.ReadDir(windowRoot)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var errs []error
+	for _, entry := range entries {
+		if entry.IsDir() {
+			legacyData := filepath.Join(windowRoot, entry.Name(), "openidea-server", "data")
+			for _, name := range []string{"tools", "jdks"} {
+				if err := mergeLegacyDirectory(
+					filepath.Join(legacyData, name),
+					filepath.Join(sharedHome, "data", name),
+				); err != nil {
+					errs = append(errs, err)
+				}
+			}
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func mergeLegacyDirectory(source, destination string) error {
+	entries, err := os.ReadDir(source)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(destination, 0o755); err != nil {
+		return err
+	}
+	var errs []error
+	for _, entry := range entries {
+		from := filepath.Join(source, entry.Name())
+		to := filepath.Join(destination, entry.Name())
+		info, err := os.Lstat(to)
+		if errors.Is(err, os.ErrNotExist) {
+			if err := os.Rename(from, to); err != nil {
+				errs = append(errs, err)
+			}
+			continue
+		}
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		if info.IsDir() && entry.IsDir() {
+			if err := mergeLegacyDirectory(from, to); err != nil {
+				errs = append(errs, err)
+			}
+		}
+	}
+	return errors.Join(errs...)
 }
 
 func goideaWindowOptions(id string, hidden bool, content mygo.Content) mygo.WindowOptions {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -37,6 +38,51 @@ func TestFilterUnifiedPatchMatchesChangedAndRenamedPaths(t *testing.T) {
 	}
 	if got := filterUnifiedPatch(patch, map[string]bool{"unrelated.ts": true}); got != "" {
 		t.Fatalf("unrelated filter = %q, want empty", got)
+	}
+}
+
+func TestTargetRelativeLogPathUsesRepositoryRoot(t *testing.T) {
+	repository := filepath.Clean("/project/orders")
+	if got := targetRelativeLogPath(repository, filepath.Join(repository, "src", "Order.java")); got != "src/Order.java" {
+		t.Fatalf("repository-relative path = %q, want src/Order.java", got)
+	}
+	outside := filepath.Join("/project", "catalog", "Catalog.java")
+	if got := targetRelativeLogPath(repository, outside); got != filepath.ToSlash(outside) {
+		t.Fatalf("outside path = %q, want absolute %q", got, filepath.ToSlash(outside))
+	}
+}
+
+func TestGetFromRevisionUsesTheCommitRepositoryForRelativePaths(t *testing.T) {
+	repository := filepath.Join(t.TempDir(), "orders")
+	if err := os.MkdirAll(repository, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	repository = realPath(repository)
+	target := filepath.Join(repository, "src", "Order.java")
+	requested := make(chan map[string]any, 1)
+	m := &Model{
+		ctx:      context.Background(),
+		postHook: func(fn func()) { fn() },
+		invokeHook: func(_ context.Context, command string, args any) (json.RawMessage, error) {
+			if command == "vcs_file_at" {
+				requested <- args.(map[string]any)
+				return json.RawMessage(`"class Order {}"`), nil
+			}
+			return json.RawMessage(`null`), nil
+		},
+	}
+	m.setRoot(filepath.Dir(repository))
+	m.vcs.repositories = []vcsRepository{{Root: repository}}
+	m.vcsMore.open = true
+	m.vcsMore.input3 = repository
+	m.getLogChangeFromRevision("src/Order.java", "abc123", repository)
+	select {
+	case args := <-requested:
+		if args["path"] != target || args["rev"] != "abc123" {
+			t.Fatalf("vcs_file_at args = %#v", args)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Get from Revision did not read the file")
 	}
 }
 

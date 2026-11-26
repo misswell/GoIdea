@@ -135,6 +135,10 @@ type mavenPane struct {
 	// offline or skip-tests switches.
 	gradleOffline   bool
 	gradleSkipTests bool
+	// settingsRoot is the project whose build-tool settings are loaded.
+	// OpenIDEA stores these switches per project, independently from the
+	// backend's Java settings.
+	settingsRoot string
 
 	err          string
 	model        buildModel
@@ -144,6 +148,7 @@ type mavenPane struct {
 	selKey       string
 	gradleSel    gradleSelection
 	gradleSelKey string
+	currentPOM   string
 	gen          uint64
 
 	analyzer      *buildDependencyAnalyzer
@@ -169,14 +174,15 @@ func (m *Model) ToggleMaven() { m.maven.visible = !m.maven.visible; m.DockToggle
 
 // loadBuildModel asks the backend for the reactor and Gradle builds.
 func (m *Model) loadBuildModel() {
-	if m.maven.loading || m.ctx == nil || (m.mgr == nil && m.invokeHook == nil) || m.Root() == "" {
+	root := m.Root()
+	m.loadBuildToolSettings(root)
+	if m.maven.loading || m.ctx == nil || (m.mgr == nil && m.invokeHook == nil) || root == "" {
 		return
 	}
 	m.maven.loading = true
 	m.maven.err = ""
 	m.maven.gen++
 	gen := m.maven.gen
-	root := m.Root()
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 60*time.Second)
@@ -256,9 +262,22 @@ func (m *Model) mavenInitTree() {
 	}
 	if m.maven.model.Maven != nil {
 		for _, prof := range m.maven.model.Maven.Profiles {
-			m.maven.profiles[mavenProfileKey(prof)] = prof.ActiveByDefault
+			key := mavenProfileKey(prof)
+			if _, chosen := m.maven.profiles[key]; !chosen {
+				m.maven.profiles[key] = prof.ActiveByDefault
+			}
 		}
 	}
+	if selected := m.maven.sel.project; selected != nil {
+		if project := m.mavenProjectByPom(selected.Pom); project != nil {
+			m.maven.sel.project = project
+		} else {
+			m.maven.sel = mavenSelection{}
+			m.maven.selKey = ""
+		}
+	}
+	m.normalizeGradleSelection()
+	m.refreshBuildToolRunConfigs()
 }
 
 // mavenProfilesList is the sync's -P list: the choices that differ from the
@@ -280,6 +299,35 @@ func (m *Model) mavenProfilesList() []string {
 	return out
 }
 
+// mavenProfilesListForProject returns the choices for one project root, as
+// mavenGoalConfig filters model.profiles before creating a run configuration.
+func (m *Model) mavenProfilesListForProject(project *mavenProject) []string {
+	out := []string{}
+	if m.maven.model.Maven == nil || project == nil {
+		return out
+	}
+	for _, prof := range m.maven.model.Maven.Profiles {
+		if !sameOptionalPath(prof.ProjectRoot, project.ProjectRoot) {
+			continue
+		}
+		on := m.mavenProfileChecked(prof)
+		switch {
+		case on && !prof.ActiveByDefault:
+			out = append(out, prof.ID)
+		case !on && prof.ActiveByDefault:
+			out = append(out, "!"+prof.ID)
+		}
+	}
+	return out
+}
+
+func sameOptionalPath(a, b *string) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return filepath.Clean(*a) == filepath.Clean(*b)
+}
+
 func (m *Model) mavenProfileChecked(p mavenProfile) bool {
 	if v, ok := m.maven.profiles[mavenProfileKey(p)]; ok {
 		return v
@@ -290,10 +338,12 @@ func (m *Model) mavenProfileChecked(p mavenProfile) bool {
 // SetMavenProfile is a profile checkbox: the choice syncs the project again,
 // since the language server resolves it with the profiles of the last sync.
 func (m *Model) SetMavenProfile(p mavenProfile, on bool) {
+	m.loadBuildToolSettings(m.Root())
 	if m.maven.profiles == nil {
 		m.maven.profiles = map[string]bool{}
 	}
 	m.maven.profiles[mavenProfileKey(p)] = on
+	m.saveBuildToolSettings()
 	m.SyncMaven()
 }
 
@@ -346,7 +396,6 @@ func (m *Model) SyncMaven() {
 			m.maven.loading = false
 			m.applyBuildToolModel(model)
 			m.syncInitialBuildModels()
-			m.refreshBuildToolRunConfigs()
 			m.invalidate()
 		})
 	}()
@@ -447,7 +496,6 @@ func (m *Model) SyncGradleBuilds(dirs []string) {
 			m.maven.loading = false
 			m.applyBuildToolModel(model)
 			m.syncInitialBuildModels()
-			m.refreshBuildToolRunConfigs()
 			m.invalidate()
 		})
 	}()
@@ -515,26 +563,138 @@ func (m *Model) acceptMavenEvent(data json.RawMessage) {
 
 // ToggleMavenOffline flips the sync's offline switch, as the toolbar's toggle.
 func (m *Model) ToggleMavenOffline() {
+	m.loadBuildToolSettings(m.Root())
 	m.maven.offline = !m.maven.offline
+	m.saveBuildToolSettings()
 	m.invalidate()
 }
 
 // ToggleMavenSkipTests flips whether the test phase runs with tests skipped.
 func (m *Model) ToggleMavenSkipTests() {
+	m.loadBuildToolSettings(m.Root())
 	m.maven.skipTests = !m.maven.skipTests
+	m.saveBuildToolSettings()
 	m.invalidate()
 }
 
 // ToggleGradleOffline and ToggleGradleSkipTests are the Gradle window's own
 // switches, matching OpenIDEA's independent Gradle settings.
 func (m *Model) ToggleGradleOffline() {
+	m.loadBuildToolSettings(m.Root())
 	m.maven.gradleOffline = !m.maven.gradleOffline
+	m.saveBuildToolSettings()
 	m.invalidate()
 }
 
 func (m *Model) ToggleGradleSkipTests() {
+	m.loadBuildToolSettings(m.Root())
 	m.maven.gradleSkipTests = !m.maven.gradleSkipTests
+	m.saveBuildToolSettings()
 	m.invalidate()
+}
+
+const buildToolsSettingsKey = "__goidea.buildTools"
+
+type buildToolProjectSettings struct {
+	Maven struct {
+		Offline   bool            `json:"offline,omitempty"`
+		SkipTests bool            `json:"skipTests,omitempty"`
+		Profiles  map[string]bool `json:"profiles,omitempty"`
+	} `json:"maven,omitempty"`
+	Gradle struct {
+		Offline   bool `json:"offline,omitempty"`
+		SkipTests bool `json:"skipTests,omitempty"`
+	} `json:"gradle,omitempty"`
+}
+
+type buildToolsSettings struct {
+	Projects map[string]buildToolProjectSettings `json:"projects,omitempty"`
+}
+
+func buildToolsProjectKey(root string) string {
+	root = strings.TrimSpace(root)
+	if root == "" {
+		return ""
+	}
+	root = filepath.Clean(root)
+	if runtime.GOOS == "windows" {
+		root = strings.ToLower(root)
+	}
+	return root
+}
+
+// loadBuildToolSettings loads OpenIDEA's per-project toolbar choices. Its
+// localStorage equivalent is native local state, so it lives beside plugin
+// preferences rather than in the backend's Java settings.
+func (m *Model) loadBuildToolSettings(root string) {
+	key := buildToolsProjectKey(root)
+	if m.maven.settingsRoot == key {
+		return
+	}
+	m.maven.settingsRoot = key
+	m.maven.offline = false
+	m.maven.skipTests = false
+	m.maven.gradleOffline = false
+	m.maven.gradleSkipTests = false
+	m.maven.profiles = nil
+	if key == "" || len(m.prefs.Plugins[buildToolsSettingsKey]) == 0 {
+		return
+	}
+	var settings buildToolsSettings
+	if json.Unmarshal(m.prefs.Plugins[buildToolsSettingsKey], &settings) != nil {
+		return
+	}
+	project, ok := settings.Projects[key]
+	if !ok {
+		return
+	}
+	m.maven.offline = project.Maven.Offline
+	m.maven.skipTests = project.Maven.SkipTests
+	m.maven.gradleOffline = project.Gradle.Offline
+	m.maven.gradleSkipTests = project.Gradle.SkipTests
+	if len(project.Maven.Profiles) > 0 {
+		m.maven.profiles = map[string]bool{}
+		for profile, checked := range project.Maven.Profiles {
+			m.maven.profiles[profile] = checked
+		}
+	}
+}
+
+func (m *Model) saveBuildToolSettings() {
+	key := buildToolsProjectKey(m.Root())
+	if key == "" {
+		return
+	}
+	m.loadBuildToolSettings(m.Root())
+	var settings buildToolsSettings
+	if len(m.prefs.Plugins[buildToolsSettingsKey]) > 0 {
+		_ = json.Unmarshal(m.prefs.Plugins[buildToolsSettingsKey], &settings)
+	}
+	if settings.Projects == nil {
+		settings.Projects = map[string]buildToolProjectSettings{}
+	}
+	project := settings.Projects[key]
+	project.Maven.Offline = m.maven.offline
+	project.Maven.SkipTests = m.maven.skipTests
+	if len(m.maven.profiles) > 0 {
+		project.Maven.Profiles = map[string]bool{}
+		for profile, checked := range m.maven.profiles {
+			project.Maven.Profiles[profile] = checked
+		}
+	}
+	project.Gradle.Offline = m.maven.gradleOffline
+	project.Gradle.SkipTests = m.maven.gradleSkipTests
+	settings.Projects[key] = project
+	raw, err := json.Marshal(settings)
+	if err != nil {
+		m.status = "Saving build tool settings failed: " + err.Error()
+		return
+	}
+	if m.prefs.Plugins == nil {
+		m.prefs.Plugins = map[string]json.RawMessage{}
+	}
+	m.prefs.Plugins[buildToolsSettingsKey] = raw
+	_ = m.savePreferences()
 }
 
 // ExpandMavenAll opens every node of the tree.
@@ -644,7 +804,13 @@ func (m *Model) mavenGoalRunConfig(p *mavenProject, goals []string) (openidea.Ru
 	if label == "" {
 		label = p.ArtifactID
 	}
-	name := label + " [" + strings.Join(goals, ",") + "]"
+	namedGoals := make([]string, 0, len(goals))
+	for _, goal := range goals {
+		if !strings.HasPrefix(goal, "-") {
+			namedGoals = append(namedGoals, goal)
+		}
+	}
+	name := label + " [" + strings.Join(namedGoals, ",") + "]"
 	var cwd *string
 	if p.Dir != "" {
 		dir := p.Dir
@@ -736,7 +902,7 @@ func (m *Model) mavenLaunch(p *mavenProject, goals []string) (string, []string) 
 	}
 	profiles := mavenActiveProfiles(
 		settingString("languages.java.maven.activeProfiles", ""),
-		m.mavenProfilesList(),
+		m.mavenProfilesListForProject(p),
 	)
 	if len(profiles) > 0 {
 		args = append(args, "-P", strings.Join(profiles, ","))
@@ -1378,6 +1544,9 @@ func (m *Model) mavenRow(c *ui.Context, p *ui.Theme, r mavenRow) {
 			if m.maven.expanded == nil {
 				m.maven.expanded = map[string]bool{}
 			}
+			if r.kind == "project" && r.project != nil {
+				m.selectMavenProject(r.project)
+			}
 			m.maven.expanded[r.key] = !m.maven.expanded[r.key]
 			m.invalidate()
 		})
@@ -1397,6 +1566,9 @@ func (m *Model) mavenRow(c *ui.Context, p *ui.Theme, r mavenRow) {
 	switch r.kind {
 	case "project", "phase", "goal", "runConfig", "dependencies", "dependency":
 		row.ContextMenu(func(menu *ui.Menu) {
+			if r.kind == "project" && r.project != nil {
+				m.selectMavenProject(r.project)
+			}
 			m.selectMavenBuildRow(r)
 			m.mavenRowContextMenu(menu, r)
 		})
@@ -1475,6 +1647,17 @@ func (m *Model) mavenProjectByPom(pom string) *mavenProject {
 	return nil
 }
 
+func (m *Model) selectMavenProject(project *mavenProject) {
+	if project == nil || project.Pom == "" {
+		return
+	}
+	m.maven.currentPOM = project.Pom
+	m.maven.activeTool = "maven"
+	m.maven.sel = mavenSelection{kind: "project", project: project}
+	m.maven.selKey = mavenProjectKey(*project)
+	m.invalidate()
+}
+
 func mavenPluginByKey(p *mavenProject, key string) *mavenPlugin {
 	if p == nil {
 		return nil
@@ -1503,8 +1686,20 @@ func (m *Model) mavenConfigsOf(p mavenProject) []*openidea.RunConfig {
 }
 
 func (m *Model) mavenRootProject() *mavenProject {
-	for i := range m.maven.model.MavenProjects() {
-		p := &m.maven.model.MavenProjects()[i]
+	pom := m.maven.currentPOM
+	if m.maven.sel.project != nil && m.maven.sel.project.Pom != "" {
+		pom = m.maven.sel.project.Pom
+	}
+	if pom != "" {
+		if project := m.mavenProjectByPom(pom); project != nil {
+			return project
+		}
+	}
+	if m.maven.model.Maven == nil {
+		return nil
+	}
+	for i := range m.maven.model.Maven.Projects {
+		p := &m.maven.model.Maven.Projects[i]
 		if !p.Aggregated {
 			return p
 		}

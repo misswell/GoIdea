@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/editor"
 
 	"mayoi/internal/openidea"
 )
@@ -138,6 +140,8 @@ type dbActionTarget struct {
 	ObjectKind string
 	ObjectName string
 	Arguments  string
+	RefSchema  string
+	RefTable   string
 	Filter     string
 	Script     string
 }
@@ -167,6 +171,8 @@ func dbTargetFrom(m *Model, arg any) dbActionTarget {
 		t.ObjectKind = get("objectKind")
 		t.ObjectName = get("objectName", "name")
 		t.Arguments = get("arguments")
+		t.RefSchema = get("refSchema")
+		t.RefTable = get("refTable")
 		t.Filter = get("filter")
 		t.Script = get("script")
 	}
@@ -198,6 +204,143 @@ func dbTargetFrom(m *Model, arg any) dbActionTarget {
 	return t
 }
 
+func dbRawTargetKind(arg any) string {
+	values, ok := arg.(map[string]any)
+	if !ok {
+		return ""
+	}
+	for _, key := range []string{"nodeKind", "targetKind"} {
+		if value, ok := values[key].(string); ok {
+			return strings.ToLower(strings.TrimSpace(value))
+		}
+	}
+	return ""
+}
+
+func dbRawSourceTarget(arg any) bool {
+	values, ok := arg.(map[string]any)
+	if !ok {
+		return false
+	}
+	if dbRawTargetKind(arg) == "source" {
+		return true
+	}
+	if kind, _ := values["kind"].(string); strings.EqualFold(strings.TrimSpace(kind), "source") {
+		return true
+	}
+	if _, ok := values["source"]; !ok {
+		return false
+	}
+	for _, key := range []string{
+		"schema", "table", "kind", "database", "column", "objectKind", "objectName", "name",
+	} {
+		if value, ok := values[key]; ok && fmt.Sprint(value) != "" {
+			return false
+		}
+	}
+	return true
+}
+
+func dbRawDatabaseTarget(arg any) bool {
+	values, ok := arg.(map[string]any)
+	if !ok {
+		return false
+	}
+	if dbRawTargetKind(arg) == "database" {
+		return true
+	}
+	if kind, _ := values["kind"].(string); strings.EqualFold(strings.TrimSpace(kind), "database") {
+		return true
+	}
+	database, _ := values["database"].(string)
+	if strings.TrimSpace(database) == "" {
+		return false
+	}
+	for _, key := range []string{"schema", "table", "column", "objectKind", "objectName", "name"} {
+		if value, ok := values[key]; ok && fmt.Sprint(value) != "" {
+			return false
+		}
+	}
+	return true
+}
+
+type dbIntrospectionFilter struct {
+	All       bool
+	Databases []string
+	Schemas   []string
+}
+
+func dbIntrospectionFilterFromSource(source map[string]any) dbIntrospectionFilter {
+	filter := dbIntrospectionFilter{All: true}
+	introspection, ok := source["introspection"].(map[string]any)
+	if !ok {
+		return filter
+	}
+	if value, ok := introspection["allDatabases"]; ok {
+		filter.All = dbMapBool(map[string]any{"value": value}, "value")
+	}
+	filter.Databases = dbPatternValues(introspection["databases"])
+	filter.Schemas = dbPatternValues(introspection["schemas"])
+	return filter
+}
+
+func dbPatternValues(value any) []string {
+	switch values := value.(type) {
+	case []string:
+		return append([]string(nil), values...)
+	case []any:
+		out := make([]string, 0, len(values))
+		for _, value := range values {
+			if text := strings.TrimSpace(fmt.Sprint(value)); text != "" {
+				out = append(out, text)
+			}
+		}
+		return out
+	case string:
+		return dbSplitPatterns(values)
+	default:
+		return nil
+	}
+}
+
+func dbMatchesPattern(name, pattern string) bool {
+	pattern = strings.TrimSpace(pattern)
+	if !strings.ContainsAny(pattern, "*?") {
+		return name == pattern
+	}
+	expression := regexp.QuoteMeta(pattern)
+	expression = strings.ReplaceAll(expression, `\*`, ".*")
+	expression = strings.ReplaceAll(expression, `\?`, ".")
+	matched, err := regexp.MatchString("^"+expression+"$", name)
+	return err == nil && matched
+}
+
+func dbShownNames(names []string, all *bool, chosen []string, keep string) []string {
+	if all == nil || *all {
+		return append([]string(nil), names...)
+	}
+	picks := make([]string, 0, len(chosen))
+	for _, pick := range chosen {
+		if pick = strings.TrimSpace(pick); pick != "" {
+			picks = append(picks, pick)
+		}
+	}
+	out := []string{}
+	for _, name := range names {
+		match := name == keep
+		for _, pick := range picks {
+			if dbMatchesPattern(name, pick) {
+				match = true
+				break
+			}
+		}
+		if match {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
 func (m *Model) dbSourceByID(id string) (openidea.DataSource, bool) {
 	if m.db == nil {
 		return openidea.DataSource{}, false
@@ -208,6 +351,13 @@ func (m *Model) dbSourceByID(id string) (openidea.DataSource, bool) {
 		}
 	}
 	return openidea.DataSource{}, false
+}
+
+func (m *Model) dbSourceName(id string) string {
+	if source, ok := m.dbSourceByID(id); ok && strings.TrimSpace(source.Name) != "" {
+		return source.Name
+	}
+	return id
 }
 
 func (m *Model) dbEnsureOpen() *dbView {
@@ -249,8 +399,13 @@ func (v *dbView) activeTarget() string {
 
 func (m *Model) DBConnectAction(arg any) {
 	t := dbTargetFrom(m, arg)
-	m.dbEnsureOpen()
+	v := m.dbEnsureOpen()
 	if t.Source == "" {
+		return
+	}
+	if !m.run.trusted {
+		v.err = "Trust this project before connecting plugin data sources."
+		m.invalidate()
 		return
 	}
 	m.SelectDBSource(t.Source)
@@ -259,8 +414,11 @@ func (m *Model) DBConnectAction(arg any) {
 
 func (m *Model) DBProperties(arg any) {
 	t := dbTargetFrom(m, arg)
-	m.dbEnsureOpen()
-	m.OpenDBDataSourceForm(t.Source)
+	v := m.dbEnsureOpen()
+	if t.Source == "" && len(v.sources) == 1 {
+		t.Source = v.sources[0].ID
+	}
+	m.OpenDBDataSourceForm(dbBaseTarget(t.Source))
 }
 
 func (m *Model) DBNewDataSource(arg any) {
@@ -276,6 +434,11 @@ func (m *Model) DBRefreshAction(arg any) {
 	t := dbTargetFrom(m, arg)
 	v := m.dbEnsureOpen()
 	if t.Table != "" {
+		if m.dbTable != nil && m.dbTable.source == t.Source &&
+			m.dbTable.schema == t.Schema && m.dbTable.table == t.Table {
+			m.DBRefreshTablePage()
+			return
+		}
 		m.OpenDBTable(t.Schema, t.Table)
 		return
 	}
@@ -284,8 +447,12 @@ func (m *Model) DBRefreshAction(arg any) {
 		return
 	}
 	m.RefreshDBSources()
-	if v.source != "" && v.connected[v.source] && v.schema != "" {
-		m.loadDBTables(v.source, v.schema)
+	target := v.activeTarget()
+	if target != "" && v.connected[target] {
+		m.loadDBSchemas(target)
+	}
+	if v.source != "" && !strings.Contains(v.source, ":") {
+		m.loadDBDatabases(v.source)
 	}
 }
 
@@ -298,13 +465,47 @@ func (m *Model) DBIntrospect(arg any) {
 	if t.Source == "" {
 		return
 	}
+	if m.dbDriver(t.Source) != "snowflake" {
+		v.err = "Introspect All Databases is available for Snowflake data sources."
+		m.invalidate()
+		return
+	}
 	go func() {
-		ctx, cancel := context.WithTimeout(m.ctx, 60*time.Second)
+		ctx, cancel := context.WithTimeout(m.ctx, 10*time.Minute)
 		defer cancel()
 		dbNames, err := m.mgr.DBDatabases(ctx, Window, t.Source)
-		var catalog *openidea.DBSavedCatalog
+		databases := dbNames.Names
+		var rawSource map[string]any
 		if err == nil {
-			catalog, err = m.mgr.DBSavedCatalog(ctx, Window, t.Source)
+			if sources, sourcesErr := m.mgr.DBSourcesRaw(ctx, Window); sourcesErr == nil {
+				for _, source := range sources {
+					if fmt.Sprint(source["id"]) == dbBaseTarget(t.Source) {
+						rawSource = source
+						break
+					}
+				}
+			}
+		}
+		if err == nil {
+			filter := dbIntrospectionFilterFromSource(rawSource)
+			databases = dbShownNames(dbNames.Names, &filter.All, filter.Databases, dbNames.Current)
+		}
+		read, schemas, tables := 0, 0, 0
+		failures := []string{}
+		if err == nil {
+			for _, database := range databases {
+				catalog, catalogErr := m.mgr.DBDatabaseCatalog(ctx, Window, t.Source, database)
+				if catalogErr != nil {
+					failures = append(failures, database+": "+catalogErr.Error())
+					continue
+				}
+				read++
+				schemas += len(catalog)
+				for _, schema := range catalog {
+					tables += len(schema.Tables)
+				}
+			}
+			_ = m.mgr.DBRetainCatalog(ctx, Window, t.Source, databases)
 		}
 		m.post(func() {
 			if m.db != v {
@@ -316,10 +517,15 @@ func (m *Model) DBIntrospect(arg any) {
 				v.err = ""
 				v.actionPrompt = &dbActionPrompt{
 					kind: "introspection", title: "Database Catalog",
-					source: t.Source, value: strings.Join(dbNames.Names, "\n"),
+					source: t.Source, value: strings.Join(databases, "\n"),
 				}
-				if catalog != nil {
-					v.actionPrompt.sql = fmt.Sprintf("%s retained", count(len(catalog.Databases), "database", "databases"))
+				v.actionPrompt.sql = fmt.Sprintf(
+					"%s read, %s and %s ready for completion.",
+					count(read, "database", "databases"), count(schemas, "schema", "schemas"),
+					count(tables, "table", "tables"),
+				)
+				if len(failures) > 0 {
+					v.actionPrompt.sql += "\n\nCould not read:\n" + strings.Join(failures, "\n")
 				}
 			}
 			m.invalidate()
@@ -337,9 +543,26 @@ func (m *Model) DBDisconnectAction(arg any) {
 		}
 		return
 	}
-	m.DisconnectDBSource(t.Source)
-	if t.Database != "" {
-		m.DisconnectDBSource(t.Source + ":" + t.Database)
+	if dbRawDatabaseTarget(arg) {
+		target := t.Source
+		if t.Database != "" && !strings.Contains(target, ":") {
+			target += ":" + t.Database
+		}
+		if strings.Contains(target, ":") {
+			m.DisconnectDBSource(target)
+			return
+		}
+	}
+	base := dbBaseTarget(t.Source)
+	targets := []string{}
+	for target := range v.connected {
+		if dbBaseTarget(target) == base {
+			targets = append(targets, target)
+		}
+	}
+	sort.Strings(targets)
+	for _, target := range targets {
+		m.DisconnectDBSource(target)
 	}
 }
 
@@ -413,53 +636,27 @@ func (m *Model) ExecuteDBSQLTab(tab *Tab, whole bool) {
 	}
 	v := m.dbEnsureOpen()
 	path := tab.doc.Path()
-	target := v.consoleSources[path]
-	if target == "" {
-		if len(v.sources) == 1 {
-			target = v.sources[0].ID
-		} else if v.activeTarget() != "" {
-			target = v.activeTarget()
-		}
-	}
+	target, schema := m.dbConsoleExecutionTarget(path)
 	if target == "" {
 		v.err = "Choose a data source for this console"
 		m.invalidate()
 		return
 	}
 	text := tab.doc.Text()
-	from, to := uint32(0), utf16Len(text)
-	if !whole {
-		selection := tab.state.Selection()
-		start := tab.doc.UTF16Pos(selection.Start())
-		end := tab.doc.UTF16Pos(selection.End())
-		from = start.Col + dbLineOffset(tab, int(start.Line))
-		to = end.Col + dbLineOffset(tab, int(end.Line))
-		if selection.Start() == selection.End() {
-			to = 0
-		}
-	}
-	if v.running {
-		return
-	}
+	from, to := dbSQLTabRange(tab, whole)
+	gen := m.dbBeginRun(v)
 	v.open = true
 	v.source = dbBaseTarget(target)
 	v.databaseTarget = target
-	v.running = true
 	v.err = ""
 	v.outLog = append(v.outLog, "Run: "+oneLine(text))
-	request := m.nextRequest()
-	schema := v.schema
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 120*time.Second)
 		defer cancel()
 		statements, err := m.mgr.DBStatements(ctx, Window, target, text, from, to)
-		var outcomes []openidea.DBOutcome
-		if err == nil && len(statements) > 0 {
-			outcomes, err = m.mgr.DBExecute(ctx, Window, request, target, statements, dbMaxRows, schema)
-		}
 		m.post(func() {
-			if m.db != v {
+			if m.db != v || v.runGen != gen {
 				return
 			}
 			v.running = false
@@ -471,21 +668,7 @@ func (m *Model) ExecuteDBSQLTab(tab *Tab, whole bool) {
 			case len(statements) == 0:
 				v.addDBResult(title, target, nil, "There is no statement to execute")
 			default:
-				v.addDBResult(title, target, outcomes, "")
-				for _, outcome := range outcomes {
-					v.outLog = append(v.outLog, oneLine(outcome.Statement.Text)+" · "+dbOutcomeSummary(outcome))
-					if outcome.Error != "" {
-						v.outLog = append(v.outLog, outcome.Error)
-					}
-				}
-				if v.manualCommit[target] {
-					for _, outcome := range outcomes {
-						if outcome.Error == "" && !dbReadOnlyStatement(outcome.Statement.Text) {
-							v.pendingTx[target] = true
-							break
-						}
-					}
-				}
+				m.dbStartOrPrompt(v, gen, target, schema, title, text, statements)
 			}
 			if len(v.outLog) > 200 {
 				v.outLog = v.outLog[len(v.outLog)-200:]
@@ -493,6 +676,66 @@ func (m *Model) ExecuteDBSQLTab(tab *Tab, whole bool) {
 			m.invalidate()
 		})
 	}()
+}
+
+func (m *Model) dbBeginRun(v *dbView) uint64 {
+	if v == nil {
+		return 0
+	}
+	if request := v.runID; request != 0 && m.mgr != nil {
+		go func() {
+			ctx, cancel := context.WithTimeout(m.ctx, 5*time.Second)
+			defer cancel()
+			_, _ = m.mgr.Invoke(ctx, Window, "cancel_request", map[string]any{"id": request})
+		}()
+	}
+	v.runGen++
+	v.runID = 0
+	v.pendingRun = nil
+	if v.actionPrompt != nil && v.actionPrompt.kind == "params" {
+		v.actionPrompt = nil
+	}
+	v.running = true
+	return v.runGen
+}
+
+func (m *Model) dbConsoleExecutionTarget(path string) (string, string) {
+	v := m.dbEnsureOpen()
+	target := v.consoleSources[path]
+	if target == "" {
+		if len(v.sources) == 1 {
+			target = v.sources[0].ID
+		} else if v.activeTarget() != "" {
+			target = v.activeTarget()
+		}
+	}
+	schema := ""
+	if target != "" && target == v.activeTarget() {
+		schema = v.schema
+	}
+	if schema == "" && dbBaseTarget(target) == dbBaseTarget(v.source) {
+		schema = v.completion.DefaultSchema
+	}
+	return target, schema
+}
+
+func dbSQLTabRange(tab *Tab, whole bool) (uint32, uint32) {
+	if tab == nil || tab.doc == nil || tab.state == nil {
+		return 0, 0
+	}
+	text := tab.doc.Text()
+	if whole {
+		return 0, utf16Len(text)
+	}
+	selection := tab.state.Selection()
+	start := tab.doc.UTF16Pos(selection.Start())
+	end := tab.doc.UTF16Pos(selection.End())
+	from := start.Col + dbLineOffset(tab, int(start.Line))
+	to := end.Col + dbLineOffset(tab, int(end.Line))
+	if selection.Start() == selection.End() {
+		to = 0
+	}
+	return from, to
 }
 
 func dbLineOffset(tab *Tab, line int) uint32 {
@@ -518,14 +761,446 @@ func dbLineOffset(tab *Tab, line int) uint32 {
 	return offset
 }
 
+func (m *Model) dbStartOrPrompt(
+	v *dbView,
+	gen uint64,
+	source, schema, title, text string,
+	statements []openidea.DBStatement,
+) {
+	params, names := dbPrepareSQLParams(statements, m.dbDriver(source))
+	if len(names) == 0 {
+		m.dbRunStatements(v, gen, source, schema, title, text, statements)
+		return
+	}
+	inputs := make([]dbParamInput, len(names))
+	for i, name := range names {
+		inputs[i].name = name
+	}
+	v.running = false
+	v.pendingRun = &dbPendingRun{
+		view: v, gen: gen, mode: "execute", source: source, schema: schema, title: title,
+		text: text, driver: m.dbDriver(source), statements: statements,
+		params: params, inputs: inputs,
+	}
+	v.actionPrompt = &dbActionPrompt{kind: "params", title: "Parameters", source: source}
+	m.invalidate()
+}
+
+// dbRunStatements executes already-split SQL on the target connection and
+// updates the result tabs, output log and transaction state.
+func (m *Model) dbRunStatements(
+	v *dbView,
+	gen uint64,
+	source, schema, title, text string,
+	statements []openidea.DBStatement,
+) {
+	if v == nil || m.db != v || v.runGen != gen || len(statements) == 0 {
+		return
+	}
+	v.running = true
+	v.err = ""
+	request := m.nextRequest()
+	v.runID = request
+	m.invalidate()
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, 120*time.Second)
+		defer cancel()
+		outcomes, err := m.mgr.DBExecute(ctx, Window, request, source, statements, dbMaxRows, schema)
+		m.post(func() {
+			if m.db != v || v.runGen != gen {
+				return
+			}
+			v.running = false
+			v.runID = 0
+			switch {
+			case err != nil:
+				v.addDBResult(title, source, nil, "Execution failed: "+err.Error())
+				v.outLog = append(v.outLog, "Execution failed: "+err.Error())
+			default:
+				v.addDBResult(title, source, outcomes, "")
+				for _, outcome := range outcomes {
+					v.outLog = append(v.outLog, oneLine(outcome.Statement.Text)+" · "+dbOutcomeSummary(outcome))
+					if outcome.Error != "" {
+						v.outLog = append(v.outLog, outcome.Error)
+					}
+				}
+				if v.manualCommit[source] {
+					for _, outcome := range outcomes {
+						if outcome.Error == "" && !dbReadOnlyStatement(outcome.Statement.Text) {
+							v.pendingTx[source] = true
+							break
+						}
+					}
+				}
+			}
+			if len(v.outLog) > 200 {
+				v.outLog = v.outLog[len(v.outLog)-200:]
+			}
+			if dbSchemaChanged(outcomes) && schema != "" && dbBaseTarget(source) == dbBaseTarget(v.source) {
+				m.loadDBTables(source, schema)
+			}
+			m.invalidate()
+		})
+	}()
+}
+
+func dbSchemaChanged(outcomes []openidea.DBOutcome) bool {
+	pattern := regexp.MustCompile(`(?is)^\s*(create|drop|alter|rename)\b`)
+	for _, outcome := range outcomes {
+		if outcome.Error == "" && pattern.MatchString(outcome.Statement.Text) {
+			return true
+		}
+	}
+	return false
+}
+
+func dbPrepareSQLParams(statements []openidea.DBStatement, driver string) ([][]dbSQLParam, []string) {
+	params := make([][]dbSQLParam, len(statements))
+	names := []string{}
+	seen := map[string]bool{}
+	numbered := 0
+	for i, statement := range statements {
+		params[i], numbered = dbFindSQLParams(statement.Text, driver, numbered)
+		for _, param := range params[i] {
+			if !seen[param.Name] {
+				seen[param.Name] = true
+				names = append(names, param.Name)
+			}
+		}
+	}
+	return params, names
+}
+
+func dbFindSQLParams(text, driver string, numbered int) ([]dbSQLParam, int) {
+	driver = strings.ToLower(driver)
+	out := []dbSQLParam{}
+	isIdent := func(value byte) bool {
+		return value == '_' || value >= 'a' && value <= 'z' || value >= 'A' && value <= 'Z' ||
+			value >= '0' && value <= '9'
+	}
+	for i := 0; i < len(text); {
+		switch text[i] {
+		case '\'', '"', '`':
+			quote := text[i]
+			i++
+			for i < len(text) {
+				if text[i] == '\\' {
+					i += minInt(2, len(text)-i)
+					continue
+				}
+				if text[i] == quote {
+					if i+1 < len(text) && text[i+1] == quote {
+						i += 2
+						continue
+					}
+					i++
+					break
+				}
+				i++
+			}
+			continue
+		case '[':
+			i++
+			for i < len(text) {
+				if text[i] == ']' {
+					if i+1 < len(text) && text[i+1] == ']' {
+						i += 2
+						continue
+					}
+					i++
+					break
+				}
+				i++
+			}
+			continue
+		case '-':
+			if i+1 < len(text) && text[i+1] == '-' {
+				if end := strings.IndexByte(text[i+2:], '\n'); end >= 0 {
+					i += end + 3
+				} else {
+					i = len(text)
+				}
+				continue
+			}
+		case '#':
+			if driver == "mysql" {
+				if end := strings.IndexByte(text[i+1:], '\n'); end >= 0 {
+					i += end + 2
+				} else {
+					i = len(text)
+				}
+				continue
+			}
+		case '/':
+			if i+1 < len(text) && text[i+1] == '*' {
+				if end := strings.Index(text[i+2:], "*/"); end >= 0 {
+					i += end + 4
+				} else {
+					i = len(text)
+				}
+				continue
+			}
+		case '$':
+			if driver == "postgres" {
+				if end := dbPostgresDollarQuoteEnd(text, i); end > i {
+					i = end
+					continue
+				}
+				j := i + 1
+				start := j
+				for j < len(text) && isIdent(text[j]) {
+					j++
+				}
+				if j > start {
+					out = append(out, dbSQLParam{Name: text[i:j], From: i, To: j})
+					i = j
+					continue
+				}
+			}
+		case '@':
+			if driver == "mysql" || driver == "snowflake" {
+				i++
+				for i < len(text) && isIdent(text[i]) {
+					i++
+				}
+				continue
+			}
+			j := i + 1
+			start := j
+			for j < len(text) && isIdent(text[j]) {
+				j++
+			}
+			if j > start {
+				out = append(out, dbSQLParam{Name: text[i:j], From: i, To: j})
+				i = j
+				continue
+			}
+		case ':':
+			if i+1 < len(text) && text[i+1] == ':' {
+				i += 2
+				continue
+			}
+			if driver == "snowflake" && i > 0 {
+				previous := text[i-1]
+				if isIdent(previous) || strings.ContainsRune(`])}"'`, rune(previous)) {
+					i++
+					continue
+				}
+			}
+			j := i + 1
+			if j < len(text) && (text[j] == '_' || text[j] >= 'a' && text[j] <= 'z' ||
+				text[j] >= 'A' && text[j] <= 'Z') {
+				j++
+				for j < len(text) && isIdent(text[j]) {
+					j++
+				}
+				out = append(out, dbSQLParam{Name: text[i:j], From: i, To: j})
+				i = j
+				continue
+			}
+		case '?':
+			if driver != "postgres" {
+				if i+1 < len(text) && text[i+1] >= '0' && text[i+1] <= '9' {
+					j := i + 2
+					for j < len(text) && text[j] >= '0' && text[j] <= '9' {
+						j++
+					}
+					out = append(out, dbSQLParam{Name: text[i:j], From: i, To: j})
+					i = j
+					continue
+				}
+				numbered++
+				name := fmt.Sprintf("?%d", numbered)
+				out = append(out, dbSQLParam{Name: name, From: i, To: i + 1})
+				i++
+				continue
+			}
+		case '{':
+			if driver == "clickhouse" {
+				if end := strings.IndexByte(text[i+1:], '}'); end >= 0 {
+					end += i + 1
+					candidate := text[i : end+1]
+					if regexp.MustCompile(`^\{[A-Za-z_][A-Za-z0-9_]*\s*:\s*[^{}]+\}$`).MatchString(candidate) {
+						out = append(out, dbSQLParam{Name: candidate, From: i, To: end + 1})
+						i = end + 1
+						continue
+					}
+				}
+			}
+		}
+		i++
+	}
+	return out, numbered
+}
+
+func dbPostgresDollarQuoteEnd(text string, start int) int {
+	if start >= len(text) || text[start] != '$' {
+		return start
+	}
+	end := strings.IndexByte(text[start+1:], '$')
+	if end < 0 {
+		return start
+	}
+	end += start + 1
+	tag := text[start : end+1]
+	for i := 1; i < len(tag)-1; i++ {
+		c := tag[i]
+		if !(c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' ||
+			i > 1 && c >= '0' && c <= '9') {
+			return start
+		}
+	}
+	if close := strings.Index(text[end+1:], tag); close >= 0 {
+		return end + 1 + close + len(tag)
+	}
+	return start
+}
+
+func dbBindSQLParams(text string, params []dbSQLParam, values map[string]string) string {
+	if len(params) == 0 {
+		return text
+	}
+	var out strings.Builder
+	at := 0
+	for _, param := range params {
+		if param.From < at || param.To < param.From || param.To > len(text) {
+			continue
+		}
+		out.WriteString(text[at:param.From])
+		value := strings.TrimSpace(values[param.Name])
+		if value == "" {
+			value = "NULL"
+		}
+		out.WriteString(value)
+		at = param.To
+	}
+	out.WriteString(text[at:])
+	return out.String()
+}
+
+func minInt(left, right int) int {
+	if left < right {
+		return left
+	}
+	return right
+}
+
+func maxInt(left, right int) int {
+	if left > right {
+		return left
+	}
+	return right
+}
+
 func (m *Model) DBExplainAction() {
+	if tab := m.tab(); tab != nil && tab.doc != nil && dbSQLPath(tab.doc.Path()) {
+		m.ExplainDBSQLTab(tab)
+		return
+	}
 	m.dbEnsureOpen()
 	m.ExplainDB()
 }
 
+// ExplainDBSQLTab explains the selected statement, or the statement at the
+// caret, in the console bound to the active SQL file.
+func (m *Model) ExplainDBSQLTab(tab *Tab) {
+	if tab == nil || tab.doc == nil || tab.state == nil {
+		return
+	}
+	v := m.dbEnsureOpen()
+	target, schema := m.dbConsoleExecutionTarget(tab.doc.Path())
+	if target == "" {
+		v.err = "Choose a data source for this console"
+		m.invalidate()
+		return
+	}
+	text := tab.doc.Text()
+	from, to := dbSQLTabRange(tab, false)
+	p := &dbPlanPane{open: true, loading: true, statement: text}
+	m.dbPlan = p
+	m.invalidate()
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, 60*time.Second)
+		defer cancel()
+		statements, err := m.mgr.DBStatements(ctx, Window, target, text, from, to)
+		if err == nil && len(statements) == 0 {
+			err = fmt.Errorf("There is no statement to explain")
+		}
+		if err == nil {
+			statements = statements[:1]
+		}
+		m.post(func() {
+			if m.dbPlan != p {
+				return
+			}
+			if err != nil {
+				p.loading = false
+				p.err = "Could not read the plan: " + err.Error()
+				m.invalidate()
+				return
+			}
+			params, names := dbPrepareSQLParams(statements, m.dbDriver(target))
+			if len(names) == 0 {
+				m.dbExplainStatement(p, target, schema, statements[0].Text)
+				return
+			}
+			inputs := make([]dbParamInput, len(names))
+			for i, name := range names {
+				inputs[i].name = name
+			}
+			v.pendingRun = &dbPendingRun{
+				view: v, mode: "explain", source: target, schema: schema,
+				title: p.statement, text: text, driver: m.dbDriver(target),
+				statements: statements, params: params, inputs: inputs,
+			}
+			v.actionPrompt = &dbActionPrompt{kind: "params", title: "Parameters", source: target}
+			m.invalidate()
+		})
+	}()
+}
+
+func (m *Model) dbExplainStatement(p *dbPlanPane, source, schema, statement string) {
+	if p == nil || m.dbPlan != p {
+		return
+	}
+	p.loading = true
+	p.statement = statement
+	p.err = ""
+	m.invalidate()
+	request := m.nextRequest()
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, 60*time.Second)
+		defer cancel()
+		nodes, err := m.mgr.DBExplain(ctx, Window, request, source, statement, schema)
+		m.post(func() {
+			if m.dbPlan != p {
+				return
+			}
+			p.loading = false
+			if err != nil {
+				p.err = "Could not read the plan: " + err.Error()
+			} else {
+				p.nodes = nodes
+				p.rows = dbPlanRows(nodes)
+			}
+			m.invalidate()
+		})
+	}()
+}
+
 func (m *Model) DBHistoryAction() {
-	m.dbEnsureOpen()
+	v := m.dbEnsureOpen()
+	if tab := m.tab(); tab != nil && tab.doc != nil && dbSQLPath(tab.doc.Path()) {
+		if target, _ := m.dbConsoleExecutionTarget(tab.doc.Path()); target != "" {
+			m.openDBHistoryAt(target, tab.doc.Path())
+			return
+		}
+	}
 	m.OpenDBHistory()
+	if v.source == "" {
+		v.err = "Choose a data source for query history."
+		m.invalidate()
+	}
 }
 
 // ToggleDBManualCommit switches the selected connection between auto-commit
@@ -546,6 +1221,16 @@ func (m *Model) SetDBManualCommit(manual bool) {
 	v := m.dbEnsureOpen()
 	source := v.activeTarget()
 	if source == "" || v.manualCommit[source] == manual {
+		return
+	}
+	if manual && m.dbDriver(source) == "clickhouse" {
+		v.err = "ClickHouse connections do not support manual commit."
+		m.invalidate()
+		return
+	}
+	if !manual && v.pendingTx[source] {
+		v.err = "Commit or roll back the pending transaction before switching to auto-commit."
+		m.invalidate()
 		return
 	}
 	go func() {
@@ -576,6 +1261,11 @@ func (m *Model) FinishDBTransaction(commit bool) {
 	v := m.dbEnsureOpen()
 	source := v.activeTarget()
 	if source == "" {
+		return
+	}
+	if m.dbDriver(source) == "clickhouse" {
+		v.err = "ClickHouse connections do not support manual transactions."
+		m.invalidate()
 		return
 	}
 	go func() {
@@ -618,13 +1308,79 @@ func (m *Model) dbLoadDefinition(t dbActionTarget) (string, error) {
 		return m.mgr.DBObjectDDL(ctx, Window, t.Source, t.Schema, t.ObjectKind, t.ObjectName)
 	}
 	if t.Table == "" {
-		return "", fmt.Errorf("choose a table, view or schema object")
+		return m.dbLoadAggregateDDL(ctx, t)
 	}
 	return m.mgr.DBTableDDL(ctx, Window, t.Source, t.Schema, t.Table)
 }
 
+func (m *Model) dbLoadAggregateDDL(ctx context.Context, t dbActionTarget) (string, error) {
+	schemas := []string{}
+	switch {
+	case t.Schema != "":
+		schemas = []string{t.Schema}
+	case t.Source != "":
+		loaded, err := m.mgr.DBSchemas(ctx, Window, t.Source)
+		if err != nil {
+			return "", err
+		}
+		schemas = loaded
+	default:
+		return "", fmt.Errorf("choose a data source, schema, table or schema object")
+	}
+	parts := []string{}
+	for _, schema := range schemas {
+		tables, err := m.mgr.DBTables(ctx, Window, t.Source, schema)
+		if err != nil {
+			return "", err
+		}
+		tables = dbSortDDLTables(tables, t.Filter)
+		for _, table := range tables {
+			ddl, err := m.mgr.DBTableDDL(ctx, Window, t.Source, schema, table.Name)
+			if err != nil {
+				return "", err
+			}
+			parts = append(parts, ddl)
+		}
+	}
+	return strings.TrimSpace(strings.Join(parts, "\n")), nil
+}
+
+func dbSortDDLTables(tables []openidea.DBTable, folder string) []openidea.DBTable {
+	out := append([]openidea.DBTable(nil), tables...)
+	folder = strings.ToLower(strings.TrimSpace(folder))
+	if folder != "" {
+		filtered := out[:0]
+		for _, table := range out {
+			kind := strings.ToLower(table.Kind)
+			switch folder {
+			case "tables":
+				if kind == "table" {
+					filtered = append(filtered, table)
+				}
+			case "views":
+				if kind == "view" {
+					filtered = append(filtered, table)
+				}
+			case "materialized views", "materializedviews", "matviews":
+				if kind == "materializedview" || kind == "materialized view" {
+					filtered = append(filtered, table)
+				}
+			default:
+				filtered = append(filtered, table)
+			}
+		}
+		out = filtered
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		left := strings.EqualFold(out[i].Kind, "table")
+		right := strings.EqualFold(out[j].Kind, "table")
+		return left && !right
+	})
+	return out
+}
+
 func (m *Model) DBGoToDDL(arg any) {
-	t := dbTargetFrom(m, arg)
+	t := dbDDLTargetFrom(m, arg)
 	v := m.dbEnsureOpen()
 	go func() {
 		ddl, err := m.dbLoadDefinition(t)
@@ -637,18 +1393,98 @@ func (m *Model) DBGoToDDL(arg any) {
 				m.invalidate()
 				return
 			}
-			title := t.ObjectName
-			if title == "" {
-				title = t.Table
+			if t.Table == "" && t.ObjectName == "" {
+				v.actionPrompt = &dbActionPrompt{
+					kind: "ddl", title: "DDL", source: t.Source, schema: t.Schema, sql: ddl,
+				}
+				m.invalidate()
+				return
 			}
-			v.actionPrompt = &dbActionPrompt{
-				kind: "ddl", title: "DDL: " + title, source: t.Source,
-				schema: t.Schema, table: t.Table, objectKind: t.ObjectKind,
-				objectName: t.ObjectName, sql: ddl,
-			}
-			m.invalidate()
+			m.dbOpenSQLDocument(t, ddl)
 		})
 	}()
+}
+
+func (m *Model) dbOpenSQLDocument(t dbActionTarget, text string) {
+	v := m.dbEnsureOpen()
+	source := t.Source
+	name := t.ObjectName
+	if name == "" {
+		name = t.Table
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
+		defer cancel()
+		console, err := m.mgr.DBConsolePath(ctx, Window, source)
+		if err != nil {
+			m.post(func() {
+				if m.db == v {
+					v.err = "Could not open the DDL: " + err.Error()
+					m.invalidate()
+				}
+			})
+			return
+		}
+		safe := func(value string) string {
+			value = regexp.MustCompile(`[^\w.-]+`).ReplaceAllString(value, "_")
+			if value == "" {
+				return "object"
+			}
+			return value
+		}
+		path := filepath.Join(filepath.Dir(console), safe(t.Schema)+"."+safe(name)+".sql")
+		for _, existing := range m.allTabs() {
+			if existing != nil && existing.doc != nil && existing.doc.Path() == realPath(path) &&
+				existing.doc.Dirty() {
+				m.post(func() {
+					if m.db == v {
+						v.err = "The DDL file has unsaved changes; save or close it before regenerating."
+						m.invalidate()
+					}
+				})
+				return
+			}
+		}
+		_, err = m.mgr.Invoke(ctx, Window, "db_export_file", map[string]any{"path": path, "text": text})
+		m.post(func() {
+			if m.db != v {
+				return
+			}
+			if err != nil {
+				v.err = "Could not write the DDL: " + err.Error()
+				m.invalidate()
+				return
+			}
+			if v.consoleSources == nil {
+				v.consoleSources = map[string]string{}
+			}
+			v.consoleSources[path] = source
+			m.openFile(path)
+		})
+	}()
+}
+
+func dbDDLTargetFrom(m *Model, arg any) dbActionTarget {
+	t := dbTargetFrom(m, arg)
+	if dbRawSourceTarget(arg) {
+		t.Schema = ""
+		t.Table = ""
+		t.Kind = ""
+		t.ObjectKind = ""
+		t.ObjectName = ""
+		return t
+	}
+	switch strings.ToLower(strings.TrimSpace(t.Kind)) {
+	case "source", "database":
+		t.Schema = ""
+		t.Table = ""
+	case "schema", "folder":
+		t.Table = ""
+	}
+	if t.ObjectKind != "" || t.ObjectName != "" || t.Table != "" || t.Schema != "" {
+		return t
+	}
+	return t
 }
 
 func (m *Model) DBQuickDoc(arg any) {
@@ -674,20 +1510,63 @@ func (m *Model) DBQuickDoc(arg any) {
 	}
 	if t.Table != "" {
 		lines = append(lines, "Table: "+t.Table, "Kind: "+t.Kind)
-		if m.dbTable != nil && m.dbTable.table == t.Table {
+		if m.dbTable != nil && m.dbTable.source == t.Source &&
+			m.dbTable.schema == t.Schema && m.dbTable.table == t.Table {
 			lines = append(lines, dbTableDetailLines(m.dbTable.page.Details)...)
 		}
 	}
 	if len(lines) == 0 {
 		lines = append(lines, "Select a database object")
 	}
-	v.actionPrompt = &dbActionPrompt{kind: "quickDoc", title: "Quick Documentation", value: strings.Join(lines, "\n")}
+	prompt := &dbActionPrompt{
+		kind: "quickDoc", title: "Quick Documentation", value: strings.Join(lines, "\n"),
+		source: t.Source, schema: t.Schema, table: t.Table,
+	}
+	v.actionPrompt = prompt
+	if t.Table != "" && (m.dbTable == nil || m.dbTable.source != t.Source ||
+		m.dbTable.schema != t.Schema || m.dbTable.table != t.Table) {
+		prompt.value += "\n\nLoading table details…"
+		go func() {
+			ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
+			defer cancel()
+			details, err := m.mgr.DBTableDetailsData(ctx, Window, t.Source, t.Schema, t.Table)
+			m.post(func() {
+				if m.db != v || v.actionPrompt != prompt {
+					return
+				}
+				if err != nil {
+					prompt.value = strings.TrimSuffix(prompt.value, "\n\nLoading table details…") +
+						"\n\nCould not read table details: " + err.Error()
+				} else {
+					prompt.value = strings.TrimSuffix(prompt.value, "\n\nLoading table details…") + "\n" +
+						strings.Join(dbTableDetailLines(details), "\n")
+				}
+				m.invalidate()
+			})
+		}()
+	}
 	m.invalidate()
 }
 
 func (m *Model) DBRename(arg any) {
+	if dbRawSourceTarget(arg) {
+		t := dbTargetFrom(m, arg)
+		t.Source = dbBaseTarget(t.Source)
+		v := m.dbEnsureOpen()
+		v.actionPrompt = &dbActionPrompt{
+			kind: "rename", title: "Rename Data Source", value: m.dbSourceName(t.Source), source: t.Source,
+		}
+		m.invalidate()
+		return
+	}
 	t := dbTargetFrom(m, arg)
-	m.dbEnsureOpen()
+	v := m.dbEnsureOpen()
+	kind := dbObjectKind(t)
+	if !dbCanRename(m.dbDriver(t.Source), kind) {
+		v.err = fmt.Sprintf("%s objects cannot be renamed for this data source.", dbObjectKindLabel(kind))
+		m.invalidate()
+		return
+	}
 	title := "Rename"
 	if t.Table != "" {
 		title = "Rename Table"
@@ -696,7 +1575,7 @@ func (m *Model) DBRename(arg any) {
 	} else if t.Source != "" {
 		title = "Rename Data Source"
 	}
-	m.db.actionPrompt = &dbActionPrompt{
+	v.actionPrompt = &dbActionPrompt{
 		kind: "rename", title: title, value: dbDisplayTargetName(t),
 		source: t.Source, schema: t.Schema, table: t.Table,
 		objectKind: t.ObjectKind, objectName: t.ObjectName, arguments: t.Arguments,
@@ -715,13 +1594,26 @@ func dbDisplayTargetName(t dbActionTarget) string {
 }
 
 func (m *Model) DBDrop(arg any) {
-	t := dbTargetFrom(m, arg)
-	m.dbEnsureOpen()
-	title := "Confirm Drop"
-	if t.Source != "" && t.Table == "" && t.ObjectName == "" {
-		title = "Remove Data Source"
+	if dbRawSourceTarget(arg) {
+		t := dbTargetFrom(m, arg)
+		t.Source = dbBaseTarget(t.Source)
+		v := m.dbEnsureOpen()
+		v.actionPrompt = &dbActionPrompt{
+			kind: "drop", title: "Remove Data Source", value: m.dbSourceName(t.Source), source: t.Source,
+		}
+		m.invalidate()
+		return
 	}
-	m.db.actionPrompt = &dbActionPrompt{
+	t := dbTargetFrom(m, arg)
+	v := m.dbEnsureOpen()
+	kind := dbObjectKind(t)
+	if !dbCanDrop(m.dbDriver(t.Source), kind) {
+		v.err = fmt.Sprintf("%s objects cannot be dropped for this data source.", dbObjectKindLabel(kind))
+		m.invalidate()
+		return
+	}
+	title := "Confirm Drop"
+	v.actionPrompt = &dbActionPrompt{
 		kind: "drop", title: title, value: dbDisplayTargetName(t),
 		source: t.Source, schema: t.Schema, table: t.Table,
 		objectKind: t.ObjectKind, objectName: t.ObjectName, arguments: t.Arguments,
@@ -731,8 +1623,16 @@ func (m *Model) DBDrop(arg any) {
 
 func (m *Model) DBTruncate(arg any) {
 	t := dbTargetFrom(m, arg)
-	m.dbEnsureOpen()
-	m.db.actionPrompt = &dbActionPrompt{
+	v := m.dbEnsureOpen()
+	if t.Source == "" || t.Table == "" {
+		return
+	}
+	if dbObjectKind(t) != "table" {
+		v.err = "Only tables can be truncated."
+		m.invalidate()
+		return
+	}
+	v.actionPrompt = &dbActionPrompt{
 		kind: "truncate", title: "Truncate", value: t.Table,
 		source: t.Source, schema: t.Schema, table: t.Table,
 	}
@@ -740,6 +1640,27 @@ func (m *Model) DBTruncate(arg any) {
 }
 
 func (m *Model) DBCopyReference(arg any) {
+	if dbRawSourceTarget(arg) {
+		t := dbTargetFrom(m, arg)
+		sourceID := dbBaseTarget(t.Source)
+		name := sourceID
+		if source, ok := m.dbSourceByID(sourceID); ok && source.Name != "" {
+			name = source.Name
+		}
+		mygo.Clipboard.WriteText(name)
+		return
+	}
+	if dbRawDatabaseTarget(arg) {
+		t := dbTargetFrom(m, arg)
+		name := t.ObjectName
+		if name == "" {
+			name = t.Database
+		}
+		if name != "" {
+			mygo.Clipboard.WriteText(name)
+		}
+		return
+	}
 	t := dbTargetFrom(m, arg)
 	text := m.dbCopyReferenceTarget(t)
 	if text != "" {
@@ -753,6 +1674,7 @@ func (m *Model) DBDuplicateSource(arg any) {
 	if t.Source == "" {
 		return
 	}
+	t.Source = dbBaseTarget(t.Source)
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 		defer cancel()
@@ -813,7 +1735,7 @@ func (m *Model) DBDuplicateSource(arg any) {
 }
 
 func (m *Model) DBDDLToClipboard(arg any) {
-	t := dbTargetFrom(m, arg)
+	t := dbDDLTargetFrom(m, arg)
 	go func() {
 		ddl, err := m.dbLoadDefinition(t)
 		m.post(func() {
@@ -830,7 +1752,7 @@ func (m *Model) DBDDLToClipboard(arg any) {
 }
 
 func (m *Model) DBDDLToConsole(arg any) {
-	t := dbTargetFrom(m, arg)
+	t := dbDDLTargetFrom(m, arg)
 	go func() {
 		ddl, err := m.dbLoadDefinition(t)
 		m.post(func() {
@@ -848,20 +1770,70 @@ func (m *Model) DBDDLToConsole(arg any) {
 
 func (m *Model) DBPutSQLTemplate(t dbActionTarget, sql string) {
 	v := m.dbEnsureOpen()
-	if t.Source != "" {
-		v.source = t.Source
+	source := t.Source
+	if source == "" {
+		source = v.activeTarget()
 	}
-	if t.Schema != "" {
-		v.schema = t.Schema
+	if source == "" {
+		v.err = "Choose a data source for this SQL script."
+		m.invalidate()
+		return
 	}
 	v.sql = sql
-	m.DBOpenConsole(map[string]any{"source": t.Source})
-	m.invalidate()
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
+		defer cancel()
+		path, err := m.mgr.DBConsolePath(ctx, Window, source)
+		m.post(func() {
+			if m.db != v {
+				return
+			}
+			if err != nil {
+				v.err = "Could not open the query console: " + err.Error()
+				m.invalidate()
+				return
+			}
+			if v.consoleSources == nil {
+				v.consoleSources = map[string]string{}
+			}
+			v.consoleSources[path] = source
+			m.openFileThen(path, func(tab *Tab) {
+				if tab == nil || tab.doc == nil || tab.state == nil {
+					return
+				}
+				text := tab.doc.Text()
+				separator := "\n\n"
+				if text == "" || strings.HasSuffix(text, "\n\n") {
+					separator = ""
+				} else if strings.HasSuffix(text, "\n") {
+					separator = "\n"
+				}
+				start := len(text)
+				insert := separator + sql
+				if err := tab.doc.ApplyEdits(context.Background(), editor.Edit{
+					Start: start, End: start, Text: insert,
+				}); err != nil {
+					if m.db == v {
+						v.err = "Could not add the SQL to the console: " + err.Error()
+						m.invalidate()
+					}
+					return
+				}
+				caret := start + len(strings.TrimRight(insert, "\n"))
+				tab.state.SetSelections(editor.Selection{Anchor: start + len(separator), Head: caret})
+				m.invalidate()
+			})
+			m.invalidate()
+		})
+	}()
 }
 
 func (m *Model) DBRunSQLScript(arg any) {
 	t := dbTargetFrom(m, arg)
 	v := m.dbEnsureOpen()
+	if t.Source == "" && len(v.sources) == 1 {
+		t.Source = v.sources[0].ID
+	}
 	go func() {
 		paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
 			Title: "Run SQL Script",
@@ -899,15 +1871,89 @@ func (m *Model) DBSQLScript(arg any) {
 			kind = value
 		}
 	}
-	columns := []openidea.DBColumnInfo{}
-	if m.dbTable != nil {
-		columns = append(columns, m.dbTable.page.Details.Columns...)
+	if t.Table == "" {
+		return
+	}
+	columns, loaded := m.dbColumnsForTarget(t)
+	if !loaded {
+		go func() {
+			ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
+			defer cancel()
+			details, err := m.mgr.DBTableDetailsData(ctx, Window, t.Source, t.Schema, t.Table)
+			m.post(func() {
+				if err != nil {
+					if m.db != nil {
+						m.db.err = "Could not read the table columns: " + err.Error()
+						m.invalidate()
+					}
+					return
+				}
+				if issue := dbScriptIssue(m.dbDriver(t.Source), kind, details.Columns); issue != "" {
+					m.db.err = issue
+					m.invalidate()
+					return
+				}
+				m.DBPutSQLTemplate(t, m.dbScriptSQL(
+					t.Source, kind, t.Schema, t.Table, details.Columns,
+				))
+			})
+		}()
+		return
+	}
+	if issue := dbScriptIssue(m.dbDriver(t.Source), kind, columns); issue != "" {
+		m.db.err = issue
+		m.invalidate()
+		return
 	}
 	m.DBPutSQLTemplate(t, m.dbScriptSQL(t.Source, kind, t.Schema, t.Table, columns))
 }
 
+func dbScriptIssue(driver, kind string, columns []openidea.DBColumnInfo) string {
+	if !strings.EqualFold(driver, "clickhouse") || kind != "update" {
+		return ""
+	}
+	for _, column := range columns {
+		if !column.PrimaryKey {
+			return ""
+		}
+	}
+	return "ClickHouse sorting key columns cannot be updated."
+}
+
+func (m *Model) dbColumnsForTarget(t dbActionTarget) ([]openidea.DBColumnInfo, bool) {
+	if m.dbTable != nil && m.dbTable.source == t.Source &&
+		m.dbTable.schema == t.Schema && m.dbTable.table == t.Table &&
+		len(m.dbTable.page.Details.Columns) > 0 {
+		return append([]openidea.DBColumnInfo(nil), m.dbTable.page.Details.Columns...), true
+	}
+	if m.db == nil {
+		return nil, false
+	}
+	for _, table := range m.db.completion.Tables {
+		if !strings.EqualFold(table.Name, t.Table) ||
+			(t.Schema != "" && !strings.EqualFold(table.Schema, t.Schema)) {
+			continue
+		}
+		columns := make([]openidea.DBColumnInfo, 0, len(table.Columns))
+		for _, column := range table.Columns {
+			columns = append(columns, openidea.DBColumnInfo{
+				Name: column.Name, DataType: column.DataType, Nullable: column.Nullable,
+				PrimaryKey: column.PrimaryKey,
+			})
+		}
+		return columns, true
+	}
+	return nil, false
+}
+
 func (m *Model) DBGoToReferencedTable(arg any) {
 	t := dbTargetFrom(m, arg)
+	if t.RefSchema != "" {
+		t.Schema = t.RefSchema
+	}
+	if t.RefTable != "" {
+		t.Table = t.RefTable
+	}
 	if t.Schema == "" || t.Table == "" {
 		return
 	}
@@ -915,6 +1961,65 @@ func (m *Model) DBGoToReferencedTable(arg any) {
 	m.loadDBTables(t.Source, t.Schema)
 	m.db.selectedTable = openidea.DBTable{Name: t.Table, Kind: "table"}
 	m.invalidate()
+}
+
+func dbObjectKind(t dbActionTarget) string {
+	kind := strings.ToLower(strings.TrimSpace(t.ObjectKind))
+	if kind == "" {
+		kind = strings.ToLower(strings.TrimSpace(t.Kind))
+	}
+	if kind == "" && (t.Table != "" || t.ObjectName != "") {
+		kind = "table"
+	}
+	switch kind {
+	case "materialized view", "matview":
+		return "materializedview"
+	default:
+		return kind
+	}
+}
+
+func dbObjectKindLabel(kind string) string {
+	switch kind {
+	case "materializedview":
+		return "Materialized view"
+	case "":
+		return "Database"
+	default:
+		return strings.ToUpper(kind[:1]) + kind[1:]
+	}
+}
+
+func dbCanRename(driver, kind string) bool {
+	driver = strings.ToLower(driver)
+	kind = strings.ToLower(kind)
+	return kind == "table" || kind == "column" ||
+		(kind == "view" && driver != "sqlite") ||
+		(kind == "index" && driver == "postgres")
+}
+
+func dbCanDrop(driver, kind string) bool {
+	driver = strings.ToLower(driver)
+	kind = strings.ToLower(kind)
+	if driver == "snowflake" && (kind == "index" || kind == "trigger") {
+		return false
+	}
+	if driver == "clickhouse" {
+		switch kind {
+		case "table", "view", "materializedview", "column", "schema":
+			return true
+		default:
+			return false
+		}
+	}
+	if driver == "sqlite" && kind == "schema" {
+		return false
+	}
+	return kind != ""
+}
+
+func dbCanModifyTable(driver string) bool {
+	return !strings.EqualFold(driver, "clickhouse")
 }
 
 func (m *Model) DBSeparateObjects() {
@@ -1188,7 +2293,7 @@ func dbBuildRowEdits(s *dbTableSheet) ([]openidea.DBRowEdit, error) {
 		for _, name := range keyColumns {
 			index := -1
 			for i, column := range columns {
-				if column == name {
+				if strings.EqualFold(column, name) {
 					index = i
 					break
 				}
@@ -1278,10 +2383,11 @@ func dbParseDelimited(text, extension string) ([][]string, error) {
 }
 
 func dbParseDelimitedSeparator(text string, comma rune) ([][]string, error) {
+	text = strings.TrimPrefix(text, "\ufeff")
 	reader := csv.NewReader(strings.NewReader(text))
 	reader.Comma = comma
 	reader.FieldsPerRecord = -1
-	reader.TrimLeadingSpace = true
+	reader.LazyQuotes = true
 	rows, err := reader.ReadAll()
 	if err != nil {
 		return nil, fmt.Errorf("Could not parse the import file: %w", err)
@@ -1328,18 +2434,27 @@ func dbImportEdits(rows [][]string, columns []string, header, emptyAsNull bool) 
 	}
 	edits := []openidea.DBRowEdit{}
 	for _, row := range rows {
-		if len(row) == 0 {
+		hasValue := false
+		for _, value := range row {
+			if value != "" {
+				hasValue = true
+				break
+			}
+		}
+		if !hasValue {
 			continue
 		}
 		values := []openidea.DBCellValue{}
 		for i, column := range mapping {
-			if column == "" || i >= len(row) {
+			if column == "" {
 				continue
 			}
 			var value *string
-			text := row[i]
-			if !emptyAsNull || text != "" {
-				value = &text
+			if i < len(row) {
+				text := row[i]
+				if !emptyAsNull || text != "" {
+					value = &text
+				}
 			}
 			values = append(values, openidea.DBCellValue{Column: column, Value: value})
 		}
@@ -1379,13 +2494,16 @@ func dbQuoteIdent(driver, value string) string {
 	plain := false
 	switch driver {
 	case "postgres":
-		plain = dbPlainIdent(value, false)
+		plain = dbPlainIdent(value, -1, true)
 	case "oracle", "snowflake":
-		plain = dbPlainIdent(value, true)
+		plain = dbPlainIdent(value, 1, true)
+	case "clickhouse":
+		plain = dbPlainIdent(value, 0, false)
 	default:
-		plain = dbPlainIdent(value, false)
+		plain = dbPlainIdent(value, 0, true)
 	}
-	if plain && !dbReservedIdent(value) {
+	if plain && !dbReservedIdent(value) &&
+		!(strings.EqualFold(driver, "snowflake") && dbSnowflakeReservedIdent(value)) {
 		return value
 	}
 	switch driver {
@@ -1400,24 +2518,23 @@ func dbQuoteIdent(driver, value string) string {
 	}
 }
 
-func dbPlainIdent(value string, upper bool) bool {
+func dbPlainIdent(value string, fold int, allowDollar bool) bool {
 	if value == "" {
 		return false
 	}
 	for i, r := range value {
-		firstLetter := r >= 'a' && r <= 'z'
-		if upper {
-			firstLetter = r >= 'A' && r <= 'Z'
-		} else if r >= 'A' && r <= 'Z' && i == 0 {
-			return false
-		}
 		if i == 0 {
-			if !(r == '_' || firstLetter) {
+			letter := r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z'
+			if fold < 0 && r >= 'A' && r <= 'Z' || fold > 0 && r >= 'a' && r <= 'z' {
+				return false
+			}
+			if !(r == '_' || letter) {
 				return false
 			}
 			continue
 		}
-		if !(r == '_' || r == '$' || r >= '0' && r <= '9' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z') {
+		if !(r == '_' || allowDollar && r == '$' || r >= '0' && r <= '9' ||
+			r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z') {
 			return false
 		}
 	}
@@ -1426,15 +2543,29 @@ func dbPlainIdent(value string, upper bool) bool {
 
 func dbReservedIdent(value string) bool {
 	switch strings.ToUpper(value) {
-	case "ALL", "AND", "AS", "ASC", "BETWEEN", "BY", "CASE", "CHECK",
-		"COLUMN", "CONSTRAINT", "CREATE", "CROSS", "DEFAULT", "DELETE",
-		"DESC", "DISTINCT", "DROP", "ELSE", "END", "EXISTS", "FOREIGN",
-		"FROM", "FULL", "GROUP", "HAVING", "IN", "INDEX", "INNER",
-		"INSERT", "INTO", "IS", "JOIN", "KEY", "LEFT", "LIKE", "LIMIT",
-		"NOT", "NULL", "OFFSET", "ON", "OR", "ORDER", "OUTER", "PRIMARY",
-		"REFERENCES", "RIGHT", "SELECT", "SET", "TABLE", "THEN", "TO",
-		"UNION", "UNIQUE", "UPDATE", "USER", "USING", "VALUES", "VIEW",
-		"WHEN", "WHERE", "WITH":
+	case "ALL", "AND", "ANY", "AS", "ASC", "BETWEEN", "BY", "CASE", "CAST",
+		"CHECK", "COLLATE", "COLUMN", "CONSTRAINT", "CREATE", "CROSS",
+		"CURRENT_DATE", "CURRENT_TIME", "CURRENT_TIMESTAMP", "DEFAULT", "DELETE",
+		"DESC", "DISTINCT", "DROP", "ELSE", "END", "EXCEPT", "EXISTS", "FALSE",
+		"FETCH", "FOR", "FOREIGN", "FROM", "FULL", "GRANT", "GROUP", "HAVING",
+		"IN", "INDEX", "INNER", "INSERT", "INTERSECT", "INTO", "IS", "JOIN",
+		"KEY", "LEFT", "LIKE", "LIMIT", "NATURAL", "NOT", "NULL", "OFFSET", "ON",
+		"OR", "ORDER", "OUTER", "PRIMARY", "REFERENCES", "RIGHT", "SELECT", "SET",
+		"TABLE", "THEN", "TO", "TRUE", "UNION", "UNIQUE", "UPDATE", "USER",
+		"USING", "VALUES", "VIEW", "WHEN", "WHERE", "WINDOW", "WITH":
+		return true
+	}
+	return false
+}
+
+func dbSnowflakeReservedIdent(value string) bool {
+	switch strings.ToUpper(value) {
+	case "ACCOUNT", "ALTER", "ASOF", "CONNECT", "CONNECTION", "CURRENT", "CURRENT_USER",
+		"DATABASE", "FOLLOWING", "GSCLUSTER", "ILIKE", "INCREMENT", "ISSUE",
+		"LATERAL", "LOCALTIME", "LOCALTIMESTAMP", "MATCH_RECOGNIZE", "MINUS", "OF",
+		"ORGANIZATION", "PIVOT", "QUALIFY", "REGEXP", "REVOKE", "RLIKE", "ROW",
+		"ROWS", "SAMPLE", "SCHEMA", "SOME", "START", "TABLESAMPLE", "TRIGGER",
+		"TRY_CAST", "UNPIVOT", "VIEW", "WHENEVER":
 		return true
 	}
 	return false
@@ -1572,6 +2703,38 @@ func (m *Model) ConfirmDBActionPrompt() {
 		return
 	}
 	switch prompt.kind {
+	case "params":
+		pending := m.db.pendingRun
+		if pending == nil || pending.view != m.db {
+			m.db.actionPrompt = nil
+			m.db.pendingRun = nil
+			m.invalidate()
+			return
+		}
+		values := make(map[string]string, len(pending.inputs))
+		for _, input := range pending.inputs {
+			values[input.name] = input.value
+		}
+		bound := make([]openidea.DBStatement, len(pending.statements))
+		for i, statement := range pending.statements {
+			text := dbBindSQLParams(statement.Text, pending.params[i], values)
+			bound[i] = openidea.DBStatement{From: 0, To: utf16Len(text), Text: text}
+		}
+		m.db.pendingRun = nil
+		m.db.actionPrompt = nil
+		switch pending.mode {
+		case "explain":
+			if len(bound) > 0 {
+				m.dbExplainStatement(m.dbPlan, pending.source, pending.schema, bound[0].Text)
+			}
+		default:
+			m.dbRunStatements(
+				pending.view, pending.gen, pending.source, pending.schema,
+				pending.title, pending.text, bound,
+			)
+		}
+		m.invalidate()
+		return
 	case "resultName":
 		if prompt.resultIndex >= 0 && prompt.resultIndex < len(m.db.results) {
 			title := strings.TrimSpace(prompt.value)
@@ -1670,8 +2833,21 @@ func (m *Model) dropDBDataSource(prompt *dbActionPrompt) {
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 		defer cancel()
-		_ = m.mgr.DBDisconnect(ctx, Window, sourceID)
-		sources, err := m.mgr.DBSourcesRaw(ctx, Window)
+		connected, err := m.mgr.DBConnected(ctx, Window)
+		if err == nil {
+			for _, target := range connected {
+				if dbBaseTarget(target) != sourceID {
+					continue
+				}
+				if err = m.mgr.DBDisconnect(ctx, Window, target); err != nil {
+					break
+				}
+			}
+		}
+		var sources []map[string]any
+		if err == nil {
+			sources, err = m.mgr.DBSourcesRaw(ctx, Window)
+		}
 		if err == nil {
 			next := make([]map[string]any, 0, len(sources))
 			for _, source := range sources {
@@ -1689,9 +2865,16 @@ func (m *Model) dropDBDataSource(prompt *dbActionPrompt) {
 			if err != nil {
 				prompt.err = "Could not remove the data source: " + err.Error()
 			} else {
-				delete(m.db.connected, sourceID)
-				if m.db.source == sourceID {
+				for target := range m.db.connected {
+					if dbBaseTarget(target) == sourceID {
+						delete(m.db.connected, target)
+					}
+				}
+				if dbBaseTarget(m.db.source) == sourceID {
 					m.db.source = ""
+					m.db.databaseTarget = ""
+					m.db.currentDatabase = ""
+					m.db.databases = nil
 					m.db.schema = ""
 					m.db.tables = nil
 					m.db.selectedTable = openidea.DBTable{}
@@ -1702,6 +2885,23 @@ func (m *Model) dropDBDataSource(prompt *dbActionPrompt) {
 			m.invalidate()
 		})
 	}()
+}
+
+func (m *Model) cancelDBActionPrompt() {
+	if m.db == nil {
+		return
+	}
+	wasParams := m.db.actionPrompt != nil && m.db.actionPrompt.kind == "params"
+	pending := m.db.pendingRun
+	m.db.actionPrompt = nil
+	if wasParams {
+		m.db.pendingRun = nil
+		m.db.running = false
+		if pending != nil && pending.mode == "explain" && m.dbPlan != nil {
+			m.dbPlan.loading = false
+		}
+	}
+	m.invalidate()
 }
 
 func (m *Model) dbRenameSQL(t dbActionTarget, name string) string {
@@ -1988,6 +3188,23 @@ func (m *Model) dbActionPromptDialog(c *ui.Context, p *ui.Theme) {
 				preview := m.dbTruncateSQL(prompt.source, prompt.schema, prompt.table, prompt.restartID, prompt.cascade)
 				ui.Text(c, "Preview").FontSize(12).TextColor(p.TextMuted).SingleLine()
 				ui.TextArea(c, &preview).ReadOnly(true).Height(90).Font("monospace").FontSize(12)
+			case "params":
+				pending := m.db.pendingRun
+				ui.Text(c, "Enter values as SQL text. Strings need their quotes; an empty value becomes NULL.").
+					FontSize(12).TextColor(p.TextMuted)
+				if pending == nil || pending.view != m.db {
+					ui.Text(c, "This run is no longer available.").FontSize(12).TextColor(p.Danger)
+				} else {
+					ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
+						ui.Column(c).Gap(6).Children(func() {
+							for i := range pending.inputs {
+								input := &pending.inputs[i]
+								ui.Text(c, input.name).FontSize(12).Font("monospace").TextColor(p.Text)
+								ui.TextArea(c, &input.value).Height(30).SingleLine().Font("monospace").AutoFocus()
+							}
+						})
+					})
+				}
 			default:
 				ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
 					text := prompt.sql
@@ -2015,8 +3232,9 @@ func (m *Model) dbActionPromptDialog(c *ui.Context, p *ui.Theme) {
 					})
 				}
 				ui.Spacer(c)
-				if prompt.kind == "rename" || prompt.kind == "resultName" || prompt.kind == "drop" || prompt.kind == "truncate" {
-					ui.Button(c, "Cancel").OnClick(func() { m.db.actionPrompt = nil; m.invalidate() })
+				if prompt.kind == "rename" || prompt.kind == "resultName" || prompt.kind == "drop" ||
+					prompt.kind == "truncate" || prompt.kind == "params" {
+					ui.Button(c, "Cancel").OnClick(func() { m.cancelDBActionPrompt() })
 					label := "OK"
 					if prompt.kind == "drop" {
 						label = "OK"
@@ -2026,6 +3244,8 @@ func (m *Model) dbActionPromptDialog(c *ui.Context, p *ui.Theme) {
 						label = "Rename"
 					} else if prompt.kind == "rename" {
 						label = "Refactor"
+					} else if prompt.kind == "params" {
+						label = "Execute"
 					}
 					ui.Button(c, label).Disabled(prompt.busy).OnClick(func() { m.ConfirmDBActionPrompt() })
 				} else {
@@ -2035,8 +3255,7 @@ func (m *Model) dbActionPromptDialog(c *ui.Context, p *ui.Theme) {
 		})
 	})
 	if !open && m.db != nil && m.db.actionPrompt == prompt {
-		m.db.actionPrompt = nil
-		m.invalidate()
+		m.cancelDBActionPrompt()
 	}
 }
 

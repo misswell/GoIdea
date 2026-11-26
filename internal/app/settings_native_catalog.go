@@ -74,6 +74,17 @@ type nativeSettingsPageSpec struct {
 	note         string
 }
 
+// nativeRuntimeSettingsPage is a page-like index over the full settings root.
+// It exposes only keys that an existing GoIDEA runtime path already consumes.
+// The page fields drive the same load/stage/save machinery as a visible
+// Settings page. Their IDs live under native.runtime and therefore never
+// claim an OpenIDEA page or add a second page to the Settings tree.
+type nativeRuntimeSettingsPage struct {
+	page     settingsPageSpec
+	consumer string
+	sections []nativeSettingsSection
+}
+
 func nativeChoice(value, label string) nativeSettingsChoice {
 	return nativeSettingsChoice{value: value, label: label}
 }
@@ -906,6 +917,225 @@ func nativeSettingsDefinitions() []nativeSettingsPageSpec {
 	return pageDefs
 }
 
+func nativeRuntimeSettingsDefinitions() []nativeRuntimeSettingsPage {
+	toggle := nativeToggle
+	text := nativeText
+	number := nativeNumber
+	selectField := nativeSelect
+	list := nativeList
+	runtime := func(
+		id, consumer string,
+		sections ...nativeSettingsSection,
+	) nativeRuntimeSettingsPage {
+		return nativeRuntimeSettingsPage{
+			page:     settingsPageSpec{id: id},
+			consumer: consumer,
+			sections: sections,
+		}
+	}
+	return []nativeRuntimeSettingsPage{
+		runtime("native.runtime.agents", "agent composer, task view and run approval", nativeSettingsSection{
+			fields: []nativeSettingsField{
+				selectField("agents.newTaskApprovals", "", "bypass",
+					nativeChoice("bypass", "Without asking"), nativeChoice("ask", "Ask")),
+				selectField("agents.sendWith", "", "enter",
+					nativeChoice("enter", "Enter"), nativeChoice("modEnter", "⌘Enter")),
+				selectField("agents.whileRunning", "", "queue",
+					nativeChoice("queue", "Queue"), nativeChoice("steer", "Steer")),
+				selectField("agents.thinking", "", "auto",
+					nativeChoice("auto", "Auto"), nativeChoice("expanded", "Expanded"),
+					nativeChoice("collapsed", "Collapsed")),
+				selectField("agents.toolCalls", "", "grouped",
+					nativeChoice("grouped", "Grouped"), nativeChoice("each", "Each")),
+				toggle("agents.foldTurns", "", true),
+				toggle("agents.smoothText", "", true),
+				toggle("agents.expandToolOutput", "", false),
+				toggle("agents.showContextUsage", "", true),
+				toggle("agents.showWorkTime", "", true),
+				toggle("agents.showUsageLimits", "", true),
+				toggle("agents.showCost", "", false),
+				nativeJSON("agents.defaults", "", "", map[string]any{}),
+				nativeJSON("agents.mcpServers", "", "", map[string]any{}),
+			},
+		}),
+		runtime("native.runtime.agentSecurity", "agent command policy", nativeSettingsSection{
+			fields: []nativeSettingsField{
+				list("agentSecurity.allowedCommands", "", "", nil),
+				list("agentSecurity.blockedCommands", "", "", nil),
+			},
+		}),
+		runtime("native.runtime.appearance", "native workbench and theme", nativeSettingsSection{
+			fields: []nativeSettingsField{
+				text("appearance.theme", "", "", "light"),
+				text("appearance.accent", "", "", "#3871e1"),
+				number("appearance.zoom", "", 100, 50, 300, 1),
+				number("appearance.uiFontSize", "", 13, 10, 18, 1),
+				text("appearance.uiFontFamily", "", "", ""),
+				text("appearance.uiFontFallback", "", "", ""),
+				toggle("appearance.useCustomFont", "", false),
+				toggle("appearance.differentToolWindowBackground", "", false),
+				toggle("appearance.smallTreeIndents", "", false),
+				toggle("appearance.fullPathInTitle", "", false),
+				toggle("appearance.showToolWindowBadges", "", true),
+				toggle("appearance.showMainToolbar", "", true),
+				toggle("appearance.showToolWindowBars", "", true),
+				toggle("appearance.showToolWindowNames", "", false),
+				toggle("appearance.widescreenToolWindows", "", false),
+				toggle("appearance.showStatusBar", "", true),
+				text("appearance.navigationBar", "", "", "statusBar"),
+				nativeJSON("appearance.statusBarWidgets", "", "", map[string]any{}),
+			},
+		}),
+		runtime("native.runtime.editor", "editor renderer, completion and decorations", nativeSettingsSection{
+			fields: []nativeSettingsField{
+				text("editor.fontFamily", "", "", "JetBrains Mono"),
+				number("editor.fontSize", "", 13, 6, 72, 1),
+				number("editor.lineHeight", "", 22, 8, 120, 1),
+				toggle("editor.ligatures", "", false),
+				number("editor.fontWeight", "", 400, 100, 900, 50),
+				text("editor.fallbackFont", "", "", ""),
+				toggle("editor.softWrap", "", false),
+				toggle("editor.showWhitespace", "", false),
+				toggle("editor.formatOnSave", "", false),
+				toggle("editor.general.wheelZoom", "", false),
+				toggle("editor.general.dragAndDrop", "", true),
+				text("editor.general.caretScroll", "", "", "minimize"),
+				toggle("editor.general.softWrapIndent", "", true),
+				toggle("editor.general.scrollPastEnd", "", false),
+				toggle("editor.general.keepTrailingOnCaretLine", "", true),
+				text("editor.general.markdownImageFolder", "", "", ""),
+				text("editor.general.markdownImageNamePattern", "", "", ""),
+				list("editor.general.softWrapFiles", "", "", []string{"*.md", "*.txt", "*.rst", "*.adoc"}),
+				toggle("editor.breadcrumbs.show", "", true),
+				text("editor.breadcrumbs.placement", "", "", "top"),
+				list("editor.breadcrumbs.disabledLanguages", "", "", nil),
+				toggle("editor.showGutterIcons", "", true),
+				list("editor.gutterIconsDisabled", "", "", nil),
+				text("editor.tabs.activateOnClose", "", "", "left"),
+				text("editor.tabs.closeButtonPosition", "", "", "right"),
+				text("editor.tabs.closingPolicy", "", "", "lru"),
+				toggle("editor.tabs.markModified", "", false),
+				toggle("editor.tabs.multipleRows", "", false),
+				toggle("editor.tabs.openAtEnd", "", false),
+				toggle("editor.tabs.pinnedSeparateRow", "", false),
+				text("editor.tabs.placement", "", "", "top"),
+				toggle("editor.tabs.showCloseButton", "", true),
+				toggle("editor.tabs.showDirectoryForNonUnique", "", true),
+				toggle("editor.tabs.showExtension", "", true),
+				toggle("editor.tabs.showFileIcon", "", true),
+				toggle("editor.tabs.showFullPathOnHover", "", true),
+				toggle("editor.tabs.sortAlphabetically", "", false),
+				number("editor.tabs.tabLimit", "", 30, 1, 100, 1),
+				toggle("editor.tabs.previewTab", "", false),
+				toggle("editor.inlay.codeVisionUsages", "", true),
+				toggle("editor.inlay.codeVisionNoUsages", "", true),
+				toggle("editor.inlay.codeVisionAuthor", "", true),
+				text("editor.inlay.codeVisionUsagesPosition", "", "", "top"),
+				text("editor.inlay.codeVisionAuthorPosition", "", "", "top"),
+				number("editor.tabSize", "", 4, 1, 16, 1),
+				toggle("editor.insertSpaces", "", true),
+			},
+		}),
+		runtime("native.runtime.files", "save pipeline", nativeSettingsSection{
+			fields: []nativeSettingsField{
+				toggle("files.autoSave", "", false),
+				toggle("files.syncOnFocus", "", true),
+				toggle("files.trimTrailingWhitespace", "", false),
+				text("editor.general.stripTrailingScope", "", "", "modified"),
+				toggle("editor.general.removeTrailingBlankLines", "", false),
+				toggle("files.ensureFinalNewline", "", false),
+			},
+		}),
+		{
+			page:     settingsPageSpec{id: "native.runtime.vcs"},
+			consumer: "commit, push, history and shelf runtime",
+			sections: []nativeSettingsSection{{
+				fields: []nativeSettingsField{
+					toggle("vcs.commit.nonModal", "", true),
+					toggle("vcs.commit.clearInitialMessage", "", false),
+					toggle("vcs.commit.blankLineAfterSubject", "", true),
+					toggle("vcs.commit.limitSubject", "", true),
+					number("vcs.commit.subjectLimit", "", 72, 20, 500, 1),
+					toggle("vcs.commit.limitBody", "", false),
+					number("vcs.commit.bodyLimit", "", 72, 20, 500, 1),
+					toggle("vcs.commit.showRightMargin", "", true),
+					toggle("vcs.commit.wrapAtMargin", "", false),
+					toggle("vcs.commit.analyzeCode", "", true),
+					toggle("vcs.commit.checkTodo", "", true),
+					toggle("vcs.commit.cleanup", "", false),
+					toggle("vcs.commit.reformat", "", false),
+					toggle("vcs.commit.optimizeImports", "", false),
+					toggle("vcs.showDirtyDirectories", "", false),
+					toggle("vcs.limitHistory", "", true),
+					number("vcs.historyLimit", "", 1000, 10, 100000, 10),
+					text("vcs.confirmation.onCreate", "", "", "ask"),
+					text("vcs.confirmation.onDelete", "", "", "ask"),
+					toggle("vcs.confirmation.showUpdateOptions", "", true),
+					toggle("vcs.confirmation.confirmDropCommits", "", true),
+					text("vcs.confirmation.onPatchCreated", "", "", "ask"),
+					text("vcs.git.executable", "", "", ""),
+					toggle("vcs.git.inlineBlame", "", false),
+					toggle("vcs.git.showBranchInProjectView", "", false),
+					toggle("vcs.git.warnCrlf", "", true),
+					toggle("vcs.git.warnDetachedHead", "", true),
+					toggle("vcs.git.signOff", "", false),
+					toggle("vcs.git.warnLargeFiles", "", true),
+					number("vcs.git.largeFileMb", "", 50, 1, 100000, 1),
+					toggle("vcs.git.warnBadFileNames", "", true),
+					toggle("vcs.git.autoUpdateOnPushRejected", "", false),
+					toggle("vcs.git.showPushDialog", "", true),
+					toggle("vcs.git.pushDialogOnlyProtected", "", false),
+					text("vcs.git.protectedBranches", "", "", "master; main"),
+					text("vcs.git.updateMethod", "", "", "merge"),
+					text("vcs.git.incomingCheck", "", "", "auto"),
+					toggle("vcs.git.combineStashAndShelf", "", false),
+					toggle("vcs.shelf.removeApplied", "", false),
+				},
+			}},
+		},
+		runtime("native.runtime.general", "application lifecycle", nativeSettingsSection{
+			fields: []nativeSettingsField{
+				toggle("general.confirmExit", "", true),
+				toggle("general.closeWithoutWelcome", "", false),
+				toggle("general.closeTabsWithWindow", "", false),
+				text("general.defaultProjectDirectory", "", "", ""),
+				text("general.openProjectIn", "", "", "ask"),
+				toggle("general.powerSaveMode", "", false),
+				toggle("general.saveOnIdle", "", false),
+				number("general.idleSeconds", "", 15, 1, 3600, 1),
+				toggle("general.autoCheckUpdates", "", true),
+				toggle("general.showWhatsNewAfterUpdate", "", true),
+				text("general.updateSource", "", "", "auto"),
+			},
+		}),
+		runtime("native.runtime.terminal", "terminal shell, input and renderer", nativeSettingsSection{
+			fields: []nativeSettingsField{
+				text("terminal.startDirectory", "", "", ""),
+				text("terminal.shellPath", "", "", ""),
+				nativeJSON("terminal.env", "", "", map[string]any{}),
+				toggle("terminal.shellIntegration", "", true),
+				text("terminal.tabName", "", "", "Local"),
+				text("terminal.fontFamily", "", "", ""),
+				number("terminal.fontSize", "", 13, 8, 72, 1),
+				number("terminal.lineHeight", "", 1, 0.5, 3, 0.1),
+				text("terminal.fallbackFontFamily", "", "", ""),
+				toggle("terminal.useEditorFont", "", false),
+				toggle("terminal.closeOnExit", "", false),
+				toggle("terminal.audibleBell", "", false),
+				toggle("terminal.copyOnSelection", "", false),
+				toggle("terminal.pasteOnMiddleClick", "", false),
+				toggle("terminal.optionAsMeta", "", true),
+				toggle("terminal.escapeToEditor", "", true),
+				toggle("terminal.mouseReporting", "", true),
+				toggle("terminal.highlightHyperlinks", "", true),
+				toggle("terminal.cursorBlink", "", true),
+				text("terminal.cursorShape", "", "", "block"),
+				number("terminal.columnWidth", "", 8, 1, 40, 1),
+			},
+		}),
+	}
+}
+
 func cmakeAndEditorNativeSettingsPages() []nativeSettingsPageSpec {
 	colorSchemeChoices := knownColorSchemeChoices()
 	colorSchemeField := func() nativeSettingsField {
@@ -1501,6 +1731,8 @@ func (m *Model) loadNativeSettingsPage(page string) {
 			case settingsPageRunDebug:
 				m.applyRunRuntimeSettings(map[string]nativeSettingsPageState{page: current})
 			}
+			m.applyEditorSchemeNativePages(map[string]nativeSettingsPageState{page: current})
+			m.applyNativePreferenceRuntimeSettings(nativeRuntimeSettingsDefinitions())
 			m.invalidate()
 		})
 	}()

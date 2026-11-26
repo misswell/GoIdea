@@ -3,6 +3,30 @@
 The GitHub release notes, which **Help › What's New** shows, come from the
 `## <version>` section here. Every release needs one, or its build fails.
 
+## Unreleased
+
+- Java and other language tools are installed once and reused by every project window.
+- Existing per-window Java tool downloads now move into that shared store.
+- Notifications now use OpenIDEA's exact active-window, hover-pause and sticky timers.
+- Switching projects clears the old project's notifications while keeping update notices.
+- Maven and Gradle offline and skip-tests choices now persist for each project.
+- Maven and Gradle project linking now follows OpenIDEA's trust, confirmation and cancellation rules.
+- **Execute Maven Goal** and **Execute Gradle Task** now let you choose their target project.
+- Database actions now follow OpenIDEA's targets, dialect gates, history, transactions and stale replies.
+- Color scheme import and export now round-trip the token attributes MyGo can render.
+- Rainbow brackets now handle Rust lifetimes without treating them as strings.
+- Semantic highlighting refreshes as soon as its language server becomes ready.
+- **Share JDT LS across builds** is unavailable for workspace projects, matching OpenIDEA.
+- **Run** and **Debug** context actions now target the named file, line, directory and framework.
+- Run **Stop**, **Rerun** and **Rerun Failed** now act on the selected child, service or composite tab.
+- **Attach to Process** now completes the real Java JDWP and Python debugpy integration lifecycle.
+- GoIDEA now recognizes all 82 OpenIDEA language IDs, filenames, extensions and live language changes.
+- Syntax highlighting now spans OpenIDEA's language catalog through native MyGo and embedded Chroma tokenizers.
+- Startup and project switching now load OpenIDEA's runtime settings, including 119 keys with live native consumers.
+- Changelists now use canonical project paths and commit only the active list's files by default.
+- Patch creation and application now choose the correct repository and reject mixed-repository selections.
+- Git Log file actions now resolve paths against the selected commit's repository.
+
 ## 0.1.43
 
 - Dialogs now keep the workbench undimmed, rise in 140 ms and accept Enter's default action.

@@ -1,6 +1,8 @@
 package app
 
 import (
+	"fmt"
+
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
 )
@@ -121,31 +123,28 @@ func (m *Model) editorColorSchemeTheme() *editor.Theme {
 	theme.Selection = visual.selection
 	theme.InactiveSelection = visual.inactiveSelection
 	theme.Cursor = visual.caret
-	for attribute, kind := range editorSchemeTokenKinds {
-		if value, ok := attributes[attribute]; ok {
-			if color, ok := parsedPreviewColor(value.Foreground); ok {
-				setEditorTokenColor(theme, kind, color)
-			}
-			if value.Bold != nil {
-				setEditorTokenBold(theme, kind, *value.Bold)
-			}
-			if value.Italic != nil {
-				setEditorTokenItalic(theme, kind, *value.Italic)
-			}
-			continue
-		}
-		if value := visual.tokens[attribute]; value != "" {
-			setEditorTokenColor(theme, kind, ui.Hex(value))
-		}
-	}
+	applyEditorSchemeVisualAttributes(theme, visual)
+	effective := make(map[string]ColorAttributes, len(attributes))
 	if custom, ok := prefs.CustomSchemes[schemeID]; ok {
 		for attribute, value := range custom.Attributes {
-			applyEditorSchemeAttribute(theme, attribute, value)
+			effective[attribute] = cloneColorAttributes(value)
 		}
 	}
 	for attribute, value := range prefs.ColorOverrides[schemeID] {
-		applyEditorSchemeAttribute(theme, attribute, value)
+		current := effective[attribute]
+		current.Foreground = firstNonEmpty(current.Foreground, value.Foreground)
+		current.Background = firstNonEmpty(current.Background, value.Background)
+		current.EffectColor = firstNonEmpty(current.EffectColor, value.EffectColor)
+		if value.Bold != nil {
+			current.Bold = value.Bold
+		}
+		if value.Italic != nil {
+			current.Italic = value.Italic
+		}
+		current.Effect = firstNonEmpty(current.Effect, value.Effect)
+		effective[attribute] = current
 	}
+	applyEditorSchemeAttributes(theme, effective)
 	return theme
 }
 
@@ -161,50 +160,256 @@ func editorSchemeBaseAndAttributes(prefs EditorSchemePrefs, id string) (string, 
 }
 
 var editorSchemeTokenKinds = map[string]editor.TokenKind{
-	"keyword":               editor.TokenKeyword,
-	"type":                  editor.TokenType,
-	"className":             editor.TokenType,
-	"functionDeclaration":   editor.TokenFunction,
-	"functionCall":          editor.TokenFunction,
-	"string":                editor.TokenString,
-	"number":                editor.TokenNumber,
-	"lineComment":           editor.TokenComment,
-	"docComment":            editor.TokenComment,
-	"operator":              editor.TokenOperator,
-	"identifier":            editor.TokenVariable,
-	"parameter":             editor.TokenVariable,
-	"globalVariable":        editor.TokenVariable,
-	"pyKeyword":             editor.TokenKeyword,
-	"pyNumber":              editor.TokenNumber,
-	"pyString":              editor.TokenString,
-	"pyLineComment":         editor.TokenComment,
-	"pyDocstring":           editor.TokenComment,
-	"pyFunctionDeclaration": editor.TokenFunction,
-	"pyParameter":           editor.TokenVariable,
-	"pyOperationSign":       editor.TokenOperator,
-	"property":              editor.TokenProperty,
-	"constant":              editor.TokenConstant,
-	"escape":                editor.TokenEscape,
-	"tag":                   editor.TokenTag,
-	"attribute":             editor.TokenAttribute,
-	"todo":                  editor.TokenMeta,
-	"invalid":               editor.TokenInvalid,
+	"keyword":             editor.TokenKeyword,
+	"type":                editor.TokenType,
+	"className":           editor.TokenType,
+	"functionDeclaration": editor.TokenFunction,
+	"functionCall":        editor.TokenFunction,
+	"string":              editor.TokenString,
+	"number":              editor.TokenNumber,
+	"lineComment":         editor.TokenComment,
+	"docComment":          editor.TokenComment,
+	"docCommentTag":       editor.TokenComment,
+	"docCommentTagValue":  editor.TokenComment,
+	"docCommentMarkup":    editor.TokenComment,
+	"operator":            editor.TokenOperator,
+	"identifier":          editor.TokenVariable,
+	"parameter":           editor.TokenVariable,
+	"globalVariable":      editor.TokenVariable,
+	"field":               editor.TokenProperty,
+	"property":            editor.TokenProperty,
+	"constant":            editor.TokenConstant,
+	"predefined":          editor.TokenConstant,
+	"escape":              editor.TokenEscape,
+	"tag":                 editor.TokenTag,
+	"markupTag":           editor.TokenTag,
+	"attribute":           editor.TokenAttribute,
+	"markupAttribute":     editor.TokenAttribute,
+	"regexp":              editor.TokenRegexp,
+	"todo":                editor.TokenMeta,
+	"metadata":            editor.TokenMeta,
+	"invalid":             editor.TokenInvalid,
 }
 
-func applyEditorSchemeAttribute(theme *editor.Theme, attribute string, value ColorAttributes) {
-	kind, ok := editorSchemeTokenKinds[attribute]
-	if !ok {
-		return
+var editorSchemeLanguageTokenKinds = map[string]editor.TokenKind{
+	"java.keyword":             editor.TokenKeyword,
+	"java.number":              editor.TokenNumber,
+	"java.string":              editor.TokenString,
+	"java.lineComment":         editor.TokenComment,
+	"java.docComment":          editor.TokenComment,
+	"java.docCommentTag":       editor.TokenComment,
+	"java.docCommentTagValue":  editor.TokenComment,
+	"java.docCommentMarkup":    editor.TokenComment,
+	"java.className":           editor.TokenType,
+	"java.identifier":          editor.TokenVariable,
+	"java.parameter":           editor.TokenVariable,
+	"java.field":               editor.TokenProperty,
+	"java.constant":            editor.TokenConstant,
+	"java.functionDeclaration": editor.TokenFunction,
+	"java.functionCall":        editor.TokenFunction,
+	"java.operator":            editor.TokenOperator,
+	"pyKeyword":                editor.TokenKeyword,
+	"pyNumber":                 editor.TokenNumber,
+	"pyString":                 editor.TokenString,
+	"pyLineComment":            editor.TokenComment,
+	"pyDocstring":              editor.TokenComment,
+	"pyFunctionDeclaration":    editor.TokenFunction,
+	"pyParameter":              editor.TokenVariable,
+	"pyOperationSign":          editor.TokenOperator,
+}
+
+var editorSchemeAttributePriority = map[string]int{
+	"type":                0,
+	"className":           1,
+	"functionDeclaration": 0,
+	"functionCall":        1,
+	"lineComment":         0,
+	"docComment":          1,
+	"docCommentTag":       2,
+	"docCommentTagValue":  3,
+	"docCommentMarkup":    4,
+	"identifier":          0,
+	"globalVariable":      1,
+	"parameter":           2,
+	"field":               1,
+	"property":            0,
+	"constant":            0,
+	"predefined":          1,
+}
+
+var editorSchemeExportTokenAttributes = []struct {
+	attribute string
+	kind      editor.TokenKind
+}{
+	{"keyword", editor.TokenKeyword},
+	{"className", editor.TokenType},
+	{"functionDeclaration", editor.TokenFunction},
+	{"identifier", editor.TokenVariable},
+	{"field", editor.TokenProperty},
+	{"constant", editor.TokenConstant},
+	{"number", editor.TokenNumber},
+	{"string", editor.TokenString},
+	{"escape", editor.TokenEscape},
+	{"regexp", editor.TokenRegexp},
+	{"lineComment", editor.TokenComment},
+	{"operator", editor.TokenOperator},
+	{"markupTag", editor.TokenTag},
+	{"markupAttribute", editor.TokenAttribute},
+	{"metadata", editor.TokenMeta},
+	{"invalid", editor.TokenInvalid},
+}
+
+func editorSchemeExportAttributes(
+	prefs EditorSchemePrefs,
+	id string,
+	base *ui.Theme,
+) map[string]ColorAttributes {
+	attributes := map[string]ColorAttributes{}
+	if custom, ok := prefs.CustomSchemes[id]; ok {
+		for attribute, value := range custom.Attributes {
+			attributes[attribute] = cloneColorAttributes(value)
+		}
 	}
-	if color, ok := parsedPreviewColor(value.Foreground); ok {
-		setEditorTokenColor(theme, kind, color)
+	for attribute, value := range prefs.ColorOverrides[id] {
+		current := attributes[attribute]
+		current.Foreground = firstNonEmpty(current.Foreground, value.Foreground)
+		current.Background = firstNonEmpty(current.Background, value.Background)
+		current.EffectColor = firstNonEmpty(current.EffectColor, value.EffectColor)
+		if value.Bold != nil {
+			current.Bold = value.Bold
+		}
+		if value.Italic != nil {
+			current.Italic = value.Italic
+		}
+		current.Effect = firstNonEmpty(current.Effect, value.Effect)
+		attributes[attribute] = current
 	}
-	if value.Bold != nil {
-		setEditorTokenBold(theme, kind, *value.Bold)
+	exportPrefs := prefs
+	exportPrefs.ColorScheme = id
+	theme := (&Model{prefs: Preferences{EditorScheme: exportPrefs}}).editorColorSchemeTheme()
+	if theme == nil {
+		if base == nil {
+			base = openideaTheme(false)
+		}
+		theme = editor.DefaultTheme(base)
 	}
-	if value.Italic != nil {
-		setEditorTokenItalic(theme, kind, *value.Italic)
+	fillTextAttributes := func(attribute, foreground string, background string) {
+		value := attributes[attribute]
+		value.Foreground = firstNonEmpty(value.Foreground, foreground)
+		value.Background = firstNonEmpty(value.Background, background)
+		attributes[attribute] = value
 	}
+	fillTextAttributes("text",
+		colorAsHex(theme.Text), colorAsHex(theme.Background))
+	for _, target := range editorSchemeExportTokenAttributes {
+		value := attributes[target.attribute]
+		style := theme.Tokens[target.kind]
+		value.Foreground = firstNonEmpty(value.Foreground, colorAsHex(theme.TokenColor(target.kind)))
+		if value.Bold == nil {
+			bold := style.Bold
+			value.Bold = &bold
+		}
+		if value.Italic == nil {
+			italic := style.Italic
+			value.Italic = &italic
+		}
+		attributes[target.attribute] = value
+	}
+	fillSurface := func(attribute string, color ui.Color) {
+		value := attributes[attribute]
+		value.Foreground = firstNonEmpty(value.Foreground, colorAsHex(color))
+		attributes[attribute] = value
+	}
+	fillSurface("caret", theme.Cursor)
+	fillSurface("lineNumber", theme.LineNumber)
+	fillSurface("lineNumberCaret", theme.ActiveLineNumber)
+	fillSurface("whitespaces", theme.Whitespace)
+	fillSurface("indentGuide", theme.IndentGuide)
+	fillSurface("rightMargin", theme.WrapGuide)
+	fillSurfaceBackground := func(attribute string, color ui.Color) {
+		value := attributes[attribute]
+		value.Background = firstNonEmpty(value.Background, colorAsHex(color))
+		attributes[attribute] = value
+	}
+	fillSurfaceBackground("caretRow", theme.ActiveLine)
+	fillSurfaceBackground("selection", theme.Selection)
+	fillSurfaceBackground("selectionInactive", theme.InactiveSelection)
+	return attributes
+}
+
+func colorAsHex(color ui.Color) string {
+	if color.A == 0 {
+		return ""
+	}
+	return fmt.Sprintf("#%02x%02x%02x", color.R, color.G, color.B)
+}
+
+func applyEditorSchemeVisualAttributes(theme *editor.Theme, visual editorSchemeVisual) {
+	attributes := make(map[string]ColorAttributes, len(visual.tokens))
+	for attribute, value := range visual.tokens {
+		attributes[attribute] = ColorAttributes{Foreground: value}
+	}
+	applyEditorSchemeAttributes(theme, attributes)
+}
+
+func applyEditorSchemeAttributes(theme *editor.Theme, attributes map[string]ColorAttributes) {
+	selected := map[editor.TokenKind]string{}
+	for attribute := range attributes {
+		kind, ok := editorSchemeTokenKinds[attribute]
+		if !ok {
+			continue
+		}
+		current, exists := selected[kind]
+		if !exists ||
+			editorSchemeAttributePriority[attribute] < editorSchemeAttributePriority[current] ||
+			editorSchemeAttributePriority[attribute] == editorSchemeAttributePriority[current] &&
+				attribute < current {
+			selected[kind] = attribute
+		}
+	}
+	for kind, attribute := range selected {
+		value := attributes[attribute]
+		if color, ok := parsedPreviewColor(value.Foreground); ok {
+			setEditorTokenColor(theme, kind, color)
+		}
+		if value.Bold != nil {
+			setEditorTokenBold(theme, kind, *value.Bold)
+		}
+		if value.Italic != nil {
+			setEditorTokenItalic(theme, kind, *value.Italic)
+		}
+	}
+	if text, ok := attributes["text"]; ok {
+		if color, ok := parsedPreviewColor(text.Foreground); ok {
+			theme.Text = color
+		}
+		if color, ok := parsedPreviewColor(text.Background); ok {
+			theme.Background = color
+		}
+	}
+	setSurfaceColor := func(attribute string, target *ui.Color) {
+		value := attributes[attribute]
+		if color, ok := parsedPreviewColor(firstNonEmpty(value.Foreground, value.Background)); ok {
+			*target = color
+		}
+	}
+	setSurfaceColor("caret", &theme.Cursor)
+	setSurfaceColor("caretRow", &theme.ActiveLine)
+	setSurfaceColor("selection", &theme.Selection)
+	setSurfaceColor("selectionInactive", &theme.InactiveSelection)
+	setSurfaceColor("lineNumber", &theme.LineNumber)
+	setSurfaceColor("lineNumberCaret", &theme.ActiveLineNumber)
+	setSurfaceColor("whitespaces", &theme.Whitespace)
+	setSurfaceColor("indentGuide", &theme.IndentGuide)
+	setSurfaceColor("rightMargin", &theme.WrapGuide)
+}
+
+func editorSchemeAttributeKind(attribute string) (editor.TokenKind, bool) {
+	if kind, ok := editorSchemeTokenKinds[attribute]; ok {
+		return kind, true
+	}
+	kind, ok := editorSchemeLanguageTokenKinds[attribute]
+	return kind, ok
 }
 
 func setEditorTokenColor(theme *editor.Theme, kind editor.TokenKind, color ui.Color) {

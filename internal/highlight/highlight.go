@@ -116,6 +116,18 @@ func Lexer(path string) chroma.Lexer {
 	if l := lexers.Match(name); l != nil && l.Config().Name == "markdown" {
 		return markdown()
 	}
+	if language := LanguageFor(path); language != nil {
+		switch language.Core {
+		case "plaintext":
+			return nil
+		default:
+			if lexerName := LexerNameFor(language); lexerName != "" {
+				if l := lexers.Get(lexerName); l != nil {
+					return chroma.Coalesce(l)
+				}
+			}
+		}
+	}
 	l := lexers.Match(name)
 	if l == nil {
 		switch strings.ToLower(name) {

@@ -89,6 +89,7 @@ func (m *Model) OpenCommit() {
 	m.commit = m.newCommitState(m.vcsRepositoryRoot())
 	m.commit.allRepositories = true
 	m.loadPreparedCommitMessage(m.commit)
+	m.loadChangelists(false)
 	if m.vcsCommitNonModal() {
 		m.ShowVCS()
 		m.SelectVCSTab(vcsContentChanges)
@@ -219,7 +220,18 @@ func (m *Model) commitIncluded(c *commitState, f openidea.FileStatus) bool {
 	if kind == "untracked" || kind == "conflicted" {
 		return false
 	}
+	if c.allRepositories && !m.fileInActiveChangelist(f.Path) {
+		return false
+	}
 	return true
+}
+
+func (m *Model) fileInActiveChangelist(path string) bool {
+	if !m.vcsMore.changelistsLoaded || len(m.vcsMore.lists.Lists) < 2 {
+		return true
+	}
+	m.syncVCSChangelistAssignments(&m.vcsMore.lists, false)
+	return m.changelistForPath(m.vcsMore.lists, path) == m.vcsMore.lists.Active
 }
 
 // partiallyStaged reports whether a file has both an index entry and further

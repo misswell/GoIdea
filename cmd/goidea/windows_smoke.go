@@ -12,11 +12,12 @@ import (
 )
 
 type smokeProjectWindow struct {
-	Root    string `json:"root"`
-	Tabs    int    `json:"tabs"`
-	Backend bool   `json:"backend"`
-	PID     int    `json:"pid"`
-	Phase   string `json:"phase"`
+	Root       string `json:"root"`
+	Tabs       int    `json:"tabs"`
+	Backend    bool   `json:"backend"`
+	PID        int    `json:"pid"`
+	Phase      string `json:"phase"`
+	ServerHome string `json:"serverHome"`
 }
 
 func smokeProjectWindows(host *nativeWindowHost, started time.Time) {
@@ -103,7 +104,7 @@ func smokeProjectWindows(host *nativeWindowHost, started time.Time) {
 	for time.Now().Before(deadline) && empty.model.BackendPID() == 0 {
 		time.Sleep(100 * time.Millisecond)
 	}
-	emptySnapshot := captureSmokeWindow(empty.model)
+	emptySnapshot := captureSmokeWindow(empty.model, empty.serverHome)
 	var countWithEmpty int
 	mygo.RunOnMain(func() {
 		countWithEmpty = host.WindowCount()
@@ -125,8 +126,8 @@ func smokeProjectWindows(host *nativeWindowHost, started time.Time) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	firstBefore := captureSmokeWindow(first.model)
-	secondBefore := captureSmokeWindow(second.model)
+	firstBefore := captureSmokeWindow(first.model, first.serverHome)
+	secondBefore := captureSmokeWindow(second.model, second.serverHome)
 	var countBefore int
 	mygo.RunOnMain(func() { countBefore = host.WindowCount() })
 	fields["beforeClose"] = map[string]any{
@@ -140,6 +141,14 @@ func smokeProjectWindows(host *nativeWindowHost, started time.Time) {
 	fields["distinctBackends"] = firstBefore.PID > 0 &&
 		secondBefore.PID > 0 &&
 		firstBefore.PID != secondBefore.PID
+	fields["sharedServerHome"] = first.serverHome != "" &&
+		first.serverHome == second.serverHome &&
+		first.serverHome == empty.serverHome
+	fields["serverHomes"] = map[string]string{
+		first.id:  first.serverHome,
+		second.id: second.serverHome,
+		empty.id:  empty.serverHome,
+	}
 
 	mygo.RunOnMain(second.win.Close)
 	deadline = time.Now().Add(20 * time.Second)
@@ -151,8 +160,8 @@ func smokeProjectWindows(host *nativeWindowHost, started time.Time) {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	firstAfter := captureSmokeWindow(first.model)
-	secondAfter := captureSmokeWindow(second.model)
+	firstAfter := captureSmokeWindow(first.model, first.serverHome)
+	secondAfter := captureSmokeWindow(second.model, second.serverHome)
 	var countAfter int
 	mygo.RunOnMain(func() { countAfter = host.WindowCount() })
 	fields["afterClose"] = map[string]any{
@@ -181,13 +190,14 @@ func waitProjectWindow(model *app.Model, timeout time.Duration) bool {
 	return false
 }
 
-func captureSmokeWindow(model *app.Model) smokeProjectWindow {
+func captureSmokeWindow(model *app.Model, serverHome string) smokeProjectWindow {
 	root, tabs, backend := model.Snapshot()
 	return smokeProjectWindow{
-		Root:    root,
-		Tabs:    tabs,
-		Backend: backend,
-		PID:     model.BackendPID(),
-		Phase:   model.Phase(),
+		Root:       root,
+		Tabs:       tabs,
+		Backend:    backend,
+		PID:        model.BackendPID(),
+		Phase:      model.Phase(),
+		ServerHome: serverHome,
 	}
 }

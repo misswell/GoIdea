@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/json"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -140,6 +141,43 @@ func TestGradleRunConfigurationUsesTheInnermostLinkedBuild(t *testing.T) {
 	}
 	if owner := m.gradleConfigOwner(nestedConfig); owner == nil || owner.Dir != "tools" {
 		t.Fatalf("nested configuration owner = %+v", owner)
+	}
+}
+
+func TestSelectedGradleProjectDrivesExecuteTask(t *testing.T) {
+	m := &Model{}
+	m.maven.model.Gradle = []gradleModel{
+		{
+			Dir: "", Command: "./gradlew",
+			Projects: []gradleProject{{Path: ":", Name: "first", Tasks: []gradleTask{{Name: "test"}}}},
+		},
+		{
+			Dir: "tools", Command: "/work/tools/gradlew",
+			Projects: []gradleProject{
+				{Path: ":", Name: "tools", Tasks: []gradleTask{{Name: "test"}}},
+				{Path: ":app", Name: "app", Tasks: []gradleTask{{Name: "jar"}}},
+			},
+		},
+	}
+	build := &m.maven.model.Gradle[1]
+	project := &build.Projects[1]
+	m.selectGradleProject(build, project)
+	currentBuild, currentProject := m.currentGradleProject()
+	if currentBuild != build || currentProject != project {
+		t.Fatalf("current Gradle project = %+v/%+v, want tools/:app", currentBuild, currentProject)
+	}
+	if m.maven.activeTool != "gradle" {
+		t.Fatalf("active tool = %q, want gradle", m.maven.activeTool)
+	}
+	config := gradleTaskConfig(currentBuild, currentProject, []string{"jar"}, false, false)
+	if config.Command != "/work/tools/gradlew" || !reflect.DeepEqual(config.Args, []string{":app:jar"}) {
+		t.Fatalf("selected Gradle execute config = %+v", config)
+	}
+
+	m.maven.model.Gradle = m.maven.model.Gradle[:1]
+	m.mavenInitTree()
+	if m.maven.gradleSel.project != nil || m.maven.gradleSelKey != "" {
+		t.Fatalf("unlinked Gradle project stayed selected: %+v", m.maven.gradleSel)
 	}
 }
 

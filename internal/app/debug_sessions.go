@@ -303,6 +303,24 @@ func (m *Model) debugHasLiveSessions() bool {
 	return false
 }
 
+// SessionSharesProcess reports whether a live debug tab still refers to the
+// same started process. A Gradle or Maven fork can expose several JDWP ports,
+// so ending one tab must not stop the Run process that feeds the others.
+func (d *DebugPane) SessionSharesProcess(runID uint32) bool {
+	if runID == 0 {
+		return false
+	}
+	if d.session != 0 && !d.ended && d.parent == runID {
+		return true
+	}
+	for _, state := range d.sessions {
+		if state != nil && state.session != 0 && !state.ended && state.parent == runID {
+			return true
+		}
+	}
+	return false
+}
+
 func (m *Model) markDebugSessionRetired(id uint32) {
 	if id == 0 {
 		return
@@ -627,6 +645,7 @@ func (m *Model) acceptBackgroundDebugEvent(id uint32, event openidea.DebugEvent)
 			appendDebugOutput(&state.output, &state.truncated, text, kind)
 		}
 	case "terminated", "exited":
+		parent := state.parent
 		m.markDebugSessionRetired(id)
 		request, cancelHeap := invalidateDebugHeapOperation(&state.heap)
 		state.stopGeneration++
@@ -643,6 +662,7 @@ func (m *Model) acceptBackgroundDebugEvent(id uint32, event openidea.DebugEvent)
 		state.vars = nil
 		state.stopLine = -1
 		state.session = 0
+		state.parent = 0
 		state.frameID = 0
 		state.varContainer = 0
 		state.status = "Debugging ended"
@@ -667,6 +687,10 @@ func (m *Model) acceptBackgroundDebugEvent(id uint32, event openidea.DebugEvent)
 			m.removeBackgroundDebugSession(id)
 			m.invalidate()
 			return true
+		}
+		if parent != 0 && !m.debug.SessionSharesProcess(parent) {
+			m.debug.parent = 0
+			m.stopAssociatedRun(parent)
 		}
 	case "hotCodeReplace":
 		if event.ChangeType == "BUILD_COMPLETE" {

@@ -64,7 +64,7 @@ func TestCheckForUpdatesAnnouncesAsAStickyNotification(t *testing.T) {
 	if n.title != "GoIDEA 99.0.0 is available" {
 		t.Fatalf("notification title = %q", n.title)
 	}
-	if !n.permanent {
+	if !n.sticky {
 		t.Fatal("the available notification is not sticky")
 	}
 	if len(n.actions) != 1 || n.actions[0].label != "Install and Restart" {

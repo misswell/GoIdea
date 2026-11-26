@@ -698,11 +698,11 @@ func (m *Model) selectedLogChangeTarget(arg any) (logChangeTarget, bool) {
 	if root == "" {
 		return logChangeTarget{}, false
 	}
-	path := change.Path
-	if !filepath.IsAbs(path) {
-		path = filepath.Join(root, path)
+	absolutePath := change.Path
+	if !filepath.IsAbs(absolutePath) {
+		absolutePath = filepath.Join(root, absolutePath)
 	}
-	leftPath := path
+	leftPath := absolutePath
 	if change.OldPath != nil && *change.OldPath != "" {
 		leftPath = filepath.Join(root, *change.OldPath)
 	}
@@ -718,7 +718,7 @@ func (m *Model) selectedLogChangeTarget(arg any) (logChangeTarget, bool) {
 		after = ""
 	}
 	return logChangeTarget{
-		change: change, commit: commit, root: root, path: path,
+		change: change, commit: commit, root: root, path: absolutePath,
 		leftPath: leftPath, before: before, after: after,
 	}, true
 }
@@ -731,7 +731,7 @@ func (m *Model) fileAtRevision(ctx context.Context, path, revision string) (stri
 	if revision != "" {
 		revArg = revision
 	}
-	raw, err := m.mgr.Invoke(ctx, Window, "vcs_file_at", map[string]any{
+	raw, err := m.invoke(ctx, "vcs_file_at", map[string]any{
 		"path": path, "rev": revArg,
 	})
 	if err != nil {
@@ -851,12 +851,24 @@ func (m *Model) AskGetLogChangeFromRevision(arg any) {
 	if !ok {
 		return
 	}
+	m.selectLogCommitTarget(map[string]any{"id": target.commit.ID, "repo": target.root})
 	m.openVCSMore(vcsMoreConfirm, "changes.getFromRevision", "Get from Revision",
 		"Replace "+filepath.Base(target.path)+" with its content from "+target.commit.ShortID+"? Local changes are lost.")
-	m.vcsMore.input = target.path + "\x00" + target.after
+	m.vcsMore.input3 = target.root
+	m.vcsMore.input = strings.Join([]string{
+		target.change.Path, target.after, target.root,
+	}, "\x00")
 }
 
-func (m *Model) getLogChangeFromRevision(path, revision string) {
+func (m *Model) getLogChangeFromRevision(repositoryPath, revision, repository string) {
+	root := vcsRepositoryKey(repository)
+	if root == "" {
+		root = m.gitLogRepositoryRoot()
+	}
+	path := repositoryPath
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(root, path)
+	}
 	m.vcsMore.busy, m.vcsMore.err = true, ""
 	m.invalidate()
 	tabs := append([]*Tab(nil), m.tabs...)
@@ -908,7 +920,7 @@ func (m *Model) AskRevertLogChange(arg any) {
 		"Apply the reverse of "+filepath.Base(target.path)+" from "+target.commit.ShortID+"?")
 	m.vcsMore.input = target.commit.ID + "\x00" + target.path
 	if target.change.OldPath != nil {
-		m.vcsMore.input += "\x00" + *target.change.OldPath
+		m.vcsMore.input += "\x00" + filepath.ToSlash(*target.change.OldPath)
 	} else {
 		m.vcsMore.input += "\x00"
 	}
@@ -944,9 +956,9 @@ func (m *Model) revertSelectedLogChange(commitID, path, oldPath, repository stri
 		if err == nil {
 			err = json.Unmarshal(raw, &patch)
 		}
-		paths := map[string]bool{filepath.ToSlash(path): true}
+		paths := map[string]bool{filepath.ToSlash(targetRelativeLogPath(repository, path)): true}
 		if oldPath != "" {
-			paths[filepath.ToSlash(oldPath)] = true
+			paths[filepath.ToSlash(targetRelativeLogPath(repository, oldPath))] = true
 		}
 		if err == nil {
 			patch = filterUnifiedPatch(patch, paths)
@@ -972,6 +984,18 @@ func (m *Model) revertSelectedLogChange(commitID, path, oldPath, repository stri
 			m.RefreshAfterVCSCommand()
 		})
 	}()
+}
+
+func targetRelativeLogPath(repository, path string) string {
+	path = filepath.Clean(path)
+	repository = filepath.Clean(repository)
+	if repository != "" && repository != "." {
+		if rel, err := filepath.Rel(repository, path); err == nil &&
+			rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return filepath.ToSlash(rel)
+		}
+	}
+	return filepath.ToSlash(path)
 }
 
 // filterUnifiedPatch keeps the git diff sections that touch paths.
