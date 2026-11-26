@@ -3,7 +3,7 @@
 The GitHub release notes, which **Help › What's New** shows, come from the
 `## <version>` section here. Every release needs one, or its build fails.
 
-## Unreleased
+## 0.1.44
 
 - Java and other language tools are installed once and reused by every project window.
 - Existing per-window Java tool downloads now move into that shared store.
