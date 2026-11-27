@@ -113,8 +113,9 @@ type dockState struct {
 	// pinned windows keep their slot: a window opened into the same area
 	// takes the area's other slot instead, and when both are pinned it waits.
 	pinned map[string]bool
-	// viewModes is OpenIDEA v0.1.44's per-window View Mode other than Dock
-	// Pinned: "dockUnpinned" hides the window when focus moves away.
+	// viewModes is OpenIDEA's per-window View Mode other than Dock Pinned:
+	// "dockUnpinned" hides the window when focus moves away and "undock"
+	// overlays it on the editor without taking a dock track.
 	viewModes map[string]string
 	// stripeButtons overrides a contribution's default stripe membership.
 	// Opening an onUse window records true, while Hide records false.
@@ -249,9 +250,8 @@ func (m *Model) dockOccupant(s dockSlot) string {
 	return m.dock.slots[s]
 }
 
-// dockVisibleSlot reports whether a side draws at all: the left side draws
-// while either of its slots is occupied or the primary area is shown, the
-// right side while either right slot is occupied.
+// dockRightShown reports whether either right slot is occupied. Layout asks
+// rightShown instead when an occupied undocked slot should take no track.
 func (m *Model) dockRightShown() bool {
 	return m.dock.slots[dockRight] != "" || m.dock.slots[dockRightSplit] != ""
 }
@@ -482,20 +482,34 @@ func (m *Model) dockDragGhost(id string, x, y, w, h float32, held bool) {
 	m.DockMove(id, target)
 }
 
-// toolViewMode is OpenIDEA v0.1.44's per-window View Mode: "dockPinned" by
-// default, or "dockUnpinned" when the window hides as focus moves away.
+// toolViewMode is OpenIDEA's per-window View Mode: "dockPinned" by default,
+// "dockUnpinned" when the window hides as focus moves away, or "undock"
+// while it overlays the editor.
 func (m *Model) toolViewMode(id string) string {
-	if m.dock.viewModes[id] == "dockUnpinned" {
-		return "dockUnpinned"
+	switch m.dock.viewModes[id] {
+	case "dockUnpinned", "undock":
+		return m.dock.viewModes[id]
 	}
 	return "dockPinned"
 }
 
-// SetToolViewMode stores a window's View Mode. Undock needs floating native
-// windows GoIDEA does not have yet, so it says so instead of pretending.
+// SetToolViewMode stores a window's View Mode. All three modes stay inside
+// the main window, as OpenIDEA v0.1.54 does in its Islands layout.
 func (m *Model) SetToolViewMode(id, mode string) {
 	if dockSpec(id) == nil {
 		return
+	}
+	if mode != "dockPinned" && mode != "dockUnpinned" && mode != "undock" {
+		return
+	}
+	if m.toolViewMode(id) == mode {
+		return
+	}
+	if mode != "dockPinned" && !m.dockWindowShown(id) {
+		m.DockShow(id)
+		if !m.dockWindowShown(id) {
+			return
+		}
 	}
 	switch mode {
 	case "dockPinned":
@@ -503,17 +517,112 @@ func (m *Model) SetToolViewMode(id, mode string) {
 			delete(m.dock.viewModes, id)
 		}
 	case "dockUnpinned":
+		fallthrough
+	case "undock":
 		if m.dock.viewModes == nil {
 			m.dock.viewModes = map[string]string{}
 		}
 		m.dock.viewModes[id] = mode
-	case "undock":
-		m.status = "Undocking is not ported yet: MyGo has a single window"
-		m.invalidate()
-		return
 	}
 	m.rememberLayout()
 	m.invalidate()
+}
+
+// undockedWindow reports whether id is shown over the editor instead of its
+// dock slot's track. Only a shown window can be undocked.
+func (m *Model) undockedWindow(id string) bool {
+	return m.toolViewMode(id) == "undock" && m.dockWindowShown(id)
+}
+
+// undockedWindows lists the visible windows that take no dock track.
+func (m *Model) undockedWindows() []string {
+	var out []string
+	for _, id := range toolWindowOrder {
+		if m.undockedWindow(id) {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+// remainingDockOccupant is the projection of a dock slot used while laying
+// out tracks: an undocked occupant leaves the track empty.
+func (m *Model) remainingDockOccupant(s dockSlot) string {
+	id := m.dockOccupant(s)
+	if id != "" && m.undockedWindow(id) {
+		return ""
+	}
+	return id
+}
+
+// dockTrackShown reports whether a side still takes a track after removing
+// the windows that are undocked over the editor.
+func (m *Model) dockTrackShown(s dockSlot) bool {
+	return m.remainingDockOccupant(s) != ""
+}
+
+// rightShown reports whether the right side takes a track after excluding
+// undocked windows. Their content still renders over the editor.
+// undockedWindowMaximized reports the side whose undocked window fills the
+// frame. As upstream's data-maximized rule, this is independent of the dock
+// side's usual maximized flag.
+func (m *Model) undockedWindowMaximized(s dockSlot) bool {
+	id := m.dockOccupant(s)
+	return id != "" && m.undockedWindow(id) && m.maximized
+}
+
+// toggleUndockedWindowMaximized is the header double-click for an undocked
+// window. It shares the dock's Restore Size action, so leaving the maximized
+// surface returns the window to the same side and keeps its content.
+func (m *Model) toggleUndockedWindowMaximized(id string) {
+	if !m.undockedWindow(id) {
+		return
+	}
+	m.maximized = !m.maximized
+	m.rememberLayout()
+	m.invalidate()
+}
+
+// undockedWindowSize is the size an undocked window draws at on its side:
+// the side's remembered size, or the full frame while it is maximized.
+func (m *Model) undockedWindowSize(s dockSlot, frameWidth, frameHeight float32) (float32, float32) {
+	if m.undockedWindowMaximized(s) {
+		return frameWidth, frameHeight
+	}
+	switch s {
+	case dockLeft, dockLeftSplit:
+		return m.leftSideWidth(), frameHeight
+	case dockRight, dockRightSplit:
+		return m.rightSideWidth(), frameHeight
+	}
+	return 0, min(float32(m.bottomSize()), frameHeight)
+}
+
+// dockWindowContent draws a contributed window and supplies the HeaderRow
+// only when the feature has not already drawn its own header. This mirrors
+// OpenIDEA's useOwnToolWindowHeader: two header rows never stack.
+func (m *Model) dockWindowContent(c *ui.Context, p *ui.Theme, oi oiColors, id string) {
+	spec := dockSpec(id)
+	if spec == nil || spec.render == nil {
+		return
+	}
+	if !m.toolWindowRendersOwnHeader(id) {
+		m.toolWindowFrameHeader(c, p, oi, id)
+	}
+	spec.render(m, c, p, oi)
+}
+
+// toolWindowRendersOwnHeader is true for the content surfaces whose first row
+// is already the OpenIDEA window title. It follows the same choices as the
+// contributions that call ToolWindowHeader upstream.
+func (m *Model) toolWindowRendersOwnHeader(id string) bool {
+	switch id {
+	case "run", "debug", "term", "log", "graphql", "problems", "todo",
+		"find", "services", "agents", "notifications", "hierarchy",
+		"maven", "gradle":
+		return true
+	}
+	return false
 }
 
 // hideUnpinnedWindows hides every dockUnpinned window except the one that
@@ -749,8 +858,7 @@ type DockLayout struct {
 	Active  string            `json:"active,omitempty"`
 	Last    []string          `json:"last,omitempty"`
 	Hidden  map[string]string `json:"hidden,omitempty"`
-	// ViewModes are the windows whose View Mode is not Dock Pinned
-	// (v0.1.44's dockUnpinned).
+	// ViewModes are the windows whose View Mode is Dock Unpinned or Undock.
 	ViewModes map[string]string `json:"viewModes,omitempty"`
 	Max       bool              `json:"maximized,omitempty"`
 	// Pinned are the windows a Pin keeps in their slot.
@@ -796,7 +904,7 @@ func (m *Model) currentDockLayout() *DockLayout {
 		}
 	}
 	for id, mode := range m.dock.viewModes {
-		if dockSpec(id) != nil && mode == "dockUnpinned" {
+		if dockSpec(id) != nil && (mode == "dockUnpinned" || mode == "undock") {
 			if l.ViewModes == nil {
 				l.ViewModes = map[string]string{}
 			}
@@ -860,13 +968,18 @@ func (m *Model) applyDockLayout(d *DockLayout) {
 		m.dock.pinned[id] = true
 	}
 	for id, mode := range d.ViewModes {
-		if dockSpec(id) == nil || mode != "dockUnpinned" {
+		if dockSpec(id) == nil || (mode != "dockUnpinned" && mode != "undock") {
 			continue
 		}
 		if m.dock.viewModes == nil {
 			m.dock.viewModes = map[string]string{}
 		}
 		m.dock.viewModes[id] = mode
+	}
+	for _, id := range m.undockedWindows() {
+		if slot, ok := m.dockSlotOf(id); ok && slot == dockLeft {
+			m.leftHidden = false
+		}
 	}
 	for id, visible := range d.StripeButtons {
 		if dockSpec(id) == nil {

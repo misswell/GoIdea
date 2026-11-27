@@ -80,3 +80,34 @@ func TestAppearanceToggleActionsChangeTheNativeWorkbench(t *testing.T) {
 		t.Fatalf("the stripe still occupies space after hiding: %+v, %v", project, ok)
 	}
 }
+
+func TestViewAppearanceAndThemeActionsChangeOffscreenChrome(t *testing.T) {
+	settings := filepath.Join(t.TempDir(), "settings.json")
+	m := &Model{cfg: Config{SettingsPath: settings}}
+	tt := workbenchTester(t, m)
+
+	if !m.RunAction("view.toggleTheme") ||
+		!m.RunCommand("view.zoomIn") ||
+		!m.RunCommand("view.toggleToolbar") ||
+		!m.RunCommand("view.toggleToolWindowBars") ||
+		!m.RunCommand("view.toggleStatusBar") {
+		t.Fatal("an OpenIDEA view action did not run")
+	}
+	tt.Frame()
+	if m.prefs.Theme != "light" || m.ideZoomPercent() != 110 {
+		t.Fatalf("theme/zoom = %q/%d", m.prefs.Theme, m.ideZoomPercent())
+	}
+	if tt.HasText("Services") || tt.HasText("GoIDEA backend not connected") {
+		t.Fatalf("hidden chrome still rendered: %q", tt.Texts())
+	}
+	if project, ok := tt.Find("Project"); !ok || project.X >= oiStripeWidth {
+		t.Fatalf("hidden tool-window bars kept their stripe: %+v, %v", project, ok)
+	}
+	stored := LoadPreferences(settings)
+	if stored.Theme != "light" || stored.Appearance.IDEZoom != 110 ||
+		!stored.Appearance.HideMainToolbar ||
+		!stored.Appearance.HideToolWindowBars ||
+		!stored.Appearance.HideStatusBar {
+		t.Fatalf("stored view appearance = %+v theme=%q", stored.Appearance, stored.Theme)
+	}
+}

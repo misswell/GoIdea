@@ -678,6 +678,10 @@ func (m *Model) startRun() {
 		m.loadRunConfigs()
 		return
 	}
+	if debugOnlyRunConfiguration(cfg) {
+		m.rejectDebugOnlyRun()
+		return
+	}
 	if m.run.pendingCoverage {
 		m.run.pendingCoverage = false
 		m.startRunWithCoverage(cfg.Raw(), cfg.Name, &coverageExecution{name: cfg.Name, root: m.Root()})
@@ -706,6 +710,10 @@ func (m *Model) startRunWithCoverage(raw json.RawMessage, name string, coverage 
 		m.invalidate()
 		return false
 	}
+	if debugOnlyRunConfiguration(cfg) {
+		m.rejectDebugOnlyRun()
+		return false
+	}
 	if cfg.Kind == "compound" {
 		return m.startCompoundRun(cfg, coverage)
 	}
@@ -713,6 +721,16 @@ func (m *Model) startRunWithCoverage(raw json.RawMessage, name string, coverage 
 		return m.startRunWithBeforeLaunch(raw, name, coverage, cfg)
 	}
 	return m.startRunWithCoverageNow(raw, name, coverage, false)
+}
+
+func (m *Model) rejectDebugOnlyRun() {
+	m.status = "Only Debug is available: this configuration attaches to a process started elsewhere"
+	m.notifyInfo(
+		"run.debugOnly",
+		"Only Debug is available",
+		"Attach to the process already started for this remote configuration.",
+	)
+	m.invalidate()
 }
 
 // startRunWithBeforeLaunch runs OpenIDEA's before-launch list before creating

@@ -60,6 +60,7 @@ func TestNativeRuntimeSettingsLoadBeforePageNavigation(t *testing.T) {
 					},
 					"agentSecurity":{"allowedCommands":["go test *"],"blockedCommands":["rm -rf *"]},
 					"mcpServer":{"enabled":true,"runWithoutConfirmation":true},
+					"general":{"reopenLastProject":false},
 					"languages":{"markdown":{"previewFontSize":18}}
 				}`), nil
 			case "settings_get":
@@ -110,6 +111,9 @@ func TestNativeRuntimeSettingsLoadBeforePageNavigation(t *testing.T) {
 	}
 	if got := m.markdownPreviewFontSize(); got != 18 {
 		t.Fatalf("markdown preview size = %v", got)
+	}
+	if m.startupReopensProject() {
+		t.Fatal("runtime general.reopenLastProject = true, want false")
 	}
 	if !m.nativeRuntimeBool(settingsPageActionsOnSave, "actionsOnSave.optimizeImports") ||
 		!m.nativeRuntimeBool(settingsPageActionsOnSave, "actionsOnSave.cleanup") {

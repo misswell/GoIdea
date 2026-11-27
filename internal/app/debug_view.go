@@ -43,12 +43,8 @@ func (m *Model) debugPanel(c *ui.Context, p *ui.Theme) {
 	}
 	ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Radius(8).Clip().
 		Background(background).Children(func() {
-		ui.Row(c).Height(36).Shrink(0).Padding(0, 10).Gap(12).AlignItems(ui.Center).
-			BorderWidth(0, 0, 1, 0).BorderColor(oi.border).Children(func() {
-			ui.Text(c, "Debug").FontSize(13).TextColor(oi.text)
+		m.toolWindowHeader(c, p, oi, "debug", func() {
 			m.debugSessionTabs(c, p)
-			ui.Spacer(c)
-			debugIcon(c, oi, "hide", "general/hide", "Hide Debug", true, false, func() { m.DockHide("debug") })
 		})
 		if d.err != "" {
 			ui.Row(c).Shrink(0).Padding(4, 10).Gap(8).AlignItems(ui.Center).Children(func() {
@@ -57,9 +53,17 @@ func (m *Model) debugPanel(c *ui.Context, p *ui.Theme) {
 			})
 		}
 		if len(d.debugSessionSummaries()) == 0 {
-			ui.Column(c).Grow(1).AlignItems(ui.Center).Justify(ui.Center).Gap(6).Children(func() {
-				ui.Text(c, "Not debugging").FontSize(13).TextColor(oi.textMuted)
-				ui.Button(c, "Start Debugging").OnClick(m.Debug)
+			ui.Column(c).Grow(1).MinHeight(120).AlignItems(ui.Center).Justify(ui.Center).
+				Padding(24).Gap(8).Children(func() {
+				ui.Text(c, "Not debugging").FontSize(13).Bold().TextColor(oi.textStrong)
+				ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
+					ui.Text(c, "Start a debug configuration with").FontSize(12).
+						TextColor(oi.textMuted)
+					ui.Text(c, keymapShortcutLabel("run.debug")).Font(oiFontMono).
+						FontSize(11).TextColor(oi.textSecondary)
+					ui.Text(c, "or click a line number to set a breakpoint.").FontSize(12).
+						TextColor(oi.textMuted)
+				})
 			})
 			return
 		}

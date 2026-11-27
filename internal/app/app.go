@@ -100,6 +100,11 @@ func chooseStartup(
 	}
 }
 
+func startupWillOpenProject(session Session, prefs Preferences, freshSession bool) bool {
+	choice := chooseStartup("", nil, session, prefs.reopenLastProject(), freshSession)
+	return choice.root != "" || len(choice.looseFiles) > 0 || choice.remote != nil
+}
+
 // explicitLaunchPaths keeps every path named by the launch command. A missing
 // file still suppresses project restore; openPaths reports the later failure
 // instead of silently opening the previous session.
@@ -444,6 +449,9 @@ type Model struct {
 	// doubleShift recognizes Shift released and pressed again within
 	// OpenIDEA's 300 ms window.
 	doubleShift doubleShiftState
+	// caretCloneChord arms OpenIDEA's double-Alt/double-Control carets for
+	// the next Up or Down key.
+	caretCloneChord caretCloneChordState
 
 	// searchHistory is Search Everywhere's recent queries, most recent first.
 	searchHistory []string
@@ -945,6 +953,10 @@ type Model struct {
 	// startupFiles opens these files beside startupRoot, so an offscreen run
 	// has a tab without touching the user's session.
 	startupFiles []string
+	// startupPending suppresses Welcome while the first frame is waiting for
+	// the backend to restore a project. OpenIDEA restores the project window
+	// without flashing a Welcome frame first.
+	startupPending bool
 
 	// recents are the Welcome screen's projects, most recent first, and
 	// recentGroups the headings it lists them under; welcomeQuery filters
@@ -1035,6 +1047,7 @@ func New(cfg Config) *Model {
 	m.applyPreferences()
 	m.syncExternalToolActions()
 	session := LoadSession(cfg.SessionPath)
+	m.startupPending = startupWillOpenProject(session, m.prefs, cfg.FreshSession)
 	m.recents = sessionRecents(session)
 	m.recentGroups = session.RecentGroups
 	m.searchHistory = append([]string(nil), session.SearchHistory...)
@@ -1178,11 +1191,23 @@ func (m *Model) Attach(win *mygo.Window) {
 }
 
 // OpenAtStartup opens dir instead of the session's project; call before Start.
-func (m *Model) OpenAtStartup(dir string) { m.startupRoot = dir }
+func (m *Model) OpenAtStartup(dir string) {
+	m.startupRoot = dir
+	if strings.TrimSpace(dir) != "" {
+		m.startupPending = true
+		m.showingWelcome = false
+	}
+}
 
 // OpenFilesAtStartup opens these files in the startup project; call before
 // Start. Paths outside the project are ignored, as session files are.
-func (m *Model) OpenFilesAtStartup(paths []string) { m.startupFiles = paths }
+func (m *Model) OpenFilesAtStartup(paths []string) {
+	m.startupFiles = paths
+	if len(paths) > 0 {
+		m.startupPending = true
+		m.showingWelcome = false
+	}
+}
 
 // Snapshot reports what the smoke run checks: the project, its tabs, and
 // whether the backend is up.
@@ -1241,6 +1266,7 @@ func (m *Model) start() {
 		m.setStartPhase("failed")
 		m.post(func() {
 			m.busy = false
+			m.startupPending = false
 			m.status = "The GoIDEA backend failed to start"
 			m.banner = "The GoIDEA backend failed to start: " + startErr.Error()
 			m.notifyError("backend", "GoIDEA backend failed to start", startErr.Error())
@@ -1274,6 +1300,7 @@ func (m *Model) start() {
 		cancelRuntime()
 		m.setStartPhase("ready")
 		m.post(func() {
+			m.startupPending = false
 			m.busy = false
 			if len(choice.looseFiles) > 0 {
 				m.status = "Opening standalone files…"
@@ -2047,6 +2074,7 @@ func (m *Model) openProject(dir string, files []string) {
 			return
 		}
 		m.post(func() {
+			m.startupPending = false
 			if prevRoot != "" && layoutKey(prevRoot) != layoutKey(dir) {
 				if m.layouts == nil {
 					m.layouts = map[string]Layout{}
@@ -3666,6 +3694,11 @@ func (m *Model) View(c *ui.Context) {
 	p := c.Theme()
 	m.refreshTodoHighlights(time.Now(), p)
 	ui.Column(c).Fill().Background(p.Background).Children(func() {
+		if m.startupWaitingVisible() {
+			m.startupSurface(c, p)
+			m.balloons(c, p)
+			return
+		}
 		if m.welcomeVisible() {
 			// With no project open the Welcome screen owns the window, as
 			// OpenIDEA's does; What's New is standalone, so while it is on
@@ -3696,7 +3729,25 @@ func (m *Model) welcomeVisible() bool {
 	if m.showingWelcome {
 		return true
 	}
-	return m.Root() == "" && len(m.allTabs()) == 0
+	return !m.startupPending && m.Root() == "" && len(m.allTabs()) == 0
+}
+
+func (m *Model) startupWaitingVisible() bool {
+	return m.startupPending && m.Root() == "" && len(m.allTabs()) == 0
+}
+
+func (m *Model) startupSurface(c *ui.Context, p *ui.Theme) {
+	oi := oiPaletteOf(p)
+	ui.Column(c.Key("startup:opening")).Fill().Background(p.Background).
+		AlignItems(ui.Center).Justify(ui.Center).Gap(12).Children(func() {
+		if logo := welcomeLogoImage(); logo != nil {
+			ui.Image(c, logo).Size(64, 64)
+		}
+		ui.Text(c, "GoIDEA").FontSize(22).Bold().TextColor(oi.textStrong)
+		ui.Spinner(c).Size(18, 18).TextColor(oi.textMuted).
+			Label("Opening project")
+		ui.Text(c, "Opening project…").FontSize(12).TextColor(oi.textMuted)
+	})
 }
 
 func (m *Model) shortcuts(c *ui.Context) {
@@ -3721,6 +3772,12 @@ func (m *Model) shortcuts(c *ui.Context) {
 		if m.RunCommand("navigate.searchEverywhere") {
 			return
 		}
+	}
+	if !m.overlayOpen() && m.observeCaretCloneChord(c) {
+		return
+	}
+	if !m.overlayOpen() && m.caretCloneChordShortcut(c) {
+		return
 	}
 	if !m.overlayOpen() && m.vimClaimsShortcut(c) {
 		return
@@ -3782,6 +3839,11 @@ func (m *Model) shortcuts(c *ui.Context) {
 	}
 	// A modal sheet owns the keyboard; only its own dismiss keys apply.
 	if m.modalOverlayOpen() {
+		if c.Shortcut(ui.Modifiers(0), ui.KeyEnter) {
+			if action := m.overlayDefaultAction(); action != nil {
+				action()
+			}
+		}
 		return
 	}
 	if m.dispatchEditorActionGapShortcuts(c) {

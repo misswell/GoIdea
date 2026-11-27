@@ -1,7 +1,10 @@
 package app
 
 import (
+	"strings"
 	"testing"
+
+	"github.com/egoist/mygo/ui"
 
 	"mayoi/internal/openidea"
 )
@@ -19,7 +22,8 @@ func TestRunWidgetChooserSelectsAConfiguration(t *testing.T) {
 		{ID: "app", Name: "Application"},
 		{ID: "tests", Name: "All Tests", IsTest: true},
 	}
-	tt := workbenchTester(t, m)
+	tt := ui.NewTester(func(c *ui.Context) { m.titleBar(c, c.Theme()) }, 1440, 40)
+	tt.Frame()
 	if !tt.HasText("Application") {
 		t.Fatalf("chooser does not name the selected configuration: %v", tt.Texts())
 	}
@@ -54,8 +58,85 @@ func TestRunWidgetChooserSelectsAConfiguration(t *testing.T) {
 func TestRunWidgetChooserPlaceholder(t *testing.T) {
 	m := &Model{}
 	m.setRoot(t.TempDir())
-	tt := workbenchTester(t, m)
+	tt := ui.NewTester(func(c *ui.Context) { m.titleBar(c, c.Theme()) }, 1440, 40)
+	tt.Frame()
 	if !tt.HasText("Select Configuration") {
 		t.Fatalf("chooser lacks the placeholder: %v", tt.Texts())
+	}
+}
+
+func TestRunWidgetDisablesRunForRemoteDebugConfigurations(t *testing.T) {
+	m := &Model{}
+	m.setRoot(t.TempDir())
+	m.run.trusted = true
+	m.run.loaded = true
+	m.run.loading = true
+	m.run.configs = []openidea.RunConfig{{
+		ID: "remote", Name: "Remote JVM", Kind: "remote-jvm",
+		Params: map[string]any{"host": "localhost", "port": "5005"},
+	}}
+	tt := ui.NewTester(func(c *ui.Context) { m.titleBar(c, c.Theme()) }, 1440, 40)
+	tt.Frame()
+	if !tt.HasText("Remote JVM") {
+		t.Fatalf("chooser does not name the remote configuration: %v", tt.Texts())
+	}
+	if tt.HasText("Run 'Remote JVM'") || !tt.HasText("'Remote JVM' can only be debugged") {
+		t.Fatalf("remote debug tooltip is wrong: %v", tt.Texts())
+	}
+	if err := tt.Click("'Remote JVM' can only be debugged"); err == nil {
+		// A disabled button may be found but must not launch anything.
+		if m.run.pendingStart || m.run.running || m.run.awaiting {
+			t.Fatal("a click started a remote configuration with Run")
+		}
+	}
+}
+
+func TestRunWidgetShowsStartingStateAndKeepsStopAvailable(t *testing.T) {
+	m := &Model{}
+	m.setRoot(t.TempDir())
+	m.run.trusted = true
+	m.run.loaded = true
+	m.run.loading = true
+	m.run.configs = []openidea.RunConfig{{ID: "app", Name: "Application", Kind: "application"}}
+	m.run.lastID = "app"
+	m.run.busy = true
+	m.run.awaiting = true
+	tt := ui.NewTester(func(c *ui.Context) { m.titleBar(c, c.Theme()) }, 1440, 40)
+	tt.Frame()
+	if !tt.HasText("Application") {
+		t.Fatalf("Run widget did not render in the production title bar: %v", tt.Texts())
+	}
+	if !tt.HasText("Starting Run") {
+		t.Fatalf("Run startup has no spinner label: %v", tt.Texts())
+	}
+	if !tt.HasText("Stop") {
+		t.Fatalf("Stop disappeared during startup: %v", tt.Texts())
+	}
+}
+
+func TestRunWidgetDoesNotApplyAProcessToADifferentSelection(t *testing.T) {
+	m := &Model{}
+	m.setRoot(t.TempDir())
+	m.run.trusted = true
+	m.run.loaded = true
+	m.run.loading = true
+	m.run.configs = []openidea.RunConfig{
+		{ID: "app", Name: "Application", Kind: "application"},
+		{ID: "tests", Name: "Tests", Kind: "maven", IsTest: true},
+	}
+	m.run.lastID = "app"
+	m.run.running = true
+	m.run.sel = 1
+	tt := ui.NewTester(func(c *ui.Context) { m.titleBar(c, c.Theme()) }, 1440, 40)
+	tt.Frame()
+	texts := strings.Join(tt.Texts(), "\n")
+	if !tt.HasText("Tests") {
+		t.Fatalf("selected configuration did not render in the title bar: %s", texts)
+	}
+	if strings.Contains(texts, "Rerun 'Tests'") || strings.Contains(texts, "Stop 'Tests'") {
+		t.Fatalf("another configuration's process was attributed to Tests: %s", texts)
+	}
+	if !tt.HasText("Run 'Tests'") || !tt.HasText("Debug 'Tests'") {
+		t.Fatalf("the idle selected configuration lost its controls: %s", texts)
 	}
 }

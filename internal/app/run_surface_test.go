@@ -70,6 +70,7 @@ func TestRunWindowUnifiedTabsSessionRailAndEmptyState(t *testing.T) {
 	tt = ui.NewTester(func(c *ui.Context) { m.runPanel(c, c.Theme()) }, 1000, 500)
 	tt.Frame()
 	for _, text := range []string{
+		"No run sessions",
 		"To run your code, do one of the following:",
 		"Click the Run icon in the editor gutter",
 		`Select "Run…" in the editor context menu`,
@@ -78,6 +79,28 @@ func TestRunWindowUnifiedTabsSessionRailAndEmptyState(t *testing.T) {
 		if !tt.HasText(text) {
 			t.Fatalf("empty run window is missing %q; texts: %s", text, strings.Join(tt.Texts(), "\n"))
 		}
+	}
+}
+
+func TestRunWindowStartingTabAndRailKeepStopAvailable(t *testing.T) {
+	m := runSurfaceTestModel()
+	m.run.agentRuns = nil
+	m.stackTrace = nil
+	m.run.children = nil
+	m.run.running = false
+	m.run.awaiting = true
+	m.run.busy = true
+	m.run.ended = time.Time{}
+	tt := ui.NewTester(func(c *ui.Context) { m.runPanel(c, c.Theme()) }, 1000, 500)
+	tt.Frame()
+	for _, text := range []string{"Starting Application", "Stop"} {
+		if !tt.HasText(text) {
+			t.Fatalf("starting Run surface is missing %q: %s", text, strings.Join(tt.Texts(), "\n"))
+		}
+	}
+	stop, ok := tt.Find("Stop")
+	if !ok || stop.W <= 0 || stop.H <= 0 {
+		t.Fatalf("Stop is not visible during startup: %+v, %v", stop, ok)
 	}
 }
 

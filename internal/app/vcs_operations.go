@@ -917,6 +917,7 @@ func (m *Model) runVCSOperation(title, command string, args map[string]any) {
 	state.err = ""
 	state.output = nil
 	root := m.Root()
+	m.logGitConsole(gitConsoleCommand, title)
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 5*time.Minute)
@@ -928,11 +929,14 @@ func (m *Model) runVCSOperation(title, command string, args map[string]any) {
 			}
 			m.vcsOps.busy = false
 			if err != nil {
-				m.vcsOps.err = title + " failed: " + err.Error()
+				message := title + " failed: " + err.Error()
+				m.vcsOps.err = message
+				m.logGitConsole(gitConsoleError, message)
 				m.invalidate()
 				return
 			}
 			m.status = title + " completed"
+			m.logGitConsole(gitConsoleInfo, m.status)
 			m.refreshAfterVCSWrite()
 			m.resetVCSOperations()
 			m.invalidate()
@@ -1104,6 +1108,7 @@ func (m *Model) runVCSMultiRepoHistoryOperation(state *VCSOperationPane, target 
 	state.request = m.nextRequest()
 	root := m.Root()
 	request := state.request
+	m.logGitConsole(gitConsoleCommand, title)
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 10*time.Minute)
@@ -1117,6 +1122,7 @@ func (m *Model) runVCSMultiRepoHistoryOperation(state *VCSOperationPane, target 
 			m.vcsOps.busy = false
 			if len(result.failures) == 0 {
 				m.status = fmt.Sprintf("%s completed in %d repositories", title, len(result.completed))
+				m.logGitConsole(gitConsoleInfo, m.status)
 				m.refreshAfterVCSWrite()
 				m.resetVCSOperations()
 				m.invalidate()
@@ -1124,11 +1130,15 @@ func (m *Model) runVCSMultiRepoHistoryOperation(state *VCSOperationPane, target 
 			}
 			m.refreshAfterVCSWrite()
 			if len(result.completed) == 0 {
-				m.vcsOps.err = title + " failed: " + m.vcsRepositoryFailuresText(result.failures)
+				message := title + " failed: " + m.vcsRepositoryFailuresText(result.failures)
+				m.vcsOps.err = message
+				m.logGitConsole(gitConsoleError, message)
 				m.invalidate()
 				return
 			}
 			failure := result.failures[0]
+			m.logGitConsole(gitConsoleError,
+				title+" partially failed: "+m.vcsRepositoryFailuresText(result.failures))
 			m.vcsOps.err = ""
 			m.vcsOps.multiRepoRollback = &vcsMultiRepoRollbackState{
 				kind: kind, target: target,
@@ -1178,6 +1188,7 @@ func (m *Model) runVCSRemoteAt(repoArg any, kind, title string, op map[string]an
 	if path, ok := repoArg.(string); ok {
 		repo = path
 	}
+	m.logGitConsole(gitConsoleCommand, title)
 	autoUpdateRejected := m.vcsGitBool("vcs.git.autoUpdateOnPushRejected")
 	updateMethod := m.vcsGitUpdateMethod()
 	m.invalidate()
@@ -1201,11 +1212,14 @@ func (m *Model) runVCSRemoteAt(repoArg any, kind, title string, op map[string]an
 			}
 			m.vcsOps.busy = false
 			if err != nil {
-				m.vcsOps.err = title + " failed: " + err.Error()
+				message := title + " failed: " + err.Error()
+				m.vcsOps.err = message
+				m.logGitConsole(gitConsoleError, message)
 				m.invalidate()
 				return
 			}
 			m.status = title + " completed"
+			m.logGitConsole(gitConsoleInfo, m.status)
 			m.refreshAfterVCSWrite()
 			m.invalidate()
 		})
@@ -1228,6 +1242,7 @@ func (m *Model) runVCSRemoteAll(kind, title string, op map[string]any) {
 	state.channel = m.nextChannel()
 	root := m.Root()
 	request, channel := state.request, state.channel
+	m.logGitConsole(gitConsoleCommand, title)
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 10*time.Minute)
@@ -1252,15 +1267,19 @@ func (m *Model) runVCSRemoteAll(kind, title string, op map[string]any) {
 			}
 			m.vcsOps.busy = false
 			for _, skipped := range result.skipped {
-				m.vcsOps.output = append(m.vcsOps.output,
-					"Skipped "+m.vcsOperationRepositoryLabel(skipped)+": no current branch or upstream")
+				message := "Skipped " + m.vcsOperationRepositoryLabel(skipped) +
+					": no current branch or upstream"
+				m.vcsOps.output = append(m.vcsOps.output, message)
+				m.logGitConsole(gitConsoleInfo, message)
 			}
 			if len(result.failures) > 0 {
 				prefix := title + " failed"
 				if len(result.completed) > 0 {
 					prefix = title + " partially failed"
 				}
-				m.vcsOps.err = prefix + ":\n" + m.vcsRepositoryFailuresText(result.failures)
+				message := prefix + ":\n" + m.vcsRepositoryFailuresText(result.failures)
+				m.vcsOps.err = message
+				m.logGitConsole(gitConsoleError, message)
 				m.refreshAfterVCSWrite()
 				m.invalidate()
 				return
@@ -1271,6 +1290,7 @@ func (m *Model) runVCSRemoteAll(kind, title string, op map[string]any) {
 			default:
 				m.status = fmt.Sprintf("Updated %d repositories", len(result.completed))
 			}
+			m.logGitConsole(gitConsoleInfo, m.status)
 			m.refreshAfterVCSWrite()
 			m.invalidate()
 		})
@@ -1455,6 +1475,7 @@ func (m *Model) runVCSMultiRepoPush(title string, forceWithLease, setUpstream bo
 	state.channel = m.nextChannel()
 	root := m.Root()
 	request, channel := state.request, state.channel
+	m.logGitConsole(gitConsoleCommand, title)
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 10*time.Minute)
@@ -1473,12 +1494,15 @@ func (m *Model) runVCSMultiRepoPush(title string, forceWithLease, setUpstream bo
 				if len(result.completed) > 0 {
 					prefix = title + " partially failed"
 				}
-				m.vcsOps.err = prefix + ":\n" + m.vcsRepositoryFailuresText(result.failures)
+				message := prefix + ":\n" + m.vcsRepositoryFailuresText(result.failures)
+				m.vcsOps.err = message
+				m.logGitConsole(gitConsoleError, message)
 				m.refreshAfterVCSWrite()
 				m.invalidate()
 				return
 			}
 			m.status = fmt.Sprintf("Pushed %d repositories", len(result.completed))
+			m.logGitConsole(gitConsoleInfo, m.status)
 			m.refreshAfterVCSWrite()
 			m.resetVCSOperations()
 			m.invalidate()
@@ -1892,6 +1916,7 @@ func (m *Model) runVCSGitOperationAt(repoArg any, title string, op map[string]an
 	state.channel = m.nextChannel()
 	root := m.Root()
 	request, channel := state.request, state.channel
+	m.logGitConsole(gitConsoleCommand, title)
 	m.invalidate()
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 10*time.Minute)
@@ -1906,11 +1931,14 @@ func (m *Model) runVCSGitOperationAt(repoArg any, title string, op map[string]an
 			}
 			m.vcsOps.busy = false
 			if err != nil {
-				m.vcsOps.err = title + " failed: " + err.Error()
+				message := title + " failed: " + err.Error()
+				m.vcsOps.err = message
+				m.logGitConsole(gitConsoleError, message)
 				m.invalidate()
 				return
 			}
 			m.status = title + " completed"
+			m.logGitConsole(gitConsoleInfo, m.status)
 			m.refreshAfterVCSWrite()
 			m.resetVCSOperations()
 			m.invalidate()
@@ -1933,6 +1961,7 @@ func (m *Model) acceptVCSOperationOutput(id uint32, data json.RawMessage) bool {
 		if over := len(state.output) - maxVCSOutputLines; over > 0 {
 			state.output = append(state.output[:0], state.output[over:]...)
 		}
+		m.logGitConsole(gitConsoleOutput, line)
 	}
 	m.invalidate()
 	return true

@@ -43,6 +43,7 @@ type runSessionView struct {
 	key         string
 	name        string
 	config      *openidea.RunConfig
+	starting    bool
 	live        bool
 	failed      bool
 	stopped     bool
@@ -66,6 +67,7 @@ type runTab struct {
 	key      string
 	label    string
 	icon     string
+	starting bool
 	live     bool
 	failed   bool
 	finished bool
@@ -150,7 +152,7 @@ func (m *Model) primaryRunSession() *runSessionView {
 	failed := p.err != "" || p.exitCode != nil && *p.exitCode != 0 && !p.stopped
 	return &runSessionView{
 		kind: runSessionPrimary, key: runPrimaryTabKey(), name: m.runTabName(p.primaryName(), cfg),
-		config: cfg, live: live, failed: failed, stopped: p.stopped,
+		config: cfg, starting: p.busy || p.awaiting && !p.running, live: live, failed: failed, stopped: p.stopped,
 		finished: !live, runID: p.runID, channel: p.channel,
 		stdinClosed: p.stdinClosed,
 		exitCode:    p.exitCode, started: p.started, ended: p.ended,
@@ -168,7 +170,7 @@ func (m *Model) childRunSession(child *runChild) *runSessionView {
 	return &runSessionView{
 		kind: runSessionChild, key: runChildTabKey(child.channel),
 		name:   m.runTabName(child.name, &child.config),
-		config: &child.config, live: child.live(), failed: failed, stopped: child.stopped,
+		config: &child.config, starting: child.starting, live: child.live(), failed: failed, stopped: child.stopped,
 		finished: child.finished, runID: child.runID, channel: child.channel,
 		stdinClosed: child.stdinClosed,
 		exitCode:    child.exitCode, started: child.started, ended: child.ended,
@@ -186,7 +188,7 @@ func (m *Model) serviceRunSession(child *runChild) *runSessionView {
 	return &runSessionView{
 		kind: runSessionService, key: runChildTabKey(child.channel),
 		name:   m.runTabName(child.name, &child.config),
-		config: &child.config, live: child.live(), failed: failed, stopped: child.stopped,
+		config: &child.config, starting: child.starting, live: child.live(), failed: failed, stopped: child.stopped,
 		finished: child.finished, runID: child.runID, channel: child.channel,
 		stdinClosed: child.stdinClosed, exitCode: child.exitCode,
 		started: child.started, ended: child.ended, err: child.err,
@@ -297,7 +299,7 @@ func (m *Model) runTabForSession(session *runSessionView) runTab {
 		tooltip = runFinishedTooltip(session)
 	}
 	return runTab{
-		key: session.key, label: session.name, icon: icon, live: session.live,
+		key: session.key, label: session.name, icon: icon, starting: session.starting, live: session.live,
 		failed: session.failed, finished: session.finished, closable: true,
 		dimmed:  session.kind == runSessionAgent && session.finished,
 		tooltip: tooltip, kind: session.kind, session: session,
@@ -524,12 +526,16 @@ func (m *Model) runSessionTab(c *ui.Context, p *ui.Theme, oi oiColors, tab *runT
 	}
 	row.OnClick(func() { m.selectRunTab(tab) })
 	row.Children(func() {
-		icon := oiIconEl(c, tab.icon, 15, oi, oi.icon)
-		if tab.failed {
-			icon = oiIconEl(c, "run/testFailed", 15, oi, oi.danger)
-		}
-		if tab.dimmed {
-			icon.Opacity(0.7)
+		if tab.starting {
+			ui.Spinner(c).Size(14, 14).TextColor(oi.textMuted).Label("Starting " + tab.label)
+		} else {
+			icon := oiIconEl(c, tab.icon, 15, oi, oi.icon)
+			if tab.failed {
+				icon = oiIconEl(c, "run/testFailed", 15, oi, oi.danger)
+			}
+			if tab.dimmed {
+				icon.Opacity(0.7)
+			}
 		}
 		textColor := oi.text
 		if tab.dimmed {
@@ -735,28 +741,37 @@ func (m *Model) runEmptyState(c *ui.Context, p *ui.Theme) {
 	oi := oiPaletteOf(p)
 	ui.Column(c).Grow(1).MinHeight(0).AlignItems(ui.Center).Justify(ui.Center).
 		Padding(24).Children(func() {
-		ui.Column(c).MaxWidth(520).Gap(6).Children(func() {
+		ui.Column(c).MaxWidth(560).Gap(6).AlignItems(ui.Center).Children(func() {
+			oiIconEl(c, "toolwindows/run", 30, oi, oi.textMuted)
+			ui.Text(c, "No run sessions").FontSize(13).Bold().TextColor(oi.textStrong).
+				Margin(0, 0, 2, 0)
 			ui.Text(c, "To run your code, do one of the following:").
 				FontSize(12).TextColor(oi.textSubtle)
-			ui.Text(c, "— Click the Run icon in the editor gutter").
-				FontSize(12).TextColor(oi.textSubtle)
-			ui.Text(c, `— Select "Run…" in the editor context menu`).
-				FontSize(12).TextColor(oi.textSubtle)
-			ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, "— Launch a").FontSize(12).TextColor(oi.textSubtle)
-				link := ui.ButtonBase(c.Key("run:empty-edit-configs")).Padding(0).
-					Radius(0).Cursor(ui.CursorPointer).Label("run configuration")
-				link.Children(func() {
-					ui.Text(c, "run configuration").FontSize(12).
-						TextColor(oi.link).Underline()
+			ui.Column(c).Gap(3).AlignItems(ui.Start).Children(func() {
+				ui.Text(c, "— Click the Run icon in the editor gutter").
+					FontSize(12).TextColor(oi.textSubtle)
+				ui.Text(c, `— Select "Run…" in the editor context menu`).
+					FontSize(12).TextColor(oi.textSubtle)
+				ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
+					ui.Text(c, "— Launch a").FontSize(12).TextColor(oi.textSubtle)
+					link := ui.ButtonBase(c.Key("run:empty-edit-configs")).Padding(0).
+						Radius(0).Cursor(ui.CursorPointer).Label("run configuration")
+					link.Children(func() {
+						ui.Text(c, "run configuration").FontSize(12).
+							TextColor(oi.link).Underline()
+					})
+					if link.Clicked() {
+						m.RunAction("run.editConfigs")
+					}
+					if shortcut := keymapShortcutLabel("run.chooseConfig"); shortcut != "" {
+						ui.Text(c, "("+shortcut+")").Font(oiFontMono).FontSize(10).
+							TextColor(oi.textFaint)
+					}
 				})
-				if link.Clicked() {
-					m.RunAction("run.editConfigs")
-				}
 			})
 			if !m.run.trusted {
 				ui.Text(c, "This project is not trusted, so Run is unavailable.").
-					FontSize(12).TextColor(oi.textMuted).Margin(0, 8, 0, 0)
+					FontSize(12).TextColor(oi.warning).Margin(0, 8, 0, 0)
 			}
 		})
 	})
@@ -793,6 +808,13 @@ func (m *Model) runSessionRail(c *ui.Context, p *ui.Theme, oi oiColors, session 
 			m.runActionIcon(c, p, oi, "rerun-failed", "run/rerun",
 				"Rerun Failed Tests", session.kind == runSessionPrimary && !session.live && failed > 0,
 				false, m.RerunFailedTests)
+		}
+		if session.starting {
+			ui.Box(c).Size(25, 24).Shrink(0).AlignItems(ui.Center).Justify(ui.Center).
+				Children(func() {
+					ui.Spinner(c).Size(14, 14).TextColor(oi.warning).
+						Label("Starting " + session.name)
+				})
 		}
 		m.runActionIconDanger(c, p, oi, "stop", "run/stop", "Stop", session.live,
 			func() { m.stopRunSession(session) })

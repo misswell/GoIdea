@@ -470,12 +470,10 @@ func (m *Model) ToggleHierarchyWindow() {
 }
 
 // rightShown reports whether the right side shows anything: either of its
-// slots occupied, or a legacy window still recorded in the old fields.
+// slots takes a track, or a legacy window still recorded in the old fields.
 func (m *Model) rightShown() bool {
-	if m.dockRightShown() {
-		return true
-	}
-	return m.rightTool != "" && !m.rightHidden
+	return m.dockTrackShown(dockRight) || m.dockTrackShown(dockRightSplit) ||
+		m.rightTool != "" && !m.rightHidden && !m.undockedWindow(m.rightTool)
 }
 
 // hierarchyDirectionLabel is the header's direction tab.

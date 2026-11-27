@@ -80,6 +80,55 @@ func TestRunChooserRunsTheChosenConfiguration(t *testing.T) {
 	}
 }
 
+func TestRunChooserRefusesDebugOnlyConfiguration(t *testing.T) {
+	m := chooserFixture(t)
+	remote := openidea.RunConfig{
+		ID: "remote", Name: "Remote JVM", Kind: "remote-jvm",
+		Params: map[string]any{"host": "localhost", "port": "5005"},
+	}
+	m.run.configs = append(m.run.configs, remote)
+	started := false
+	m.invokeHook = func(_ context.Context, cmd string, _ any) (json.RawMessage, error) {
+		if cmd == "run_start" {
+			started = true
+		}
+		return json.Marshal(nil)
+	}
+	m.OpenRunChooser("run")
+	m.chooser.query = "remote"
+	m.chooseActivate("run")
+	if started || m.run.running || m.run.awaiting || m.run.busy {
+		t.Fatal("Run launched a configuration that only supports Debug")
+	}
+	if m.chooser != nil {
+		t.Fatal("the invalid Run left the chooser open")
+	}
+	if !strings.Contains(m.status, "Only Debug is available") {
+		t.Fatalf("the refused launch has no explanation: status=%q", m.status)
+	}
+}
+
+func TestRunLauncherRefusesDebugOnlyConfiguration(t *testing.T) {
+	m := chooserFixture(t)
+	remote := openidea.RunConfig{
+		ID: "remote", Name: "Remote JVM", Kind: "remote-jvm",
+		Params: map[string]any{"host": "localhost", "port": "5005"},
+	}
+	started := false
+	m.invokeHook = func(_ context.Context, cmd string, _ any) (json.RawMessage, error) {
+		if cmd == "run_start" {
+			started = true
+		}
+		return json.Marshal(nil)
+	}
+	if m.startRunWith(remote.Raw(), remote.Name) {
+		t.Fatal("the central Run launcher accepted a debug-only configuration")
+	}
+	if started || m.run.running || m.run.awaiting || m.run.busy {
+		t.Fatal("Run launched the remote debug configuration")
+	}
+}
+
 func TestDebugSelectedRefusesUnsupportedAdapters(t *testing.T) {
 	m := chooserFixture(t)
 	// A Kotlin adapter is not shipped: refused, not silently launched.

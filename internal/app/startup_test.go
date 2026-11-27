@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/egoist/mygo/ui"
 )
 
 func TestInProjectToleratesSeparatorsAndSymlinks(t *testing.T) {
@@ -45,5 +47,37 @@ func TestInProjectToleratesSeparatorsAndSymlinks(t *testing.T) {
 		if !inProject(root, filepath.Join(link, "src", "App.java")) {
 			t.Errorf("symlinked file: inProject(%q, %q) = false, want true", root, filepath.Join(link, "src", "App.java"))
 		}
+	}
+}
+
+func TestProjectRestoreDoesNotFlashWelcome(t *testing.T) {
+	project := t.TempDir()
+	session := Session{Root: project}
+	if !startupWillOpenProject(session, Preferences{}, false) {
+		t.Fatal("the default startup did not schedule the remembered project")
+	}
+	reopenOff := false
+	if startupWillOpenProject(session,
+		Preferences{System: SystemPrefs{ReopenLastProject: &reopenOff}}, false) {
+		t.Fatal("Reopen projects on startup off still scheduled a project")
+	}
+	if startupWillOpenProject(session, Preferences{}, true) {
+		t.Fatal("a fresh session scheduled the remembered project")
+	}
+
+	m := &Model{startupPending: true}
+	tester := ui.NewTester(func(c *ui.Context) { m.View(c) }, 900, 640)
+	tester.Frame()
+	if !tester.HasText("Opening project…") {
+		t.Fatalf("startup surface is missing: %v", tester.Texts())
+	}
+	if tester.HasText("Welcome to GoIDEA") {
+		t.Fatalf("project restore flashed Welcome: %v", tester.Texts())
+	}
+
+	m.startupPending = false
+	tester.Frame()
+	if !tester.HasText("Welcome to GoIDEA") {
+		t.Fatalf("Welcome did not return when no project was pending: %v", tester.Texts())
 	}
 }

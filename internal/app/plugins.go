@@ -201,7 +201,7 @@ func (h *goideaPluginHost) Call(p *plugin.Plugin, method string, args json.RawMe
 		}
 		if in.Action == "" {
 			h.m.post(func() {
-				h.m.notifyPlugin(title, in.Message, level)
+				h.m.notifyPluginConsented(title, in.Message, level)
 			})
 			return false, nil
 		}
@@ -209,8 +209,9 @@ func (h *goideaPluginHost) Call(p *plugin.Plugin, method string, args json.RawMe
 		// window.notify resolves true when the optional action is chosen and
 		// false after the same 20 second window Mayoi's notification toast uses.
 		result := make(chan bool, 1)
+		shown := make(chan bool, 1)
 		h.m.post(func() {
-			h.m.notifyPlugin(title, in.Message, level, notifyAction{
+			shown <- h.m.notifyPluginConsented(title, in.Message, level, notifyAction{
 				label: in.Action,
 				run: func(*Model) {
 					select {
@@ -220,6 +221,9 @@ func (h *goideaPluginHost) Call(p *plugin.Plugin, method string, args json.RawMe
 				},
 			})
 		})
+		if !<-shown {
+			return false, nil
+		}
 		timer := time.NewTimer(20 * time.Second)
 		defer timer.Stop()
 		select {

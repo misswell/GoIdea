@@ -341,11 +341,106 @@ func (m *Model) workbench(c *ui.Context, p *ui.Theme) {
 				}
 			})
 		}
+		m.undockedToolWindows(c, p, oi)
 		m.balloons(c, p)
 		if !m.prefs.Appearance.HideStatusBar {
 			m.statusBar(c, p)
 		}
 	})
+}
+
+// undockedToolWindows draws View Mode › Undock windows over the editor.
+// Their slots and content stay intact, but they take no track from the side
+// that owns the slot, and their open size is the side's stored size.
+func (m *Model) undockedToolWindows(c *ui.Context, p *ui.Theme, oi oiColors) {
+	ids := m.undockedWindows()
+	if len(ids) == 0 {
+		return
+	}
+	frameWidth, height := c.Size()
+	frameTop := c.TitleBar().Height
+	if frameTop <= 0 {
+		frameTop = oiTitleBarHeight
+	}
+	frameHeight := max(float32(0), height-frameTop)
+	ui.Overlay(c, func() {
+		for _, id := range ids {
+			slot, ok := m.dockSlotOf(id)
+			if !ok {
+				continue
+			}
+			spec := dockSpec(id)
+			if spec == nil || spec.render == nil {
+				continue
+			}
+			panel := ui.Column(c).Key("undocked:window:" + id).Role(ui.RoleDialog).
+				Label(spec.title).Background(m.toolWindowBackground(p)).
+				Radius(oiIslandRadius).Clip().MinWidth(0).MinHeight(0)
+			if panel.DoubleClicked() {
+				m.toggleUndockedWindowMaximized(id)
+			}
+			dockWidth, dockHeight := m.undockedWindowSize(slot, frameWidth, frameHeight)
+			m.placeUndockedWindow(panel, slot, frameTop, frameHeight, dockWidth, dockHeight)
+			if m.consumeToolWindowFocus(id) {
+				panel.Focusable().AutoFocus()
+			}
+			panel.Children(func() {
+				m.dockWindowContent(c, p, oi, id)
+			})
+		}
+	})
+}
+
+func (m *Model) toolWindowFrameHeader(c *ui.Context, p *ui.Theme, oi oiColors, id string) {
+	spec := dockSpec(id)
+	if spec == nil {
+		return
+	}
+	header := ui.Row(c).Key("toolwindow:frame-header:"+id).
+		Height(oiTokensFor(m, p).HeaderHeight).Shrink(0).Padding(0, 6, 0, 8).
+		Gap(6).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(oi.border)
+	if header.DoubleClicked() {
+		m.toggleUndockedWindowMaximized(id)
+	}
+	header.Children(func() {
+		ui.Text(c, spec.title).FontSize(13).TextColor(oi.textStrong).
+			SingleLine().Ellipsis("…")
+		ui.Spacer(c)
+		m.toolWindowCornerIcon(c, p, oi, id)
+	})
+}
+
+// placeUndockedWindow pins an undocked window to its side's inner edge as
+// OpenIDEA's .undocked rule does. The primary and split areas divide a side
+// by position, and maximized mode fills the whole workbench.
+func (m *Model) placeUndockedWindow(
+	panel ui.Element,
+	slot dockSlot,
+	frameTop, frameHeight, width, height float32,
+) {
+	if m.undockedWindowMaximized(slot) {
+		panel.Absolute().Left(0).Right(0).Top(frameTop).Bottom(0)
+		return
+	}
+	switch slot {
+	case dockLeft:
+		panel.Absolute().Left(0).Top(frameTop)
+	case dockLeftSplit:
+		panel.Absolute().Left(0).Top(frameTop + frameHeight/2)
+	case dockRight:
+		panel.Absolute().Right(0).Top(frameTop)
+	case dockRightSplit:
+		panel.Absolute().Right(0).Top(frameTop + frameHeight/2)
+	case dockBottom:
+		panel.Absolute().Left(0).Bottom(0).WidthPercent(100)
+	case dockBottomSplit:
+		panel.Absolute().Right(0).Bottom(0).WidthPercent(50)
+	}
+	if width > 0 {
+		panel.Width(width).Height(height)
+	} else {
+		panel.Height(height)
+	}
 }
 
 // showWelcome returns to the Welcome screen without unloading the project,
@@ -586,8 +681,8 @@ func (m *Model) stripeButtonMenu(menu *ui.Menu, id string) {
 // leftShown reports whether the left side draws: a window in either of its
 // areas.
 func (m *Model) leftShown() bool {
-	return m.dockOccupant(dockLeft) != "" || !m.leftHidden ||
-		m.dockOccupant(dockLeftSplit) != ""
+	return m.remainingDockOccupant(dockLeft) != "" || !m.leftHidden ||
+		m.dockTrackShown(dockLeftSplit)
 }
 
 // leftSide is the left side's two areas: the primary island and, below it,
@@ -598,7 +693,7 @@ func (m *Model) leftSide(c *ui.Context, p *ui.Theme, oi oiColors) {
 	if !m.leftShown() {
 		return
 	}
-	splitID := m.dockOccupant(dockLeftSplit)
+	splitID := m.remainingDockOccupant(dockLeftSplit)
 	both := !m.leftHidden && splitID != ""
 	primaryGrow, splitGrow := float32(1), float32(1)
 	if both {
@@ -735,14 +830,20 @@ func (m *Model) rightWidthHandle(c *ui.Context, oi oiColors) {
 // below it, the split slot's, with the gap between them the pointer drags. A
 // lone window takes the whole side, as the left side does.
 func (m *Model) rightSide(c *ui.Context, p *ui.Theme, oi oiColors) {
-	top := m.dockOccupant(dockRight)
-	bottom := m.dockOccupant(dockRightSplit)
+	top := m.remainingDockOccupant(dockRight)
+	bottom := m.remainingDockOccupant(dockRightSplit)
 	if top == "" && !m.rightHidden && dockSpec(m.rightTool) != nil {
 		// A session or a test can still name the right window the old way.
 		top = m.rightTool
 	}
 	if bottom == "" && !m.rightHidden && dockSpec(m.rightSplitTool) != nil {
 		bottom = m.rightSplitTool
+	}
+	if m.undockedWindow(top) {
+		top = ""
+	}
+	if m.undockedWindow(bottom) {
+		bottom = ""
 	}
 	if top == "" && bottom == "" {
 		return
@@ -783,7 +884,7 @@ func (m *Model) rightIsland(c *ui.Context, p *ui.Theme, oi oiColors, id string, 
 		island.Focusable().AutoFocus()
 	}
 	island.Children(func() {
-		spec.render(m, c, p, oi)
+		m.dockWindowContent(c, p, oi, id)
 	})
 }
 
@@ -1029,7 +1130,7 @@ func (m *Model) leftSplitHandle(c *ui.Context, oi oiColors, room float32) {
 // side, which the drag of the gap between the islands moves.
 func (m *Model) leftIsland(c *ui.Context, p *ui.Theme, oi oiColors, grow float32) {
 	tk := oiTokensFor(m, p)
-	if id := m.dockOccupant(dockLeft); id != "" {
+	if id := m.remainingDockOccupant(dockLeft); id != "" {
 		if spec := dockSpec(id); spec != nil && spec.render != nil {
 			background := oi.island
 			if m.prefs.Appearance.DifferentToolWindowBackground {
@@ -1062,6 +1163,9 @@ func (m *Model) leftIsland(c *ui.Context, p *ui.Theme, oi oiColors, grow float32
 			Gap(6).AlignItems(ui.Center).Children(func() {
 			if m.sideMode == "vcs" {
 				ui.Text(c, title).FontSize(13).TextColor(oi.textStrong).SingleLine().Ellipsis("…")
+			} else if id := m.remainingDockOccupant(dockLeft); id != "" {
+				ui.Text(c, dockSpec(id).title).FontSize(13).TextColor(oi.textStrong).
+					SingleLine().Ellipsis("…")
 			} else {
 				m.projectTreeTitle(c, p, oi)
 			}
@@ -1080,6 +1184,9 @@ func (m *Model) leftIsland(c *ui.Context, p *ui.Theme, oi oiColors, grow float32
 					m.CollapseProjectAll()
 				})
 				m.projectViewOptionsButton(c, p, oi)
+			}
+			if id := m.remainingDockOccupant(dockLeft); id != "" {
+				m.toolWindowCornerIcon(c, p, oi, id)
 			}
 		})
 		if m.sideMode == "vcs" {
@@ -1131,11 +1238,7 @@ func (m *Model) leftSplitIsland(c *ui.Context, p *ui.Theme, oi oiColors, grow fl
 			Gap(6).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, title).FontSize(13).TextColor(oi.textStrong).SingleLine().Ellipsis("…")
 			ui.Spacer(c)
-			m.headerIcon(c, p, oi, "split-hide", "Hide", "general/remove", func() {
-				if id := m.dockOccupant(dockLeftSplit); id != "" {
-					m.DockHide(id)
-				}
-			})
+			m.toolWindowCornerIcon(c, p, oi, id)
 		})
 		ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
 			if m.leftSplit == "bookmarks" {
@@ -1167,6 +1270,82 @@ func (m *Model) headerIconDisabled(c *ui.Context, p *ui.Theme, oi oiColors, key,
 	b.Children(func() { oiIconEl(c, icon, 16, oi, oi.icon) })
 	if onClick != nil && b.Clicked() {
 		onClick()
+	}
+}
+
+// toolWindowCornerIcon draws the same ⋮ and Hide controls as HeaderRow on a
+// panel that already owns its title. It keeps panel headers visually alike
+// without taking the content tab strip away from the feature.
+func (m *Model) toolWindowCornerIcon(c *ui.Context, p *ui.Theme, oi oiColors, id string) {
+	spec := dockSpec(id)
+	if spec == nil {
+		return
+	}
+	more := ui.ButtonBase(c.Key("toolwindow:frame-options:"+id)).Size(20, 20).
+		Radius(4).Justify(ui.Center).AlignItems(ui.Center).
+		Cursor(ui.CursorPointer).Tooltip("Options").Label("Options")
+	if more.Hovered() || more.Focused() {
+		more.Background(oi.toolbarHover)
+	}
+	more.Children(func() { oiIconEl(c, "general/moreVertical", 16, oi, oi.icon) })
+	more.Menu(func(menu *ui.Menu) { m.toolWindowFrameOptionsMenu(menu, id) })
+	hideTip := "Hide " + spec.title + " Tool Window"
+	hide := ui.ButtonBase(c.Key("toolwindow:frame-hide:"+id)).Size(20, 20).
+		Radius(4).Justify(ui.Center).AlignItems(ui.Center).
+		Cursor(ui.CursorPointer).Tooltip(hideTip).Label(hideTip)
+	if hide.Hovered() || hide.Focused() {
+		hide.Background(oi.toolbarHover)
+	}
+	hide.Children(func() { oiIconEl(c, "general/hide", 16, oi, oi.icon) })
+	if hide.Clicked() {
+		m.DockHide(id)
+	}
+}
+
+// toolWindowFrameOptionsMenu is HeaderRow's options menu for a window whose
+// content owns its title: View Mode, Move To, Maximize / Restore and Hide.
+func (m *Model) toolWindowFrameOptionsMenu(menu *ui.Menu, id string) {
+	current := m.toolViewMode(id)
+	menu.Submenu("View Mode", func(sub *ui.Menu) {
+		for _, mode := range []struct {
+			id, label string
+		}{
+			{"dockPinned", "Dock Pinned"},
+			{"dockUnpinned", "Dock Unpinned"},
+			{"undock", "Undock"},
+		} {
+			mode := mode
+			item := sub.Item(mode.label).Checked(current == mode.id)
+			if item.Chosen() {
+				m.SetToolViewMode(id, mode.id)
+			}
+		}
+	})
+	menu.Submenu("Move To", func(sub *ui.Menu) {
+		from, shown := m.dockSlotOf(id)
+		for slot := dockSlot(0); slot < dockSlotCount; slot++ {
+			slot := slot
+			item := sub.Item(dockSlotLabel(slot)).Checked(shown && from == slot).
+				Disabled(shown && from == slot)
+			if item.Chosen() {
+				m.DockMove(id, slot)
+			}
+		}
+	})
+	maximize := "Maximize"
+	if m.maximized {
+		maximize = "Restore Size"
+	}
+	if menu.Item(maximize).Chosen() {
+		if m.undockedWindow(id) {
+			m.toggleUndockedWindowMaximized(id)
+		} else {
+			m.toggleToolWindowMaximized()
+		}
+	}
+	menu.Separator()
+	if menu.Item("Hide").Chosen() {
+		m.DockHide(id)
 	}
 }
 
@@ -1872,10 +2051,13 @@ func (m *Model) emptyEditor(c *ui.Context, p *ui.Theme) {
 
 // bottomTool names the window the bottom area shows, if any.
 func (m *Model) bottomTool() string {
-	if m.primaryTool() != "" {
-		return m.primaryTool()
+	if id := m.primaryTool(); id != "" && !m.undockedWindow(id) {
+		return id
 	}
-	return m.splitTool()
+	if id := m.splitTool(); id != "" && !m.undockedWindow(id) {
+		return id
+	}
+	return ""
 }
 
 // bottomIsland wraps the bottom tool windows: their own panels already draw

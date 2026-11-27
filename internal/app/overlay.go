@@ -9,8 +9,16 @@ package app
 import (
 	"slices"
 	"sort"
+	"time"
 
 	"github.com/egoist/mygo/ui"
+)
+
+// OpenIDEA shell motion tokens. Dialogs and balloons share --dur; hovers use
+// --dur-fast.
+const (
+	oiMotionFast = 80 * time.Millisecond
+	oiMotionBase = 140 * time.Millisecond
 )
 
 // Overlay layers, bottom to top.
@@ -38,6 +46,9 @@ type Overlay struct {
 	// Render draws it; the feature owns the dialog, the manager only calls
 	// it in order.
 	Render func(m *Model, c *ui.Context, p *ui.Theme)
+	// Default is the enabled default-button action while this overlay is open.
+	// The manager routes an unclaimed Return here only for the topmost modal.
+	Default func(m *Model) func()
 }
 
 type overlayRegistry struct {
@@ -71,6 +82,24 @@ func unregisterOverlay(id string) bool {
 		}
 	}
 	return true
+}
+
+// defaultAction returns the enabled default-button action of the topmost
+// modal overlay. It is part of the registry rather than template state, so a
+// dialog opened by a key waits for Return even when it is single-line.
+func (m *Model) overlayDefaultAction() func() {
+	open := m.openOverlays()
+	for i := len(open) - 1; i >= 0; i-- {
+		o := open[i]
+		if !o.Modal {
+			continue
+		}
+		if o.Default == nil {
+			return nil
+		}
+		return o.Default(m)
+	}
+	return nil
 }
 
 // overlayOrder is the registry sorted back to front: layer, then priority,

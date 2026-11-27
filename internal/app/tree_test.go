@@ -41,7 +41,9 @@ func hasRow(tr *Tree, path string) bool {
 // the project's build output show.
 func TestTreeLoadsOnDemandFromTheWorkspace(t *testing.T) {
 	root := t.TempDir()
-	for _, dir := range []string{"src/main/java/com/example", ".idea", ".git", "target", "build"} {
+	for _, dir := range []string{
+		"src/main/java/com/example", ".idea", ".openidea", ".vscode", ".git", "target", "build",
+	} {
 		if err := os.MkdirAll(filepath.Join(root, dir), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -60,9 +62,9 @@ func TestTreeLoadsOnDemandFromTheWorkspace(t *testing.T) {
 
 	src := filepath.Join(root, "src")
 	q.drain(t, "the root's children", func() bool { return hasRow(tr, src) })
-	// Build output and tool folders show shaded ("excluded"), as OpenIDEA
-	// draws them; VCS metadata stays out of the tree.
-	for _, excluded := range []string{".idea", "target", "build"} {
+	// Explicit build exclusions stay shaded. Project tool folders are ordinary
+	// rows in IDEA and do not inherit that background.
+	for _, excluded := range []string{"target", "build"} {
 		p := filepath.Join(root, excluded)
 		var row *treeNode
 		for _, r := range tr.Rows() {
@@ -72,6 +74,18 @@ func TestTreeLoadsOnDemandFromTheWorkspace(t *testing.T) {
 		}
 		if row == nil || !row.excluded {
 			t.Errorf("%s is not drawn as an excluded row: %v", excluded, row)
+		}
+	}
+	for _, ordinary := range []string{".idea", ".openidea", ".vscode"} {
+		p := filepath.Join(root, ordinary)
+		var row *treeNode
+		for _, r := range tr.Rows() {
+			if r.path == p {
+				row = r
+			}
+		}
+		if row == nil || row.excluded {
+			t.Errorf("%s is not an ordinary project row: %v", ordinary, row)
 		}
 	}
 	if p := filepath.Join(root, ".git"); hasRow(tr, p) {

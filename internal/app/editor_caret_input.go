@@ -2,10 +2,22 @@ package app
 
 import (
 	"reflect"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
 )
+
+const caretCloneChordTimeout = 300 * time.Millisecond
+
+type caretCloneChordState struct {
+	previousMods ui.Modifiers
+	tappedAt     time.Time
+	armed        bool
+	armedAt      time.Time
+	direction    int
+	recentAt     time.Time
+}
 
 // caretClickState bridges MyGo's rectangular Alt+Shift press into OpenIDEA's
 // Add or Remove Caret gesture. MyGo applies the press as a one-line column
@@ -17,9 +29,38 @@ type caretClickState struct {
 	moved  bool
 }
 
+// cloneCaretWithOppositeCancellation preserves OpenIDEA's Add or Remove Caret
+// gesture across a two-modifier chord. MyGo's add-cursor stack already removes
+// the newest caret when the next command goes the other way.
+func (m *Model) cloneCaretWithOppositeCancellation(
+	t *Tab,
+	direction int,
+	now time.Time,
+) bool {
+	if direction == 0 {
+		return false
+	}
+	command := editor.AddCursorAbove
+	if direction > 0 {
+		command = editor.AddCursorBelow
+	}
+	if !t.state.Run(command) {
+		return false
+	}
+	state := &m.caretCloneChord
+	state.direction = direction
+	state.armedAt = now
+	state.recentAt = state.armedAt
+	m.invalidate()
+	return true
+}
+
 func (m *Model) editorCaretInput(t *Tab, ev ui.InputEvent) bool {
 	if t == nil || t.state == nil {
 		return false
+	}
+	if ev.Kind == ui.InputKeyDown && m.caretCloneChordConsumes(t, ev) {
+		return true
 	}
 	if m.overwriteEditorInput(t, ev) {
 		return true
@@ -138,6 +179,144 @@ func (m *Model) editorCaretInput(t *Tab, ev ui.InputEvent) bool {
 		return false
 	case ui.InputKeyUp:
 		m.scheduleDebugSelectionHover(t)
+	}
+	return false
+}
+
+func (m *Model) observeCaretCloneChord(c *ui.Context) bool {
+	if !m.activeEditorFocused() {
+		return false
+	}
+	mods := c.Modifiers()
+	now := c.Now()
+	state := &m.caretCloneChord
+	if state.armed {
+		if (state.direction != 0 && now.Sub(state.recentAt) <= caretCloneChordTimeout) ||
+			now.Sub(state.armedAt) <= caretCloneChordTimeout {
+			state.previousMods = mods
+			return false
+		}
+		*state = caretCloneChordState{}
+	}
+	modifier := ui.Modifiers(0)
+	switch mods {
+	case ui.Alt:
+		modifier = ui.Alt
+	case ui.Ctrl:
+		modifier = ui.Ctrl
+	}
+	if modifier != 0 {
+		if state.previousMods == modifier && !state.tappedAt.IsZero() &&
+			now.Sub(state.tappedAt) >= 0 && now.Sub(state.tappedAt) <= caretCloneChordTimeout {
+			state.armed = true
+			state.armedAt = now
+			state.tappedAt = time.Time{}
+			state.direction = 0
+			state.recentAt = time.Time{}
+			m.invalidate()
+			return true
+		}
+		state.previousMods = modifier
+		state.tappedAt = now
+		return false
+	}
+	if !state.tappedAt.IsZero() && now.Sub(state.tappedAt) <= caretCloneChordTimeout {
+		return false
+	}
+	state.tappedAt = time.Time{}
+	state.previousMods = mods
+	return false
+}
+
+func (m *Model) caretCloneChordConsumes(t *Tab, ev ui.InputEvent) bool {
+	state := &m.caretCloneChord
+	if !state.armed || ev.Repeat {
+		return false
+	}
+	if ev.Time.Sub(state.armedAt) < 0 || ev.Time.Sub(state.armedAt) > caretCloneChordTimeout {
+		*state = caretCloneChordState{}
+		return false
+	}
+	direction := 0
+	modifier := ""
+	switch ev.Key {
+	case ui.KeyUp:
+		direction = -1
+		modifier = "Up"
+	case ui.KeyDown:
+		direction = 1
+		modifier = "Down"
+	default:
+		return false
+	}
+	modPrefix := ""
+	switch ev.Mods {
+	case ui.Alt:
+		modPrefix = "Alt"
+	case ui.Ctrl:
+		modPrefix = "Ctrl"
+	default:
+		*state = caretCloneChordState{}
+		return false
+	}
+	binding := modPrefix + " " + modPrefix + "+" + modifier
+	id := "editor.cloneCaretAbove"
+	if direction > 0 {
+		id = "editor.cloneCaretBelow"
+	}
+	if m.activeEditorFocused() && m.tab() == t &&
+		m.keymapHasBinding(id, binding) {
+		return m.cloneCaretWithOppositeCancellation(t, direction, ev.Time)
+	}
+	*state = caretCloneChordState{}
+	return false
+}
+
+// caretCloneChordShortcut claims the direction key in the frame's shortcut
+// pass. Waiting for the editor's OnInput is too late because the generic
+// keymap can consume Alt+Down as Shrink Selection or Move Statement Down.
+func (m *Model) caretCloneChordShortcut(c *ui.Context) bool {
+	if c == nil {
+		return false
+	}
+	state := &m.caretCloneChord
+	if !state.armed {
+		return false
+	}
+	now := c.Now()
+	if now.Sub(state.armedAt) < 0 || now.Sub(state.armedAt) > caretCloneChordTimeout {
+		*state = caretCloneChordState{}
+		return false
+	}
+	t := m.tab()
+	if t == nil || !m.activeEditorFocused() {
+		*state = caretCloneChordState{}
+		return false
+	}
+	for _, gesture := range []struct {
+		mods      ui.Modifiers
+		prefix    string
+		key       ui.Key
+		direction int
+		action    string
+	}{
+		{ui.Alt, "Alt", ui.KeyUp, -1, "editor.cloneCaretAbove"},
+		{ui.Alt, "Alt", ui.KeyDown, 1, "editor.cloneCaretBelow"},
+		{ui.Ctrl, "Ctrl", ui.KeyUp, -1, "editor.cloneCaretAbove"},
+		{ui.Ctrl, "Ctrl", ui.KeyDown, 1, "editor.cloneCaretBelow"},
+	} {
+		if !c.Shortcut(gesture.mods, gesture.key) {
+			continue
+		}
+		binding := gesture.prefix + " " + gesture.prefix
+		if gesture.key == ui.KeyUp {
+			binding += "+Up"
+		} else {
+			binding += "+Down"
+		}
+		if m.keymapHasBinding(gesture.action, binding) {
+			return m.cloneCaretWithOppositeCancellation(t, gesture.direction, now)
+		}
 	}
 	return false
 }

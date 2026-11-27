@@ -3,6 +3,19 @@
 The GitHub release notes, which **Help › What's New** shows, come from the
 `## <version>` section here. Every release needs one, or its build fails.
 
+## Unreleased
+
+- Project restore now shows a native startup surface instead of flashing Welcome before the project opens.
+- Project View keeps `.idea`, `.openidea` and `.vscode` as ordinary rows without an excluded background.
+- Markdown split preview now applies only to Markdown files, so Java and other source files stay single-pane.
+- Dialogs and balloons now follow OpenIDEA's motion and default Enter behavior.
+- Undocked tool windows now float over the editor with OpenIDEA's frame and focus behavior.
+- Run and Debug now share OpenIDEA's native header, startup state and clearer empty-state actions.
+- The Git console now mirrors real VCS output with typed, colored, bounded and auto-following lines.
+- Quick Switch now lists the real built-in and imported editor color schemes.
+- Project Structure actions now accept the section argument used by OpenIDEA.
+- Repeated JDT and plugin notices reuse their visible balloon while preserving notification history.
+
 ## 0.1.45
 
 - Project windows now return to Welcome after the last project closes and preserve state on backend failure.

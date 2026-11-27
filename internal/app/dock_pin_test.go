@@ -89,7 +89,7 @@ func TestDockUnpinnedHidesWhenAnotherToolWindowTakesFocus(t *testing.T) {
 	}
 }
 
-func TestViewModePersistsAndUndockIsRefused(t *testing.T) {
+func TestViewModePersists(t *testing.T) {
 	m := toolModel()
 	m.setRoot(t.TempDir())
 	m.ShowProblems()
@@ -99,14 +99,16 @@ func TestViewModePersistsAndUndockIsRefused(t *testing.T) {
 	if l.Dock == nil || l.Dock.ViewModes["problems"] != "dockUnpinned" {
 		t.Fatalf("the View Mode is not in the layout: %+v", l.Dock)
 	}
+	m.SetToolViewMode("problems", "undock")
+	m.rememberLayout()
+	l = normalizeLayout(m.currentLayout())
+	if l.Dock == nil || l.Dock.ViewModes["problems"] != "undock" {
+		t.Fatalf("Undock is not in the layout: %+v", l.Dock)
+	}
 	restored := toolModel()
 	restored.layouts = map[string]Layout{layoutKey(m.Root()): l}
 	restored.applyLayout(m.Root())
-	if restored.toolViewMode("problems") != "dockUnpinned" {
+	if restored.toolViewMode("problems") != "undock" {
 		t.Fatalf("View Mode after restore = %q", restored.toolViewMode("problems"))
-	}
-	m.SetToolViewMode("problems", "undock")
-	if m.toolViewMode("problems") != "dockUnpinned" || m.status == "" {
-		t.Fatal("Undock changed the mode without a floating window")
 	}
 }

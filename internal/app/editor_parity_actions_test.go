@@ -1,6 +1,7 @@
 package app
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
@@ -83,6 +84,8 @@ func TestNativeKeymapActionsMatchOpenIDEA(t *testing.T) {
 		"refactor.inline":             "Cmd+Alt+N",
 		"refactor.move":               "F6",
 		"editor.scrollToCenter":       "Ctrl+L",
+		"editor.cloneCaretAbove":      "Alt Alt+Up",
+		"editor.cloneCaretBelow":      "Alt Alt+Down",
 		"editor.matchBrace":           "Ctrl+M",
 		"navigate.declaration":        "Cmd+B",
 	}
@@ -114,6 +117,44 @@ func TestNativeKeymapActionsMatchOpenIDEA(t *testing.T) {
 		if _, ok := actionGet(id); !ok {
 			t.Errorf("%s is not callable through the alias", id)
 		}
+	}
+}
+
+func TestEditorScrollCenterMatchBraceAndCloneCaretRunOffscreen(t *testing.T) {
+	scrollText := strings.Repeat("filler\n", 80) + "(delta)\n"
+	text := "alpha\nbeta\ngamma\n(delta)\n"
+	tab := editorTab(scrollText, strings.Index(scrollText, "("))
+	tab.editorFocused = true
+	m := &Model{
+		tabs:   []*Tab{tab},
+		active: 0,
+	}
+	tt := ui.NewTester(func(c *ui.Context) {
+		m.shortcuts(c)
+		view := editor.View(c, tab.state).Fill().AutoFocus()
+		tab.editorFocused = view.Focused() || view.FocusWithin()
+	}, 800, 300)
+	tt.Frame()
+	tab.editorFocused = true
+
+	tt.Key(ui.Ctrl, ui.KeyL)
+	tt.Frame()
+	if tab.state.ScrollY() == 0 || !m.RunAction("editor.scrollToCenter") {
+		t.Fatalf("Scroll to Center did not run: scroll=%v", tab.state.ScrollY())
+	}
+
+	tab.state.Buffer.Reset(text)
+	tab.state.SetScrollY(0)
+	tab.state.Select(strings.Index(text, "("), strings.Index(text, "("))
+	tt.Frame()
+	t.Logf("editor focus before brace: %v", tab.editorFocused)
+	if !m.ActionEnabled("editor.matchBrace") {
+		t.Fatalf("match-brace action disabled; tab focus=%v", tab.editorFocused)
+	}
+	tt.Key(ui.Ctrl, ui.KeyM)
+	tt.Frame()
+	if got := tab.state.Cursor(); got != strings.Index(text, ")")+1 {
+		t.Fatalf("Move Caret to Matching Brace = %d, want %d", got, strings.Index(text, ")")+1)
 	}
 }
 

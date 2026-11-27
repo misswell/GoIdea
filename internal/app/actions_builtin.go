@@ -29,6 +29,11 @@ func init() {
 			a.When = func(m *Model) bool { return m.Root() != "" && !m.showingWelcome }
 		case "file.openProjectPath":
 			a.RunWithArg = func(m *Model, arg any) { m.openProjectPathArg(arg) }
+		case "file.projectStructure":
+			a.RunWithArg = func(m *Model, arg any) {
+				section, _ := arg.(string)
+				m.OpenProjectStructure(section)
+			}
 		case "file.openRecentProject":
 			a.RunWithArg = func(m *Model, arg any) { m.openProjectPath(projectPathArg(arg)) }
 		case "build.compileFile":

@@ -143,7 +143,7 @@ func activeMarkdownTab(m *Model) *Tab {
 }
 
 func (m *Model) markdownModeFor(t *Tab) markdownMode {
-	if t == nil {
+	if t == nil || t.doc == nil || !isMarkdownPath(t.doc.Path()) {
 		return markdownEditorOnly
 	}
 	if t.markdownMode != "" {

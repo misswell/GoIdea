@@ -803,6 +803,7 @@ func (m *Model) finishRemoteConnection(
 	m.resetRemoteProjectState()
 	m.resetProjectState(session.Root)
 	m.setRoot(session.Root)
+	m.startupPending = false
 	m.showingWelcome = false
 	m.tree = nil
 	m.tabs, m.active = nil, 0

@@ -117,6 +117,15 @@ func (m *Model) notifySticky(key, level, title, body string, userInitiated bool,
 // downloads must remain visible even after OpenIDEA's ordinary sticky timeout.
 func (m *Model) notifyStickyProgress(key, level, title string, taskID string,
 	userInitiated bool, actions ...notifyAction) {
+	if existing, ok := m.oldestNotificationWithKey(key); ok {
+		if m.replaceNotification(existing.id, ideNotification{
+			key: key, level: level, title: title, actions: actions,
+			userInitiated: userInitiated, sticky: true, stickySet: true,
+			persistent: true, progressTask: taskID,
+		}) {
+			return
+		}
+	}
 	m.postNotification(ideNotification{key: key, level: level, title: title,
 		actions: actions, userInitiated: userInitiated, sticky: true, stickySet: true,
 		persistent: true, progressTask: taskID})
@@ -132,6 +141,18 @@ func (m *Model) notifyPlugin(title, body string, level string, actions ...notify
 	})
 }
 
+// notifyPluginConsented posts plugin text only while the Plugins group still
+// allows balloons. The legacy host bridge stops accepting its optional action
+// when the user suppressed that group instead of turning the host request
+// into an action the hidden balloon can no longer offer.
+func (m *Model) notifyPluginConsented(title, body, level string, actions ...notifyAction) bool {
+	if m.notifyPrefsFor("plugins").Display == "none" {
+		return false
+	}
+	m.notifyPlugin(title, body, level, actions...)
+	return true
+}
+
 // updateNotificationBody changes the newest notification of a key in place,
 // so a download's progress replaces its balloon's text instead of restarting
 // the notification.
@@ -144,6 +165,46 @@ func (m *Model) updateNotificationBody(key, body string) {
 		m.invalidate()
 		return
 	}
+}
+
+// oldestNotificationWithKey returns the reusable entry for a keyed balloon.
+// A new entry of the same key is stacked ahead of it, so this is the only
+// element postNotification removes when it appends the newest entry.
+func (m *Model) oldestNotificationWithKey(key string) (ideNotification, bool) {
+	if key == "" {
+		return ideNotification{}, false
+	}
+	for i := len(m.notify.items) - 1; i >= 0; i-- {
+		if m.notify.items[i].key == key {
+			return m.notify.items[i], true
+		}
+	}
+	return ideNotification{}, false
+}
+
+// replaceNotification swaps a persistent balloon in place while retaining its
+// identity. Download progress and install states share the update key and
+// must not restart the sticky clock or leave a dismissed ghost behind.
+func (m *Model) replaceNotification(id int, next ideNotification) bool {
+	for i := range m.notify.items {
+		old := &m.notify.items[i]
+		if old.id != id {
+			continue
+		}
+		stopNotifyTimer(old)
+		next.id = old.id
+		next.at = old.at
+		next.read = false
+		next.group = old.group
+		next.logged = old.logged
+		next.balloon = true
+		next.hover = old.hover
+		m.notify.items[i] = next
+		m.invalidate()
+		m.saveSession()
+		return true
+	}
+	return false
 }
 
 // notifyBeep plays the system alert; a test replaces it.
@@ -578,7 +639,7 @@ func (m *Model) balloonView(c *ui.Context, p *ui.Theme, n ideNotification) {
 		Radius(10).Background(oi.popup).BorderWidth(1).BorderColor(oi.popupBorder).
 		Shadow(0, 8, 24, 0, ui.RGBA(0, 0, 0, shade)).
 		Transition(ui.ElementTransition{
-			Duration: 150 * time.Millisecond,
+			Duration: oiMotionBase,
 			Ease:     ui.EaseOut,
 			Enter:    &ui.Motion{X: 12},
 		})
@@ -717,7 +778,7 @@ func (m *Model) notificationsView(c *ui.Context, p *ui.Theme, oi oiColors) {
 								ui.Text(c, it.title).FontSize(13).Bold().TextColor(oi.textStrong).
 									SingleLine().Ellipsis("…")
 								ui.Spacer(c)
-								ui.Text(c, it.at.Format("15:04")).FontSize(12).
+								ui.Text(c, it.at.Local().Format("15:04")).FontSize(12).
 									TextColor(oi.textSubtle).SingleLine()
 								x := ui.ButtonBase(c.Key(fmt.Sprintf("notify:close:%d", it.id))).
 									Size(20, 20).Radius(4).Justify(ui.Center).AlignItems(ui.Center).

@@ -1454,6 +1454,12 @@ func (m *Model) debugVars(c *ui.Context, p *ui.Theme) {
 // out the two areas of a side. The side keeps one height whichever it shows.
 func (m *Model) bottomSlot(c *ui.Context, p *ui.Theme) {
 	primary, split := m.primaryTool(), m.splitTool()
+	if m.undockedWindow(primary) {
+		primary = ""
+	}
+	if m.undockedWindow(split) {
+		split = ""
+	}
 	if primary == "" && split == "" {
 		return
 	}
@@ -1486,7 +1492,9 @@ func (m *Model) bottomToolIsland(c *ui.Context, p *ui.Theme, id string) {
 	if m.consumeToolWindowFocus(id) {
 		island.Focusable().AutoFocus()
 	}
-	island.Children(func() { m.toolPanel(c, p, id) })
+	island.Children(func() {
+		m.toolPanel(c, p, id)
+	})
 }
 
 func (m *Model) toolPanel(c *ui.Context, p *ui.Theme, name string) {

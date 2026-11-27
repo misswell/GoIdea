@@ -58,6 +58,29 @@ func TestMarkdownNativeLayoutActionsRenderOneDocument(t *testing.T) {
 	}
 }
 
+func TestMarkdownSplitModeNeverAppliesToSourceFiles(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "ApplicationController.java")
+	doc := docbridge.Virtual(path, "package com.example;\npublic class App {}\n")
+	tab := &Tab{doc: doc, state: &editor.State{Buffer: doc.Buffer()}}
+	m := &Model{
+		tabs:   []*Tab{tab},
+		active: 0,
+		prefs: Preferences{General: GeneralPrefs{
+			MarkdownMode: string(markdownEditorPreview),
+		}},
+	}
+	m.setRoot(root)
+	if got := m.markdownModeFor(tab); got != markdownEditorOnly {
+		t.Fatalf("Java Markdown mode = %q, want editor only", got)
+	}
+	tester := ui.NewTester(func(c *ui.Context) { m.View(c) }, 1000, 700)
+	tester.Frame()
+	if strings.Contains(strings.Join(tester.Texts(), "\n"), "public class App {}") {
+		t.Fatalf("Java source was rendered in a Markdown preview: %q", tester.Texts())
+	}
+}
+
 func TestDjangoContentDetectsTagsAndOffersNativeFileTypeChoices(t *testing.T) {
 	if !isDjangoContent(`<h1>{% block title %}Home{% endblock %}</h1>`) {
 		t.Fatal("Django block tags were not detected")

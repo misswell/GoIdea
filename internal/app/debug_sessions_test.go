@@ -200,6 +200,31 @@ func TestDebugSessionTabsRenderEveryNativeContent(t *testing.T) {
 	}
 }
 
+func TestDebugToolWindowReusesRunChromeAndEmptyGuidance(t *testing.T) {
+	m := &Model{}
+	m.setRoot(t.TempDir())
+	m.debug.visible = true
+	tester := ui.NewTester(func(c *ui.Context) { m.debugPanel(c, c.Theme()) }, 1000, 420)
+	tester.Frame()
+	for _, label := range []string{
+		"Debug", "Options", "Hide Debug Tool Window", "Not debugging",
+		"Start a debug configuration with", "or click a line number to set a breakpoint.",
+	} {
+		if !tester.HasText(label) {
+			t.Fatalf("Debug empty surface is missing %q: %q", label, tester.Texts())
+		}
+	}
+	title, _ := tester.Find("Debug")
+	options, _ := tester.Find("Options")
+	hide, _ := tester.Find("Hide Debug Tool Window")
+	notDebugging, _ := tester.Find("Not debugging")
+	if title.Y < 4 || title.Y > 32 || options.Y < 4 || options.Y > 32 ||
+		hide.Y < 4 || hide.Y > 32 || notDebugging.Y <= 40 {
+		t.Fatalf("Debug chrome is not a shared title row above content: title=%+v options=%+v hide=%+v empty=%+v",
+			title, options, hide, notDebugging)
+	}
+}
+
 func TestBackgroundBuildCompleteOffersHotSwapToItsSession(t *testing.T) {
 	m := &Model{ctx: context.Background()}
 	m.debug = DebugPane{

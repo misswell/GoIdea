@@ -34,6 +34,10 @@ func init() {
 	pasteHistoryOpen := func(m *Model) bool { return m.editorExtras.open }
 	editorAvailable := func(m *Model) bool { return m.activeEditorAvailable() }
 	editorEditable := func(m *Model) bool { return m.activeEditorEditable() }
+	editorSelection := func(m *Model) bool {
+		t := m.tab()
+		return t != nil && t.state != nil && len(t.state.Selections()) > 0
+	}
 
 	register("editor.inlineCompletion.accept", "Insert Inline Proposal",
 		"Inline Completion", "Tab", inlineShown,
@@ -166,11 +170,11 @@ func init() {
 		},
 		{
 			"editor.cloneCaretAbove",
-			"Clone Caret Above", "Editor Actions", "", editorAvailable, editor.AddCursorAbove,
+			"Clone Caret Above", "Editor Actions", "Alt Alt+Up", editorSelection, editor.AddCursorAbove,
 		},
 		{
 			"editor.cloneCaretBelow",
-			"Clone Caret Below", "Editor Actions", "", editorAvailable, editor.AddCursorBelow,
+			"Clone Caret Below", "Editor Actions", "Alt Alt+Down", editorSelection, editor.AddCursorBelow,
 		},
 	}
 	for _, spec := range commandActions {

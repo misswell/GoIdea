@@ -523,6 +523,11 @@ func (m *Model) chooseActivate(how string) {
 		m.closeRunChooser()
 		m.DebugRunConfig(cfg)
 	default:
+		if debugOnlyRunConfiguration(cfg) {
+			m.closeRunChooser()
+			m.rejectDebugOnlyRun()
+			return
+		}
 		m.closeRunChooser()
 		m.askOrStart(cfg.Raw(), cfg.Name)
 	}
@@ -829,7 +834,7 @@ func (m *Model) runChooserDialog(c *ui.Context, p *ui.Theme) {
 											m.activateChooserConfigSession(cfgi.ID, session, false)
 										})
 									} else {
-										ui.Button(c, "Run").OnClick(func() {
+										ui.Button(c, "Run").Disabled(debugOnlyRunConfiguration(cfgi)).OnClick(func() {
 											ch.sel = i
 											m.chooseActivate("run")
 										})

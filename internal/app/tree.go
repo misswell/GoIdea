@@ -17,7 +17,7 @@ import (
 // workspace hides: build output, caches and tool state that a Java project
 // never wants to browse.
 var hiddenDirs = map[string]bool{
-	".idea": true, ".mvn": true, "target": true, ".gradle": true,
+	".mvn": true, "target": true, ".gradle": true,
 	"build": true, "out": true, "bin": true, "node_modules": true, ".qoder": true,
 }
 
@@ -1643,7 +1643,7 @@ func hiddenName(name string, showHidden bool) bool {
 // excludedDir reports whether a shown folder is build output or tool state,
 // which IDEs dim and shade: "excluded" content.
 func excludedDir(name string) bool {
-	return hiddenDirs[name] || name == ".idea" || name == ".vscode" || name == ".openidea" ||
+	return hiddenDirs[name] ||
 		name == ".venv" || name == "__pycache__" || name == ".next" || name == ".turbo" || name == ".cache"
 }
 

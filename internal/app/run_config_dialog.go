@@ -774,6 +774,10 @@ func (m *Model) launchSelectedRunConfig(action string) {
 	if d == nil || d.saving || d.templateMode || d.selected() == nil {
 		return
 	}
+	if action == "run" && debugOnlyRunConfiguration(d.selected()) {
+		m.rejectDebugOnlyRun()
+		return
+	}
 	d.launchAfter = action
 	m.saveRunConfigs(true)
 }
@@ -1475,7 +1479,8 @@ func (m *Model) runConfigsDialog(c *ui.Context, p *ui.Theme) {
 				ui.Text(c, d.saveErr).FontSize(12).TextColor(p.Danger).SingleLine()
 			}
 			ui.Row(c).Gap(8).Children(func() {
-				ui.Button(c, "Run").Disabled(d.saving || d.templateMode || d.selected() == nil).
+				ui.Button(c, "Run").Disabled(d.saving || d.templateMode || d.selected() == nil ||
+					debugOnlyRunConfiguration(d.selected())).
 					OnClick(m.RunSelectedRunConfig)
 				ui.Button(c, "Debug").Disabled(d.saving || d.templateMode || d.selected() == nil).
 					OnClick(m.DebugSelectedRunConfig)

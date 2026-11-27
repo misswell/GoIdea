@@ -261,7 +261,7 @@ func (m *Model) applyLayoutSnapshot(l Layout) {
 			m.dock.pinned[id] = true
 		}
 		for id, mode := range l.Dock.ViewModes {
-			if dockSpec(id) == nil || mode != "dockUnpinned" {
+			if dockSpec(id) == nil || (mode != "dockUnpinned" && mode != "undock") {
 				continue
 			}
 			if m.dock.viewModes == nil {

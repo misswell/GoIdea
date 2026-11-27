@@ -122,6 +122,72 @@ func TestOverlayUnregister(t *testing.T) {
 	}
 }
 
+func TestOverlayDefaultActionUsesTheTopmostModal(t *testing.T) {
+	defer unregisterOverlay("test.default.first")
+	defer unregisterOverlay("test.default.second")
+	m := &Model{}
+	registerTestOverlay("test.default.first", true, func(*Model) bool { return true },
+		func(*Model) func() { return func() {} })
+	registerTestOverlay("test.default.second", true, func(*Model) bool { return true },
+		func(*Model) func() { return nil })
+	if action := m.overlayDefaultAction(); action != nil {
+		t.Fatal("a disabled topmost default fell through to the dialog below")
+	}
+	unregisterOverlay("test.default.second")
+	if action := m.overlayDefaultAction(); action == nil {
+		t.Fatal("the visible modal has no default action")
+	}
+}
+
+func TestModalOverlayRoutesUnclaimedEnterToItsDefault(t *testing.T) {
+	defer unregisterOverlay("test.default.enter")
+	entered := false
+	registerTestOverlay("test.default.enter", true, func(*Model) bool { return true },
+		func(*Model) func() {
+			return func() { entered = true }
+		})
+	m := &Model{}
+	tester := ui.NewTester(func(c *ui.Context) { m.shortcuts(c) }, 800, 600)
+	tester.Frame()
+	tester.Key(0, ui.KeyEnter)
+	tester.Frame()
+	if !entered {
+		t.Fatal("modal overlay did not run its default action on Enter")
+	}
+}
+
+func registerTestOverlay(id string, modal bool, open func(*Model) bool, action func(*Model) func()) *Overlay {
+	o := &Overlay{ID: id, Layer: overlayLayerDialog, Priority: 1000, Modal: modal,
+		Open: open, Render: func(*Model, *ui.Context, *ui.Theme) {}, Default: action}
+	registerOverlay(o)
+	return o
+}
+
+func TestModalOrderPreservesOverlayLayers(t *testing.T) {
+	defer unregisterOverlay("test.modal.popup")
+	defer unregisterOverlay("test.modal.dialog")
+	registerTestOverlay("test.modal.popup", false, func(*Model) bool { return true }, nil)
+	registerTestOverlay("test.modal.dialog", true, func(*Model) bool { return true },
+		func(*Model) func() { return func() {} })
+	m := &Model{}
+	open := m.openOverlays()
+	if len(open) < 2 {
+		t.Fatalf("open overlays = %d", len(open))
+	}
+	var popup, dialog int
+	for i, o := range open {
+		switch o.ID {
+		case "test.modal.popup":
+			popup = i
+		case "test.modal.dialog":
+			dialog = i
+		}
+	}
+	if popup >= dialog {
+		t.Fatalf("popup index %d, dialog index %d", popup, dialog)
+	}
+}
+
 func TestOverlayCloseHandsTheKeyboardBack(t *testing.T) {
 	m := &Model{}
 	m.overlayFocusSettle([]string{"rename"}, true)

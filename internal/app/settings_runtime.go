@@ -97,6 +97,11 @@ func (m *Model) loadNativeRuntimeSettings(ctx context.Context) error {
 		if projectErr == nil {
 			_ = json.Unmarshal(projectRaw, &projectRoot)
 		}
+		if reopenLastProject, ok := nativeSettingRootBool(
+			globalRoot, "general.reopenLastProject",
+		); ok {
+			m.prefs.System.ReopenLastProject = &reopenLastProject
+		}
 		for _, def := range runtimeDefs {
 			current := m.nativeSettings.pages[def.page.id]
 			if current.loading || (current.loaded && m.nativeSettingsDirty(def.page.id)) {
@@ -281,6 +286,22 @@ func nativeSettingBool(values map[string]any, key string, fallback bool) bool {
 		return value
 	}
 	return fallback
+}
+
+func nativeSettingRootBool(root map[string]any, path string) (bool, bool) {
+	var value any = root
+	for _, part := range strings.Split(path, ".") {
+		object, ok := value.(map[string]any)
+		if !ok {
+			return false, false
+		}
+		value, ok = object[part]
+		if !ok {
+			return false, false
+		}
+	}
+	boolean, ok := value.(bool)
+	return boolean, ok
 }
 
 func nativeSettingString(values map[string]any, key, fallback string) string {

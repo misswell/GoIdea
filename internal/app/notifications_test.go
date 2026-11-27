@@ -481,6 +481,77 @@ func TestSuppressGroupKeepsHistory(t *testing.T) {
 	m.ClearNotifications()
 }
 
+func TestRepeatedLanguageServerNoticeReusesOneHistoryEntry(t *testing.T) {
+	m := &Model{}
+	install := notifyAction{label: "Install", run: func(*Model) {}}
+	m.notifySticky("lsp-warning-jdtls-jdtls", "warning", "JDT",
+		"First import warning", false, install)
+	if len(m.notify.items) != 1 || !m.notify.items[0].balloon {
+		t.Fatalf("first language-server notification = %+v", m.notify.items)
+	}
+	m.notifySticky("lsp-warning-jdtls-jdtls", "warning", "JDT",
+		"Updated import warning", false, install)
+	if len(m.notify.items) != 1 {
+		t.Fatalf("a repeated JDT notice created %d history rows", len(m.notify.items))
+	}
+	got := m.notify.items[0]
+	if got.body != "Updated import warning" || !got.balloon {
+		t.Fatalf("the repeat was not the newest keyed notice: %+v", got)
+	}
+}
+
+func TestPersistentDownloadKeepsItsBalloonAndActionsOnReuse(t *testing.T) {
+	m := &Model{}
+	cancel := notifyAction{label: "Cancel", run: func(*Model) {}}
+	m.notifyStickyProgress(updateKey, "info", "Downloading GoIdea 0.1.55",
+		updateInstallTaskID, true, cancel)
+	before := m.notify.items[0]
+	if timeout, ok := notificationTimeout(before); ok || timeout != 0 {
+		t.Fatalf("download timer = %v, %v", timeout, ok)
+	}
+	m.notifyStickyProgress(updateKey, "info", "Downloading GoIdea 0.1.55",
+		updateInstallTaskID, true, cancel)
+	if len(m.notify.items) != 1 {
+		t.Fatalf("download reuse made %d notifications", len(m.notify.items))
+	}
+	got := m.notify.items[0]
+	if got.id != before.id || !got.persistent || !got.balloon ||
+		got.progressTask != updateInstallTaskID || len(got.actions) != 1 {
+		t.Fatalf("persistent download after reuse = %+v", got)
+	}
+	if timeout, ok := notificationTimeout(got); ok || timeout != 0 {
+		t.Fatalf("reused download has a timer: %v, %v", timeout, ok)
+	}
+}
+
+func TestDontShowAgainKeepsToolWindowHistory(t *testing.T) {
+	m := &Model{}
+	m.notifyWarning("lsp-warning-jdtls", "JDT", "Import stalled")
+	actions := m.balloonActions(m.notify.items[0])
+	if len(actions) != 1 || actions[0].label != "Don't Show Again" {
+		t.Fatalf("balloon actions = %+v", actions)
+	}
+	actions[0].run(m)
+	if m.notifyPrefsFor("lsp").Display != "none" {
+		t.Fatal("Don't Show Again did not silence the group")
+	}
+	if len(m.loggedNotifications()) != 1 || m.notify.items[0].balloon {
+		t.Fatalf("suppression lost the history or balloon: %+v", m.notify.items)
+	}
+}
+
+func TestSuppressedPluginGroupDoesNotOfferAHiddenAction(t *testing.T) {
+	m := &Model{}
+	m.SuppressGroup("plugins")
+	if m.notifyPluginConsented("Demo Plugin", "Choose", "info",
+		notifyAction{label: "Open", run: func(*Model) {}}) {
+		t.Fatal("a suppressed plugin group accepted an action")
+	}
+	if len(m.notify.items) != 0 {
+		t.Fatalf("suppressed plugin notice was created: %+v", m.notify.items)
+	}
+}
+
 func TestNotifyPrefsDraftRoundTrip(t *testing.T) {
 	m := &Model{}
 	d := m.settingsDraftFromPrefs()

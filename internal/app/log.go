@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -19,9 +20,28 @@ import (
 // logLimit is how many commits the Git log asks for at once, as OpenIDEA's
 // first window does; the list is read-only, so a fixed window is enough.
 const (
-	logLimit                        = 200
-	vcsContentConsole vcsContentTab = 6
+	logLimit                         = 200
+	maxGitConsoleLines               = 5000
+	vcsContentConsole  vcsContentTab = 6
 )
+
+type gitConsoleKind string
+
+const (
+	gitConsoleCommand gitConsoleKind = "cmd"
+	gitConsoleOutput  gitConsoleKind = "out"
+	gitConsoleError   gitConsoleKind = "err"
+	gitConsoleInfo    gitConsoleKind = "info"
+)
+
+// gitConsoleLine is one line in OpenIDEA's Git console. Command lines carry
+// the timestamp; output, error and informational lines keep the same order.
+type gitConsoleLine struct {
+	id   uint64
+	at   time.Time
+	kind gitConsoleKind
+	text string
+}
 
 // LogPane is the Git tool window's Log tab: the commit list, the selected
 // commit's message, branches and signature, and the files that commit changed.
@@ -80,8 +100,10 @@ type LogPane struct {
 	filterMatchCase bool
 	filterErr       string
 	// console is the Git window's command/output log. Operations may append
-	// lines here without coupling the window to a particular RPC dialog.
-	console []string
+	// typed lines here without coupling the window to a particular RPC dialog.
+	console       []gitConsoleLine
+	consoleSeq    uint64
+	consoleScroll ui.ScrollState
 	// repo is an external Git log root; empty uses the open project's repository.
 	repo string
 }
@@ -876,25 +898,73 @@ func (m *Model) gitToolWindowTabs(c *ui.Context, p *ui.Theme, oi oiColors) {
 	})
 }
 
+// logGitConsole appends one OpenIDEA Git-console entry. A command may span
+// lines, and interior blank lines stay visible just as they do upstream.
+func (m *Model) logGitConsole(kind gitConsoleKind, text string) {
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	text = strings.ReplaceAll(text, "\r", "\n")
+	all := strings.Split(text, "\n")
+	now := time.Now()
+	for i, line := range all {
+		if line == "" && (i == 0 || i == len(all)-1) {
+			continue
+		}
+		m.log.consoleSeq++
+		m.log.console = append(m.log.console, gitConsoleLine{
+			id: m.log.consoleSeq, at: now, kind: kind, text: line,
+		})
+	}
+	if over := len(m.log.console) - maxGitConsoleLines; over > 0 {
+		m.log.console = append(m.log.console[:0], m.log.console[over:]...)
+	}
+}
+
+func (m *Model) clearGitConsole() {
+	m.log.console = nil
+	m.log.consoleScroll = ui.ScrollState{}
+	m.invalidate()
+}
+
 func (m *Model) gitConsoleContent(c *ui.Context, p *ui.Theme, oi oiColors) {
 	ui.Row(c).Height(32).Shrink(0).Padding(0, 6).Gap(3).AlignItems(ui.Center).
 		BorderWidth(1, 0, 1, 0).BorderColor(p.Border).Children(func() {
-		ui.Button(c, "Clear All").Size(72, 24).Disabled(len(m.log.console) == 0).
-			OnClick(func() {
-				m.log.console = nil
-				m.invalidate()
-			})
+		m.httpToolbarButton(c, p, "general/delete", "Clear All",
+			len(m.log.console) == 0, m.clearGitConsole)
 	})
-	ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
-		ui.Column(c).Padding(8, 10).Gap(4).Children(func() {
+	if m.log.consoleScroll.Y >= m.log.consoleScroll.MaxY {
+		m.log.consoleScroll.Y = math.MaxFloat32
+	}
+	ui.Scroll(c).Grow(1).MinHeight(0).TrackScroll(&m.log.consoleScroll).Children(func() {
+		ui.Column(c).Padding(8, 6).Gap(2).Children(func() {
 			if len(m.log.console) == 0 {
 				ui.Text(c, "Git commands run by the IDE appear here.").FontSize(12).
 					TextColor(oi.textMuted)
 				return
 			}
-			for i, line := range m.log.console {
-				ui.Text(c, line).Key(fmt.Sprintf("git-console:%d", i)).FontSize(12).
-					Font("monospace").TextColor(oi.textStrong)
+			for _, line := range m.log.console {
+				line := line
+				color := oi.textStrong
+				switch line.kind {
+				case gitConsoleCommand:
+					color = oi.text
+				case gitConsoleError:
+					color = oi.danger
+				case gitConsoleInfo:
+					color = oi.textSubtle
+				}
+				ui.Row(c).Key(fmt.Sprintf("git-console:%d", line.id)).
+					Gap(7).AlignItems(ui.Start).Children(func() {
+					text := line.text
+					if text == "" {
+						text = " "
+					}
+					if line.kind == gitConsoleCommand {
+						ui.Text(c, line.at.Format("15:04:05")).FontSize(11).
+							Font("monospace").TextColor(oi.textSubtle).SingleLine()
+					}
+					ui.Text(c, text).FontSize(12).Font("monospace").
+						TextColor(color).Grow(1)
+				})
 			}
 		})
 	})
