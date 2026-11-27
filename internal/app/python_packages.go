@@ -300,7 +300,7 @@ func (m *Model) savePythonRequirements() {
 func (m *Model) renderPythonPackages(c *ui.Context, oi oiColors) {
 	m.ensurePythonPackages(false)
 	state := m.languageSDKs.packages
-	settingsSectionTitle(c, oi, "Packages")
+	m.settingsSectionTitle(c, oi, "Packages")
 	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
 		label := state.interpreter
 		if label == "" {
@@ -400,7 +400,7 @@ func (m *Model) renderPythonPackages(c *ui.Context, oi oiColors) {
 	if state.frozen == "" {
 		return
 	}
-	settingsSectionTitle(c, oi, "Frozen Requirements")
+	m.settingsSectionTitle(c, oi, "Frozen Requirements")
 	ui.Row(c).MinHeight(30).Gap(8).AlignItems(ui.Center).PaddingStart(20).Children(func() {
 		ui.Button(c, "Copy").OnClick(func() {
 			mygo.Clipboard.WriteText(state.frozen)

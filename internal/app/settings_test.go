@@ -299,6 +299,100 @@ func TestSettingsTreeNestsAndGroups(t *testing.T) {
 	}
 }
 
+func TestSettingsDialogResizesClampsAndPersists(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	m := &Model{
+		cfg: Config{SettingsPath: path},
+		prefs: Preferences{
+			SettingsWindowWidth:  1180,
+			SettingsWindowHeight: 860,
+			SettingsSidebarWidth: 260,
+		},
+		frameWidth:  1600,
+		frameHeight: 1000,
+	}
+	if width, height := m.settingsDialogSize(); width != 1180 || height != 860 {
+		t.Fatalf("stored Settings size = %vx%v", width, height)
+	}
+	m.resizeSettingsDialog(500, 300)
+	if m.prefs.SettingsWindowWidth != 1552 || m.prefs.SettingsWindowHeight != 952 {
+		t.Fatalf("clamped Settings size = %dx%d", m.prefs.SettingsWindowWidth, m.prefs.SettingsWindowHeight)
+	}
+	m.prefs.SettingsWindowHeight = 100
+	m.frameWidth, m.frameHeight = 800, 600
+	if width, height := m.settingsDialogSize(); width != 752 || height != 552 {
+		t.Fatalf("small-window Settings size = %vx%v, want 752x552", width, height)
+	}
+	m.prefs.SettingsSidebarWidth = 500
+	if got := m.settingsSideWidth(); got < 300.79 || got > 300.81 {
+		t.Fatalf("sidebar in a small sheet = %v, want 300.8", got)
+	}
+	if err := m.prefs.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	stored := LoadPreferences(path)
+	if stored.SettingsWindowWidth != m.prefs.SettingsWindowWidth {
+		t.Fatalf("stored Settings width = %d, want %d", stored.SettingsWindowWidth, m.prefs.SettingsWindowWidth)
+	}
+}
+
+func TestSettingsDialogResizeKeepsTheOppositeEdgeAnchored(t *testing.T) {
+	m := &Model{
+		prefs:       Preferences{SettingsWindowWidth: 980, SettingsWindowHeight: 720},
+		frameWidth:  1600,
+		frameHeight: 1000,
+	}
+	m.resizeSettingsDialog(120, 80)
+	if m.settingsOffsetX != 60 {
+		t.Fatalf("horizontal resize compensation = %v, want 60", m.settingsOffsetX)
+	}
+	if m.settingsOffsetY != 40 {
+		t.Fatalf("vertical resize compensation = %v, want 40", m.settingsOffsetY)
+	}
+	m.resizeSettingsDialog(-120, -80)
+	if m.settingsOffsetX != 0 || m.settingsOffsetY != 0 {
+		t.Fatalf("restored offsets = %v, %v, want zero", m.settingsOffsetX, m.settingsOffsetY)
+	}
+}
+
+func TestSettingsDialogCornerDoubleClickExpandsAndRestores(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	m := &Model{
+		cfg:                    Config{SettingsPath: path},
+		frameWidth:             1500,
+		frameHeight:            900,
+		settingsWindowResizing: false,
+	}
+	m.prefs.SettingsWindowWidth, m.prefs.SettingsWindowHeight = 0, 0
+	m.toggleExpandedSettingsDialog()
+	if width, height := m.settingsDialogSize(); width != 1452 || height != 852 {
+		t.Fatalf("expanded Settings size = %vx%v", width, height)
+	}
+	m.toggleExpandedSettingsDialog()
+	if width, height := m.settingsDialogSize(); width != settingsDialogWidth || height != settingsDialogMaxHeight {
+		t.Fatalf("restored Settings size = %vx%v", width, height)
+	}
+}
+
+func TestSettingsResizeKeepsTheDraggedEdgeUnderThePointer(t *testing.T) {
+	m := &Model{
+		frameWidth:  1500,
+		frameHeight: 900,
+	}
+	m.prefs.SettingsWindowWidth = 700
+	m.prefs.SettingsWindowHeight = 500
+	width, height := m.settingsDialogSize()
+	m.resizeSettingsDialog(200, 100)
+	if m.settingsOffsetX != 100 || m.settingsOffsetY != 50 {
+		t.Fatalf("resize compensation = (%v, %v), want (100, 50)",
+			m.settingsOffsetX, m.settingsOffsetY)
+	}
+	if gotWidth, gotHeight := m.settingsDialogSize(); gotWidth <= width || gotHeight <= height {
+		t.Fatalf("resize did not grow the sheet: %vx%v from %vx%v",
+			gotWidth, gotHeight, width, height)
+	}
+}
+
 func TestSettingsFilterKeepsAncestors(t *testing.T) {
 	rows := settingsFilterTree(settingsTree(), "editor font", nil)
 	if len(rows) != 1 || rows[0].key != settingsGroupKey("Editor") {

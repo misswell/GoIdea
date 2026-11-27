@@ -59,6 +59,23 @@ func TestSETextMaskMatching(t *testing.T) {
 	}
 }
 
+func TestSEFiltersSanitizeStoredValuesLikeOpenIDEA(t *testing.T) {
+	f := seFilters{
+		FilesLanguages: []string{"java", " java ", "", "kotlin", "java"},
+		Classes:        []string{"enum", "enum", " "},
+		Text:           "*.java",
+	}.sanitized()
+	if got := f.FilesLanguages; len(got) != 2 || got[0] != "java" || got[1] != "kotlin" {
+		t.Fatalf("files languages = %v", got)
+	}
+	if got := f.Classes; len(got) != 1 || got[0] != "enum" {
+		t.Fatalf("classes = %v", got)
+	}
+	if f.Text != "*.java" {
+		t.Fatalf("text mask = %q", f.Text)
+	}
+}
+
 func TestSELanguageFilterUsesLongestExtensionSuffix(t *testing.T) {
 	languages := []openidea.LanguageInfo{
 		{ID: "typescript", Name: "TypeScript", Extensions: []string{"ts", "tsx"}},
@@ -89,6 +106,29 @@ func TestSELanguageFilterUsesLongestExtensionSuffix(t *testing.T) {
 	}
 	if got := f.clearTab(seTabFiles); got.active(seTabFiles) {
 		t.Fatalf("Reset Filter left %+v", got)
+	}
+}
+
+func TestSEFilterAllTogglesEveryOptionLikeOpenIDEA(t *testing.T) {
+	f := seFilters{
+		FilesLanguages:   []string{"java"},
+		ClassesLanguages: []string{"kotlin"},
+		Classes:          []string{"enum"},
+	}.setFilterValues(seTabFiles, "language", nil).
+		setFilterValues(seTabClasses, "language", nil).
+		setFilterValues(seTabClasses, "kind", nil)
+	if f.active(seTabFiles) || f.active(seTabClasses) {
+		t.Fatalf("All did not clear filters: %+v", f)
+	}
+
+	f = f.setFilterValues(seTabSymbols, "language", []string{"java", "kotlin"}).
+		setFilterValues(seTabSymbols, "kind", []string{"class", "method"})
+	if !f.active(seTabSymbols) ||
+		!f.languageExcluded(seTabSymbols, "/p/App.java", []openidea.LanguageInfo{
+			{ID: "java", Extensions: []string{"java"}},
+		}) ||
+		!f.kindExcluded(seTabSymbols, "method") {
+		t.Fatalf("checking every option did not clear exclusions: %+v", f)
 	}
 }
 

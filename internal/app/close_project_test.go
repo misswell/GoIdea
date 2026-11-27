@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egoist/mygo"
+
 	"mayoi/internal/openidea"
 )
 
@@ -246,6 +248,207 @@ func TestLastWindowCloseReturnsToWelcome(t *testing.T) {
 	}
 	if host.immediate != 0 {
 		t.Fatal("last window was destroyed instead of returning to Welcome")
+	}
+}
+
+func TestWelcomeWindowCloseProceedsInsteadOfReopeningWelcome(t *testing.T) {
+	host := &fakeWorkspaceHost{windows: 1}
+	confirmExit := false
+	m := &Model{
+		workspaceHost: host,
+		postHook:      func(fn func()) { fn() },
+		confirmExitHook: func(done func(bool, bool)) {
+			confirmExit = true
+			done(true, false)
+		},
+	}
+	m.showingWelcome = true
+	event := &mygo.CloseEvent{}
+	m.registerWindowCloseHandler(func(callback func(*mygo.CloseEvent)) func() {
+		callback(event)
+		return func() {}
+	})
+	if !event.DefaultPrevented() {
+		t.Fatal("the close request did not prevent the native window from closing first")
+	}
+	if !m.forceQuit {
+		t.Fatal("the Welcome window did not proceed through shutdown")
+	}
+	if m.applicationQuit {
+		t.Fatal("closing a Welcome window incorrectly became an application quit")
+	}
+	if !confirmExit {
+		t.Fatal("the last Welcome window skipped general.confirmExit")
+	}
+}
+
+func TestWelcomeWindowCloseCancelKeepsTheWindowOpen(t *testing.T) {
+	host := &fakeWorkspaceHost{windows: 1}
+	posted := make(chan func(), 1)
+	m := &Model{
+		workspaceHost: host,
+		postHook:      func(fn func()) { posted <- fn },
+		confirmExitHook: func(done func(bool, bool)) {
+			done(false, false)
+		},
+	}
+	m.showingWelcome = true
+	event := &mygo.CloseEvent{}
+	m.handleWindowClose(event)
+	if !event.DefaultPrevented() {
+		t.Fatal("the close request did not prevent the native window from closing first")
+	}
+	if m.forceQuit || m.quitting || m.applicationQuit {
+		t.Fatalf("cancelled Welcome close changed lifecycle state: force=%v quitting=%v appQuit=%v",
+			m.forceQuit, m.quitting, m.applicationQuit)
+	}
+	select {
+	case <-posted:
+		t.Fatal("cancelled Welcome close still called the main-thread shutdown")
+	default:
+	}
+}
+
+func TestClosingOneOfSeveralWelcomeWindowsDoesNotAskToExit(t *testing.T) {
+	host := &fakeWorkspaceHost{windows: 2}
+	confirmExit := false
+	m := &Model{
+		workspaceHost: host,
+		postHook:      func(fn func()) { fn() },
+		confirmExitHook: func(done func(bool, bool)) {
+			confirmExit = true
+			done(false, false)
+		},
+	}
+	m.showingWelcome = true
+	event := &mygo.CloseEvent{}
+	m.handleWindowClose(event)
+	if !event.DefaultPrevented() {
+		t.Fatal("the close request did not prevent the native window from closing first")
+	}
+	if confirmExit {
+		t.Fatal("closing one of several windows asked to quit the application")
+	}
+	if !m.forceQuit || m.applicationQuit {
+		t.Fatalf("multi-window Welcome close = force=%v appQuit=%v", m.forceQuit, m.applicationQuit)
+	}
+}
+
+func TestWelcomeWindowCloseCanPersistDontAskAgain(t *testing.T) {
+	settingsPath := filepath.Join(t.TempDir(), "settings.json")
+	host := &fakeWorkspaceHost{windows: 1}
+	m := &Model{
+		cfg:           Config{SettingsPath: settingsPath},
+		workspaceHost: host,
+		postHook:      func(fn func()) { fn() },
+		confirmExitHook: func(done func(bool, bool)) {
+			done(true, true)
+		},
+	}
+	m.showingWelcome = true
+	event := &mygo.CloseEvent{}
+	m.handleWindowClose(event)
+	if !m.forceQuit {
+		t.Fatal("the confirmed Welcome close did not finish")
+	}
+	if m.prefs.System.confirmExit() || LoadPreferences(settingsPath).System.confirmExit() {
+		t.Fatal("Don't ask again did not persist general.confirmExit=false")
+	}
+}
+
+func TestLastProjectWindowReturnsToWelcomeWithoutExitConfirmation(t *testing.T) {
+	project := filepath.Join(t.TempDir(), "project")
+	confirmExit := false
+	m := &Model{
+		workspaceHost: &fakeWorkspaceHost{windows: 1},
+		postHook:      func(fn func()) { fn() },
+		confirmExitHook: func(done func(bool, bool)) {
+			confirmExit = true
+			done(true, false)
+		},
+	}
+	m.setRoot(project)
+	m.handleWindowClose(&mygo.CloseEvent{})
+	if confirmExit {
+		t.Fatal("returning the last project session to Welcome asked to exit")
+	}
+	if m.Root() != "" || !m.showingWelcome || m.forceQuit || m.quitting {
+		t.Fatalf("last project close = root %q welcome %v force %v quitting %v",
+			m.Root(), m.showingWelcome, m.forceQuit, m.quitting)
+	}
+}
+
+func TestLastProjectWindowWithCloseWithoutWelcomeConfirmsExit(t *testing.T) {
+	project := filepath.Join(t.TempDir(), "project")
+	confirmExit := false
+	m := &Model{
+		workspaceHost: &fakeWorkspaceHost{windows: 1},
+		postHook:      func(fn func()) { fn() },
+		confirmExitHook: func(done func(bool, bool)) {
+			confirmExit = true
+			done(false, false)
+		},
+	}
+	m.setRoot(project)
+	m.prefs.System.CloseWithoutWelcome = true
+	m.handleWindowClose(&mygo.CloseEvent{})
+	if !confirmExit {
+		t.Fatal("closeWithoutWelcome skipped the last-window exit confirmation")
+	}
+	if m.forceQuit || m.quitting || m.Root() != project || m.showingWelcome {
+		t.Fatalf("cancelled exit changed the project: root %q welcome %v force %v quitting %v",
+			m.Root(), m.showingWelcome, m.forceQuit, m.quitting)
+	}
+}
+
+func TestApplicationExitUsesTheSameDontAskConfirmation(t *testing.T) {
+	settingsPath := filepath.Join(t.TempDir(), "settings.json")
+	m := &Model{
+		cfg:      Config{SettingsPath: settingsPath},
+		postHook: func(fn func()) { fn() },
+		confirmExitHook: func(done func(bool, bool)) {
+			done(true, true)
+		},
+	}
+	confirmed := false
+	m.ConfirmApplicationExit(func(ok bool) {
+		confirmed = ok
+	})
+	if !confirmed {
+		t.Fatal("application exit confirmation was not accepted")
+	}
+	if m.prefs.System.confirmExit() || LoadPreferences(settingsPath).System.confirmExit() {
+		t.Fatal("application exit did not persist Don't ask again")
+	}
+}
+
+func TestWelcomeWindowCloseStopsTheBackend(t *testing.T) {
+	manager := openidea.NewManager(openidea.LaunchConfig{})
+	m := &Model{
+		ctx:           context.Background(),
+		mgr:           manager,
+		workspaceHost: &fakeWorkspaceHost{windows: 1},
+		postHook:      func(fn func()) { fn() },
+		confirmExitHook: func(done func(bool, bool)) {
+			done(true, false)
+		},
+		cancel: func() {},
+	}
+	m.showingWelcome = true
+	m.handleWindowClose(&mygo.CloseEvent{})
+
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, err := manager.Ensure(context.Background()); errors.Is(err, openidea.ErrClosed) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("Welcome close did not close the backend manager: %+v", manager.State())
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if manager.Server() != nil {
+		t.Fatal("Welcome close left a live backend server")
 	}
 }
 

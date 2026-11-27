@@ -275,7 +275,11 @@ func TestWorkbenchHierarchyRightWindowRenders(t *testing.T) {
 	}
 	m.rightTool = "hierarchy"
 	tt := workbenchTester(t, m)
-	for _, text := range []string{"Hierarchy", "Callers of main", "↑", "↓", "callerA"} {
+	for _, text := range []string{
+		"Hierarchy", "Callers of main", "Callers Hierarchy", "Callees Hierarchy",
+		"Refresh", "Previous Hierarchy Occurrence", "Next Hierarchy Occurrence",
+		"Autoscroll to Source", "callerA",
+	} {
 		if !tt.HasText(text) {
 			t.Fatalf("%q is not in the right window: %q", text, tt.Texts())
 		}

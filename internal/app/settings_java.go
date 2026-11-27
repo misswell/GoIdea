@@ -241,11 +241,11 @@ func (m *Model) settingsJavaBody(c *ui.Context, p *ui.Theme, oi oiColors) {
 		})
 	}
 
-	settingsSectionTitle(c, oi, scope+" JDK")
+	m.settingsSectionTitle(c, oi, scope+" JDK")
 	m.javaJdkRow(c, oi, "SDK", &state.draft.JDK, "Auto")
 	ui.Text(c, "Compiles and runs the project, and also runs jdtls when its version is sufficient.").
 		FontSize(12).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Language level", 220)
 		level := state.draft.LanguageLevel
 		shown := "SDK default"
@@ -253,7 +253,7 @@ func (m *Model) settingsJavaBody(c *ui.Context, p *ui.Theme, oi oiColors) {
 			shown = level
 		}
 		choices := append([]string{"SDK default"}, javaLanguageLevels...)
-		if ui.Select(c, &shown, choices).Width(180).Changed() {
+		if ui.Select(c, &shown, choices).Width(settingsSelectMinWidth).Changed() {
 			if shown == "SDK default" {
 				state.draft.LanguageLevel = ""
 			} else {
@@ -265,11 +265,10 @@ func (m *Model) settingsJavaBody(c *ui.Context, p *ui.Theme, oi oiColors) {
 	ui.Text(c, "Java source and bytecode compliance when no build descriptor overrides it.").
 		FontSize(12).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
 
-	ui.Row(c).Height(10)
-	settingsSectionTitle(c, oi, "Language Server")
+	m.settingsSectionTitle(c, oi, "Language Server")
 	shared := state.draft.JDTLSShared
 	sharedDisabled := m.javaSettingsSharedDisabled()
-	if ui.Checkbox(c, &shared, "Share JDT LS across builds").
+	if settingsCheckbox(c, &shared, "Share JDT LS across builds").
 		Disabled(sharedDisabled).Opacity(opacityForDisabled(sharedDisabled)).Changed() {
 		state.draft.JDTLSShared = shared
 		m.invalidate()
@@ -283,9 +282,9 @@ func (m *Model) settingsJavaBody(c *ui.Context, p *ui.Theme, oi oiColors) {
 	m.javaJdkRow(c, oi, "JDK", &state.draft.JDTLSJdk, "Auto")
 	ui.Text(c, "Runs only jdtls. Auto uses a suitable installed JDK or a managed runtime.").
 		FontSize(12).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "JVM options", 220)
-		ui.TextInput(c, &state.draft.JDTLSVmArgs).Grow(1).
+		ui.TextInput(c, &state.draft.JDTLSVmArgs).Grow(1).MaxWidth(settingsPathMaxWidth).
 			Placeholder("-Xmx4g")
 	})
 	ui.Text(c, "Passed to the JVM running jdtls (java.jdt.ls.vmargs).").
@@ -302,7 +301,7 @@ func (m *Model) javaSettingsSharedDisabled() bool {
 // javaJdkRow is the native JDK picker: installed SDKs plus a path field for a
 // JDK detection did not find and a folder button for explicit selection.
 func (m *Model) javaJdkRow(c *ui.Context, oi oiColors, label string, value *string, emptyLabel string) {
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, label, 220)
 		choices, labels := m.javaJDKChoices(*value, emptyLabel)
 		shown := labels[0]
@@ -312,7 +311,8 @@ func (m *Model) javaJdkRow(c *ui.Context, oi oiColors, label string, value *stri
 				break
 			}
 		}
-		if ui.Select(c, &shown, labels).Grow(1).Changed() {
+		if ui.Select(c, &shown, labels).MinWidth(settingsSelectMinWidth).
+			Grow(1).MaxWidth(settingsControlMaxWidth).Changed() {
 			for i, choiceLabel := range labels {
 				if shown == choiceLabel {
 					*value = choices[i]

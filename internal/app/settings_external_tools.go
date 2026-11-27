@@ -117,9 +117,9 @@ func externalToolField(
 	placeholder string,
 	macros bool,
 ) {
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
-		settingsFormLabel(c, oi, label+":", 170)
-		input := ui.TextInput(c, value).Grow(1)
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
+		settingsFormLabel(c, oi, label, settingsLabelMaxWidth)
+		input := ui.TextInput(c, value).Grow(1).MaxWidth(settingsPathMaxWidth)
 		if placeholder != "" {
 			input.Placeholder(placeholder)
 		}
@@ -146,7 +146,7 @@ func externalToolField(
 func (m *Model) settingsExternalToolsBody(c *ui.Context, oi oiColors) {
 	m.ensureExternalToolSelection()
 	tools := &m.settingsDraft.externalTools
-	ui.Row(c).MinHeight(30).Gap(6).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(6).AlignItems(ui.Center).Children(func() {
 		ui.Button(c, "＋").Tooltip("Add").OnClick(func() { m.addExternalTool(false) })
 		remove := ui.Button(c, "−")
 		remove.Tooltip("Remove")
@@ -209,26 +209,21 @@ func (m *Model) settingsExternalToolsBody(c *ui.Context, oi oiColors) {
 		return
 	}
 	tool := &(*tools)[index]
-	ui.Row(c).Height(12)
-	settingsSectionTitle(c, oi, "Tool Settings")
+	m.settingsSectionTitle(c, oi, "Tool Settings")
 	externalToolField(c, oi, "Name", &tool.Name, "", false)
 	externalToolField(c, oi, "Group", &tool.Group, "External Tools", false)
 	externalToolField(c, oi, "Description", &tool.Description, "", false)
 	externalToolField(c, oi, "Program", &tool.Program, "e.g. /usr/bin/env", true)
 	externalToolField(c, oi, "Arguments", &tool.Arguments, "", true)
 	externalToolField(c, oi, "Working directory", &tool.WorkingDirectory, "$ProjectFileDir$", true)
-	ui.Row(c).MinHeight(28).AlignItems(ui.Center).PaddingStart(178).Children(func() {
-		synchronize := tool.SynchronizeAfter
-		if ui.Checkbox(c, &synchronize, "Synchronize files after execution").Changed() {
-			tool.SynchronizeAfter = synchronize
-		}
-	})
-	ui.Row(c).MinHeight(28).AlignItems(ui.Center).PaddingStart(178).Children(func() {
-		openConsole := tool.OpenConsole
-		if ui.Checkbox(c, &openConsole, "Open console for tool output").Changed() {
-			tool.OpenConsole = openConsole
-		}
-	})
+	synchronize := tool.SynchronizeAfter
+	if settingsCheckbox(c, &synchronize, "Synchronize files after execution").Changed() {
+		tool.SynchronizeAfter = synchronize
+	}
+	openConsole := tool.OpenConsole
+	if settingsCheckbox(c, &openConsole, "Open console for tool output").Changed() {
+		tool.OpenConsole = openConsole
+	}
 	ui.Text(c, "Enabled tools appear in Find Action under External Tools and can get shortcuts in Keymap. Output is shown in the Run tool window.").
 		FontSize(12).TextColor(oi.textMuted).Padding(12, 182)
 }

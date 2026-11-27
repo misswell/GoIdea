@@ -652,6 +652,12 @@ type Preferences struct {
 	// SearchPreview remembers whether Search Everywhere opens its source
 	// preview beside the result list.
 	SearchPreview bool `json:"searchPreview,omitempty"`
+	// SettingsWindowWidth, SettingsWindowHeight and SettingsSidebarWidth
+	// remember the dimensions and page-tree split chosen by dragging the
+	// native Settings sheet.
+	SettingsWindowWidth  int `json:"settingsWindowWidth,omitempty"`
+	SettingsWindowHeight int `json:"settingsWindowHeight,omitempty"`
+	SettingsSidebarWidth int `json:"settingsSidebarWidth,omitempty"`
 	// SearchFieldHistory is the Find window's recent multi-line queries, newest
 	// first, as OpenIDEA keeps the search-field history.
 	SearchFieldHistory []string `json:"searchFieldHistory,omitempty"`

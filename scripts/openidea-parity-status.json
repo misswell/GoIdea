@@ -583,7 +583,7 @@
     },
     "overlay:search.everywhere": {
       "status": "integrated",
-      "evidence": "internal/app/overlay_registry.go registers search.everywhere as searchEverywhere. internal/app/se.go now renders OpenIDEA's 760-DIP top dialog, scope checkbox/selector, preview/filter/Find-tool-window controls, history menu, dynamic-height relevance mix and selected-result footer. TestSearchEverywhereDialogUsesOpenHeaderRowsAndFooter, TestSearchEverywhereMixedAllTabMatchesOpenIDEA, TestSearchEverywherePreviewLayoutRendersOffscreen, TestSearchEverywhereFilterPopupRendersOffscreen, TestSearchEverywhereShiftAndPrimaryClickSelection and the existing components/double-Shift/search tests cover the native surface"
+      "evidence": "internal/app/overlay_registry.go registers search.everywhere as searchEverywhere. internal/app/se.go follows OpenIDEA rank.ts, query.ts, model.ts and SearchEverywhere.tsx for exact/prefix/substring/hump ranking, stable relevance mixing, streaming source updates, per-tab limits, settings-option entries and keyboard navigation. internal/app/se_filters.go follows filters.ts for language/kind/all semantics and internal/app/se_endpoints.go renders backend routes as OpenIDEA symbol rows. TestSearchEverywhereMatchesOpenIDEARankingAndSettingsEntries, TestSearchEverywhereKeepsOldSectionUntilNewQueryAnswers, TestSearchEverywhereDialogUsesOpenHeaderRowsAndFooter, TestSearchEverywhereMixedAllTabMatchesOpenIDEA, TestSearchEverywhereFilterPopupRendersOffscreen and TestSearchEverywhereShiftAndPrimaryClickSelection cover the native surface."
     },
     "overlay:search.fileStructure": {
       "status": "integrated",
@@ -599,7 +599,7 @@
     },
     "overlay:settings.dialog": {
       "status": "integrated",
-      "evidence": "internal/app/overlay_registry.go registers settings.dialog as settings over internal/app/settings_window.go; TestOverlayOpenFollowsBusinessState proves modal behavior and the Settings staging, tree, search and history tests cover the sheet"
+      "evidence": "internal/app/overlay_registry.go registers settings.dialog as settings over internal/app/settings_window.go. The native sheet uses OpenIDEA 980x720, 900x700 minimum metrics, 240 DIP sidebar, 24 DIP tree rows, shared 300 DIP form labels, 28 DIP rows, 26 DIP toggles, titled section rules and 12 DIP footer controls. Its edges and title resize the sheet with persisted dimensions, title double-click zooms, backdrop clicks are ignored, and Escape clears search before it closes. TestSettingsDialogResizesClampsAndPersists, TestSettingsDialogResizeKeepsTheOppositeEdgeAnchored, TestSettingsBackdropClickDoesNotDismiss, TestSettingsSearchEscapeClearsBeforeClose, TestSettingsSectionsUseOpenIDEASeparation and TestEverySettingsPageRendersAtReferenceSize cover the shell and every registered page."
     },
     "overlay:settings.projectStructure": {
       "status": "integrated",
@@ -1747,7 +1747,7 @@
     },
     "toolwindow:hierarchy": {
       "status": "integrated",
-      "evidence": "internal/app/hierarchy.go hierarchyRightView: right-anchored window with Call/Type direction tabs, lazy children per node and recursion leaves; lsp_call_hierarchy, lsp_type_hierarchy; e2e hierarchy.rows, hierarchy.visible, hierarchyError; internal/app/hierarchy_test.go; internal/app/workbench_render_test.go TestWorkbenchHierarchyRightWindowRenders"
+      "evidence": "internal/app/hierarchy.go hierarchyRightView follows OpenIDEA HeaderRow, hierarchy toolbar and content tabs: 32 DIP shared header, 24 DIP selected tab, grouped 20 DIP icon toolbar, 24 DIP rows and wrapped 24 DIP empty state. lsp_call_hierarchy and lsp_type_hierarchy remain authoritative; hierarchy.rows, hierarchy.visible and hierarchyError cover the real backend. TestHierarchyToolWindowUsesOpenIDEAHeaderToolbarAndRowMetrics, TestHierarchyEmptyStateWrapsInsideTheToolWindow and TestWorkbenchHierarchyRightWindowRenders cover the native geometry and content."
     },
     "toolwindow:bookmarks": {
       "status": "integrated",
@@ -1903,7 +1903,7 @@
     },
     "feature:search": {
       "status": "integrated",
-      "evidence": "base.search.done, base.search.files, base.search.matches and searchEverywhere.*; internal/app/search.go and search_actions.go implement Find in Files, Replace in Files, rerun, named scopes and directory arguments. internal/app/se.go provides Search Everywhere's OpenIDEA UI, relevance mix, per-tab history, project/all-places scopes, slash commands, Shift/Cmd multi-selection, index+LSP symbol merge, preview, filters and keyboard navigation; se_filters.go covers filtering; se_endpoints.go loads live enabled plugin endpoint providers and ranks method, path, route suffix and handler matches; recent_navigation.go adds Recent Files, Recent Locations and the open-file Switcher. TestRunSearchSendsFullOpenIDEAQuery, TestRerunSearchActionRepeatsTheCurrentQuery, TestSearchReplyWaitsForTheStreamedDoneEvent, TestReplaceInFilesUsesExactSelectedPosition, TestSearchScopesValidateAndPersist, TestSearchActionsAreRegisteredAndPaletteVisible, TestSearchEndpointsRankAndFilterLikeOpenIDEA, TestOnlyLiveEnabledPluginsContributeEndpoints, TestSearchEverywhereMixedAllTabMatchesOpenIDEA, TestSearchEverywhereMergesIndexAndLanguageServerSymbols, TestSearchEverywhereScopeFiltersProductionAndTest, TestSearchEverywhereHistoryIsPerTabAndBrowses, TestSearchEverywhereSlashCommandsRunAndListScopes, TestSearchEverywhereShiftAndPrimaryClickSelection, TestSearchEverywherePreviewLayoutRendersOffscreen, TestSearchEverywhereActionsHideDisabledUntilChecked and TestSwitcherOpensSelectionWhenControlIsReleased cover the native surfaces and backend requests"
+      "evidence": "base.search.done, base.search.files, base.search.matches and searchEverywhere.*; internal/app/search.go and search_actions.go implement Find in Files, Replace in Files, rerun, named scopes and directory arguments. internal/app/se.go now follows OpenIDEA rank.ts, query.ts, model.ts and SearchEverywhere.tsx for exact/prefix/substring/hump ranking, stable All-tab relevance mixing, old-section holding while a source streams, per-tab limits, option-level Settings entries, endpoint symbol rows, filter semantics and keyboard navigation. TestSearchEverywhereMatchesOpenIDEARankingAndSettingsEntries, TestSearchEverywhereKeepsOldSectionUntilNewQueryAnswers, TestSearchEverywhereMixedAllTabMatchesOpenIDEA, TestSearchEndpointsRankAndFilterLikeOpenIDEA, TestSEFiltersSanitizeStoredValuesLikeOpenIDEA and TestSearchEverywhereNavigationStopsAtEndsAndWraps cover the native behavior."
     },
     "feature:project-tree": {
       "status": "integrated",
@@ -1963,7 +1963,7 @@
     },
     "feature:settings": {
       "status": "partial",
-      "evidence": "internal/app/settings_window.go; OpenIDEA's 980 DIP sheet: page tree built like model/pages.ts with group folders, search filtering with ancestors, breadcrumbs, Back/Forward history, Reset and Cancel/Apply/OK staging; internal/app/settings_test.go"
+      "evidence": "internal/app/settings_window.go follows OpenIDEA SettingsDialog.tsx and Form.module.css for the 980x720 sheet, resizable shell, page tree, search clearing, breadcrumbs, history and shared form metrics. All registered pages render in the native offscreen matrix, and generic backend pages share title rules, label columns, row/toggle rhythm and control widths. TestEverySettingsPageRendersAtReferenceSize, TestSettingsSheetAlignsItsPanes, TestSettingsDialogResizesClampsAndPersists, TestSettingsBackdropClickDoesNotDismiss and TestSettingsSearchEscapeClearsBeforeClose cover the UI. The feature remains partial where native MyGo renderer APIs or runtime consumers are still missing, including bold font weight, sticky lines and several specialized settings consumers."
     },
     "feature:tools": {
       "status": "integrated",
@@ -3107,7 +3107,7 @@
     },
     "feature:welcome": {
       "status": "integrated",
-      "evidence": "internal/app/welcome.go, welcome_recents.go, recent_projects.go and project_popup.go implement OpenIDEA's Welcome rail, Recent Projects, groups, title-bar Projects popup, actions, open projects, type-to-filter, keyboard selection, remove, Customize and Plugins pages. TestProjectPopupMatchesOpenIDEAEntryGroupsAndSelection, TestProjectPopupTypeToFilterAndNoMatch, TestProjectPopupRendersNativeSectionsAndTitleWidgetOpensIt, TestProjectPopupTypingAndEnterOpenTheFilteredProject and TestProjectPopupRemovesOnlyRecentProjects cover the title-bar surface. cmd/goidea/windows.go now hides the separate macOS title bar and places the traffic lights over OpenIDEA's integrated toolbar; TestGoideaWindowUsesOpenIDEAChrome covers the window options. The welcome-empty, welcome, welcome-customize, welcome-plugins, recent-projects and project-popup screenshots cover the visuals"
+      "evidence": "internal/app/welcome.go, welcome_recents.go, recent_projects.go and project_popup.go implement OpenIDEA's Welcome rail, Recent Projects, groups, title-bar Projects popup, actions, open projects, type-to-filter, keyboard selection, remove, Customize and Plugins pages. TestProjectPopupMatchesOpenIDEAEntryGroupsAndSelection, TestProjectPopupTypeToFilterAndNoMatch, TestProjectPopupRendersNativeSectionsAndTitleWidgetOpensIt, TestProjectPopupTypingAndEnterOpenTheFilteredProject and TestProjectPopupRemovesOnlyRecentProjects cover the title-bar surface. cmd/goidea/windows.go now hides the separate macOS title bar and places the traffic lights over OpenIDEA's integrated toolbar; TestGoideaWindowUsesOpenIDEAChrome covers the window options. The welcome-empty, welcome, welcome-customize, welcome-plugins, recent-projects and project-popup screenshots cover the visuals. cmd/goidea/windows.go now routes the traffic-light close through the native CloseEvent guard: an empty Welcome window exits, while a last project window returns to Welcome unless general.closeWithoutWelcome is set. TestWelcomeWindowCloseProceedsInsteadOfReopeningWelcome, TestWelcomeWindowCloseCancelKeepsTheWindowOpen, TestWelcomeWindowCloseCanPersistDontAskAgain and TestWelcomeWindowCloseStopsTheBackend cover the close-button lifecycle."
     },
     "action:file.openRecent": {
       "status": "integrated",

@@ -42,32 +42,36 @@ func TestSearchEndpointsRankAndFilterLikeOpenIDEA(t *testing.T) {
 		},
 	}
 
-	exact := seEndpointItems(endpoints, "/api/photos")
+	exact := seEndpointItems(endpoints, "/api/photos", 50)
 	if len(exact) != 2 || exact[0].title != "GET /api/photos" ||
 		exact[1].title != "POST /api/photos/{id}" {
 		t.Fatalf("exact path match = %+v", exact)
 	}
-	post := seEndpointItems(endpoints, "POST photos")
+	if exact[0].kind != "symbol" || exact[0].symbol != "method" ||
+		exact[0].container != "PhotosController#list" {
+		t.Fatalf("route result was not a display-compatible symbol: %+v", exact[0])
+	}
+	post := seEndpointItems(endpoints, "POST photos", 50)
 	if len(post) != 2 || post[0].title != "POST /api/photos/{id}" ||
 		post[1].title != "* /api/search" {
 		t.Fatalf("method + name match = %+v", post)
 	}
-	handler := seEndpointItems(endpoints, "search_photos")
+	handler := seEndpointItems(endpoints, "search_photos", 50)
 	if len(handler) != 1 || handler[0].path != "/p/app.py" {
 		t.Fatalf("handler match = %+v", handler)
 	}
-	if got := seEndpointItems(endpoints, "DELETE /api/search"); len(got) != 1 ||
+	if got := seEndpointItems(endpoints, "DELETE /api/search", 50); len(got) != 1 ||
 		got[0].title != "* /api/search" {
 		t.Fatalf("DELETE returned %+v", got)
 	}
-	if got := seEndpointItems(endpoints, "DELETE /api/photos"); len(got) != 0 {
+	if got := seEndpointItems(endpoints, "DELETE /api/photos", 50); len(got) != 0 {
 		t.Fatalf("DELETE photos returned %+v", got)
 	}
 }
 
 func TestEndpointRowsCarryTheDeclarationLocation(t *testing.T) {
 	item := seItem{
-		kind: "endpoint", title: "GET /api/photos", path: "/p/PhotosController.java",
+		kind: "symbol", symbol: "method", title: "GET /api/photos", path: "/p/PhotosController.java",
 		line: 8, col: 4,
 	}
 	if item.path != "/p/PhotosController.java" || item.line != 8 || item.col != 4 {

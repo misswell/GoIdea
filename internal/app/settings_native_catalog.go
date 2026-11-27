@@ -1909,7 +1909,7 @@ func (m *Model) settingsNativeBody(c *ui.Context, oi oiColors, page string) {
 		return
 	}
 	if page == settingsPagePython {
-		settingsSectionTitle(c, oi, "Python")
+		m.settingsSectionTitle(c, oi, "Python")
 		ui.Text(c, "Python interpreters, dependencies and docstring formatting are configured on the child pages.").
 			FontSize(12).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
 		return
@@ -1935,17 +1935,18 @@ func (m *Model) settingsNativeBody(c *ui.Context, oi oiColors, page string) {
 	m.ensureNativeLanguageSDKs(page, false)
 	if page == settingsPageActionsOnSave {
 		reformat := m.settingsDraft.reformatOnSave
-		if ui.Checkbox(c, &reformat, "Reformat code").Changed() {
+		if settingsCheckbox(c, &reformat, "Reformat code").Changed() {
 			m.settingsDraft.reformatOnSave = reformat
 			m.invalidate()
 		}
 		ui.Text(c, "Formats the whole file with the language server's formatter.").
-			FontSize(11).TextColor(oi.textMuted).PaddingStart(20).SingleLine().Ellipsis("…")
+			FontSize(11).TextColor(oi.textMuted).
+			PaddingStart(settingsSectionIndent + 20).SingleLine().Ellipsis("…")
 	}
 	if !m.settingsVCSNativeBody(c, oi, page) {
 		for _, section := range def.sections {
 			if section.title != "" {
-				settingsSectionTitle(c, oi, section.title)
+				m.settingsSectionTitle(c, oi, section.title)
 			}
 			for _, field := range section.fields {
 				m.renderNativeSettingsField(c, oi, page, field)
@@ -1985,38 +1986,42 @@ func (m *Model) renderNativeSettingsField(c *ui.Context, oi oiColors, page strin
 		if field.invert {
 			value = !value
 		}
-		if ui.Checkbox(c, &value, field.label).Disabled(disabled).Opacity(opacityForDisabled(disabled)).Changed() {
+		if settingsCheckbox(c, &value, field.label).
+			Disabled(disabled).Opacity(opacityForDisabled(disabled)).Changed() {
 			if field.invert {
 				value = !value
 			}
 			m.setNativeSettingsValue(page, field.key, value)
 		}
 	case nativeSettingsText:
-		ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
-			settingsFormLabel(c, oi, field.label, 230)
+		ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
+			settingsFormLabel(c, oi, field.label, settingsLabelMaxWidth)
 			value := nativeSettingsString(m, page, field.key)
-			input := ui.TextInput(c, &value).Grow(1).Placeholder(field.placeholder).
+			input := ui.TextInput(c, &value).MinWidth(settingsTextWidth).Grow(1).
+				MaxWidth(settingsControlMaxWidth).
+				Placeholder(field.placeholder).
 				Disabled(disabled).Opacity(opacityForDisabled(disabled))
 			if input.Changed() {
 				m.setNativeSettingsValue(page, field.key, value)
 			}
 		})
 	case nativeSettingsPassword:
-		ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
-			settingsFormLabel(c, oi, field.label, 230)
+		ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
+			settingsFormLabel(c, oi, field.label, settingsLabelMaxWidth)
 			value := nativeSettingsString(m, page, field.key)
-			input := ui.TextInput(c, &value).Grow(1).Password().
+			input := ui.TextInput(c, &value).MinWidth(settingsTextWidth).Grow(1).
+				MaxWidth(settingsControlMaxWidth).Password().
 				Disabled(disabled).Opacity(opacityForDisabled(disabled))
 			if input.Changed() {
 				m.setNativeSettingsValue(page, field.key, value)
 			}
 		})
 	case nativeSettingsNumber:
-		ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
-			settingsFormLabel(c, oi, field.label, 230)
+		ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
+			settingsFormLabel(c, oi, field.label, settingsLabelMaxWidth)
 			value := nativeSettingsNumberValue(m, page, field.key)
 			input := ui.NumberInput(c, &value, field.min, field.max, field.step).
-				Width(120).Disabled(disabled).Opacity(opacityForDisabled(disabled))
+				Width(settingsNumberWidth).Disabled(disabled).Opacity(opacityForDisabled(disabled))
 			if input.Changed() {
 				m.setNativeSettingsValue(page, field.key, value)
 			}
@@ -2029,8 +2034,8 @@ func (m *Model) renderNativeSettingsField(c *ui.Context, oi oiColors, page strin
 		if field.key == editorColorSchemeKey {
 			field.choices = m.colorSchemeChoices(field.choices)
 		}
-		ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
-			settingsFormLabel(c, oi, field.label, 230)
+		ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
+			settingsFormLabel(c, oi, field.label, settingsLabelMaxWidth)
 			value := nativeSettingsString(m, page, field.key)
 			label := value
 			labels := make([]string, len(field.choices))
@@ -2041,7 +2046,8 @@ func (m *Model) renderNativeSettingsField(c *ui.Context, oi oiColors, page strin
 				}
 			}
 			selectorDisabled := field.disabledUnless != "" && disabled
-			selector := ui.Select(c, &label, labels).Grow(1).
+			selector := ui.Select(c, &label, labels).MinWidth(settingsSelectMinWidth).
+				Grow(1).MaxWidth(settingsControlMaxWidth).
 				Disabled(selectorDisabled).Opacity(opacityForDisabled(selectorDisabled))
 			if selector.Changed() {
 				for _, choice := range field.choices {
@@ -2069,10 +2075,11 @@ func (m *Model) renderNativeSettingsField(c *ui.Context, oi oiColors, page strin
 	case nativeSettingsPythonInterpreters:
 		m.renderPythonInterpreters(c, oi, field)
 	case nativeSettingsJSON:
-		ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
-			settingsFormLabel(c, oi, field.label, 230)
+		ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
+			settingsFormLabel(c, oi, field.label, settingsLabelMaxWidth)
 			text := nativeSettingsJSONText(nativeSettingsValue(m, page, field.key))
-			input := ui.TextInput(c, &text).Grow(1).Placeholder(field.placeholder)
+			input := ui.TextInput(c, &text).Grow(1).MaxWidth(settingsControlMaxWidth).
+				Placeholder(field.placeholder)
 			if input.Changed() {
 				var parsed any
 				if err := json.Unmarshal([]byte(text), &parsed); err == nil {
@@ -2084,8 +2091,8 @@ func (m *Model) renderNativeSettingsField(c *ui.Context, oi oiColors, page strin
 		m.renderNativeCMakeProfiles(c, oi, page, field)
 	}
 	if field.hint != "" {
-		ui.Text(c, field.hint).FontSize(11).TextColor(oi.textMuted).
-			PaddingStart(20).SingleLine().Ellipsis("…")
+		ui.Text(c, field.hint).FontSize(12).TextColor(oi.textMuted).
+			PaddingStart(settingsSectionIndent + settingsLabelMaxWidth + 8).Wrap()
 	}
 }
 
@@ -2258,7 +2265,7 @@ func (m *Model) renderNativeCMakeProfiles(c *ui.Context, oi oiColors, page strin
 }
 
 func (m *Model) renderCMakeProfileText(c *ui.Context, oi oiColors, label, value string, changed func(string)) {
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).PaddingStart(40).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).PaddingStart(40).Children(func() {
 		settingsFormLabel(c, oi, label, 190)
 		input := ui.TextInput(c, &value).Grow(1)
 		if input.Changed() {
@@ -2279,7 +2286,7 @@ func (m *Model) renderNativeSettingsList(c *ui.Context, oi oiColors, page string
 	}
 	for i := range values {
 		i := i
-		ui.Row(c).MinHeight(30).Gap(6).AlignItems(ui.Center).PaddingStart(20).Children(func() {
+		ui.Row(c).MinHeight(settingsFormRow).Gap(6).AlignItems(ui.Center).PaddingStart(20).Children(func() {
 			value := values[i]
 			input := ui.TextInput(c, &value).Grow(1).Placeholder(field.placeholder)
 			if input.Changed() {
@@ -2302,7 +2309,7 @@ func (m *Model) renderNativeSettingsList(c *ui.Context, oi oiColors, page string
 		state.aux = map[string]string{}
 	}
 	inputKey := field.key + ".draft"
-	ui.Row(c).MinHeight(30).Gap(6).AlignItems(ui.Center).PaddingStart(20).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(6).AlignItems(ui.Center).PaddingStart(20).Children(func() {
 		draft := state.aux[inputKey]
 		input := ui.TextInput(c, &draft).Grow(1).Placeholder(field.placeholder)
 		if input.Changed() {
@@ -2337,7 +2344,7 @@ func (m *Model) renderNativeSettingsMap(c *ui.Context, oi oiColors, page string,
 	}
 	for _, key := range keys {
 		key := key
-		ui.Row(c).MinHeight(30).Gap(6).AlignItems(ui.Center).PaddingStart(20).Children(func() {
+		ui.Row(c).MinHeight(settingsFormRow).Gap(6).AlignItems(ui.Center).PaddingStart(20).Children(func() {
 			name := key
 			ui.TextInput(c, &name).Width(180)
 			value := values[key]
@@ -2359,7 +2366,7 @@ func (m *Model) renderNativeSettingsMap(c *ui.Context, oi oiColors, page string,
 		state.aux = map[string]string{}
 	}
 	nameKey, valueKey := field.key+".name", field.key+".value"
-	ui.Row(c).MinHeight(30).Gap(6).AlignItems(ui.Center).PaddingStart(20).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(6).AlignItems(ui.Center).PaddingStart(20).Children(func() {
 		name, value := state.aux[nameKey], state.aux[valueKey]
 		nameInput := ui.TextInput(c, &name).Width(180).Placeholder("NAME")
 		valueInput := ui.TextInput(c, &value).Grow(1).Placeholder("value")
@@ -2398,7 +2405,7 @@ func (m *Model) renderNativeSettingsLanguages(c *ui.Context, oi oiColors, page s
 		name, languageID, _ := strings.Cut(entry, "\x00")
 		id := languageID
 		enabled := !containsStringFold(disabled, id)
-		if ui.Checkbox(c, &enabled, name).Changed() {
+		if settingsCheckbox(c, &enabled, name).Changed() {
 			current := nativeSettingsListValue(m, page, field.key)
 			if enabled {
 				for i, value := range current {
@@ -2427,7 +2434,7 @@ func (m *Model) nativeGutterBody(c *ui.Context, oi oiColors) {
 		return
 	}
 	master := nativeSettingsBool(m, page, "editor.showGutterIcons")
-	if ui.Checkbox(c, &master, "Show gutter icons").Changed() {
+	if settingsCheckbox(c, &master, "Show gutter icons").Changed() {
 		m.setNativeSettingsValue(page, "editor.showGutterIcons", master)
 	}
 	groups := []nativeSettingsChoice{

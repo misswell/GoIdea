@@ -70,6 +70,22 @@ func nativeModal(c *ui.Context, open *bool, fn func()) nativeModalElement {
 // nativeSurfaceModal keeps the same blocking, transparent backdrop and rise
 // motion for dialogs that draw their complete window surface themselves.
 func nativeSurfaceModal(c *ui.Context, open *bool, fn func()) nativeModalElement {
+	return nativeSurfaceModalWithBackdrop(c, open, true, fn)
+}
+
+// nativePersistentSurfaceModal is the same complete-window surface with
+// OpenIDEA's Settings policy: clicks on the transparent backdrop are ignored,
+// while Escape still cancels the sheet.
+func nativePersistentSurfaceModal(c *ui.Context, open *bool, fn func()) nativeModalElement {
+	return nativeSurfaceModalWithBackdrop(c, open, false, fn)
+}
+
+func nativeSurfaceModalWithBackdrop(
+	c *ui.Context,
+	open *bool,
+	dismissOnBackdrop bool,
+	fn func(),
+) nativeModalElement {
 	if !*open {
 		return nativeModalElement{}
 	}
@@ -80,7 +96,7 @@ func nativeSurfaceModal(c *ui.Context, open *bool, fn func()) nativeModalElement
 	var panel ui.Element
 	ui.Overlay(c, func() {
 		back := ui.Box(c).Absolute().Left(0).Top(0).Right(0).Bottom(0).Center().Modal()
-		if back.Clicked() || back.OverlayShortcut(0, ui.KeyEscape) {
+		if (dismissOnBackdrop && back.Clicked()) || back.OverlayShortcut(0, ui.KeyEscape) {
 			*open = false
 			dismissed = true
 		}

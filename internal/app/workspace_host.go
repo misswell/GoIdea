@@ -150,9 +150,12 @@ func (m *Model) isLastProjectWindow() bool {
 }
 
 // returnLastSessionToWelcome closes the last project or LightEdit window by
-// following Close Project -> Welcome. The native host calls it from the close
-// guard; a sibling window or the closeWithoutWelcome preference keeps the
-// normal close path.
+// following Close Project -> Welcome. OpenIDEA applies this only when the
+// window actually has a project or LightEdit session. An already-empty
+// Welcome window must proceed through the normal close path, or a click on the
+// traffic-light close button would be cancelled and Welcome would reopen.
+// The native host calls it from the close guard; a sibling window or the
+// closeWithoutWelcome preference keeps the normal close path.
 func (m *Model) returnLastSessionToWelcome() bool {
 	if m == nil || m.applicationQuit || m.forceQuit || !m.isLastProjectWindow() ||
 		m.prefs.System.CloseWithoutWelcome {
@@ -165,11 +168,7 @@ func (m *Model) returnLastSessionToWelcome() bool {
 	if len(m.allTabs()) > 0 {
 		return false
 	}
-	m.showingWelcome = true
-	m.status = "Open a file"
-	m.saveSession()
-	m.invalidate()
-	return true
+	return false
 }
 
 func (m *Model) openProjectInNativeWindow(path string, files []string) bool {

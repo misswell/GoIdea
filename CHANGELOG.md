@@ -3,6 +3,15 @@
 The GitHub release notes, which **Help › What's New** shows, come from the
 `## <version>` section here. Every release needs one, or its build fails.
 
+## Unreleased
+
+- Closing the Welcome window now exits normally instead of reopening Welcome.
+- Settings pages now use OpenIDEA's form spacing, control sizes and section rules.
+- The Settings window now resizes from its edges or title with remembered dimensions.
+- Settings keeps its contents open on backdrop clicks and clears search with Escape first.
+- Search Everywhere now follows OpenIDEA's ranking and lists individual Settings options.
+- Hierarchy now uses OpenIDEA's compact header tabs, grouped toolbar and content spacing.
+
 ## 0.1.48
 
 - Search Everywhere keeps mixed All results flowing without synthetic section-count rows.

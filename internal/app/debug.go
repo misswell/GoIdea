@@ -2259,6 +2259,16 @@ func (m *Model) SmokeDebug(ctx context.Context) (map[string]any, error) {
 		return out, errors.New("The breakpoint was not hit within 4 minutes: " + state)
 	}
 	out["paused"] = true
+	// The pause event arrives before fetchStop finishes loading frames and the
+	// first scope. Let the same native load that feeds the Debug pane settle
+	// before the acceptance reads it.
+	if !m.waitDebug(ctx, func(d *DebugPane) bool {
+		return len(d.frames) > 0 && len(d.vars) > 0
+	}, 30*time.Second) {
+		out["variablesLoaded"] = false
+	} else {
+		out["variablesLoaded"] = true
+	}
 	frameID := int64(0)
 	m.post(func() {
 		out["status"] = m.debug.status

@@ -147,7 +147,7 @@ func (m *Model) settingsProjectTrustBody(c *ui.Context, oi oiColors) {
 			FontSize(12).TextColor(oi.textMuted).SingleLine()
 	}
 
-	settingsSectionTitle(c, oi, "Trusted projects")
+	m.settingsSectionTitle(c, oi, "Trusted projects")
 	for _, path := range state.decisions.Projects {
 		path := path
 		busy := state.busy["project:"+path]

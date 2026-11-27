@@ -18,13 +18,13 @@ func (m *Model) loadVimSettingsPage() {
 // without leaving the settings window.
 func (m *Model) settingsVimBody(c *ui.Context, oi oiColors) {
 	enabled := m.settingsDraft.vimEnabled
-	if ui.Checkbox(c, &enabled, "Enable Vim emulation").Changed() {
+	if settingsCheckbox(c, &enabled, "Enable Vim emulation").Changed() {
 		m.settingsDraft.vimEnabled = enabled
 		m.invalidate()
 	}
 
-	settingsSectionTitle(c, oi, "Vim rc file")
-	ui.Row(c).MinHeight(30).Gap(10).AlignItems(ui.Center).Children(func() {
+	m.settingsSectionTitle(c, oi, "Vim rc file")
+	ui.Row(c).MinHeight(settingsFormRow).Gap(10).AlignItems(ui.Center).Children(func() {
 		ui.Text(c, "Configuration file").FontSize(12).Bold().TextColor(oi.textStrong).SingleLine()
 		ui.Button(c, "Reload").OnClick(func() {
 			m.reloadVimRc(false)
@@ -57,7 +57,7 @@ func (m *Model) settingsVimBody(c *ui.Context, oi oiColors) {
 		}
 	}
 
-	settingsSectionTitle(c, oi, "Shortcut conflicts")
+	m.settingsSectionTitle(c, oi, "Shortcut conflicts")
 	ui.Text(c,
 		"With Vim as the handler the key goes to the editor while Vim mode is on. "+
 			"With IDE, an enabled IDE action runs first.",
@@ -96,7 +96,7 @@ func (m *Model) settingsVimConflictRow(c *ui.Context, oi oiColors, key vimKey) {
 	if handler != "vim" && handler != "ide" {
 		handler = key.handler
 	}
-	ui.Row(c.Key("settings:vim:"+stroke)).MinHeight(30).Gap(10).AlignItems(ui.Center).
+	ui.Row(c.Key("settings:vim:"+stroke)).MinHeight(settingsFormRow).Gap(10).AlignItems(ui.Center).
 		Padding(0, 8).Children(func() {
 		settingsVimCell(c, oi, key.stroke, 112, false)
 		settingsVimCell(c, oi, actionText, 250, false)

@@ -5,6 +5,7 @@ package app
 
 import (
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
@@ -97,6 +98,37 @@ func (f seFilters) kinds(tab seTab) []string {
 func (f seFilters) active(tab seTab) bool {
 	return len(f.languages(tab)) > 0 || len(f.kinds(tab)) > 0 ||
 		(tab == seTabText && strings.TrimSpace(f.Text) != "")
+}
+
+// sanitized mirrors OpenIDEA's sanitizeFilters: valid string ids survive,
+// duplicates collapse and older or malformed values cannot hide results.
+func (f seFilters) sanitized() seFilters {
+	out := seFilters{
+		FilesLanguages:   sanitizeSearchFilterIDs(f.FilesLanguages),
+		ClassesLanguages: sanitizeSearchFilterIDs(f.ClassesLanguages),
+		SymbolsLanguages: sanitizeSearchFilterIDs(f.SymbolsLanguages),
+		Classes:          sanitizeSearchFilterIDs(f.Classes),
+		Symbols:          sanitizeSearchFilterIDs(f.Symbols),
+		Text:             f.Text,
+	}
+	return out
+}
+
+func sanitizeSearchFilterIDs(ids []string) []string {
+	if len(ids) == 0 {
+		return nil
+	}
+	seen := make(map[string]bool, len(ids))
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		out = append(out, id)
+	}
+	return out
 }
 
 // languageExcluded drops paths whose longest registered suffix belongs to an
@@ -273,7 +305,8 @@ func seGlobMatches(pattern, path string) bool {
 // saveSearchFilters stores the funnel in the settings, as OpenIDEA keeps it
 // across starts.
 func (m *Model) saveSearchFilters() {
-	f := m.seFilters
+	f := m.seFilters.sanitized()
+	m.seFilters = f
 	m.prefs.SearchFilters = &f
 	if m.cfg.SettingsPath != "" {
 		_ = m.savePreferences()
@@ -293,39 +326,25 @@ func (m *Model) seFilterPanel(c *ui.Context, p *ui.Theme, s *sePane) {
 				m.refreshSearchEverywhere()
 			})
 		} else {
-			switch {
-			case !s.languagesDone && s.languagesBusy:
-				ui.Text(c, "Loading file types…").FontSize(12).TextColor(p.TextMuted).SingleLine()
-			case s.languagesError != "":
-				ui.Text(c, s.languagesError).FontSize(12).TextColor(p.TextMuted).SingleLine()
-			case len(s.languages) == 0:
-				ui.Text(c, "No file types are available.").FontSize(12).TextColor(p.TextMuted).SingleLine()
-			default:
-				ui.Text(c, "File types").FontSize(12).TextColor(p.TextMuted).SingleLine()
-				for _, language := range s.languages {
-					language := language
-					id := language.ID
-					on := true
-					for _, excluded := range s.filters.languages(s.tab) {
-						if excluded == id {
-							on = false
-							break
-						}
-					}
-					m.seFilterCheckbox(c, p, s, "language:"+id, seLanguageLabel(language), on, func() {
-						s.filters = s.filters.toggleLanguage(s.tab, id)
-					})
-				}
-			}
-			if kinds := seFilterKinds(s.tab); len(kinds) > 0 {
-				ui.Text(c, "Show symbol kinds").FontSize(12).TextColor(p.TextMuted).SingleLine()
+			if s.tab == seTabFiles {
+				m.seLanguageChecklist(c, p, s, "File Types", s.languages)
+			} else {
+				kinds := seFilterKinds(s.tab)
+				options := make([]seFilterOption, 0, len(kinds))
 				for _, kind := range kinds {
-					kind := kind
-					label := seKindLabels[kind]
-					on := !s.filters.kindExcluded(s.tab, kind)
-					m.seFilterCheckbox(c, p, s, "kind:"+kind, label, on, func() {
-						s.filters = s.filters.toggleKind(s.tab, kind)
-					})
+					options = append(options, seFilterOption{ID: kind, Label: seKindLabels[kind]})
+				}
+				title := "Symbol Kinds"
+				if s.tab == seTabClasses {
+					title = "Kinds"
+				}
+				m.seFilterChecklist(c, p, s, title, options, "kind")
+				if s.languagesBusy && !s.languagesDone {
+					ui.Text(c, "Loading languages…").FontSize(12).TextColor(p.TextMuted).SingleLine()
+				} else if s.languagesError != "" {
+					ui.Text(c, s.languagesError).FontSize(12).TextColor(p.TextMuted).SingleLine()
+				} else {
+					m.seLanguageChecklist(c, p, s, "Languages", s.languages)
 				}
 			}
 		}
@@ -346,6 +365,105 @@ func (m *Model) seFilterPanel(c *ui.Context, p *ui.Theme, s *sePane) {
 			})
 		}
 	})
+}
+
+type seFilterOption struct {
+	ID    string
+	Label string
+}
+
+func (m *Model) seLanguageChecklist(
+	c *ui.Context, p *ui.Theme, s *sePane, title string, languages []openidea.LanguageInfo,
+) {
+	options := make([]seFilterOption, 0, len(languages))
+	for _, language := range languages {
+		if len(language.Extensions) == 0 {
+			continue
+		}
+		options = append(options, seFilterOption{
+			ID: language.ID, Label: seLanguageLabel(language),
+		})
+	}
+	sort.SliceStable(options, func(i, j int) bool {
+		return strings.ToLower(options[i].Label) < strings.ToLower(options[j].Label)
+	})
+	if len(options) == 0 {
+		ui.Text(c, title).FontSize(12).TextColor(p.TextMuted).SingleLine()
+		ui.Text(c, "No file types are available.").FontSize(12).TextColor(p.TextMuted).SingleLine()
+		return
+	}
+	m.seFilterChecklist(c, p, s, title, options, "language")
+}
+
+func (m *Model) seFilterChecklist(
+	c *ui.Context,
+	p *ui.Theme,
+	s *sePane,
+	title string,
+	options []seFilterOption,
+	prefix string,
+) {
+	ui.Text(c, title).FontSize(12).TextColor(p.TextMuted).SingleLine()
+	excluded := make(map[string]bool, len(s.filters.languages(s.tab))+len(s.filters.kinds(s.tab)))
+	values := s.filters.kinds(s.tab)
+	if prefix == "language" {
+		values = s.filters.languages(s.tab)
+	}
+	for _, value := range values {
+		excluded[value] = true
+	}
+	shown := 0
+	for _, option := range options {
+		if !excluded[option.ID] {
+			shown++
+		}
+	}
+	all := shown == len(options)
+	m.seFilterCheckbox(c, p, s, prefix+":all", "All", all, func() {
+		s.filters = s.filters.setFilterValues(s.tab, prefix, func() []string {
+			if all {
+				ids := make([]string, 0, len(options))
+				for _, option := range options {
+					ids = append(ids, option.ID)
+				}
+				return ids
+			}
+			return nil
+		}())
+	})
+	for _, option := range options {
+		option := option
+		on := !excluded[option.ID]
+		m.seFilterCheckbox(c, p, s, prefix+":"+option.ID, option.Label, on, func() {
+			if prefix == "language" {
+				s.filters = s.filters.toggleLanguage(s.tab, option.ID)
+			} else {
+				s.filters = s.filters.toggleKind(s.tab, option.ID)
+			}
+		})
+	}
+}
+
+func (f seFilters) setFilterValues(tab seTab, prefix string, values []string) seFilters {
+	values = sanitizeSearchFilterIDs(values)
+	if prefix == "language" {
+		switch tab {
+		case seTabFiles:
+			f.FilesLanguages = values
+		case seTabClasses:
+			f.ClassesLanguages = values
+		case seTabSymbols:
+			f.SymbolsLanguages = values
+		}
+		return f
+	}
+	switch tab {
+	case seTabClasses:
+		f.Classes = values
+	case seTabSymbols:
+		f.Symbols = values
+	}
+	return f
 }
 
 func seLanguageLabel(language openidea.LanguageInfo) string {

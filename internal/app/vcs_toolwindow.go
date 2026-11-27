@@ -97,12 +97,12 @@ func (m *Model) vcsToolWindowContent(c *ui.Context, p *ui.Theme, oi oiColors) {
 func (m *Model) vcsCombinedStashAndShelfContent(c *ui.Context, p *ui.Theme, oi oiColors) {
 	ui.Column(c).Grow(1).MinHeight(0).Children(func() {
 		ui.Column(c).Grow(1).MinHeight(0).Children(func() {
-			settingsSectionTitle(c, oi, "Stashes")
+			m.settingsSectionTitle(c, oi, "Stashes")
 			m.vcsStashContent(c, p, oi)
 		})
 		ui.Row(c).Height(1).Shrink(0).Background(p.Border)
 		ui.Column(c).Grow(1).MinHeight(0).Children(func() {
-			settingsSectionTitle(c, oi, "Shelves")
+			m.settingsSectionTitle(c, oi, "Shelves")
 			m.vcsShelfContent(c, p, oi)
 		})
 	})

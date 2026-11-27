@@ -4,6 +4,7 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -49,7 +50,7 @@ func TestSearchEverywhereMixedAllTabMatchesOpenIDEA(t *testing.T) {
 	if len(rows) == 0 || rows[0].header {
 		t.Fatalf("typed All results kept headers or were empty: %+v", rows)
 	}
-	if rows[0].item.kind != "endpoint" || rows[0].item.title != "POST /api/users" {
+	if rows[0].item.kind != "symbol" || rows[0].item.symbol != "method" || rows[0].item.title != "POST /api/users" {
 		t.Fatalf("the exact route did not rank before text: %+v", rows)
 	}
 	if rows[0].item.container != "UsersController.create" {
@@ -300,7 +301,7 @@ func TestSearchEverywhereFilterPopupRendersOffscreen(t *testing.T) {
 	tt := ui.NewTester(m.View, 1440, 900)
 	tt.SetDark(true)
 	tt.Frame()
-	for _, text := range []string{"File types", "Java"} {
+	for _, text := range []string{"File Types", "Java"} {
 		if !tt.HasText(text) {
 			t.Fatalf("the Search Everywhere filter lacks %q: %q", text, tt.Texts())
 		}
@@ -404,5 +405,96 @@ func TestSearchEverywhereDialogUsesOpenHeaderRowsAndFooter(t *testing.T) {
 		if err := png.Encode(file, tt.Image()); err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+func TestSearchEverywhereMatchesOpenIDEARankingAndSettingsEntries(t *testing.T) {
+	exact := seMatchText("Order", "order", true)
+	prefix := seMatchText("OrderService", "order", true)
+	substring := seMatchText("NewOrderService", "order", true)
+	humps := seMatchText("OptimizeImports", "oi", true)
+	if exact.score <= prefix.score || prefix.score <= substring.score || substring.score <= humps.score {
+		t.Fatalf("ranking is not exact > prefix > substring > hump: %d %d %d %d",
+			exact.score, prefix.score, substring.score, humps.score)
+	}
+	if got := seRunIndices(seMatchText("Optimize Imports", "imp opt", false).runs); !reflect.DeepEqual(
+		got, []int{0, 1, 2, 9, 10, 11},
+	) {
+		t.Fatalf("multi-word indices = %v", got)
+	}
+
+	m := &Model{}
+	items := m.seSettingItems("line numbers")
+	if len(items) == 0 || items[0].title != "Show line numbers" {
+		t.Fatalf("settings options were not indexed individually: %+v", items)
+	}
+	if items[0].setting == "" || len(items[0].settingPath) < 2 ||
+		!reflect.DeepEqual(items[0].settingPath, []string{"Editor", "General", "Appearance"}) {
+		t.Fatalf("settings entry lacks its page breadcrumb: %+v", items[0])
+	}
+}
+
+func TestSearchEverywhereNavigationStopsAtEndsAndWraps(t *testing.T) {
+	m := &Model{}
+	m.se = seLoadedPane(seTabFiles, "App")
+	m.se.files = []openidea.FileMatch{
+		{Path: "/project/src/App.java", RelPath: "src/App.java"},
+		{Path: "/project/src/AppView.java", RelPath: "src/AppView.java"},
+	}
+	m.clampSESelection()
+	if m.se.sel != 0 {
+		t.Fatalf("initial selection = %d", m.se.sel)
+	}
+	m.stepSearchEverywhere(1)
+	if m.se.sel != 1 {
+		t.Fatalf("next selection = %d", m.se.sel)
+	}
+	m.stepSearchEverywhere(1)
+	if m.se.sel != 0 {
+		t.Fatalf("forward wrap selection = %d", m.se.sel)
+	}
+	m.stepSearchEverywhere(-1)
+	if m.se.sel != 1 {
+		t.Fatalf("backward wrap selection = %d", m.se.sel)
+	}
+	m.jumpSearchEverywhereEdge(false)
+	if m.se.sel != 0 {
+		t.Fatalf("Home selection = %d", m.se.sel)
+	}
+	m.jumpSearchEverywhereEdge(true)
+	if m.se.sel != 1 {
+		t.Fatalf("End selection = %d", m.se.sel)
+	}
+}
+
+func TestSearchEverywhereKeepsOldSectionUntilNewQueryAnswers(t *testing.T) {
+	m := &Model{}
+	m.se = seLoadedPane(seTabFiles, "old")
+	m.se.files = []openidea.FileMatch{{
+		Path: "/project/Old.java", RelPath: "Old.java",
+	}}
+	if rows := m.seRows(); len(rows) != 1 || rows[0].item.title != "Old.java" {
+		t.Fatalf("initial rows = %+v", rows)
+	}
+	m.settleSearchEverywhereSnapshot()
+
+	m.se.query = "new"
+	m.se.fileDone = false
+	if rows := m.seRows(); len(rows) != 1 || rows[0].item.title != "Old.java" {
+		t.Fatalf("old rows disappeared before the new source answered: %+v", rows)
+	}
+	m.se.files = []openidea.FileMatch{{
+		Path: "/project/New.java", RelPath: "New.java",
+	}}
+	if rows := m.seRows(); len(rows) != 1 || rows[0].item.title != "Old.java" {
+		t.Fatalf("unsettled new data replaced the old rows: %+v", rows)
+	}
+
+	m.se.files = []openidea.FileMatch{{
+		Path: "/project/New.java", RelPath: "New.java",
+	}}
+	m.se.fileDone = true
+	if rows := m.seRows(); len(rows) != 1 || rows[0].item.title != "New.java" {
+		t.Fatalf("new rows were not published: %+v", rows)
 	}
 }

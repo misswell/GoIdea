@@ -11,6 +11,7 @@ package app
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 
@@ -20,14 +21,27 @@ import (
 // Metrics of SettingsDialog.module.css and SettingsDialog.tsx.
 const (
 	settingsDialogWidth     float32 = 980
+	settingsDialogMinWidth  float32 = 900
 	settingsDialogMaxHeight float32 = 720
-	settingsDialogMinHeight float32 = 420
+	settingsDialogMinHeight float32 = 700
+	settingsDialogMargin    float32 = 24
 	settingsSideDefault     float32 = 240
 	settingsSideMin         float32 = 160
-	settingsTitleHeight     float32 = 40
+	settingsTitleHeight     float32 = 28
 	settingsHeaderHeight    float32 = 40
 	settingsTreeRow         float32 = 24
 	settingsFormRow         float32 = 28
+	settingsToggleRow       float32 = 26
+	settingsSectionIndent   float32 = 18
+	settingsSectionGap      float32 = 22
+	settingsSectionTitleRow float32 = 22
+	settingsSectionTitleGap float32 = 6
+	settingsLabelMaxWidth   float32 = 300
+	settingsNumberWidth     float32 = 64
+	settingsTextWidth       float32 = 240
+	settingsSelectMinWidth  float32 = 180
+	settingsControlMaxWidth float32 = 320
+	settingsPathMaxWidth    float32 = 360
 	settingsFooterHeight    float32 = 52
 )
 
@@ -3054,14 +3068,14 @@ func (m *Model) settingsWritePath() string { return m.cfg.SettingsPath }
 
 // --- Drawing ---------------------------------------------------------------
 
-// settingsDialog draws Settings while it is open; Escape and a click outside
-// dismiss it as Cancel.
+// settingsDialog draws Settings while it is open. Escape cancels, while a
+// backdrop click is ignored as OpenIDEA's Settings dialog does.
 func (m *Model) settingsDialog(c *ui.Context, p *ui.Theme) {
 	if !m.settingsOpen {
 		return
 	}
 	open := m.settingsOpen
-	dlg := nativeSurfaceModal(c, &open, func() {
+	dlg := nativePersistentSurfaceModal(c, &open, func() {
 		setNativeModalDefault(m.applySettingsAndClose)
 		m.settingsSheet(c, p)
 	})
@@ -3077,9 +3091,13 @@ func (m *Model) settingsDialog(c *ui.Context, p *ui.Theme) {
 // footer's status and buttons.
 func (m *Model) settingsSheet(c *ui.Context, p *ui.Theme) {
 	oi := oiPaletteOf(p)
-	ui.Column(c).Width(settingsDialogWidth).Height(m.settingsDialogHeight()).
-		Background(oi.elev).Border(1, oi.border).Radius(6).
-		Shadow(0, 10, 30, 0, ui.RGBA(0, 0, 0, 0.30)).Children(func() {
+	width, height := m.settingsDialogSize()
+	sheet := ui.Column(c).Width(width).Height(height).
+		Background(oi.elev).Border(1, oi.border).Radius(10).
+		Shadow(0, 10, 30, 0, ui.RGBA(0, 0, 0, 0.30)).
+		Translate(m.settingsOffsetX, m.settingsOffsetY).
+		Role(ui.RoleDialog).Label("Settings")
+	sheet.Children(func() {
 		m.settingsTitle(c, oi)
 		// Stretch, not the Row default of centering: a short page would
 		// otherwise float in the middle instead of filling its side.
@@ -3089,30 +3107,76 @@ func (m *Model) settingsSheet(c *ui.Context, p *ui.Theme) {
 			m.settingsPageHost(c, p, oi)
 		})
 		m.settingsFooter(c, p, oi)
+		m.settingsResizeHandles(c, oi)
 	})
 }
 
-// settingsDialogHeight is min(720px, the window less 48), with a floor so
-// the page still has room on a small window.
+// settingsDialogSize starts at OpenIDEA's 980x720 sheet, then uses the size
+// chosen by dragging its edges. The result always leaves a margin and remains
+// usable when the project window is smaller.
+func (m *Model) settingsDialogSize() (float32, float32) {
+	availableWidth := m.frameWidth
+	if availableWidth <= 0 {
+		availableWidth = m.editorWidth
+	}
+	if availableWidth > 0 {
+		availableWidth -= settingsDialogMargin * 2
+	}
+	width := settingsDialogWidth
+	if stored := float32(m.prefs.SettingsWindowWidth); stored > 0 {
+		width = stored
+	}
+	if availableWidth > 0 {
+		width = min(width, availableWidth)
+	}
+	if width < settingsDialogMinWidth {
+		width = settingsDialogMinWidth
+		if availableWidth > 0 {
+			width = min(width, availableWidth)
+		}
+	}
+
+	availableHeight := m.frameHeight
+	if availableHeight <= 0 {
+		availableHeight = m.editorHeight
+	}
+	if availableHeight > 0 {
+		availableHeight -= settingsDialogMargin * 2
+	}
+	height := settingsDialogMaxHeight
+	if stored := float32(m.prefs.SettingsWindowHeight); stored > 0 {
+		height = stored
+	}
+	if availableHeight > 0 {
+		height = min(height, availableHeight)
+	}
+	if height < settingsDialogMinHeight {
+		height = settingsDialogMinHeight
+		if availableHeight > 0 {
+			height = min(height, availableHeight)
+		}
+	}
+	return max(1, width), max(1, height)
+}
+
 func (m *Model) settingsDialogHeight() float32 {
-	h := m.editorHeight - 48
-	if h <= 0 || h > settingsDialogMaxHeight {
-		h = settingsDialogMaxHeight
-	}
-	if h < settingsDialogMinHeight {
-		h = settingsDialogMinHeight
-	}
-	return h
+	_, height := m.settingsDialogSize()
+	return height
 }
 
 // settingsSideWidth is the page tree's width, 160..40% of the sheet.
 func (m *Model) settingsSideWidth() float32 {
 	w := m.settingsSide
 	if w <= 0 {
-		w = settingsSideDefault
+		if stored := float32(m.prefs.SettingsSidebarWidth); stored > 0 {
+			w = stored
+		} else {
+			w = settingsSideDefault
+		}
 	}
 	w = max(w, settingsSideMin)
-	return min(w, settingsDialogWidth*0.4)
+	width, _ := m.settingsDialogSize()
+	return min(w, width*0.4)
 }
 
 // settingsTitle is the dialog's title row.
@@ -3121,20 +3185,38 @@ func (m *Model) settingsTitle(c *ui.Context, oi oiColors) {
 	if m.settingsDraft.newProjects {
 		title = "Settings for New Projects"
 	}
-	ui.Row(c).Height(settingsTitleHeight).Shrink(0).Padding(0, 16).
-		AlignItems(ui.Center).Children(func() {
+	r := ui.Row(c).Height(settingsTitleHeight).Shrink(0).Padding(0, 16).
+		Background(oi.frame).BorderWidth(0, 0, 1, 0).BorderColor(oi.border).
+		AlignItems(ui.Center)
+	r.Children(func() {
 		ui.Text(c, title).FontSize(13).Bold().TextColor(oi.textStrong).SingleLine()
 	})
+	if dx, dy, held := r.Dragged(); held && (dx != 0 || dy != 0) {
+		m.settingsOffsetX += dx
+		m.settingsOffsetY += dy
+		m.clampSettingsOffset()
+		m.invalidate()
+	}
+	if r.DoubleClicked() {
+		m.toggleExpandedSettingsDialog()
+	}
 }
 
 // settingsSidebar is the search field and the page tree.
 func (m *Model) settingsSidebar(c *ui.Context, p *ui.Theme, oi oiColors) {
 	ui.Column(c).Width(m.settingsSideWidth()).Shrink(0).MinHeight(0).Children(func() {
 		ui.Row(c).Padding(7, 5, 6, 5).Shrink(0).Children(func() {
-			in := ui.TextInput(c, &m.settingsQuery).Grow(1).Placeholder("Search settings").AutoFocus()
+			in := ui.SearchField(c, &m.settingsQuery).Grow(1).
+				Placeholder("").Label("Search settings").AutoFocus()
 			in.OnChange(func() { m.settingsQueryChanged() })
 			in.OnShortcut(0, ui.KeyDown, func() { m.settingsStepSelection(1) })
 			in.OnShortcut(0, ui.KeyUp, func() { m.settingsStepSelection(-1) })
+			in.Tooltip("Settings search")
+			in.OnShortcut(0, ui.KeyEscape, func() {
+				if m.settingsQuery == "" {
+					m.closeSettings()
+				}
+			})
 		})
 		ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
 			ui.Column(c).Children(func() {
@@ -3159,7 +3241,7 @@ func (m *Model) settingsSidebar(c *ui.Context, p *ui.Theme, oi oiColors) {
 func (m *Model) settingsTreeRow(c *ui.Context, oi oiColors, i int, row settingsRow) {
 	selected := row.node.key == m.settingsPage
 	r := ui.Row(c.Key(fmt.Sprintf("settings:node:%d", i))).Height(settingsTreeRow).
-		PaddingStart(6 + float32(row.depth)*16).PaddingEnd(10).Gap(4).AlignItems(ui.Center)
+		PaddingStart(4 + float32(row.depth)*20).PaddingEnd(8).Gap(4).AlignItems(ui.Center)
 	switch {
 	case selected:
 		r.Background(oi.selected)
@@ -3186,10 +3268,13 @@ func (m *Model) settingsTreeRow(c *ui.Context, oi oiColors, i int, row settingsR
 		if selected {
 			color = oi.textStrong
 		}
+		if row.depth == 0 && !selected {
+			color = oi.textStrong
+		}
 		if row.node.page != nil && m.settingsDirtyPage(row.node.key) {
 			color = oi.accent
 		}
-		label := ui.Text(c, row.node.title).FontSize(12).TextColor(color).
+		label := ui.Text(c, row.node.title).FontSize(13).TextColor(color).
 			SingleLine().Ellipsis("…").Grow(1)
 		if row.depth == 0 {
 			label.Bold()
@@ -3200,20 +3285,166 @@ func (m *Model) settingsTreeRow(c *ui.Context, oi oiColors, i int, row settingsR
 	}
 }
 
-// settingsSplitHandle is the hairline between the tree and the page; dragging
-// it resizes the tree between 160 DIPs and 40% of the sheet.
+// settingsSplitHandle keeps OpenIDEA's hairline visible inside a wider drag
+// target. Dragging resizes the tree between 160 DIPs and 40% of the sheet.
 func (m *Model) settingsSplitHandle(c *ui.Context, oi oiColors) {
-	h := ui.Row(c).Key("settings:split").Width(1).Shrink(0).Background(oi.borderStrong).
-		Cursor(ui.CursorResizeEW)
-	dx, _, held := h.Dragged()
-	if !held || dx == 0 {
+	h := ui.Row(c).Key("settings:split").Width(1).Shrink(0).
+		Background(oi.borderStrong)
+	h.Children(func() {
+		grip := ui.Box(c).Key("settings:split:grip").Absolute().
+			Left(-3).Right(-3).Top(0).Bottom(0).Cursor(ui.CursorResizeEW).
+			Focusable().Role(ui.RoleSplitter).Label("Resize Settings pages")
+		dx, _, held := grip.Dragged()
+		if !held {
+			if m.settingsSideDragging {
+				m.settingsSideDragging = false
+				m.prefs.SettingsSidebarWidth = int(m.settingsSideWidth())
+				_ = m.savePreferences()
+			}
+			return
+		}
+		if dx == 0 {
+			return
+		}
+		m.settingsSideDragging = true
+		width, _ := m.settingsDialogSize()
+		w := max(min(m.settingsSideWidth()+dx, width*0.4), settingsSideMin)
+		if w != m.settingsSide {
+			m.settingsSide = w
+			m.invalidate()
+		}
+	})
+}
+
+// settingsResizeHandles makes the in-page Settings sheet resizable like
+// OpenIDEA's native Settings window. Double-clicking the title uses the
+// platform's zoom behavior and a second double-click restores the remembered
+// size.
+func (m *Model) settingsResizeHandles(c *ui.Context, oi oiColors) {
+	anyHeld := false
+
+	right := ui.Row(c.Key("settings:resize:east")).Absolute().
+		Right(0).Top(settingsTitleHeight).Bottom(settingsFooterHeight).Width(6).
+		Cursor(ui.CursorResizeE)
+	if dx, _, held := right.Dragged(); held {
+		anyHeld = true
+		if dx != 0 {
+			m.resizeSettingsDialog(dx, 0)
+		}
+	}
+	bottom := ui.Row(c.Key("settings:resize:south")).Absolute().
+		Left(0).Right(0).Bottom(0).Height(6).Cursor(ui.CursorResizeS)
+	if _, dy, held := bottom.Dragged(); held {
+		anyHeld = true
+		if dy != 0 {
+			m.resizeSettingsDialog(0, dy)
+		}
+	}
+	corner := ui.Row(c.Key("settings:resize:corner")).Absolute().
+		Right(0).Bottom(0).Size(14, 14).Cursor(ui.CursorResizeNWSE).
+		Tooltip("Drag to resize Settings")
+	corner.Children(func() {
+		ui.Column(c).Fill().Padding(2, 2, 2, 2).
+			Justify(ui.End).AlignItems(ui.End).Gap(1).Children(func() {
+			for _, width := range []float32{4, 7, 10} {
+				ui.Row(c).Width(width).Height(1).Background(oi.borderStrong)
+			}
+		})
+	})
+	if dx, dy, held := corner.Dragged(); held {
+		anyHeld = true
+		if dx != 0 || dy != 0 {
+			m.resizeSettingsDialog(dx, dy)
+		}
+	}
+
+	if anyHeld {
+		m.settingsWindowResizing = true
 		return
 	}
-	w := max(min(m.settingsSideWidth()+dx, settingsDialogWidth*0.4), settingsSideMin)
-	if w != m.settingsSide {
-		m.settingsSide = w
+	if m.settingsWindowResizing {
+		m.settingsWindowResizing = false
+		_ = m.savePreferences()
+	}
+}
+
+// resizeSettingsDialog applies a pointer delta from one of the three resize
+// edges. The sheet is centered by the overlay, so it also shifts by half the
+// growth to keep the opposite edge under the user's selected anchor. Width and
+// height are stored immediately so the next frame and start use the same size.
+func (m *Model) resizeSettingsDialog(dx, dy float32) {
+	oldWidth, oldHeight := m.settingsDialogSize()
+	availableWidth, availableHeight := m.settingsAvailableSize()
+	newWidth, newHeight := oldWidth, oldHeight
+	if dx != 0 {
+		newWidth = max(oldWidth+dx, settingsDialogMinWidth)
+		if availableWidth > 0 {
+			newWidth = min(newWidth, availableWidth)
+		}
+		m.prefs.SettingsWindowWidth = int(math.Round(float64(newWidth)))
+		m.settingsOffsetX += (newWidth - oldWidth) / 2
+	}
+	if dy != 0 {
+		newHeight = max(oldHeight+dy, settingsDialogMinHeight)
+		if availableHeight > 0 {
+			newHeight = min(newHeight, availableHeight)
+		}
+		m.prefs.SettingsWindowHeight = int(math.Round(float64(newHeight)))
+		m.settingsOffsetY += (newHeight - oldHeight) / 2
+	}
+	m.clampSettingsOffset()
+	if newWidth != oldWidth || newHeight != oldHeight {
 		m.invalidate()
 	}
+}
+
+func (m *Model) toggleExpandedSettingsDialog() {
+	width, height := m.settingsDialogSize()
+	availableWidth, availableHeight := m.settingsAvailableSize()
+	expanded := availableWidth > 0 && availableHeight > 0 &&
+		width >= availableWidth-1 && height >= availableHeight-1
+	if expanded {
+		m.prefs.SettingsWindowWidth = 0
+		m.prefs.SettingsWindowHeight = 0
+	} else {
+		m.prefs.SettingsWindowWidth = int(math.Round(float64(max(settingsDialogMinWidth, availableWidth))))
+		m.prefs.SettingsWindowHeight = int(math.Round(float64(max(settingsDialogMinHeight, availableHeight))))
+	}
+	m.settingsOffsetX = 0
+	m.settingsOffsetY = 0
+	_ = m.savePreferences()
+	m.invalidate()
+}
+
+func (m *Model) settingsAvailableSize() (float32, float32) {
+	availableWidth := m.frameWidth
+	if availableWidth <= 0 {
+		availableWidth = m.editorWidth
+	}
+	availableHeight := m.frameHeight
+	if availableHeight <= 0 {
+		availableHeight = m.editorHeight
+	}
+	if availableWidth > 0 {
+		availableWidth -= settingsDialogMargin * 2
+	}
+	if availableHeight > 0 {
+		availableHeight -= settingsDialogMargin * 2
+	}
+	return availableWidth, availableHeight
+}
+
+func (m *Model) clampSettingsOffset() {
+	width, height := m.settingsDialogSize()
+	frameWidth, frameHeight := m.frameWidth, m.frameHeight
+	if frameWidth <= 0 || frameHeight <= 0 {
+		m.settingsOffsetX, m.settingsOffsetY = 0, 0
+		return
+	}
+	maxX := max(float32(0), (frameWidth-width)/2-settingsDialogMargin)
+	maxY := max(float32(0), (frameHeight-height)/2)
+	m.settingsOffsetX = min(max(m.settingsOffsetX, -maxX), maxX)
+	m.settingsOffsetY = min(max(m.settingsOffsetY, -maxY), maxY)
 }
 
 // settingsPageHost is the breadcrumb header and the selected page's body.
@@ -3227,6 +3458,7 @@ func (m *Model) settingsPageHost(c *ui.Context, p *ui.Theme, oi oiColors) {
 					ui.Text(c, "Nothing found").FontSize(12).TextColor(oi.textSubtle).SingleLine()
 					return
 				}
+				m.settingsSectionStarted = false
 				m.settingsPageBody(c, p, oi, current)
 			})
 		})
@@ -3251,19 +3483,41 @@ func (m *Model) settingsPageHeader(c *ui.Context, p *ui.Theme, oi oiColors, curr
 			}
 		})
 		if ok && m.settingsDirtyPage(current.key) {
-			ui.Button(c, "Reset").OnClick(func() { m.settingsResetPage() })
+			reset := ui.ButtonBase(c.Key("settings:reset")).Padding(4, 6).Radius(4).
+				AlignItems(ui.Center).Cursor(ui.CursorPointer)
+			if reset.Hovered() {
+				reset.Background(oi.hover)
+			}
+			reset.Children(func() {
+				ui.Text(c, "Reset").FontSize(12).TextColor(oi.link).SingleLine()
+			})
+			reset.OnClick(func() { m.settingsResetPage() })
 		}
-		back := ui.Button(c, "‹").Width(26).Disabled(m.settingsHistoryAt <= 0)
-		back.OnClick(func() { m.settingsStepHistory(-1) })
-		fwd := ui.Button(c, "›").Width(26).Disabled(m.settingsHistoryAt >= len(m.settingsHistory)-1)
-		fwd.OnClick(func() { m.settingsStepHistory(1) })
+		historyButton := func(key, icon string, disabled bool) ui.Element {
+			button := ui.ButtonBase(c.Key(key)).Size(20, 20).Radius(4).
+				Justify(ui.Center).AlignItems(ui.Center).
+				Disabled(disabled).Opacity(opacityForDisabled(disabled))
+			if button.Hovered() {
+				button.Background(oi.toolbarHover)
+			}
+			button.Children(func() { oiIconEl(c, icon, 14, oi, oi.icon) })
+			return button
+		}
+		ui.Row(c).Gap(2).AlignItems(ui.Center).Children(func() {
+			back := historyButton("settings:history:back", "general/chevronLeft", m.settingsHistoryAt <= 0)
+			back.OnClick(func() { m.settingsStepHistory(-1) })
+			fwd := historyButton("settings:history:forward", "general/chevronRight",
+				m.settingsHistoryAt >= len(m.settingsHistory)-1)
+			fwd.OnClick(func() { m.settingsStepHistory(1) })
+		})
 	})
 }
 
 // settingsFooter is the save status and Cancel / Apply / OK, in macOS order.
 func (m *Model) settingsFooter(c *ui.Context, p *ui.Theme, oi oiColors) {
-	ui.Row(c).Height(settingsFooterHeight).Shrink(0).Padding(10, 16).
-		Gap(10).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).Height(settingsFooterHeight).Shrink(0).Padding(12, 16).
+		Background(oi.frame).BorderWidth(1, 0, 0, 0).BorderColor(oi.border).
+		Gap(12).AlignItems(ui.Center).Children(func() {
 		if m.settingsErr != "" {
 			ui.Text(c, "Could not save: "+m.settingsErr).FontSize(12).
 				TextColor(oi.danger).SingleLine().Ellipsis("…").Grow(1)
@@ -3281,9 +3535,30 @@ func (m *Model) settingsFooter(c *ui.Context, p *ui.Theme, oi oiColors) {
 		}
 		saving := m.javaSettings.saving || m.languageToolSettings.saving ||
 			m.settingsBackendCatalogSaving()
-		ui.Button(c, "Cancel").Disabled(saving).OnClick(m.closeSettings)
-		apply := ui.Button(c, "Apply").Disabled(saving || !m.settingsPending())
+		dialogButton := func(key, label string, primary, disabled bool) ui.Element {
+			button := ui.ButtonBase(c.Key(key)).MinWidth(72).Height(28).
+				Padding(0, 12).Radius(4).Justify(ui.Center).AlignItems(ui.Center).
+				Cursor(ui.CursorPointer).BorderWidth(1).BorderColor(oi.buttonBorder).
+				Disabled(disabled).Opacity(opacityForDisabled(disabled))
+			if primary {
+				button.Background(oi.accent).BorderColor(oi.accent)
+			} else if button.Hovered() {
+				button.Background(oi.buttonHover)
+			}
+			button.Children(func() {
+				tone := oi.textStrong
+				if primary {
+					tone = ui.Hex("#ffffff")
+				}
+				ui.Text(c, label).FontSize(12).TextColor(tone).SingleLine()
+			})
+			return button
+		}
+		cancel := dialogButton("settings:cancel", "Cancel", false, saving)
+		cancel.OnClick(m.closeSettings)
+		apply := dialogButton("settings:apply", "Apply", false, saving || !m.settingsPending())
 		apply.OnClick(m.applySettings)
-		ui.Button(c, "OK").Disabled(saving).OnClick(m.applySettingsAndClose)
+		ok := dialogButton("settings:ok", "OK", true, saving)
+		ok.OnClick(m.applySettingsAndClose)
 	})
 }

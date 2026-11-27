@@ -318,6 +318,9 @@ type Model struct {
 	// postHook replaces RunOnMain in tests, which run without the event
 	// loop; nil means the real main-thread hop.
 	postHook func(fn func())
+	// confirmExitHook replaces the native exit confirmation in focused window
+	// close tests. Production shows the same prompt as application Quit.
+	confirmExitHook func(done func(confirmed, dontAsk bool))
 	// refreshAfterVCSWriteHook lets focused operation tests observe a
 	// completed remote call without starting the live refresh RPCs.
 	refreshAfterVCSWriteHook func()
@@ -588,8 +591,13 @@ type Model struct {
 	externalToolPrompt *externalToolPromptState
 	// settingsCollapsed are the tree nodes closed with their caret, and
 	// settingsSide is the page tree's width after a drag of the split handle.
-	settingsCollapsed map[string]bool
-	settingsSide      float32
+	settingsCollapsed      map[string]bool
+	settingsSide           float32
+	settingsSideDragging   bool
+	settingsWindowResizing bool
+	settingsOffsetX        float32
+	settingsOffsetY        float32
+	settingsSectionStarted bool
 	// keymapRecorder stages a shortcut captured for one Keymap action; Apply
 	// writes it through the Settings draft rather than the live preferences.
 	keymapRecorder keymapRecorderState
@@ -911,6 +919,7 @@ type Model struct {
 	bottomHeight int
 	maximized    bool
 	// frameHeight is the last drawn window height, which caps a resize.
+	frameWidth  float32
 	frameHeight float32
 	// editorWidth is the width the editor island drew at last frame, which
 	// caps a drag of the side beside it, and editorHeight the height it drew,
@@ -1043,8 +1052,9 @@ func New(cfg Config) *Model {
 		m.settingsBaseline = raw
 	}
 	if m.prefs.SearchFilters != nil {
-		m.seFilters = *m.prefs.SearchFilters
+		m.seFilters = m.prefs.SearchFilters.sanitized()
 	}
+	m.seFilters = m.seFilters.sanitized()
 	m.sePreviewState = m.prefs.SearchPreview
 	m.ensureMacros()
 	m.syncSavedMacroActions()
@@ -1176,12 +1186,7 @@ func (m *Model) Attach(win *mygo.Window) {
 	m.win = win
 	m.SetWindowActive(win.IsFocused())
 	m.mcpReports.windowFocused = win.IsFocused()
-	win.OnClose(func(e *mygo.CloseEvent) {
-		if m.forceQuit {
-			return
-		}
-		m.requestWindowClose(e.PreventDefault)
-	})
+	m.registerWindowCloseHandler(win.OnClose)
 	win.OnBlur(func() {
 		m.SetWindowActive(false)
 		m.mcpSetWindowFocused(false)
@@ -1199,6 +1204,26 @@ func (m *Model) Attach(win *mygo.Window) {
 	if m.workspaceHost != nil {
 		m.workspaceHost.WindowFocused(m)
 	}
+}
+
+// registerWindowCloseHandler installs the same callback used by every native
+// window. The seam lets tests invoke MyGo's CloseEvent path without starting a
+// visible window or the native event loop.
+func (m *Model) registerWindowCloseHandler(register func(func(*mygo.CloseEvent)) func()) {
+	if register == nil {
+		return
+	}
+	register(m.handleWindowClose)
+}
+
+// handleWindowClose is the callback Attach registers with MyGo's native close
+// button. It first prevents the default close so process and document guards
+// can run, then destroys the window only after they succeed.
+func (m *Model) handleWindowClose(e *mygo.CloseEvent) {
+	if m.forceQuit {
+		return
+	}
+	m.requestWindowClose(e.PreventDefault)
 }
 
 // OpenAtStartup opens dir instead of the session's project; call before Start.
@@ -3402,7 +3427,75 @@ func (m *Model) requestWindowClose(prevent func()) {
 	}
 	m.quitting = true
 	m.applicationQuit = false
-	m.requestRunningWorkTermination(m.windowCloseAfterProcessGuard, m.cancelQuitPreparation)
+	closeWindow := func() {
+		m.requestRunningWorkTermination(m.windowCloseAfterProcessGuard, m.cancelQuitPreparation)
+	}
+	if m.returnsToWelcomeOnWindowClose() {
+		closeWindow()
+		return
+	}
+	if !m.isLastProjectWindow() {
+		closeWindow()
+		return
+	}
+	m.confirmWindowExit(func(ok bool) {
+		if !ok {
+			m.cancelQuitPreparation()
+			return
+		}
+		closeWindow()
+	})
+}
+
+// returnsToWelcomeOnWindowClose is OpenIDEA's returnsToWelcome: a last window
+// with a project or LightEdit session goes back to Welcome unless the user
+// explicitly chose to close it.
+func (m *Model) returnsToWelcomeOnWindowClose() bool {
+	return m != nil && !m.applicationQuit && m.isLastProjectWindow() &&
+		m.hasWindowSession() && !m.prefs.System.CloseWithoutWelcome
+}
+
+func (m *Model) hasWindowSession() bool {
+	return m != nil && (m.Root() != "" || len(m.allTabs()) > 0)
+}
+
+// confirmWindowExit is decideClose's last-window confirmation. Choosing Don't
+// ask again persists general.confirmExit=false, as OpenIDEA does.
+func (m *Model) confirmWindowExit(done func(bool)) {
+	if done == nil {
+		return
+	}
+	if !m.prefs.System.confirmExit() {
+		done(true)
+		return
+	}
+	answer := func(confirmed, dontAsk bool) {
+		if confirmed && dontAsk {
+			m.prefs.System.ConfirmExit = boolPref(false)
+			if err := m.savePreferences(); err != nil {
+				m.status = "Saving settings failed: " + err.Error()
+			}
+		}
+		done(confirmed)
+	}
+	if m.confirmExitHook != nil {
+		m.confirmExitHook(answer)
+		return
+	}
+	go func() {
+		res, err := mygo.Dialog.Message(mygo.MessageOptions{
+			Parent: m.win, Type: mygo.MessageWarning, Title: "Confirm Exit",
+			Message: "Are you sure you want to exit GoIDEA?",
+			Buttons: []string{"Exit", "Cancel"}, DefaultButton: 0, CancelButton: 1,
+			CheckboxLabel:   "Don't ask again",
+			CheckboxChecked: false,
+		})
+		if err != nil {
+			m.post(func() { done(false) })
+			return
+		}
+		m.post(func() { answer(res.Button == 0, res.CheckboxChecked) })
+	}()
 }
 
 func (m *Model) windowCloseAfterProcessGuard() {
@@ -3521,25 +3614,7 @@ func (m *Model) CancelApplicationQuitPreparation() {
 // ConfirmApplicationExit shows the one application-wide confirmation after
 // every window has passed its own checks.
 func (m *Model) ConfirmApplicationExit(done func(ok bool)) {
-	if done == nil {
-		return
-	}
-	if !m.prefs.System.confirmExit() {
-		done(true)
-		return
-	}
-	go func() {
-		res, err := mygo.Dialog.Message(mygo.MessageOptions{
-			Parent: m.win, Type: mygo.MessageWarning, Title: "Quit GoIDEA",
-			Message: "Are you sure you want to quit GoIDEA?",
-			Buttons: []string{"Quit", "Cancel"}, DefaultButton: 1, CancelButton: 1,
-		})
-		if err != nil {
-			m.post(func() { done(false) })
-			return
-		}
-		m.post(func() { done(res.Button == 0) })
-	}()
+	m.confirmWindowExit(done)
 }
 
 // ShutdownForApplicationQuit closes only this window's resources. The host
@@ -3701,7 +3776,7 @@ func (m *Model) View(c *ui.Context) {
 		m.focusGroup(groupSplit)
 		m.focusApply = true
 	}
-	_, m.frameHeight = c.Size()
+	m.frameWidth, m.frameHeight = c.Size()
 	m.shortcuts(c)
 	p := c.Theme()
 	m.refreshTodoHighlights(time.Now(), p)

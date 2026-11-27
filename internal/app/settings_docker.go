@@ -363,9 +363,10 @@ func (m *Model) submitDockerSettings() {
 }
 
 func dockerSettingsField(c *ui.Context, p *ui.Theme, label string, value *string) {
-	ui.Row(c).MinHeight(30).Gap(8).AlignItems(ui.Center).Children(func() {
-		ui.Text(c, label).Width(150).FontSize(12).TextColor(p.Text)
-		ui.TextInput(c, value).Grow(1)
+	oi := oiPaletteOf(p)
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
+		settingsFormLabel(c, oi, label, settingsLabelMaxWidth)
+		ui.TextInput(c, value).Grow(1).MaxWidth(settingsPathMaxWidth)
 	})
 }
 
@@ -399,9 +400,10 @@ func (m *Model) dockerTLSDirectoryField(
 	p *ui.Theme,
 	u *dockerSettingsUI,
 ) {
-	ui.Row(c).MinHeight(30).Gap(8).AlignItems(ui.Center).Children(func() {
-		ui.Text(c, "Certificates folder (TLS, optional)").Width(150).FontSize(12).TextColor(p.Text)
-		ui.TextInput(c, &u.tls).Grow(1).
+	oi := oiPaletteOf(p)
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
+		settingsFormLabel(c, oi, "Certificates folder (TLS, optional)", settingsLabelMaxWidth)
+		ui.TextInput(c, &u.tls).Grow(1).MaxWidth(settingsPathMaxWidth).
 			Placeholder("contains ca.pem, cert.pem and key.pem")
 		if ui.Button(c, "Browse…").Clicked() {
 			m.browseDockerTLSDirectory(u)
@@ -433,6 +435,7 @@ func dockerSSHConfigLabel(config openidea.SSHConfiguration) string {
 }
 
 func (m *Model) dockerSSHConfigPicker(c *ui.Context, p *ui.Theme, u *dockerSettingsUI) {
+	oi := oiPaletteOf(p)
 	if u.sshSettingsOpened && !m.remote.sshSettingsOpen {
 		u.sshSettingsOpened = false
 		if len(m.remote.sshConfigs) > 0 {
@@ -440,8 +443,8 @@ func (m *Model) dockerSSHConfigPicker(c *ui.Context, p *ui.Theme, u *dockerSetti
 		}
 		m.loadDockerSSHConfigurations(true)
 	}
-	ui.Row(c).MinHeight(30).Gap(8).AlignItems(ui.Center).Children(func() {
-		ui.Text(c, "SSH configuration").Width(150).FontSize(12).TextColor(p.Text)
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
+		settingsFormLabel(c, oi, "SSH configuration", settingsLabelMaxWidth)
 		if u.sshLoading {
 			ui.Text(c, "Loading SSH configurations…").FontSize(12).TextColor(p.TextMuted).Grow(1)
 			return
@@ -463,7 +466,7 @@ func (m *Model) dockerSSHConfigPicker(c *ui.Context, p *ui.Theme, u *dockerSetti
 		if config, ok := dockerSSHConfigByID(u.sshConfigs, shown); ok {
 			label = dockerSSHConfigLabel(config)
 		}
-		button := ui.Button(c, label).Grow(1)
+		button := ui.Button(c, label).Grow(1).MaxWidth(settingsControlMaxWidth)
 		button.Menu(func(menu *ui.Menu) {
 			if menu.Item("None — type the Engine API URL below").Checked(shown == "").Chosen() {
 				u.sshConfig = ""
@@ -605,13 +608,15 @@ func (m *Model) dockerSettingsFormDialog(c *ui.Context, p *ui.Theme) {
 			} else {
 				dockerSettingsField(c, p, "Address", &u.address)
 				dockerSettingsField(c, p, "Username", &u.username)
-				ui.Row(c).MinHeight(30).Gap(8).AlignItems(ui.Center).Children(func() {
-					ui.Text(c, "Password").Width(150).FontSize(12).TextColor(p.Text)
+				oi := oiPaletteOf(p)
+				ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
+					settingsFormLabel(c, oi, "Password", settingsLabelMaxWidth)
 					placeholder := "Password or access token"
 					if u.existing {
 						placeholder = "Unchanged"
 					}
-					ui.TextInput(c, &u.password).Grow(1).Password().Placeholder(placeholder)
+					ui.TextInput(c, &u.password).Grow(1).MaxWidth(settingsControlMaxWidth).
+						Password().Placeholder(placeholder)
 				})
 				ui.Text(c, "Images from this registry are pulled with these credentials.").
 					FontSize(11).TextColor(p.TextMuted)

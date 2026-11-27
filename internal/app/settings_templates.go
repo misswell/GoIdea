@@ -140,18 +140,18 @@ func (m *Model) mutateSettingsFileTemplateScheme(edit func(*FileTemplateScheme))
 func (m *Model) settingsLiveTemplatesBody(c *ui.Context, oi oiColors) {
 	prefs := &m.settingsDraft.templates.Live
 	enabled := prefs.Enabled
-	if ui.Checkbox(c, &enabled, "Enable Live Templates").Changed() {
+	if settingsCheckbox(c, &enabled, "Enable Live Templates").Changed() {
 		prefs.Enabled = enabled
 		m.invalidate()
 	}
 	caseSensitive := prefs.CaseSensitive
-	if ui.Checkbox(c, &caseSensitive, "Case sensitive abbreviations").Changed() {
+	if settingsCheckbox(c, &caseSensitive, "Case sensitive abbreviations").Changed() {
 		prefs.CaseSensitive = caseSensitive
 		m.invalidate()
 	}
 
-	settingsSectionTitle(c, oi, "Templates")
-	ui.Row(c).MinHeight(30).Gap(6).AlignItems(ui.Center).Children(func() {
+	m.settingsSectionTitle(c, oi, "Templates")
+	ui.Row(c).MinHeight(settingsFormRow).Gap(6).AlignItems(ui.Center).Children(func() {
 		ui.Button(c, "＋").Tooltip("Add live template").OnClick(m.addSettingsLiveTemplate)
 		copyButton := ui.Button(c, "Copy")
 		copyButton.Disabled(m.settingsTemplates.liveID == "")
@@ -162,12 +162,12 @@ func (m *Model) settingsLiveTemplatesBody(c *ui.Context, oi oiColors) {
 		remove.OnClick(m.removeSettingsLiveTemplate)
 	})
 	expandWithTab := prefs.ExpandWithTab
-	if ui.Checkbox(c, &expandWithTab, "Expand abbreviations with Tab").Changed() {
+	if settingsCheckbox(c, &expandWithTab, "Expand abbreviations with Tab").Changed() {
 		prefs.ExpandWithTab = expandWithTab
 		m.invalidate()
 	}
 	showInCompletion := prefs.ShowInCompletion
-	if ui.Checkbox(c, &showInCompletion, "Show live templates in code completion").Changed() {
+	if settingsCheckbox(c, &showInCompletion, "Show live templates in code completion").Changed() {
 		prefs.ShowInCompletion = showInCompletion
 		m.invalidate()
 	}
@@ -218,7 +218,7 @@ func (m *Model) settingsLiveTemplatesBody(c *ui.Context, oi oiColors) {
 			Padding(12, 0)
 		return
 	}
-	settingsSectionTitle(c, oi, "Template Text")
+	m.settingsSectionTitle(c, oi, "Template Text")
 	changed := templateFieldChanged(c, oi, "Abbreviation", &edit.Abbreviation, "sout")
 	changed = templateFieldChanged(c, oi, "Description", &edit.Name, "Print expression") || changed
 	changed = templateFieldChanged(c, oi, "Group", &edit.Group, "Java") || changed
@@ -232,7 +232,7 @@ func (m *Model) settingsLiveTemplatesBody(c *ui.Context, oi oiColors) {
 		m.commitSettingsLiveTemplate(edit)
 	}
 	scopeAny := edit.Scope == "any"
-	if ui.Checkbox(c, &scopeAny, "Also expand in comments and strings").Changed() {
+	if settingsCheckbox(c, &scopeAny, "Also expand in comments and strings").Changed() {
 		if scopeAny {
 			edit.Scope = "any"
 		} else {
@@ -241,7 +241,7 @@ func (m *Model) settingsLiveTemplatesBody(c *ui.Context, oi oiColors) {
 		m.commitSettingsLiveTemplate(edit)
 	}
 	if len(edit.Variables) > 0 {
-		settingsSectionTitle(c, oi, "Variables")
+		m.settingsSectionTitle(c, oi, "Variables")
 		for index := range edit.Variables {
 			variable := &edit.Variables[index]
 			variableChanged := templateFieldChanged(c, oi, variable.Name+" expression",
@@ -249,7 +249,7 @@ func (m *Model) settingsLiveTemplatesBody(c *ui.Context, oi oiColors) {
 			variableChanged = templateFieldChanged(c, oi, variable.Name+" default",
 				&variable.DefaultValue, `"value"`) || variableChanged
 			skip := variable.SkipIfDefined
-			if ui.Checkbox(c, &skip, "Skip "+variable.Name+" if defined").Changed() {
+			if settingsCheckbox(c, &skip, "Skip "+variable.Name+" if defined").Changed() {
 				variable.SkipIfDefined = skip
 				variableChanged = true
 			}
@@ -268,13 +268,13 @@ func (m *Model) settingsLiveTemplatesBody(c *ui.Context, oi oiColors) {
 func (m *Model) settingsPostfixBody(c *ui.Context, oi oiColors) {
 	prefs := &m.settingsDraft.templates.Postfix
 	enabled := prefs.Enabled
-	if ui.Checkbox(c, &enabled, "Enable postfix completion").Changed() {
+	if settingsCheckbox(c, &enabled, "Enable postfix completion").Changed() {
 		prefs.Enabled = enabled
 		m.invalidate()
 	}
 	ui.Text(c, "Type an expression and a template name after a dot, for example value.not or list.for.").
 		FontSize(11).TextColor(oi.textMuted).MaxWidth(720).Wrap()
-	settingsSectionTitle(c, oi, "Templates")
+	m.settingsSectionTitle(c, oi, "Templates")
 	ui.Row(c).MinHeight(24).Gap(8).AlignItems(ui.Center).PaddingStart(4).Children(func() {
 		settingsFormLabelDim(c, oi, "", 24)
 		settingsFormLabelDim(c, oi, "Postfix", 110)
@@ -312,12 +312,12 @@ func (m *Model) settingsPostfixBody(c *ui.Context, oi oiColors) {
 }
 
 func (m *Model) settingsFileTemplatesBody(c *ui.Context, oi oiColors) {
-	settingsSectionTitle(c, oi, "Scheme")
+	m.settingsSectionTitle(c, oi, "Scheme")
 	view := "Default"
 	if m.settingsTemplates.projectFileView {
 		view = "Project"
 	}
-	ui.Row(c).MinHeight(32).Gap(12).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(12).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Settings for", 150)
 		for _, choice := range []struct {
 			id, label string
@@ -338,8 +338,8 @@ func (m *Model) settingsFileTemplatesBody(c *ui.Context, oi oiColors) {
 
 	scheme := m.settingsFileTemplateView()
 	m.ensureSettingsFileSelection(&scheme)
-	settingsSectionTitle(c, oi, "Files")
-	ui.Row(c).MinHeight(30).Gap(6).AlignItems(ui.Center).Children(func() {
+	m.settingsSectionTitle(c, oi, "Files")
+	ui.Row(c).MinHeight(settingsFormRow).Gap(6).AlignItems(ui.Center).Children(func() {
 		ui.Button(c, "＋ File").OnClick(m.addSettingsFileTemplate)
 		copyButton := ui.Button(c, "Copy File")
 		copyButton.Disabled(m.settingsTemplates.fileID == "")
@@ -474,7 +474,7 @@ func (m *Model) settingsFileTemplateEditor(c *ui.Context, oi oiColors, scheme *F
 	}
 	row := func(label string, value string, placeholder string) {
 		mutateText := value
-		ui.Row(c).MinHeight(30).Gap(8).AlignItems(ui.Center).Children(func() {
+		ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 			settingsFormLabel(c, oi, label, 120)
 			input := ui.TextInput(c, &mutateText)
 			if placeholder != "" {
@@ -489,34 +489,34 @@ func (m *Model) settingsFileTemplateEditor(c *ui.Context, oi oiColors, scheme *F
 	row("Extension", template.extension, "java")
 	row("Default name", template.defaultName, "Main")
 	enabled := template.enabled
-	if ui.Checkbox(c, &enabled, "Enabled").Changed() {
+	if settingsCheckbox(c, &enabled, "Enabled").Changed() {
 		m.mutateSettingsFileTemplateByID(templateID, func(target *projectNewTemplate) {
 			target.enabled = enabled
 		})
 	}
 	reformat := template.reformat
-	if ui.Checkbox(c, &reformat, "Reformat according to style").Changed() {
+	if settingsCheckbox(c, &reformat, "Reformat according to style").Changed() {
 		m.mutateSettingsFileTemplateByID(templateID, func(target *projectNewTemplate) {
 			target.reformat = reformat
 		})
 	}
-	ui.Row(c).MinHeight(30).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Name style", 120)
 		style := template.nameStyle
 		if style == "" {
 			style = "asis"
 		}
-		selectInput := ui.Select(c, &style, []string{"asis", "snake", "pascal"}).Width(140)
+		selectInput := ui.Select(c, &style, []string{"asis", "snake", "pascal"}).Width(settingsSelectMinWidth)
 		if selectInput.Changed() {
 			m.mutateSettingsFileTemplateByID(templateID, func(target *projectNewTemplate) {
 				target.nameStyle = style
 			})
 		}
 	})
-	ui.Row(c).MinHeight(30).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Package style", 120)
 		style := template.packageStyle
-		selectInput := ui.Select(c, &style, []string{"", "jvm", "go", "php"}).Width(140)
+		selectInput := ui.Select(c, &style, []string{"", "jvm", "go", "php"}).Width(settingsSelectMinWidth)
 		if selectInput.Changed() {
 			m.mutateSettingsFileTemplateByID(templateID, func(target *projectNewTemplate) {
 				target.packageStyle = style
@@ -530,7 +530,7 @@ func (m *Model) settingsFileTemplateEditor(c *ui.Context, oi oiColors, scheme *F
 			labels[i] = kind.label
 		}
 		chosen := labels[m.settingsTemplates.fileKind]
-		sel := ui.Select(c, &chosen, labels).Width(170)
+		sel := ui.Select(c, &chosen, labels).Width(settingsSelectMinWidth)
 		if sel.Changed() {
 			for i, label := range labels {
 				if label == chosen {
@@ -564,7 +564,7 @@ func (m *Model) settingsFileTemplateEditor(c *ui.Context, oi oiColors, scheme *F
 	kind := &template.kinds[m.settingsTemplates.fileKind]
 	kindRow := func(label string, value *string, placeholder string) {
 		mutateText := *value
-		ui.Row(c).MinHeight(30).Gap(8).AlignItems(ui.Center).Children(func() {
+		ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 			settingsFormLabel(c, oi, label, 120)
 			input := ui.TextInput(c, &mutateText)
 			if placeholder != "" {
@@ -621,7 +621,7 @@ func (m *Model) settingsFileIncludeEditor(c *ui.Context, oi oiColors, scheme *Fi
 	if !ok {
 		return
 	}
-	ui.Row(c).MinHeight(30).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Include name", 120)
 		newName := name
 		ui.TextInput(c, &newName)
@@ -675,7 +675,7 @@ func templateField(c *ui.Context, oi oiColors, label string, value *string, plac
 
 func templateFieldChanged(c *ui.Context, oi oiColors, label string, value *string, placeholder string) bool {
 	original := *value
-	ui.Row(c).MinHeight(30).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, label, 150)
 		input := ui.TextInput(c, value)
 		if placeholder != "" {

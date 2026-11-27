@@ -10,12 +10,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -84,9 +88,6 @@ const (
 	seMoreStepAll = 15
 	seMoreStepTab = 50
 
-	seFileQueryLimit  = 100
-	seTextFileLimit   = 40
-	seTextMatchLimit  = 200
 	seRecentActionCap = 12
 	// seHistoryCap bounds the remembered Search Everywhere queries for each
 	// tab, as OpenIDEA's MAX_HISTORY.
@@ -102,21 +103,22 @@ const (
 
 // seItem is one result row before it is drawn.
 type seItem struct {
-	kind      string // "file", "symbol", "endpoint", "text", "action", "setting" or "command"
-	title     string
-	detail    string
-	rel       string
-	path      string
-	line      int
-	col       int
-	endCol    int
-	lineSet   bool
-	container string
-	right     string
-	action    string
-	setting   string
-	command   seTab
-	folder    bool
+	kind        string // "file", "symbol", "endpoint", "text", "action", "setting" or "command"
+	title       string
+	detail      string
+	rel         string
+	path        string
+	line        int
+	col         int
+	endCol      int
+	lineSet     bool
+	container   string
+	right       string
+	action      string
+	setting     string
+	settingPath []string
+	command     seTab
+	folder      bool
 	// disabled keeps a matching action visible while making it inert, as
 	// OpenIDEA does for unavailable actions.
 	disabled bool
@@ -163,6 +165,10 @@ type sePane struct {
 	endpoints    []openidea.PluginEndpoint
 	text         []openidea.FileMatches
 	textCount    int
+	// lastRows is the last settled view. While a new query streams, a loading
+	// section keeps those rows until its source answers, matching OpenIDEA's
+	// SectionState.
+	lastRows []seRow
 
 	fileDone, symbolDone, endpointDone, textDone bool
 	textBusy                                     bool
@@ -579,7 +585,7 @@ func (m *Model) loadSearchEverywhereLanguages() {
 	if s == nil || s.languagesBusy || s.languagesDone {
 		return
 	}
-	if m.mgr == nil || m.ctx == nil {
+	if m.ctx == nil || (m.mgr == nil && m.invokeHook == nil) {
 		s.languagesDone = true
 		return
 	}
@@ -587,7 +593,14 @@ func (m *Model) loadSearchEverywhereLanguages() {
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, seQueryTimeout)
 		defer cancel()
-		languages, err := m.mgr.ToolLanguages(ctx, Window)
+		catalog, err := m.toolLanguages(ctx)
+		languages := make([]openidea.LanguageInfo, 0, len(catalog))
+		for _, language := range catalog {
+			languages = append(languages, openidea.LanguageInfo{
+				ID: language.ID, Name: language.Name,
+				Extensions: language.Extensions, Filenames: language.Filenames,
+			})
+		}
 		m.post(func() {
 			if m.se != s {
 				return
@@ -613,6 +626,9 @@ func (m *Model) refreshSearchEverywhere() {
 	if s == nil {
 		return
 	}
+	if s.tab != seTabAll && s.tab != seTabActions && s.filters.active(s.tab) {
+		m.loadSearchEverywhereLanguages()
+	}
 	if s.notFound != "" && s.autoEverywhere && s.includeNonProject {
 		if len(s.notFound) > 1 && strings.Contains(s.query, s.notFound) {
 			// Keep the automatically widened scope while the user is still
@@ -626,14 +642,7 @@ func (m *Model) refreshSearchEverywhere() {
 		if parsed.list {
 			m.cancelSearchEverywhereSources()
 			s.seq++
-			s.recent = nil
-			s.files = nil
-			s.dirs = nil
-			s.indexSymbols = nil
-			s.symbols = nil
-			s.endpoints = nil
-			s.text = nil
-			s.textCount = 0
+			s.lastRows = nil
 			s.textBusy = false
 			s.fileDone = true
 			s.symbolDone = true
@@ -645,30 +654,20 @@ func (m *Model) refreshSearchEverywhere() {
 			m.invalidate()
 			return
 		}
-		s.tab = parsed.tab
 		s.query = parsed.rest
-		s.extra = map[seSection]int{}
-		s.sel = 0
-		s.selKey = ""
-		s.selAnchor = 0
-		s.selKeys = nil
+		s.tab = parsed.tab
+		s.historyIndex = -1
+		s.filterOpen = false
 	}
 	m.cancelSearchEverywhereSources()
 	s.seq++
 	seq := s.seq
+	m.settleSearchEverywhereSnapshot()
 	s.extra = map[seSection]int{}
 	s.sel = 0
 	s.selKey = ""
 	s.selAnchor = 0
 	s.selKeys = nil
-	s.recent = nil
-	s.files = nil
-	s.dirs = nil
-	s.indexSymbols = nil
-	s.symbols = nil
-	s.endpoints = nil
-	s.text = nil
-	s.textCount = 0
 	s.textBusy = false
 	s.fileDone = false
 	s.symbolDone = false
@@ -720,6 +719,22 @@ func (m *Model) refreshSearchEverywhere() {
 		s.endpointDone = true
 		s.textDone = true
 	}
+	if s.fileDone {
+		s.recent = nil
+		s.files = nil
+		s.dirs = nil
+	}
+	if s.symbolDone {
+		s.indexSymbols = nil
+		s.symbols = nil
+	}
+	if s.endpointDone {
+		s.endpoints = nil
+	}
+	if s.textDone {
+		s.text = nil
+		s.textCount = 0
+	}
 	if wantsRecent {
 		m.seQueryRecentFiles(seq)
 	} else if wantsFiles {
@@ -752,6 +767,7 @@ func (m *Model) seQueryRecentFiles(seq int) {
 	req := m.nextRequest()
 	s.fileReq = req
 	root := m.Root()
+	limit := s.seSectionLimit(seRecentFiles)
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, seQueryTimeout)
 		defer cancel()
@@ -771,17 +787,17 @@ func (m *Model) seQueryRecentFiles(seq int) {
 					s.err = "Loading recent files failed: " + err.Error()
 				}
 			} else {
-				s.recent = make([]openidea.FileMatch, 0, min(len(paths), s.seSectionLimit(seRecentFiles)))
-				for _, path := range paths {
+				s.recent = make([]openidea.FileMatch, 0, min(len(paths), limit))
+				for index, path := range paths {
+					if index >= limit {
+						break
+					}
 					if path == "" {
 						continue
 					}
 					s.recent = append(s.recent, openidea.FileMatch{
 						Path: path, RelPath: seRelativePath(root, path),
 					})
-					if len(s.recent) > s.seSectionLimit(seRecentFiles) {
-						break
-					}
 				}
 			}
 			m.searchEverywhereSectionDone()
@@ -804,11 +820,10 @@ func (m *Model) seQueryFiles(seq int, query string) {
 	req := m.nextRequest()
 	s.fileReq = req
 	tab := s.tab
-	empty := s.seEmpty()
 	includeNonProject := s.includeNonProject
 	fileSet := s.fileSet
 	locationHas := s.location.has
-	languageFilter := s.filters.active(seTabFiles)
+	languageFilter := tab == seTabFiles && s.filters.active(seTabFiles)
 	go func() {
 		select {
 		case <-m.ctx.Done():
@@ -817,11 +832,8 @@ func (m *Model) seQueryFiles(seq int, query string) {
 		}
 		ctx, cancel := context.WithTimeout(m.ctx, seQueryTimeout)
 		defer cancel()
-		limit := seFileQueryLimit
+		limit := s.seSectionLimit(seFiles) + 1
 		scopeFilter := !includeNonProject && fileSet != "all"
-		if (tab == seTabFiles && !empty) || scopeFilter || languageFilter {
-			limit = seTabLimit + 1
-		}
 		if scopeFilter || languageFilter {
 			limit = limit*4 + 1
 		}
@@ -882,7 +894,7 @@ func (m *Model) mergeSearchEverywhereFiles(
 	seen := map[string]bool{}
 	for _, file := range files {
 		if m.searchEverywherePathAllowed(file.Path, s.fileSet, s.includeNonProject) &&
-			!s.filters.languageExcluded(seTabFiles, file.Path, s.languages) {
+			(s.tab != seTabFiles || !s.filters.languageExcluded(seTabFiles, file.Path, s.languages)) {
 			merged = append(merged, file)
 			seen[file.Path] = true
 		}
@@ -897,7 +909,7 @@ func (m *Model) mergeSearchEverywhereFiles(
 	}
 	for _, dir := range dirs {
 		if !seen[dir.Path] && m.searchEverywherePathAllowed(dir.Path, s.fileSet, s.includeNonProject) &&
-			!s.filters.languageExcluded(seTabFiles, dir.Path, s.languages) {
+			(s.tab != seTabFiles || !s.filters.languageExcluded(seTabFiles, dir.Path, s.languages)) {
 			merged = append(merged, dir)
 			seen[dir.Path] = true
 		}
@@ -927,11 +939,12 @@ func (m *Model) seQuerySymbols(seq int, query string) {
 	req := m.nextRequest()
 	s.symbolReq = req
 	filter := "all"
-	limit := s.seSectionLimit(seSymbols) + 1
+	limit := s.seSectionLimit(seSymbols)
 	if s.tab == seTabClasses {
+		limit = s.seSectionLimit(seClasses)
 		filter = "types"
 	} else if s.tab == seTabAll {
-		limit = limit*2 + 1
+		limit *= 2
 	}
 	go func() {
 		select {
@@ -982,8 +995,34 @@ func (m *Model) seQuerySymbols(seq int, query string) {
 					s.err = "Finding symbols failed: " + err.Error()
 				}
 			}
-			s.indexSymbols = indexed
-			s.symbols = lsp
+			for _, symbol := range indexed {
+				path := symbol.Path
+				if path == "" {
+					path = symbol.RelPath
+				}
+				if !m.searchEverywherePathAllowed(path, s.fileSet, s.includeNonProject) {
+					continue
+				}
+				if s.tab != seTabAll && s.filters.languageExcluded(s.tab, path, s.languages) {
+					continue
+				}
+				if s.tab != seTabAll && s.filters.kindExcluded(s.tab, symbol.Kind) {
+					continue
+				}
+				s.indexSymbols = append(s.indexSymbols, symbol)
+			}
+			for _, symbol := range lsp {
+				if !m.searchEverywherePathAllowed(symbol.Location.Path, s.fileSet, s.includeNonProject) {
+					continue
+				}
+				if s.tab != seTabAll && s.filters.languageExcluded(s.tab, symbol.Location.Path, s.languages) {
+					continue
+				}
+				if s.tab != seTabAll && s.filters.kindExcluded(s.tab, symbol.Kind) {
+					continue
+				}
+				s.symbols = append(s.symbols, symbol)
+			}
 			m.searchEverywhereSectionDone()
 		})
 	}()
@@ -1006,7 +1045,11 @@ func (m *Model) seQueryText(seq int, query string) {
 	s.textCh = ch
 	s.textBusy = true
 	mask := s.filters.Text
+	if s.tab != seTabText {
+		mask = ""
+	}
 	fileSet := s.fileSet
+	limit := s.seSectionLimit(seText)
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 5*time.Minute)
 		defer cancel()
@@ -1019,7 +1062,7 @@ func (m *Model) seQueryText(seq int, query string) {
 			"query": map[string]any{
 				"pattern": query, "isRegex": false, "caseSensitive": false,
 				"wholeWord": false, "include": searchMaskList(mask), "exclude": []string{},
-				"scope": scope, "maxMatches": seTabLimit + 1,
+				"scope": scope, "maxMatches": limit,
 			},
 			"onEvent": map[string]any{"$channel": ch},
 		})
@@ -1051,13 +1094,9 @@ func (m *Model) acceptSearchEverywhereEvent(data json.RawMessage) {
 		if ev.File == nil || len(ev.File.Matches) == 0 {
 			return
 		}
-		if len(s.text) >= seTextFileLimit {
-			s.textTruncated = true
-			return
-		}
 		s.text = append(s.text, *ev.File)
 		s.textCount += len(ev.File.Matches)
-		if s.textCount >= seTextMatchLimit {
+		if s.textCount >= s.seSectionLimit(seText) {
 			s.textTruncated = true
 		}
 	case "done":
@@ -1100,6 +1139,12 @@ func (m *Model) searchEverywhereSectionDone() {
 	if s == nil {
 		return
 	}
+	if s.tab != seTabAll && s.filters.active(s.tab) &&
+		s.tab != seTabText &&
+		!s.languagesBusy && !s.languagesDone {
+		m.loadSearchEverywhereLanguages()
+		return
+	}
 	m.clampSESelection()
 	m.syncSearchEverywherePreview()
 	if !s.searchEverywhereLoading() && !s.seEmpty() && s.autoEverywhere &&
@@ -1120,33 +1165,96 @@ func (m *Model) searchEverywhereSectionDone() {
 		m.activateSearchEverywhereNow(side)
 		return
 	}
+	m.settleSearchEverywhereSnapshot()
 	m.invalidate()
+}
+
+// settleSearchEverywhereSnapshot records every settled source independently.
+// Slow sections keep their previous items, so a fast action or file response
+// remains usable while a later search is still streaming.
+func (m *Model) settleSearchEverywhereSnapshot() {
+	s := m.se
+	if s == nil {
+		return
+	}
+	sections := sectionsFor(s.tab, s.seEmpty())
+	current := searchEverywhereRowsBySection(m.buildSearchEverywhereRows())
+	previous := searchEverywhereRowsBySection(s.lastRows)
+	for _, section := range sections {
+		if m.searchEverywhereSectionIsLoading(section) {
+			current[section] = s.retainedSearchEverywhereRows(section, previous[section])
+		}
+	}
+	s.lastRows = cloneSearchEverywhereRows(m.composeSearchEverywhereRows(sections, current))
+}
+
+// retainedSearchEverywhereRows limits a retained group to that section's
+// current page. It also prevents a More row from surviving a complete scan.
+func (s *sePane) retainedSearchEverywhereRows(
+	section seSection,
+	group searchEverywhereSectionRows,
+) searchEverywhereSectionRows {
+	limit := s.seSectionLimit(section)
+	if len(group.items) > limit {
+		group.items = group.items[:limit]
+	}
+	if len(group.items) < limit {
+		group.more = false
+	}
+	return group
 }
 
 // seActionItems is the registry filtered by the query, as Find Action does.
 func (m *Model) seActionItems(query string) []seItem {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return nil
+	}
 	var items []seItem
 	for _, cmd := range commands() {
-		if !commandMatches(cmd, query) {
-			continue
-		}
 		enabled := m.ActionEnabled(cmd.id)
+		action, hasAction := actionGetForModel(m, cmd.id)
+		category, description, keywords := cmd.group, "", cmd.keywords
 		icon := (*ui.SVG)(nil)
-		if action, ok := actionGet(cmd.id); ok && action.Icon != nil {
+		if hasAction {
+			if action.Category != "" {
+				category = action.Category
+			}
+			description = action.Description
+			keywords = action.Keywords
 			icon = action.Icon
 		}
-		detail := cmd.group
-		score := seItemMatchScore(cmd.title, cmd.group+" "+cmd.keywords+" "+cmd.id, query)
+
+		titleHit := seMatchText(cmd.title, query, true)
+		score := titleHit.score
+		var indices []int
+		if len(titleHit.runs) > 0 {
+			indices = seRunIndices(titleHit.runs)
+		} else {
+			extra := strings.Join([]string{category, description, keywords}, "\n")
+			extraHit := seMatchText(extra, query, true)
+			idHit := strings.Contains(strings.ToLower(cmd.id), strings.ToLower(query))
+			if len(extraHit.runs) == 0 && !idHit {
+				continue
+			}
+			score = extraHit.score - 400
+		}
 		if !enabled {
 			score -= 150
+		}
+		for recentRank, id := range m.recentActions {
+			if id == cmd.id {
+				score += 40 - min(30, recentRank*3)
+				break
+			}
 		}
 		items = append(items, seItem{
 			kind:     "action",
 			title:    cmd.title,
-			detail:   detail,
+			detail:   category,
 			action:   cmd.id,
 			disabled: !enabled,
-			indices:  seMatchIndices(cmd.title, query),
+			indices:  indices,
 			score:    score,
 			icon:     icon,
 		})
@@ -1176,32 +1284,75 @@ func (m *Model) seRecentActionItems() []seItem {
 	return items
 }
 
-// seSettingItems lists the settings pages whose title, group, keywords or
-// options match, as OpenIDEA merges settings into Find Action results.
+// seSettingItems indexes every settings page and every option label as a
+// separate result, following OpenIDEA's settingsSearchEntries. A matching
+// option keeps its page breadcrumb in the Settings column.
 func (m *Model) seSettingItems(query string) []seItem {
-	terms := settingsQueryTerms(query)
-	if len(terms) == 0 {
+	query = strings.TrimSpace(query)
+	if query == "" {
 		return nil
 	}
+	tree := settingsTree()
 	var items []seItem
-	for _, page := range settingsPages() {
-		if !settingsMatches(settingsPageTexts(page), terms) {
+	seen := map[string]bool{}
+	for _, node := range settingsFlattenAll(tree) {
+		page := node.page
+		if page == nil {
 			continue
 		}
-		items = append(items, seItem{
-			kind:    "setting",
-			title:   page.title,
-			detail:  page.group,
-			setting: page.id,
-			indices: seMatchIndices(page.title, query),
-			score:   seItemMatchScore(page.title, page.group, query) - 120,
-		})
+		path := settingsBreadcrumb(tree, node.key)
+		if len(path) > 0 {
+			path = path[:len(path)-1]
+		}
+		pageHit := seMatchText(page.title, query, true)
+		score := pageHit.score
+		if len(pageHit.runs) == 0 {
+			keywordHit := seMatchText(strings.Join(page.keywords, " "), query, true)
+			if len(keywordHit.runs) == 0 {
+				score = -1
+			} else {
+				score = keywordHit.score - 400
+			}
+		}
+		if score >= 0 {
+			key := "page:" + page.id + ":" + page.title
+			if !seen[key] {
+				seen[key] = true
+				items = append(items, seItem{
+					kind:        "setting",
+					title:       page.title,
+					setting:     page.id,
+					settingPath: append([]string{}, path...),
+					indices:     seRunIndices(pageHit.runs),
+					score:       score - 120,
+				})
+			}
+		}
+		for _, label := range uniqueStrings(page.labels) {
+			label = strings.TrimSpace(label)
+			if label == "" {
+				continue
+			}
+			hit := seMatchText(label, query, true)
+			if len(hit.runs) == 0 {
+				continue
+			}
+			key := "option:" + page.id + ":" + label
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			items = append(items, seItem{
+				kind:        "setting",
+				title:       label,
+				setting:     page.id,
+				settingPath: append(append([]string{}, path...), page.title),
+				indices:     seRunIndices(hit.runs),
+				score:       hit.score - 120,
+			})
+		}
 	}
-	sort.SliceStable(items, func(i, j int) bool {
-		left := strings.HasPrefix(strings.ToLower(items[i].title), strings.ToLower(strings.TrimSpace(query)))
-		right := strings.HasPrefix(strings.ToLower(items[j].title), strings.ToLower(strings.TrimSpace(query)))
-		return left && !right
-	})
+	sort.SliceStable(items, func(i, j int) bool { return items[i].score > items[j].score })
 	return items
 }
 
@@ -1230,6 +1381,200 @@ func seMatchIndices(text, query string) []int {
 	return out
 }
 
+// seMatchText ports common/rank.ts matchText. It supports contiguous and
+// word/camel-hump matches, Find Action's word-aligned fragments, and the
+// upstream multi-word token fallback. Runs are half-open [start,end).
+type seMatchTextResult struct {
+	score int
+	runs  [][2]int
+}
+
+func seMatchText(text, query string, wordAligned bool) seMatchTextResult {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return seMatchTextResult{}
+	}
+	hit := seFuzzyMatch(text, query)
+	if hit != nil && (!wordAligned || seWordAligned(text, hit)) {
+		return seMatchTextResult{score: seScoreIndices(text, query, hit), runs: seIndexRuns(hit)}
+	}
+	tokens := strings.Fields(query)
+	if len(tokens) < 2 {
+		return seMatchTextResult{}
+	}
+	all := map[int]bool{}
+	score := 0
+	for _, token := range tokens {
+		tokenHit := seFuzzyMatch(text, token)
+		if tokenHit == nil {
+			return seMatchTextResult{}
+		}
+		for _, index := range tokenHit {
+			all[index] = true
+		}
+		score += seScoreIndices(text, token, tokenHit)
+	}
+	indices := make([]int, 0, len(all))
+	for index := range all {
+		indices = append(indices, index)
+	}
+	sort.Ints(indices)
+	return seMatchTextResult{
+		score: int(math.Round(float64(score)/float64(len(tokens)))) - 50,
+		runs:  seIndexRuns(indices),
+	}
+}
+
+func seFuzzyMatch(text, query string) []int {
+	runes := []rune(text)
+	lowerText := []rune(strings.ToLower(text))
+	lowerQuery := []rune(strings.ToLower(query))
+	if len(lowerQuery) == 0 {
+		return []int{}
+	}
+	for start := 0; start+len(lowerQuery) <= len(lowerText); start++ {
+		if slices.Equal(lowerText[start:start+len(lowerQuery)], lowerQuery) {
+			out := make([]int, len(lowerQuery))
+			for index := range out {
+				out[index] = start + index
+			}
+			return out
+		}
+	}
+	if hump := seHumpMatch(runes, lowerQuery); hump != nil {
+		return hump
+	}
+	out := make([]int, 0, len(lowerQuery))
+	queryAt := 0
+	for index, char := range lowerText {
+		if queryAt < len(lowerQuery) && char == lowerQuery[queryAt] {
+			out = append(out, index)
+			queryAt++
+		}
+	}
+	if queryAt != len(lowerQuery) {
+		return nil
+	}
+	return out
+}
+
+func seHumpMatch(text, query []rune) []int {
+	var out []int
+	queryAt := 0
+	for index := 0; index < len(text) && queryAt < len(query); index++ {
+		if unicode.ToLower(text[index]) != query[queryAt] {
+			continue
+		}
+		aligned := seWordStart(text, index)
+		if len(out) > 0 {
+			aligned = aligned || out[len(out)-1] == index-1
+		}
+		if aligned {
+			out = append(out, index)
+			queryAt++
+		}
+	}
+	if queryAt != len(query) {
+		return nil
+	}
+	return out
+}
+
+func seWordStart(text []rune, index int) bool {
+	if index <= 0 {
+		return true
+	}
+	previous, current := text[index-1], text[index]
+	if strings.ContainsRune(" \t\r\n_-./\\:", previous) {
+		return true
+	}
+	return unicode.IsUpper(current) && unicode.IsLower(previous)
+}
+
+func seWordAligned(text string, indices []int) bool {
+	if len(indices) < 2 {
+		return true
+	}
+	runes := []rune(text)
+	for index := 1; index < len(indices); index++ {
+		if indices[index] == indices[index-1]+1 {
+			continue
+		}
+		if !seWordStart(runes, indices[index]) {
+			return false
+		}
+	}
+	return true
+}
+
+func seScoreIndices(text, query string, indices []int) int {
+	lowerText, lowerQuery := strings.ToLower(text), strings.ToLower(query)
+	score := 0
+	switch {
+	case lowerText == lowerQuery:
+		score = 1000
+	case strings.HasPrefix(lowerText, lowerQuery):
+		score = 800
+	case seContiguous(indices):
+		score = 600 - min(100, max(0, indices[0]))*2
+	default:
+		runes := []rune(text)
+		starts := 0
+		for _, index := range indices {
+			if seWordStart(runes, index) {
+				starts++
+			}
+		}
+		if starts >= min(2, len(indices)) {
+			score = 400 + starts*10
+		} else {
+			spread := 0
+			if len(indices) >= 2 {
+				spread = min(150, indices[len(indices)-1]-indices[0]-len(indices)+1)
+			}
+			score = 200 - spread
+		}
+	}
+	if len(indices) > 0 {
+		runes := []rune(text)
+		if strings.HasPrefix(strings.ToLower(string(runes[indices[0]:])), lowerQuery) {
+			score += 5
+		}
+	}
+	return score - min(60, utf8.RuneCountInString(text))
+}
+
+func seContiguous(indices []int) bool {
+	for index := 1; index < len(indices); index++ {
+		if indices[index] != indices[index-1]+1 {
+			return false
+		}
+	}
+	return true
+}
+
+func seIndexRuns(indices []int) [][2]int {
+	var runs [][2]int
+	for _, index := range indices {
+		if len(runs) > 0 && runs[len(runs)-1][1] == index {
+			runs[len(runs)-1][1] = index + 1
+		} else {
+			runs = append(runs, [2]int{index, index + 1})
+		}
+	}
+	return runs
+}
+
+func seRunIndices(runs [][2]int) []int {
+	var out []int
+	for _, run := range runs {
+		for index := run[0]; index < run[1]; index++ {
+			out = append(out, index)
+		}
+	}
+	return out
+}
+
 func seUintIndices(indices []uint32) []int {
 	out := make([]int, len(indices))
 	for index, value := range indices {
@@ -1242,7 +1587,7 @@ func seUintIndices(indices []uint32) []int {
 // which is what the Classes tab keeps.
 func isTypeKind(kind string) bool {
 	switch strings.ToLower(kind) {
-	case "class", "interface", "enum", "record", "annotation", "struct", "trait", "typealias", "object":
+	case "class", "interface", "struct", "enum", "trait", "typealias":
 		return true
 	}
 	return false
@@ -1289,40 +1634,17 @@ func seItemMatchScore(title, extra, query string) int {
 	return 0
 }
 
-func seLSPMatchScore(title, extra, query string) int {
-	q := strings.ToLower(strings.TrimSpace(query))
-	if q == "" {
-		return 0
-	}
-	name := strings.ToLower(title)
-	if name == q {
-		return 3500
-	}
-	if indices := seMatchIndices(title, query); len(indices) > 0 {
-		score := 500 + len(indices)*10
-		if strings.HasPrefix(name, q) {
-			score += 150
-		}
-		if strings.Contains(name, q) {
-			score += 100
-		}
-		return score
-	}
-	if _, score, ok := fuzzySubsequence(q, name+"\n"+strings.ToLower(extra)); ok {
-		return 300 + score
-	}
-	return 0
-}
-
 func seItemWeight(item seItem, query string) int {
 	switch item.kind {
 	case "file":
-		weight := seItemMatchScore(item.title, "", query)
-		if pathWeight := seItemMatchScore(item.rel, "", query); pathWeight > weight {
-			weight = pathWeight
+		if match := seMatchText(item.title, query, false); len(match.runs) > 0 {
+			return match.score
 		}
-		return weight - 200
-	case "symbol", "endpoint":
+		if match := seMatchText(item.rel, query, false); len(match.runs) > 0 {
+			return match.score - 200
+		}
+		return 0
+	case "symbol":
 		if item.score != 0 {
 			return item.score
 		}
@@ -1424,6 +1746,34 @@ func (m *Model) seRows() []seRow {
 		}
 		return rows
 	}
+	rows := m.buildSearchEverywhereRows()
+	sections := sectionsFor(s.tab, s.seEmpty())
+	if len(s.lastRows) == 0 {
+		return rows
+	}
+
+	current := searchEverywhereRowsBySection(rows)
+	previous := searchEverywhereRowsBySection(s.lastRows)
+	retained := false
+	for _, section := range sections {
+		group := current[section]
+		if m.searchEverywhereSectionIsLoading(section) {
+			if old := previous[section]; len(old.items) > 0 {
+				group = s.retainedSearchEverywhereRows(section, old)
+				retained = true
+			}
+		}
+		current[section] = group
+	}
+	if retained {
+		return m.composeSearchEverywhereRows(sections, current)
+	}
+	s.lastRows = cloneSearchEverywhereRows(rows)
+	return rows
+}
+
+func (m *Model) buildSearchEverywhereRows() []seRow {
+	s := m.se
 	root := m.Root()
 	location := parseSELocationQuery(strings.TrimSpace(s.query), root)
 	query := strings.TrimSpace(location.text)
@@ -1485,13 +1835,13 @@ func (m *Model) seRows() []seRow {
 			if excludeTypes && isTypeKind(kind) {
 				return false
 			}
-			return !s.filters.kindExcluded(tab, kind)
+			return s.tab == seTabAll || !s.filters.kindExcluded(tab, kind)
 		}
 		for index, sym := range s.indexSymbols {
 			if !keep(sym.Kind) {
 				continue
 			}
-			if s.filters.languageExcluded(tab, sym.Path, s.languages) ||
+			if s.tab != seTabAll && s.filters.languageExcluded(tab, sym.Path, s.languages) ||
 				!m.searchEverywherePathAllowed(sym.Path, s.fileSet, s.includeNonProject) {
 				continue
 			}
@@ -1532,7 +1882,7 @@ func (m *Model) seRows() []seRow {
 			if !keep(sym.Kind) {
 				continue
 			}
-			if s.filters.languageExcluded(tab, sym.Location.Path, s.languages) ||
+			if s.tab != seTabAll && s.filters.languageExcluded(tab, sym.Location.Path, s.languages) ||
 				!m.searchEverywherePathAllowed(sym.Location.Path, s.fileSet, s.includeNonProject) {
 				continue
 			}
@@ -1545,7 +1895,11 @@ func (m *Model) seRows() []seRow {
 			if sym.Container != nil {
 				container = *sym.Container
 			}
-			score := seLSPMatchScore(sym.Name, container, query)
+			hit := seMatchText(sym.Name, query, false)
+			if len(hit.runs) == 0 {
+				continue
+			}
+			score := hit.score
 			if strings.EqualFold(sym.Name, query) {
 				score = 3500
 			}
@@ -1562,7 +1916,7 @@ func (m *Model) seRows() []seRow {
 					col:       int(sym.Location.Range.Start.Col),
 					endCol:    int(sym.Location.Range.Start.Col) + len([]rune(sym.Name)),
 					lineSet:   true,
-					indices:   seMatchIndices(seSymbolDisplayName(sym.Name, sym.Kind), query),
+					indices:   seRunIndices(hit.runs),
 					score:     score,
 				},
 				score: score,
@@ -1582,9 +1936,10 @@ func (m *Model) seRows() []seRow {
 		return items
 	}
 	textItems := func() []seItem {
-		items := make([]seItem, 0, seTextMatchLimit)
+		limit := s.seSectionLimit(seText)
+		items := make([]seItem, 0, limit)
 		for _, f := range s.text {
-			if !seTextMaskMatches(s.filters.Text, f.Path) {
+			if s.tab == seTabText && !seTextMaskMatches(s.filters.Text, f.Path) {
 				continue
 			}
 			for _, hit := range f.Matches {
@@ -1606,7 +1961,7 @@ func (m *Model) seRows() []seRow {
 					indices: indices,
 					score:   350,
 				})
-				if len(items) >= seTextMatchLimit {
+				if len(items) >= limit {
 					return items
 				}
 			}
@@ -1626,7 +1981,7 @@ func (m *Model) seRows() []seRow {
 		case seSymbols:
 			return symbolItems(seTabSymbols, false, s.tab == seTabAll)
 		case seEndpoints:
-			items := seEndpointItems(s.endpoints, query)
+			items := seEndpointItems(s.endpoints, query, s.seSectionLimit(seEndpoints))
 			for index := range items {
 				items[index].rel = seRelativePath(root, items[index].path)
 			}
@@ -1727,6 +2082,130 @@ func (m *Model) seRows() []seRow {
 	return rows
 }
 
+type searchEverywhereSectionRows struct {
+	items []seItem
+	more  bool
+}
+
+func cloneSearchEverywhereRows(rows []seRow) []seRow {
+	return append([]seRow(nil), rows...)
+}
+
+// searchEverywhereRowsBySection separates a rendered snapshot without losing
+// each source's order. OpenIDEA keeps section items while that section is
+// loading and publishes the first new item from it.
+func searchEverywhereRowsBySection(rows []seRow) map[seSection]searchEverywhereSectionRows {
+	groups := map[seSection]searchEverywhereSectionRows{}
+	for _, row := range rows {
+		if row.header {
+			continue
+		}
+		group := groups[row.section]
+		if row.more {
+			group.more = true
+		} else {
+			group.items = append(group.items, row.item)
+		}
+		groups[row.section] = group
+	}
+	return groups
+}
+
+func (m *Model) searchEverywhereSectionIsLoading(section seSection) bool {
+	s := m.se
+	if s == nil {
+		return false
+	}
+	switch section {
+	case seRecentFiles, seFiles:
+		return !s.fileDone
+	case seClasses, seSymbols:
+		return !s.symbolDone
+	case seEndpoints:
+		return !s.endpointDone || s.pluginsBusy
+	case seText:
+		return !s.textDone || s.textBusy
+	}
+	return false
+}
+
+func (m *Model) composeSearchEverywhereRows(
+	sections []seSection,
+	groups map[seSection]searchEverywhereSectionRows,
+) []seRow {
+	s := m.se
+	if s == nil {
+		return nil
+	}
+	query := strings.TrimSpace(parseSELocationQuery(strings.TrimSpace(s.query), m.Root()).text)
+	if s.tab == seTabAll && !s.seEmpty() {
+		type mixedItem struct {
+			item        seItem
+			section     seSection
+			weight      int
+			sectionRank int
+			index       int
+		}
+		var mixed []mixedItem
+		hasMore := map[seSection]bool{}
+		for rank, section := range sections {
+			capWeight := int(^uint(0) >> 1)
+			for index, item := range groups[section].items {
+				if index >= s.seSectionLimit(section) {
+					hasMore[section] = true
+					break
+				}
+				weight := seItemWeight(item, query)
+				if weight > capWeight {
+					weight = capWeight
+				}
+				capWeight = weight
+				mixed = append(mixed, mixedItem{
+					item: item, section: section, weight: weight,
+					sectionRank: rank, index: index,
+				})
+			}
+		}
+		sort.SliceStable(mixed, func(i, j int) bool {
+			if mixed[i].weight != mixed[j].weight {
+				return mixed[i].weight > mixed[j].weight
+			}
+			if mixed[i].sectionRank != mixed[j].sectionRank {
+				return mixed[i].sectionRank < mixed[j].sectionRank
+			}
+			return mixed[i].index < mixed[j].index
+		})
+		rows := make([]seRow, 0, len(mixed)+len(sections))
+		for _, item := range mixed {
+			rows = append(rows, seRow{section: item.section, item: item.item})
+		}
+		for _, section := range sections {
+			if groups[section].more || hasMore[section] {
+				rows = append(rows, seRow{section: section, more: true})
+			}
+		}
+		return rows
+	}
+
+	var rows []seRow
+	for _, section := range sections {
+		group := groups[section]
+		if len(group.items) == 0 && !group.more {
+			continue
+		}
+		if s.seEmpty() {
+			rows = append(rows, seRow{section: section, header: true})
+		}
+		for _, item := range group.items {
+			rows = append(rows, seRow{section: section, item: item})
+		}
+		if group.more {
+			rows = append(rows, seRow{section: section, more: true})
+		}
+	}
+	return rows
+}
+
 // seSelectable reports whether a row can take the selection.
 func seSelectable(r seRow) bool { return !r.header }
 
@@ -1744,7 +2223,7 @@ func seRowKey(r seRow) string {
 	case "action":
 		return "action:" + it.action
 	case "setting":
-		return "setting:" + it.setting
+		return "setting:" + it.setting + ":" + it.title
 	default:
 		return fmt.Sprintf("%s:%s:%d:%d:%s", it.kind, it.path, it.line, it.col, it.title)
 	}
@@ -1877,17 +2356,21 @@ func (m *Model) stepSearchEverywhere(delta int) {
 	}
 	m.clampSESelection()
 	rows := m.seRows()
+	if len(rows) == 0 {
+		return
+	}
 	i := s.sel + delta
 	for i >= 0 && i < len(rows) && !seSelectable(rows[i]) {
 		i += delta
 	}
 	if i < 0 || i >= len(rows) {
 		if delta > 0 {
-			for i = 0; i < len(rows) && !seSelectable(rows[i]); i++ {
-			}
+			i = 0
 		} else {
-			for i = len(rows) - 1; i >= 0 && !seSelectable(rows[i]); i-- {
-			}
+			i = len(rows) - 1
+		}
+		for i >= 0 && i < len(rows) && !seSelectable(rows[i]) {
+			i += delta
 		}
 	}
 	if i < 0 || i >= len(rows) {
@@ -1900,6 +2383,26 @@ func (m *Model) stepSearchEverywhere(delta int) {
 	s.revealSelection = true
 	m.syncSearchEverywherePreview()
 	m.invalidate()
+}
+
+// jumpSearchEverywhereEdge ports List's Home and End keys.
+func (m *Model) jumpSearchEverywhereEdge(last bool) {
+	s := m.se
+	if s == nil {
+		return
+	}
+	rows := m.seRows()
+	index, step := 0, 1
+	if last {
+		index, step = len(rows)-1, -1
+	}
+	for index >= 0 && index < len(rows) && !seSelectable(rows[index]) {
+		index += step
+	}
+	if index < 0 || index >= len(rows) {
+		return
+	}
+	m.selectSERow(index, recentSelectionSingle)
 }
 
 // stepSearchEverywhereGroup ports PageUp/PageDown and the primary-modifier
@@ -1916,7 +2419,7 @@ func (m *Model) stepSearchEverywhereGroup(delta int) {
 		if row.header || row.more || !seSelectable(row) {
 			continue
 		}
-		if row.section != last {
+		if row.section != last || len(starts) == 0 {
 			starts = append(starts, index)
 			last = row.section
 		}
@@ -1924,9 +2427,8 @@ func (m *Model) stepSearchEverywhereGroup(delta int) {
 	if len(starts) < 2 {
 		return
 	}
-	target := starts[0]
+	target := starts[len(starts)-1]
 	if delta > 0 {
-		target = starts[len(starts)-1]
 		for _, start := range starts {
 			if start > s.sel {
 				target = start
@@ -1934,19 +2436,20 @@ func (m *Model) stepSearchEverywhereGroup(delta int) {
 			}
 		}
 	} else {
-		current := 0
+		current := starts[0]
 		for index := len(starts) - 1; index >= 0; index-- {
 			if starts[index] <= s.sel {
-				current = index
+				current = starts[index]
 				break
 			}
 		}
-		target = starts[current]
+		target = current
 		if target == s.sel {
-			if current > 0 {
-				target = starts[current-1]
-			} else {
-				target = starts[0]
+			for index := len(starts) - 1; index >= 0; index-- {
+				if starts[index] < s.sel {
+					target = starts[index]
+					break
+				}
 			}
 		}
 	}
@@ -1987,13 +2490,25 @@ func (m *Model) clampSESelection() {
 			}
 		}
 	}
+	if s.sel < 0 {
+		for i, row := range rows {
+			if !seSelectable(row) || row.more {
+				continue
+			}
+			s.sel = i
+			s.selKey = seRowKey(row)
+			s.selKeys = nil
+			s.revealSelection = true
+			return
+		}
+	}
 	if s.sel >= 0 && s.sel < len(rows) && seSelectable(rows[s.sel]) {
 		s.selKey = seRowKey(rows[s.sel])
 		return
 	}
 	if s.sel >= len(rows) || (s.sel >= 0 && !seSelectable(rows[s.sel])) {
 		for i, r := range rows {
-			if seSelectable(r) {
+			if seSelectable(r) && !r.more {
 				s.sel = i
 				s.selKey = seRowKey(r)
 				s.revealSelection = true
@@ -2118,21 +2633,45 @@ func (m *Model) activateSearchEverywhereNow(side bool) {
 		if item.folder {
 			m.selectInProjectView(item.path)
 		} else {
-			m.revealAt(item.path, item.line, item.col)
 			if side {
-				m.OpenInOppositeGroup()
+				m.reveal = &revealPos{
+					path: item.path, line: item.line, col: item.col,
+					endLine: -1, endCol: -1,
+				}
+				m.openWith(item.path, openSpec{
+					at: -1,
+					done: func(tab *Tab) {
+						m.revealSearchEverywhereTarget(tab, item)
+						m.moveRecentTabToSide(tab, true)
+					},
+				})
+			} else {
+				m.revealAt(item.path, item.line, item.col)
 			}
 		}
-	case "symbol", "endpoint", "text":
+	case "symbol", "text":
 		m.rememberSearchQuery(s.tab, strings.TrimSpace(s.query))
 		m.CloseSearchEverywhere()
-		if item.kind == "text" && item.endCol > item.col {
+		if side {
+			endLine, endCol := -1, -1
+			if item.kind == "text" && item.endCol > item.col {
+				endLine, endCol = item.line, item.endCol
+			}
+			m.reveal = &revealPos{
+				path: item.path, line: item.line, col: item.col,
+				endLine: endLine, endCol: endCol,
+			}
+			m.openWith(item.path, openSpec{
+				at: -1,
+				done: func(tab *Tab) {
+					m.revealSearchEverywhereTarget(tab, item)
+					m.moveRecentTabToSide(tab, true)
+				},
+			})
+		} else if item.kind == "text" && item.endCol > item.col {
 			m.revealRange(item.path, item.line, item.col, item.line, item.endCol)
 		} else {
 			m.revealAt(item.path, item.line, item.col)
-		}
-		if side {
-			m.OpenInOppositeGroup()
 		}
 	default:
 		m.invalidate()
@@ -2601,6 +3140,8 @@ func (m *Model) searchEverywhereQuery(c *ui.Context, p *ui.Theme, s *sePane) {
 			})
 			input.OnShortcut(0, ui.KeyDown, func() { m.stepSearchEverywhere(1) })
 			input.OnShortcut(0, ui.KeyUp, func() { m.stepSearchEverywhere(-1) })
+			input.OnShortcut(0, ui.KeyHome, func() { m.jumpSearchEverywhereEdge(false) })
+			input.OnShortcut(0, ui.KeyEnd, func() { m.jumpSearchEverywhereEdge(true) })
 			input.OnShortcut(0, ui.KeyPageDown, func() { m.stepSearchEverywhereGroup(1) })
 			input.OnShortcut(0, ui.KeyPageUp, func() { m.stepSearchEverywhereGroup(-1) })
 			primary := sePrimaryModifier()
@@ -2868,10 +3409,12 @@ func (m *Model) searchEverywhereResultContent(
 			}
 		})
 	case "setting":
-		m.seHighlightedText(c, it.title, it.indices, 12, oi.textStrong)
-		ui.Spacer(c)
-		ui.Text(c, "Settings: "+it.detail).MaxWidth(320).FontSize(12).
-			TextColor(oi.textSubtle).SingleLine().Ellipsis("…")
+		ui.Row(c).Grow(1).MinWidth(0).AlignItems(ui.Center).Gap(6).Children(func() {
+			m.seHighlightedText(c, it.title, it.indices, 12, oi.textStrong)
+			ui.Spacer(c)
+			ui.Text(c, "Settings: "+strings.Join(it.settingPath, " | ")).MaxWidth(320).FontSize(12).
+				TextColor(oi.textSubtle).SingleLine().Ellipsis("…")
+		})
 	case "command":
 		m.seHighlightedText(c, it.title, it.indices, 12, oi.textStrong)
 		ui.Spacer(c)
@@ -3005,12 +3548,19 @@ func searchEverywhereDescribe(row seRow, ok bool) string {
 		}
 		return fmt.Sprintf("%s:%d", item.path, item.line+1)
 	case "setting":
-		return item.detail + " | " + item.title
+		return strings.Join(append(append([]string{}, item.settingPath...), item.title), " | ")
 	case "action":
-		if item.detail != "" {
-			return item.detail + "  ·  ⌥↵ to assign a shortcut"
+		description := ""
+		if action, ok := actionGet(item.action); ok {
+			description = action.Description
 		}
-		return "⌥↵ to assign a shortcut"
+		if description == "" && item.detail != "" {
+			description = item.detail + " | " + item.title
+		}
+		if description == "" {
+			description = item.title
+		}
+		return description + "  ·  ⌥↵ to assign a shortcut"
 	}
 	return ""
 }
@@ -3153,8 +3703,6 @@ func (m *Model) seRowIcon(c *ui.Context, p *ui.Theme, it seItem) {
 		} else {
 			fileIconEl(c, oi, it.path, 16, oi.textSubtle)
 		}
-	case "endpoint":
-		oiIconEl(c, "nodes/method", 16, oi, oi.textSubtle)
 	case "text":
 		oiIconEl(c, "openidea/nodes/textMatch", 16, oi, oi.textSubtle)
 	case "action":

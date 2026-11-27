@@ -199,7 +199,7 @@ func vcsNativeSettingsPages() []nativeSettingsPageSpec {
 }
 
 func (m *Model) settingsVCSOverviewBody(c *ui.Context, oi oiColors) {
-	settingsSectionTitle(c, oi, "Version Control")
+	m.settingsSectionTitle(c, oi, "Version Control")
 	ui.Text(c, "Configure commit, confirmation, mappings, Git, diff, log and shelf behavior.").
 		FontSize(12).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
 	children := []struct {
@@ -228,7 +228,7 @@ func (m *Model) settingsVCSOverviewBody(c *ui.Context, oi oiColors) {
 }
 
 func (m *Model) settingsVCSMappingsBody(c *ui.Context, oi oiColors) {
-	settingsSectionTitle(c, oi, "Directory mappings")
+	m.settingsSectionTitle(c, oi, "Directory mappings")
 	ui.Row(c).MinHeight(28).Padding(8, 10).Children(func() {
 		ui.Text(c, "Directory").FontSize(11).Bold().TextColor(oi.textMuted).Grow(1)
 		ui.Text(c, "VCS").FontSize(11).Bold().TextColor(oi.textMuted).Width(120)
@@ -254,7 +254,7 @@ func (m *Model) settingsVCSLogBody(c *ui.Context, oi oiColors) {
 	changed := false
 	check := func(value **bool, fallback bool, label string) {
 		on := prefBool(*value, fallback)
-		if ui.Checkbox(c, &on, label).Changed() {
+		if settingsCheckbox(c, &on, label).Changed() {
 			*value = &on
 			changed = true
 		}
@@ -264,7 +264,7 @@ func (m *Model) settingsVCSLogBody(c *ui.Context, oi oiColors) {
 	check(&options.CommitTimestamp, false, "Show commit time rather than author time")
 	check(&options.RefsOnLeft, false, "Show references on the left")
 	check(&options.ShowLineStats, false, "Show lines added and deleted")
-	settingsSectionTitle(c, oi, "Visible columns")
+	m.settingsSectionTitle(c, oi, "Visible columns")
 	check(&options.ShowAuthor, true, "Author")
 	check(&options.ShowHash, false, "Hash")
 	check(&options.ShowDate, true, "Date")
@@ -278,7 +278,7 @@ func (m *Model) settingsVCSLogBody(c *ui.Context, oi oiColors) {
 
 func (m *Model) settingsVCSGitHubBody(c *ui.Context, oi oiColors) {
 	value := m.prefs.VCS.GitHub.AutoMarkViewed
-	if ui.Checkbox(c, &value, "Automatically mark opened files as viewed").Changed() {
+	if settingsCheckbox(c, &value, "Automatically mark opened files as viewed").Changed() {
 		m.prefs.VCS.GitHub.AutoMarkViewed = value
 		m.savePreferences()
 		m.invalidate()
@@ -311,7 +311,7 @@ func (m *Model) settingsVCSCommitNativeBody(c *ui.Context, oi oiColors) {
 	m.settingsVCSToggle(c, oi, page, "vcs.commit.clearInitialMessage",
 		"Clear initial commit message", 0, "")
 
-	settingsSectionTitle(c, oi, "Commit Message Inspections")
+	m.settingsSectionTitle(c, oi, "Commit Message Inspections")
 	m.settingsVCSToggle(c, oi, page, "vcs.commit.blankLineAfterSubject",
 		"Blank line between subject and body", 0, "")
 	m.settingsVCSToggleNumber(c, oi, page,
@@ -328,7 +328,7 @@ func (m *Model) settingsVCSCommitNativeBody(c *ui.Context, oi oiColors) {
 		"Wrap when typing reaches right margin", 20, "",
 		!nativeSettingsBool(m, page, "vcs.commit.limitBody"))
 
-	settingsSectionTitle(c, oi, "Commit Checks")
+	m.settingsSectionTitle(c, oi, "Commit Checks")
 	ui.Row(c).AlignItems(ui.Start).Gap(24).Children(func() {
 		ui.Column(c).Grow(1).Children(func() {
 			m.settingsVCSToggle(c, oi, page, "vcs.commit.analyzeCode",
@@ -349,7 +349,7 @@ func (m *Model) settingsVCSCommitNativeBody(c *ui.Context, oi oiColors) {
 
 func (m *Model) settingsVCSConfirmationNativeBody(c *ui.Context, oi oiColors) {
 	page := settingsPageVCSConfirmation
-	settingsSectionTitle(c, oi, "Confirmation")
+	m.settingsSectionTitle(c, oi, "Confirmation")
 	m.settingsVCSRadioRow(c, oi, page, "vcs.confirmation.onCreate",
 		"When files are created",
 		nativeChoice("ask", "Ask"),
@@ -365,7 +365,7 @@ func (m *Model) settingsVCSConfirmationNativeBody(c *ui.Context, oi oiColors) {
 	m.settingsVCSToggle(c, oi, page, "vcs.confirmation.confirmDropCommits",
 		"Ask for confirmation to drop commits", 0, "Applicable to Git.")
 
-	settingsSectionTitle(c, oi, "Changes")
+	m.settingsSectionTitle(c, oi, "Changes")
 	m.settingsVCSToggle(c, oi, page, "vcs.showDirtyDirectories",
 		"Highlight directories that contain modified files in the Project tree", 0, "")
 	m.settingsVCSSelectRow(c, oi, page, "vcs.confirmation.onPatchCreated",
@@ -386,7 +386,7 @@ func (m *Model) settingsVCSGitNativeBody(c *ui.Context, oi oiColors) {
 	m.settingsVCSToggle(c, oi, page, "vcs.git.showBranchInProjectView",
 		"Show branch and incoming/outgoing commits in the Project view", 0, "")
 
-	settingsSectionTitle(c, oi, "Commit")
+	m.settingsSectionTitle(c, oi, "Commit")
 	m.settingsVCSToggle(c, oi, page, "vcs.git.warnCrlf",
 		"Warn if CRLF line separators are about to be committed", 0, "")
 	m.settingsVCSToggle(c, oi, page, "vcs.git.warnDetachedHead",
@@ -400,7 +400,7 @@ func (m *Model) settingsVCSGitNativeBody(c *ui.Context, oi oiColors) {
 	m.settingsVCSToggle(c, oi, page, "vcs.git.warnBadFileNames",
 		"Warn when committing files with names that might cause issues on other systems", 0, "")
 
-	settingsSectionTitle(c, oi, "Push")
+	m.settingsSectionTitle(c, oi, "Push")
 	m.settingsVCSToggle(c, oi, page, "vcs.git.autoUpdateOnPushRejected",
 		"Auto-update if push of the current branch was rejected", 0, "")
 	showPush := nativeSettingsBool(m, page, "vcs.git.showPushDialog")
@@ -412,7 +412,7 @@ func (m *Model) settingsVCSGitNativeBody(c *ui.Context, oi oiColors) {
 		"Protected branches", "master; main",
 		"Force push is not allowed to these branches. Separate patterns with ; (wildcards * and ? are supported).")
 
-	settingsSectionTitle(c, oi, "Update")
+	m.settingsSectionTitle(c, oi, "Update")
 	m.settingsVCSRadioRow(c, oi, page, "vcs.git.updateMethod",
 		"Update method",
 		nativeChoice("merge", "Merge"),
@@ -425,10 +425,10 @@ func (m *Model) settingsVCSGitNativeBody(c *ui.Context, oi oiColors) {
 	settingsVCSHint(c, oi, 20,
 		"Fetches remotes in the background so incoming commits show in the Branches popup. Auto stops after an authentication failure.")
 
-	settingsSectionTitle(c, oi, "Passwords")
+	m.settingsSectionTitle(c, oi, "Passwords")
 	m.settingsVCSGitCredentialsRow(c, oi)
 
-	settingsSectionTitle(c, oi, "Stash")
+	m.settingsSectionTitle(c, oi, "Stash")
 	m.settingsVCSToggle(c, oi, page, "vcs.git.combineStashAndShelf",
 		"Combine stashes and shelves in one tab", 0, "")
 }
@@ -450,7 +450,7 @@ func (m *Model) settingsVCSToggle(
 	disabled ...bool,
 ) {
 	value := nativeSettingsBool(m, page, key)
-	check := ui.Checkbox(c, &value, label).PaddingStart(padding)
+	check := ui.Checkbox(c, &value, label).MinHeight(settingsToggleRow).PaddingStart(padding)
 	if len(disabled) > 0 {
 		check.Disabled(disabled[0])
 	}
@@ -468,12 +468,12 @@ func (m *Model) settingsVCSToggleNumber(
 ) {
 	enabled := nativeSettingsBool(m, page, toggleKey)
 	number := nativeSettingsNumberValue(m, page, numberKey)
-	ui.Row(c).MinHeight(30).Gap(8).AlignItems(ui.Center).Children(func() {
-		check := ui.Checkbox(c, &enabled, label+":")
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
+		check := ui.Checkbox(c, &enabled, label+":").MinHeight(settingsToggleRow)
 		if check.Changed() {
 			m.setNativeSettingsValue(page, toggleKey, enabled)
 		}
-		input := ui.NumberInput(c, &number, minValue, maxValue, step).Width(112)
+		input := ui.NumberInput(c, &number, minValue, maxValue, step).Width(settingsNumberWidth)
 		if input.Changed() {
 			m.setNativeSettingsValue(page, numberKey, number)
 		}
@@ -491,7 +491,7 @@ func (m *Model) settingsVCSRadioRow(
 	choices ...nativeSettingsChoice,
 ) {
 	value := nativeSettingsString(m, page, key)
-	ui.Row(c).MinHeight(32).Gap(10).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(10).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, label+":", 230)
 		ui.RadioGroup(c, func() {
 			for _, choice := range choices {
@@ -512,7 +512,7 @@ func (m *Model) settingsVCSSelectRow(
 	choices ...nativeSettingsChoice,
 ) {
 	value := nativeSettingsString(m, page, key)
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, label+":", 230)
 		labels := make([]string, len(choices))
 		selected := value
@@ -522,7 +522,8 @@ func (m *Model) settingsVCSSelectRow(
 				selected = choice.label
 			}
 		}
-		selector := ui.Select(c, &selected, labels).Grow(1)
+		selector := ui.Select(c, &selected, labels).
+			MinWidth(settingsSelectMinWidth).Grow(1).MaxWidth(settingsControlMaxWidth)
 		if selector.Changed() {
 			for _, choice := range choices {
 				if choice.label == selected {
@@ -539,10 +540,11 @@ func (m *Model) settingsVCSTextRow(
 	oi oiColors,
 	page, key, label, placeholder, hint string,
 ) {
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, label+":", 230)
 		value := nativeSettingsString(m, page, key)
-		input := ui.TextInput(c, &value).Grow(1).Placeholder(placeholder)
+		input := ui.TextInput(c, &value).Grow(1).MaxWidth(settingsPathMaxWidth).
+			Placeholder(placeholder)
 		if input.Changed() {
 			m.setNativeSettingsValue(page, key, value)
 		}
@@ -567,7 +569,7 @@ func (m *Model) settingsVCSGitCredentialsRow(c *ui.Context, oi oiColors) {
 			SingleLine().Ellipsis("…")
 	}
 	if len(hosts) == 0 {
-		ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+		ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 			settingsFormLabel(c, oi, "Passwords:", 230)
 			ui.Text(c, "No saved credentials").FontSize(12).TextColor(oi.textMuted).
 				Grow(1).SingleLine()
@@ -588,7 +590,7 @@ func (m *Model) settingsVCSGitCredentialsRow(c *ui.Context, oi oiColors) {
 			if forgetting {
 				label = "Forgetting…"
 			}
-			ui.Button(c, label).Width(92).Disabled(forgetting).
+			ui.Button(c, label).Width(settingsNumberWidth).Disabled(forgetting).
 				OnClick(func() { m.forgetVCSGitCredential(host) })
 		})
 	}
@@ -710,7 +712,7 @@ func (m *Model) settingsVCSGitExecutableRow(c *ui.Context, oi oiColors) {
 	m.ensureVCSGitDetected()
 	aux := m.vcsGitAuxSnapshot()
 	detected, testing := aux["git.detected"], aux["git.testing"] == "1"
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Path to Git executable:", 230)
 		value := nativeSettingsString(m, page, "vcs.git.executable")
 		placeholder := "Auto-detected"

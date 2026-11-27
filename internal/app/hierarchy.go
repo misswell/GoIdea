@@ -21,6 +21,16 @@ import (
 
 const hierarchyRoot = "root"
 
+const (
+	hierarchyToolbarHeight     float32 = 32
+	hierarchyRowHeight         float32 = 24
+	hierarchyTabHeight         float32 = 24
+	hierarchyToolButton        float32 = 20
+	hierarchyToolbarGap        float32 = 2
+	hierarchyHeaderSidePadding float32 = 6
+	hierarchyBodyInset         float32 = 24
+)
+
 // hierarchyItem is one HierarchyItem of the language server's answer.
 type hierarchyItem struct {
 	Name           string                  `json:"name"`
@@ -567,22 +577,18 @@ func (m *Model) StepHierarchy(dir int) {
 	m.OpenHierarchyItem(ids[next])
 }
 
-// hierarchyRightView is the right area: the window's title, tabs and tree.
+// hierarchyRightView is OpenIDEA's tool-window frame. The title and compact
+// content tab live in the same 32 DIP header; the controls are one 32 DIP
+// toolbar below it, split into compact icon groups.
 func (m *Model) hierarchyRightView(c *ui.Context, p *ui.Theme, oi oiColors) {
 	ui.Column(c).Grow(1).MinHeight(0).Background(oi.island).
 		Radius(oiIslandRadius).Focusable().AutoFocus().Children(func() {
-		ui.Row(c).Height(oiTokensFor(m, p).HeaderHeight).Shrink(0).Padding(0, 6, 0, 8).
-			Gap(6).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "Hierarchy").FontSize(13).TextColor(oi.textStrong).
-				SingleLine().Ellipsis("…")
-			ui.Spacer(c)
-			m.headerIcon(c, p, oi, "hierarchy-close", "Hide", "general/remove", m.CloseHierarchyWindow)
-		})
-		m.hierarchyTabs(c, p, oi)
+		m.hierarchyHeader(c, p, oi)
 		m.hierarchyToolbar(c, p, oi)
 		if note := m.hierarchy.notes[hierarchyRoot]; note != "" {
-			ui.Row(c).Shrink(0).Padding(4, 10).Children(func() {
-				ui.Text(c, note).FontSize(12).TextColor(oi.warning).SingleLine().Ellipsis("…")
+			ui.Row(c).Shrink(0).Padding(0, 8, 4, 8).Children(func() {
+				ui.Text(c, note).FontSize(oiFontSizeS).Italic().TextColor(oi.textSubtle).
+					SingleLine().Ellipsis("…")
 			})
 		}
 		ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
@@ -592,8 +598,11 @@ func (m *Model) hierarchyRightView(c *ui.Context, p *ui.Theme, oi oiColors) {
 				return
 			}
 			if !m.hierarchy.active() {
-				ui.Text(c, "Use Call Hierarchy (Ctrl+Alt+H) or Type Hierarchy (Ctrl+H) on a symbol.").FontSize(12).
-					TextColor(oi.textMuted).Padding(8, 10).Ellipsis("…")
+				ui.Column(c).Fill().Padding(hierarchyBodyInset).Gap(oiSpaceL).
+					Justify(ui.Center).AlignItems(ui.Center).Children(func() {
+					ui.Text(c, "Use Call Hierarchy (Ctrl+Alt+H) or Type Hierarchy (Ctrl+H) on a symbol to see its hierarchy here").
+						FontSize(oiFontSizeM).TextColor(oi.textMuted).MaxWidth(320).Wrap()
+				})
 				return
 			}
 			m.hierarchyRootRow(c, p, oi)
@@ -605,58 +614,166 @@ func (m *Model) hierarchyRightView(c *ui.Context, p *ui.Theme, oi oiColors) {
 	})
 }
 
-// hierarchyTabs draws the hierarchy's closable content tab.
-func (m *Model) hierarchyTabs(c *ui.Context, p *ui.Theme, oi oiColors) {
-	ui.Row(c).Height(27).Shrink(0).Padding(0, 4).Gap(2).AlignItems(ui.Stretch).
-		BorderWidth(0, 0, 1, 0).BorderColor(oi.border).Children(func() {
-		tab := ui.ButtonBase(c.Key("hierarchy:content-tab")).Height(27).
-			Padding(0, 8).Radius(4).AlignItems(ui.Center).Background(oi.selected)
+// hierarchyHeader is HeaderRow in OpenIDEA: the plain title, then the compact
+// closable content tab, a flexible spacer, and the faded frame actions.
+func (m *Model) hierarchyHeader(c *ui.Context, p *ui.Theme, oi oiColors) {
+	header := ui.Row(c).Key("hierarchy:header").Height(oiTokensFor(m, p).HeaderHeight).
+		Shrink(0).Padding(0, hierarchyHeaderSidePadding).
+		Gap(oiSpaceM).AlignItems(ui.Center).
+		BorderWidth(0, 0, 1, 0).BorderColor(oi.border)
+	if header.DoubleClicked() {
+		m.toggleToolWindowMaximized()
+	}
+	header.Children(func() {
+		ui.Text(c, "Hierarchy").FontSize(oiFontSizeM).TextColor(oi.textStrong).
+			SingleLine().Ellipsis("…")
+		if m.hierarchy.active() {
+			m.hierarchyContentTab(c, oi)
+		}
+		ui.Spacer(c)
+		actions := ui.Row(c).Key("hierarchy:header-actions").Shrink(0).
+			Gap(hierarchyToolbarGap).AlignItems(ui.Center)
+		if header.Hovered() || header.FocusWithin() {
+			actions.Opacity(1)
+		} else {
+			actions.Opacity(0.52)
+		}
+		actions.Children(func() {
+			more := hierarchyIconButton(c, "hierarchy:options", "general/moreVertical",
+				"Options", oi, oi.icon, func() {})
+			more.Menu(func(menu *ui.Menu) { m.toolWindowFrameOptionsMenu(menu, "hierarchy") })
+			hideTip := "Hide Hierarchy Tool Window"
+			hide := hierarchyIconButton(c, "hierarchy:hide", "general/hide",
+				hideTip, oi, oi.icon, m.CloseHierarchyWindow)
+			hide.Label(hideTip)
+		})
+	})
+}
+
+// hierarchyContentTab is the compact Tabs primitive: 28 DIP strip, 22–24 DIP
+// selected pill, 10 DIP label inset and a 20 DIP close slot.
+func (m *Model) hierarchyContentTab(c *ui.Context, oi oiColors) {
+	ui.Row(c).Key("hierarchy:tabs").Height(28).Shrink(1).MinWidth(0).
+		AlignItems(ui.Center).Children(func() {
+		tab := ui.Row(c).Key("hierarchy:content-tab").Height(hierarchyTabHeight).
+			Radius(oiRadiusM).AlignItems(ui.Center).Background(oi.selected).
+			BorderWidth(1, 1, 1, 1).BorderColor(oi.borderStrong).
+			Focusable().Role(ui.RoleTab).Label(m.hierarchyTitle())
+		tab.HandleInput(func(ev ui.InputEvent) bool {
+			if ev.Kind != ui.InputKeyDown {
+				return false
+			}
+			switch ev.Key {
+			case ui.KeyEnter, ui.KeySpace:
+				m.OpenHierarchyItem(hierarchyRoot)
+			case ui.KeyBackspace, ui.KeyDelete, ui.KeyEscape:
+				m.CloseHierarchyContent()
+			default:
+				return false
+			}
+			return true
+		})
+		if tab.Clicked() {
+			m.selectHierarchy(hierarchyRoot)
+		}
 		tab.Children(func() {
 			ui.Text(c, m.hierarchyTitle()).FontSize(12).TextColor(oi.textStrong).
-				SingleLine().Ellipsis("…")
-			if ui.Button(c, "×").Clicked() {
+				PaddingStart(10).SingleLine().Ellipsis("…")
+			closeButton := ui.ButtonBase(c.Key("hierarchy:content-tab:close")).
+				Size(20, 20).Radius(oiRadiusS).Justify(ui.Center).AlignItems(ui.Center).
+				Cursor(ui.CursorPointer).Tooltip("Close Hierarchy").Label("Close Hierarchy")
+			if closeButton.Hovered() {
+				closeButton.Background(oi.toolbarHover)
+			}
+			closeButton.Children(func() {
+				oiIconEl(c, "general/remove", 16, oi, oi.textMuted)
+			})
+			if closeButton.Clicked() {
 				m.CloseHierarchyContent()
 			}
 		})
 	})
 }
 
-// hierarchyToolbar matches OpenIDEA's direction, refresh, occurrence and
-// autoscroll controls.
+// hierarchyToolbar is HierarchyToolbar: two direction buttons, a separator,
+// Refresh, another separator, previous/next occurrences and Autoscroll. Every
+// control is the same 20x20 icon button as OpenIDEA's small IconButton.
 func (m *Model) hierarchyToolbar(c *ui.Context, p *ui.Theme, oi oiColors) {
-	ui.Row(c).Height(28).Shrink(0).Padding(0, 7).Gap(6).AlignItems(ui.Center).
-		BorderWidth(0, 0, 1, 0).BorderColor(oi.border).Children(func() {
+	ui.Row(c).Key("hierarchy:toolbar").Role(ui.RoleToolbar).
+		Label("Hierarchy actions").Height(hierarchyToolbarHeight).Shrink(0).
+		Padding(0, hierarchyHeaderSidePadding).Gap(hierarchyToolbarGap).
+		AlignItems(ui.Center).Children(func() {
 		for _, direction := range []string{"incoming", "outgoing"} {
 			direction := direction
-			label := "↑"
+			icon := "general/up"
 			if direction == "outgoing" {
-				label = "↓"
+				icon = "general/down"
 			}
-			button := ui.Button(c, label)
+			button := hierarchyIconButton(c, "hierarchy:direction:"+direction, icon,
+				m.hierarchyDirectionLabel(direction)+" Hierarchy", oi, oi.icon, func() {
+					m.SetHierarchyDirection(direction)
+				})
 			if m.hierarchy.direction == direction {
-				button.Background(oi.hoverTint).TextColor(oi.textStrong)
+				button.Background(oi.stripeSelected).TextColor(oi.textStrong)
+				button.Opacity(1)
 			}
-			button.Tooltip(m.hierarchyDirectionLabel(direction) + " Hierarchy")
-			button.OnClick(func() { m.SetHierarchyDirection(direction) })
 		}
-		ui.Button(c, "Refresh").Disabled(!m.hierarchy.active()).OnClick(m.RefreshHierarchy)
-		previous := ui.Button(c, "Prev").Disabled(!m.hierarchy.active())
-		previous.Tooltip("Previous Hierarchy Occurrence")
-		previous.OnClick(func() { m.StepHierarchy(-1) })
-		next := ui.Button(c, "Next").Disabled(!m.hierarchy.active())
-		next.Tooltip("Next Hierarchy Occurrence")
-		next.OnClick(func() { m.StepHierarchy(1) })
-		autoscroll := ui.Button(c, "AutoScroll")
+		hierarchyToolbarSeparator(c, oi, "directions")
+		hierarchyIconButton(c, "hierarchy:refresh", "general/refresh", "Refresh",
+			oi, oi.icon, func() {
+				if m.hierarchy.active() {
+					m.RefreshHierarchy()
+				}
+			}).Disabled(!m.hierarchy.active())
+		hierarchyToolbarSeparator(c, oi, "refresh")
+		hierarchyIconButton(c, "hierarchy:prev", "general/up", "Previous Hierarchy Occurrence",
+			oi, oi.icon, func() {
+				if m.hierarchy.active() {
+					m.StepHierarchy(-1)
+				}
+			}).Disabled(!m.hierarchy.active())
+		hierarchyIconButton(c, "hierarchy:next", "general/down", "Next Hierarchy Occurrence",
+			oi, oi.icon, func() {
+				if m.hierarchy.active() {
+					m.StepHierarchy(1)
+				}
+			}).Disabled(!m.hierarchy.active())
+		autoscroll := hierarchyIconButton(c, "hierarchy:autoscroll", "general/autoscrollToSource",
+			"Autoscroll to Source", oi, oi.icon, func() {
+				m.prefs.Hierarchy.Autoscroll = !m.prefs.Hierarchy.Autoscroll
+				m.savePreferences()
+				m.invalidate()
+			})
 		if m.prefs.Hierarchy.Autoscroll {
-			autoscroll.Background(oi.hoverTint).TextColor(oi.textStrong)
+			autoscroll.Background(oi.stripeSelected).TextColor(oi.textStrong)
+			autoscroll.Opacity(1)
 		}
-		autoscroll.Tooltip("Autoscroll to Source")
-		autoscroll.OnClick(func() {
-			m.prefs.Hierarchy.Autoscroll = !m.prefs.Hierarchy.Autoscroll
-			m.savePreferences()
-			m.invalidate()
-		})
 	})
+}
+
+func hierarchyToolbarSeparator(c *ui.Context, oi oiColors, key string) {
+	ui.Row(c).Key("hierarchy:toolbar:separator:" + key).
+		Width(1).Height(16).MarginX(4).Background(oi.border)
+}
+
+func hierarchyIconButton(
+	c *ui.Context,
+	key, icon, label string,
+	oi oiColors,
+	tint ui.Color,
+	onClick func(),
+) ui.Element {
+	button := ui.ButtonBase(c.Key(key)).Size(hierarchyToolButton, hierarchyToolButton).
+		Radius(oiRadiusM).Justify(ui.Center).AlignItems(ui.Center).
+		Cursor(ui.CursorPointer).Tooltip(label).Label(label)
+	if button.Hovered() || button.Focused() {
+		button.Background(oi.toolbarHover)
+	}
+	button.Children(func() { oiIconEl(c, icon, 16, oi, tint) })
+	if onClick != nil && button.Clicked() {
+		onClick()
+	}
+	return button
 }
 
 func (m *Model) hierarchyRootRow(c *ui.Context, p *ui.Theme, oi oiColors) {
@@ -664,7 +781,7 @@ func (m *Model) hierarchyRootRow(c *ui.Context, p *ui.Theme, oi oiColors) {
 	if rootName == "" {
 		rootName = filepath.Base(m.hierarchy.rootPath)
 	}
-	row := ui.Row(c.Key("hierarchy:root")).Height(24).Gap(4).
+	row := ui.Row(c.Key("hierarchy:root")).Height(hierarchyRowHeight).Gap(oiSpaceS).
 		PaddingStart(4).PaddingEnd(8).Radius(5).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer)
 	if m.hierarchy.selected == hierarchyRoot {
@@ -691,12 +808,12 @@ func (m *Model) hierarchyRootRow(c *ui.Context, p *ui.Theme, oi oiColors) {
 		if asset := symbolIcon(kind); asset != "" {
 			oiIconEl(c, asset, 16, oi, oi.textSubtle).MarginEnd(2)
 		}
-		ui.Text(c, rootName).FontSize(13).TextColor(oi.textStrong).
+		ui.Text(c, rootName).FontSize(oiFontSizeM).TextColor(oi.textStrong).
 			SingleLine().Ellipsis("…")
 		ui.Spacer(c)
 		if m.hierarchy.rootPath != "" {
 			ui.Text(c, fmt.Sprintf("%s:%d", filepath.Base(m.hierarchy.rootPath), m.hierarchy.rootLine+1)).
-				FontSize(13).TextColor(oi.textSubtle).SingleLine().Ellipsis("…")
+				FontSize(oiFontSizeM).TextColor(oi.textSubtle).SingleLine().Ellipsis("…")
 		}
 		switch {
 		case m.hierarchy.loading[hierarchyRoot]:
@@ -720,7 +837,7 @@ func (m *Model) hierarchyRootRow(c *ui.Context, p *ui.Theme, oi oiColors) {
 // hierarchyRow draws one row: the expand caret, the symbol badge, the name,
 // its detail and the call-site count.
 func (m *Model) hierarchyRow(c *ui.Context, p *ui.Theme, oi oiColors, node hierarchyNode) {
-	row := ui.Row(c.Key("hierarchy:" + node.id)).Height(24).Gap(4).
+	row := ui.Row(c.Key("hierarchy:" + node.id)).Height(hierarchyRowHeight).Gap(oiSpaceM).
 		PaddingStart(4 + float32(node.depth)*m.treeIndentWidth()).PaddingEnd(8).Radius(5).
 		AlignItems(ui.Center).Cursor(ui.CursorPointer)
 	if node.item.Path != "" {
@@ -761,22 +878,22 @@ func (m *Model) hierarchyRow(c *ui.Context, p *ui.Theme, oi oiColors, node hiera
 		} else {
 			ui.Row(c).Size(16, 16).Shrink(0).MarginEnd(2)
 		}
-		ui.Text(c, node.item.Name).FontSize(13).TextColor(oi.text).
+		ui.Text(c, node.item.Name).FontSize(oiFontSizeM).TextColor(oi.text).
 			SingleLine().Ellipsis("…")
 		if node.item.Detail != nil && *node.item.Detail != "" {
-			ui.Text(c, *node.item.Detail).FontSize(13).TextColor(oi.textSubtle).
-				SingleLine().Ellipsis("…")
+			ui.Text(c, *node.item.Detail).FontSize(oiFontSizeM).
+				TextColor(oi.textSubtle).MinWidth(0).SingleLine().Ellipsis("…")
 		}
 		ui.Spacer(c)
 		if node.item.Path != "" {
 			ui.Text(c, fmt.Sprintf("%s:%d", filepath.Base(node.item.Path), node.item.SelectionRange.Start.Line+1)).
-				FontSize(13).TextColor(oi.textSubtle).SingleLine().Ellipsis("…")
+				FontSize(oiFontSizeM).TextColor(oi.textSubtle).SingleLine().Ellipsis("…")
 		}
 		if node.recursion {
-			ui.Text(c, "recursive").FontSize(13).TextColor(oi.textSubtle).SingleLine()
+			ui.Text(c, "recursive").FontSize(oiFontSizeM).TextColor(oi.textSubtle).SingleLine()
 		}
 		if n := len(node.item.FromRanges); n > 1 {
-			ui.Text(c, fmt.Sprintf("(%d calls)", n)).FontSize(13).
+			ui.Text(c, fmt.Sprintf("(%d calls)", n)).FontSize(oiFontSizeM).
 				TextColor(oi.textSubtle).SingleLine()
 		}
 		if note := m.hierarchy.notes[node.id]; note != "" {

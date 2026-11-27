@@ -3,6 +3,8 @@ package app
 import (
 	"testing"
 
+	"github.com/egoist/mygo/ui"
+
 	"mayoi/internal/openidea"
 )
 
@@ -153,6 +155,76 @@ func TestHierarchyDefaultsMatchOpenIDEA(t *testing.T) {
 	m.OpenTypeHierarchy()
 	if m.hierarchy.direction != "outgoing" {
 		t.Fatalf("fresh type hierarchy direction = %q, want outgoing", m.hierarchy.direction)
+	}
+}
+
+func TestHierarchyToolWindowUsesOpenIDEAHeaderToolbarAndRowMetrics(t *testing.T) {
+	m := hierarchyTestModel()
+	m.hierarchy.children[hierarchyRoot] = []hierarchyNode{{
+		id: hierarchyRoot + "/caller", parent: hierarchyRoot,
+		item: hierarchyItemAt("callerA", 8, 3), depth: 1,
+	}}
+	tt := ui.NewTester(func(c *ui.Context) {
+		m.hierarchyRightView(c, c.Theme(), oiPaletteOf(c.Theme()))
+	}, 300, 520)
+	tt.SetDark(true)
+	tt.SetScale(1)
+	tt.Frame()
+
+	title, titleOK := tt.Find("Hierarchy")
+	tab, tabOK := tt.Find("Callers of main")
+	toolbar, toolbarOK := tt.Find("Hierarchy actions")
+	refresh, refreshOK := tt.Find("Refresh")
+	root, rootOK := tt.Find("main")
+	closeButton, closeOK := tt.Find("Close Hierarchy")
+	if !titleOK || !tabOK || !toolbarOK || !refreshOK || !rootOK || !closeOK {
+		t.Fatalf("missing Hierarchy chrome: %q", tt.Texts())
+	}
+
+	if title.Y < 0 || title.Y+title.H > oiHeaderHeight+1 {
+		t.Fatalf("title is outside the 32 DIP header: %+v", title)
+	}
+	if tab.Y < 0 || tab.Y+tab.H > oiHeaderHeight+1 {
+		t.Fatalf("content tab is outside the shared header: %+v", tab)
+	}
+	if closeButton.X < tab.X || closeButton.X+closeButton.W > 300 {
+		t.Fatalf("close button is clipped or outside its tab: tab=%+v close=%+v", tab, closeButton)
+	}
+	if toolbar.Y < oiHeaderHeight-1 ||
+		toolbar.Y+toolbar.H > oiHeaderHeight+hierarchyToolbarHeight+1 {
+		t.Fatalf("toolbar is not the next 32 DIP row: %+v", toolbar)
+	}
+	if refresh.X < toolbar.X || refresh.Y < toolbar.Y || refresh.Y+refresh.H > toolbar.Y+toolbar.H {
+		t.Fatalf("refresh icon is outside its compact toolbar: toolbar=%+v refresh=%+v", toolbar, refresh)
+	}
+	if root.Y < oiHeaderHeight+hierarchyToolbarHeight-1 {
+		t.Fatalf("tree row overlaps the toolbar: row=%+v toolbar=%+v", root, toolbar)
+	}
+}
+
+func TestHierarchyEmptyStateWrapsInsideTheToolWindow(t *testing.T) {
+	m := &Model{}
+	m.hierarchy = hierarchyPane{
+		children: map[string][]hierarchyNode{}, expanded: map[string]bool{},
+		loading: map[string]bool{}, failed: map[string]string{}, notes: map[string]string{},
+	}
+	tt := ui.NewTester(func(c *ui.Context) {
+		m.hierarchyRightView(c, c.Theme(), oiPaletteOf(c.Theme()))
+	}, 300, 520)
+	tt.SetDark(true)
+	tt.SetScale(1)
+	tt.Frame()
+
+	const hint = "Use Call Hierarchy (Ctrl+Alt+H) or Type Hierarchy (Ctrl+H) on a symbol to see its hierarchy here"
+	rect, ok := tt.Find(hint)
+	if !ok {
+		t.Fatalf("empty hint is missing: %q", tt.Texts())
+	}
+	if rect.H <= oiFontSizeM {
+		t.Fatalf("empty hint did not wrap in a 300 DIP window: %+v", rect)
+	}
+	if rect.X < hierarchyBodyInset || rect.X+rect.W > 300-hierarchyBodyInset+1 {
+		t.Fatalf("empty hint exceeds the 24 DIP body inset: %+v", rect)
 	}
 }
 

@@ -118,13 +118,13 @@ func (m *Model) settingsPageBody(c *ui.Context, p *ui.Theme, oi oiColors, node s
 
 // settingsSystemBody is Settings › Appearance & Behavior › System Settings.
 func (m *Model) settingsSystemBody(c *ui.Context, oi oiColors) {
-	settingsSectionTitle(c, oi, "Project")
+	m.settingsSectionTitle(c, oi, "Project")
 	reopen := m.settingsDraft.reopenLast
-	if ui.Checkbox(c, &reopen, "Reopen projects on startup").Changed() {
+	if settingsCheckbox(c, &reopen, "Reopen projects on startup").Changed() {
 		m.settingsDraft.reopenLast = reopen
 		m.invalidate()
 	}
-	ui.Row(c).MinHeight(32).Gap(12).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(12).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Open project in", 220)
 		ui.Row(c).Gap(14).AlignItems(ui.Center).Children(func() {
 			for _, choice := range []struct {
@@ -141,9 +141,10 @@ func (m *Model) settingsSystemBody(c *ui.Context, oi oiColors) {
 			}
 		})
 	})
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Default directory", 220)
-		input := ui.TextInput(c, &m.settingsDraft.defaultProjectDirectory).Grow(1).MaxWidth(420)
+		input := ui.TextInput(c, &m.settingsDraft.defaultProjectDirectory).Grow(1).
+			MaxWidth(settingsPathMaxWidth)
 		if input.Changed() {
 			m.invalidate()
 		}
@@ -152,8 +153,8 @@ func (m *Model) settingsSystemBody(c *ui.Context, oi oiColors) {
 	ui.Text(c, `This directory is preselected in "Open…" and "New Window" dialogs.`).
 		FontSize(11).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
 
-	settingsSectionTitle(c, oi, "Caches")
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	m.settingsSectionTitle(c, oi, "Caches")
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Current location", 220)
 		path := m.goideaDataDir()
 		ui.Text(c, path).FontSize(12).Font("monospace").TextColor(oi.text).
@@ -164,9 +165,9 @@ func (m *Model) settingsSystemBody(c *ui.Context, oi oiColors) {
 			}
 		})
 	})
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Local data directory", 220)
-		in := ui.TextInput(c, &m.settingsDraft.localDataDir).Grow(1).MaxWidth(420).
+		in := ui.TextInput(c, &m.settingsDraft.localDataDir).Grow(1).MaxWidth(settingsPathMaxWidth).
 			Disabled(m.localDataDirLocked())
 		if in.Changed() {
 			m.invalidate()
@@ -179,7 +180,7 @@ func (m *Model) settingsSystemBody(c *ui.Context, oi oiColors) {
 		})
 	})
 	move := m.settingsDraft.localDataMove
-	if ui.Checkbox(c, &move, "Copy existing data to the new location").
+	if settingsCheckbox(c, &move, "Copy existing data to the new location").
 		Disabled(m.localDataDirLocked()).Changed() {
 		m.settingsDraft.localDataMove = move
 		m.invalidate()
@@ -194,15 +195,15 @@ func (m *Model) settingsSystemBody(c *ui.Context, oi oiColors) {
 			FontSize(11).TextColor(oi.warning).SingleLine()
 	}
 
-	settingsSectionTitle(c, oi, "Autosave")
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	m.settingsSectionTitle(c, oi, "Autosave")
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		saveOnIdle := m.settingsDraft.saveOnIdle
-		if ui.Checkbox(c, &saveOnIdle, "Save files if the IDE is idle for").Changed() {
+		if settingsCheckbox(c, &saveOnIdle, "Save files if the IDE is idle for").Changed() {
 			m.settingsDraft.saveOnIdle = saveOnIdle
 			m.invalidate()
 		}
 		seconds := float64(m.settingsDraft.idleSeconds)
-		field := ui.NumberInput(c, &seconds, 1, 3600, 1).Width(92)
+		field := ui.NumberInput(c, &seconds, 1, 3600, 1).Width(settingsNumberWidth)
 		field.Disabled(!m.settingsDraft.saveOnIdle)
 		if field.Changed() {
 			m.settingsDraft.idleSeconds = int(seconds)
@@ -211,23 +212,23 @@ func (m *Model) settingsSystemBody(c *ui.Context, oi oiColors) {
 		ui.Text(c, "seconds").FontSize(12).TextColor(oi.textMuted)
 	})
 	autoSave := m.settingsDraft.autoSave
-	if ui.Checkbox(c, &autoSave,
+	if settingsCheckbox(c, &autoSave,
 		"Save files when switching to a different application or a built-in terminal").Changed() {
 		m.settingsDraft.autoSave = autoSave
 		m.invalidate()
 	}
 	syncOnFocus := m.settingsDraft.syncOnFocus
-	if ui.Checkbox(c, &syncOnFocus,
+	if settingsCheckbox(c, &syncOnFocus,
 		"Synchronize external changes when switching to the IDE window").Changed() {
 		m.settingsDraft.syncOnFocus = syncOnFocus
 		m.invalidate()
 	}
 
-	settingsSectionTitle(c, oi, "Local History")
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	m.settingsSectionTitle(c, oi, "Local History")
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Keep local history for", 220)
 		days := float64(m.settingsDraft.localHistoryDays)
-		field := ui.NumberInput(c, &days, 1, 365, 1).Width(92)
+		field := ui.NumberInput(c, &days, 1, 365, 1).Width(settingsNumberWidth)
 		if field.Changed() {
 			m.settingsDraft.localHistoryDays = int(days)
 			m.invalidate()
@@ -236,10 +237,10 @@ func (m *Model) settingsSystemBody(c *ui.Context, oi oiColors) {
 	})
 	ui.Text(c, "Days on which files changed; older revisions are removed when a project opens.").
 		FontSize(11).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Maximum local history size per project", 220)
 		size := float64(m.settingsDraft.localHistoryMaxMB)
-		field := ui.NumberInput(c, &size, 16, 16384, 64).Width(100)
+		field := ui.NumberInput(c, &size, 16, 16384, 64).Width(settingsNumberWidth)
 		if field.Changed() {
 			m.settingsDraft.localHistoryMaxMB = int(size)
 			m.invalidate()
@@ -247,14 +248,14 @@ func (m *Model) settingsSystemBody(c *ui.Context, oi oiColors) {
 		ui.Text(c, "MB").FontSize(12).TextColor(oi.textMuted)
 	})
 
-	settingsSectionTitle(c, oi, "Exit")
+	m.settingsSectionTitle(c, oi, "Exit")
 	confirmExit := m.settingsDraft.confirmExit
-	if ui.Checkbox(c, &confirmExit, "Confirm before exiting the IDE").Changed() {
+	if settingsCheckbox(c, &confirmExit, "Confirm before exiting the IDE").Changed() {
 		m.settingsDraft.confirmExit = confirmExit
 		m.invalidate()
 	}
 	closeWithoutWelcome := m.settingsDraft.closeWithoutWelcome
-	if ui.Checkbox(c, &closeWithoutWelcome,
+	if settingsCheckbox(c, &closeWithoutWelcome,
 		"Close the window instead of showing the Welcome screen").Changed() {
 		m.settingsDraft.closeWithoutWelcome = closeWithoutWelcome
 		m.invalidate()
@@ -262,7 +263,7 @@ func (m *Model) settingsSystemBody(c *ui.Context, oi oiColors) {
 	ui.Text(c, "When this is the only window, closing a project or file closes the window. On macOS, the app stays in the Dock.").
 		FontSize(11).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
 	closeTabsWithWindow := m.settingsDraft.closeTabsWithWindow
-	if ui.Checkbox(c, &closeTabsWithWindow,
+	if settingsCheckbox(c, &closeTabsWithWindow,
 		"Close all editor tabs when the window closes").Changed() {
 		m.settingsDraft.closeTabsWithWindow = closeTabsWithWindow
 		m.invalidate()
@@ -274,12 +275,12 @@ func (m *Model) settingsSystemBody(c *ui.Context, oi oiColors) {
 // settingsDateFormatsBody is Settings › System Settings › Date Formats.
 func (m *Model) settingsDateFormatsBody(c *ui.Context, oi oiColors) {
 	f := &m.settingsDraft.dateFormat
-	if ui.Checkbox(c, &f.OverrideSystem, "Override system date and time format").Changed() {
+	if settingsCheckbox(c, &f.OverrideSystem, "Override system date and time format").Changed() {
 		m.invalidate()
 	}
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Date format", 220)
-		input := ui.TextInput(c, &f.Pattern).Grow(1).MaxWidth(280)
+		input := ui.TextInput(c, &f.Pattern).Grow(1).MaxWidth(settingsTextWidth)
 		if !f.OverrideSystem {
 			input.Disabled(true)
 		}
@@ -291,7 +292,7 @@ func (m *Model) settingsDateFormatsBody(c *ui.Context, oi oiColors) {
 	ui.Text(c, "Placeholders: yyyy, yy, MMMM, MMM, MM, M, dd, d").
 		FontSize(11).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
 	use24 := f.Use24Hour
-	use24Element := ui.Checkbox(c, &use24, "Use 24-hour time format")
+	use24Element := settingsCheckbox(c, &use24, "Use 24-hour time format")
 	if !f.OverrideSystem {
 		use24Element.Disabled(true)
 	}
@@ -300,7 +301,7 @@ func (m *Model) settingsDateFormatsBody(c *ui.Context, oi oiColors) {
 		m.invalidate()
 	}
 	pretty := f.Pretty
-	if ui.Checkbox(c, &pretty, "Use pretty formatting").Changed() {
+	if settingsCheckbox(c, &pretty, "Use pretty formatting").Changed() {
 		f.Pretty = pretty
 		m.invalidate()
 	}
@@ -308,7 +309,7 @@ func (m *Model) settingsDateFormatsBody(c *ui.Context, oi oiColors) {
 		FontSize(11).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
 	now := time.Now()
 	region := c.Region()
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Preview", 220)
 		ui.Text(c, formatAppTimestamp(*f, region, float64(now.Add(-2*time.Hour).UnixMilli()), now)+
 			" · "+formatAppTimestamp(*f, region, float64(now.Add(-3*24*time.Hour).UnixMilli()), now)).
@@ -321,8 +322,8 @@ func (m *Model) settingsDateFormatsBody(c *ui.Context, oi oiColors) {
 func (m *Model) settingsAgentsBody(c *ui.Context, oi oiColors) {
 	a := &m.settingsDraft.agents
 
-	settingsSectionTitle(c, oi, "New Tasks")
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	m.settingsSectionTitle(c, oi, "New Tasks")
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "New tasks start", 220)
 		choices := []string{
 			"Without asking for approval",
@@ -344,8 +345,8 @@ func (m *Model) settingsAgentsBody(c *ui.Context, oi oiColors) {
 	ui.Text(c, "Without asking means the agent's bypass or full-access mode, where command permissions don't apply").
 		FontSize(11).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
 
-	settingsSectionTitle(c, oi, "Sending")
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	m.settingsSectionTitle(c, oi, "Sending")
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Send messages with", 220)
 		labels := []string{"Enter", "⌘Enter"}
 		shown := "Enter"
@@ -361,7 +362,7 @@ func (m *Model) settingsAgentsBody(c *ui.Context, oi oiColors) {
 			m.invalidate()
 		}
 	})
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "While the agent works, sending", 220)
 		labels := []string{
 			"Queues the message for after the turn",
@@ -383,15 +384,15 @@ func (m *Model) settingsAgentsBody(c *ui.Context, oi oiColors) {
 	ui.Text(c, "The other way is a modifier away: ⌘↵ with Enter, ⌘⇧↵ with ⌘Enter").
 		FontSize(11).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
 
-	settingsSectionTitle(c, oi, "Conversation")
+	m.settingsSectionTitle(c, oi, "Conversation")
 	fold := !a.NoFoldTurns
-	if ui.Checkbox(c, &fold, "Fold a finished turn's work").Changed() {
+	if settingsCheckbox(c, &fold, "Fold a finished turn's work").Changed() {
 		a.NoFoldTurns = !fold
 		m.invalidate()
 	}
 	ui.Text(c, "Reasoning and tool calls before the reply fold into one line under its message").
 		FontSize(11).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Tool calls", 220)
 		labels := []string{"Grouped by what they did", "One per line"}
 		shown := labels[0]
@@ -407,7 +408,7 @@ func (m *Model) settingsAgentsBody(c *ui.Context, oi oiColors) {
 			m.invalidate()
 		}
 	})
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Reasoning", 220)
 		labels := []string{"Open while it streams", "Always open", "Folded"}
 		values := []string{"auto", "expanded", "collapsed"}
@@ -428,36 +429,36 @@ func (m *Model) settingsAgentsBody(c *ui.Context, oi oiColors) {
 			m.invalidate()
 		}
 	})
-	if ui.Checkbox(c, &a.ExpandToolOutput, "Show tool output without opening it").Changed() {
+	if settingsCheckbox(c, &a.ExpandToolOutput, "Show tool output without opening it").Changed() {
 		m.invalidate()
 	}
 	smooth := !a.NoSmoothText
-	if ui.Checkbox(c, &smooth, "Reveal streaming text smoothly").Changed() {
+	if settingsCheckbox(c, &smooth, "Reveal streaming text smoothly").Changed() {
 		a.NoSmoothText = !smooth
 		m.invalidate()
 	}
 	ui.Text(c, "Text appears at a steady pace instead of in bursts.").
 		FontSize(11).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
 
-	settingsSectionTitle(c, oi, "Shown in the Task Header")
+	m.settingsSectionTitle(c, oi, "Shown in the Task Header")
 	context := !a.NoContextUsage
-	if ui.Checkbox(c, &context, "Context window usage").Changed() {
+	if settingsCheckbox(c, &context, "Context window usage").Changed() {
 		a.NoContextUsage = !context
 		m.invalidate()
 	}
 	work := !a.NoWorkTime
-	if ui.Checkbox(c, &work, "Time spent on the task").Changed() {
+	if settingsCheckbox(c, &work, "Time spent on the task").Changed() {
 		a.NoWorkTime = !work
 		m.invalidate()
 	}
 	limits := !a.NoUsageLimits
-	if ui.Checkbox(c, &limits, "Usage limits").Changed() {
+	if settingsCheckbox(c, &limits, "Usage limits").Changed() {
 		a.NoUsageLimits = !limits
 		m.invalidate()
 	}
 	ui.Text(c, "The account's 5-hour and weekly limits, when the agent reports them (Claude Code).").
 		FontSize(11).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
-	if ui.Checkbox(c, &a.ShowCost, "Session cost").Changed() {
+	if settingsCheckbox(c, &a.ShowCost, "Session cost").Changed() {
 		m.invalidate()
 	}
 	ui.Text(c, "What the session has cost so far, as the agent reports it.").
@@ -468,11 +469,11 @@ func (m *Model) settingsAgentsBody(c *ui.Context, oi oiColors) {
 // version and the last check with Check Now, then the two switches the update
 // flow keeps, then where the build updates from.
 func (m *Model) settingsUpdatesBody(c *ui.Context, oi oiColors) {
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Current version", 220)
 		ui.Text(c, mygo.App.Version()).FontSize(12).TextColor(oi.text).SingleLine()
 	})
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Last checked", 220)
 		when := "Never"
 		if t := m.lastUpdateCheck(); !t.IsZero() {
@@ -489,7 +490,7 @@ func (m *Model) settingsUpdatesBody(c *ui.Context, oi oiColors) {
 	})
 	ui.Row(c).Height(10)
 	auto := m.settingsDraft.updateAutoCheck
-	if ui.Checkbox(c, &auto, "Check for updates automatically").Changed() {
+	if settingsCheckbox(c, &auto, "Check for updates automatically").Changed() {
 		m.settingsDraft.updateAutoCheck = auto
 		m.invalidate()
 	}
@@ -497,14 +498,14 @@ func (m *Model) settingsUpdatesBody(c *ui.Context, oi oiColors) {
 		FontSize(12).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
 	ui.Row(c).Height(10)
 	whats := m.settingsDraft.updateWhatsNew
-	if ui.Checkbox(c, &whats, "Show What's New after an update").Changed() {
+	if settingsCheckbox(c, &whats, "Show What's New after an update").Changed() {
 		m.settingsDraft.updateWhatsNew = whats
 		m.invalidate()
 	}
 	ui.Text(c, "Opens a page with the release notes when a new version starts. Help › What's New opens it any time.").
 		FontSize(12).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
 	ui.Row(c).Height(10)
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Update source", 220)
 		shown := updateSourceLabel(m.settingsDraft.updateSource)
 		sel := ui.Select(c, &shown, []string{"Automatic", "GitHub", "CNB (China mirror)"}).Width(220)
@@ -563,21 +564,42 @@ func (m *Model) settingsGroupPage(c *ui.Context, oi oiColors, node settingsNode)
 
 // settingsFormLabel is a settings row's label, in the column the rows share.
 func settingsFormLabel(c *ui.Context, oi oiColors, label string, width float32) {
-	ui.Text(c, label).FontSize(12).TextColor(oi.text).Width(width).
-		SingleLine().Ellipsis("…")
+	// OpenIDEA measures every section as one fit-content(45%) column. The
+	// native layout uses the same shared column for all regular form rows;
+	// table headers and compact inline rows use settingsFormLabelDim instead.
+	_ = width
+	width = settingsLabelMaxWidth
+	text := strings.TrimSpace(label)
+	if text != "" && !strings.HasSuffix(text, ":") {
+		text += ":"
+	}
+	ui.Text(c, text).FontSize(12).TextColor(oi.text).Width(width).
+		PaddingStart(settingsSectionIndent).Wrap()
 }
 
 // settingsFormLabelDim is a label whose control this state disables, as
 // OpenIDEA dims Show tabs in when Tab placement is left, right or none.
 func settingsFormLabelDim(c *ui.Context, oi oiColors, label string, width float32) {
-	ui.Text(c, label).FontSize(12).TextColor(oi.textMuted).Width(width).
-		SingleLine().Ellipsis("…")
+	width = min(width, settingsLabelMaxWidth)
+	text := strings.TrimSpace(label)
+	if text != "" && !strings.HasSuffix(text, ":") {
+		text += ":"
+	}
+	ui.Text(c, text).FontSize(12).TextColor(oi.textMuted).Width(width).
+		PaddingStart(settingsSectionIndent).Wrap()
+}
+
+// settingsCheckbox is the shared checkbox row for OpenIDEA's indented section
+// bodies. Page-specific table checkboxes keep their own padding.
+func settingsCheckbox(c *ui.Context, checked *bool, label string) ui.Element {
+	return ui.Checkbox(c, checked, label).
+		MinHeight(settingsToggleRow).PaddingStart(settingsSectionIndent)
 }
 
 // settingsAppearanceBody is Appearance's theme, accessibility, UI and tool
 // window choices. It stages the same switches View › Appearance changes.
 func (m *Model) settingsAppearanceBody(c *ui.Context, oi oiColors) {
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Theme:", 220)
 		shown := "Light"
 		if m.settingsDraft.theme == "dark" {
@@ -589,7 +611,7 @@ func (m *Model) settingsAppearanceBody(c *ui.Context, oi oiColors) {
 			m.settingsSetTheme(strings.ToLower(shown))
 		}
 		switchOn := sync
-		chk := ui.Checkbox(c, &switchOn, "Sync with OS")
+		chk := settingsCheckbox(c, &switchOn, "Sync with OS")
 		if chk.Changed() {
 			if switchOn {
 				m.settingsSetTheme("")
@@ -626,7 +648,7 @@ func (m *Model) settingsAppearanceBody(c *ui.Context, oi oiColors) {
 			})
 		})
 	})
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Accent color:", 220)
 		label := accentLabelOf(m.settingsDraft.accent)
 		labels := make([]string, 0, len(accentChoices))
@@ -640,8 +662,8 @@ func (m *Model) settingsAppearanceBody(c *ui.Context, oi oiColors) {
 	})
 	ui.Row(c).Height(8)
 
-	settingsSectionTitle(c, oi, "Accessibility")
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	m.settingsSectionTitle(c, oi, "Accessibility")
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Zoom:", 220)
 		labels := make([]string, 0, len(ideZoomSteps))
 		for _, zoom := range ideZoomSteps {
@@ -657,27 +679,29 @@ func (m *Model) settingsAppearanceBody(c *ui.Context, oi oiColors) {
 		}
 	})
 	customFont := m.settingsDraft.useCustomFont
-	if ui.Checkbox(c, &customFont, "Use custom font").Changed() {
+	if settingsCheckbox(c, &customFont, "Use custom font").Changed() {
 		m.settingsDraft.useCustomFont = customFont
 		m.settingsPreview()
 	}
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabelDim(c, oi, "UI font:", 220)
 		shown := uiFontFamilyOr(m.settingsDraft.uiFontFamily)
 		choices := settingsUIFontChoices(shown)
-		if ui.Select(c, &shown, choices).Grow(1).Disabled(!customFont).Changed() {
+		if ui.Select(c, &shown, choices).MinWidth(settingsSelectMinWidth).
+			Grow(1).MaxWidth(settingsControlMaxWidth).Disabled(!customFont).Changed() {
 			m.settingsDraft.uiFontFamily = shown
 			m.settingsPreview()
 		}
 	})
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabelDim(c, oi, "Fallback font:", 220)
 		shown := m.settingsDraft.uiFontFallback
 		if shown == "" {
 			shown = "(None)"
 		}
 		choices := append([]string{"(None)"}, settingsUIFontChoices(shown)...)
-		if ui.Select(c, &shown, choices).Grow(1).Disabled(!customFont).Changed() {
+		if ui.Select(c, &shown, choices).MinWidth(settingsSelectMinWidth).
+			Grow(1).MaxWidth(settingsControlMaxWidth).Disabled(!customFont).Changed() {
 			if shown == "(None)" {
 				shown = ""
 			}
@@ -685,39 +709,39 @@ func (m *Model) settingsAppearanceBody(c *ui.Context, oi oiColors) {
 			m.settingsPreview()
 		}
 	})
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabelDim(c, oi, "Size:", 220)
 		size := float64(m.settingsDraft.uiFontSize)
-		if ui.NumberInput(c, &size, 10, 18, 1).Width(100).Disabled(!customFont).Changed() {
+		if ui.NumberInput(c, &size, 10, 18, 1).Width(settingsNumberWidth).Disabled(!customFont).Changed() {
 			m.settingsDraft.uiFontSize = int(math.Round(size))
 			m.settingsPreview()
 		}
 		ui.Text(c, "px").FontSize(12).TextColor(oi.textMuted).SingleLine()
 	})
 	contrast := m.settingsDraft.contrastScrollbars
-	if ui.Checkbox(c, &contrast, "Use contrast scrollbars").Changed() {
+	if settingsCheckbox(c, &contrast, "Use contrast scrollbars").Changed() {
 		m.settingsDraft.contrastScrollbars = contrast
 		m.settingsPreview()
 	}
 	redGreen := m.settingsDraft.redGreenVision
-	if ui.Checkbox(c, &redGreen, "Adjust colors for red-green vision deficiency").Changed() {
+	if settingsCheckbox(c, &redGreen, "Adjust colors for red-green vision deficiency").Changed() {
 		m.settingsDraft.redGreenVision = redGreen
 		m.settingsPreview()
 	}
 	ui.Row(c).Height(8)
 
-	settingsSectionTitle(c, oi, "UI Options")
+	m.settingsSectionTitle(c, oi, "UI Options")
 	showToolbar := m.settingsDraft.showMainToolbar
-	if ui.Checkbox(c, &showToolbar, "Show main toolbar").Changed() {
+	if settingsCheckbox(c, &showToolbar, "Show main toolbar").Changed() {
 		m.settingsDraft.showMainToolbar = showToolbar
 		m.invalidate()
 	}
 	showStatus := m.settingsDraft.showStatusBar
-	if ui.Checkbox(c, &showStatus, "Show status bar").Changed() {
+	if settingsCheckbox(c, &showStatus, "Show status bar").Changed() {
 		m.settingsDraft.showStatusBar = showStatus
 		m.invalidate()
 	}
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Navigation bar:", 220)
 		shown := navigationBarLabel(m.settingsDraft.navigationBar)
 		if ui.Select(c, &shown, []string{"Status Bar", "Top", "Don't Show"}).Changed() {
@@ -726,40 +750,40 @@ func (m *Model) settingsAppearanceBody(c *ui.Context, oi oiColors) {
 		}
 	})
 	compact := m.settingsDraft.compactMode
-	if ui.Checkbox(c, &compact, "Compact Mode").Changed() {
+	if settingsCheckbox(c, &compact, "Compact Mode").Changed() {
 		m.settingsDraft.compactMode = compact
 		m.invalidate()
 	}
 	fullPath := m.settingsDraft.fullPathInTitle
-	if ui.Checkbox(c, &fullPath, "Always show full path in window header").Changed() {
+	if settingsCheckbox(c, &fullPath, "Always show full path in window header").Changed() {
 		m.settingsDraft.fullPathInTitle = fullPath
 	}
 	projectColors := m.settingsDraft.projectColorsInToolbar
-	if ui.Checkbox(c, &projectColors, "Use project colors in main toolbar").Changed() {
+	if settingsCheckbox(c, &projectColors, "Use project colors in main toolbar").Changed() {
 		m.settingsDraft.projectColorsInToolbar = projectColors
 	}
 	differentToolWindowBackground := m.settingsDraft.differentToolWindowBackground
-	if ui.Checkbox(c, &differentToolWindowBackground, "Different tool window background").Changed() {
+	if settingsCheckbox(c, &differentToolWindowBackground, "Different tool window background").Changed() {
 		m.settingsDraft.differentToolWindowBackground = differentToolWindowBackground
 		m.invalidate()
 	}
 	altDnd := m.settingsDraft.dndWithAltOnly
-	if ui.Checkbox(c, &altDnd, "Drag-and-drop with Alt pressed only").Changed() {
+	if settingsCheckbox(c, &altDnd, "Drag-and-drop with Alt pressed only").Changed() {
 		m.settingsDraft.dndWithAltOnly = altDnd
 	}
 	smallIndents := m.settingsDraft.smallTreeIndents
-	if ui.Checkbox(c, &smallIndents, "Use smaller indents in trees").Changed() {
+	if settingsCheckbox(c, &smallIndents, "Use smaller indents in trees").Changed() {
 		m.settingsDraft.smallTreeIndents = smallIndents
 	}
 	menuIcons := m.settingsDraft.menuIcons
-	if ui.Checkbox(c, &menuIcons, "Display icons in menu items").Changed() {
+	if settingsCheckbox(c, &menuIcons, "Display icons in menu items").Changed() {
 		m.settingsDraft.menuIcons = menuIcons
 	}
 	mainMenuAlt := m.settingsDraft.mainMenuAlt
-	if ui.Checkbox(c, &mainMenuAlt, "Open main menu with a lone Alt press").Changed() {
+	if settingsCheckbox(c, &mainMenuAlt, "Open main menu with a lone Alt press").Changed() {
 		m.settingsDraft.mainMenuAlt = mainMenuAlt
 	}
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Main menu:", 220)
 		shown := mainMenuChoiceLabel(m.settingsDraft.mainMenuStyle)
 		if ui.Select(c, &shown, []string{
@@ -770,15 +794,15 @@ func (m *Model) settingsAppearanceBody(c *ui.Context, oi oiColors) {
 	})
 	ui.Row(c).Height(8)
 
-	settingsSectionTitle(c, oi, "Antialiasing")
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	m.settingsSectionTitle(c, oi, "Antialiasing")
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "IDE:", 220)
 		shown := antialiasingLabel(m.settingsDraft.ideAntialiasing)
 		if ui.Select(c, &shown, antialiasingLabels).Width(180).Changed() {
 			m.settingsDraft.ideAntialiasing = antialiasingValue(shown)
 		}
 	})
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Editor:", 220)
 		shown := antialiasingLabel(m.settingsDraft.editorAntialiasing)
 		if ui.Select(c, &shown, antialiasingLabels).Width(180).Changed() {
@@ -787,24 +811,24 @@ func (m *Model) settingsAppearanceBody(c *ui.Context, oi oiColors) {
 	})
 	ui.Row(c).Height(8)
 
-	settingsSectionTitle(c, oi, "Tool Windows")
+	m.settingsSectionTitle(c, oi, "Tool Windows")
 	showBars := m.settingsDraft.showToolWindowBars
-	if ui.Checkbox(c, &showBars, "Show tool window bars").Changed() {
+	if settingsCheckbox(c, &showBars, "Show tool window bars").Changed() {
 		m.settingsDraft.showToolWindowBars = showBars
 		m.invalidate()
 	}
 	showNames := m.settingsDraft.showToolWindowNames
-	if ui.Checkbox(c, &showNames, "Show tool window names").Changed() {
+	if settingsCheckbox(c, &showNames, "Show tool window names").Changed() {
 		m.settingsDraft.showToolWindowNames = showNames
 		m.invalidate()
 	}
 	showBadges := m.settingsDraft.showToolWindowBadges
-	if ui.Checkbox(c, &showBadges, "Show tool window badges").Changed() {
+	if settingsCheckbox(c, &showBadges, "Show tool window badges").Changed() {
 		m.settingsDraft.showToolWindowBadges = showBadges
 		m.invalidate()
 	}
 	widescreen := m.settingsDraft.widescreenToolWindows
-	if ui.Checkbox(c, &widescreen, "Widescreen tool window layout").Changed() {
+	if settingsCheckbox(c, &widescreen, "Widescreen tool window layout").Changed() {
 		m.settingsDraft.widescreenToolWindows = widescreen
 		m.invalidate()
 	}
@@ -901,7 +925,7 @@ func navigationBarValue(label string) string {
 func (m *Model) settingsPreferredThemeRow(
 	c *ui.Context, oi oiColors, dark bool, label string,
 ) {
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, label+":", 300)
 		name := m.settingsDraft.preferredLightTheme
 		if dark {
@@ -921,9 +945,9 @@ func (m *Model) settingsPreferredThemeRow(
 // main weight, fallback and an editable native preview.
 func (m *Model) settingsFontBody(c *ui.Context, oi oiColors) {
 	if m.settingsFontPreview == "" {
-		m.settingsFontPreview = "The quick brown fox jumps over the lazy dog.\n0O 1lI {} () [] -> =>"
+		m.settingsFontPreview = settingsFontPreviewSample
 	}
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Font", 220)
 		family := m.settingsDraft.font.Family
 		if family == "" {
@@ -931,45 +955,48 @@ func (m *Model) settingsFontBody(c *ui.Context, oi oiColors) {
 		}
 		choices := settingsFontFamilyChoices(m.settingsFontMonoOnly, family)
 		shown := family
-		if ui.Select(c, &shown, choices).Grow(1).Changed() {
+		if ui.Select(c, &shown, choices).Width(settingsTextWidth).Changed() {
 			m.settingsSetFontFamily(shown)
 		}
 	})
 	monoOnly := m.settingsFontMonoOnly
-	if ui.Checkbox(c, &monoOnly, "Show only monospaced fonts").Changed() {
+	if settingsCheckbox(c, &monoOnly, "Show only monospaced fonts").Changed() {
 		m.settingsFontMonoOnly = monoOnly
 		m.invalidate()
 	}
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Size:", 220)
 		size := float64(m.settingsDraft.fontSize)
-		in := ui.NumberInput(c, &size, minFontSize, maxFontSize, 1).Width(100)
+		in := ui.NumberInput(c, &size, minFontSize, maxFontSize, 1).Width(settingsNumberWidth)
 		if in.Changed() {
 			m.settingsSetFont(float32(math.Round(size)))
 		}
 		ui.Text(c, "px").FontSize(12).TextColor(oi.textMuted).SingleLine()
-		lineHeight := float64(m.settingsDraft.font.lineHeightPixels(m.settingsDraft.fontSize))
-		lineHeightInput := ui.NumberInput(c, &lineHeight, minFontLineHeight, maxFontLineHeight, 1).Width(92)
-		if lineHeightInput.Changed() {
-			m.settingsSetFontLineHeight(float32(math.Round(lineHeight)))
-		}
-		ui.Text(c, "line height").FontSize(12).TextColor(oi.textMuted).SingleLine()
+		ui.Row(c).Gap(6).AlignItems(ui.Center).PaddingStart(12).Children(func() {
+			ui.Text(c, "Line height").FontSize(12).TextColor(oi.textMuted).SingleLine()
+			lineHeight := float64(m.settingsDraft.font.lineHeightPixels(m.settingsDraft.fontSize))
+			lineHeightInput := ui.NumberInput(c, &lineHeight, minFontLineHeight, maxFontLineHeight, 1).
+				Width(settingsNumberWidth)
+			if lineHeightInput.Changed() {
+				m.settingsSetFontLineHeight(float32(math.Round(lineHeight)))
+			}
+			ui.Text(c, "px").FontSize(12).TextColor(oi.textMuted).SingleLine()
+		})
 	})
 	ligatures := m.settingsDraft.font.Ligatures
-	if ui.Checkbox(c, &ligatures, "Enable ligatures").Changed() {
+	if settingsCheckbox(c, &ligatures, "Enable ligatures").Changed() {
 		m.settingsSetFontLigatures(ligatures)
 	}
 
-	ui.Row(c).Height(10)
-	settingsSectionTitle(c, oi, "Typography Settings")
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	m.settingsSectionTitle(c, oi, "Typography Settings")
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Main font weight:", 220)
 		shown := fontWeightLabel(m.settingsDraft.font.weight())
 		if ui.Select(c, &shown, fontWeightLabels).Width(150).Changed() {
 			m.settingsSetFontWeight(fontWeightValue(shown))
 		}
 	})
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Fallback font:", 220)
 		fallback := m.settingsDraft.font.Fallback
 		shown := fallback
@@ -977,7 +1004,8 @@ func (m *Model) settingsFontBody(c *ui.Context, oi oiColors) {
 			shown = "(None)"
 		}
 		choices := append([]string{"(None)"}, settingsFontFamilyChoices(false, fallback)...)
-		if ui.Select(c, &shown, choices).Grow(1).Changed() {
+		if ui.Select(c, &shown, choices).MinWidth(settingsSelectMinWidth).
+			Grow(1).MaxWidth(settingsControlMaxWidth).Changed() {
 			if shown == "(None)" {
 				shown = ""
 			}
@@ -985,9 +1013,9 @@ func (m *Model) settingsFontBody(c *ui.Context, oi oiColors) {
 		}
 	})
 
-	ui.Row(c).Height(10)
-	settingsSectionTitle(c, oi, "Preview")
-	previewHeight := max(float32(116), m.settingsDraft.font.lineHeightPixels(m.settingsDraft.fontSize)*6)
+	ui.Text(c, "Preview").FontSize(12).Bold().TextColor(oi.textStrong).
+		Padding(18, 0, 6, 0)
+	previewHeight := max(float32(240), m.settingsDraft.font.lineHeightPixels(m.settingsDraft.fontSize)*10)
 	ui.TextArea(c, &m.settingsFontPreview).Height(previewHeight).Grow(1).
 		Font(m.settingsDraft.font.fontFamily()).
 		FontSize(m.settingsDraft.fontSize).
@@ -1021,9 +1049,21 @@ func settingsFontFamilyChoices(monoOnly bool, current string) []string {
 }
 
 var fontWeightLabels = []string{
-	"Thin", "ExtraLight", "Light", "Regular", "Medium",
-	"SemiBold", "Bold", "ExtraBold", "Black",
+	"Thin", "Extra Light", "Light", "Regular", "Medium",
+	"Semi Bold", "Bold", "Extra Bold", "Black",
 }
+
+const settingsFontPreviewSample = `OpenIDEA is a full-featured IDE
+with a high level of usability and outstanding
+advanced code editing and refactoring support.
+
+abcdefghijklmnopqrstuvwxyz 0123456789 (){}[]
+ABCDEFGHIJKLMNOPQRSTUVWXYZ +-*/= .,;:!? #&$%@|^
+
+<!-- -- != := === >= >- >=> |-> -> <$> </> #[ |||> |= ~@
+
+中文字体回退示例 · 日本語 · 한국어
+`
 
 var fontWeightValues = []int{100, 200, 300, 400, 500, 600, 700, 800, 900}
 
@@ -1044,8 +1084,8 @@ func fontWeightValue(label string) int {
 // settingsGeneralBody is Editor › General: Markdown Images, Mouse Control,
 // Scrolling, Soft Wraps, Virtual Space and Save Files in general.tsx's order.
 func (m *Model) settingsGeneralBody(c *ui.Context, oi oiColors) {
-	settingsSectionTitle(c, oi, "Markdown Images")
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	m.settingsSectionTitle(c, oi, "Markdown Images")
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Image folder:", 220)
 		in := ui.TextInput(c, &m.settingsDraft.markdownImageFolder).Grow(1)
 		if in.Changed() {
@@ -1054,7 +1094,7 @@ func (m *Model) settingsGeneralBody(c *ui.Context, oi oiColors) {
 	})
 	ui.Text(c, "Relative to the Markdown file.").
 		FontSize(12).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Image name pattern:", 220)
 		in := ui.TextInput(c, &m.settingsDraft.markdownImageNamePattern).Grow(1)
 		if in.Changed() {
@@ -1065,18 +1105,18 @@ func (m *Model) settingsGeneralBody(c *ui.Context, oi oiColors) {
 		FontSize(12).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
 	ui.Row(c).Height(10)
 
-	settingsSectionTitle(c, oi, "Mouse Control")
+	m.settingsSectionTitle(c, oi, "Mouse Control")
 	wheel := m.settingsDraft.wheelZoom
-	if ui.Checkbox(c, &wheel, "Change font size with Ctrl/Command+Mouse Wheel").Changed() {
+	if settingsCheckbox(c, &wheel, "Change font size with Ctrl/Command+Mouse Wheel").Changed() {
 		m.settingsSetWheelZoom(wheel)
 	}
 	drop := m.settingsDraft.dragAndDrop
-	if ui.Checkbox(c, &drop, "Enable drag-and-drop functionality in editor").Changed() {
+	if settingsCheckbox(c, &drop, "Enable drag-and-drop functionality in editor").Changed() {
 		m.settingsSetDragAndDrop(drop)
 	}
 	ui.Row(c).Height(10)
 
-	settingsSectionTitle(c, oi, "Scrolling")
+	m.settingsSectionTitle(c, oi, "Scrolling")
 	caretScroll := m.settingsDraft.caretScroll
 	ui.RadioGroup(c, func() {
 		ui.Radio(c, &caretScroll, "center", "Keep caret line centered")
@@ -1087,9 +1127,9 @@ func (m *Model) settingsGeneralBody(c *ui.Context, oi oiColors) {
 	}
 	ui.Row(c).Height(10)
 
-	settingsSectionTitle(c, oi, "Soft Wraps")
+	m.settingsSectionTitle(c, oi, "Soft Wraps")
 	wrap := m.settingsDraft.softWrap
-	if ui.Checkbox(c, &wrap, "Soft-wrap files").Changed() {
+	if settingsCheckbox(c, &wrap, "Soft-wrap files").Changed() {
 		m.settingsSetSoftWrap(wrap)
 	}
 	ui.Row(c).MinHeight(28).Gap(8).AlignItems(ui.Center).PaddingStart(20).Children(func() {
@@ -1103,22 +1143,20 @@ func (m *Model) settingsGeneralBody(c *ui.Context, oi oiColors) {
 	ui.Text(c, "Use ; to separate patterns. * matches every file.").
 		FontSize(12).TextColor(oi.textMuted).PaddingStart(20).SingleLine().Ellipsis("…")
 	wrapIndent := m.settingsDraft.softWrapIndent
-	ui.Checkbox(c, &wrapIndent, "Use original line's indent for wrapped parts").
+	settingsCheckbox(c, &wrapIndent, "Use original line's indent for wrapped parts").
 		PaddingStart(20).Disabled(true)
 	settingsUnavailableNote(c, oi, "MyGo always preserves the original line's indent when it wraps.")
-	ui.Row(c).Height(10)
-	settingsSectionTitle(c, oi, "Virtual Space")
+	m.settingsSectionTitle(c, oi, "Virtual Space")
 	end := m.settingsDraft.scrollPastEnd
-	if ui.Checkbox(c, &end, "Show virtual space at file bottom").Changed() {
+	if settingsCheckbox(c, &end, "Show virtual space at file bottom").Changed() {
 		m.settingsSetScrollPastEnd(end)
 	}
-	ui.Row(c).Height(10)
-	settingsSectionTitle(c, oi, "Save Files")
+	m.settingsSectionTitle(c, oi, "Save Files")
 	trim := m.settingsDraft.trimTrailing
-	if ui.Checkbox(c, &trim, "Remove trailing spaces on:").Changed() {
+	if settingsCheckbox(c, &trim, "Remove trailing spaces on:").Changed() {
 		m.settingsSetTrimTrailing(trim)
 	}
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).PaddingStart(20).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).PaddingStart(20).Children(func() {
 		shown := saveTrimLabel(m.settingsDraft.trimAllLines)
 		sel := ui.Select(c, &shown, []string{"Modified lines", "All lines"}).
 			Disabled(!m.settingsDraft.trimTrailing)
@@ -1127,21 +1165,21 @@ func (m *Model) settingsGeneralBody(c *ui.Context, oi oiColors) {
 		}
 	})
 	keep := m.settingsDraft.keepTrailingOnCaretLine
-	check := ui.Checkbox(c, &keep, "Keep trailing spaces on caret line").
+	check := settingsCheckbox(c, &keep, "Keep trailing spaces on caret line").
 		PaddingStart(20).Disabled(!m.settingsDraft.trimTrailing)
 	if check.Changed() {
 		m.settingsSetKeepTrailingOnCaretLine(keep)
 	}
 	blank := m.settingsDraft.dropTrailingBlankLines
-	if ui.Checkbox(c, &blank, "Remove trailing blank lines at the end of saved files").Changed() {
+	if settingsCheckbox(c, &blank, "Remove trailing blank lines at the end of saved files").Changed() {
 		m.settingsSetDropTrailingBlankLines(blank)
 	}
 	final := m.settingsDraft.ensureFinalNewline
-	if ui.Checkbox(c, &final, "Ensure every saved file ends with a line break").Changed() {
+	if settingsCheckbox(c, &final, "Ensure every saved file ends with a line break").Changed() {
 		m.settingsSetEnsureFinalNewline(final)
 	}
 	reformat := m.settingsDraft.reformatOnSave
-	if ui.Checkbox(c, &reformat, "Reformat code on save").Changed() {
+	if settingsCheckbox(c, &reformat, "Reformat code on save").Changed() {
 		m.settingsSetReformatOnSave(reformat)
 	}
 	ui.Text(c, "Runs the language server's formatter before an explicit save.").
@@ -1157,10 +1195,20 @@ func saveTrimLabel(all bool) string {
 	return "Modified lines"
 }
 
-// settingsSectionTitle is a page section's heading, as the dialog draws the
-// titles above groups of rows.
-func settingsSectionTitle(c *ui.Context, oi oiColors, title string) {
-	ui.Text(c, title).FontSize(12).TextColor(oi.textStrong).Padding(0, 0, 6, 0).SingleLine()
+// settingsSectionTitle is OpenIDEA's titled separator: a strong heading with
+// a hairline running to the right, followed by the trouble-free 22 DIP gap
+// the form rows use.
+func (m *Model) settingsSectionTitle(c *ui.Context, oi oiColors, title string) {
+	if m.settingsSectionStarted {
+		ui.Row(c).Height(settingsSectionGap)
+	}
+	m.settingsSectionStarted = true
+	ui.Row(c).Height(settingsSectionTitleRow).Padding(0, 0, settingsSectionTitleGap, 0).
+		Gap(8).AlignItems(ui.Center).
+		Children(func() {
+			ui.Text(c, title).FontSize(12).Bold().TextColor(oi.textStrong).SingleLine()
+			ui.Row(c).Height(1).Grow(1).Background(oi.border)
+		})
 }
 
 func settingsUnavailableNote(c *ui.Context, oi oiColors, text string) {
@@ -1175,7 +1223,7 @@ func (m *Model) settingsEditorAppearanceBody(c *ui.Context, oi oiColors) {
 	caretBlinking := m.settingsDraft.caretBlinking
 	caretPeriod := float64(m.settingsDraft.caretBlinkPeriod)
 	ui.Row(c).MinHeight(28).Gap(8).AlignItems(ui.Center).Children(func() {
-		check := ui.Checkbox(c, &caretBlinking, "Caret blinking (ms):").Disabled(true)
+		check := settingsCheckbox(c, &caretBlinking, "Caret blinking (ms):").Disabled(true)
 		input := ui.NumberInput(c, &caretPeriod, minCaretBlinkPeriod, maxCaretBlinkPeriod, 50).
 			Width(92).
 			Disabled(true)
@@ -1187,11 +1235,11 @@ func (m *Model) settingsEditorAppearanceBody(c *ui.Context, oi oiColors) {
 		}
 	})
 	smoothBlink := m.settingsDraft.smoothCaretBlinking
-	if ui.Checkbox(c, &smoothBlink, "Use smooth caret blinking").Disabled(true).Changed() {
+	if settingsCheckbox(c, &smoothBlink, "Use smooth caret blinking").Disabled(true).Changed() {
 		m.settingsSetSmoothCaretBlinking(smoothBlink)
 	}
 	blockCaret := m.settingsDraft.blockCaret
-	if ui.Checkbox(c, &blockCaret, "Use block caret").Changed() {
+	if settingsCheckbox(c, &blockCaret, "Use block caret").Changed() {
 		m.settingsSetBlockCaret(blockCaret)
 	}
 	smoothMovement := m.settingsDraft.smoothCaretMovement
@@ -1200,7 +1248,7 @@ func (m *Model) settingsEditorAppearanceBody(c *ui.Context, oi oiColors) {
 		movementStyle = "Gliding"
 	}
 	ui.Row(c).MinHeight(28).Gap(8).AlignItems(ui.Center).Children(func() {
-		check := ui.Checkbox(c, &smoothMovement, "Use smooth caret movement").Disabled(true)
+		check := settingsCheckbox(c, &smoothMovement, "Use smooth caret movement").Disabled(true)
 		sel := ui.Select(c, &movementStyle, []string{"Snappy", "Gliding"}).
 			Width(112).
 			Disabled(true)
@@ -1213,7 +1261,7 @@ func (m *Model) settingsEditorAppearanceBody(c *ui.Context, oi oiColors) {
 	})
 	settingsUnavailableNote(c, oi, "MyGo renders caret timing and motion from its native editor profile.")
 	hardWrapGuides := m.settingsDraft.hardWrapGuides
-	if ui.Checkbox(c, &hardWrapGuides, "Show hard wrap and visual guides (configured in Code Style options)").Changed() {
+	if settingsCheckbox(c, &hardWrapGuides, "Show hard wrap and visual guides (configured in Code Style options)").Changed() {
 		m.settingsSetHardWrapGuides(hardWrapGuides)
 	}
 	lineNumbers := m.settingsDraft.lineNumbers
@@ -1225,7 +1273,7 @@ func (m *Model) settingsEditorAppearanceBody(c *ui.Context, oi oiColors) {
 		lineNumberMode = "Hybrid"
 	}
 	ui.Row(c).MinHeight(28).Gap(8).AlignItems(ui.Center).Children(func() {
-		check := ui.Checkbox(c, &lineNumbers, "Show line numbers")
+		check := settingsCheckbox(c, &lineNumbers, "Show line numbers")
 		shown := "Absolute"
 		shown = lineNumberMode
 		sel := ui.Select(c, &shown, []string{"Absolute", "Relative", "Hybrid"}).
@@ -1239,21 +1287,21 @@ func (m *Model) settingsEditorAppearanceBody(c *ui.Context, oi oiColors) {
 		}
 	})
 	methodSeparators := m.settingsDraft.methodSeparators
-	if ui.Checkbox(c, &methodSeparators, "Show method separators").Disabled(true).Changed() {
+	if settingsCheckbox(c, &methodSeparators, "Show method separators").Disabled(true).Changed() {
 		m.settingsSetMethodSeparators(methodSeparators)
 	}
 	settingsUnavailableNote(c, oi, "MyGo does not expose method-separator decoration ranges.")
 	showWhitespace := m.settingsDraft.showWhitespace
-	if ui.Checkbox(c, &showWhitespace, "Show whitespaces").Changed() {
+	if settingsCheckbox(c, &showWhitespace, "Show whitespaces").Changed() {
 		m.settingsSetShowWhitespace(showWhitespace)
 	}
 	ui.Row(c).Gap(14).PaddingStart(20).Children(func() {
 		leading := m.settingsDraft.whitespaceLeading
 		inner := m.settingsDraft.whitespaceInner
 		trailing := m.settingsDraft.whitespaceTrailing
-		leadingCheck := ui.Checkbox(c, &leading, "Leading").Disabled(true)
-		innerCheck := ui.Checkbox(c, &inner, "Inner").Disabled(true)
-		trailingCheck := ui.Checkbox(c, &trailing, "Trailing").Disabled(!showWhitespace)
+		leadingCheck := settingsCheckbox(c, &leading, "Leading").Disabled(true)
+		innerCheck := settingsCheckbox(c, &inner, "Inner").Disabled(true)
+		trailingCheck := settingsCheckbox(c, &trailing, "Trailing").Disabled(!showWhitespace)
 		if leadingCheck.Changed() {
 			m.settingsSetWhitespaceParts(leading, inner, trailing)
 		}
@@ -1266,29 +1314,29 @@ func (m *Model) settingsEditorAppearanceBody(c *ui.Context, oi oiColors) {
 	})
 	settingsUnavailableNote(c, oi, "MyGo exposes all, trailing or selection whitespace; leading and inner need finer spans.")
 	indentGuides := m.settingsDraft.indentGuides
-	if ui.Checkbox(c, &indentGuides, "Show indent guides").Changed() {
+	if settingsCheckbox(c, &indentGuides, "Show indent guides").Changed() {
 		m.settingsSetIndentGuides(indentGuides)
 	}
 	rainbow := m.settingsDraft.rainbowIndentGuides
-	if ui.Checkbox(c, &rainbow, "Rainbow indent guides").
+	if settingsCheckbox(c, &rainbow, "Rainbow indent guides").
 		PaddingStart(20).
 		Disabled(true).
 		Changed() {
 		m.settingsSetRainbowIndentGuides(rainbow)
 	}
 	intentionBulb := m.settingsDraft.intentionBulb
-	if ui.Checkbox(c, &intentionBulb, "Show intention bulb").Disabled(true).Changed() {
+	if settingsCheckbox(c, &intentionBulb, "Show intention bulb").Disabled(true).Changed() {
 		m.settingsSetIntentionBulb(intentionBulb)
 	}
 	settingsUnavailableNote(c, oi, "Rainbow guide colors and the intention bulb need native editor decoration hooks.")
 	renderDocs := m.settingsDraft.renderDocComments
-	if ui.Checkbox(c, &renderDocs, "Render documentation comments").Changed() {
+	if settingsCheckbox(c, &renderDocs, "Render documentation comments").Changed() {
 		m.settingsSetRenderDocComments(renderDocs)
 	}
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Distraction free mode text width:", 260)
 		width := float64(m.settingsDraft.zenWidth)
-		in := ui.NumberInput(c, &width, minZenWidth, maxZenWidth, 1).Width(100)
+		in := ui.NumberInput(c, &width, minZenWidth, maxZenWidth, 1).Width(settingsNumberWidth)
 		if in.Changed() {
 			m.settingsSetZenWidth(int(math.Round(width)))
 		}
@@ -1300,7 +1348,7 @@ func (m *Model) settingsEditorAppearanceBody(c *ui.Context, oi oiColors) {
 // breadcrumbs switch, Top / Bottom placement and MyGo's language chooser.
 func (m *Model) settingsBreadcrumbsBody(c *ui.Context, oi oiColors) {
 	show := m.settingsDraft.showBreadcrumbs
-	if ui.Checkbox(c, &show, "Show breadcrumbs:").Changed() {
+	if settingsCheckbox(c, &show, "Show breadcrumbs:").Changed() {
 		m.settingsSetShowBreadcrumbs(show)
 	}
 	place := m.settingsDraft.breadcrumbPlacement
@@ -1311,7 +1359,7 @@ func (m *Model) settingsBreadcrumbsBody(c *ui.Context, oi oiColors) {
 	if place != m.settingsDraft.breadcrumbPlacement {
 		m.settingsSetBreadcrumbPlacement(place)
 	}
-	ui.Row(c).MinHeight(28).Gap(8).AlignItems(ui.Center).PaddingStart(20).Children(func() {
+	ui.Row(c).MinHeight(28).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Show breadcrumbs for:", 180)
 	})
 	languages := m.settingsBreadcrumbLanguages()
@@ -1326,7 +1374,7 @@ func (m *Model) settingsBreadcrumbsBody(c *ui.Context, oi oiColors) {
 			for _, language := range languages[i:end] {
 				language := language
 				on := !slices.Contains(m.settingsDraft.breadcrumbDisabled, language)
-				check := ui.Checkbox(c, &on, languageDisplayName(language)).
+				check := settingsCheckbox(c, &on, languageDisplayName(language)).
 					Disabled(!m.settingsDraft.showBreadcrumbs)
 				if check.Changed() {
 					m.settingsToggleBreadcrumbLanguage(language)
@@ -1378,11 +1426,12 @@ func languageDisplayName(language string) string {
 // preview tab, the closing limit and the tab a close activates, in
 // general.tsx's order.
 func (m *Model) settingsEditorTabsBody(c *ui.Context, oi oiColors) {
-	settingsSectionTitle(c, oi, "Appearance")
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).PaddingStart(20).Children(func() {
+	m.settingsSectionTitle(c, oi, "Appearance")
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Tab placement", 220)
 		shown := tabPlacementLabel(m.settingsDraft.tabPlacement)
-		sel := ui.Select(c, &shown, []string{"Top", "Bottom", "Left", "Right", "None"})
+		sel := ui.Select(c, &shown, []string{"Top", "Bottom", "Left", "Right", "None"}).
+			MinWidth(settingsSelectMinWidth).MaxWidth(settingsControlMaxWidth)
 		if sel.Changed() {
 			m.settingsSetTabPlacement(tabPlacementValue(shown))
 		}
@@ -1391,7 +1440,7 @@ func (m *Model) settingsEditorTabsBody(c *ui.Context, oi oiColors) {
 	// OpenIDEA, so Show tabs in does not apply to it.
 	overflowOff := m.settingsDraft.tabPlacement == "left" ||
 		m.settingsDraft.tabPlacement == "right" || m.settingsDraft.tabPlacement == "none"
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).PaddingStart(20).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).PaddingStart(20).Children(func() {
 		if overflowOff {
 			settingsFormLabelDim(c, oi, "Show tabs in:", 220)
 		} else {
@@ -1415,56 +1464,54 @@ func (m *Model) settingsEditorTabsBody(c *ui.Context, oi oiColors) {
 		m.settingsSetSqueezeTabs(squeeze)
 	}
 	pinnedRow := m.settingsDraft.pinnedSeparateRow
-	if ui.Checkbox(c, &pinnedRow, "Show pinned tabs in a separate row").Changed() {
+	if settingsCheckbox(c, &pinnedRow, "Show pinned tabs in a separate row").Changed() {
 		m.settingsSetPinnedSeparateRow(pinnedRow)
 	}
 	fileIcon := m.settingsDraft.showFileIcon
-	if ui.Checkbox(c, &fileIcon, "Show file icon").Changed() {
+	if settingsCheckbox(c, &fileIcon, "Show file icon").Changed() {
 		m.settingsSetShowFileIcon(fileIcon)
 	}
 	extension := m.settingsDraft.showExtension
-	if ui.Checkbox(c, &extension, "Show file extension").Changed() {
+	if settingsCheckbox(c, &extension, "Show file extension").Changed() {
 		m.settingsSetShowExtension(extension)
 	}
 	directory := m.settingsDraft.showDirectoryForNonUnique
-	if ui.Checkbox(c, &directory, "Show directory for non-unique file names").Changed() {
+	if settingsCheckbox(c, &directory, "Show directory for non-unique file names").Changed() {
 		m.settingsSetShowDirectoryForNonUnique(directory)
 	}
 	modified := m.settingsDraft.markModified
-	if ui.Checkbox(c, &modified, "Mark modified (*)").Changed() {
+	if settingsCheckbox(c, &modified, "Mark modified (*)").Changed() {
 		m.settingsSetMarkModified(modified)
 	}
 	fullPath := m.settingsDraft.showFullPathOnHover
-	if ui.Checkbox(c, &fullPath, "Show full path on mouse hover").Changed() {
+	if settingsCheckbox(c, &fullPath, "Show full path on mouse hover").Changed() {
 		m.settingsSetShowFullPathOnHover(fullPath)
 	}
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).PaddingStart(20).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Close button position:", 220)
 		shown := closePositionLabel(m.settingsDraft.closePosition)
-		sel := ui.Select(c, &shown, []string{"Right", "Left", "None"})
+		sel := ui.Select(c, &shown, []string{"Right", "Left", "None"}).
+			MinWidth(settingsSelectMinWidth).MaxWidth(settingsControlMaxWidth)
 		if sel.Changed() {
 			m.settingsSetClosePosition(closePositionValue(shown))
 		}
 	})
-	ui.Row(c).Height(10)
-	settingsSectionTitle(c, oi, "Tab Order")
+	m.settingsSectionTitle(c, oi, "Tab Order")
 	sortTabs := m.settingsDraft.sortAlphabetically
-	if ui.Checkbox(c, &sortTabs, "Sort tabs alphabetically").Changed() {
+	if settingsCheckbox(c, &sortTabs, "Sort tabs alphabetically").Changed() {
 		m.settingsSetSortTabs(sortTabs)
 	}
 	atEnd := m.settingsDraft.openAtEnd
-	if ui.Checkbox(c, &atEnd, "Open new tabs at the end").Changed() {
+	if settingsCheckbox(c, &atEnd, "Open new tabs at the end").Changed() {
 		m.settingsSetOpenAtEnd(atEnd)
 	}
-	ui.Row(c).Height(10)
-	settingsSectionTitle(c, oi, "Opening Policy")
+	m.settingsSectionTitle(c, oi, "Opening Policy")
 	previewTab := !m.settingsDraft.noPreviewTab
-	if ui.Checkbox(c, &previewTab, "Enable preview tab").Changed() {
+	if settingsCheckbox(c, &previewTab, "Enable preview tab").Changed() {
 		m.settingsSetNoPreviewTab(!previewTab)
 	}
-	ui.Row(c).Height(10)
-	settingsSectionTitle(c, oi, "Closing Policy")
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).PaddingStart(20).Children(func() {
+	m.settingsSectionTitle(c, oi, "Closing Policy")
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "When the limit is reached", 220)
 		shown := "Close least recently used tabs"
 		if m.settingsDraft.tabClosingPolicy == "unchanged" {
@@ -1473,7 +1520,7 @@ func (m *Model) settingsEditorTabsBody(c *ui.Context, oi oiColors) {
 		sel := ui.Select(c, &shown, []string{
 			"Close unchanged tabs first",
 			"Close least recently used tabs",
-		})
+		}).MinWidth(settingsSelectMinWidth).MaxWidth(settingsControlMaxWidth)
 		if sel.Changed() {
 			if shown == "Close unchanged tabs first" {
 				m.settingsSetTabClosingPolicy("unchanged")
@@ -1482,15 +1529,15 @@ func (m *Model) settingsEditorTabsBody(c *ui.Context, oi oiColors) {
 			}
 		}
 	})
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).PaddingStart(20).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Tab limit", 220)
 		limit := float64(m.settingsDraft.tabLimit)
-		in := ui.NumberInput(c, &limit, 1, maxTabLimit, 1).Width(100)
+		in := ui.NumberInput(c, &limit, 1, maxTabLimit, 1).Width(settingsNumberWidth)
 		if in.Changed() {
 			m.settingsSetTabLimit(int(math.Round(limit)))
 		}
 	})
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).PaddingStart(20).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "When the current tab is closed, activate", 220)
 	})
 	activate := m.settingsDraft.activateOnClose
@@ -1564,19 +1611,18 @@ func closePositionValue(label string) string {
 // choices remain visible and disabled with the actual renderer limitation.
 func (m *Model) settingsCodeFoldingBody(c *ui.Context, oi oiColors) {
 	folding := m.settingsDraft.showFolding
-	if ui.Checkbox(c, &folding, "Show code folding outline").Changed() {
+	if settingsCheckbox(c, &folding, "Show code folding outline").Changed() {
 		m.settingsSetShowFolding(folding)
 	}
-	ui.Row(c).Height(10)
-	settingsSectionTitle(c, oi, "Fold by default")
+	m.settingsSectionTitle(c, oi, "Fold by default")
 	fileHeader := true
-	ui.Checkbox(c, &fileHeader, "File header").Disabled(true).PaddingStart(20)
+	settingsCheckbox(c, &fileHeader, "File header").Disabled(true).PaddingStart(20)
 	foldImports := m.settingsDraft.foldImports
-	if ui.Checkbox(c, &foldImports, "Imports").Disabled(!folding).PaddingStart(20).Changed() {
+	if settingsCheckbox(c, &foldImports, "Imports").Disabled(!folding).PaddingStart(20).Changed() {
 		m.settingsSetFoldImports(foldImports)
 	}
 	docComments := false
-	ui.Checkbox(c, &docComments, "Documentation comments").Disabled(true).PaddingStart(20)
+	settingsCheckbox(c, &docComments, "Documentation comments").Disabled(true).PaddingStart(20)
 	ui.Text(c, "File headers and documentation comments need syntax-tree fold ranges from MyGo.").
 		FontSize(11).TextColor(oi.textMuted).PaddingStart(20).SingleLine().Ellipsis("…")
 }
@@ -1586,13 +1632,13 @@ func (m *Model) settingsCodeFoldingBody(c *ui.Context, oi oiColors) {
 // "no usages" choice. The global hint switches for types, parameters and other
 // hints are not drawn yet because the server returns them as one list.
 func (m *Model) settingsInlayHintsBody(c *ui.Context, oi oiColors) {
-	settingsSectionTitle(c, oi, "Code Vision")
+	m.settingsSectionTitle(c, oi, "Code Vision")
 	usages := m.settingsDraft.codeVisionUsages
-	if ui.Checkbox(c, &usages, "Usages").Changed() {
+	if settingsCheckbox(c, &usages, "Usages").Changed() {
 		m.settingsDraft.codeVisionUsages = usages
 		m.invalidate()
 	}
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).PaddingStart(20).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).PaddingStart(20).Children(func() {
 		if m.settingsDraft.codeVisionUsages {
 			settingsFormLabel(c, oi, "Position", 180)
 		} else {
@@ -1607,18 +1653,18 @@ func (m *Model) settingsInlayHintsBody(c *ui.Context, oi oiColors) {
 		}
 	})
 	noUsages := m.settingsDraft.codeVisionNoUsages
-	check := ui.Checkbox(c, &noUsages, "Show “no usages”").
+	check := settingsCheckbox(c, &noUsages, "Show “no usages”").
 		Disabled(!m.settingsDraft.codeVisionUsages)
 	if check.Changed() {
 		m.settingsDraft.codeVisionNoUsages = noUsages
 		m.invalidate()
 	}
 	author := m.settingsDraft.codeVisionAuthor
-	if ui.Checkbox(c, &author, "Code author").Changed() {
+	if settingsCheckbox(c, &author, "Code author").Changed() {
 		m.settingsDraft.codeVisionAuthor = author
 		m.invalidate()
 	}
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).PaddingStart(20).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).PaddingStart(20).Children(func() {
 		if m.settingsDraft.codeVisionAuthor {
 			settingsFormLabel(c, oi, "Position", 180)
 		} else {
@@ -1797,11 +1843,11 @@ func todoToneOf(tone string, oi oiColors) ui.Color {
 // TodoSettingsPage.tsx draws them.
 func (m *Model) settingsTodoBody(c *ui.Context, oi oiColors) {
 	caseOn := m.settingsDraft.todoCaseSensitive
-	if ui.Checkbox(c, &caseOn, "Case sensitive").Changed() {
+	if settingsCheckbox(c, &caseOn, "Case sensitive").Changed() {
 		m.settingsSetTodoCase(caseOn)
 	}
 	comments := m.settingsDraft.todoCommentsOnly
-	if ui.Checkbox(c, &comments, "Only in comments").Changed() {
+	if settingsCheckbox(c, &comments, "Only in comments").Changed() {
 		m.settingsSetTodoComments(comments)
 	}
 	ui.Row(c).Height(10)
@@ -1819,7 +1865,7 @@ func (m *Model) settingsTodoBody(c *ui.Context, oi oiColors) {
 		ui.Row(c.Key(fmt.Sprintf("settings:todo:%d", i))).MinHeight(28).Gap(8).
 			AlignItems(ui.Center).PaddingStart(20).Children(func() {
 			enabled := m.settingsDraft.todoPatterns[i].Enabled
-			if ui.Checkbox(c, &enabled, "").Changed() {
+			if settingsCheckbox(c, &enabled, "").Changed() {
 				m.settingsSetTodoEnabled(i, enabled)
 			}
 			keyword := m.settingsDraft.todoPatterns[i].Keyword
@@ -1865,11 +1911,11 @@ func (m *Model) settingsPageSummary() []string {
 // notificationPrefs() reads them.
 func (m *Model) settingsNotificationsBody(c *ui.Context, oi oiColors) {
 	balloons := m.settingsDraft.notifyBalloons
-	if ui.Checkbox(c, &balloons, "Display balloon notifications").Changed() {
+	if settingsCheckbox(c, &balloons, "Display balloon notifications").Changed() {
 		m.settingsDraft.notifyBalloons = balloons
 	}
 	sound := m.settingsDraft.notifySound
-	if ui.Checkbox(c, &sound, "Play sound").Changed() {
+	if settingsCheckbox(c, &sound, "Play sound").Changed() {
 		m.settingsDraft.notifySound = sound
 	}
 	choices := []struct{ id, label string }{
@@ -1912,7 +1958,7 @@ func (m *Model) settingsNotificationsBody(c *ui.Context, oi oiColors) {
 				})
 			}
 			log := !prefs.NoLog
-			if ui.Checkbox(c, &log, "Log").Changed() {
+			if settingsCheckbox(c, &log, "Log").Changed() {
 				p := m.settingsDraft.notifyGroups[g.id]
 				p.NoLog = !log
 				m.settingsDraft.notifyGroups[g.id] = p

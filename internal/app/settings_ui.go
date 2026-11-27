@@ -51,6 +51,10 @@ func (m *Model) openSettingsPage(page string, newProjects bool) {
 	m.settingsPage = page
 	m.settingsQuery = ""
 	m.settingsErr = ""
+	m.settingsSide = 0
+	m.settingsOffsetX = 0
+	m.settingsOffsetY = 0
+	m.settingsSectionStarted = false
 	m.settingsCollapsed = map[string]bool{}
 	m.settingsDraft = m.settingsDraftFromPrefs()
 	m.settingsDraft.newProjects = newProjects
@@ -108,6 +112,9 @@ func (m *Model) closeSettings() {
 	m.settingsCollapsed = nil
 	m.settingsErr = ""
 	m.settingsThemePrefs = false
+	m.settingsOffsetX = 0
+	m.settingsOffsetY = 0
+	m.settingsSectionStarted = false
 	m.applyPreferences()
 	m.resetJavaSettingsSession()
 	m.resetLanguageSDKSession()

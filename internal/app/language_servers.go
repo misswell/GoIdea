@@ -2054,7 +2054,7 @@ func (m *Model) settingsLanguageServersBody(c *ui.Context, p *ui.Theme, oi oiCol
 		ui.Text(c, m.toolsErr).FontSize(12).TextColor(p.Danger).MaxWidth(760)
 	}
 	if m.toolsBusy != "" {
-		ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+		ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 			text := m.toolsBusy
 			if m.toolsProgress != "" {
 				text += " · " + m.toolsProgress
@@ -2141,7 +2141,7 @@ func (m *Model) languageToolDetails(c *ui.Context, p *ui.Theme, oi oiColors, too
 	state := &m.languageToolSettings
 	entry := state.draft[tool.Name]
 	custom := isCustomLanguageServer(entry)
-	settingsSectionTitle(c, oi, tool.Display)
+	m.settingsSectionTitle(c, oi, tool.Display)
 	ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 		badge := languageToolStatusLabel(tool.Status)
 		color := oi.success
@@ -2206,7 +2206,7 @@ func (m *Model) languageToolDetails(c *ui.Context, p *ui.Theme, oi oiColors, too
 		if languages != "" {
 			label += " for " + languages + " files"
 		}
-		if ui.Checkbox(c, &enabled, label).Changed() {
+		if settingsCheckbox(c, &enabled, label).Changed() {
 			m.stageLanguageToolEnabled(tool.Name, enabled)
 		}
 	} else {
@@ -2215,9 +2215,9 @@ func (m *Model) languageToolDetails(c *ui.Context, p *ui.Theme, oi oiColors, too
 		}
 	}
 
-	settingsSectionTitle(c, oi, "Executable")
+	m.settingsSectionTitle(c, oi, "Executable")
 	editor := m.languageToolEditor(tool.Name)
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		label := "Path"
 		if custom {
 			label = "Command"
@@ -2225,12 +2225,14 @@ func (m *Model) languageToolDetails(c *ui.Context, p *ui.Theme, oi oiColors, too
 		settingsFormLabel(c, oi, label, 150)
 		var input ui.Element
 		if custom {
-			input = ui.TextInput(c, &editor.Command).Grow(1).Font("monospace")
+			input = ui.TextInput(c, &editor.Command).Grow(1).MaxWidth(settingsPathMaxWidth).
+				Font("monospace")
 			if input.Changed() {
 				m.stageLanguageToolCommand(tool.Name, editor.Command)
 			}
 		} else {
-			input = ui.TextInput(c, &editor.Path).Grow(1).Font("monospace")
+			input = ui.TextInput(c, &editor.Path).Grow(1).MaxWidth(settingsPathMaxWidth).
+				Font("monospace")
 			if input.Changed() {
 				m.stageLanguageToolPath(tool.Name, tool.Command, editor.Path)
 			}
@@ -2245,16 +2247,18 @@ func (m *Model) languageToolDetails(c *ui.Context, p *ui.Theme, oi oiColors, too
 		})
 	})
 	if custom {
-		ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+		ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 			settingsFormLabel(c, oi, "Languages", 150)
-			in := ui.TextInput(c, &editor.Languages).Grow(1).Placeholder("java, kotlin")
+			in := ui.TextInput(c, &editor.Languages).Grow(1).MaxWidth(settingsControlMaxWidth).
+				Placeholder("java, kotlin")
 			if in.Changed() {
 				m.stageLanguageToolList(tool.Name, "languages", editor.Languages)
 			}
 		})
-		ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+		ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 			settingsFormLabel(c, oi, "Root markers", 150)
-			in := ui.TextInput(c, &editor.RootMarkers).Grow(1).Placeholder("pyproject.toml, .git")
+			in := ui.TextInput(c, &editor.RootMarkers).Grow(1).MaxWidth(settingsControlMaxWidth).
+				Placeholder("pyproject.toml, .git")
 			if in.Changed() {
 				m.stageLanguageToolList(tool.Name, "rootMarkers", editor.RootMarkers)
 			}
@@ -2263,7 +2267,7 @@ func (m *Model) languageToolDetails(c *ui.Context, p *ui.Theme, oi oiColors, too
 			TextColor(oi.textMuted).PaddingStart(158).SingleLine().Ellipsis("…")
 	}
 
-	settingsSectionTitle(c, oi, "Startup")
+	m.settingsSectionTitle(c, oi, "Startup")
 	ui.Text(c, "Changing these restarts the server.").FontSize(11).TextColor(oi.textMuted).
 		SingleLine().Ellipsis("…")
 	m.languageToolTextRow(c, oi, "Arguments", tool.Name, "args", &editor.Args,
@@ -2280,7 +2284,7 @@ func (m *Model) languageToolDetails(c *ui.Context, p *ui.Theme, oi oiColors, too
 	m.languageToolTextRow(c, oi, "Initialization options", tool.Name, "initializationOptions",
 		&editor.InitializationOptions, placeholder, true)
 
-	settingsSectionTitle(c, oi, "Workspace Configuration")
+	m.settingsSectionTitle(c, oi, "Workspace Configuration")
 	ui.Text(c, "Sent to the running server; no restart needed.").FontSize(11).TextColor(oi.textMuted).
 		SingleLine().Ellipsis("…")
 	m.languageToolTextRow(c, oi, "Settings", tool.Name, "settings", &editor.Settings,
@@ -2300,17 +2304,19 @@ func (m *Model) languageToolTextRow(
 	placeholder string,
 	multiline bool,
 ) {
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, label, 150)
 		if multiline {
-			in := ui.TextArea(c, value).Grow(1).Height(86).Font("monospace").
+			in := ui.TextArea(c, value).Grow(1).MaxWidth(settingsPathMaxWidth).Height(86).
+				Font("monospace").
 				Placeholder(placeholder)
 			if in.Changed() {
 				m.stageLanguageToolJSON(name, field, *value)
 			}
 			return
 		}
-		in := ui.TextInput(c, value).Grow(1).Placeholder(placeholder)
+		in := ui.TextInput(c, value).Grow(1).MaxWidth(settingsPathMaxWidth).
+			Placeholder(placeholder)
 		if in.Changed() {
 			if field == "env" {
 				m.stageLanguageToolEnv(name, *value)
@@ -2383,7 +2389,7 @@ func (m *Model) languageToolAlternativesRow(c *ui.Context, oi oiColors, names []
 		shown = "Custom combination"
 		labels = append([]string{"Custom combination"}, labels...)
 	}
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Language server", 150)
 		sel := ui.Select(c, &shown, labels).Width(260)
 		if sel.Changed() {

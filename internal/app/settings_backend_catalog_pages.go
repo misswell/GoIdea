@@ -12,7 +12,11 @@ import (
 
 func settingsBackendStatus(c *ui.Context, oi oiColors, loading bool, errText, noun string, retry func()) {
 	if loading {
-		ui.Text(c, "Loading "+noun+"…").FontSize(12).TextColor(oi.textMuted).SingleLine()
+		ui.Row(c).Height(settingsFormRow).PaddingStart(settingsSectionIndent).
+			Gap(6).AlignItems(ui.Center).Children(func() {
+			ui.Spinner(c).Size(12, 12).TextColor(oi.textMuted).Label("Loading " + noun)
+			ui.Text(c, "Loading "+noun+"…").FontSize(12).TextColor(oi.textMuted).SingleLine()
+		})
 		return
 	}
 	if errText == "" {
@@ -31,7 +35,11 @@ func settingsBackendScopeText(c *ui.Context, oi oiColors, scope string) {
 	} else if scope == "mixed" {
 		where = "this project and the application"
 	}
-	ui.Text(c, "Stored in "+where+".").FontSize(12).TextColor(oi.textMuted).SingleLine()
+	ui.Row(c).Height(26).Padding(0, settingsSectionIndent, 6, 0).
+		Gap(6).AlignItems(ui.Center).Children(func() {
+		oiIconEl(c, "status/info", 14, oi, oi.textSubtle)
+		ui.Text(c, "Stored in "+where+".").FontSize(12).TextColor(oi.textMuted).SingleLine()
+	})
 }
 
 func settingsEditableStringList(
@@ -47,7 +55,7 @@ func settingsEditableStringList(
 	}
 	for i := range values {
 		i := i
-		ui.Row(c).MinHeight(30).Gap(6).AlignItems(ui.Center).Children(func() {
+		ui.Row(c).MinHeight(settingsFormRow).Gap(6).AlignItems(ui.Center).Children(func() {
 			ui.TextInput(c, &values[i]).Grow(1).Placeholder(placeholder)
 			ui.Button(c, "Remove").Width(72).OnClick(func() { remove(i) })
 		})
@@ -62,10 +70,11 @@ func (m *Model) settingsFileTypesBody(c *ui.Context, oi oiColors) {
 		return
 	}
 
-	settingsSectionTitle(c, oi, "Recognized File Types")
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
-		settingsFormLabel(c, oi, "Filter file types", 150)
-		ui.TextInput(c, &state.filter).Grow(1).Placeholder("Name or pattern")
+	m.settingsSectionTitle(c, oi, "Recognized File Types")
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
+		settingsFormLabel(c, oi, "Filter file types", settingsLabelMaxWidth)
+		ui.TextInput(c, &state.filter).Grow(1).MaxWidth(settingsControlMaxWidth).
+			Placeholder("Name or pattern")
 	})
 	filtered := m.filteredFileTypeLanguages()
 	if len(filtered) == 0 {
@@ -80,9 +89,10 @@ func (m *Model) settingsFileTypesBody(c *ui.Context, oi oiColors) {
 			selectedLabel = labels[i]
 		}
 	}
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
-		settingsFormLabel(c, oi, "File type", 150)
-		if ui.Select(c, &selectedLabel, labels).Grow(1).Changed() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
+		settingsFormLabel(c, oi, "File type", settingsLabelMaxWidth)
+		if ui.Select(c, &selectedLabel, labels).MinWidth(settingsSelectMinWidth).
+			Grow(1).MaxWidth(settingsControlMaxWidth).Changed() {
 			for i, label := range labels {
 				if label == selectedLabel {
 					state.selected = filtered[i].ID
@@ -111,7 +121,7 @@ func (m *Model) settingsFileTypesBody(c *ui.Context, oi oiColors) {
 			})
 		})
 	}
-	ui.Row(c).MinHeight(30).Gap(6).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(6).AlignItems(ui.Center).Children(func() {
 		ui.TextInput(c, &state.patternDraft).Grow(1).Placeholder("*.ext")
 		ui.Button(c, "Add").Width(56).OnClick(func() {
 			fileTypesAddPattern(&state.draft, state.languages, language.ID, state.patternDraft)
@@ -126,7 +136,7 @@ func (m *Model) settingsFileTypesBody(c *ui.Context, oi oiColors) {
 	settingsEditableStringList(c, oi, assoc.Hashbangs, "interpreter", func(index int) {
 		m.removeFileTypeHashbang(language.ID, index)
 	})
-	ui.Row(c).MinHeight(30).Gap(6).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(6).AlignItems(ui.Center).Children(func() {
 		ui.TextInput(c, &state.hashbangDraft).Grow(1).Placeholder("node")
 		ui.Button(c, "Add").Width(56).OnClick(func() { m.addFileTypeHashbang(language.ID) })
 	})
@@ -135,8 +145,7 @@ func (m *Model) settingsFileTypesBody(c *ui.Context, oi oiColors) {
 			FontSize(11).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
 	}
 
-	ui.Row(c).Height(12)
-	settingsSectionTitle(c, oi, "Files opened in associated applications")
+	m.settingsSectionTitle(c, oi, "Files opened in associated applications")
 	ui.Text(c, "Files matching these patterns open in the system application instead of an editor.").
 		FontSize(12).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
 	settingsEditableStringList(c, oi, state.draft.AssociatedApplications, "*.xlsx", func(index int) {
@@ -146,13 +155,13 @@ func (m *Model) settingsFileTypesBody(c *ui.Context, oi oiColors) {
 			m.invalidate()
 		}
 	})
-	ui.Row(c).MinHeight(30).Gap(6).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(6).AlignItems(ui.Center).Children(func() {
 		ui.TextInput(c, &state.associatedDraft).Grow(1).Placeholder("*.xlsx")
 		ui.Button(c, "Add").Width(56).OnClick(func() { m.addAssociatedApplication() })
 	})
 
 	ui.Row(c).Height(14)
-	settingsSectionTitle(c, oi, "Override File Type")
+	m.settingsSectionTitle(c, oi, "Override File Type")
 	ui.Text(c, "Override the language of one project-relative or absolute file.").
 		FontSize(12).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
 	overrides := m.fileTypeOverrideEntries()
@@ -176,7 +185,7 @@ func (m *Model) settingsFileTypesBody(c *ui.Context, oi oiColors) {
 				languageLabel = labels[i]
 			}
 		}
-		ui.Row(c).MinHeight(30).Gap(6).AlignItems(ui.Center).Children(func() {
+		ui.Row(c).MinHeight(settingsFormRow).Gap(6).AlignItems(ui.Center).Children(func() {
 			ui.TextInput(c, &state.overridePath).Grow(1).Placeholder("src/example.txt")
 			if ui.Select(c, &languageLabel, labels).Width(190).Changed() {
 				for i, label := range labels {
@@ -194,7 +203,7 @@ func (m *Model) settingsFileTypesBody(c *ui.Context, oi oiColors) {
 	}
 
 	ui.Row(c).Height(14)
-	settingsSectionTitle(c, oi, "Ignored Files and Folders")
+	m.settingsSectionTitle(c, oi, "Ignored Files and Folders")
 	ui.Text(c, "Names hidden from the project tree, navigation, search, indexing and Git changes.").
 		FontSize(12).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
 	ui.Text(c, "Ignore files and folders").FontSize(12).Bold().TextColor(oi.text).SingleLine()
@@ -202,7 +211,7 @@ func (m *Model) settingsFileTypesBody(c *ui.Context, oi oiColors) {
 		state.draft.IgnoredNames = removeSettingString(state.draft.IgnoredNames, index)
 		m.invalidate()
 	})
-	ui.Row(c).MinHeight(30).Gap(6).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(6).AlignItems(ui.Center).Children(func() {
 		ui.TextInput(c, &state.ignoredDraft).Grow(1).Placeholder("*.tmp")
 		ui.Button(c, "Add").Width(56).OnClick(func() {
 			state.draft.IgnoredNames = appendSettingString(state.draft.IgnoredNames, &state.ignoredDraft)
@@ -211,14 +220,14 @@ func (m *Model) settingsFileTypesBody(c *ui.Context, oi oiColors) {
 	})
 
 	ui.Row(c).Height(14)
-	settingsSectionTitle(c, oi, "Exclude patterns")
+	m.settingsSectionTitle(c, oi, "Exclude patterns")
 	ui.Text(c, "Glob patterns hidden from the project tree and skipped by search and indexing.").
 		FontSize(12).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
 	settingsEditableStringList(c, oi, state.draft.Exclude, "**/dist", func(index int) {
 		state.draft.Exclude = removeSettingString(state.draft.Exclude, index)
 		m.invalidate()
 	})
-	ui.Row(c).MinHeight(30).Gap(6).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(6).AlignItems(ui.Center).Children(func() {
 		ui.TextInput(c, &state.excludeDraft).Grow(1).Placeholder("**/generated")
 		ui.Button(c, "Add").Width(56).OnClick(func() {
 			state.draft.Exclude = appendSettingString(state.draft.Exclude, &state.excludeDraft)
@@ -394,8 +403,8 @@ func (m *Model) removeFileTypeOverride(path string) {
 }
 
 func (m *Model) settingsNaturalLanguagesBody(c *ui.Context, oi oiColors) {
-	settingsSectionTitle(c, oi, "Languages")
-	ui.Row(c).MinHeight(32).Gap(12).AlignItems(ui.Center).Children(func() {
+	m.settingsSectionTitle(c, oi, "Languages")
+	ui.Row(c).MinHeight(settingsFormRow).Gap(12).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "English (USA, UK)", 220)
 		ui.Text(c, "Used by Proofreading › Typo").FontSize(12).TextColor(oi.textMuted).SingleLine()
 	})
@@ -409,14 +418,14 @@ func (m *Model) settingsSpellingBody(c *ui.Context, oi oiColors) {
 	if !state.loaded {
 		return
 	}
-	settingsSectionTitle(c, oi, "Accepted words")
+	m.settingsSectionTitle(c, oi, "Accepted words")
 	if m.Root() != "" {
 		ui.Text(c, "Project dictionary").FontSize(12).Bold().TextColor(oi.text).SingleLine()
 		ui.Text(c, "Stored with the project.").FontSize(11).TextColor(oi.textMuted).SingleLine()
 		settingsEditableStringList(c, oi, state.projectDraft.ProjectWords, "word", func(index int) {
 			m.removeSpellingWord("project", index)
 		})
-		ui.Row(c).MinHeight(30).Gap(6).AlignItems(ui.Center).Children(func() {
+		ui.Row(c).MinHeight(settingsFormRow).Gap(6).AlignItems(ui.Center).Children(func() {
 			ui.TextInput(c, &state.projectWordDraft).Grow(1).Placeholder("word")
 			ui.Button(c, "Add").Width(56).OnClick(func() { m.addSpellingWord("project") })
 		})
@@ -426,19 +435,18 @@ func (m *Model) settingsSpellingBody(c *ui.Context, oi oiColors) {
 	settingsEditableStringList(c, oi, state.globalDraft.IDEWords, "word", func(index int) {
 		m.removeSpellingWord("global", index)
 	})
-	ui.Row(c).MinHeight(30).Gap(6).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(6).AlignItems(ui.Center).Children(func() {
 		ui.TextInput(c, &state.ideWordDraft).Grow(1).Placeholder("word")
 		ui.Button(c, "Add").Width(56).OnClick(func() { m.addSpellingWord("global") })
 	})
 
-	ui.Row(c).Height(12)
-	settingsSectionTitle(c, oi, "Custom dictionaries")
+	m.settingsSectionTitle(c, oi, "Custom dictionaries")
 	ui.Text(c, "Plain-text word lists or Hunspell .dic files. Relative paths resolve against the project root.").
 		FontSize(12).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
 	settingsEditableStringList(c, oi, state.globalDraft.CustomDictionaries, "~/dictionaries/team.dic", func(index int) {
 		m.removeSpellingDictionary(index)
 	})
-	ui.Row(c).MinHeight(30).Gap(6).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(6).AlignItems(ui.Center).Children(func() {
 		ui.TextInput(c, &state.dictionaryDraft).Grow(1).Placeholder("~/dictionaries/team.dic")
 		ui.Button(c, "Add").Width(56).OnClick(m.addSpellingDictionary)
 	})
@@ -511,23 +519,25 @@ func (m *Model) settingsFormatterBody(c *ui.Context, oi oiColors, page string) {
 		return
 	}
 	name := formatterToolName(state.tool)
-	settingsSectionTitle(c, oi, name)
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
-		settingsFormLabel(c, oi, name+" path", 180)
-		ui.TextInput(c, &state.draft.Path).Grow(1).Placeholder("Auto")
+	m.settingsSectionTitle(c, oi, name)
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
+		settingsFormLabel(c, oi, name+" path", settingsLabelMaxWidth)
+		ui.TextInput(c, &state.draft.Path).Grow(1).MaxWidth(settingsPathMaxWidth).
+			Placeholder("Auto")
 		ui.Button(c, "Browse…").OnClick(func() { m.browseFormatterPath(false) })
 	})
 	if state.tool == "ruff" {
-		ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
-			settingsFormLabel(c, oi, "Configuration directory", 180)
-			ui.TextInput(c, &state.draft.ConfigurationDirectory).Grow(1).Placeholder("Project configuration")
+		ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
+			settingsFormLabel(c, oi, "Configuration directory", settingsLabelMaxWidth)
+			ui.TextInput(c, &state.draft.ConfigurationDirectory).Grow(1).
+				MaxWidth(settingsPathMaxWidth).Placeholder("Project configuration")
 			ui.Button(c, "Browse…").OnClick(func() { m.browseFormatterPath(true) })
 		})
 		ui.Text(c, "Empty uses the nearest pyproject.toml ([tool.ruff]), ruff.toml or .ruff.toml.").
 			FontSize(11).TextColor(oi.textMuted).SingleLine().Ellipsis("…")
 	}
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
-		settingsFormLabel(c, oi, "Formatting provider", 180)
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
+		settingsFormLabel(c, oi, "Formatting provider", settingsLabelMaxWidth)
 		shown := "Automatic (language server first)"
 		if state.draft.Prefer {
 			shown = name
@@ -539,20 +549,19 @@ func (m *Model) settingsFormatterBody(c *ui.Context, oi oiColors, page string) {
 		}
 	})
 	runOnSave := state.draft.RunOnSave
-	if ui.Checkbox(c, &runOnSave, "Run on save").Changed() {
+	if settingsCheckbox(c, &runOnSave, "Run on save").Changed() {
 		state.draft.RunOnSave = runOnSave
 		m.invalidate()
 	}
 	ui.Text(c, "Also enable Reformat code on save in Editor › General.").
 		FontSize(11).TextColor(oi.textMuted).SingleLine()
 
-	ui.Row(c).Height(12)
-	settingsSectionTitle(c, oi, "Enabled languages")
+	m.settingsSectionTitle(c, oi, "Enabled languages")
 	languages := formatterLanguageChoices(state.tool, state.draft.Languages)
 	for _, language := range languages {
 		language := language
 		on := containsStringFold(state.draft.Languages, language)
-		if ui.Checkbox(c, &on, formatterLanguageLabel(language)).Changed() {
+		if settingsCheckbox(c, &on, formatterLanguageLabel(language)).Changed() {
 			m.setFormatterLanguage(language, on)
 		}
 	}
@@ -1140,9 +1149,10 @@ func (m *Model) settingsInspectionsBody(c *ui.Context, oi oiColors) {
 			label = labels[i]
 		}
 	}
-	ui.Row(c).MinHeight(32).Gap(8).AlignItems(ui.Center).Children(func() {
-		settingsFormLabel(c, oi, "Profile", 130)
-		if ui.Select(c, &label, labels).Grow(1).Changed() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
+		settingsFormLabel(c, oi, "Profile", settingsLabelMaxWidth)
+		if ui.Select(c, &label, labels).MinWidth(settingsSelectMinWidth).
+			Grow(1).MaxWidth(settingsControlMaxWidth).Changed() {
 			for i, option := range labels {
 				if option == label {
 					m.setActiveInspectionProfile(profiles[i].ID)
@@ -1159,9 +1169,10 @@ func (m *Model) settingsInspectionsBody(c *ui.Context, oi oiColors) {
 		}
 		ui.Text(c, "Stored in "+stored).FontSize(11).TextColor(oi.textMuted).SingleLine()
 	})
-	ui.Row(c).MinHeight(30).Gap(8).AlignItems(ui.Center).Children(func() {
-		settingsFormLabel(c, oi, "Search inspections", 130)
-		ui.TextInput(c, &state.query).Grow(1).Placeholder("Name, id or description")
+	ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
+		settingsFormLabel(c, oi, "Search inspections", settingsLabelMaxWidth)
+		ui.TextInput(c, &state.query).Grow(1).MaxWidth(settingsControlMaxWidth).
+			Placeholder("Name, id or description")
 	})
 	overrides := m.activeInspectionOverrides()
 	query := strings.ToLower(strings.TrimSpace(state.query))
@@ -1184,7 +1195,7 @@ func (m *Model) settingsInspectionsBody(c *ui.Context, oi oiColors) {
 		if override.Enabled != nil {
 			on = *override.Enabled
 		}
-		ui.Row(c).MinHeight(30).Gap(8).AlignItems(ui.Center).Children(func() {
+		ui.Row(c).MinHeight(settingsFormRow).Gap(8).AlignItems(ui.Center).Children(func() {
 			if ui.Checkbox(c, &on, "").Changed() {
 				m.setInspectionEnabled(row, on)
 			}
@@ -1336,7 +1347,7 @@ func (m *Model) setInspectionOption(row inspectionPageRow, option inspectionOpti
 }
 
 func (m *Model) settingsRunTargetsBody(c *ui.Context, oi oiColors) {
-	settingsSectionTitle(c, oi, "Run Targets")
+	m.settingsSectionTitle(c, oi, "Run Targets")
 	ui.Text(c, "Run applications on local machines, SSH hosts or Docker containers.").
 		FontSize(12).TextColor(oi.textMuted).MaxWidth(720)
 	ui.Text(c, "The native Run Targets editor configures SSH targets, project folders, interpreters and containers.").
@@ -1347,7 +1358,7 @@ func (m *Model) settingsRunTargetsBody(c *ui.Context, oi oiColors) {
 }
 
 func (m *Model) settingsDeploymentBody(c *ui.Context, oi oiColors) {
-	settingsSectionTitle(c, oi, "Deployment")
+	m.settingsSectionTitle(c, oi, "Deployment")
 	ui.Text(c, "Configure local, SFTP and FTP deployment servers, mappings and excluded paths.").
 		FontSize(12).TextColor(oi.textMuted).MaxWidth(720)
 	ui.Text(c, "The native Deployment editor tests connections and saves the project's deployment configuration.").
@@ -1358,7 +1369,7 @@ func (m *Model) settingsDeploymentBody(c *ui.Context, oi oiColors) {
 }
 
 func (m *Model) settingsSSHBody(c *ui.Context, oi oiColors) {
-	settingsSectionTitle(c, oi, "SSH Configurations")
+	m.settingsSectionTitle(c, oi, "SSH Configurations")
 	ui.Text(c, "Manage SSH hosts used for remote development, deployment and run targets.").
 		FontSize(12).TextColor(oi.textMuted).MaxWidth(720)
 	ui.Text(c, "The native editor supports OpenSSH config, key pairs, passwords, passphrases and connection tests.").

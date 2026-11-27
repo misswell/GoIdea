@@ -129,7 +129,7 @@ func (m *Model) renderHTTPProxyCheck(c *ui.Context, oi oiColors) {
 	}
 	status := state.aux["proxy.checkStatus"]
 	running := state.aux["proxy.checkRunning"] == "1"
-	ui.Row(c).MinHeight(32).Gap(6).AlignItems(ui.Center).PaddingStart(20).Children(func() {
+	ui.Row(c).MinHeight(settingsFormRow).Gap(6).AlignItems(ui.Center).Children(func() {
 		settingsFormLabel(c, oi, "Check connection", 190)
 		input := ui.TextInput(c, &urlText).Grow(1).Placeholder(nativeHTTPProxyCheckURL)
 		if input.Changed() {

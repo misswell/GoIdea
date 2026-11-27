@@ -1222,7 +1222,7 @@ func (m *Model) renderPythonEnvironmentCreator(c *ui.Context, oi oiColors) {
 	if state.aux == nil {
 		state.aux = map[string]string{}
 	}
-	settingsSectionTitle(c, oi, "Create Environment")
+	m.settingsSectionTitle(c, oi, "Create Environment")
 	tool := state.aux["python.venv.tool"]
 	if tool == "" {
 		tool = "venv"

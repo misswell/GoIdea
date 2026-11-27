@@ -154,8 +154,8 @@ func TestClassesTabKeepsOnlyTypeKinds(t *testing.T) {
 		extra: map[seSection]int{},
 		symbols: []openidea.WorkspaceSymbol{
 			{Name: "App", Kind: "class"},
-			{Name: "run", Kind: "method"},
-			{Name: "Greeter", Kind: "interface"},
+			{Name: "AppRun", Kind: "method"},
+			{Name: "AppService", Kind: "interface"},
 		},
 	}}
 	names := map[string]bool{}
@@ -164,7 +164,7 @@ func TestClassesTabKeepsOnlyTypeKinds(t *testing.T) {
 			names[r.item.title] = true
 		}
 	}
-	if !names["App"] || !names["Greeter"] || names["run"] {
+	if !names["App"] || !names["AppService"] || names["AppRun()"] {
 		t.Fatalf("the Classes tab listed %v", names)
 	}
 	if isTypeKind("method") || !isTypeKind("enum") {
