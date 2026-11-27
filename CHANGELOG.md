@@ -3,7 +3,7 @@
 The GitHub release notes, which **Help › What's New** shows, come from the
 `## <version>` section here. Every release needs one, or its build fails.
 
-## Unreleased
+## 0.1.47
 
 - Search Everywhere now uses OpenIDEA's scope, preview, filter and result-footer controls.
 - The All tab mixes routes, classes, files, symbols, actions and text by relevance.
