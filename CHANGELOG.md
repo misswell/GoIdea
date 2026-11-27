@@ -3,6 +3,10 @@
 The GitHub release notes, which **Help › What's New** shows, come from the
 `## <version>` section here. Every release needs one, or its build fails.
 
+## Unreleased
+
+- Search Everywhere keeps mixed All results flowing without synthetic section-count rows.
+
 ## 0.1.47
 
 - Search Everywhere now uses OpenIDEA's scope, preview, filter and result-footer controls.

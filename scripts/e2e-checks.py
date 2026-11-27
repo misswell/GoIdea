@@ -866,7 +866,16 @@ CHECKS = {
         ("se.symbols", "Search Everywhere listed symbols from the language server", lambda d: ((get(d, "searchEverywhere.symbols") or 0) >= 1, get(d, "searchEverywhere.symbols"))),
         ("se.actions", "Search Everywhere listed actions", lambda d: ((get(d, "searchEverywhere.actions") or 0) >= 1, get(d, "searchEverywhere.actions"))),
         ("se.text", "Search Everywhere listed text matches", lambda d: ((get(d, "searchEverywhere.text") or 0) >= 1, get(d, "searchEverywhere.text"))),
-        ("se.sections", "the All tab carried the OpenIDEA sections", lambda d: (all(s in (get(d, "searchEverywhere.allSections") or []) for s in ("files", "symbols", "actions", "text")), get(d, "searchEverywhere.allSections"))),
+        ("se.sections", "the All tab mixed OpenIDEA results without synthetic headers", lambda d: (
+            (get(d, "searchEverywhere.allRows") or 0) > 0
+            and len(get(d, "searchEverywhere.allSections") or []) >= 2
+            and all(s in ("classes", "files", "symbols", "endpoints", "actions", "text")
+                    for s in (get(d, "searchEverywhere.allSections") or [])),
+            {
+                "rows": get(d, "searchEverywhere.allRows"),
+                "sections": get(d, "searchEverywhere.allSections"),
+            },
+        )),
     ],
     "debug": [
         ("debugError", *absent("debugError")),

@@ -878,7 +878,7 @@
   },
   {
    "id": "lsp.se.sections",
-   "label": "the All tab carried the OpenIDEA sections",
+   "label": "the All tab mixed OpenIDEA results without synthetic headers",
    "feature": "Search Everywhere All tab section order",
    "area": "search",
    "gate": "release",
