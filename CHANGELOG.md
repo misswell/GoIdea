@@ -3,7 +3,7 @@
 The GitHub release notes, which **Help › What's New** shows, come from the
 `## <version>` section here. Every release needs one, or its build fails.
 
-## Unreleased
+## 0.1.46
 
 - Project restore now shows a native startup surface instead of flashing Welcome before the project opens.
 - Project View keeps `.idea`, `.openidea` and `.vscode` as ordinary rows without an excluded background.
