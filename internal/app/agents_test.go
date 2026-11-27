@@ -366,9 +366,13 @@ func TestAgentQueueBackgroundAndConfigRPC(t *testing.T) {
 		args    map[string]any
 	}
 	calls := make(chan call, 8)
+	actionsDone := make(chan struct{}, 8)
 	m := &Model{
-		ctx:      context.Background(),
-		postHook: func(fn func()) { fn() },
+		ctx: context.Background(),
+		postHook: func(fn func()) {
+			fn()
+			actionsDone <- struct{}{}
+		},
 		invokeHook: func(_ context.Context, command string, input any) (json.RawMessage, error) {
 			args, _ := input.(map[string]any)
 			calls <- call{command: command, args: args}
@@ -415,14 +419,12 @@ func TestAgentQueueBackgroundAndConfigRPC(t *testing.T) {
 	}
 	waitIdle := func() {
 		t.Helper()
-		deadline := time.Now().Add(5 * time.Second)
-		for time.Now().Before(deadline) {
-			if !m.agents.taskBusy["a"] {
-				return
-			}
-			time.Sleep(time.Millisecond)
+		select {
+		case <-actionsDone:
+			return
+		case <-time.After(5 * time.Second):
+			t.Fatal("agent action did not finish")
 		}
-		t.Fatal("agent action did not finish")
 	}
 
 	m.sendAgentQueuedNow("a", "q1")

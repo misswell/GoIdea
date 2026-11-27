@@ -19,7 +19,10 @@ import (
 func pluginFixture(t *testing.T, settingsPath, name string) string {
 	t.Helper()
 	t.Cleanup(func() {
-		unregisterAction(pluginActionPrefix + name + ".run")
+		legacy := pluginActionPrefix + name + ".run"
+		unregisterAction(legacy)
+		delete(actionAliases, legacy)
+		unregisterAction("plugin." + name + ".run")
 	})
 	dir := filepath.Join(filepath.Dir(settingsPath), "plugins", name)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
