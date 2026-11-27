@@ -3,7 +3,7 @@
 The GitHub release notes, which **Help › What's New** shows, come from the
 `## <version>` section here. Every release needs one, or its build fails.
 
-## Unreleased
+## 0.1.49
 
 - Closing the Welcome window now exits normally instead of reopening Welcome.
 - Settings pages now use OpenIDEA's form spacing, control sizes and section rules.
