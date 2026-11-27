@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -77,6 +76,7 @@ func (m *Model) seQueryEndpoints(seq int, query string) {
 	}
 	if strings.TrimSpace(query) == "" {
 		s.endpointDone = true
+		m.searchEverywhereSectionDone()
 		return
 	}
 	if s.pluginsBusy || !s.pluginsDone {
@@ -85,10 +85,12 @@ func (m *Model) seQueryEndpoints(seq int, query string) {
 	if s.pluginsError != "" {
 		s.endpointDone = true
 		s.err = s.pluginsError
+		m.searchEverywhereSectionDone()
 		return
 	}
 	if len(s.plugins) == 0 {
 		s.endpointDone = true
+		m.searchEverywhereSectionDone()
 		return
 	}
 	s.endpointSeq++
@@ -273,18 +275,22 @@ func seEndpointItems(endpoints []openidea.PluginEndpoint, query string) []seItem
 		}
 		line := int(endpoint.Location.Range.Start.Line)
 		col := int(endpoint.Location.Range.Start.Col)
-		title := httpMethod + " " + endpoint.Path
-		detail := endpoint.Framework
-		if name != "" {
-			detail = name + " · " + detail
+		endCol := col
+		if endpoint.Handler != nil {
+			endCol += len([]rune(*endpoint.Handler))
 		}
-		if endpoint.Location.Path != "" {
-			detail += fmt.Sprintf(" · %s:%d", filepath.Base(endpoint.Location.Path), line+1)
+		title := httpMethod + " " + endpoint.Path
+		container := ""
+		if endpoint.Handler != nil {
+			container = *endpoint.Handler
 		}
 		hits = append(hits, seEndpointHit{
 			item: seItem{
-				kind: "endpoint", symbol: "method", title: title, detail: detail,
-				path: endpoint.Location.Path, line: line, col: col,
+				kind: "endpoint", symbol: "method", title: title,
+				container: container, right: filepath.Base(endpoint.Location.Path),
+				path: endpoint.Location.Path, line: line, col: col, endCol: endCol,
+				lineSet: true, score: score,
+				detail: endpoint.Framework,
 			},
 			score: score,
 			rel:   endpoint.Location.Path,

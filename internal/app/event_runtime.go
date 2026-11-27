@@ -341,6 +341,9 @@ func (m *Model) acceptIndexState(event openidea.IndexStateEvent) {
 		} else {
 			state.indexingVisible = false
 			m.upsertTask(BackgroundTask{ID: backendIndexingID(), Done: true})
+			if m.se != nil {
+				m.refreshSearchEverywhere()
+			}
 		}
 		m.refreshReadiness()
 		m.invalidate()
@@ -601,6 +604,11 @@ func (m *Model) acceptProjectRootsChanged(event openidea.ProjectRootsChangedEven
 		m.RefreshProjectStructureSDKs()
 		m.loadBuildModel()
 		m.refreshBuildToolRunConfigs()
+		if m.se != nil {
+			m.se.scopeRootsDone = false
+			m.loadSearchEverywhereScopes()
+			m.refreshSearchEverywhere()
+		}
 		if m.run.trusted {
 			m.loadRunConfigs()
 		}

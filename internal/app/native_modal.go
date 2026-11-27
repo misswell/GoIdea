@@ -101,3 +101,40 @@ func nativeSurfaceModal(c *ui.Context, open *bool, fn func()) nativeModalElement
 	nativeModalDefault = savedDefault
 	return nativeModalElement{Element: panel, dismissed: dismissed}
 }
+
+// nativeTopSurfaceModal keeps a complete native surface near the top of the
+// window, matching OpenIDEA's top-positioned Search Everywhere dialog.
+func nativeTopSurfaceModal(c *ui.Context, open *bool, top float32, fn func()) nativeModalElement {
+	if !*open {
+		return nativeModalElement{}
+	}
+	width, height := c.Size()
+	dismissed := false
+	savedDefault := nativeModalDefault
+	nativeModalDefault = nil
+	var panel ui.Element
+	ui.Overlay(c, func() {
+		back := ui.Box(c).Absolute().Left(0).Top(0).Right(0).Bottom(0).
+			Justify(ui.Start).AlignItems(ui.Center).Modal()
+		if back.Clicked() || back.OverlayShortcut(0, ui.KeyEscape) {
+			*open = false
+			dismissed = true
+		}
+		back.Children(func() {
+			panel = ui.Column(c).Role(ui.RoleDialog).MaxWidth(width-48).
+				MaxHeight(height-48).Margin(top, 0, 0, 0).
+				Transition(ui.ElementTransition{
+					Duration: oiDialogMotion,
+					Ease:     ui.EaseOut,
+					Enter:    &ui.Motion{Y: 4, Scale: 0.995},
+				})
+			panel.Children(fn)
+			if action := nativeModalDefault; action != nil &&
+				panel.OverlayShortcut(0, ui.KeyEnter) {
+				action()
+			}
+		})
+	})
+	nativeModalDefault = savedDefault
+	return nativeModalElement{Element: panel, dismissed: dismissed}
+}

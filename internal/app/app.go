@@ -453,8 +453,11 @@ type Model struct {
 	// the next Up or Down key.
 	caretCloneChord caretCloneChordState
 
-	// searchHistory is Search Everywhere's recent queries, most recent first.
-	searchHistory []string
+	// searchHistory is the All tab's Search Everywhere history, kept for
+	// compatibility with older sessions. searchHistories keeps every tab.
+	searchHistory   []string
+	searchHistories map[seTab][]string
+	sePreviewState  bool
 	// seFilters is Search Everywhere's funnel, mirrored into the prefs.
 	seFilters seFilters
 
@@ -1042,6 +1045,7 @@ func New(cfg Config) *Model {
 	if m.prefs.SearchFilters != nil {
 		m.seFilters = *m.prefs.SearchFilters
 	}
+	m.sePreviewState = m.prefs.SearchPreview
 	m.ensureMacros()
 	m.syncSavedMacroActions()
 	m.applyPreferences()
@@ -1050,7 +1054,14 @@ func New(cfg Config) *Model {
 	m.startupPending = startupWillOpenProject(session, m.prefs, cfg.FreshSession)
 	m.recents = sessionRecents(session)
 	m.recentGroups = session.RecentGroups
-	m.searchHistory = append([]string(nil), session.SearchHistory...)
+	m.searchHistories = map[seTab][]string{}
+	for tab, queries := range session.SearchHistories {
+		m.searchHistories[seTab(tab)] = append([]string(nil), queries...)
+	}
+	if len(m.searchHistories[seTabAll]) == 0 && len(session.SearchHistory) > 0 {
+		m.searchHistories[seTabAll] = append([]string(nil), session.SearchHistory...)
+	}
+	m.searchHistory = append([]string(nil), m.searchHistories[seTabAll]...)
 	m.logcat.history = append([]string(nil), session.LogcatHistory...)
 	m.logcat.historyAt = -1
 	m.searchScopes = append([]SearchScope(nil), session.SearchScopes...)
@@ -3111,7 +3122,7 @@ func (m *Model) sessionSnapshot() (Session, bool) {
 		}
 	}
 	if root == "" && fileTabs == 0 && len(m.recents) == 0 && len(m.recentGroups) == 0 &&
-		len(m.searchHistory) == 0 && len(m.notify.items) == 0 &&
+		len(m.searchHistory) == 0 && len(m.searchHistories) == 0 && len(m.notify.items) == 0 &&
 		len(m.namedLayouts) == 0 && m.activeNamedLayout == "" {
 		// Nothing to remember; keep the previous session rather than
 		// writing an empty one after a failed start.
@@ -3203,7 +3214,8 @@ func (m *Model) sessionSnapshot() (Session, bool) {
 		RecentProjects:    recentPaths(m.recents),
 		Recents:           append([]RecentProject(nil), m.recents...),
 		RecentGroups:      append([]RecentGroup(nil), m.recentGroups...),
-		SearchHistory:     append([]string(nil), m.searchHistory...),
+		SearchHistory:     append([]string(nil), m.searchHistories[seTabAll]...),
+		SearchHistories:   cloneSearchHistories(m.searchHistories),
 		LogcatHistory:     append([]string(nil), m.logcat.history...),
 		SearchScopes:      append([]SearchScope(nil), m.searchScopes...),
 		Notifications:     m.notificationHistory(),

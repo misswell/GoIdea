@@ -61,7 +61,7 @@ release can be called today.
 | Java | `java` | 3 | 0 | 3 |
 | Language services | `lsp` | 43 | 1 | 33 |
 | MCP | `mcp` | 7 | 0 | 7 |
-| Navigation and index | `nav` | 16 | 0 | 7 |
+| Navigation and index | `nav` | 16 | 0 | 8 |
 | Notebooks | `notebook` | 12 | 0 | 12 |
 | Performance | `perf` | 0 | 2 | 0 |
 | Plugins | `plugin` | 44 | 24 | 27 |
@@ -88,7 +88,7 @@ release can be called today.
 ## Served by `openidea-server --stdio`
 
 549 commands. `GoIDEA` marks the ones a non-test Go source invokes today
-(446 of 549).
+(447 of 549).
 
 | Command | Domain | Arguments | GoIDEA |
 | --- | --- | --- | --- |
@@ -264,7 +264,7 @@ release can be called today.
 | `find_dirs` | Navigation and index | `limit`, `query` | yes |
 | `find_files` | Navigation and index | `limit`, `query` | yes |
 | `find_files_named` | Navigation and index | `name` | — |
-| `find_symbols` | Navigation and index | `filter`, `limit`, `query` | — |
+| `find_symbols` | Navigation and index | `filter`, `limit`, `query` | yes |
 | `fs_append_file_bytes` | ? | `data`, `path`, `request` | yes |
 | `fs_compare_directories` | File system | `left`, `onProgress`, `request`, `right` | yes |
 | `fs_copy` | File system | `from`, `to` | yes |
@@ -792,7 +792,7 @@ GoIDEA needs to do for each:
 
 ## What this means for GoIDEA
 
-549 remote commands are available today; GoIDEA uses 446. The parity work is
+549 remote commands are available today; GoIDEA uses 447. The parity work is
 first to cover the remote surface OpenIDEA's own frontend uses, then to move
 `shared-op`/`host`/`crate` commands onto stdio through the OpenIDEA fork
 (a submodule bump and a server release), and to implement `desktop` commands

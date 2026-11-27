@@ -9,14 +9,19 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/editor"
 
+	"mayoi/internal/highlight"
 	"mayoi/internal/openidea"
 )
 
@@ -34,7 +39,6 @@ const (
 type seSection string
 
 const (
-	seHistory       seSection = "history"
 	seRecentFiles   seSection = "recent"
 	seRecentActions seSection = "recentActions"
 	seClasses       seSection = "classes"
@@ -59,7 +63,6 @@ var seTabs = []struct {
 }
 
 var seSectionTitles = map[seSection]string{
-	seHistory:       "Search History",
 	seRecentFiles:   "Recent Files",
 	seRecentActions: "Recent Actions",
 	seClasses:       "Classes",
@@ -81,30 +84,46 @@ const (
 	seMoreStepAll = 15
 	seMoreStepTab = 50
 
-	seFileQueryLimit   = 100
-	seSymbolQueryLimit = 100
-	seTextFileLimit    = 40
-	seTextMatchLimit   = 200
-	seRecentActionCap  = 15
-	// seHistoryCap bounds the remembered Search Everywhere queries.
-	seHistoryCap = 10
-	seDebounce   = 120 * time.Millisecond
+	seFileQueryLimit  = 100
+	seTextFileLimit   = 40
+	seTextMatchLimit  = 200
+	seRecentActionCap = 12
+	// seHistoryCap bounds the remembered Search Everywhere queries for each
+	// tab, as OpenIDEA's MAX_HISTORY.
+	seHistoryCap = 50
+	seDebounce   = 60 * time.Millisecond
+
+	seDialogWidth    = 760
+	seDialogMaxListH = 672
+	seDialogMinListH = 240
+	sePreviewLines   = 41
+	sePreviewBytes   = 512 << 10
 )
 
 // seItem is one result row before it is drawn.
 type seItem struct {
-	kind    string // "file", "symbol", "endpoint", "text", "action", "setting", "history" or "command"
-	title   string
-	detail  string
-	path    string
-	line    int
-	col     int
-	action  string
-	setting string
-	command seTab
+	kind      string // "file", "symbol", "endpoint", "text", "action", "setting" or "command"
+	title     string
+	detail    string
+	rel       string
+	path      string
+	line      int
+	col       int
+	endCol    int
+	lineSet   bool
+	container string
+	right     string
+	action    string
+	setting   string
+	command   seTab
+	folder    bool
 	// disabled keeps a matching action visible while making it inert, as
 	// OpenIDEA does for unavailable actions.
 	disabled bool
+	// score is the source's pre-computed relevance, used by the All tab's
+	// relevance mix and by endpoint ranking.
+	score int
+	icon  *ui.SVG
 	// indices are rune offsets into title, matched by the query for emphasis.
 	indices []int
 	// symbol is the workspace symbol's kind, which picks its node icon.
@@ -127,21 +146,57 @@ type sePane struct {
 	sel   int
 	// selKey follows the chosen result while streamed sections reorder it.
 	selKey string
+	// selAnchor and selKeys implement OpenIDEA's Shift range and primary-click
+	// toggle selections. A nil selKeys means only the lead row is selected.
+	selAnchor int
+	selKeys   map[string]bool
 	// extra widens a section past its first page, as the More rows do.
 	extra map[seSection]int
 	// location is the parsed `File.kt:42` part of the current query.
 	location seLocationQuery
 
-	files     []openidea.FileMatch
-	symbols   []openidea.WorkspaceSymbol
-	endpoints []openidea.PluginEndpoint
-	text      []openidea.FileMatches
-	textCount int
+	recent       []openidea.FileMatch
+	files        []openidea.FileMatch
+	dirs         []openidea.FileMatch
+	indexSymbols []openidea.SymbolMatch
+	symbols      []openidea.WorkspaceSymbol
+	endpoints    []openidea.PluginEndpoint
+	text         []openidea.FileMatches
+	textCount    int
 
 	fileDone, symbolDone, endpointDone, textDone bool
 	textBusy                                     bool
 	textTruncated                                bool
 	err                                          string
+
+	// The All/Actions tabs use includeNonProject for their checkbox. The
+	// other tabs combine it with fileSet to choose IDEA's named scope.
+	includeNonProject bool
+	fileSet           string
+	scopeRoots        []seSourceFolder
+	scopeRootsDone    bool
+	autoEverywhere    bool
+	notFound          string
+
+	// preview keeps the selected source beside the list, remembered across
+	// openings as OpenIDEA's preview toggle is.
+	preview       bool
+	previewKey    string
+	previewPath   string
+	previewLine   int
+	previewCol    int
+	previewEndCol int
+	previewFrom   int
+	previewLines  []string
+	previewTokens [][]highlight.Token
+	previewErr    string
+	previewRatio  float32
+
+	historyIndex    int
+	historyDraft    string
+	pendingEnter    bool
+	pendingSide     bool
+	revealSelection bool
 
 	plugins      []openidea.PluginInfo
 	pluginsBusy  bool
@@ -164,6 +219,161 @@ type sePane struct {
 	filterOpen bool
 }
 
+// seSourceFolder is one entry of the backend's project_roots response. The
+// same root union drives OpenIDEA's Project Files, Production and Test scopes.
+type seSourceFolder struct {
+	Path string `json:"path"`
+	Kind string `json:"kind"`
+}
+
+type seProjectRoots struct {
+	Roots []seSourceFolder `json:"roots"`
+	// The pinned backend also returns detected roots; unmarked entries are not
+	// effective and therefore do not feed a named scope.
+	Detected []seSourceFolder `json:"detected"`
+}
+
+func (m *Model) loadSearchEverywhereScopes() {
+	s := m.se
+	if s == nil || s.scopeRootsDone {
+		return
+	}
+	if m.mgr == nil || m.ctx == nil {
+		s.scopeRootsDone = true
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, seQueryTimeout)
+		defer cancel()
+		raw, err := m.mgr.Invoke(ctx, Window, "project_roots", nil)
+		var roots seProjectRoots
+		if err == nil {
+			err = json.Unmarshal(raw, &roots)
+		}
+		m.post(func() {
+			if m.se != s {
+				return
+			}
+			s.scopeRootsDone = true
+			if err == nil {
+				s.scopeRoots = roots.Roots
+			}
+			m.invalidate()
+		})
+	}()
+}
+
+// searchEverywherePathAllowed applies IDEA's All Places / Project /
+// Production / Test scope to a backend result.
+func (m *Model) searchEverywherePathAllowed(path, fileSet string, includeNonProject bool) bool {
+	if includeNonProject {
+		return true
+	}
+	if fileSet == "" || fileSet == "all" {
+		return sePathInside(m.Root(), path)
+	}
+	root := m.Root()
+	if !sePathInside(root, path) {
+		return false
+	}
+	relative := strings.Trim(seRelativePath(root, path), "/")
+	var innermost *seSourceFolder
+	if m.se != nil {
+		for index := range m.se.scopeRoots {
+			candidate := &m.se.scopeRoots[index]
+			if candidate.Path == "" || relative == candidate.Path ||
+				strings.HasPrefix(relative, strings.TrimRight(candidate.Path, "/")+"/") {
+				if innermost == nil || len(candidate.Path) > len(innermost.Path) {
+					innermost = candidate
+				}
+			}
+		}
+	}
+	test := seLooksLikeTestPath(relative)
+	if innermost != nil {
+		switch strings.ToLower(innermost.Kind) {
+		case "excluded":
+			return false
+		case "test", "testresources":
+			test = true
+		case "source", "resources":
+			test = false
+		}
+	}
+	if fileSet == "test" {
+		return test
+	}
+	return !test
+}
+
+func seLooksLikeTestPath(relative string) bool {
+	relative = strings.ToLower(strings.ReplaceAll(relative, `\`, "/"))
+	name := filepath.Base(relative)
+	path := "/" + relative
+	if strings.HasPrefix(relative, "src/test/") ||
+		strings.Contains(path, "/test/") ||
+		strings.Contains(path, "/tests/") ||
+		strings.Contains(path, "/__tests__/") {
+		return true
+	}
+	for _, suffix := range []string{
+		"_test.go", "_test.py", "test.py", "_test.rs", ".test.js", ".test.jsx",
+		".test.ts", ".test.tsx", ".spec.js", ".spec.jsx", ".spec.ts", ".spec.tsx",
+	} {
+		if strings.HasSuffix(name, suffix) {
+			return true
+		}
+	}
+	return name == "conftest.py" ||
+		(strings.HasSuffix(name, ".java") &&
+			(strings.HasSuffix(strings.TrimSuffix(name, ".java"), "Test") ||
+				strings.HasSuffix(strings.TrimSuffix(name, ".java"), "Tests") ||
+				strings.HasSuffix(strings.TrimSuffix(name, ".java"), "Spec") ||
+				strings.HasSuffix(strings.TrimSuffix(name, ".java"), "IT")))
+}
+
+// searchEverywhereScratchMatches lists files under GoIDEA's Scratch and
+// Consoles root, matching them like the project index, for IDEA's "Include
+// non-project items". The walk is bounded to four levels and 2,000 files.
+func (m *Model) searchEverywhereScratchMatches(query string) []openidea.FileMatch {
+	root, err := m.scratchDir()
+	if err != nil {
+		return nil
+	}
+	var out []openidea.FileMatch
+	_ = filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return nil
+		}
+		relative, err := filepath.Rel(root, path)
+		if err != nil || relative == "." {
+			return nil
+		}
+		relative = strings.ReplaceAll(relative, `\`, "/")
+		depth := strings.Count(relative, "/")
+		if entry.IsDir() {
+			if depth >= 4 {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if len(out) >= 2000 {
+			return fs.SkipAll
+		}
+		display := "Scratches/" + relative
+		score := seItemMatchScore(filepath.Base(relative), display, query)
+		if score == 0 {
+			return nil
+		}
+		out = append(out, openidea.FileMatch{
+			Path: path, RelPath: display, Score: uint32(score),
+		})
+		return nil
+	})
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Score > out[j].Score })
+	return out
+}
+
 // seQueryTimeout bounds one backend lookup of the overlay.
 const seQueryTimeout = 30 * time.Second
 
@@ -174,16 +384,30 @@ func (m *Model) OpenSearchEverywhere() {
 
 func (m *Model) openSearchEverywhereAt(tab seTab) {
 	if m.se != nil {
+		if m.se.tab == tab {
+			m.setSearchEverywhereIncludeNonProject(!m.se.includeNonProject)
+			return
+		}
 		m.SetSearchEverywhereTab(tab)
 		return
 	}
-	m.se = &sePane{open: true, tab: tab, extra: map[seSection]int{}, filters: m.seFilters}
+	m.se = &sePane{
+		open: true, tab: tab, extra: map[seSection]int{}, filters: m.seFilters,
+		preview: m.sePreviewState, previewRatio: 33, fileSet: "all",
+		autoEverywhere: true, historyIndex: -1, revealSelection: true,
+	}
 	if t := m.tab(); t != nil && t.state != nil {
 		m.se.query = t.state.SelectedText()
+	}
+	if strings.TrimSpace(m.se.query) == "" {
+		if history := m.searchHistoryFor(tab); len(history) > 0 {
+			m.se.query = history[0]
+		}
 	}
 	m.refreshSearchEverywhere()
 	m.loadSearchEverywhereLanguages()
 	m.loadSearchEverywherePlugins()
+	m.loadSearchEverywhereScopes()
 	m.invalidate()
 }
 
@@ -193,17 +417,25 @@ func (m *Model) CloseSearchEverywhere() {
 	if s == nil {
 		return
 	}
+	m.rememberSearchQuery(s.tab, s.query)
+	m.cancelSearchEverywhereSources()
 	m.se = nil
-	if s.fileReq != 0 {
-		m.cancelRequest(s.fileReq)
-	}
-	if s.symbolReq != 0 {
-		m.cancelRequest(s.symbolReq)
-	}
-	if s.textCh != 0 {
-		m.cancelRequest(s.textCh)
-	}
 	m.invalidate()
+}
+
+func (m *Model) cancelSearchEverywhereSources() {
+	s := m.se
+	if s == nil || m.ctx == nil {
+		return
+	}
+	for _, id := range []uint32{s.fileReq, s.symbolReq, s.textCh} {
+		if id != 0 {
+			m.cancelRequest(id)
+		}
+	}
+	s.fileReq = 0
+	s.symbolReq = 0
+	s.textCh = 0
 }
 
 // SetSearchEverywhereTab switches the narrowing tab, as a click or Tab does.
@@ -214,12 +446,79 @@ func (m *Model) SetSearchEverywhereTab(tab seTab) {
 	if m.se.tab == tab {
 		return
 	}
+	if m.se.autoEverywhere && m.se.notFound != "" {
+		m.se.includeNonProject = false
+		m.se.notFound = ""
+	}
 	m.se.tab = tab
 	m.se.sel = 0
 	m.se.selKey = ""
+	m.se.selAnchor = 0
+	m.se.selKeys = nil
 	m.se.filterOpen = false
+	m.se.historyIndex = -1
 	m.refreshSearchEverywhere()
 	m.loadSearchEverywhereLanguages()
+	m.invalidate()
+}
+
+// setSearchEverywhereIncludeNonProject is the All/Actions checkbox and the
+// All Places scope. It counts as the user's explicit scope choice, so a later
+// empty project query no longer widens automatically.
+func (m *Model) setSearchEverywhereIncludeNonProject(on bool) {
+	if m.se == nil || m.se.includeNonProject == on {
+		return
+	}
+	m.se.includeNonProject = on
+	m.se.autoEverywhere = false
+	m.se.notFound = ""
+	m.se.sel = 0
+	m.se.selKey = ""
+	m.se.selAnchor = 0
+	m.se.selKeys = nil
+	m.refreshSearchEverywhere()
+	m.invalidate()
+}
+
+// setSearchEverywhereFileSet applies Project Files / Production / Test.
+func (m *Model) setSearchEverywhereFileSet(fileSet string) {
+	if m.se == nil {
+		return
+	}
+	switch fileSet {
+	case "all", "production", "test":
+	default:
+		fileSet = "all"
+	}
+	m.se.fileSet = fileSet
+	m.se.includeNonProject = false
+	m.se.autoEverywhere = false
+	m.se.notFound = ""
+	m.loadSearchEverywhereScopes()
+	m.se.sel = 0
+	m.se.selKey = ""
+	m.se.selAnchor = 0
+	m.se.selKeys = nil
+	m.refreshSearchEverywhere()
+	m.invalidate()
+}
+
+// setSearchEverywherePreview toggles the source preview and remembers it.
+func (m *Model) setSearchEverywherePreview(on bool) {
+	if m.se == nil {
+		return
+	}
+	m.se.preview = on
+	m.sePreviewState = on
+	m.prefs.SearchPreview = on
+	if m.cfg.SettingsPath != "" {
+		_ = m.savePreferences()
+	}
+	if !on {
+		m.clearSearchEverywherePreview()
+	} else {
+		m.syncSearchEverywherePreview()
+	}
 	m.invalidate()
 }
 
@@ -246,7 +545,7 @@ func sectionsFor(tab seTab, emptyQuery bool) []seSection {
 	if emptyQuery {
 		switch tab {
 		case seTabAll:
-			return []seSection{seHistory, seRecentFiles, seRecentActions}
+			return []seSection{seRecentFiles, seRecentActions}
 		case seTabFiles:
 			return []seSection{seRecentFiles}
 		case seTabActions:
@@ -264,9 +563,9 @@ func sectionsFor(tab seTab, emptyQuery bool) []seSection {
 // seSectionLimit is how many rows a section shows before a More row.
 func (s *sePane) seSectionLimit(section seSection) int {
 	base := seTabLimit
-	if s.tab == seTabAll && section != seRecentFiles && section != seRecentActions && section != seHistory {
+	if s.tab == seTabAll && section != seRecentFiles && section != seRecentActions {
 		base = seAllLimit
-	} else if section == seRecentFiles || section == seRecentActions || section == seHistory {
+	} else if section == seRecentFiles || section == seRecentActions {
 		base = seRecentLimit
 	}
 	return base + s.extra[section]
@@ -303,7 +602,7 @@ func (m *Model) loadSearchEverywhereLanguages() {
 				return
 			}
 			s.languages = languages
-			m.invalidate()
+			m.searchEverywhereSectionDone()
 		})
 	}()
 }
@@ -314,10 +613,23 @@ func (m *Model) refreshSearchEverywhere() {
 	if s == nil {
 		return
 	}
+	if s.notFound != "" && s.autoEverywhere && s.includeNonProject {
+		if len(s.notFound) > 1 && strings.Contains(s.query, s.notFound) {
+			// Keep the automatically widened scope while the user is still
+			// refining the query that had no project results.
+		} else {
+			s.includeNonProject = false
+			s.notFound = ""
+		}
+	}
 	if parsed, ok := parseSECommand(s.query); ok {
 		if parsed.list {
+			m.cancelSearchEverywhereSources()
 			s.seq++
+			s.recent = nil
 			s.files = nil
+			s.dirs = nil
+			s.indexSymbols = nil
 			s.symbols = nil
 			s.endpoints = nil
 			s.text = nil
@@ -338,10 +650,21 @@ func (m *Model) refreshSearchEverywhere() {
 		s.extra = map[seSection]int{}
 		s.sel = 0
 		s.selKey = ""
+		s.selAnchor = 0
+		s.selKeys = nil
 	}
+	m.cancelSearchEverywhereSources()
 	s.seq++
 	seq := s.seq
+	s.extra = map[seSection]int{}
+	s.sel = 0
+	s.selKey = ""
+	s.selAnchor = 0
+	s.selKeys = nil
+	s.recent = nil
 	s.files = nil
+	s.dirs = nil
+	s.indexSymbols = nil
 	s.symbols = nil
 	s.endpoints = nil
 	s.text = nil
@@ -353,15 +676,18 @@ func (m *Model) refreshSearchEverywhere() {
 	s.textDone = false
 	s.textTruncated = false
 	s.err = ""
+	s.pendingEnter = false
 	m.clampSESelection()
 	sections := sectionsFor(s.tab, s.seEmpty())
 	rawQuery := strings.TrimSpace(s.query)
 	s.location = parseSELocationQuery(rawQuery, m.Root())
 	query := strings.TrimSpace(s.location.text)
-	wantsFiles, wantsSymbols, wantsEndpoints, wantsText := false, false, false, false
+	wantsRecent, wantsFiles, wantsSymbols, wantsEndpoints, wantsText := false, false, false, false, false
 	for _, sec := range sections {
 		switch sec {
-		case seRecentFiles, seFiles:
+		case seRecentFiles:
+			wantsRecent = true
+		case seFiles:
 			wantsFiles = true
 		case seClasses, seSymbols:
 			wantsSymbols = true
@@ -375,14 +701,28 @@ func (m *Model) refreshSearchEverywhere() {
 		wantsText = false
 		s.textDone = true
 	}
+	if !wantsRecent && !wantsFiles {
+		s.fileDone = true
+	}
+	if !wantsSymbols {
+		s.symbolDone = true
+	}
+	if !wantsEndpoints {
+		s.endpointDone = true
+	}
+	if !wantsText {
+		s.textDone = true
+	}
 	if m.Root() == "" {
-		wantsFiles, wantsSymbols, wantsEndpoints, wantsText = false, false, false, false
+		wantsRecent, wantsFiles, wantsSymbols, wantsEndpoints, wantsText = false, false, false, false, false
 		s.fileDone = true
 		s.symbolDone = true
 		s.endpointDone = true
 		s.textDone = true
 	}
-	if wantsFiles {
+	if wantsRecent {
+		m.seQueryRecentFiles(seq)
+	} else if wantsFiles {
 		m.seQueryFiles(seq, query)
 	}
 	if wantsSymbols {
@@ -397,11 +737,78 @@ func (m *Model) refreshSearchEverywhere() {
 	m.invalidate()
 }
 
-// seQueryFiles asks the file index; an empty query lists recent files.
-func (m *Model) seQueryFiles(seq int, query string) {
+// seQueryRecentFiles lists the backend's recent files for an empty query, as
+// OpenIDEA's Recent Files section does.
+func (m *Model) seQueryRecentFiles(seq int) {
 	s := m.se
+	if s == nil {
+		return
+	}
+	if m.mgr == nil || m.ctx == nil {
+		s.fileDone = true
+		m.searchEverywhereSectionDone()
+		return
+	}
 	req := m.nextRequest()
 	s.fileReq = req
+	root := m.Root()
+	go func() {
+		ctx, cancel := context.WithTimeout(m.ctx, seQueryTimeout)
+		defer cancel()
+		raw, err := m.mgr.Invoke(ctx, Window, "recent_files", nil)
+		var paths []string
+		if err == nil {
+			err = json.Unmarshal(raw, &paths)
+		}
+		m.post(func() {
+			if m.se != s || s.seq != seq {
+				return
+			}
+			s.fileReq = 0
+			s.fileDone = true
+			if err != nil {
+				if openidea.ErrorKind(err) != "cancelled" && s.err == "" {
+					s.err = "Loading recent files failed: " + err.Error()
+				}
+			} else {
+				s.recent = make([]openidea.FileMatch, 0, min(len(paths), s.seSectionLimit(seRecentFiles)))
+				for _, path := range paths {
+					if path == "" {
+						continue
+					}
+					s.recent = append(s.recent, openidea.FileMatch{
+						Path: path, RelPath: seRelativePath(root, path),
+					})
+					if len(s.recent) > s.seSectionLimit(seRecentFiles) {
+						break
+					}
+				}
+			}
+			m.searchEverywhereSectionDone()
+		})
+	}()
+}
+
+// seQueryFiles asks the file index for files and, where the tab can show
+// directories, for folder matches too. Empty queries use recent_files above.
+func (m *Model) seQueryFiles(seq int, query string) {
+	s := m.se
+	if s == nil {
+		return
+	}
+	if m.mgr == nil || m.ctx == nil {
+		s.fileDone = true
+		m.searchEverywhereSectionDone()
+		return
+	}
+	req := m.nextRequest()
+	s.fileReq = req
+	tab := s.tab
+	empty := s.seEmpty()
+	includeNonProject := s.includeNonProject
+	fileSet := s.fileSet
+	locationHas := s.location.has
+	languageFilter := s.filters.active(seTabFiles)
 	go func() {
 		select {
 		case <-m.ctx.Done():
@@ -411,22 +818,47 @@ func (m *Model) seQueryFiles(seq int, query string) {
 		ctx, cancel := context.WithTimeout(m.ctx, seQueryTimeout)
 		defer cancel()
 		limit := seFileQueryLimit
-		if s.tab == seTabFiles && !s.seEmpty() {
+		scopeFilter := !includeNonProject && fileSet != "all"
+		if (tab == seTabFiles && !empty) || scopeFilter || languageFilter {
 			limit = seTabLimit + 1
 		}
-		raw, err := m.mgr.Invoke(ctx, Window, "find_files", map[string]any{
-			"query": query, "limit": limit,
-		})
-		var files []openidea.FileMatch
-		if err == nil {
-			err = json.Unmarshal(raw, &files)
+		if scopeFilter || languageFilter {
+			limit = limit*4 + 1
 		}
+		withDirs := strings.TrimSpace(query) != "" && !languageFilter && !locationHas
+
+		var files, dirs []openidea.FileMatch
+		var fileErr, dirErr error
+		var wg sync.WaitGroup
+		fetch := func(command string, dst *[]openidea.FileMatch, errp *error, done *sync.WaitGroup) {
+			defer done.Done()
+			raw, err := m.mgr.Invoke(ctx, Window, command, map[string]any{
+				"query": query, "limit": limit,
+			})
+			if err == nil {
+				err = json.Unmarshal(raw, dst)
+			}
+			*errp = err
+		}
+		wg.Add(1)
+		go fetch("find_files", &files, &fileErr, &wg)
+		if withDirs {
+			wg.Add(1)
+			go fetch("find_dirs", &dirs, &dirErr, &wg)
+		}
+		wg.Wait()
+
 		m.post(func() {
 			if m.se != s || s.seq != seq {
 				return
 			}
 			s.fileReq = 0
 			s.fileDone = true
+			files = m.mergeSearchEverywhereFiles(files, dirs, query)
+			err := fileErr
+			if err == nil && dirErr != nil && len(files) == 0 {
+				err = dirErr
+			}
 			if err != nil {
 				if openidea.ErrorKind(err) != "cancelled" {
 					s.err = "Finding files failed: " + err.Error()
@@ -434,16 +866,73 @@ func (m *Model) seQueryFiles(seq int, query string) {
 			} else {
 				s.files = files
 			}
-			m.invalidate()
+			m.searchEverywhereSectionDone()
 		})
 	}()
 }
 
-// seQuerySymbols asks the language server for workspace symbols.
+func (m *Model) mergeSearchEverywhereFiles(
+	files, dirs []openidea.FileMatch, query string,
+) []openidea.FileMatch {
+	s := m.se
+	if s == nil {
+		return files
+	}
+	merged := make([]openidea.FileMatch, 0, len(files)+len(dirs))
+	seen := map[string]bool{}
+	for _, file := range files {
+		if m.searchEverywherePathAllowed(file.Path, s.fileSet, s.includeNonProject) &&
+			!s.filters.languageExcluded(seTabFiles, file.Path, s.languages) {
+			merged = append(merged, file)
+			seen[file.Path] = true
+		}
+	}
+	if s.includeNonProject && strings.TrimSpace(query) != "" {
+		for _, file := range m.searchEverywhereScratchMatches(query) {
+			if !seen[file.Path] {
+				merged = append(merged, file)
+				seen[file.Path] = true
+			}
+		}
+	}
+	for _, dir := range dirs {
+		if !seen[dir.Path] && m.searchEverywherePathAllowed(dir.Path, s.fileSet, s.includeNonProject) &&
+			!s.filters.languageExcluded(seTabFiles, dir.Path, s.languages) {
+			merged = append(merged, dir)
+			seen[dir.Path] = true
+		}
+	}
+	sort.SliceStable(merged, func(i, j int) bool {
+		if merged[i].Score != merged[j].Score {
+			return merged[i].Score > merged[j].Score
+		}
+		return !strings.HasSuffix(merged[i].RelPath, "/") &&
+			strings.HasSuffix(merged[j].RelPath, "/")
+	})
+	return merged
+}
+
+// seQuerySymbols asks both the project index and the language server, then
+// merges them in the All/Classes/Symbols sections as OpenIDEA does.
 func (m *Model) seQuerySymbols(seq int, query string) {
 	s := m.se
+	if s == nil {
+		return
+	}
+	if m.mgr == nil || m.ctx == nil {
+		s.symbolDone = true
+		m.searchEverywhereSectionDone()
+		return
+	}
 	req := m.nextRequest()
 	s.symbolReq = req
+	filter := "all"
+	limit := s.seSectionLimit(seSymbols) + 1
+	if s.tab == seTabClasses {
+		filter = "types"
+	} else if s.tab == seTabAll {
+		limit = limit*2 + 1
+	}
 	go func() {
 		select {
 		case <-m.ctx.Done():
@@ -452,12 +941,35 @@ func (m *Model) seQuerySymbols(seq int, query string) {
 		}
 		ctx, cancel := context.WithTimeout(m.ctx, seQueryTimeout)
 		defer cancel()
-		raw, err := m.mgr.Invoke(ctx, Window, "lsp_workspace_symbols", map[string]any{
-			"request": req, "query": query,
-		})
-		var syms []openidea.WorkspaceSymbol
-		if err == nil {
-			err = json.Unmarshal(raw, &syms)
+		var indexed []openidea.SymbolMatch
+		var lsp []openidea.WorkspaceSymbol
+		var indexErr, lspErr error
+		var wait sync.WaitGroup
+		wait.Add(2)
+		go func() {
+			defer wait.Done()
+			raw, err := m.mgr.Invoke(ctx, Window, "find_symbols", map[string]any{
+				"query": query, "filter": filter, "limit": limit,
+			})
+			if err == nil {
+				err = json.Unmarshal(raw, &indexed)
+			}
+			indexErr = err
+		}()
+		go func() {
+			defer wait.Done()
+			raw, err := m.mgr.Invoke(ctx, Window, "lsp_workspace_symbols", map[string]any{
+				"request": req, "query": query,
+			})
+			if err == nil {
+				err = json.Unmarshal(raw, &lsp)
+			}
+			lspErr = err
+		}()
+		wait.Wait()
+		err := indexErr
+		if err != nil {
+			err = lspErr
 		}
 		m.post(func() {
 			if m.se != s || s.seq != seq {
@@ -469,11 +981,10 @@ func (m *Model) seQuerySymbols(seq int, query string) {
 				if openidea.ErrorKind(err) != "cancelled" && s.err == "" {
 					s.err = "Finding symbols failed: " + err.Error()
 				}
-			} else if len(syms) > seSymbolQueryLimit {
-				syms = syms[:seSymbolQueryLimit]
 			}
-			s.symbols = syms
-			m.invalidate()
+			s.indexSymbols = indexed
+			s.symbols = lsp
+			m.searchEverywhereSectionDone()
 		})
 	}()
 }
@@ -482,18 +993,33 @@ func (m *Model) seQuerySymbols(seq int, query string) {
 // shows; the rest of the stream is dropped.
 func (m *Model) seQueryText(seq int, query string) {
 	s := m.se
+	if s == nil {
+		return
+	}
+	if m.mgr == nil || m.ctx == nil {
+		s.textDone = true
+		s.textBusy = false
+		m.searchEverywhereSectionDone()
+		return
+	}
 	ch := m.nextChannel()
 	s.textCh = ch
 	s.textBusy = true
+	mask := s.filters.Text
+	fileSet := s.fileSet
 	go func() {
 		ctx, cancel := context.WithTimeout(m.ctx, 5*time.Minute)
 		defer cancel()
+		scope := map[string]any{"kind": "project"}
+		if fileSet != "all" {
+			scope = map[string]any{"kind": "fileSet", "set": fileSet}
+		}
 		_, err := m.mgr.Invoke(ctx, Window, "search_start", map[string]any{
 			"request": ch,
 			"query": map[string]any{
 				"pattern": query, "isRegex": false, "caseSensitive": false,
-				"wholeWord": false, "include": searchMaskList(s.filters.Text), "exclude": []string{},
-				"scope": map[string]any{"kind": "project"}, "maxMatches": 0,
+				"wholeWord": false, "include": searchMaskList(mask), "exclude": []string{},
+				"scope": scope, "maxMatches": seTabLimit + 1,
 			},
 			"onEvent": map[string]any{"$channel": ch},
 		})
@@ -505,7 +1031,7 @@ func (m *Model) seQueryText(seq int, query string) {
 			if err != nil && openidea.ErrorKind(err) != "cancelled" && s.err == "" {
 				s.err = "Searching failed: " + err.Error()
 			}
-			m.invalidate()
+			m.searchEverywhereSectionDone()
 		})
 	}()
 }
@@ -539,6 +1065,61 @@ func (m *Model) acceptSearchEverywhereEvent(data json.RawMessage) {
 		s.textDone = true
 	}
 	m.clampSESelection()
+	m.searchEverywhereSectionDone()
+}
+
+func (s *sePane) searchEverywhereLoading() bool {
+	for _, section := range sectionsFor(s.tab, s.seEmpty()) {
+		switch section {
+		case seRecentFiles, seFiles:
+			if !s.fileDone {
+				return true
+			}
+		case seClasses, seSymbols:
+			if !s.symbolDone {
+				return true
+			}
+		case seEndpoints:
+			if !s.endpointDone || s.pluginsBusy {
+				return true
+			}
+		case seText:
+			if !s.textDone || s.textBusy {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// searchEverywhereSectionDone keeps selection and preview aligned while
+// sources stream, waits for an early Enter until the top result is settled,
+// and applies IDEA's automatic "search everywhere instead" fallback.
+func (m *Model) searchEverywhereSectionDone() {
+	s := m.se
+	if s == nil {
+		return
+	}
+	m.clampSESelection()
+	m.syncSearchEverywherePreview()
+	if !s.searchEverywhereLoading() && !s.seEmpty() && s.autoEverywhere &&
+		!s.includeNonProject && s.tab != seTabActions && s.notFound == "" &&
+		len(m.seRows()) == 0 {
+		query := strings.TrimSpace(parseSELocationQuery(strings.TrimSpace(s.query), m.Root()).text)
+		if query != "" {
+			s.includeNonProject = true
+			s.notFound = query
+			m.refreshSearchEverywhere()
+			return
+		}
+	}
+	if s.pendingEnter && !s.searchEverywhereLoading() {
+		side := s.pendingSide
+		s.pendingEnter = false
+		s.pendingSide = false
+		m.activateSearchEverywhereNow(side)
+		return
+	}
 	m.invalidate()
 }
 
@@ -550,9 +1131,14 @@ func (m *Model) seActionItems(query string) []seItem {
 			continue
 		}
 		enabled := m.ActionEnabled(cmd.id)
+		icon := (*ui.SVG)(nil)
+		if action, ok := actionGet(cmd.id); ok && action.Icon != nil {
+			icon = action.Icon
+		}
 		detail := cmd.group
-		if cmd.shortcut != "" {
-			detail += " · " + cmd.shortcut
+		score := seItemMatchScore(cmd.title, cmd.group+" "+cmd.keywords+" "+cmd.id, query)
+		if !enabled {
+			score -= 150
 		}
 		items = append(items, seItem{
 			kind:     "action",
@@ -561,14 +1147,11 @@ func (m *Model) seActionItems(query string) []seItem {
 			action:   cmd.id,
 			disabled: !enabled,
 			indices:  seMatchIndices(cmd.title, query),
+			score:    score,
+			icon:     icon,
 		})
 	}
-	sort.SliceStable(items, func(i, j int) bool {
-		if items[i].disabled != items[j].disabled {
-			return !items[i].disabled
-		}
-		return false
-	})
+	sort.SliceStable(items, func(i, j int) bool { return items[i].score > items[j].score })
 	return items
 }
 
@@ -576,16 +1159,18 @@ func (m *Model) seActionItems(query string) []seItem {
 func (m *Model) seRecentActionItems() []seItem {
 	var items []seItem
 	for _, id := range m.recentActions {
-		cmd, ok := Command(id)
+		cmd, ok := actionGet(id)
 		if !ok {
 			continue
 		}
 		items = append(items, seItem{
 			kind:     "action",
-			title:    cmd.title,
-			detail:   cmd.group,
-			action:   cmd.id,
-			disabled: !m.ActionEnabled(cmd.id),
+			title:    cmd.Title,
+			detail:   cmd.Category,
+			action:   cmd.ID,
+			disabled: !m.ActionEnabled(cmd.ID),
+			icon:     cmd.Icon,
+			score:    0,
 		})
 	}
 	return items
@@ -609,6 +1194,7 @@ func (m *Model) seSettingItems(query string) []seItem {
 			detail:  page.group,
 			setting: page.id,
 			indices: seMatchIndices(page.title, query),
+			score:   seItemMatchScore(page.title, page.group, query) - 120,
 		})
 	}
 	sort.SliceStable(items, func(i, j int) bool {
@@ -644,6 +1230,14 @@ func seMatchIndices(text, query string) []int {
 	return out
 }
 
+func seUintIndices(indices []uint32) []int {
+	out := make([]int, len(indices))
+	for index, value := range indices {
+		out[index] = int(value)
+	}
+	return out
+}
+
 // isTypeKind reports whether a workspace symbol is a class-like declaration,
 // which is what the Classes tab keeps.
 func isTypeKind(kind string) bool {
@@ -654,7 +1248,170 @@ func isTypeKind(kind string) bool {
 	return false
 }
 
-// seRows flattens the loaded results into headers, items and More rows.
+func seSymbolDisplayName(name, kind string) string {
+	switch strings.ToLower(kind) {
+	case "function", "method", "constructor":
+		if !strings.HasSuffix(name, ")") {
+			return name + "()"
+		}
+	}
+	return name
+}
+
+// seItemMatchScore mirrors the comparable degree the All tab used when it
+// merged name, path, symbol, endpoint and action results.
+func seItemMatchScore(title, extra, query string) int {
+	q := strings.ToLower(strings.TrimSpace(query))
+	if q == "" {
+		return 0
+	}
+	name := strings.ToLower(title)
+	basis := name
+	if extra != "" {
+		basis += "\n" + strings.ToLower(extra)
+	}
+	switch {
+	case name == q:
+		return 4000
+	case strings.HasPrefix(name, q):
+		return 3000
+	case strings.Contains(" "+name, " "+q):
+		return 1400
+	case strings.Contains(name, q):
+		return 1000
+	case strings.Contains(basis, q):
+		return 500
+	default:
+		if _, score, ok := fuzzySubsequence(q, basis); ok {
+			return 300 + score
+		}
+	}
+	return 0
+}
+
+func seLSPMatchScore(title, extra, query string) int {
+	q := strings.ToLower(strings.TrimSpace(query))
+	if q == "" {
+		return 0
+	}
+	name := strings.ToLower(title)
+	if name == q {
+		return 3500
+	}
+	if indices := seMatchIndices(title, query); len(indices) > 0 {
+		score := 500 + len(indices)*10
+		if strings.HasPrefix(name, q) {
+			score += 150
+		}
+		if strings.Contains(name, q) {
+			score += 100
+		}
+		return score
+	}
+	if _, score, ok := fuzzySubsequence(q, name+"\n"+strings.ToLower(extra)); ok {
+		return 300 + score
+	}
+	return 0
+}
+
+func seItemWeight(item seItem, query string) int {
+	switch item.kind {
+	case "file":
+		weight := seItemMatchScore(item.title, "", query)
+		if pathWeight := seItemMatchScore(item.rel, "", query); pathWeight > weight {
+			weight = pathWeight
+		}
+		return weight - 200
+	case "symbol", "endpoint":
+		if item.score != 0 {
+			return item.score
+		}
+		return seItemMatchScore(item.title, item.container, query)
+	case "action", "setting":
+		return item.score
+	case "text":
+		return 350
+	default:
+		return 0
+	}
+}
+
+func seRelativePath(root, path string) string {
+	normalizedRoot := strings.TrimRight(strings.ReplaceAll(root, `\`, "/"), "/")
+	normalizedPath := strings.ReplaceAll(path, `\`, "/")
+	if normalizedRoot != "" && strings.HasPrefix(normalizedPath, normalizedRoot+"/") {
+		return strings.TrimPrefix(normalizedPath, normalizedRoot+"/")
+	}
+	return normalizedPath
+}
+
+func sePathInside(root, path string) bool {
+	if root == "" {
+		return true
+	}
+	normalizedRoot := strings.TrimRight(strings.ReplaceAll(root, `\`, "/"), "/")
+	normalizedPath := strings.ReplaceAll(path, `\`, "/")
+	return normalizedPath == normalizedRoot || strings.HasPrefix(normalizedPath, normalizedRoot+"/")
+}
+
+// seTextRow collapses the indentation to OpenIDEA's two visible spaces and
+// maps the backend's match ranges onto the shortened display text.
+func seTextRow(text string, textOffset uint32, ranges [][2]uint32, query string) (string, int, int, []int) {
+	runes := []rune(text)
+	white := 0
+	for white < len(runes) && (runes[white] == ' ' || runes[white] == '\t') {
+		white++
+	}
+	indent := min(white, 2)
+	lead := white - indent
+	trimmedEnd := len(runes)
+	for trimmedEnd > white {
+		r := runes[trimmedEnd-1]
+		if r != ' ' && r != '\t' && r != '\r' {
+			break
+		}
+		trimmedEnd--
+	}
+	display := string(runes[:indent]) + string(runes[white:trimmedEnd])
+	var indices []int
+	for _, match := range ranges {
+		start := max(int(match[0]), white)
+		end := min(int(match[1]), trimmedEnd)
+		for at := start; at < end; at++ {
+			position := at - lead
+			if position >= 0 && position < len([]rune(display)) {
+				indices = append(indices, position)
+			}
+		}
+	}
+	if len(indices) == 0 {
+		indices = seMatchIndices(display, query)
+	}
+	col, endCol := 0, 0
+	if len(ranges) > 0 {
+		col = int(ranges[0][0]) + int(textOffset)
+		endCol = int(ranges[0][1]) + int(textOffset)
+	}
+	return display, col, endCol, indices
+}
+
+func cloneSearchHistories(source map[seTab][]string) map[string][]string {
+	if len(source) == 0 {
+		return nil
+	}
+	out := make(map[string][]string, len(source))
+	for tab, queries := range source {
+		if len(queries) == 0 {
+			continue
+		}
+		out[string(tab)] = append([]string(nil), queries...)
+	}
+	return out
+}
+
+// seRows flattens the loaded results into the rows the dialog renders. An
+// empty query keeps section headers. A typed All query interleaves every
+// source by relevance and omits headers, as OpenIDEA's buildRows does.
 func (m *Model) seRows() []seRow {
 	s := m.se
 	if s == nil {
@@ -667,72 +1424,160 @@ func (m *Model) seRows() []seRow {
 		}
 		return rows
 	}
-	query := strings.TrimSpace(parseSELocationQuery(strings.TrimSpace(s.query), m.Root()).text)
-	var rows []seRow
-	add := func(section seSection, items []seItem) {
-		if len(items) == 0 {
-			return
+	root := m.Root()
+	location := parseSELocationQuery(strings.TrimSpace(s.query), root)
+	query := strings.TrimSpace(location.text)
+
+	fileItems := func(section seSection) []seItem {
+		source := s.files
+		if section == seRecentFiles {
+			source = s.recent
 		}
-		limit := s.seSectionLimit(section)
-		rows = append(rows, seRow{section: section, header: true})
-		for i, it := range items {
-			if i >= limit {
-				rows = append(rows, seRow{section: section, more: true})
-				break
+		items := make([]seItem, 0, len(source))
+		for _, f := range source {
+			if section != seRecentFiles {
+				if !m.searchEverywherePathAllowed(f.Path, s.fileSet, s.includeNonProject) {
+					continue
+				}
+				if s.tab != seTabAll && s.filters.languageExcluded(s.tab, f.Path, s.languages) {
+					continue
+				}
 			}
-			rows = append(rows, seRow{section: section, item: it})
-		}
-	}
-	fileItems := func() []seItem {
-		items := make([]seItem, 0, len(s.files))
-		for _, f := range s.files {
-			if s.tab != seTabAll && s.filters.languageExcluded(s.tab, f.Path, s.languages) {
-				continue
+			rel := strings.ReplaceAll(f.RelPath, `\`, "/")
+			if rel == "" {
+				rel = seRelativePath(root, f.Path)
 			}
-			name := filepath.Base(f.RelPath)
-			indices := seFileMatchIndices(f.RelPath, name, f.Indices)
+			folder := strings.HasSuffix(rel, "/")
+			name := filepath.Base(strings.TrimSuffix(rel, "/"))
+			indices := seFileMatchIndices(rel, name, f.Indices)
 			line, col := 0, 0
-			if parsed := parseSELocationQuery(strings.TrimSpace(s.query), m.Root()); parsed.has {
-				line, col = parsed.line, parsed.col
+			if location.has {
+				line, col = location.line, location.col
 			}
 			items = append(items, seItem{
-				kind:    "file",
-				title:   name,
-				detail:  filepath.Dir(f.RelPath),
-				path:    f.Path,
-				line:    line,
-				col:     col,
-				indices: indices,
+				kind:      "file",
+				title:     name,
+				rel:       rel,
+				container: filepath.Dir(strings.TrimSuffix(rel, "/")),
+				path:      f.Path,
+				line:      line,
+				col:       col,
+				lineSet:   location.has,
+				folder:    folder,
+				indices:   indices,
+				score:     seItemMatchScore(name, rel, query),
 			})
 		}
 		return items
 	}
-	symbolItems := func(tab seTab, typesOnly bool) []seItem {
-		items := make([]seItem, 0, len(s.symbols))
-		for _, sym := range s.symbols {
-			if typesOnly && !isTypeKind(sym.Kind) {
+	symbolItems := func(tab seTab, typesOnly, excludeTypes bool) []seItem {
+		type candidate struct {
+			item  seItem
+			score int
+			order int
+		}
+		var candidates []candidate
+		seen := map[string]bool{}
+		keep := func(kind string) bool {
+			if typesOnly && !isTypeKind(kind) {
+				return false
+			}
+			if excludeTypes && isTypeKind(kind) {
+				return false
+			}
+			return !s.filters.kindExcluded(tab, kind)
+		}
+		for index, sym := range s.indexSymbols {
+			if !keep(sym.Kind) {
 				continue
 			}
-			if s.filters.kindExcluded(tab, sym.Kind) {
+			if s.filters.languageExcluded(tab, sym.Path, s.languages) ||
+				!m.searchEverywherePathAllowed(sym.Path, s.fileSet, s.includeNonProject) {
 				continue
 			}
-			if s.filters.languageExcluded(tab, sym.Location.Path, s.languages) {
+			key := fmt.Sprintf("%s\x00%d\x00%s", sym.Path, sym.Range.Start.Line, sym.Name)
+			if seen[key] {
 				continue
 			}
-			detail := filepath.Dir(sym.Location.Path)
-			if sym.Container != nil && *sym.Container != "" {
-				detail = *sym.Container + " · " + detail
+			seen[key] = true
+			container := ""
+			if sym.Container != nil {
+				container = *sym.Container
 			}
-			items = append(items, seItem{
-				kind:    "symbol",
-				symbol:  strings.ToLower(sym.Kind),
-				title:   sym.Name,
-				detail:  detail,
-				path:    sym.Location.Path,
-				line:    int(sym.Location.Range.Start.Line),
-				col:     int(sym.Location.Range.Start.Col),
-				indices: seMatchIndices(sym.Name, query),
+			score := 3000 - index
+			if strings.EqualFold(sym.Name, query) {
+				score = 4000 - index
+			}
+			candidates = append(candidates, candidate{
+				item: seItem{
+					kind:      "symbol",
+					symbol:    strings.ToLower(sym.Kind),
+					title:     seSymbolDisplayName(sym.Name, sym.Kind),
+					rel:       sym.RelPath,
+					container: container,
+					right:     filepath.Base(sym.Path),
+					path:      sym.Path,
+					line:      int(sym.Range.Start.Line),
+					col:       int(sym.Range.Start.Col),
+					endCol:    int(sym.Range.Start.Col) + len([]rune(sym.Name)),
+					lineSet:   true,
+					indices:   seUintIndices(sym.Indices),
+					score:     score,
+				},
+				score: score,
+				order: len(candidates),
 			})
+		}
+		for index, sym := range s.symbols {
+			if !keep(sym.Kind) {
+				continue
+			}
+			if s.filters.languageExcluded(tab, sym.Location.Path, s.languages) ||
+				!m.searchEverywherePathAllowed(sym.Location.Path, s.fileSet, s.includeNonProject) {
+				continue
+			}
+			key := fmt.Sprintf("%s\x00%d\x00%s", sym.Location.Path, sym.Location.Range.Start.Line, sym.Name)
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			container := ""
+			if sym.Container != nil {
+				container = *sym.Container
+			}
+			score := seLSPMatchScore(sym.Name, container, query)
+			if strings.EqualFold(sym.Name, query) {
+				score = 3500
+			}
+			candidates = append(candidates, candidate{
+				item: seItem{
+					kind:      "symbol",
+					symbol:    strings.ToLower(sym.Kind),
+					title:     seSymbolDisplayName(sym.Name, sym.Kind),
+					rel:       seRelativePath(root, sym.Location.Path),
+					container: container,
+					right:     filepath.Base(sym.Location.Path),
+					path:      sym.Location.Path,
+					line:      int(sym.Location.Range.Start.Line),
+					col:       int(sym.Location.Range.Start.Col),
+					endCol:    int(sym.Location.Range.Start.Col) + len([]rune(sym.Name)),
+					lineSet:   true,
+					indices:   seMatchIndices(seSymbolDisplayName(sym.Name, sym.Kind), query),
+					score:     score,
+				},
+				score: score,
+				order: len(candidates) + index,
+			})
+		}
+		sort.SliceStable(candidates, func(i, j int) bool {
+			if candidates[i].score != candidates[j].score {
+				return candidates[i].score > candidates[j].score
+			}
+			return candidates[i].order < candidates[j].order
+		})
+		items := make([]seItem, len(candidates))
+		for index := range candidates {
+			items[index] = candidates[index].item
 		}
 		return items
 	}
@@ -743,17 +1588,23 @@ func (m *Model) seRows() []seRow {
 				continue
 			}
 			for _, hit := range f.Matches {
-				col := 0
-				if len(hit.Ranges) > 0 {
-					col = int(hit.Ranges[0][0])
+				text, col, endCol, indices := seTextRow(hit.Text, hit.TextOffset, hit.Ranges, query)
+				rel := f.RelPath
+				if rel == "" {
+					rel = seRelativePath(root, f.Path)
 				}
 				items = append(items, seItem{
-					kind:   "text",
-					title:  strings.TrimSpace(hit.Text),
-					detail: fmt.Sprintf("%s:%d", filepath.Base(f.Path), hit.Line+1),
-					path:   f.Path,
-					line:   int(hit.Line),
-					col:    col,
+					kind:    "text",
+					title:   text,
+					rel:     rel,
+					right:   filepath.Base(f.Path),
+					path:    f.Path,
+					line:    int(hit.Line),
+					col:     col,
+					endCol:  endCol,
+					lineSet: true,
+					indices: indices,
+					score:   350,
 				})
 				if len(items) >= seTextMatchLimit {
 					return items
@@ -762,34 +1613,115 @@ func (m *Model) seRows() []seRow {
 		}
 		return items
 	}
-	historyItems := func() []seItem {
-		items := make([]seItem, 0, len(m.searchHistory))
-		for _, q := range m.searchHistory {
-			items = append(items, seItem{kind: "history", title: q})
-		}
-		return items
-	}
-	for _, section := range sectionsFor(s.tab, s.seEmpty()) {
+	sectionItems := func(section seSection) []seItem {
 		switch section {
-		case seHistory:
-			add(section, historyItems())
 		case seRecentFiles:
-			add(section, fileItems())
+			return fileItems(section)
 		case seRecentActions:
-			add(section, m.seRecentActionItems())
+			return m.seRecentActionItems()
 		case seClasses:
-			add(section, symbolItems(seTabClasses, true))
+			return symbolItems(seTabClasses, true, false)
 		case seFiles:
-			add(section, fileItems())
+			return fileItems(section)
 		case seSymbols:
-			add(section, symbolItems(seTabSymbols, false))
+			return symbolItems(seTabSymbols, false, s.tab == seTabAll)
 		case seEndpoints:
-			add(section, seEndpointItems(s.endpoints, strings.TrimSpace(s.query)))
+			items := seEndpointItems(s.endpoints, query)
+			for index := range items {
+				items[index].rel = seRelativePath(root, items[index].path)
+			}
+			return items
 		case seActions:
-			items := append(m.seActionItems(query), m.seSettingItems(query)...)
-			add(section, items)
+			actions := m.seActionItems(query)
+			if s.tab == seTabActions && !s.includeNonProject {
+				filtered := actions[:0]
+				for _, item := range actions {
+					if !item.disabled {
+						filtered = append(filtered, item)
+					}
+				}
+				actions = filtered
+			}
+			merged := append(actions, m.seSettingItems(query)...)
+			sort.SliceStable(merged, func(i, j int) bool {
+				return merged[i].score > merged[j].score
+			})
+			return merged
 		case seText:
-			add(section, textItems())
+			return textItems()
+		default:
+			return nil
+		}
+	}
+
+	sections := sectionsFor(s.tab, s.seEmpty())
+	if !s.seEmpty() && s.tab == seTabAll {
+		type mixedItem struct {
+			item        seItem
+			section     seSection
+			weight      int
+			sectionRank int
+			index       int
+		}
+		var mixed []mixedItem
+		hasMore := map[seSection]bool{}
+		for rank, section := range sections {
+			all := sectionItems(section)
+			limit := s.seSectionLimit(section)
+			capWeight := int(^uint(0) >> 1)
+			for index, item := range all {
+				if index >= limit {
+					hasMore[section] = true
+					break
+				}
+				weight := seItemWeight(item, query)
+				if weight > capWeight {
+					weight = capWeight
+				}
+				capWeight = weight
+				mixed = append(mixed, mixedItem{
+					item: item, section: section, weight: weight,
+					sectionRank: rank, index: index,
+				})
+			}
+		}
+		sort.SliceStable(mixed, func(i, j int) bool {
+			if mixed[i].weight != mixed[j].weight {
+				return mixed[i].weight > mixed[j].weight
+			}
+			if mixed[i].sectionRank != mixed[j].sectionRank {
+				return mixed[i].sectionRank < mixed[j].sectionRank
+			}
+			return mixed[i].index < mixed[j].index
+		})
+		rows := make([]seRow, 0, len(mixed)+len(sections))
+		for _, mixed := range mixed {
+			rows = append(rows, seRow{section: mixed.section, item: mixed.item})
+		}
+		for _, section := range sections {
+			if hasMore[section] {
+				rows = append(rows, seRow{section: section, more: true})
+			}
+		}
+		return rows
+	}
+
+	var rows []seRow
+	for _, section := range sections {
+		items := sectionItems(section)
+		if len(items) == 0 {
+			continue
+		}
+		limit := s.seSectionLimit(section)
+		if s.seEmpty() {
+			rows = append(rows, seRow{section: section, header: true})
+		}
+		for index, item := range items {
+			if index >= limit {
+				rows = append(rows, seRow{section: section, more: true})
+				break
+			}
+			rows = append(rows, seRow{section: section, item: item})
 		}
 	}
 	return rows
@@ -813,11 +1745,127 @@ func seRowKey(r seRow) string {
 		return "action:" + it.action
 	case "setting":
 		return "setting:" + it.setting
-	case "history":
-		return "history:" + strings.ToLower(it.title)
 	default:
 		return fmt.Sprintf("%s:%s:%d:%d:%s", it.kind, it.path, it.line, it.col, it.title)
 	}
+}
+
+// selectSERow applies OpenIDEA's row-selection modes without activating the
+// result. Shift extends from the anchor and a primary-modifier click toggles
+// one row; a plain click leaves only that row selected.
+func (m *Model) selectSERow(index int, mode recentSelectionMode) {
+	s := m.se
+	if s == nil {
+		return
+	}
+	rows := m.seRows()
+	if index < 0 || index >= len(rows) || !seSelectable(rows[index]) {
+		return
+	}
+	switch mode {
+	case recentSelectionRange:
+		anchor := clampSymbolSel(s.selAnchor, len(rows))
+		if s.selKeys == nil {
+			anchor = clampSymbolSel(s.sel, len(rows))
+		}
+		start, end := anchor, index
+		if start > end {
+			start, end = end, start
+		}
+		keys := make(map[string]bool, end-start+1)
+		for _, row := range rows[start : end+1] {
+			if seSelectable(row) {
+				keys[seRowKey(row)] = true
+			}
+		}
+		s.sel = index
+		s.selKey = seRowKey(rows[index])
+		s.selAnchor = anchor
+		s.selKeys = keys
+	case recentSelectionToggle:
+		keys := make(map[string]bool, len(s.selKeys)+1)
+		if s.selKeys == nil {
+			if s.sel >= 0 && s.sel < len(rows) && seSelectable(rows[s.sel]) {
+				keys[seRowKey(rows[s.sel])] = true
+			}
+		} else {
+			for key, selected := range s.selKeys {
+				if selected {
+					keys[key] = true
+				}
+			}
+		}
+		key := seRowKey(rows[index])
+		if keys[key] {
+			delete(keys, key)
+			if len(keys) == 0 {
+				s.sel = index
+				s.selKey = key
+				s.selAnchor = index
+				s.selKeys = nil
+				break
+			}
+			lead := index
+			for rowIndex := len(rows) - 1; rowIndex >= 0; rowIndex-- {
+				if keys[seRowKey(rows[rowIndex])] {
+					lead = rowIndex
+					break
+				}
+			}
+			s.sel = lead
+			s.selKey = seRowKey(rows[lead])
+			s.selAnchor = lead
+			s.selKeys = keys
+			break
+		}
+		keys[key] = true
+		s.sel = index
+		s.selKey = key
+		s.selAnchor = index
+		s.selKeys = keys
+	default:
+		s.sel = index
+		s.selKey = seRowKey(rows[index])
+		s.selAnchor = index
+		s.selKeys = nil
+	}
+	s.revealSelection = true
+	m.syncSearchEverywherePreview()
+	m.invalidate()
+}
+
+// isSERowSelected reports the lead and the additional selected rows.
+func (s *sePane) isSERowSelected(index int, row seRow) bool {
+	if s == nil || index < 0 {
+		return false
+	}
+	if index == s.sel {
+		return true
+	}
+	return s.selKeys != nil && s.selKeys[seRowKey(row)]
+}
+
+// selectedSERows returns the selected rows in list order, as OpenIDEA's
+// selectedRows helper does. With one-row selection it returns the lead.
+func (m *Model) selectedSERows(rows []seRow) []seRow {
+	s := m.se
+	if s == nil || len(rows) == 0 || s.sel < 0 || s.sel >= len(rows) ||
+		!seSelectable(rows[s.sel]) {
+		return nil
+	}
+	if s.selKeys == nil {
+		return []seRow{rows[s.sel]}
+	}
+	out := make([]seRow, 0, len(s.selKeys))
+	for _, row := range rows {
+		if seSelectable(row) && s.selKeys[seRowKey(row)] {
+			out = append(out, row)
+		}
+	}
+	if len(out) == 0 {
+		return []seRow{rows[s.sel]}
+	}
+	return out
 }
 
 // stepSearchEverywhere moves the selection, skipping headers and stopping at
@@ -834,10 +1882,80 @@ func (m *Model) stepSearchEverywhere(delta int) {
 		i += delta
 	}
 	if i < 0 || i >= len(rows) {
+		if delta > 0 {
+			for i = 0; i < len(rows) && !seSelectable(rows[i]); i++ {
+			}
+		} else {
+			for i = len(rows) - 1; i >= 0 && !seSelectable(rows[i]); i-- {
+			}
+		}
+	}
+	if i < 0 || i >= len(rows) {
 		return
 	}
 	s.sel = i
 	s.selKey = seRowKey(rows[i])
+	s.selAnchor = i
+	s.selKeys = nil
+	s.revealSelection = true
+	m.syncSearchEverywherePreview()
+	m.invalidate()
+}
+
+// stepSearchEverywhereGroup ports PageUp/PageDown and the primary-modifier
+// arrow shortcuts: the next/previous first row of a section.
+func (m *Model) stepSearchEverywhereGroup(delta int) {
+	s := m.se
+	if s == nil {
+		return
+	}
+	rows := m.seRows()
+	starts := make([]int, 0)
+	last := seSection("")
+	for index, row := range rows {
+		if row.header || row.more || !seSelectable(row) {
+			continue
+		}
+		if row.section != last {
+			starts = append(starts, index)
+			last = row.section
+		}
+	}
+	if len(starts) < 2 {
+		return
+	}
+	target := starts[0]
+	if delta > 0 {
+		target = starts[len(starts)-1]
+		for _, start := range starts {
+			if start > s.sel {
+				target = start
+				break
+			}
+		}
+	} else {
+		current := 0
+		for index := len(starts) - 1; index >= 0; index-- {
+			if starts[index] <= s.sel {
+				current = index
+				break
+			}
+		}
+		target = starts[current]
+		if target == s.sel {
+			if current > 0 {
+				target = starts[current-1]
+			} else {
+				target = starts[0]
+			}
+		}
+	}
+	s.sel = target
+	s.selKey = seRowKey(rows[target])
+	s.selAnchor = target
+	s.selKeys = nil
+	s.revealSelection = true
+	m.syncSearchEverywherePreview()
 	m.invalidate()
 }
 
@@ -848,6 +1966,19 @@ func (m *Model) clampSESelection() {
 		return
 	}
 	rows := m.seRows()
+	if s.selKeys != nil {
+		valid := make(map[string]bool, len(s.selKeys))
+		for _, row := range rows {
+			if seSelectable(row) && s.selKeys[seRowKey(row)] {
+				valid[seRowKey(row)] = true
+			}
+		}
+		if len(valid) == 0 {
+			s.selKeys = nil
+		} else {
+			s.selKeys = valid
+		}
+	}
 	if s.selKey != "" {
 		for i, row := range rows {
 			if seSelectable(row) && seRowKey(row) == s.selKey {
@@ -865,11 +1996,13 @@ func (m *Model) clampSESelection() {
 			if seSelectable(r) {
 				s.sel = i
 				s.selKey = seRowKey(r)
+				s.revealSelection = true
 				return
 			}
 		}
 		s.sel = -1
 		s.selKey = ""
+		s.selKeys = nil
 	}
 }
 
@@ -889,10 +2022,38 @@ func (m *Model) activateSearchEverywhere(side bool) {
 	if s == nil {
 		return
 	}
+	if s.searchEverywhereLoading() {
+		s.pendingEnter = true
+		s.pendingSide = side
+		m.invalidate()
+		return
+	}
+	m.activateSearchEverywhereNow(side)
+}
+
+func (m *Model) activateSearchEverywhereNow(side bool) {
+	s := m.se
+	if s == nil {
+		return
+	}
 	m.clampSESelection()
 	rows := m.seRows()
 	if s.sel < 0 || s.sel >= len(rows) {
 		m.invalidate()
+		return
+	}
+	if selected := m.selectedSERows(rows); len(selected) > 1 {
+		navigable := make([]seRow, 0, len(selected))
+		for _, candidate := range selected {
+			if searchEverywhereCanSplit(candidate) {
+				navigable = append(navigable, candidate)
+			}
+		}
+		if len(navigable) > 0 {
+			m.openSearchEverywhereRows(navigable, seRowKey(rows[s.sel]), side)
+			return
+		}
+		m.CloseSearchEverywhere()
 		return
 	}
 	row := rows[s.sel]
@@ -901,8 +2062,24 @@ func (m *Model) activateSearchEverywhere(side bool) {
 		if s.tab == seTabAll {
 			step = seMoreStepAll
 		}
+		previousLimit := s.seSectionLimit(row.section)
 		s.extra[row.section] += step
-		s.selKey = seRowKey(row)
+		seen := 0
+		s.selKey = ""
+		s.selAnchor = 0
+		s.selKeys = nil
+		for _, candidate := range m.seRows() {
+			if candidate.header || candidate.more || candidate.section != row.section {
+				continue
+			}
+			if seen == previousLimit {
+				s.selKey = seRowKey(candidate)
+				break
+			}
+			seen++
+		}
+		m.clampSESelection()
+		m.syncSearchEverywherePreview()
 		m.invalidate()
 		return
 	}
@@ -913,30 +2090,47 @@ func (m *Model) activateSearchEverywhere(side bool) {
 		s.query = ""
 		s.sel = 0
 		s.selKey = ""
+		s.selAnchor = 0
+		s.selKeys = nil
 		s.extra = map[seSection]int{}
 		s.filterOpen = false
-		m.refreshSearchEverywhere()
-	case "history":
-		s.query = item.title
-		s.sel = 0
-		s.selKey = ""
-		s.extra = map[seSection]int{}
+		s.historyIndex = -1
 		m.refreshSearchEverywhere()
 	case "action":
 		if item.disabled {
 			return
 		}
 		m.rememberRecentAction(item.action)
+		if action, ok := actionGet(item.action); ok && action.Toggled != nil {
+			m.RunCommand(item.action)
+			m.invalidate()
+			return
+		}
 		m.CloseSearchEverywhere()
 		m.RunCommand(item.action)
 	case "setting":
-		m.rememberSearchQuery(strings.TrimSpace(s.query))
+		m.rememberSearchQuery(s.tab, strings.TrimSpace(s.query))
 		m.CloseSearchEverywhere()
 		m.OpenSettingsPage(item.setting)
-	case "file", "symbol", "endpoint", "text":
-		m.rememberSearchQuery(strings.TrimSpace(s.query))
+	case "file":
+		m.rememberSearchQuery(s.tab, strings.TrimSpace(s.query))
 		m.CloseSearchEverywhere()
-		m.revealAt(item.path, item.line, item.col)
+		if item.folder {
+			m.selectInProjectView(item.path)
+		} else {
+			m.revealAt(item.path, item.line, item.col)
+			if side {
+				m.OpenInOppositeGroup()
+			}
+		}
+	case "symbol", "endpoint", "text":
+		m.rememberSearchQuery(s.tab, strings.TrimSpace(s.query))
+		m.CloseSearchEverywhere()
+		if item.kind == "text" && item.endCol > item.col {
+			m.revealRange(item.path, item.line, item.col, item.line, item.endCol)
+		} else {
+			m.revealAt(item.path, item.line, item.col)
+		}
 		if side {
 			m.OpenInOppositeGroup()
 		}
@@ -945,14 +2139,120 @@ func (m *Model) activateSearchEverywhere(side bool) {
 	}
 }
 
-// rememberSearchQuery puts an executed query first in the search history,
+// openSearchEverywhereRows ports OpenIDEA's multi-result openInListOrder:
+// every chosen navigation result opens as a regular tab, then the lead row
+// receives focus and its caret or selection position.
+func (m *Model) openSearchEverywhereRows(rows []seRow, leadKey string, side bool) {
+	s := m.se
+	if s == nil {
+		return
+	}
+	m.rememberSearchQuery(s.tab, strings.TrimSpace(s.query))
+	m.CloseSearchEverywhere()
+
+	targets := make([]seRow, 0, len(rows))
+	for _, row := range rows {
+		if searchEverywhereCanSplit(row) {
+			targets = append(targets, row)
+		}
+	}
+	if len(targets) == 0 {
+		return
+	}
+
+	var openNext func(int)
+	openNext = func(index int) {
+		if index >= len(targets) {
+			for _, row := range targets {
+				if seRowKey(row) == leadKey {
+					m.focusSearchEverywhereTarget(row, side)
+					return
+				}
+			}
+			m.focusSearchEverywhereTarget(targets[len(targets)-1], side)
+			return
+		}
+		item := targets[index].item
+		m.openWith(item.path, openSpec{
+			at: -1,
+			done: func(tab *Tab) {
+				m.revealSearchEverywhereTarget(tab, item)
+				if side {
+					m.moveRecentTabToSide(tab, false)
+				}
+				openNext(index + 1)
+			},
+			failed: func(string, error) {
+				openNext(index + 1)
+			},
+		})
+	}
+	openNext(0)
+}
+
+func (m *Model) focusSearchEverywhereTarget(row seRow, side bool) {
+	item := row.item
+	m.focusRecentLead(item.path, side)
+	var tab *Tab
+	switch {
+	case side && m.split != nil:
+		for _, candidate := range m.split.tabs {
+			if samePath(tabPath(candidate), item.path) {
+				tab = candidate
+				break
+			}
+		}
+	default:
+		for _, candidate := range m.tabs {
+			if samePath(tabPath(candidate), item.path) {
+				tab = candidate
+				break
+			}
+		}
+	}
+	if tab != nil {
+		m.revealSearchEverywhereTarget(tab, item)
+	}
+}
+
+func (m *Model) revealSearchEverywhereTarget(tab *Tab, item seItem) {
+	if tab == nil {
+		return
+	}
+	endLine := -1
+	endCol := -1
+	if item.kind == "text" && item.endCol > item.col {
+		endLine = item.line
+		endCol = item.endCol
+	}
+	m.reveal = &revealPos{
+		path: item.path, line: item.line, col: item.col,
+		endLine: endLine, endCol: endCol,
+	}
+	m.applyReveal(tab)
+}
+
+func (m *Model) searchHistoryFor(tab seTab) []string {
+	if m.searchHistories == nil {
+		m.searchHistories = map[seTab][]string{}
+		legacy := append([]string(nil), m.searchHistory...)
+		if len(legacy) > 0 {
+			m.searchHistories[seTabAll] = legacy
+		}
+	}
+	return m.searchHistories[tab]
+}
+
+// rememberSearchQuery puts an executed query first in its tab's history,
 // once, as OpenIDEA's Search Everywhere history does.
-func (m *Model) rememberSearchQuery(query string) {
+func (m *Model) rememberSearchQuery(tab seTab, query string) {
+	query = strings.TrimSpace(query)
 	if query == "" {
 		return
 	}
+	m.searchHistoryFor(tab)
 	list := []string{query}
-	for _, old := range m.searchHistory {
+	for _, old := range m.searchHistories[tab] {
 		if !strings.EqualFold(old, query) {
 			list = append(list, old)
 		}
@@ -960,8 +2260,47 @@ func (m *Model) rememberSearchQuery(query string) {
 	if len(list) > seHistoryCap {
 		list = list[:seHistoryCap]
 	}
-	m.searchHistory = list
+	m.searchHistories[tab] = list
+	if tab == seTabAll {
+		m.searchHistory = append([]string(nil), list...)
+	}
 	m.saveSession()
+}
+
+// BrowseSearchEverywhereHistory walks the current tab's history, as Alt+Up
+// and Alt+Down do in OpenIDEA's query field.
+func (m *Model) BrowseSearchEverywhereHistory(delta int) {
+	s := m.se
+	if s == nil || delta == 0 {
+		return
+	}
+	history := m.searchHistoryFor(s.tab)
+	if len(history) == 0 {
+		return
+	}
+	position := s.historyIndex
+	if position < -1 {
+		position = -1
+	}
+	if delta > 0 {
+		position = min(len(history)-1, position+delta)
+	} else {
+		position = max(-1, position+delta)
+	}
+	if position == s.historyIndex {
+		return
+	}
+	if s.historyIndex == -1 {
+		s.historyDraft = s.query
+	}
+	s.historyIndex = position
+	if position == -1 {
+		s.query = s.historyDraft
+	} else {
+		s.query = history[position]
+	}
+	m.refreshSearchEverywhere()
+	m.invalidate()
 }
 
 // rememberRecentAction puts a run command first in the recent list.
@@ -978,6 +2317,99 @@ func (m *Model) rememberRecentAction(id string) {
 	m.recentActions = list
 }
 
+func (m *Model) clearSearchEverywherePreview() {
+	s := m.se
+	if s == nil {
+		return
+	}
+	s.previewKey = ""
+	s.previewPath = ""
+	s.previewLine = 0
+	s.previewCol = 0
+	s.previewEndCol = 0
+	s.previewFrom = 0
+	s.previewLines = nil
+	s.previewTokens = nil
+	s.previewErr = ""
+}
+
+func (m *Model) selectedSearchEverywhereItem() (seItem, bool) {
+	s := m.se
+	if s == nil {
+		return seItem{}, false
+	}
+	rows := m.seRows()
+	if s.sel < 0 || s.sel >= len(rows) || !seSelectable(rows[s.sel]) {
+		return seItem{}, false
+	}
+	return rows[s.sel].item, true
+}
+
+// syncSearchEverywherePreview reads the selected file once and keeps twenty
+// source lines around its match, as OpenIDEA's CodePreview does.
+func (m *Model) syncSearchEverywherePreview() {
+	s := m.se
+	if s == nil {
+		return
+	}
+	if !s.preview {
+		m.clearSearchEverywherePreview()
+		return
+	}
+	item, ok := m.selectedSearchEverywhereItem()
+	if !ok || item.path == "" || item.folder {
+		m.clearSearchEverywherePreview()
+		return
+	}
+	key := fmt.Sprintf("%s:%d:%d:%d", item.path, item.line, item.col, item.endCol)
+	if key == s.previewKey {
+		return
+	}
+	m.clearSearchEverywherePreview()
+	s.previewKey = key
+	s.previewPath = item.path
+	s.previewLine = item.line
+	s.previewCol = item.col
+	s.previewEndCol = item.endCol
+	info, err := os.Stat(item.path)
+	if err != nil {
+		s.previewErr = err.Error()
+		return
+	}
+	if info.IsDir() {
+		s.previewErr = "Choose a file to preview its source"
+		return
+	}
+	if info.Size() > sePreviewBytes {
+		s.previewErr = "The result is too large to preview"
+		return
+	}
+	raw, err := os.ReadFile(item.path)
+	if err != nil {
+		s.previewErr = err.Error()
+		return
+	}
+	source := strings.ReplaceAll(string(raw), "\r\n", "\n")
+	lines := strings.Split(source, "\n")
+	line := max(0, min(item.line, len(lines)-1))
+	from := max(0, line-sePreviewLines/2)
+	to := min(len(lines), from+sePreviewLines)
+	if to-from < sePreviewLines {
+		from = max(0, to-sePreviewLines)
+	}
+	s.previewFrom = from
+	s.previewLine = line
+	s.previewLines = append([]string(nil), lines[from:to]...)
+	lexed := highlight.Lex(highlight.Lexer(item.path), source)
+	s.previewTokens = make([][]highlight.Token, len(s.previewLines))
+	for index := range s.previewLines {
+		row := from + index
+		if row < len(lexed) {
+			s.previewTokens[index] = lexed[row].Tokens
+		}
+	}
+}
+
 // searchEverywhereDialog draws the overlay.
 func (m *Model) searchEverywhereDialog(c *ui.Context, p *ui.Theme) {
 	s := m.se
@@ -985,128 +2417,727 @@ func (m *Model) searchEverywhereDialog(c *ui.Context, p *ui.Theme) {
 		return
 	}
 	open := s.open
-	nativeModal(c, &open, func() {
-		ui.Column(c).Width(680).Gap(8).Children(func() {
-			ui.Row(c).Gap(4).Children(func() {
-				for _, t := range seTabs {
-					t := t
-					on := s.tab == t.id
-					b := ui.ButtonBase(c.Key("se:tab:"+string(t.id))).Height(24).
-						Padding(0, 8).Radius(6).AlignItems(ui.Center).Cursor(ui.CursorPointer)
-					if on {
-						b.Background(p.SurfaceHover)
-					} else if b.Hovered() {
-						b.Background(p.SurfaceHover)
-					}
-					b.Children(func() {
-						col := p.TextMuted
-						if on {
-							col = p.Text
-						}
-						ui.Text(c, t.label).FontSize(12).TextColor(col).SingleLine()
-					})
-					b.OnClick(func() { m.SetSearchEverywhereTab(t.id) })
-				}
-				if seFilterTab(s.tab) {
-					ui.Spacer(c)
-					b := ui.ButtonBase(c.Key("se:filter")).Height(24).Padding(0, 8).
-						Radius(6).AlignItems(ui.Center).Cursor(ui.CursorPointer)
-					if s.filterOpen || s.filters.active(s.tab) {
-						b.Background(p.SurfaceHover)
-					} else if b.Hovered() {
-						b.Background(p.SurfaceHover)
-					}
-					b.Tooltip("Filter")
-					b.Children(func() {
-						ui.Text(c, "Filter").FontSize(12).TextColor(p.TextMuted).SingleLine()
-					})
-					b.OnClick(func() { s.filterOpen = !s.filterOpen })
-				}
-			})
-			if s.filterOpen && seFilterTab(s.tab) {
-				m.seFilterPanel(c, p, s)
-			}
-			in := ui.TextInput(c, &s.query).AutoFocus()
-			in.OnChange(func() {
-				m.refreshSearchEverywhere()
-				m.clampSESelection()
-			})
-			in.OnShortcut(0, ui.KeyDown, func() { m.stepSearchEverywhere(1) })
-			in.OnShortcut(0, ui.KeyUp, func() { m.stepSearchEverywhere(-1) })
-			in.OnShortcut(0, ui.KeyTab, func() { m.CycleSearchEverywhereTab(1) })
-			in.OnShortcut(ui.Shift, ui.KeyTab, func() { m.CycleSearchEverywhereTab(-1) })
-			if in.Submitted() {
-				m.ActivateSearchEverywhere()
-			}
+	oi := oiPaletteOf(p)
+	width := float32(seDialogWidth)
+	if m.editorWidth > 0 {
+		width = min(width, max(520, m.editorWidth-48))
+	}
+	top := float32(36)
+	if m.editorHeight > 0 {
+		top = max(28, min(96, m.editorHeight*0.09))
+	}
+	dialog := nativeTopSurfaceModal(c, &open, top, func() {
+		ui.Column(c).Width(width).Background(oi.popup).
+			Border(1, oi.popupBorder).Radius(6).Clip().Children(func() {
+			m.searchEverywhereHeader(c, p, s)
+			m.searchEverywhereQuery(c, p, s)
 			rows := m.seRows()
-			if s.sel >= len(rows) {
-				s.sel = 0
-			}
-			if len(rows) == 0 {
-				switch {
-				case s.err != "":
-					errorState(c, p, s.err)
-				case s.tab == seTabText && s.textBusy:
-					loadingState(c, p, "Searching")
-				case s.seEmpty() && s.tab == seTabAll:
-					emptyState(c, p, "Type to search classes, files, symbols, actions and text")
-				default:
-					emptyState(c, p, "No matching results")
+			m.clampSESelection()
+			if s.preview && len(rows) > 0 {
+				previewHeight := float32(532)
+				if m.editorHeight > 0 {
+					previewHeight = min(previewHeight, max(280, m.editorHeight-180))
 				}
-				return
+				ui.SplitPercent(c, &s.previewRatio,
+					func() { m.searchEverywhereResults(c, p, s, rows) },
+					func() { m.searchEverywherePreviewPane(c, p, s) },
+				).Height(previewHeight)
+			} else {
+				m.searchEverywhereResults(c, p, s, rows)
 			}
-			ui.Text(c, count(m.seItemCount(rows), "result", "results")).
-				FontSize(12).TextColor(p.TextMuted).SingleLine()
-			ui.Scroll(c).Height(380).Children(func() {
-				ui.Column(c).Children(func() {
-					for i, row := range rows {
-						i, row := i, row
-						if row.header {
-							ui.Text(c, seSectionTitles[row.section]).FontSize(12).
-								TextColor(p.TextMuted).Padding(6, 8).SingleLine()
-							continue
+			if len(rows) > 0 {
+				m.searchEverywhereFooter(c, p, s, rows)
+			}
+		})
+	})
+	if dialog.Dismissed() || !open {
+		m.CloseSearchEverywhere()
+	}
+}
+
+func (m *Model) searchEverywhereHeader(c *ui.Context, p *ui.Theme, s *sePane) {
+	oi := oiPaletteOf(p)
+	filterButton := ui.Element{}
+	filterButtonBuilt := false
+	ui.Row(c).Height(44).Shrink(0).Padding(0, 8).
+		Background(oi.frame).BorderWidth(0, 0, 1, 0).BorderColor(oi.popupBorder).
+		AlignItems(ui.Center).Gap(8).Children(func() {
+		ui.Row(c).Grow(1).MinWidth(0).Gap(2).AlignItems(ui.Center).Children(func() {
+			for _, tab := range seTabs {
+				tab := tab
+				active := s.tab == tab.id
+				button := ui.ButtonBase(c.Key("se:tab:"+string(tab.id))).
+					Height(26).Padding(0, 9).Radius(4).AlignItems(ui.Center).
+					Cursor(ui.CursorPointer).BorderWidth(1, 1, 1, 1).
+					BorderColor(ui.Color{})
+				if active {
+					button.Background(oi.tabSelected).BorderColor(oi.tabSelectedBorder)
+				} else if button.Hovered() {
+					button.Background(oi.toolbarHover)
+				}
+				button.Children(func() {
+					tone := oi.text
+					if active {
+						tone = oi.textStrong
+					}
+					ui.Text(c, tab.label).FontSize(12).TextColor(tone).SingleLine()
+				})
+				button.OnClick(func() { m.SetSearchEverywhereTab(tab.id) })
+			}
+		})
+		ui.Spacer(c)
+		if s.tab == seTabAll || s.tab == seTabActions {
+			checked := s.includeNonProject
+			label := "Include non-project items"
+			if s.tab == seTabActions {
+				label = "Include disabled actions"
+			}
+			if ui.Checkbox(c, &checked, label).FontSize(11).Changed() {
+				m.setSearchEverywhereIncludeNonProject(checked)
+			}
+		} else {
+			scope := "all"
+			if s.includeNonProject {
+				scope = "allPlaces"
+			} else {
+				scope = s.fileSet
+			}
+			options := []string{"All Places", "Project Files", "Project Production Files", "Project Test Files"}
+			label := map[string]string{
+				"allPlaces": "All Places", "all": "Project Files",
+				"production": "Project Production Files", "test": "Project Test Files",
+			}[scope]
+			if label == "" {
+				label = "Project Files"
+			}
+			if ui.Select(c, &label, options).Width(170).Changed() {
+				switch label {
+				case "All Places":
+					m.setSearchEverywhereIncludeNonProject(true)
+				case "Project Production Files":
+					m.setSearchEverywhereFileSet("production")
+				case "Project Test Files":
+					m.setSearchEverywhereFileSet("test")
+				default:
+					m.setSearchEverywhereFileSet("all")
+				}
+			}
+		}
+		previewButton := m.searchEverywhereIconButton(c, "se:preview", "general/listFiles",
+			"Preview", s.preview, oi)
+		previewButton.OnClick(func() { m.setSearchEverywherePreview(!s.preview) })
+		if seFilterTab(s.tab) {
+			filterButton = m.searchEverywhereIconButton(c, "se:filter", "general/filter",
+				"Filter", s.filterOpen || s.filters.active(s.tab), oi)
+			filterButtonBuilt = true
+			filterButton.OnClick(func() { s.filterOpen = !s.filterOpen })
+		}
+		findButton := m.searchEverywhereIconButton(c, "se:find-tool-window", "general/openInToolWindow",
+			"Open in Find Tool Window", false, oi)
+		findButton.OnClick(func() { m.openSearchEverywhereInFindToolWindow() })
+	})
+	if filterButtonBuilt {
+		ui.Popover(c, filterButton, &s.filterOpen, func() {
+			ui.Column(c).Width(250).Padding(6, 4).Gap(2).Children(func() {
+				m.seFilterPanel(c, p, s)
+			})
+		})
+	}
+}
+
+func (m *Model) searchEverywhereIconButton(
+	c *ui.Context, key, icon, tooltip string, pressed bool, oi oiColors,
+) ui.Element {
+	button := ui.ButtonBase(c.Key(key)).Size(24, 24).Shrink(0).Radius(4).
+		Justify(ui.Center).AlignItems(ui.Center).Cursor(ui.CursorPointer)
+	if pressed {
+		button.Background(oi.toolbarHover)
+	} else if button.Hovered() {
+		button.Background(oi.toolbarHover)
+	}
+	button.Tooltip(tooltip)
+	button.Children(func() { oiIconEl(c, icon, 16, oi, oi.icon) })
+	return button
+}
+
+func (m *Model) searchEverywhereQuery(c *ui.Context, p *ui.Theme, s *sePane) {
+	oi := oiPaletteOf(p)
+	ui.Row(c).Height(44).Shrink(0).Padding(6, 8).Children(func() {
+		field := ui.Row(c).Height(32).Grow(1).Gap(6).Padding(0, 10).
+			Background(oi.popup).Border(2, oi.borderStrong).Radius(4).
+			AlignItems(ui.Center)
+		field.Children(func() {
+			historyButton := ui.ButtonBase(c.Key("se:history")).Height(22).Radius(4).
+				Padding(0, 2).Gap(1).AlignItems(ui.Center).Cursor(ui.CursorPointer)
+			if historyButton.Hovered() {
+				historyButton.Background(oi.toolbarHover)
+			}
+			historyButton.Tooltip("Search history")
+			historyButton.Children(func() {
+				oiIconEl(c, "general/search", 16, oi, oi.textSubtle)
+				oiIconEl(c, "general/chevronDown", 10, oi, oi.textSubtle)
+			})
+			historyButton.Menu(func(menu *ui.Menu) {
+				history := m.searchHistoryFor(s.tab)
+				if len(history) == 0 {
+					menu.Item("No recent searches").Disabled(true)
+					return
+				}
+				menu.Item("Recent Searches").Disabled(true)
+				for _, query := range history[:min(15, len(history))] {
+					query := query
+					if menu.Item(query).Chosen() {
+						s.query = query
+						s.historyIndex = -1
+						m.refreshSearchEverywhere()
+					}
+				}
+			})
+			input := ui.TextInputBase(c, &s.query).Grow(1).MinWidth(0).
+				FontSize(12).TextColor(oi.textStrong).AutoFocus()
+			input.OnChange(func() {
+				s.historyIndex = -1
+				m.refreshSearchEverywhere()
+			})
+			input.OnShortcut(0, ui.KeyDown, func() { m.stepSearchEverywhere(1) })
+			input.OnShortcut(0, ui.KeyUp, func() { m.stepSearchEverywhere(-1) })
+			input.OnShortcut(0, ui.KeyPageDown, func() { m.stepSearchEverywhereGroup(1) })
+			input.OnShortcut(0, ui.KeyPageUp, func() { m.stepSearchEverywhereGroup(-1) })
+			primary := sePrimaryModifier()
+			input.OnShortcut(primary, ui.KeyDown, func() { m.stepSearchEverywhereGroup(1) })
+			input.OnShortcut(primary, ui.KeyUp, func() { m.stepSearchEverywhereGroup(-1) })
+			input.OnShortcut(ui.Alt, ui.KeyUp, func() { m.BrowseSearchEverywhereHistory(1) })
+			input.OnShortcut(ui.Alt, ui.KeyDown, func() { m.BrowseSearchEverywhereHistory(-1) })
+			input.OnShortcut(0, ui.KeyTab, func() { m.CycleSearchEverywhereTab(1) })
+			input.OnShortcut(ui.Shift, ui.KeyTab, func() { m.CycleSearchEverywhereTab(-1) })
+			input.OnShortcut(0, ui.KeyEnter, func() { m.activateSearchEverywhere(false) })
+			input.OnShortcut(ui.Shift, ui.KeyEnter, func() { m.activateSearchEverywhere(true) })
+			input.OnShortcut(ui.Alt, ui.KeyEnter, func() { m.openSearchEverywhereIntentions() })
+			if s.tab == seTabText {
+				input.OnShortcut(primary, ui.KeyEnter, func() { m.openSearchEverywhereInFindToolWindow() })
+			}
+			if s.searchEverywhereLoading() && !s.seEmpty() {
+				ui.Spinner(c).Size(14, 14).TextColor(oi.textSubtle).Label("Searching")
+			}
+			hint := ""
+			switch s.tab {
+			case seTabAll:
+				hint = "Type / to see commands"
+			case seTabText:
+				if sePrimaryModifier() == ui.Cmd {
+					hint = "⌘↵ to open in Find tool window"
+				} else {
+					hint = "Ctrl+Enter to open in Find tool window"
+				}
+			}
+			if hint != "" {
+				ui.Text(c, hint).FontSize(11).TextColor(oi.textFaint).SingleLine()
+			}
+		})
+	})
+}
+
+func (m *Model) searchEverywhereResults(c *ui.Context, p *ui.Theme, s *sePane, rows []seRow) {
+	oi := oiPaletteOf(p)
+	if len(rows) == 0 {
+		if s.err != "" {
+			errorState(c, p, s.err)
+			return
+		}
+		if s.searchEverywhereLoading() {
+			return
+		}
+		message := ""
+		if s.seEmpty() {
+			if s.tab != seTabAll {
+				message = "Type to search"
+			}
+		} else if s.includeNonProject {
+			message = "Nothing found"
+		} else {
+			message = "Nothing found in project files"
+		}
+		if message != "" {
+			ui.Row(c).Height(64).Shrink(0).Justify(ui.Center).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, message).FontSize(12).TextColor(oi.textFaint).SingleLine()
+			})
+		}
+		return
+	}
+	height := float32(len(rows) * 24)
+	if !s.seEmpty() {
+		height = max(float32(seDialogMinListH), height)
+	}
+	height = min(float32(seDialogMaxListH), height)
+	ui.Scroll(c).Height(height + 8).Grow(1).MinHeight(0).Children(func() {
+		ui.Column(c).Padding(0, 0, 8, 0).Children(func() {
+			for index, row := range rows {
+				index, row := index, row
+				if row.header {
+					ui.Text(c, seSectionTitles[row.section]).FontSize(11).
+						TextColor(oi.textSubtle).Padding(6, 8).SingleLine()
+					continue
+				}
+				if row.more {
+					more := ui.Row(c.Key(fmt.Sprintf("se:more:%s", row.section))).
+						Height(24).Shrink(0).PaddingStart(26).PaddingEnd(8).
+						AlignItems(ui.Center).Cursor(ui.CursorPointer)
+					if more.Hovered() {
+						more.Background(oi.toolbarHover)
+					}
+					more.Children(func() {
+						ui.Text(c, "… more "+strings.ToLower(seSectionTitles[row.section])).
+							FontSize(12).TextColor(oi.textSubtle).SingleLine()
+					})
+					more.OnClick(func() {
+						m.selectSERow(index, recentSelectionSingle)
+						m.ActivateSearchEverywhere()
+					})
+					continue
+				}
+				active := index == s.sel
+				selected := s.isSERowSelected(index, row)
+				repeat := index > 0 && row.item.kind == "text" && rows[index-1].item.kind == "text" &&
+					row.item.path == rows[index-1].item.path
+				itemRow := ui.Row(c.Key(fmt.Sprintf("se:%d", index))).
+					Height(24).Shrink(0).Padding(0, 8).Gap(6).AlignItems(ui.Center).
+					Cursor(ui.CursorPointer)
+				if active {
+					itemRow.Background(oi.selected)
+					if s.revealSelection {
+						itemRow.ScrollIntoView()
+						s.revealSelection = false
+					}
+				} else if selected {
+					itemRow.Background(oi.selectedInactive)
+				} else if itemRow.Hovered() {
+					itemRow.Background(oi.toolbarHover)
+				}
+				itemRow.Children(func() {
+					m.seRowIcon(c, p, row.item)
+					m.searchEverywhereResultContent(c, p, row, active, repeat)
+				})
+				mods := itemRow.ClickModifiers()
+				itemRow.OnClick(func() {
+					mode := recentSelectionSingle
+					switch {
+					case mods&ui.Shift != 0:
+						mode = recentSelectionRange
+					case mods&sePrimaryModifier() != 0:
+						mode = recentSelectionToggle
+					}
+					m.selectSERow(index, mode)
+					if mode == recentSelectionSingle {
+						m.ActivateSearchEverywhere()
+					}
+				})
+				itemRow.ContextMenu(func(menu *ui.Menu) {
+					m.selectSERow(index, recentSelectionSingle)
+					m.searchEverywhereContextMenu(menu, row)
+				})
+			}
+		})
+	})
+}
+
+func (m *Model) searchEverywhereContextMenu(menu *ui.Menu, row seRow) {
+	item := row.item
+	if item.kind == "setting" {
+		if menu.Item("Open Settings Page").Chosen() {
+			m.CloseSearchEverywhere()
+			m.OpenSettingsPage(item.setting)
+		}
+		return
+	}
+	if item.kind == "action" {
+		if item.disabled {
+			menu.Item("Run").Disabled(true)
+			return
+		}
+		if menu.Item("Run").Chosen() {
+			m.activateSearchEverywhereNow(false)
+		}
+		return
+	}
+	if menu.Item("Open").Chosen() {
+		m.activateSearchEverywhereNow(false)
+	}
+	if searchEverywhereCanSplit(row) {
+		if menu.Item("Open to the Side").Chosen() {
+			m.activateSearchEverywhereNow(true)
+		}
+	}
+	menu.Separator()
+	if menu.Item("Copy Path").Chosen() {
+		mygo.Clipboard.WriteText(item.path)
+	}
+	if menu.Item("Copy Path from Project Root").Chosen() {
+		text := item.rel
+		if text == "" {
+			text = item.path
+		}
+		mygo.Clipboard.WriteText(text)
+	}
+	if item.kind == "symbol" {
+		if menu.Item("Copy Name").Chosen() {
+			mygo.Clipboard.WriteText(strings.TrimSuffix(item.title, "()"))
+		}
+	}
+	if item.kind == "file" || item.kind == "text" {
+		if menu.Item("Find in Directory…").Chosen() {
+			m.CloseSearchEverywhere()
+			m.RunActionWithArg("find.inPath", map[string]any{
+				"directory": filepath.Dir(item.path),
+			})
+		}
+	}
+}
+
+func (m *Model) searchEverywhereResultContent(
+	c *ui.Context, p *ui.Theme, row seRow, active, repeat bool,
+) {
+	oi := oiPaletteOf(p)
+	it := row.item
+	switch it.kind {
+	case "file":
+		ui.Row(c).Grow(1).MinWidth(0).AlignItems(ui.Baseline).Gap(6).Children(func() {
+			m.seHighlightedText(c, it.title, it.indices, 12, oi.textStrong)
+			if it.lineSet {
+				ui.Text(c, fmt.Sprintf(":%d", it.line+1)).FontSize(12).
+					TextColor(oi.textMuted).SingleLine()
+			}
+			if it.container != "" {
+				ui.Text(c, it.container).MinWidth(0).FontSize(12).
+					TextColor(oi.textSubtle).SingleLine().Ellipsis("…")
+			}
+		})
+	case "symbol", "endpoint":
+		containerTone := oi.textSubtle
+		if active {
+			containerTone = oi.textSecondary
+		}
+		ui.Row(c).Grow(1).MinWidth(0).AlignItems(ui.Baseline).Gap(6).Children(func() {
+			m.seHighlightedText(c, it.title, it.indices, 12, oi.textStrong)
+			if it.container != "" {
+				ui.Text(c, it.container).MinWidth(0).FontSize(12).
+					TextColor(containerTone).SingleLine().Ellipsis("…")
+			}
+		})
+		right := it.right
+		if row.section == seClasses && it.rel != "" {
+			right = filepath.Dir(it.rel)
+			if right == "." {
+				right = filepath.Base(it.rel)
+			}
+		}
+		if right != "" {
+			ui.Text(c, right).MaxWidth(300).FontSize(12).
+				TextColor(oi.textSubtle).SingleLine().Ellipsis("…")
+		}
+	case "text":
+		m.seCodeLine(c, it, active, oi)
+		tone := oi.textSubtle
+		if active {
+			tone = oi.textMuted
+		} else if repeat {
+			tone = oi.textFaint
+		}
+		ui.Text(c, fmt.Sprintf("%s %d", it.right, it.line+1)).MaxWidth(300).
+			FontSize(12).TextColor(tone).SingleLine().Ellipsis("…")
+	case "action":
+		action := ui.Row(c).Grow(1).MinWidth(0).AlignItems(ui.Center).Gap(6)
+		action.Children(func() {
+			tone := oi.textStrong
+			if it.disabled {
+				tone = oi.textFaint
+			}
+			m.seHighlightedText(c, it.title, it.indices, 12, tone)
+			if shortcut := openIDEAShortcutForAction(it.action); shortcut != "" {
+				ui.Text(c, shortcut).FontSize(11).TextColor(oi.textSubtle).SingleLine()
+			}
+			ui.Spacer(c)
+			if item, ok := actionGet(it.action); ok && item.Toggled != nil {
+				on := item.Toggled(m)
+				if ui.Toggle(c, &on, "").Disabled(it.disabled).Changed() {
+					m.rememberRecentAction(it.action)
+					m.RunCommand(it.action)
+				}
+			} else if it.detail != "" {
+				ui.Text(c, it.detail).MaxWidth(300).FontSize(12).
+					TextColor(oi.textSubtle).SingleLine().Ellipsis("…")
+			}
+		})
+	case "setting":
+		m.seHighlightedText(c, it.title, it.indices, 12, oi.textStrong)
+		ui.Spacer(c)
+		ui.Text(c, "Settings: "+it.detail).MaxWidth(320).FontSize(12).
+			TextColor(oi.textSubtle).SingleLine().Ellipsis("…")
+	case "command":
+		m.seHighlightedText(c, it.title, it.indices, 12, oi.textStrong)
+		ui.Spacer(c)
+		ui.Text(c, it.detail).FontSize(12).TextColor(oi.textSubtle).SingleLine()
+	}
+}
+
+func openIDEAShortcutForAction(id string) string {
+	if _, ok := actionGet(id); !ok {
+		return ""
+	}
+	return keymapShortcutLabel(id)
+}
+
+func sePrimaryModifier() ui.Modifiers {
+	if keymapHostOS == "darwin" {
+		return ui.Cmd
+	}
+	return ui.Ctrl
+}
+
+func (m *Model) seHighlightedText(
+	c *ui.Context, text string, indices []int, size float32, color ui.Color,
+) {
+	if len(indices) == 0 {
+		ui.Text(c, text).FontSize(size).TextColor(color).SingleLine().Ellipsis("…")
+		return
+	}
+	runes := []rune(text)
+	spans := make([]ui.Span, 0, len(indices)*2+1)
+	highlight := map[int]bool{}
+	for _, index := range indices {
+		if index >= 0 && index < len(runes) {
+			highlight[index] = true
+		}
+	}
+	for index := 0; index < len(runes); {
+		on := highlight[index]
+		end := index + 1
+		for end < len(runes) && highlight[end] == on {
+			end++
+		}
+		span := ui.Span{Text: string(runes[index:end]), Size: size, Color: color}
+		if on {
+			span.Color = oiPaletteOf(c.Theme()).accent
+			span.Weight = 600
+		}
+		spans = append(spans, span)
+		index = end
+	}
+	ui.RichText(c, spans...).FontSize(size).SingleLine().Ellipsis("…")
+}
+
+func (m *Model) seCodeLine(c *ui.Context, item seItem, active bool, oi oiColors) {
+	indices := item.indices
+	ui.RichText(c, seCodeSpans(item.title, indices, active, oi)...).
+		Grow(1).MinWidth(0).SingleLine().Ellipsis("…")
+}
+
+func seCodeSpans(text string, indices []int, active bool, oi oiColors) []ui.Span {
+	runes := []rune(text)
+	highlight := map[int]bool{}
+	for _, index := range indices {
+		if index >= 0 && index < len(runes) {
+			highlight[index] = true
+		}
+	}
+	spans := make([]ui.Span, 0, len(indices)*2+1)
+	base := oi.text
+	if active {
+		base = oi.textStrong
+	}
+	for index := 0; index < len(runes); {
+		on := highlight[index]
+		end := index + 1
+		for end < len(runes) && highlight[end] == on {
+			end++
+		}
+		span := ui.Span{Text: string(runes[index:end]), Size: 12, Color: base}
+		if on {
+			span.Background = oi.selectedInactive
+			span.Weight = 600
+			span.Color = oi.textStrong
+		}
+		spans = append(spans, span)
+		index = end
+	}
+	return spans
+}
+
+func (m *Model) searchEverywhereFooter(c *ui.Context, p *ui.Theme, s *sePane, rows []seRow) {
+	oi := oiPaletteOf(p)
+	active, ok := selectedSearchEverywhereRow(rows, s)
+	ui.Row(c).Height(30).Shrink(0).Padding(0, 12).Gap(14).
+		Background(oi.frame).BorderWidth(1, 0, 0, 0).BorderColor(oi.popupBorder).
+		AlignItems(ui.Center).Children(func() {
+		ui.Text(c, searchEverywhereDescribe(active, ok)).Grow(1).MinWidth(0).
+			FontSize(11).TextColor(oi.textSubtle).SingleLine().Ellipsis("…")
+		if ok && searchEverywhereCanSplit(active) {
+			link := ui.ButtonBase(c.Key("se:open-in-right-split")).Padding(0).
+				AlignItems(ui.Center).Cursor(ui.CursorPointer)
+			if link.Hovered() {
+				link.Background(oi.toolbarHover)
+			}
+			link.Children(func() {
+				ui.Text(c, "Open In Right Split").FontSize(12).TextColor(oi.link).SingleLine()
+			})
+			link.OnClick(func() { m.ActivateSearchEverywhereInOppositeGroup() })
+		}
+	})
+}
+
+func selectedSearchEverywhereRow(rows []seRow, s *sePane) (seRow, bool) {
+	if s == nil || s.sel < 0 || s.sel >= len(rows) || !seSelectable(rows[s.sel]) || rows[s.sel].more {
+		return seRow{}, false
+	}
+	return rows[s.sel], true
+}
+
+func searchEverywhereDescribe(row seRow, ok bool) string {
+	if !ok {
+		return ""
+	}
+	item := row.item
+	switch item.kind {
+	case "file":
+		return item.rel
+	case "symbol", "endpoint", "text":
+		if item.rel != "" {
+			return fmt.Sprintf("%s:%d", item.rel, item.line+1)
+		}
+		return fmt.Sprintf("%s:%d", item.path, item.line+1)
+	case "setting":
+		return item.detail + " | " + item.title
+	case "action":
+		if item.detail != "" {
+			return item.detail + "  ·  ⌥↵ to assign a shortcut"
+		}
+		return "⌥↵ to assign a shortcut"
+	}
+	return ""
+}
+
+func searchEverywhereCanSplit(item seRow) bool {
+	if item.header || item.more {
+		return false
+	}
+	switch item.item.kind {
+	case "file":
+		return !item.item.folder
+	case "symbol", "endpoint", "text":
+		return true
+	}
+	return false
+}
+
+func (m *Model) searchEverywherePreviewPane(c *ui.Context, p *ui.Theme, s *sePane) {
+	oi := oiPaletteOf(p)
+	ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Children(func() {
+		ui.Row(c).Height(28).Shrink(0).Padding(0, 10).Gap(6).
+			Background(oi.frame).AlignItems(ui.Center).Children(func() {
+			if s.previewPath != "" {
+				fileIconEl(c, oi, s.previewPath, 15, oi.textMuted)
+				ui.Text(c, filepath.Base(s.previewPath)).FontSize(11).
+					TextColor(oi.textSecondary).SingleLine()
+				if s.previewLine >= 0 {
+					ui.Text(c, fmt.Sprintf("%d", s.previewLine+1)).FontSize(11).
+						TextColor(oi.textFaint).SingleLine()
+				}
+			}
+		})
+		switch {
+		case s.previewErr != "":
+			ui.Row(c).Padding(8, 10).Children(func() {
+				ui.Text(c, s.previewErr).FontSize(11).TextColor(oi.warning).
+					SingleLine().Ellipsis("…")
+			})
+		case len(s.previewLines) > 0:
+			ui.ScrollBoth(c).Grow(1).MinHeight(0).Children(func() {
+				ui.Column(c).Padding(5, 0).Children(func() {
+					for index, line := range s.previewLines {
+						lineNumber := s.previewFrom + index
+						row := ui.Row(c.Key(fmt.Sprintf("se:preview:%d", lineNumber))).
+							Height(20).Shrink(0).Padding(0, 6).Gap(9).
+							AlignItems(ui.Center)
+						if lineNumber == s.previewLine {
+							row.Background(oi.hoverTint)
 						}
-						if row.more {
-							r := ui.Row(c.Key(fmt.Sprintf("se:more:%s", row.section))).Height(24).
-								Padding(0, 8).AlignItems(ui.Center).Cursor(ui.CursorPointer)
-							if r.Hovered() {
-								r.Background(p.SurfaceHover)
+						row.Children(func() {
+							ui.Text(c, fmt.Sprintf("%d", lineNumber+1)).Width(42).
+								FontSize(10).Font(oiFontMono).TextColor(oi.textFaint).SingleLine()
+							if lineNumber == s.previewLine && s.previewCol < s.previewEndCol {
+								var tokens []highlight.Token
+								if index < len(s.previewTokens) {
+									tokens = s.previewTokens[index]
+								}
+								ui.RichText(c, sePreviewLineSpans(
+									strings.ReplaceAll(line, "\t", "    "),
+									tokens, s.previewCol, s.previewEndCol, p, oi,
+								)...).FontSize(11).Font(oiFontMono).SingleLine()
+							} else {
+								var tokens []highlight.Token
+								if index < len(s.previewTokens) {
+									tokens = s.previewTokens[index]
+								}
+								ui.RichText(c, recentSnippetSpans(
+									strings.ReplaceAll(line, "\t", "    "),
+									tokens, editor.DefaultTheme(p), oi.textMuted,
+								)...).FontSize(11).Font(oiFontMono).SingleLine()
 							}
-							r.Children(func() {
-								ui.Text(c, "More…").FontSize(12).TextColor(p.TextMuted).SingleLine()
-							})
-							r.OnClick(func() {
-								s.sel = i
-								m.ActivateSearchEverywhere()
-							})
-							continue
-						}
-						r := ui.Row(c.Key(fmt.Sprintf("se:%d", i))).Height(24).Padding(0, 8).
-							Gap(8).AlignItems(ui.Center).Cursor(ui.CursorPointer)
-						if i == s.sel {
-							r.Background(p.SurfaceHover)
-						} else if r.Hovered() {
-							r.Background(p.SurfaceHover)
-						}
-						r.Children(func() {
-							m.seRowIcon(c, p, row.item)
-							ui.Text(c, row.item.title).FontSize(12).TextColor(p.Text).
-								SingleLine().Ellipsis("…")
-							ui.Spacer(c)
-							ui.Text(c, row.item.detail).FontSize(12).
-								TextColor(p.TextMuted).SingleLine().Ellipsis("…")
-						})
-						r.OnClick(func() {
-							s.sel = i
-							m.ActivateSearchEverywhere()
 						})
 					}
 				})
 			})
-		})
+		default:
+			ui.Row(c).Padding(8, 10).Children(func() {
+				ui.Text(c, "Choose a result to preview its source").
+					FontSize(11).TextColor(oi.textFaint).SingleLine()
+			})
+		}
 	})
-	if !open {
+}
+
+func sePreviewLineSpans(
+	text string, tokens []highlight.Token, from, to int, p *ui.Theme, oi oiColors,
+) []ui.Span {
+	spans := recentSnippetSpans(text, tokens, editor.DefaultTheme(p), oi.textMuted)
+	cursor := 0
+	for index := range spans {
+		length := len([]rune(spans[index].Text))
+		start, end := cursor, cursor+length
+		if start < to && end > from {
+			spans[index].Background = oi.selectedInactive
+			spans[index].Color = oi.textStrong
+		}
+		cursor = end
+	}
+	return spans
+}
+
+func (m *Model) openSearchEverywhereInFindToolWindow() {
+	s := m.se
+	if s == nil {
+		return
+	}
+	query := strings.TrimSpace(parseSELocationQuery(strings.TrimSpace(s.query), m.Root()).text)
+	m.CloseSearchEverywhere()
+	m.RunActionWithArg("find.inPath", map[string]any{"query": query})
+}
+
+func (m *Model) openSearchEverywhereIntentions() {
+	item, ok := m.selectedSearchEverywhereItem()
+	if !ok {
+		return
+	}
+	switch item.kind {
+	case "action":
+		if item.disabled {
+			return
+		}
 		m.CloseSearchEverywhere()
+		m.OpenSettingsPage("keymap")
+		m.settingsRecordKeymap(item.action)
+	case "setting":
+		m.CloseSearchEverywhere()
+		m.OpenSettingsPage(item.setting)
 	}
 }
 
@@ -1117,11 +3148,25 @@ func (m *Model) seRowIcon(c *ui.Context, p *ui.Theme, it seItem) {
 	oi := oiPaletteOf(p)
 	switch it.kind {
 	case "file":
-		fileIconEl(c, oi, it.path, 16, oi.textSubtle)
+		if it.folder {
+			folderIconEl(c, oi, "directory", 16, oi.textSubtle)
+		} else {
+			fileIconEl(c, oi, it.path, 16, oi.textSubtle)
+		}
 	case "endpoint":
-		oiIconEl(c, "fileTypes/http", 16, oi, oi.textSubtle)
+		oiIconEl(c, "nodes/method", 16, oi, oi.textSubtle)
 	case "text":
 		oiIconEl(c, "openidea/nodes/textMatch", 16, oi, oi.textSubtle)
+	case "action":
+		if it.icon != nil {
+			ui.Icon(c, it.icon).Size(16, 16).TextColor(oi.textSubtle)
+			return
+		}
+		ui.Row(c).Size(16, 16).Shrink(0)
+	case "setting":
+		oiIconEl(c, "general/settings", 16, oi, oi.textSubtle)
+	case "command":
+		oiIconEl(c, "general/search", 16, oi, oi.textSubtle)
 	case "symbol":
 		if asset := symbolIcon(it.symbol); asset != "" {
 			oiIconEl(c, asset, 16, oi, oi.textSubtle)
@@ -1252,7 +3297,7 @@ func (m *Model) SmokeSearchEverywhere(ctx context.Context, query string) map[str
 			st.items = m.seItemCount(rows)
 			seen := map[seSection]bool{}
 			for _, r := range rows {
-				if r.header && !seen[r.section] {
+				if r.section != "" && !seen[r.section] {
 					seen[r.section] = true
 					st.sections = append(st.sections, string(r.section))
 				}

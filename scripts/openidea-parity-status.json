@@ -583,7 +583,7 @@
     },
     "overlay:search.everywhere": {
       "status": "integrated",
-      "evidence": "internal/app/overlay_registry.go registers search.everywhere as searchEverywhere; components_test.go, double_shift_test.go and se_test.go cover empty state, opening, tabs, actions and selection"
+      "evidence": "internal/app/overlay_registry.go registers search.everywhere as searchEverywhere. internal/app/se.go now renders OpenIDEA's 760-DIP top dialog, scope checkbox/selector, preview/filter/Find-tool-window controls, history menu, dynamic-height relevance mix and selected-result footer. TestSearchEverywhereDialogUsesOpenHeaderRowsAndFooter, TestSearchEverywhereMixedAllTabMatchesOpenIDEA, TestSearchEverywherePreviewLayoutRendersOffscreen, TestSearchEverywhereFilterPopupRendersOffscreen, TestSearchEverywhereShiftAndPrimaryClickSelection and the existing components/double-Shift/search tests cover the native surface"
     },
     "overlay:search.fileStructure": {
       "status": "integrated",
@@ -1215,7 +1215,7 @@
     },
     "action:navigate.searchEverywhere": {
       "status": "integrated",
-      "evidence": "internal/app/se.go OpenSearchEverywhere; internal/app/commands.go navigate.searchEverywhere; Navigate menu and the title bar search button; e2e searchEverywhere.files/symbols/actions/text/allSections; internal/app/se_test.go"
+      "evidence": "internal/app/se.go OpenSearchEverywhere and OpenIDEA's re-open scope toggle; internal/app/commands.go navigate.searchEverywhere; Navigate menu and the title bar search button; e2e searchEverywhere.files/symbols/actions/text/allSections; TestSearchEverywhereReopenTogglesScopeAndCloseAddsHistory, TestSearchEverywhereHistoryIsPerTabAndBrowses and se_test.go"
     },
     "action:navigate.findAction": {
       "status": "integrated",
@@ -1903,7 +1903,7 @@
     },
     "feature:search": {
       "status": "integrated",
-      "evidence": "base.search.done, base.search.files, base.search.matches and searchEverywhere.*; internal/app/search.go and search_actions.go implement Find in Files, Replace in Files, rerun, named scopes and directory arguments; internal/app/se.go provides Search Everywhere tabs, history and recent files/actions; se_filters.go covers filtering; se_endpoints.go loads live enabled plugin endpoint providers and ranks method, path, route suffix and handler matches; recent_navigation.go adds Recent Files, Recent Locations and the open-file Switcher. TestRunSearchSendsFullOpenIDEAQuery, TestRerunSearchActionRepeatsTheCurrentQuery, TestSearchReplyWaitsForTheStreamedDoneEvent, TestReplaceInFilesUsesExactSelectedPosition, TestSearchScopesValidateAndPersist, TestSearchActionsAreRegisteredAndPaletteVisible, TestSearchEndpointsRankAndFilterLikeOpenIDEA, TestOnlyLiveEnabledPluginsContributeEndpoints, TestSearchEverywhereTabCyclesAndWraps, TestSearchEverywhereActionsFilter and TestSwitcherOpensSelectionWhenControlIsReleased cover the native surfaces and backend requests"
+      "evidence": "base.search.done, base.search.files, base.search.matches and searchEverywhere.*; internal/app/search.go and search_actions.go implement Find in Files, Replace in Files, rerun, named scopes and directory arguments. internal/app/se.go provides Search Everywhere's OpenIDEA UI, relevance mix, per-tab history, project/all-places scopes, slash commands, Shift/Cmd multi-selection, index+LSP symbol merge, preview, filters and keyboard navigation; se_filters.go covers filtering; se_endpoints.go loads live enabled plugin endpoint providers and ranks method, path, route suffix and handler matches; recent_navigation.go adds Recent Files, Recent Locations and the open-file Switcher. TestRunSearchSendsFullOpenIDEAQuery, TestRerunSearchActionRepeatsTheCurrentQuery, TestSearchReplyWaitsForTheStreamedDoneEvent, TestReplaceInFilesUsesExactSelectedPosition, TestSearchScopesValidateAndPersist, TestSearchActionsAreRegisteredAndPaletteVisible, TestSearchEndpointsRankAndFilterLikeOpenIDEA, TestOnlyLiveEnabledPluginsContributeEndpoints, TestSearchEverywhereMixedAllTabMatchesOpenIDEA, TestSearchEverywhereMergesIndexAndLanguageServerSymbols, TestSearchEverywhereScopeFiltersProductionAndTest, TestSearchEverywhereHistoryIsPerTabAndBrowses, TestSearchEverywhereSlashCommandsRunAndListScopes, TestSearchEverywhereShiftAndPrimaryClickSelection, TestSearchEverywherePreviewLayoutRendersOffscreen, TestSearchEverywhereActionsHideDisabledUntilChecked and TestSwitcherOpensSelectionWhenControlIsReleased cover the native surfaces and backend requests"
     },
     "feature:project-tree": {
       "status": "integrated",
@@ -3724,6 +3724,10 @@
     "command:find_files": {
       "status": "integrated",
       "evidence": "internal/app/agent_composer.go, internal/app/run.go, internal/app/stack_trace.go and 3 more invokes the OpenIDEA RPC through the native Go adapter"
+    },
+    "command:find_symbols": {
+      "status": "integrated",
+      "evidence": "internal/app/se.go calls the project-index find_symbols RPC and merges its ranked declarations with lsp_workspace_symbols in Search Everywhere's Classes, Symbols and All tabs; TestSearchEverywhereMergesIndexAndLanguageServerSymbols covers deduplication and source ordering"
     },
     "command:fs_compare_directories": {
       "status": "integrated",

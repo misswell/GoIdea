@@ -3,6 +3,15 @@
 The GitHub release notes, which **Help › What's New** shows, come from the
 `## <version>` section here. Every release needs one, or its build fails.
 
+## Unreleased
+
+- Search Everywhere now uses OpenIDEA's scope, preview, filter and result-footer controls.
+- The All tab mixes routes, classes, files, symbols, actions and text by relevance.
+- Search results now show the active section, path, matched column and Open In Right Split action.
+- Project-index and language-server symbols now merge into one native result list.
+- Search Everywhere previews source beside the result list and keeps per-tab search histories.
+- Search Everywhere now supports slash-command scopes and Shift or Cmd multi-selection.
+
 ## 0.1.46
 
 - Project restore now shows a native startup surface instead of flashing Welcome before the project opens.

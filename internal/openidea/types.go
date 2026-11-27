@@ -1041,6 +1041,18 @@ type WorkspaceSymbol struct {
 	Location  Location `json:"location"`
 }
 
+// SymbolMatch is one hit of find_symbols from the project index.
+type SymbolMatch struct {
+	Name      string       `json:"name"`
+	Kind      string       `json:"kind"`
+	Container *string      `json:"container"`
+	Path      string       `json:"path"`
+	RelPath   string       `json:"relPath"`
+	Range     OutlineRange `json:"range"`
+	Score     uint32       `json:"score"`
+	Indices   []uint32     `json:"indices,omitempty"`
+}
+
 // CodeActionQuery is lsp_code_action_query's answer: the actions the servers
 // offer at a range, kept raw for lsp_apply_code_action, and the kinds they
 // advertise.

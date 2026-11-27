@@ -107,7 +107,7 @@ func TestSERowsApplyTheFunnel(t *testing.T) {
 	if n := m.seItemCount(m.seRows()); n != 1 {
 		t.Fatalf("the excluded interface still counts: %d", n)
 	}
-	if rows := m.seRows(); len(rows) < 2 || rows[1].item.title != "App" {
+	if rows := m.seRows(); len(rows) != 1 || rows[0].item.title != "App" {
 		t.Fatalf("the wrong class row is listed: %+v", rows)
 	}
 	m.se.filters.Classes = nil

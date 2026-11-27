@@ -79,6 +79,9 @@ type Session struct {
 	// SearchHistory is Search Everywhere's recent queries, most recent first,
 	// as OpenIDEA keeps the search history across starts.
 	SearchHistory []string `json:"searchHistory,omitempty"`
+	// SearchHistories keeps each Search Everywhere tab's history separately,
+	// as OpenIDEA does. Legacy SearchHistory remains the All tab's list.
+	SearchHistories map[string][]string `json:"searchHistories,omitempty"`
 	// LogcatHistory is the Logcat filter menu's recent expressions, newest
 	// first, shared across projects like OpenIDEA's local-storage history.
 	LogcatHistory []string `json:"logcatHistory,omitempty"`
@@ -646,6 +649,9 @@ type Preferences struct {
 	MainToolbar *toolbarLayout `json:"mainToolbar,omitempty"`
 	// SearchFilters is Search Everywhere's funnel, kept across starts.
 	SearchFilters *seFilters `json:"searchFilters,omitempty"`
+	// SearchPreview remembers whether Search Everywhere opens its source
+	// preview beside the result list.
+	SearchPreview bool `json:"searchPreview,omitempty"`
 	// SearchFieldHistory is the Find window's recent multi-line queries, newest
 	// first, as OpenIDEA keeps the search-field history.
 	SearchFieldHistory []string `json:"searchFieldHistory,omitempty"`

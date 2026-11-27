@@ -13,7 +13,7 @@ func TestSectionsForMatchesOpenIDEA(t *testing.T) {
 		empty bool
 		want  []seSection
 	}{
-		{seTabAll, true, []seSection{seHistory, seRecentFiles, seRecentActions}},
+		{seTabAll, true, []seSection{seRecentFiles, seRecentActions}},
 		{seTabFiles, true, []seSection{seRecentFiles}},
 		{seTabActions, true, []seSection{seRecentActions}},
 		{seTabClasses, true, nil},
@@ -81,14 +81,14 @@ func TestRecentActionsKeepNewestFirstAndDedupe(t *testing.T) {
 
 func TestSearchEverywhereRowsCarrySectionHeadersAndLimits(t *testing.T) {
 	m := &Model{se: &sePane{
-		open:  true,
-		tab:   seTabAll,
-		extra: map[seSection]int{},
-		files: make([]openidea.FileMatch, 40),
+		open:   true,
+		tab:    seTabAll,
+		extra:  map[seSection]int{},
+		recent: make([]openidea.FileMatch, 40),
 	}}
-	for i := range m.se.files {
-		m.se.files[i].Path = "/p/File" + string(rune('A'+i)) + ".java"
-		m.se.files[i].RelPath = "src/File" + string(rune('A'+i)) + ".java"
+	for i := range m.se.recent {
+		m.se.recent[i].Path = "/p/File" + string(rune('A'+i)) + ".java"
+		m.se.recent[i].RelPath = "src/File" + string(rune('A'+i)) + ".java"
 	}
 	rows := m.seRows()
 	if len(rows) == 0 || !rows[0].header || rows[0].section != seRecentFiles {
@@ -200,9 +200,9 @@ func TestSearchEverywhereSelectionSkipsHeaders(t *testing.T) {
 
 func TestSearchHistoryRemembersAndReplaysQueries(t *testing.T) {
 	m := &Model{}
-	m.rememberSearchQuery("Widget")
-	m.rememberSearchQuery("button")
-	m.rememberSearchQuery("widget")
+	m.rememberSearchQuery(seTabAll, "Widget")
+	m.rememberSearchQuery(seTabAll, "button")
+	m.rememberSearchQuery(seTabAll, "widget")
 	if len(m.searchHistory) != 2 || m.searchHistory[0] != "widget" || m.searchHistory[1] != "button" {
 		t.Fatalf("the history is %v", m.searchHistory)
 	}
@@ -211,17 +211,12 @@ func TestSearchHistoryRemembersAndReplaysQueries(t *testing.T) {
 	}
 
 	m.OpenSearchEverywhere()
-	rows := m.seRows()
-	if len(rows) == 0 || !rows[0].header || rows[0].section != seHistory {
-		t.Fatalf("Search History is not the first section: %+v", rows)
-	}
-	if len(rows) < 2 || rows[1].item.kind != "history" || rows[1].item.title != "widget" {
-		t.Fatalf("the newest query is not the first row: %+v", rows)
-	}
-	m.se.sel = 1
-	m.ActivateSearchEverywhere()
 	if m.se == nil || m.se.query != "widget" {
-		t.Fatalf("the history row did not replay the query: %+v", m.se)
+		t.Fatalf("the newest All-tab query was not restored: %+v", m.se)
+	}
+	m.SetSearchEverywhereTab(seTabFiles)
+	if m.se.query != "widget" || len(m.searchHistoryFor(seTabFiles)) != 0 {
+		t.Fatalf("Files did not start with its own empty history: %+v", m.se)
 	}
 	m.CloseSearchEverywhere()
 }
