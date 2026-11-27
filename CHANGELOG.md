@@ -3,7 +3,7 @@
 The GitHub release notes, which **Help › What's New** shows, come from the
 `## <version>` section here. Every release needs one, or its build fails.
 
-## Unreleased
+## 0.1.48
 
 - Search Everywhere keeps mixed All results flowing without synthetic section-count rows.
 
