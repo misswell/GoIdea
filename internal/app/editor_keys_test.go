@@ -20,8 +20,6 @@ func TestIntellijEditorBindingsMatchOpenIDEA(t *testing.T) {
 		{Mods: ui.Cmd | ui.Shift, Key: ui.KeyUp, Command: editor.MoveLinesUp},
 		{Mods: ui.Cmd | ui.Shift, Key: ui.KeyDown, Command: editor.MoveLinesDown},
 		{Mods: ui.Ctrl | ui.Shift, Key: ui.KeyJ, Command: editor.JoinLines},
-		{Mods: ui.Ctrl, Key: ui.KeyG, Command: editor.SelectNext},
-		{Mods: ui.Ctrl | ui.Cmd, Key: ui.KeyG, Command: editor.SelectAllMatches},
 		{Mods: ui.Alt, Key: ui.KeyUp, Command: editor.SelectLarger},
 		{Mods: ui.Alt, Key: ui.KeyDown, Command: editor.SelectSmaller},
 		{Mods: ui.Cmd, Key: ui.KeyMinus, Command: editor.Fold},

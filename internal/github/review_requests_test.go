@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -507,6 +506,7 @@ func TestReviewMutationsSendExactGraphQLInputs(t *testing.T) {
 
 func TestReviewRESTOperationsUseExactPathsAndBodies(t *testing.T) {
 	seen := map[string]bool{}
+	var branchHeads []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer rest-token" {
 			t.Errorf("authorization = %q", r.Header.Get("Authorization"))
@@ -525,15 +525,16 @@ func TestReviewRESTOperationsUseExactPathsAndBodies(t *testing.T) {
 		case "GET /repos/acme/goidea/pulls":
 			seen["branch"] = true
 			query := r.URL.Query()
+			branchHeads = append(branchHeads, query.Get("head"))
 			if query.Get("state") != "open" ||
-				query.Get("head") != "acme:topic" ||
 				query.Get("base") != "" ||
 				query.Get("per_page") != "1" {
 				t.Errorf("branch query = %s", r.URL.RawQuery)
 			}
 			io.WriteString(w, `[{
 				"number":42,"title":"Review flow",
-				"html_url":"https://github.com/acme/goidea/pull/42"
+				"html_url":"https://github.com/acme/goidea/pull/42",
+				"head":{"sha":"head-oid"}
 			}]`)
 		case "POST /repos/acme/goidea/issues/42/comments":
 			seen["comment"] = true
@@ -560,8 +561,14 @@ func TestReviewRESTOperationsUseExactPathsAndBodies(t *testing.T) {
 	}
 	found, ok, err := client.OpenPullRequestForBranch(context.Background(), repo, " topic ")
 	if err != nil || !ok || found.Number != 42 || found.Title != "Review flow" ||
-		found.URL != "https://github.com/acme/goidea/pull/42" {
+		found.URL != "https://github.com/acme/goidea/pull/42" || found.HeadOID != "head-oid" {
 		t.Fatalf("branch pull request = %+v, ok=%v, err=%v", found, ok, err)
+	}
+	found, ok, err = client.OpenPullRequestForHead(
+		context.Background(), repo, "contributor", "topic",
+	)
+	if err != nil || !ok || found.Number != 42 {
+		t.Fatalf("fork pull request = %+v, ok=%v, err=%v", found, ok, err)
 	}
 	if err := client.CreateIssueComment(
 		context.Background(), repo, 42, " Timeline comment ",
@@ -571,10 +578,10 @@ func TestReviewRESTOperationsUseExactPathsAndBodies(t *testing.T) {
 	if len(seen) != 3 || !seen["base"] || !seen["branch"] || !seen["comment"] {
 		t.Fatalf("seen = %#v", seen)
 	}
-
-	endpoint, err := url.Parse(server.URL + "/repos/acme/goidea/pulls?state=open&head=acme%3Atopic&per_page=1")
-	if err != nil || endpoint.Query().Get("head") != "acme:topic" {
-		t.Fatalf("url fixture = %v, err=%v", endpoint, err)
+	if len(branchHeads) != 2 ||
+		branchHeads[0] != "acme:topic" ||
+		branchHeads[1] != "contributor:topic" {
+		t.Fatalf("branch heads = %v", branchHeads)
 	}
 }
 

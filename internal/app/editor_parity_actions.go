@@ -89,14 +89,6 @@ func init() {
 	}
 	commandActions := []commandAction{
 		{
-			"code.addCaretNextOccurrence",
-			"Add Selection for Next Occurrence", "Edit", "Ctrl+G", editorAvailable, editor.SelectNext,
-		},
-		{
-			"code.selectAllOccurrences",
-			"Select All Occurrences", "Edit", "Ctrl+Cmd+G", editorAvailable, editor.SelectAllMatches,
-		},
-		{
 			"code.extendSelection",
 			"Extend Selection", "Edit", "Alt+Up", editorAvailable, editor.SelectLarger,
 		},
@@ -181,6 +173,17 @@ func init() {
 		spec := spec
 		register(spec.id, spec.title, spec.group, spec.shortcut, spec.when,
 			func(m *Model) { m.runEditorCommand(spec.command) }, nil)
+	}
+	for _, action := range []struct {
+		id, title, shortcut string
+		run                 func(*Model)
+	}{
+		{"code.addCaretNextOccurrence", "Add Selection for Next Occurrence", "Ctrl+G", (*Model).addNextEditorOccurrence},
+		{"code.selectAllOccurrences", "Select All Occurrences", "Ctrl+Cmd+G", (*Model).selectAllEditorOccurrences},
+	} {
+		register(action.id, action.title, "Edit", action.shortcut, editorAvailable, action.run, nil)
+		registered, _ := actionGet(action.id)
+		registered.KeyWhen = (*Model).activeEditorFocused
 	}
 
 	register("code.addCaretsToLineEnds", "Add Carets to Ends of Selected Lines",

@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -73,16 +75,18 @@ type githubState struct {
 	// client is an injection point for focused tests.
 	client *ghub.Client
 
-	coordinates   ghub.Coordinates
-	repository    ghub.Repository
-	viewer        ghub.Viewer
-	currentBranch string
-	connecting    bool
-	connectErr    string
-	needsToken    bool
-	tokenErr      string
-	tokenDraft    string
-	tokenSaving   bool
+	coordinates    ghub.Coordinates
+	remotes        []githubRemoteChoice
+	selectedRemote string
+	repository     ghub.Repository
+	viewer         ghub.Viewer
+	currentBranch  string
+	connecting     bool
+	connectErr     string
+	needsToken     bool
+	tokenErr       string
+	tokenDraft     string
+	tokenSaving    bool
 
 	view string
 	// showFilters expands the author, assignee and label fields below the
@@ -104,17 +108,34 @@ type githubState struct {
 	listLoaded  bool
 	listErr     string
 
-	selectedNumber int
-	detail         *ghub.PullRequestDetail
-	detailLoading  bool
-	detailErr      string
-	selectedFile   int
+	selectedNumber   int
+	openPullRequests []int
+	detail           *ghub.PullRequestDetail
+	detailLoading    bool
+	detailErr        string
+	selectedFile     int
 
 	create    githubCreateState
 	actionErr string
 	notice    string
 
 	review githubReviewState
+}
+
+type githubBranchIdentity struct {
+	remotes     []githubRemoteChoice
+	remoteName  string
+	coordinates ghub.Coordinates
+	localBranch string
+	headOwner   string
+	headBranch  string
+	pullRequest int
+	tracked     bool
+}
+
+type githubRemoteChoice struct {
+	Remote      string
+	Coordinates ghub.Coordinates
 }
 
 func (s githubState) connected() bool {
@@ -160,34 +181,107 @@ func (m *Model) githubClient() *ghub.Client {
 	return m.github.client
 }
 
-func githubCoordinatesForRoot(root string) (ghub.Coordinates, string, error) {
+func githubBranchIdentityForRoot(root string) (githubBranchIdentity, error) {
 	repo, err := git.Open(root)
 	if err != nil {
-		return ghub.Coordinates{}, "", fmt.Errorf("this project is not a Git work tree")
-	}
-	raw, _, preferredErr := repo.PreferredRemoteURL()
-	if preferredErr == nil {
-		if coordinates, parseErr := ghub.ParseRemote(raw); parseErr == nil {
-			return coordinates, repo.BranchName(), nil
-		}
+		return githubBranchIdentity{}, fmt.Errorf("this project is not a Git work tree")
 	}
 	names, namesErr := repo.Remotes()
 	if namesErr != nil {
-		return ghub.Coordinates{}, "", namesErr
+		return githubBranchIdentity{}, namesErr
 	}
+	raw, _, preferredErr := repo.PreferredRemoteURL()
+	preferredRemote := ""
+	var remotes []githubRemoteChoice
+	seen := map[ghub.Coordinates]bool{}
 	for _, name := range names {
-		raw, err := repo.RemoteURL(name)
+		remoteURL, err := repo.RemoteURL(name)
 		if err != nil {
 			continue
 		}
-		if coordinates, err := ghub.ParseRemote(raw); err == nil {
-			return coordinates, repo.BranchName(), nil
+		coordinates, err := ghub.ParseRemote(remoteURL)
+		if err != nil || seen[coordinates] {
+			continue
+		}
+		seen[coordinates] = true
+		remotes = append(remotes, githubRemoteChoice{
+			Remote: name, Coordinates: coordinates,
+		})
+		if preferredErr == nil && remoteURL == raw {
+			preferredRemote = name
 		}
 	}
-	if preferredErr != nil {
-		return ghub.Coordinates{}, "", preferredErr
+	if len(remotes) == 0 {
+		if preferredErr != nil {
+			return githubBranchIdentity{}, preferredErr
+		}
+		return githubBranchIdentity{}, fmt.Errorf("add a github.com remote to use Pull Requests")
 	}
-	return ghub.Coordinates{}, "", fmt.Errorf("add a github.com remote to use Pull Requests")
+	if preferredRemote == "" {
+		preferredRemote = remotes[0].Remote
+	}
+	for _, remote := range remotes {
+		if remote.Remote == preferredRemote {
+			return githubBranchIdentityFromRemote(
+				repo, remotes, remote,
+			), nil
+		}
+	}
+	return githubBranchIdentity{}, fmt.Errorf("add a github.com remote to use Pull Requests")
+}
+
+func githubBranchIdentityFromRemote(
+	repo *git.Repo,
+	remotes []githubRemoteChoice,
+	remote githubRemoteChoice,
+) githubBranchIdentity {
+	local := repo.BranchName()
+	identity := githubBranchIdentity{
+		remotes:     append([]githubRemoteChoice(nil), remotes...),
+		remoteName:  remote.Remote,
+		coordinates: remote.Coordinates,
+		localBranch: local,
+		headOwner:   remote.Coordinates.Owner,
+		headBranch:  local,
+	}
+	_, upstream, err := repo.PreferredRemoteURL()
+	if err != nil || upstream == "" {
+		return identity
+	}
+	identity.tracked = true
+	if number, ok := githubPullRequestRef(upstream); ok {
+		identity.pullRequest = number
+		identity.headBranch = ""
+		return identity
+	}
+	if trackedRemote, remoteErr := repo.RemoteURLForBranch(local); remoteErr == nil {
+		if trackedCoordinates, parseErr := ghub.ParseRemote(trackedRemote); parseErr == nil {
+			identity.headOwner = trackedCoordinates.Owner
+		}
+	}
+	identity.headBranch = strings.TrimPrefix(upstream, "refs/heads/")
+	if identity.headBranch == "" {
+		identity.headBranch = local
+	}
+	return identity
+}
+
+func githubPullRequestRef(ref string) (int, bool) {
+	ref = strings.TrimSpace(ref)
+	if !strings.HasPrefix(ref, "refs/pull/") || !strings.HasSuffix(ref, "/head") {
+		return 0, false
+	}
+	value := strings.TrimSuffix(strings.TrimPrefix(ref, "refs/pull/"), "/head")
+	number, err := strconv.Atoi(value)
+	return number, err == nil && number > 0
+}
+
+func githubCoordinatesForRoot(root string) (ghub.Coordinates, string, error) {
+	identity, err := githubBranchIdentityForRoot(root)
+	if err != nil {
+		return ghub.Coordinates{}, "", err
+	}
+	return identity.coordinates, identity.localBranch, nil
 }
 
 // OpenGitHubPullRequests shows the Pull Requests dock window.
@@ -219,18 +313,31 @@ func (m *Model) connectGitHub(force bool) {
 	if m.github.connected() && !force {
 		return
 	}
-	coordinates, branch, err := githubCoordinatesForRoot(m.github.root)
+	identity, err := githubBranchIdentityForRoot(m.github.root)
 	if err != nil {
 		m.github.connectErr = err.Error()
 		m.github.needsToken = false
 		m.invalidate()
 		return
 	}
+	selectedRemote := identity.remoteName
+	if m.github.selectedRemote != "" {
+		for _, remote := range identity.remotes {
+			if remote.Remote == m.github.selectedRemote {
+				selectedRemote = remote.Remote
+				identity.coordinates = remote.Coordinates
+				break
+			}
+		}
+	}
+	coordinates, branch := identity.coordinates, identity.localBranch
 	client := m.githubClient()
 	filters := m.github.filters
 	root := m.github.root
 	gen := m.github.generation
 	m.github.coordinates = coordinates
+	m.github.remotes = append([]githubRemoteChoice(nil), identity.remotes...)
+	m.github.selectedRemote = selectedRemote
 	m.github.currentBranch = branch
 	m.github.connecting = true
 	m.github.connectErr = ""
@@ -245,9 +352,14 @@ func (m *Model) connectGitHub(force bool) {
 			var branchPullRequest ghub.BranchPullRequest
 			var branchPullRequestOK bool
 			var branchPullRequestErr error
-			if branch != "" {
+			if identity.tracked && identity.pullRequest > 0 {
+				branchPullRequest = ghub.BranchPullRequest{Number: identity.pullRequest}
+				branchPullRequestOK = true
+			} else if identity.tracked && identity.headBranch != "" {
 				branchPullRequest, branchPullRequestOK, branchPullRequestErr =
-					client.OpenPullRequestForBranch(ctx, coordinates, branch)
+					client.OpenPullRequestForHead(
+						ctx, coordinates, identity.headOwner, identity.headBranch,
+					)
 			}
 			var page ghub.SearchPage
 			page, err = client.SearchPullRequests(ctx, coordinates, filters, "")
@@ -261,6 +373,9 @@ func (m *Model) connectGitHub(force bool) {
 					m.github.viewer = viewer
 					m.github.listApply(page, true)
 					m.github.review.branch = branch
+					m.github.review.branchTracked = identity.tracked
+					m.github.review.headOwner = identity.headOwner
+					m.github.review.headBranch = identity.headBranch
 					m.github.review.branchLoading = false
 					m.github.review.branchErr = ""
 					if branchPullRequestErr != nil {
@@ -274,15 +389,29 @@ func (m *Model) connectGitHub(force bool) {
 						m.github.review.branchTitle = ""
 						m.github.review.branchURL = ""
 					}
+					if branchPullRequestOK {
+						m.updateGitHubReviewBranchSync(
+							root, gen, branchPullRequest.Number, branchPullRequest.HeadOID,
+						)
+					} else {
+						m.github.review.branchUpdateRequired = false
+					}
 					if m.github.pendingNumber() > 0 {
 						number := m.github.pendingNumber()
-						m.showGitHubPullRequestNumber(number)
+						if m.github.detail == nil {
+							m.showGitHubPullRequestNumber(number)
+						}
 					} else if branchPullRequestOK &&
 						(m.github.review.enableAfterLookup || m.github.review.enabled) {
+						if branchPullRequest.HeadOID == "" {
+							m.github.review.enableAfterLookup = false
+							m.github.review.enabled = true
+							m.github.review.mode = "review"
+							m.showGitHubPullRequestNumber(branchPullRequest.Number)
+						}
+					} else if !identity.tracked && m.github.review.enableAfterLookup {
 						m.github.review.enableAfterLookup = false
-						m.github.review.enabled = true
-						m.github.review.mode = "review"
-						m.showGitHubPullRequestNumber(branchPullRequest.Number)
+						m.github.notice = "The current branch has no remote upstream"
 					}
 					m.invalidate()
 				})
@@ -307,6 +436,42 @@ func (m *Model) connectGitHub(force bool) {
 			m.invalidate()
 		})
 	}()
+}
+
+func (m *Model) selectGitHubRepository(remoteName string) {
+	m.ensureGitHubState()
+	if remoteName == "" || remoteName == m.github.selectedRemote {
+		return
+	}
+	identity, err := githubBranchIdentityForRoot(m.github.root)
+	if err != nil {
+		m.github.connectErr = err.Error()
+		m.invalidate()
+		return
+	}
+	var chosen *githubRemoteChoice
+	for index := range identity.remotes {
+		if identity.remotes[index].Remote == remoteName {
+			chosen = &identity.remotes[index]
+			break
+		}
+	}
+	if chosen == nil {
+		return
+	}
+	visible := m.github.visible
+	credentials, client := m.github.credentials, m.github.client
+	reviewEnabled := m.github.review.enabled
+	m.github = githubState{
+		visible: visible, root: m.github.root, generation: m.github.generation + 1,
+		credentials: credentials, client: client,
+		remotes:        append([]githubRemoteChoice(nil), identity.remotes...),
+		selectedRemote: remoteName, coordinates: chosen.Coordinates,
+		view: "list", filters: ghub.DefaultSearchFilters(), selectedFile: -1,
+		review: newGitHubReviewState(),
+	}
+	m.github.review.enabled = reviewEnabled
+	m.connectGitHub(false)
 }
 
 func (s *githubState) pendingNumber() int {
@@ -341,11 +506,19 @@ func (s *githubState) listApply(page ghub.SearchPage, reset bool) {
 
 func (m *Model) refreshGitHub() {
 	m.ensureGitHubState()
+	if m.github.root == "" {
+		return
+	}
+	if m.github.needsToken && !m.github.connected() {
+		return
+	}
+	m.connectGitHub(true)
+}
+
+func (m *Model) refreshGitHubCurrentView() {
+	m.ensureGitHubState()
 	if !m.github.connected() {
-		if m.github.needsToken {
-			return
-		}
-		m.connectGitHub(true)
+		m.refreshGitHub()
 		return
 	}
 	switch m.github.view {
@@ -441,12 +614,19 @@ func (m *Model) showGitHubPullRequestNumber(number int) {
 	if number <= 0 {
 		return
 	}
+	samePullRequest := m.github.view == "detail" &&
+		m.github.selectedNumber == number
 	m.github.view = "detail"
 	m.github.selectedNumber = number
-	m.github.detail = nil
-	m.github.detailErr = ""
-	m.github.selectedFile = -1
-	resetGitHubReviewData(&m.github.review)
+	if !slices.Contains(m.github.openPullRequests, number) {
+		m.github.openPullRequests = append(m.github.openPullRequests, number)
+	}
+	if !samePullRequest {
+		m.github.detail = nil
+		m.github.detailErr = ""
+		m.github.selectedFile = -1
+		resetGitHubReviewData(&m.github.review)
+	}
 	if !m.github.connected() {
 		if !m.github.connecting && !m.github.needsToken {
 			m.connectGitHub(true)
@@ -512,8 +692,10 @@ func (m *Model) loadGitHubDetail() {
 						}
 					}
 				}
-				m.github.review.activeRow = -1
 				m.refreshGitHubReviewData()
+				if m.github.review.branchNumber == number && detail.HeadOID != "" {
+					m.updateGitHubReviewBranchSync(root, gen, number, detail.HeadOID)
+				}
 				for i := range m.github.items {
 					if m.github.items[i].Number == number {
 						m.github.items[i] = detail.PullRequestSummary
@@ -532,7 +714,31 @@ func (m *Model) BackToGitHubList() {
 	m.github.detailLoading = false
 	m.github.detailErr = ""
 	m.github.selectedFile = -1
+	if m.github.connected() {
+		m.loadGitHubList(true)
+	}
 	m.invalidate()
+}
+
+func (m *Model) closeGitHubPullRequest(number int) {
+	m.ensureGitHubState()
+	index := slices.Index(m.github.openPullRequests, number)
+	if index < 0 {
+		return
+	}
+	m.github.openPullRequests = append(
+		m.github.openPullRequests[:index],
+		m.github.openPullRequests[index+1:]...,
+	)
+	if m.github.view != "detail" || m.github.selectedNumber != number {
+		m.invalidate()
+		return
+	}
+	if index > 0 {
+		m.showGitHubPullRequestNumber(m.github.openPullRequests[index-1])
+		return
+	}
+	m.BackToGitHubList()
 }
 
 func (m *Model) OpenGitHubCreate() {
@@ -687,6 +893,7 @@ func (m *Model) SelectGitHubFile(index int) {
 		}
 	}
 	m.github.review.activeRow = -1
+	m.github.review.selectionAnchor = -1
 	m.invalidate()
 }
 
@@ -920,7 +1127,7 @@ func registerGitHubActions() {
 			},
 		},
 		{
-			ID: "github.refresh", Title: "Refresh Pull Requests",
+			ID: "github.refresh", Title: "Refresh Pull Requests List",
 			Category: "GitHub", Keywords: "github pull request reload",
 			When:    available,
 			Enabled: func(m *Model) bool { return !m.github.connecting && !m.github.listLoading },
@@ -936,18 +1143,24 @@ func registerGitHubActions() {
 			Run:     func(m *Model) { m.loadGitHubDetail() },
 		},
 		{
-			ID: "github.pullRequest.timeline.refresh", Title: "Refresh Review Data",
+			ID: "github.pullRequest.timeline.refresh", Title: "Refresh Timeline",
 			Category: "GitHub", Keywords: "github timeline comments review",
 			When:    func(m *Model) bool { return available(m) && m.github.view == "detail" },
 			Enabled: func(m *Model) bool { return m.github.connected() && !m.github.detailLoading },
+			Running: func(m *Model) bool { return m.github.detailLoading },
 			Run:     func(m *Model) { m.loadGitHubDetail() },
 		},
 		{
 			ID: "github.pullRequest.diff.refreshReview", Title: "Refresh Review Data",
 			Category: "GitHub", Keywords: "github diff review comments refresh",
-			When:    func(m *Model) bool { return available(m) && m.github.selectedNumber > 0 },
-			Enabled: func(m *Model) bool { return m.github.connected() && !m.github.detailLoading },
-			Run:     func(m *Model) { m.loadGitHubDetail() },
+			When: func(m *Model) bool {
+				return available(m) && m.github.view == "detail" && m.github.detail != nil
+			},
+			Enabled: func(m *Model) bool {
+				return m.github.connected() && !githubReviewLoading(&m.github.review)
+			},
+			Running: func(m *Model) bool { return githubReviewLoading(&m.github.review) },
+			Run:     func(m *Model) { m.refreshGitHubReviewData() },
 		},
 		{
 			ID: "github.createPullRequest", Title: "Create Pull Request…",

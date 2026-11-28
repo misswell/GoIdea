@@ -17,6 +17,8 @@ func init() {
 			label := fmt.Sprintf("#%d Review", number)
 			if m.github.review.enabled {
 				label = fmt.Sprintf("#%d Review On", number)
+			} else if m.github.review.branchUpdateRequired {
+				label = fmt.Sprintf("#%d Review Needs Update", number)
 			}
 			button := ui.ButtonBase(c.Key("status:github-review")).Height(22).
 				Padding(0, 6).Radius(4).Gap(4).AlignItems(ui.Center).
@@ -27,6 +29,9 @@ func init() {
 			title := m.github.review.branchTitle
 			if title == "" {
 				title = fmt.Sprintf("Pull request #%d", number)
+			}
+			if m.github.review.branchUpdateRequired {
+				title += " · the pull request head is not in the current branch history"
 			}
 			button.Tooltip(title + " on " + m.github.currentBranch)
 			button.Children(func() {
@@ -45,6 +50,10 @@ func init() {
 	detailAvailable := func(m *Model) bool {
 		return available(m) && m.github.detail != nil
 	}
+	reviewDiffAvailable := func(m *Model) bool {
+		return detailAvailable(m) && m.github.view == "detail" &&
+			m.github.review.mode == "review"
+	}
 	register := func(action *Action) {
 		_ = registerAction(action)
 	}
@@ -52,11 +61,14 @@ func init() {
 		ID: "github.pullRequest.reviewMode", Title: "Review Mode", Category: "GitHub",
 		Keywords: "github review current branch pull request",
 		When:     available, Enabled: func(m *Model) bool {
-			return !m.github.connecting && !m.github.review.branchLoading
+			return !m.github.connecting && !m.github.review.branchLoading &&
+				!m.github.review.branchSyncLoading
 		},
 		Toggled: func(m *Model) bool { return m.github.review.enabled },
-		Running: func(m *Model) bool { return m.github.review.branchLoading },
-		Run:     func(m *Model) { m.ToggleGitHubReviewMode() },
+		Running: func(m *Model) bool {
+			return m.github.review.branchLoading || m.github.review.branchSyncLoading
+		},
+		Run: func(m *Model) { m.ToggleGitHubReviewMode() },
 	})
 	register(&Action{
 		ID: "github.pullRequest.show", Title: "Show Current Branch Pull Request",
@@ -78,10 +90,10 @@ func init() {
 	register(&Action{
 		ID: "github.pullRequest.diff.addComment", Title: "Add Review Comment",
 		Category: "GitHub", Keywords: "github diff line single comment",
-		When: detailAvailable,
+		When: reviewDiffAvailable,
 		Enabled: func(m *Model) bool {
 			_, ok := m.selectedGitHubDiffRow()
-			return ok
+			return ok && m.github.connected() && !m.github.review.comment.submitting
 		},
 		Run: func(m *Model) { m.BeginGitHubReviewComment(false) },
 	})
@@ -89,10 +101,10 @@ func init() {
 		ID:    "github.pullRequest.diff.addMultilineComment",
 		Title: "Add Multiline Review Comment", Category: "GitHub",
 		Keywords: "github diff range lines multiline comment",
-		When:     detailAvailable,
+		When:     reviewDiffAvailable,
 		Enabled: func(m *Model) bool {
-			_, ok := m.selectedGitHubDiffRow()
-			return ok
+			_, _, _, ok := m.selectedGitHubDiffRange(true)
+			return ok && m.github.connected() && !m.github.review.comment.submitting
 		},
 		Run: func(m *Model) { m.BeginGitHubReviewComment(true) },
 	})

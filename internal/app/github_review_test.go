@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -67,6 +68,48 @@ func githubReviewTestDetail() *ghub.PullRequestDetail {
 				Body: "Use the new API", CreatedAt: "2026-11-02T08:00:00Z",
 			}},
 		}},
+	}
+}
+
+func TestGitHubReviewBranchUsesBackendMergeBase(t *testing.T) {
+	for _, tc := range []struct {
+		name, response string
+		updateRequired bool
+	}{
+		{"head in local history", `"ABCDEF"`, false},
+		{"older merge base", `"aaa111"`, true},
+		{"missing head", `null`, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m, callbacks := githubReviewTestModelWithCallbacks(t)
+			m.github.review.branchNumber = 42
+			m.invokeHook = func(_ context.Context, method string, args any) (json.RawMessage, error) {
+				params, ok := args.(map[string]any)
+				if method != "vcs_merge_base" || !ok || params["a"] != "abcdef" || params["b"] != "HEAD" {
+					t.Errorf("merge base request = %s %+v", method, args)
+				}
+				return json.RawMessage(tc.response), nil
+			}
+			m.updateGitHubReviewBranchSync(m.Root(), m.github.generation, 42, "abcdef")
+			waitGitHubCallback(t, callbacks)
+			if m.github.review.branchSyncLoading || m.github.review.branchUpdateRequired != tc.updateRequired {
+				t.Fatalf("branch update required = %v, loading = %v", m.github.review.branchUpdateRequired, m.github.review.branchSyncLoading)
+			}
+		})
+	}
+}
+
+func TestGitHubDiffRowRangeRequiresContiguousLinesOnSameSide(t *testing.T) {
+	rows := parseGitHubPatch("@@ -1,2 +1,3 @@\n context\n-old\n+new\n+more\n@@ -9 +10 @@\n+later")
+	start, end, ok := githubDiffRowRange(rows, 4, 3, true)
+	if !ok || rows[start].CommentLine != 2 || rows[end].CommentLine != 3 {
+		t.Fatalf("reverse selection: start=%d end=%d ok=%v", start, end, ok)
+	}
+	if _, _, ok := githubDiffRowRange(rows, 2, 3, true); ok {
+		t.Fatal("accepted a range spanning different sides")
+	}
+	if _, _, ok := githubDiffRowRange(rows, 3, 6, true); ok {
+		t.Fatal("accepted a range spanning hunks")
 	}
 }
 
@@ -219,7 +262,8 @@ func TestGitHubPatchLinesMultilineDraftsAndThreadNavigation(t *testing.T) {
 		},
 	}
 	m.github.selectedFile = 0
-	m.github.review.activeRow = 4
+	m.SelectGitHubDiffRow(3)
+	m.ExtendGitHubDiffSelection(4)
 	m.BeginGitHubReviewComment(true)
 	if !m.github.review.comment.open ||
 		m.github.review.comment.path != "src/Second.java" ||

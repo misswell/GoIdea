@@ -23,8 +23,6 @@ var keymapEditorCommands = map[string]editor.Command{
 	"code.moveStatementUp":               editor.MoveLinesUp,
 	"code.moveStatementDown":             editor.MoveLinesDown,
 	"code.joinLines":                     editor.JoinLines,
-	"code.addCaretNextOccurrence":        editor.SelectNext,
-	"code.selectAllOccurrences":          editor.SelectAllMatches,
 	"code.extendSelection":               editor.SelectLarger,
 	"code.shrinkSelection":               editor.SelectSmaller,
 	"code.fold":                          editor.Fold,

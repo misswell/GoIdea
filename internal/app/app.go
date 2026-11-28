@@ -155,6 +155,7 @@ type Tab struct {
 	// time, matching OpenIDEA's Column Selection Mode.
 	columnMode  bool
 	columnBlock columnSelectionBlock
+	occurrences editorOccurrenceSearch
 	// todoSeen and todoDark are the buffer version and appearance the editor's
 	// TODO tints were computed for, so a frame only rescans when one changed.
 	todoSeen uint64

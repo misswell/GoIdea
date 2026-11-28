@@ -42,6 +42,7 @@ func (m *Model) resetRemoteProjectState() {
 	state.browseDir = ""
 	state.browseEntries = nil
 	state.browseErr = ""
+	state.browseRetryDir = ""
 	state.envBusy = false
 	state.envLoaded = false
 	state.envErr = ""
@@ -55,6 +56,21 @@ func (m *Model) resetRemoteProjectState() {
 	state.secretValue = ""
 	state.trustOpen = false
 	state.sshSessionErr = ""
+	state.sshSettingsRequest++
+	state.sshSettingsTesting = false
+	state.sshTestResult = ""
+	state.sshTestErr = ""
+	state.sshTestRemedy = ""
+	state.sshTestFingerprint = ""
+	state.sshTestConfig = openidea.SSHConfiguration{}
+	state.sshSecret = ""
+	state.sshSessionRequest++
+	state.sshSessionBusy = false
+	state.sshSessionResult = ""
+	state.sshSessionSecret = ""
+	state.sshSessionRemedy = ""
+	state.sshSessionFingerprint = ""
+	state.sshSessionConfig = openidea.SSHConfiguration{}
 }
 
 func remoteSSHConfigurationChoices(configs []openidea.SSHConfiguration) []string {
@@ -191,6 +207,23 @@ func (m *Model) remoteBaseContext() context.Context {
 	return context.Background()
 }
 
+func (m *Model) retryRemoteChoices() {
+	state := &m.remote
+	if state.configsLoading {
+		return
+	}
+	state.configsLoaded = false
+	state.configsErr = ""
+	if state.sshSettingsOpen {
+		state.sshSettingsPending = true
+	}
+	if state.sshSessionOpen && len(state.sshConfigs) == 0 {
+		state.sshSessionWaiting = true
+	}
+	m.loadRemoteChoices()
+	m.invalidate()
+}
+
 func (m *Model) browseRemoteFolders(dir string) {
 	state := &m.remote
 	config := selectedRemoteSSHConfiguration(state)
@@ -202,6 +235,7 @@ func (m *Model) browseRemoteFolders(dir string) {
 		dir = "~"
 	}
 	state.browseErr = ""
+	state.browseRetryDir = dir
 	state.busy = true
 	state.busyLabel = "Reading remote folders…"
 	state.browseRequest++
@@ -227,8 +261,8 @@ func (m *Model) browseRemoteFolders(dir string) {
 			}
 			if err != nil {
 				state.browseErr = err.Error()
-				m.handleRemoteConnectError(err, target, dir, *config)
 			} else {
+				state.browseRetryDir = ""
 				sort.SliceStable(entries, func(i, j int) bool {
 					leftHidden := strings.HasPrefix(entries[i].Name, ".")
 					rightHidden := strings.HasPrefix(entries[j].Name, ".")
@@ -245,6 +279,18 @@ func (m *Model) browseRemoteFolders(dir string) {
 			m.invalidate()
 		})
 	}()
+}
+
+func (m *Model) retryRemoteFolderBrowse() {
+	state := &m.remote
+	dir := strings.TrimSpace(state.browseRetryDir)
+	if dir == "" {
+		dir = strings.TrimSpace(state.connectPath)
+	}
+	if dir == "" {
+		dir = "~"
+	}
+	m.browseRemoteFolders(dir)
 }
 
 func remoteListedDirectory(requested string, entries []openidea.RemoteDirectoryEntry) string {
@@ -458,6 +504,54 @@ func (m *Model) requestRemoteConnection(
 	}()
 }
 
+func (m *Model) retryRemoteConnection() bool {
+	state := &m.remote
+	if state.busy || state.session != nil || state.pendingTarget.Kind == "" {
+		return false
+	}
+	target := state.pendingTarget
+	requested := state.pendingPath
+	config := state.pendingSSH
+	state.connectErr = ""
+	m.requestRemoteConnection(target, requested, config)
+	return true
+}
+
+func (m *Model) retryRemoteBackend() {
+	state := &m.remote
+	if state.session == nil || state.busy || m.mgr == nil {
+		return
+	}
+	backendState := m.BackendState()
+	if backendState.Running || backendState.Phase == "starting" || backendState.Phase == "restarting" {
+		return
+	}
+	state.connectErr = ""
+	state.busy = true
+	state.busyLabel = "Reconnecting to the remote backend…"
+	m.invalidate()
+	generation := state.generation
+	go func() {
+		ctx, cancel := context.WithTimeout(m.remoteBaseContext(), 5*time.Minute)
+		defer cancel()
+		_, err := m.mgr.Ensure(ctx)
+		m.post(func() {
+			if state.generation != generation {
+				return
+			}
+			state.busy = false
+			state.busyLabel = ""
+			if err != nil {
+				state.connectErr = "Could not reconnect to the remote backend: " + err.Error()
+			} else {
+				state.connectErr = ""
+				m.status = "Reconnected to the remote backend"
+			}
+			m.invalidate()
+		})
+	}()
+}
+
 func (m *Model) newRemoteBackend(target openidea.RemoteTarget, config openidea.SSHConfiguration) *remoteBackend {
 	dataDir := ""
 	if m.cfg.SessionPath != "" {
@@ -577,10 +671,18 @@ func (m *Model) startRemoteConnection(
 		}
 		run.transportAttempted = true
 		if err := m.mgr.UseTransport(ctx, backend.launcher()); err != nil {
-			_ = m.mgr.UseLocal(ctx)
+			localErr := m.mgr.UseLocal(ctx)
 			m.post(func() {
 				if state.generation != generation {
 					backend.closeForwards()
+					return
+				}
+				backend.closeForwards()
+				if localErr != nil {
+					m.remoteBackendUnavailable(
+						"Could not start the remote backend or restore the local backend",
+						fmt.Errorf("remote: %v; local: %w", err, localErr),
+					)
 					return
 				}
 				state.busy = false
@@ -595,10 +697,17 @@ func (m *Model) startRemoteConnection(
 		progress(openidea.RemoteProgress{Stage: openidea.RemoteStageOpening})
 		info, err := m.openRemoteBackendProject(ctx, root)
 		if err != nil {
-			_ = m.mgr.UseLocal(ctx)
+			localErr := m.mgr.UseLocal(ctx)
 			backend.closeForwards()
 			m.post(func() {
 				if state.generation != generation {
+					return
+				}
+				if localErr != nil {
+					m.remoteBackendUnavailable(
+						"Could not open the remote project or restore the local backend",
+						fmt.Errorf("remote: %v; local: %w", err, localErr),
+					)
 					return
 				}
 				state.busy = false
@@ -1322,14 +1431,13 @@ func (m *Model) forwardRemotePortFromInput() {
 		m.invalidate()
 		return
 	}
-	value := strings.TrimSpace(state.portsInput)
-	port, err := strconv.Atoi(value)
-	if err != nil || port <= 0 || port > 65535 {
+	port, ok := parseRemotePort(state.portsInput)
+	if !ok {
 		state.portsErr = "Port must be between 1 and 65535."
 		m.invalidate()
 		return
 	}
-	forwarded, err := state.backend.startForward(uint16(port), nil)
+	forwarded, err := state.backend.startForward(port, nil)
 	if err != nil {
 		state.portsErr = err.Error()
 		m.invalidate()
@@ -1344,9 +1452,59 @@ func (m *Model) forwardRemotePortFromInput() {
 	m.invalidate()
 }
 
+func parseRemotePort(value string) (uint16, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0, false
+	}
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			return 0, false
+		}
+	}
+	port, err := strconv.ParseUint(value, 10, 16)
+	if err != nil || port == 0 {
+		return 0, false
+	}
+	return uint16(port), true
+}
+
 func remotePortInputValid(value string) bool {
-	port, err := strconv.Atoi(strings.TrimSpace(value))
-	return err == nil && port > 0 && port <= 65535
+	_, ok := parseRemotePort(value)
+	return ok
+}
+
+func (m *Model) refreshRemotePorts() {
+	state := &m.remote
+	if state.backend == nil {
+		state.ports = nil
+		state.portsErr = "No remote session is connected."
+		m.invalidate()
+		return
+	}
+	state.ports = state.backend.listForwards()
+	state.portsErr = ""
+	m.invalidate()
+}
+
+func (m *Model) retryRemotePorts() {
+	state := &m.remote
+	if state.backend == nil {
+		state.portsErr = "No remote session is connected."
+		m.invalidate()
+		return
+	}
+	if strings.TrimSpace(state.portsInput) != "" {
+		m.forwardRemotePortFromInput()
+		return
+	}
+	state.portsErr = ""
+	if err := state.backend.forwardConfiguredPorts(); err != nil {
+		state.portsErr = "Could not forward dev container ports: " + err.Error()
+	}
+	m.restoreRemotePorts()
+	state.ports = state.backend.listForwards()
+	m.invalidate()
 }
 
 func (m *Model) stopRemoteForward(port uint16, host *string) {
@@ -1423,6 +1581,10 @@ func (m *Model) remotePortsToolWindow(c *ui.Context, p *ui.Theme) {
 		})
 		if state.portsErr != "" {
 			errorState(c, p, state.portsErr)
+			ui.Row(c).Gap(6).Children(func() {
+				ui.Button(c, "Retry").OnClick(m.retryRemotePorts)
+				ui.Button(c, "Refresh").OnClick(m.refreshRemotePorts)
+			})
 		}
 		if len(state.ports) == 0 {
 			emptyState(c, p, "No forwarded ports")
@@ -1589,6 +1751,8 @@ func (m *Model) beginRemoteSSHSettings() {
 	state := &m.remote
 	state.sshSettingsOpen = true
 	state.sshSettingsErr = ""
+	state.sshSettingsBusy = false
+	m.resetRemoteSSHTest(true)
 	state.sshSelected = 0
 	state.sshEditing = len(state.sshConfigs) == 0
 	if len(state.sshConfigs) > 0 {
@@ -1597,12 +1761,14 @@ func (m *Model) beginRemoteSSHSettings() {
 		state.sshName, state.sshHost, state.sshPort = "", "", ""
 		state.sshUser, state.sshAuth, state.sshKeyFile = "", "openSsh", ""
 		state.sshSaveSecret = false
+		state.sshEditID = newRemoteSSHConfigurationID(nil)
 	}
 	m.invalidate()
 }
 
 func (m *Model) loadRemoteSSHForm(config openidea.SSHConfiguration) {
 	state := &m.remote
+	state.sshEditID = config.ID
 	state.sshName = config.Name
 	state.sshHost = config.Host
 	state.sshPort = ""
@@ -1613,16 +1779,34 @@ func (m *Model) loadRemoteSSHForm(config openidea.SSHConfiguration) {
 	state.sshAuth = config.Auth
 	state.sshKeyFile = config.KeyFile
 	state.sshSaveSecret = config.SaveSecret
+	m.resetRemoteSSHTest(true)
 }
 
 func (m *Model) selectRemoteSSHConfig(index int) {
 	state := &m.remote
-	if index < 0 || index >= len(state.sshConfigs) {
+	if state.sshSettingsBusy || state.sshSettingsTesting ||
+		index < 0 || index >= len(state.sshConfigs) {
 		return
 	}
 	state.sshSelected = index
 	state.sshEditing = false
 	m.loadRemoteSSHForm(state.sshConfigs[index])
+	m.invalidate()
+}
+
+func (m *Model) addRemoteSSHConfiguration() {
+	state := &m.remote
+	if state.sshSettingsBusy || state.sshSettingsTesting {
+		return
+	}
+	state.sshEditing = true
+	state.sshSelected = -1
+	state.sshName, state.sshHost, state.sshPort = "", "", ""
+	state.sshUser, state.sshAuth, state.sshKeyFile = "", "openSsh", ""
+	state.sshSaveSecret = false
+	state.sshEditID = newRemoteSSHConfigurationID(state.sshConfigs)
+	state.sshSettingsErr = ""
+	m.resetRemoteSSHTest(true)
 	m.invalidate()
 }
 
@@ -1661,10 +1845,11 @@ func remoteSSHConfigIndex(configs []openidea.SSHConfiguration, id string) int {
 
 func (m *Model) saveRemoteSSHConfiguration() {
 	state := &m.remote
-	if state.sshSettingsBusy {
+	if state.sshSettingsBusy || state.sshSettingsTesting {
 		return
 	}
 	config := openidea.SSHConfiguration{
+		ID:   strings.TrimSpace(state.sshEditID),
 		Name: strings.TrimSpace(state.sshName), Host: strings.TrimSpace(state.sshHost),
 		User: strings.TrimSpace(state.sshUser), Auth: state.sshAuth,
 		KeyFile: strings.TrimSpace(state.sshKeyFile), SaveSecret: state.sshSaveSecret,
@@ -1685,7 +1870,9 @@ func (m *Model) saveRemoteSSHConfiguration() {
 	}
 	configs := append([]openidea.SSHConfiguration(nil), state.sshConfigs...)
 	if state.sshEditing || len(configs) == 0 {
-		config.ID = fmt.Sprintf("ssh-%d", time.Now().UnixMilli())
+		if config.ID == "" {
+			config.ID = newRemoteSSHConfigurationID(configs)
+		}
 		configs = append(configs, config)
 	} else {
 		if state.sshSelected < 0 || state.sshSelected >= len(configs) {
@@ -1696,6 +1883,12 @@ func (m *Model) saveRemoteSSHConfiguration() {
 		config.ID = configs[state.sshSelected].ID
 		configs[state.sshSelected] = config
 	}
+	state.sshEditID = config.ID
+	secret := state.sshSecret
+	state.sshSettingsRequest++
+	request := state.sshSettingsRequest
+	generation := state.generation
+	state.sshSettingsTesting = false
 	state.sshSettingsBusy = true
 	state.sshSettingsErr = ""
 	m.invalidate()
@@ -1703,7 +1896,13 @@ func (m *Model) saveRemoteSSHConfiguration() {
 		ctx, cancel := context.WithTimeout(m.remoteBaseContext(), 30*time.Second)
 		defer cancel()
 		saved, err := m.saveRemoteSSHConfigurations(ctx, configs)
+		if err == nil && secret != "" && config.Auth != "openSsh" {
+			err = m.setRemoteSSHSecret(ctx, config.ID, secret, config.SaveSecret)
+		}
 		m.post(func() {
+			if state.generation != generation || state.sshSettingsRequest != request {
+				return
+			}
 			state.sshSettingsBusy = false
 			if err != nil {
 				state.sshSettingsErr = "Could not save SSH configurations: " + err.Error()
@@ -1711,6 +1910,7 @@ func (m *Model) saveRemoteSSHConfiguration() {
 				return
 			}
 			state.sshConfigs = saved
+			state.sshSecret = ""
 			state.sshSelected = remoteSSHConfigIndex(saved, config.ID)
 			if state.sshSelected < 0 {
 				state.sshSelected = 0
@@ -1722,6 +1922,7 @@ func (m *Model) saveRemoteSSHConfiguration() {
 			}
 			state.sshSettingsOpen = false
 			state.sshEditing = false
+			m.resetRemoteSSHTest(true)
 			m.invalidate()
 		})
 	}()
@@ -1729,17 +1930,25 @@ func (m *Model) saveRemoteSSHConfiguration() {
 
 func (m *Model) deleteRemoteSSHConfiguration() {
 	state := &m.remote
-	if state.sshSelected < 0 || state.sshSelected >= len(state.sshConfigs) || state.sshEditing {
+	if state.sshSettingsBusy || state.sshSettingsTesting ||
+		state.sshSelected < 0 || state.sshSelected >= len(state.sshConfigs) || state.sshEditing {
 		return
 	}
 	configs := append([]openidea.SSHConfiguration(nil), state.sshConfigs[:state.sshSelected]...)
 	configs = append(configs, state.sshConfigs[state.sshSelected+1:]...)
+	state.sshSettingsRequest++
+	request := state.sshSettingsRequest
+	generation := state.generation
 	state.sshSettingsBusy = true
+	state.sshSettingsErr = ""
 	go func() {
 		ctx, cancel := context.WithTimeout(m.remoteBaseContext(), 30*time.Second)
 		defer cancel()
 		saved, err := m.saveRemoteSSHConfigurations(ctx, configs)
 		m.post(func() {
+			if state.generation != generation || state.sshSettingsRequest != request {
+				return
+			}
 			state.sshSettingsBusy = false
 			if err != nil {
 				state.sshSettingsErr = "Could not delete the SSH configuration: " + err.Error()
@@ -1753,11 +1962,13 @@ func (m *Model) deleteRemoteSSHConfiguration() {
 				state.sshEditing = true
 				state.sshName, state.sshHost, state.sshPort = "", "", ""
 				state.sshUser, state.sshAuth, state.sshKeyFile = "", "openSsh", ""
+				state.sshEditID = newRemoteSSHConfigurationID(nil)
 			} else {
 				m.loadRemoteSSHForm(saved[0])
 				state.sshChoice = remoteSSHConfigurationChoices(saved)[0]
 				state.sshConfigID = saved[0].ID
 			}
+			m.resetRemoteSSHTest(true)
 			m.invalidate()
 		})
 	}()
@@ -1769,7 +1980,7 @@ func remoteConfigFromState(state *remoteDevelopmentState) openidea.SSHConfigurat
 		port = &value
 	}
 	config := openidea.SSHConfiguration{
-		Name: strings.TrimSpace(state.sshName), Host: strings.TrimSpace(state.sshHost),
+		ID: strings.TrimSpace(state.sshEditID), Name: strings.TrimSpace(state.sshName), Host: strings.TrimSpace(state.sshHost),
 		Port: port, User: strings.TrimSpace(state.sshUser), Auth: state.sshAuth,
 		KeyFile: strings.TrimSpace(state.sshKeyFile), SaveSecret: state.sshSaveSecret,
 	}

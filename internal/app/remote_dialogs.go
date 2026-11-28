@@ -85,8 +85,18 @@ func (m *Model) remoteSSHSettingsDialog(c *ui.Context, p *ui.Theme) {
 				})
 				return
 			}
+			if state.configsErr != "" {
+				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+					ui.Text(c, state.configsErr).FontSize(11).TextColor(p.Danger).Grow(1)
+					ui.Button(c, "Retry").Disabled(state.configsLoading).
+						OnClick(m.retryRemoteChoices)
+				})
+			}
 			ui.Row(c).Grow(1).Gap(14).Children(func() {
 				ui.Column(c).Width(230).Gap(4).Children(func() {
+					if len(state.sshConfigs) == 0 {
+						emptyState(c, p, "No SSH configurations")
+					}
 					for i, config := range state.sshConfigs {
 						i, config := i, config
 						label := strings.TrimSpace(config.Name)
@@ -96,15 +106,8 @@ func (m *Model) remoteSSHSettingsDialog(c *ui.Context, p *ui.Theme) {
 						ui.Button(c, label).OnClick(func() { m.selectRemoteSSHConfig(i) })
 					}
 					ui.Spacer(c)
-					ui.Button(c, "Add").OnClick(func() {
-						state.sshEditing = true
-						state.sshSelected = -1
-						state.sshName, state.sshHost, state.sshPort = "", "", ""
-						state.sshUser, state.sshAuth, state.sshKeyFile = "", "openSsh", ""
-						state.sshSaveSecret = false
-						state.sshSettingsErr = ""
-						m.invalidate()
-					})
+					ui.Button(c, "Add").Disabled(state.sshSettingsBusy || state.sshSettingsTesting).
+						OnClick(m.addRemoteSSHConfiguration)
 				})
 				ui.Column(c).Grow(1).Gap(8).Children(func() {
 					ui.Text(c, "Configuration").FontSize(12).Bold().TextColor(p.Text).SingleLine()
@@ -139,13 +142,58 @@ func (m *Model) remoteSSHSettingsDialog(c *ui.Context, p *ui.Theme) {
 							default:
 								state.sshAuth = "openSsh"
 							}
+							m.resetRemoteSSHTest(false)
 						}
 					})
-					remoteSettingsRow(c, p, "Private key", func() {
-						ui.TextInput(c, &state.sshKeyFile).Height(28).Grow(1).
-							Placeholder("~/.ssh/id_ed25519")
+					if state.sshAuth == "keyPair" {
+						remoteSettingsRow(c, p, "Private key", func() {
+							ui.TextInput(c, &state.sshKeyFile).Height(28).Grow(1).
+								Placeholder("~/.ssh/id_ed25519")
+						})
+					}
+					if state.sshAuth != "openSsh" {
+						secretLabel := "Password"
+						saveLabel := "Save password"
+						if state.sshAuth == "keyPair" {
+							secretLabel = "Passphrase"
+							saveLabel = "Save passphrase"
+						}
+						remoteSettingsRow(c, p, secretLabel, func() {
+							ui.TextInput(c, &state.sshSecret).Password().Height(28).Grow(1).
+								Placeholder("Leave empty to use a saved credential")
+						})
+						ui.Checkbox(c, &state.sshSaveSecret, saveLabel)
+					} else {
+						ui.Text(c, "Uses HostName, User, Port, IdentityFile and ProxyJump from ~/.ssh/config, and keys of the SSH agent.").
+							FontSize(11).TextColor(p.TextMuted)
+					}
+					ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+						ui.Button(c, "Test Connection").
+							Disabled(state.sshSettingsBusy || state.sshSettingsTesting ||
+								strings.TrimSpace(state.sshHost) == "").
+							OnClick(m.testRemoteSSHConfiguration)
+						if state.sshSettingsTesting {
+							loadingState(c, p, "Connecting…")
+						} else if state.sshTestResult != "" && m.remoteSSHTestMatchesForm() {
+							ui.Text(c, state.sshTestResult).FontSize(11).TextColor(p.Success).Grow(1)
+						}
 					})
-					ui.Checkbox(c, &state.sshSaveSecret, "Save password or key passphrase in Keychain")
+					if state.sshTestErr != "" && m.remoteSSHTestMatchesForm() {
+						errorState(c, p, state.sshTestErr)
+						switch state.sshTestRemedy {
+						case remoteSSHRemedyTrustHost:
+							ui.Row(c).AlignItems(ui.Center).Children(func() {
+								ui.Text(c, "The authenticity of the host cannot be established.").
+									FontSize(11).TextColor(p.TextMuted).Grow(1)
+								ui.Button(c, "Trust Host and Retry").
+									Disabled(state.sshSettingsTesting).
+									OnClick(m.trustRemoteSSHConfigurationHost)
+							})
+						case remoteSSHRemedySecret:
+							ui.Button(c, "Connect").Disabled(state.sshSettingsTesting).
+								OnClick(m.retryRemoteSSHConfigurationSecret)
+						}
+					}
 					if state.sshSettingsErr != "" {
 						errorState(c, p, state.sshSettingsErr)
 					}
@@ -153,21 +201,23 @@ func (m *Model) remoteSSHSettingsDialog(c *ui.Context, p *ui.Theme) {
 			})
 			ui.Row(c).AlignItems(ui.Center).Children(func() {
 				if !state.sshEditing && state.sshSelected >= 0 {
-					ui.Button(c, "Delete").Disabled(state.sshSettingsBusy).
+					ui.Button(c, "Delete").Disabled(state.sshSettingsBusy || state.sshSettingsTesting).
 						OnClick(m.deleteRemoteSSHConfiguration)
 				}
 				ui.Spacer(c)
-				ui.Button(c, "Cancel").Disabled(state.sshSettingsBusy).
+				ui.Button(c, "Cancel").Disabled(state.sshSettingsBusy || state.sshSettingsTesting).
 					OnClick(func() {
+						m.resetRemoteSSHTest(true)
 						state.sshSettingsPending = false
 						state.sshSettingsOpen = false
 					})
-				ui.Button(c, "Save").Disabled(state.sshSettingsBusy).
+				ui.Button(c, "Save").Disabled(state.sshSettingsBusy || state.sshSettingsTesting).
 					OnClick(m.saveRemoteSSHConfiguration)
 			})
 		})
 	})
 	if !open || dialog.Dismissed() {
+		m.resetRemoteSSHTest(true)
 		state.sshSettingsPending = false
 		state.sshSettingsOpen = false
 	}

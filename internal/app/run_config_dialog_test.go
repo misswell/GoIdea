@@ -188,8 +188,8 @@ func TestRunConfigDialogApplyPreservesAnUnchangedTemporaryConfiguration(t *testi
 	m.OpenRunConfigs()
 	d := m.runCfgDlg
 	m.AddRunConfig()
-	d.items[d.sel].Command = "echo"
-	d.items[d.sel].Name = "Persistent"
+	d.typeParams["command"] = "echo"
+	d.name = "Persistent"
 	m.ApplyRunConfigs()
 	for i := 0; i < 100 && len(hook.saved) == 0; i++ {
 		time.Sleep(10 * time.Millisecond)

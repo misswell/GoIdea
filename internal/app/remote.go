@@ -38,20 +38,22 @@ type remoteDevelopmentState struct {
 	sshConfigs     []openidea.SSHConfiguration
 	sshConfigID    string
 	sshChoice      string
+	sshEditID      string
 	distros        []string
 	distro         string
 
-	busy          bool
-	busyLabel     string
-	progress      *openidea.RemoteProgress
-	connectErr    string
-	connection    *remoteConnectionRun
-	generation    uint64
-	browseOpen    bool
-	browseDir     string
-	browseEntries []openidea.RemoteDirectoryEntry
-	browseErr     string
-	browseRequest uint64
+	busy           bool
+	busyLabel      string
+	progress       *openidea.RemoteProgress
+	connectErr     string
+	connection     *remoteConnectionRun
+	generation     uint64
+	browseOpen     bool
+	browseDir      string
+	browseEntries  []openidea.RemoteDirectoryEntry
+	browseErr      string
+	browseRetryDir string
+	browseRequest  uint64
 
 	session       *openidea.RemoteSession
 	backend       *remoteBackend
@@ -83,14 +85,29 @@ type remoteDevelopmentState struct {
 	sshUser            string
 	sshAuth            string
 	sshKeyFile         string
+	sshSecret          string
 	sshSaveSecret      bool
 	sshSettingsErr     string
 	sshSettingsBusy    bool
+	sshSettingsTesting bool
+	sshTestResult      string
+	sshTestErr         string
+	sshTestRemedy      remoteSSHRemedy
+	sshTestFingerprint string
+	sshTestConfig      openidea.SSHConfiguration
+	sshSettingsRequest uint64
 
-	sshSessionOpen      bool
-	sshSessionPendingID string
-	sshSessionWaiting   bool
-	sshSessionErr       string
+	sshSessionOpen        bool
+	sshSessionPendingID   string
+	sshSessionWaiting     bool
+	sshSessionBusy        bool
+	sshSessionErr         string
+	sshSessionResult      string
+	sshSessionSecret      string
+	sshSessionRemedy      remoteSSHRemedy
+	sshSessionFingerprint string
+	sshSessionConfig      openidea.SSHConfiguration
+	sshSessionRequest     uint64
 
 	ports       []openidea.ForwardedPort
 	portsInput  string
@@ -634,6 +651,25 @@ func (m *Model) remoteHostPanel(c *ui.Context, p *ui.Theme, state *remoteDevelop
 		}
 		if state.connectErr != "" {
 			errorState(c, p, state.connectErr)
+			if !state.busy && !state.secretOpen && !state.trustOpen &&
+				(state.pendingTarget.Kind != "" || state.session != nil) {
+				ui.Row(c).AlignItems(ui.Center).Children(func() {
+					ui.Button(c, "Retry").OnClick(func() {
+						if !m.retryRemoteConnection() {
+							m.retryRemoteBackend()
+						}
+					})
+				})
+			}
+		} else if state.session != nil {
+			backendState := m.BackendState()
+			if !backendState.Running && backendState.Phase != "starting" &&
+				backendState.Phase != "restarting" {
+				ui.Row(c).AlignItems(ui.Center).Children(func() {
+					ui.Button(c, "Retry").Disabled(state.busy).
+						OnClick(m.retryRemoteBackend)
+				})
+			}
 		}
 		ui.Row(c).Gap(6).Children(func() {
 			ui.Button(c, "Connect…").Disabled(state.busy || remoteConnected(m)).
@@ -692,6 +728,10 @@ func (m *Model) remotePortsPanel(c *ui.Context, p *ui.Theme) {
 		})
 		if state.portsErr != "" {
 			errorState(c, p, state.portsErr)
+			ui.Row(c).Gap(6).Children(func() {
+				ui.Button(c, "Retry").OnClick(m.retryRemotePorts)
+				ui.Button(c, "Refresh").OnClick(m.refreshRemotePorts)
+			})
 		}
 		if len(state.ports) == 0 {
 			emptyState(c, p, "No forwarded ports")
@@ -876,6 +916,10 @@ func (m *Model) remoteConnectDialog(c *ui.Context, p *ui.Theme) {
 					}
 					ui.Button(c, "Configure…").OnClick(m.openRemoteSSHSettings)
 				})
+				if state.configsErr != "" {
+					ui.Button(c, "Retry SSH Configurations").Disabled(state.configsLoading).
+						OnClick(m.retryRemoteChoices)
+				}
 			}
 			ui.Text(c, "Project directory:").FontSize(11).Bold().TextColor(p.Text).SingleLine()
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
@@ -890,6 +934,7 @@ func (m *Model) remoteConnectDialog(c *ui.Context, p *ui.Theme) {
 			})
 			if state.browseErr != "" {
 				errorState(c, p, state.browseErr)
+				ui.Button(c, "Retry Browse").OnClick(m.retryRemoteFolderBrowse)
 			}
 			if state.browseOpen {
 				ui.Column(c).Height(150).Gap(2).BorderWidth(1).
@@ -907,6 +952,9 @@ func (m *Model) remoteConnectDialog(c *ui.Context, p *ui.Theme) {
 							m.browseRemoteFolders(entry.Path)
 						})
 					}
+					if len(state.browseEntries) == 0 {
+						emptyState(c, p, "No subfolders")
+					}
 				})
 			}
 			if state.progress != nil {
@@ -921,6 +969,9 @@ func (m *Model) remoteConnectDialog(c *ui.Context, p *ui.Theme) {
 			}
 			if state.connectErr != "" {
 				errorState(c, p, state.connectErr)
+				if state.pendingTarget.Kind != "" && !state.busy {
+					ui.Button(c, "Retry").OnClick(func() { m.retryRemoteConnection() })
+				}
 			}
 			ui.Row(c).AlignItems(ui.Center).Children(func() {
 				ui.Spacer(c)

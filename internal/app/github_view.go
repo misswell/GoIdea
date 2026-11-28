@@ -75,7 +75,7 @@ func (m *Model) githubHeader(c *ui.Context, p *ui.Theme, oi oiColors) {
 			if m.github.view != "create" {
 				m.httpToolbarButton(c, p, "general/refresh", "Refresh",
 					!m.github.connected() || m.github.connecting || m.github.listLoading ||
-						m.github.detailLoading, m.refreshGitHub)
+						m.github.detailLoading, m.refreshGitHubCurrentView)
 			}
 			ui.Spacer(c)
 			title := "Pull Requests"
@@ -98,6 +98,22 @@ func (m *Model) githubHeader(c *ui.Context, p *ui.Theme, oi oiColors) {
 				}).Menu(func(menu *ui.Menu) {
 					if m.github.viewer.Login != "" {
 						menu.Item("Signed in as " + m.github.viewer.Login).Disabled(true)
+					}
+					if len(m.github.remotes) > 1 {
+						menu.Submenu("Repository", func(submenu *ui.Menu) {
+							for _, remote := range m.github.remotes {
+								label := remote.Coordinates.String()
+								if remote.Remote != "" &&
+									remote.Remote != remote.Coordinates.Name {
+									label = remote.Remote + " · " + label
+								}
+								if submenu.Item(label).
+									Checked(remote.Remote == m.github.selectedRemote).
+									Chosen() {
+									m.selectGitHubRepository(remote.Remote)
+								}
+							}
+						})
 					}
 					if menu.Item("GitHub Token Settings…").Chosen() {
 						c.OpenURL(githubTokenURL)

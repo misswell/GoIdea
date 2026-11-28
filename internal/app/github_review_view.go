@@ -23,6 +23,9 @@ func (m *Model) githubReviewToolbar(c *ui.Context, p *ui.Theme, oi oiColors) {
 				ui.Text(c, fmt.Sprintf("#%d on %s", m.github.review.branchNumber,
 					m.github.currentBranch)).FontSize(11).TextColor(oi.textMuted).
 					SingleLine().Ellipsis("…")
+				if m.github.review.branchUpdateRequired {
+					githubBadge(c, "Branch update required", oi.warning, oi)
+				}
 			} else if m.github.review.branchErr != "" {
 				ui.Text(c, m.github.review.branchErr).FontSize(11).
 					TextColor(oi.danger).SingleLine().Ellipsis("…")
@@ -64,12 +67,18 @@ func (m *Model) githubReviewToolbar(c *ui.Context, p *ui.Theme, oi oiColors) {
 		})
 		if row, ok := m.selectedGitHubDiffRow(); ok && m.github.review.mode == "review" {
 			ui.Row(c).Gap(5).AlignItems(ui.Center).Wrap().Children(func() {
-				ui.Text(c, fmt.Sprintf("Selected line %s:%d", row.CommentSide,
-					row.CommentLine)).FontSize(11).TextColor(oi.textMuted)
+				selection := fmt.Sprintf("Selected line %s:%d", row.CommentSide,
+					row.CommentLine)
+				if start, end, _, multiline := m.selectedGitHubDiffRange(true); multiline {
+					selection = fmt.Sprintf("Selected %s:%d-%d",
+						end.CommentSide, start.CommentLine, end.CommentLine)
+				}
+				ui.Text(c, selection).FontSize(11).TextColor(oi.textMuted)
 				ui.Button(c, "Comment").OnClick(func() {
 					m.BeginGitHubReviewComment(false)
 				})
-				ui.Button(c, "Multiline").OnClick(func() {
+				_, _, _, multiline := m.selectedGitHubDiffRange(true)
+				ui.Button(c, "Multiline").Disabled(!multiline).OnClick(func() {
 					m.BeginGitHubReviewComment(true)
 				})
 			})
@@ -170,9 +179,16 @@ func (m *Model) githubPatchRows(
 	file ghub.FileChange,
 ) {
 	rows := parseGitHubPatch(file.Patch)
+	rangeStart, rangeEnd, multiline := githubDiffRowRange(
+		rows,
+		m.github.review.selectionAnchor,
+		m.github.review.activeRow,
+		true,
+	)
 	threadsByLine := map[string][]int{}
 	for index, thread := range m.github.review.threads {
-		if thread.Path != file.Path || thread.Line <= 0 {
+		if thread.Path != file.Path || thread.Line <= 0 ||
+			thread.IsOutdated || strings.EqualFold(thread.SubjectType, "FILE") {
 			continue
 		}
 		key := thread.DiffSide + ":" + fmt.Sprint(thread.Line)
@@ -187,12 +203,16 @@ func (m *Model) githubPatchRows(
 				continue
 			}
 			selected := index == m.github.review.activeRow
+			inRange := multiline && index >= rangeStart && index <= rangeEnd &&
+				rows[index].CommentSide == rows[m.github.review.activeRow].CommentSide
 			line := ui.Row(c.Key(fmt.Sprintf("github:diff-row:%s:%d", file.Path, index))).
 				MinHeight(19).Padding(0, 2).Gap(4).AlignItems(ui.Center)
 			if row.CommentLine > 0 {
 				line.Cursor(ui.CursorPointer)
 			}
-			if selected {
+			if inRange {
+				line.Background(oi.selected)
+			} else if selected {
 				line.Background(oi.selected)
 			} else if line.Hovered() && row.CommentLine > 0 {
 				line.Background(oi.hoverTint)
@@ -204,7 +224,13 @@ func (m *Model) githubPatchRows(
 				line.Background(oi.danger.Mix(oi.elev, 0.9))
 			}
 			if row.CommentLine > 0 {
-				line.OnClick(func() { m.SelectGitHubDiffRow(index) })
+				line.OnClick(func() {
+					if line.ClickModifiers()&ui.Shift != 0 {
+						m.ExtendGitHubDiffSelection(index)
+					} else {
+						m.SelectGitHubDiffRow(index)
+					}
+				})
 			}
 			line.Children(func() {
 				oldLabel, newLabel := "", ""
@@ -258,32 +284,15 @@ func (m *Model) githubReviewCommentEditor(c *ui.Context, p *ui.Theme, oi oiColor
 		ui.Text(c, "Review comment · "+location).
 			FontSize(11).Bold().TextColor(oi.text).SingleLine().Ellipsis("…")
 		ui.Row(c).Gap(5).AlignItems(ui.Center).Wrap().Children(func() {
-			ui.Text(c, "Side").FontSize(11).TextColor(oi.textMuted)
-			if comment.side == "LEFT" {
-				ui.Button(c, "✓ Old").OnClick(func() {
-					comment.side, comment.startSide = "LEFT", "LEFT"
-				})
-				ui.Button(c, "New").OnClick(func() {
-					comment.side, comment.startSide = "RIGHT", "RIGHT"
-				})
-			} else {
-				ui.Button(c, "Old").OnClick(func() {
-					comment.side, comment.startSide = "LEFT", "LEFT"
-				})
-				ui.Button(c, "✓ New").OnClick(func() {
-					comment.side, comment.startSide = "RIGHT", "RIGHT"
-				})
+			side := comment.side
+			if side == "LEFT" {
+				side = "Old"
+			} else if side == "RIGHT" {
+				side = "New"
 			}
-			ui.Text(c, "Start").FontSize(11).TextColor(oi.textMuted)
-			startLine := float64(comment.startLine)
-			if ui.NumberInput(c, &startLine, 1, 100000, 1).Width(74).Changed() {
-				comment.startLine = int(startLine)
-			}
-			ui.Text(c, "End").FontSize(11).TextColor(oi.textMuted)
-			line := float64(comment.line)
-			if ui.NumberInput(c, &line, 1, 100000, 1).Width(74).Changed() {
-				comment.line = int(line)
-			}
+			ui.Text(c, side).FontSize(11).TextColor(oi.textMuted)
+			ui.Text(c, fmt.Sprintf("Lines %d–%d", comment.startLine, comment.line)).
+				FontSize(11).TextColor(oi.textMuted)
 		})
 		ui.TextArea(c.Key("github:review-comment-body"), &comment.body).
 			MinHeight(72).Placeholder("Leave a review comment")

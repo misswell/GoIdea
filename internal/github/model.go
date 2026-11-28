@@ -319,9 +319,10 @@ type CreatePullRequestInput struct {
 // BranchPullRequest identifies the open pull request whose head is a local
 // branch, used by Review Mode.
 type BranchPullRequest struct {
-	Number int
-	Title  string
-	URL    string
+	Number  int
+	Title   string
+	URL     string
+	HeadOID string
 }
 
 // ReviewThreadInput is a single-line or multiline review comment.

@@ -73,11 +73,11 @@ release can be called today.
 | SDKs | `sdk` | 13 | 0 | 13 |
 | Search | `search` | 4 | 0 | 4 |
 | Spelling | `spell` | 2 | 0 | 0 |
-| SSH | `ssh` | 7 | 3 | 3 |
+| SSH | `ssh` | 7 | 3 | 4 |
 | Syntax trees | `syntax` | 9 | 0 | 4 |
 | Terminal | `term` | 8 | 0 | 6 |
 | Toolchains | `tools` | 8 | 0 | 8 |
-| Version control | `vcs` | 83 | 0 | 65 |
+| Version control | `vcs` | 83 | 0 | 66 |
 | Web preview | `web` | 1 | 2 | 1 |
 | Window and menu | `window` | 0 | 35 | 0 |
 | Window drag | `window_drag` | 0 | 1 | 0 |
@@ -88,7 +88,7 @@ release can be called today.
 ## Served by `openidea-server --stdio`
 
 549 commands. `GoIDEA` marks the ones a non-test Go source invokes today
-(447 of 549).
+(449 of 549).
 
 | Command | Domain | Arguments | GoIDEA |
 | --- | --- | --- | --- |
@@ -526,7 +526,7 @@ release can be called today.
 | `ssh_needs_secret` | SSH | `id` | — |
 | `ssh_open_terminal` | SSH | `cols`, `id`, `onOutput`, `rows` | yes |
 | `ssh_set_secret` | SSH | `id`, `save`, `secret` | yes |
-| `ssh_test` | SSH | `config`, `secret` | — |
+| `ssh_test` | SSH | `config`, `secret` | yes |
 | `ssh_trust_host` | SSH | `fingerprint`, `id` | yes |
 | `structural_languages` | Code analysis | — | yes |
 | `structural_search` | Code analysis | `onEvent`, `query`, `request`, `scope` | yes |
@@ -594,7 +594,7 @@ release can be called today.
 | `vcs_log_refs` | Version control | `repo` | — |
 | `vcs_log_users` | Version control | `repo` | — |
 | `vcs_merge` | Version control | `branch`, `repo` | — |
-| `vcs_merge_base` | Version control | `a`, `b`, `repo` | — |
+| `vcs_merge_base` | Version control | `a`, `b`, `repo` | yes |
 | `vcs_merge_with` | Version control | `branches`, `options`, `repo` | yes |
 | `vcs_move_worktree` | Version control | `path`, `repo`, `to` | yes |
 | `vcs_open_external_log` | Version control | `path` | yes |
@@ -792,7 +792,7 @@ GoIDEA needs to do for each:
 
 ## What this means for GoIDEA
 
-549 remote commands are available today; GoIDEA uses 447. The parity work is
+549 remote commands are available today; GoIDEA uses 449. The parity work is
 first to cover the remote surface OpenIDEA's own frontend uses, then to move
 `shared-op`/`host`/`crate` commands onto stdio through the OpenIDEA fork
 (a submodule bump and a server release), and to implement `desktop` commands

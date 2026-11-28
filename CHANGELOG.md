@@ -3,6 +3,15 @@
 The GitHub release notes, which **Help › What's New** shows, come from the
 `## <version>` section here. Every release needs one, or its build fails.
 
+## Unreleased
+
+- Occurrence shortcuts keep selection direction and prompt before searching from the top.
+- Pull Requests keeps review tabs open and supports selecting a range for a comment.
+- Pull Requests can switch GitHub remotes and shows when the review branch is behind.
+- SSH configurations offer Test Connection and show the next step when authentication fails.
+- Remote Development offers retries for configuration, folder, backend and port errors.
+- Edit Configurations shows fields for Go, pytest, npm, Bun, Godot and shell commands.
+
 ## 0.1.49
 
 - Closing the Welcome window now exits normally instead of reopening Welcome.

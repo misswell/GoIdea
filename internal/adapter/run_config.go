@@ -102,7 +102,8 @@ func hasArg(args []string, want string) bool {
 // configuration kind.
 var kindLabels = map[string]string{
 	"npm": "npm", "deno": "Deno", "bun": "Bun", "cargo": "Cargo",
-	"gradle": "Gradle", "maven": "Maven", "go": "Go", "python": "Python",
+	"gradle": "Gradle", "maven": "Maven", "go": "Go Build", "go-test": "Go Test", "godot": "Godot",
+	"python": "Python",
 	"pytest": "pytest", "phpunit": "PHPUnit", "composer": "Composer",
 	"make": "Make", "cmake": "CMake", "just": "Just", "shell": "Shell Script",
 	"program": "Program", "compound": "Compound", "application": "Application",
@@ -148,7 +149,8 @@ var runConfigTypes = []RunConfigType{
 	{ID: "node", Label: "Node.js", Group: "JavaScript and TypeScript"},
 	{ID: "gradle", Label: "Gradle", Group: "Build Tools"},
 	{ID: "maven", Label: "Maven", Group: "Build Tools"},
-	{ID: "go", Label: "Go", Group: "Go"},
+	{ID: "go", Label: "Go Build", Group: "Go"},
+	{ID: "go-test", Label: "Go Test", Group: "Go"},
 	{ID: "python", Label: "Python", Group: "Python"},
 	{ID: "pytest", Label: "pytest", Group: "Python"},
 	{ID: "django-test", Label: "Django Test", Group: "Python"},
@@ -163,6 +165,7 @@ var runConfigTypes = []RunConfigType{
 	{ID: "jar-application", Label: "JAR Application", Group: "Application"},
 	{ID: "spring-boot", Label: "Spring Boot", Group: "Application"},
 	{ID: "tomcat", Label: "Tomcat", Group: "Application"},
+	{ID: "godot", Label: "Godot", Group: "Other"},
 	{ID: "compound", Label: "Compound", Group: "Other"},
 }
 
@@ -205,8 +208,10 @@ func DefaultCommand(kind string) string {
 		return "bun"
 	case "node":
 		return "node"
-	case "go":
+	case "go", "go-test":
 		return "go"
+	case "godot":
+		return "godot"
 	case "python", "django-test":
 		return "python"
 	case "pytest":
@@ -243,6 +248,27 @@ func BlankTemplate(kind string) (*openidea.RunConfig, error) {
 		obj["params"] = map[string]string{"wrapper": "true", "tasks": ""}
 	case "maven":
 		obj["params"] = map[string]string{"wrapper": "false", "tasks": ""}
+	case "shell":
+		obj["params"] = map[string]string{"mode": "command"}
+	case "program":
+		obj["params"] = map[string]string{"program": "", "arguments": ""}
+	case "npm":
+		obj["params"] = map[string]string{"packageManager": "npm", "command": "run"}
+	case "bun":
+		obj["params"] = map[string]string{"packageManager": "bun", "command": "run"}
+	case "pytest":
+		obj["params"] = map[string]string{"command": "pytest"}
+	case "godot":
+		obj["params"] = map[string]string{"projectDir": "", "scene": "", "arguments": ""}
+	case "go":
+		obj["params"] = map[string]string{
+			"goKind": "build", "scope": "package", "target": ".",
+			"runAfterBuild": "true", "useTags": "true",
+		}
+	case "go-test":
+		obj["params"] = map[string]string{
+			"goKind": "test", "scope": "package", "target": ".", "useTags": "true",
+		}
 	case "docker-dockerfile":
 		obj["params"] = map[string]string{"connection": "default", "dockerfile": "Dockerfile", "runImage": "true"}
 	case "docker-image":

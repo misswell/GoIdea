@@ -134,8 +134,8 @@ func TestKeymapSettingsStageApplyReloadAndReset(t *testing.T) {
 	if got := m.KeymapBindings("file.save"); !reflect.DeepEqual(got, []string{"Alt+P"}) {
 		t.Fatalf("applied Save binding = %v", got)
 	}
-	if !keymapEditorBindingsHave(tab.state.Bindings, ui.Cmd, ui.KeyD, editor.SelectNext) {
-		t.Fatal("Apply did not rebuild the open editor with VS Code macOS bindings")
+	if got := m.KeymapBindings("code.addCaretNextOccurrence"); !reflect.DeepEqual(got, []string{"Cmd+D"}) {
+		t.Fatalf("applied VS Code occurrence binding = %v", got)
 	}
 	stored := LoadPreferences(path)
 	if stored.KeymapPreset != "vscode-macos" ||

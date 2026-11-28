@@ -412,19 +412,32 @@ func (c *Client) UpdatePullRequestBase(
 	return c.REST(ctx, http.MethodPatch, endpoint, map[string]any{"base": base}, nil)
 }
 
-// OpenPullRequestForBranch finds the open pull request whose head is branch.
+// OpenPullRequestForBranch finds the open pull request whose head is branch
+// in the same repository.
 func (c *Client) OpenPullRequestForBranch(
 	ctx context.Context,
 	repo Coordinates,
 	branch string,
 ) (BranchPullRequest, bool, error) {
+	return c.OpenPullRequestForHead(ctx, repo, repo.Owner, branch)
+}
+
+// OpenPullRequestForHead finds the open pull request into repo whose head is
+// headOwner/branch. A fork's head owner differs from the base repository's.
+func (c *Client) OpenPullRequestForHead(
+	ctx context.Context,
+	repo Coordinates,
+	headOwner string,
+	branch string,
+) (BranchPullRequest, bool, error) {
 	branch = strings.TrimSpace(branch)
-	if branch == "" {
+	headOwner = strings.TrimSpace(headOwner)
+	if branch == "" || headOwner == "" {
 		return BranchPullRequest{}, false, nil
 	}
 	query := url.Values{
 		"state":    {"open"},
-		"head":     {repo.Owner + ":" + branch},
+		"head":     {headOwner + ":" + branch},
 		"per_page": {"1"},
 	}
 	endpoint := repoRESTPath(repo) + "/pulls?" + query.Encode()
@@ -432,6 +445,9 @@ func (c *Client) OpenPullRequestForBranch(
 		Number  int    `json:"number"`
 		Title   string `json:"title"`
 		HTMLURL string `json:"html_url"`
+		Head    struct {
+			SHA string `json:"sha"`
+		} `json:"head"`
 	}
 	if err := c.REST(ctx, http.MethodGet, endpoint, nil, &response); err != nil {
 		return BranchPullRequest{}, false, err
@@ -440,9 +456,10 @@ func (c *Client) OpenPullRequestForBranch(
 		return BranchPullRequest{}, false, nil
 	}
 	return BranchPullRequest{
-		Number: response[0].Number,
-		Title:  response[0].Title,
-		URL:    response[0].HTMLURL,
+		Number:  response[0].Number,
+		Title:   response[0].Title,
+		URL:     response[0].HTMLURL,
+		HeadOID: response[0].Head.SHA,
 	}, true, nil
 }
 

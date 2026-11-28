@@ -261,8 +261,8 @@ func normalizedRunConfig(cfg *openidea.RunConfig) string {
 	if cfg == nil {
 		return ""
 	}
-	if form := adapter.BuildToolForm(cfg); form != nil {
-		cfg = adapter.ApplyBuildToolForm(cfg, form)
+	if form := adapter.RunTypeForm(cfg); form != nil {
+		cfg = adapter.ApplyRunTypeForm(cfg, form)
 	}
 	obj, err := adapter.ConfigObject(cfg)
 	if err != nil {
@@ -328,7 +328,7 @@ func (d *runConfigDlg) loadForm() {
 		return
 	}
 	d.loadDockerFields(cfg)
-	d.typeParams = adapter.BuildToolForm(cfg)
+	d.typeParams = adapter.RunTypeForm(cfg)
 	d.name = cfg.Name
 	d.args = adapter.FormatArgs(cfg.Args)
 	d.cwd = cfg.CwdOr("")
@@ -392,7 +392,7 @@ func (d *runConfigDlg) applyForm() {
 	edited.OutputFile = optionalTrimmed(d.outputFile)
 	edited.Target = runTargetChoicePointer(d.runOn)
 	if d.typeParams != nil {
-		if applied := adapter.ApplyBuildToolForm(&edited, d.typeParams); applied != nil {
+		if applied := adapter.ApplyRunTypeForm(&edited, d.typeParams); applied != nil {
 			edited = *applied
 		}
 	}
@@ -537,7 +537,7 @@ func (d *runConfigDlg) loadTemplateForm() {
 		d.templates = append(d.templates, template)
 	}
 	d.loadDockerFields(template)
-	d.typeParams = adapter.BuildToolForm(template)
+	d.typeParams = adapter.RunTypeForm(template)
 	d.name = template.Name
 	d.args = adapter.FormatArgs(template.Args)
 	d.cwd = template.CwdOr("")
@@ -613,7 +613,7 @@ func (d *runConfigDlg) applyTemplateForm() {
 		}
 	}
 	if d.typeParams != nil {
-		if applied := adapter.ApplyBuildToolForm(&edited, d.typeParams); applied != nil {
+		if applied := adapter.ApplyRunTypeForm(&edited, d.typeParams); applied != nil {
 			edited = *applied
 		}
 	}
@@ -662,6 +662,154 @@ func (d *runConfigDlg) buildToolTextField(
 			d.typeParams[key] = value
 		}
 	})
+}
+
+func (d *runConfigDlg) runTypeTextField(
+	c *ui.Context,
+	p *ui.Theme,
+	label, key, placeholder string,
+) {
+	value := d.typeParams[key]
+	ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+		ui.Text(c, label).FontSize(12).TextColor(p.TextMuted).Width(140).SingleLine()
+		input := ui.TextInput(c, &value).Width(520).Font("monospace").Placeholder(placeholder)
+		if input.Changed() {
+			d.typeParams[key] = value
+		}
+	})
+}
+
+func (d *runConfigDlg) runTypeTextArea(
+	c *ui.Context,
+	p *ui.Theme,
+	label, key, placeholder string,
+) {
+	value := d.typeParams[key]
+	ui.Row(c).Gap(8).AlignItems(ui.Start).Children(func() {
+		ui.Text(c, label).FontSize(12).TextColor(p.TextMuted).Width(140).SingleLine()
+		area := ui.TextArea(c, &value).Width(520).Height(62).Font("monospace").Placeholder(placeholder)
+		if area.Changed() {
+			d.typeParams[key] = value
+		}
+	})
+}
+
+func (d *runConfigDlg) runTypeSelectField(
+	c *ui.Context,
+	p *ui.Theme,
+	label, key string,
+	values, labels []string,
+) {
+	current := d.typeParams[key]
+	selected := ""
+	for i, value := range values {
+		if value == current {
+			selected = labels[i]
+			break
+		}
+	}
+	if selected == "" && len(labels) > 0 {
+		selected = labels[0]
+	}
+	ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+		ui.Text(c, label).FontSize(12).TextColor(p.TextMuted).Width(140).SingleLine()
+		if pick := ui.Select(c, &selected, labels); pick.Changed() {
+			for i, value := range values {
+				if labels[i] == selected {
+					d.typeParams[key] = value
+					break
+				}
+			}
+		}
+	})
+}
+
+func (d *runConfigDlg) runTypeCheckbox(
+	c *ui.Context,
+	label, key string,
+) {
+	value := d.typeParams[key] == "true"
+	if check := ui.Checkbox(c, &value, label); check.Changed() {
+		d.typeParams[key] = fmt.Sprintf("%t", value)
+	}
+}
+
+func (m *Model) renderRunTypeFields(c *ui.Context, p *ui.Theme, kind string) {
+	d := m.runCfgDlg
+	switch kind {
+	case "shell":
+		d.runTypeSelectField(c, p, "Execute", "mode",
+			[]string{"file", "text", "command"},
+			[]string{"Script file", "Script text", "Command line"})
+		switch d.typeParams["mode"] {
+		case "file":
+			d.runTypeTextField(c, p, "Script path", "path", "Path to the script")
+			d.runTypeTextField(c, p, "Script options", "options", "Arguments passed to the script")
+			d.runTypeTextField(c, p, "Interpreter path", "interpreter", "Run the script directly")
+			if d.typeParams["interpreter"] != "" {
+				d.runTypeTextField(c, p, "Interpreter options", "interpreterOptions", "Arguments passed to the interpreter")
+			}
+		case "text":
+			d.runTypeTextArea(c, p, "Script text", "script", "Shell commands to execute")
+		default:
+			d.runTypeTextField(c, p, "Command", "command", "e.g. ./gradlew or cargo")
+			d.runTypeTextField(c, p, "Arguments", "args", `Space separated; quote with ' or "`)
+		}
+	case "program":
+		d.runTypeTextField(c, p, "Executable", "program", "Path or command on PATH")
+		d.runTypeTextField(c, p, "Program arguments", "arguments", "Arguments passed to the program")
+	case "npm":
+		d.runTypeTextField(c, p, "package.json directory", "packageDir", "Project root")
+		d.runTypeSelectField(c, p, "Command", "command",
+			[]string{"run", "test", "start", "install", "ci", "publish", "pack"},
+			[]string{"run", "test", "start", "install", "ci", "publish", "pack"})
+		if d.typeParams["command"] == "run" {
+			d.runTypeTextField(c, p, "Script", "script", "package.json script")
+		}
+		d.runTypeTextField(c, p, "Arguments", "arguments", "Arguments after the script")
+		d.runTypeSelectField(c, p, "Package manager", "packageManager",
+			[]string{"npm", "pnpm", "yarn", "bun"},
+			[]string{"npm", "pnpm", "yarn", "bun"})
+		d.runTypeTextField(c, p, "Node interpreter", "nodeInterpreter", "Project default")
+	case "bun":
+		d.runTypeTextField(c, p, "Working directory", "packageDir", "Project root")
+		d.runTypeSelectField(c, p, "Command", "command",
+			[]string{"run", "test"}, []string{"run", "test"})
+		if d.typeParams["command"] == "run" {
+			d.runTypeTextField(c, p, "Script", "script", "package.json script or file")
+		}
+		d.runTypeTextField(c, p, "Arguments", "arguments", "Arguments after the script")
+	case "godot":
+		d.runTypeTextField(c, p, "Project directory", "projectDir", "Directory holding project.godot")
+		d.runTypeTextField(c, p, "Scene", "scene", "Main scene")
+		d.runTypeTextField(c, p, "Arguments", "arguments", "Godot command-line options")
+		d.runTypeTextField(c, p, "Executable", "executable", "godot")
+	case "pytest":
+		d.runTypeTextField(c, p, "Command", "command", "pytest, uv, poetry or python")
+		d.runTypeTextField(c, p, "Runner arguments", "runnerArgs", "e.g. run pytest or -m pytest")
+		d.runTypeTextField(c, p, "Target", "target", "Directory, file or test id")
+		d.runTypeTextField(c, p, "pytest options", "options", "e.g. -x -q --tb=short")
+	case "go", "go-test":
+		if kind == "go" {
+			d.runTypeSelectField(c, p, "Go configuration", "goKind",
+				[]string{"build", "test"}, []string{"Go Build", "Go Test"})
+		}
+		d.runTypeSelectField(c, p, "Run kind", "scope",
+			[]string{"directory", "file", "package"},
+			[]string{"Directory", "File", "Package"})
+		d.runTypeTextField(c, p, "Target", "target", "Package, directory or file")
+		if d.typeParams["goKind"] != "test" {
+			d.runTypeTextField(c, p, "Output directory", "outputDir", "Optional build output")
+			d.runTypeCheckbox(c, "Run after build", "runAfterBuild")
+		} else {
+			d.runTypeTextField(c, p, "Pattern", "pattern", "Regular expression for test names")
+		}
+		d.runTypeTextField(c, p, "Go tool arguments", "toolArgs", "e.g. -tags integration")
+		d.runTypeCheckbox(c, "Use all custom build tags", "useTags")
+		d.runTypeTextField(c, p, "Program arguments", "programArgs", "Arguments after -args")
+		d.runTypeTextField(c, p, "Module", "module", "Project root")
+		d.runTypeTextField(c, p, "Executable", "executable", "go")
+	}
 }
 
 func (d *runConfigDlg) renderBuildToolFields(c *ui.Context, p *ui.Theme, kind string) {
@@ -1077,6 +1225,8 @@ func (m *Model) runConfigForm(
 		m.runCfgDlg.renderDockerFields(c, cfg.Kind, p)
 	case cfg.Kind == "maven" || cfg.Kind == "gradle":
 		m.runCfgDlg.renderBuildToolFields(c, p, cfg.Kind)
+	case m.runCfgDlg.typeParams != nil:
+		m.renderRunTypeFields(c, p, cfg.Kind)
 	default:
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, "Command").FontSize(12).TextColor(p.TextMuted).Width(140).SingleLine()
@@ -1095,13 +1245,15 @@ func (m *Model) runConfigForm(
 	}
 
 	if cfg.Kind != "compound" {
-		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "Working directory").FontSize(12).TextColor(p.TextMuted).Width(140).SingleLine()
-			ui.Text(c, m.Root()+"/").FontSize(12).TextColor(p.TextMuted).SingleLine()
-			ui.TextInput(c, &m.runCfgDlg.cwd).Width(360).Font("monospace").
-				Placeholder("Project root")
-		})
-		fieldError("cwd")
+		if !adapter.RunTypeOwnsWorkingDirectory(cfg.Kind) {
+			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, "Working directory").FontSize(12).TextColor(p.TextMuted).Width(140).SingleLine()
+				ui.Text(c, m.Root()+"/").FontSize(12).TextColor(p.TextMuted).SingleLine()
+				ui.TextInput(c, &m.runCfgDlg.cwd).Width(360).Font("monospace").
+					Placeholder("Project root")
+			})
+			fieldError("cwd")
+		}
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, "Environment variables").FontSize(12).TextColor(p.TextMuted).Width(140).SingleLine()
 			ui.TextInput(c, &m.runCfgDlg.env).Width(520).Font("monospace").

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 
@@ -28,6 +29,10 @@ func remoteSSHSessionID(arg any) string {
 func (m *Model) StartRemoteSSHSession(arg any) {
 	state := &m.remote
 	state.sshSessionErr = ""
+	state.sshSessionResult = ""
+	state.sshSessionRemedy = ""
+	state.sshSessionFingerprint = ""
+	state.sshSessionSecret = ""
 	id := remoteSSHSessionID(arg)
 	if !state.configsLoaded || state.configsLoading {
 		state.sshSessionOpen = true
@@ -88,20 +93,33 @@ func (m *Model) startRemoteSSHSessionOn(config openidea.SSHConfiguration) {
 		m.invalidate()
 		return
 	}
-	if m.mgr == nil {
+	if m.mgr == nil && m.invokeHook == nil {
 		state.sshSessionOpen = true
 		state.sshSessionErr = "The GoIDEA backend is not connected."
 		m.invalidate()
 		return
 	}
-	state.sshSessionOpen = false
+	state.sshSessionOpen = true
+	state.sshSessionBusy = false
 	state.sshSessionPendingID = ""
 	state.sshSessionWaiting = false
-	if !m.term.visible {
-		m.autoSaveOnSwitch()
-		m.term.visible = true
-		m.occupyBottom("term")
+	state.sshSessionErr = ""
+	state.sshSessionResult = ""
+	state.sshSessionRemedy = ""
+	state.sshSessionFingerprint = ""
+	state.sshSessionConfig = config
+	if !remoteConnected(m) {
+		m.testRemoteSSHSession()
+		return
 	}
+	m.prepareRemoteSSHSessionTerminal()
+	name := remoteSSHConfigurationName(config)
+	state.sshSessionOpen = false
+	m.status = "Starting SSH session " + name + "…"
+	m.spawnTermProcess(m.Root(), m.Root(), m.term.active, "ssh", remoteOpenSSHArgs(config), name)
+}
+
+func remoteSSHConfigurationName(config openidea.SSHConfiguration) string {
 	name := strings.TrimSpace(config.Name)
 	if name == "" {
 		name = config.Label()
@@ -109,12 +127,146 @@ func (m *Model) startRemoteSSHSessionOn(config openidea.SSHConfiguration) {
 	if name == "" {
 		name = config.ID
 	}
-	m.status = "Starting SSH session " + name + "…"
-	if !remoteConnected(m) {
-		m.startBackendRemoteSSHSession(config, name)
+	return name
+}
+
+func (m *Model) prepareRemoteSSHSessionTerminal() {
+	if !m.term.visible {
+		m.autoSaveOnSwitch()
+		m.term.visible = true
+		m.occupyBottom("term")
+	}
+}
+
+func (m *Model) testRemoteSSHSession() {
+	state := &m.remote
+	if state.sshSessionBusy {
 		return
 	}
-	m.spawnTermProcess(m.Root(), m.Root(), m.term.active, "ssh", remoteOpenSSHArgs(config), name)
+	config := state.sshSessionConfig
+	if strings.TrimSpace(config.Host) == "" {
+		state.sshSessionErr = "The SSH configuration has no host."
+		m.invalidate()
+		return
+	}
+	state.sshSessionRequest++
+	request := state.sshSessionRequest
+	generation := state.generation
+	secret := state.sshSessionSecret
+	name := remoteSSHConfigurationName(config)
+	state.sshSessionBusy = true
+	state.sshSessionErr = ""
+	state.sshSessionResult = ""
+	state.sshSessionRemedy = ""
+	state.sshSessionFingerprint = ""
+	m.status = "Connecting to SSH configuration " + name + "…"
+	m.invalidate()
+	go func() {
+		ctx, cancel := context.WithTimeout(m.remoteBaseContext(), 30*time.Second)
+		defer cancel()
+		message, err := m.testRemoteSSHConnection(ctx, config, secret)
+		if err == nil && secret != "" {
+			err = m.setRemoteSSHSecret(ctx, config.ID, secret, config.SaveSecret)
+		}
+		m.post(func() {
+			if state.generation != generation || state.sshSessionRequest != request {
+				return
+			}
+			state.sshSessionBusy = false
+			if err != nil {
+				state.sshSessionErr = "Could not start the SSH session: " + err.Error()
+				state.sshSessionRemedy = remoteSSHRemedyForError(err, config.Auth)
+				state.sshSessionFingerprint = sshHostKeyFingerprint(err.Error())
+				if state.sshSessionRemedy == remoteSSHRemedyTrustHost &&
+					state.sshSessionFingerprint == "" {
+					state.sshSessionErr += " The host key fingerprint is unavailable; try again."
+				}
+				m.status = state.sshSessionErr
+				m.invalidate()
+				return
+			}
+			state.sshSessionResult = message
+			state.sshSessionSecret = ""
+			state.sshSessionOpen = false
+			m.prepareRemoteSSHSessionTerminal()
+			m.startBackendRemoteSSHSession(config, name)
+		})
+	}()
+}
+
+func (m *Model) trustRemoteSSHSessionHost() {
+	state := &m.remote
+	if state.sshSessionBusy || state.sshSessionRemedy != remoteSSHRemedyTrustHost {
+		return
+	}
+	fingerprint := state.sshSessionFingerprint
+	if strings.TrimSpace(fingerprint) == "" {
+		state.sshSessionErr = "The SSH host key fingerprint is unavailable. Try the session again."
+		m.invalidate()
+		return
+	}
+	configID := strings.TrimSpace(state.sshSessionConfig.ID)
+	if configID == "" {
+		state.sshSessionErr = "The SSH configuration has no id."
+		m.invalidate()
+		return
+	}
+	state.sshSessionRequest++
+	request := state.sshSessionRequest
+	generation := state.generation
+	state.sshSessionBusy = true
+	state.sshSessionErr = ""
+	m.invalidate()
+	go func() {
+		ctx, cancel := context.WithTimeout(m.remoteBaseContext(), 30*time.Second)
+		defer cancel()
+		err := m.trustRemoteSSHHost(ctx, configID, fingerprint)
+		m.post(func() {
+			if state.generation != generation || state.sshSessionRequest != request {
+				return
+			}
+			state.sshSessionBusy = false
+			if err != nil {
+				state.sshSessionErr = "Could not trust the SSH host: " + err.Error()
+				state.sshSessionRemedy = ""
+				m.invalidate()
+				return
+			}
+			state.sshSessionRemedy = ""
+			state.sshSessionFingerprint = ""
+			m.testRemoteSSHSession()
+		})
+	}()
+}
+
+func (m *Model) retryRemoteSSHSessionSecret() {
+	state := &m.remote
+	if state.sshSessionBusy || state.sshSessionRemedy != remoteSSHRemedySecret {
+		return
+	}
+	if state.sshSessionSecret == "" {
+		state.sshSessionErr = "Enter the password or key passphrase."
+		m.invalidate()
+		return
+	}
+	m.testRemoteSSHSession()
+}
+
+func (m *Model) cancelRemoteSSHSession() {
+	state := &m.remote
+	state.sshSessionRequest++
+	state.sshSessionOpen = false
+	state.sshSessionPendingID = ""
+	state.sshSessionWaiting = false
+	state.sshSessionBusy = false
+	state.sshSessionErr = ""
+	state.sshSessionResult = ""
+	state.sshSessionSecret = ""
+	state.sshSessionRemedy = ""
+	state.sshSessionFingerprint = ""
+	state.sshSessionConfig = openidea.SSHConfiguration{}
+	m.status = "SSH session cancelled."
+	m.invalidate()
 }
 
 // startBackendRemoteSSHSession uses OpenIDEA's built-in client, so an SSH
@@ -169,39 +321,63 @@ func (m *Model) remoteSSHSessionDialog(c *ui.Context, p *ui.Theme) {
 			ui.Text(c, "Start SSH Session").FontSize(14).Bold().TextColor(p.Text).SingleLine()
 			if state.sshSessionWaiting {
 				loadingState(c, p, "Loading SSH configurations…")
+			} else if state.configsErr != "" {
+				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+					ui.Text(c, state.configsErr).FontSize(12).TextColor(p.Danger).Grow(1)
+					ui.Button(c, "Retry").Disabled(state.configsLoading).
+						OnClick(m.retryRemoteChoices)
+				})
 			} else if len(state.sshConfigs) == 0 {
-				ui.Text(c, "No SSH configurations. Add one to start a terminal session.").
+				emptyState(c, p, "No SSH configurations")
+				ui.Text(c, "Add one to start a terminal session.").
 					FontSize(12).TextColor(p.TextMuted)
 			} else {
 				for _, config := range state.sshConfigs {
 					config := config
-					label := strings.TrimSpace(config.Name)
-					if label == "" {
-						label = config.Label()
-					}
-					if label == "" {
-						label = config.ID
-					}
-					ui.Button(c, label).Disabled(strings.TrimSpace(config.Host) == "").
+					ui.Button(c, remoteSSHConfigurationName(config)).
+						Disabled(state.sshSessionBusy || strings.TrimSpace(config.Host) == "").
 						OnClick(func() { m.startRemoteSSHSessionOn(config) })
 				}
 			}
+			if state.sshSessionBusy {
+				loadingState(c, p, "Connecting to the SSH host…")
+			}
 			if state.sshSessionErr != "" {
 				errorState(c, p, state.sshSessionErr)
+				switch state.sshSessionRemedy {
+				case remoteSSHRemedyTrustHost:
+					ui.Row(c).AlignItems(ui.Center).Children(func() {
+						ui.Text(c, "The authenticity of the host cannot be established.").
+							FontSize(11).TextColor(p.TextMuted).Grow(1)
+						ui.Button(c, "Trust Host and Retry").
+							Disabled(state.sshSessionBusy).
+							OnClick(m.trustRemoteSSHSessionHost)
+					})
+				case remoteSSHRemedySecret:
+					label := "Password"
+					if state.sshSessionConfig.Auth != "password" {
+						label = "Key passphrase"
+					}
+					ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+						ui.Text(c, label).FontSize(11).TextColor(p.TextMuted).Width(100)
+						ui.TextInput(c, &state.sshSessionSecret).Password().Height(28).Grow(1)
+						ui.Button(c, "Connect").Disabled(state.sshSessionBusy).
+							OnClick(m.retryRemoteSSHSessionSecret)
+					})
+				}
 			}
 			ui.Row(c).AlignItems(ui.Center).Children(func() {
-				ui.Button(c, "Edit SSH Configurations…").OnClick(func() {
+				ui.Button(c, "Edit SSH Configurations…").Disabled(state.sshSessionBusy).OnClick(func() {
+					m.cancelRemoteSSHSession()
 					state.sshSessionOpen = false
 					m.openRemoteSSHSettings()
 				})
 				ui.Spacer(c)
-				ui.Button(c, "Cancel").OnClick(func() { state.sshSessionOpen = false })
+				ui.Button(c, "Cancel").OnClick(m.cancelRemoteSSHSession)
 			})
 		})
 	})
 	if !open || dialog.Dismissed() {
-		state.sshSessionOpen = false
-		state.sshSessionPendingID = ""
-		state.sshSessionWaiting = false
+		m.cancelRemoteSSHSession()
 	}
 }

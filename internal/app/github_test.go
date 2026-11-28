@@ -176,9 +176,9 @@ func TestGitHubActionsAndToolWindowAreRegistered(t *testing.T) {
 		title string
 	}{
 		{"github.pullRequest.showInToolWindow", "Pull Requests"},
-		{"github.refresh", "Refresh Pull Requests"},
+		{"github.refresh", "Refresh Pull Requests List"},
 		{"github.pullRequest.refresh", "Refresh Pull Request"},
-		{"github.pullRequest.timeline.refresh", "Refresh Review Data"},
+		{"github.pullRequest.timeline.refresh", "Refresh Timeline"},
 		{"github.pullRequest.diff.refreshReview", "Refresh Review Data"},
 		{"github.pullRequest.diff.addComment", "Add Review Comment"},
 		{"github.pullRequest.diff.addMultilineComment", "Add Multiline Review Comment"},
@@ -257,6 +257,16 @@ func TestGitHubConnectLoadsRepositoryAndFirstSearchPage(t *testing.T) {
 	defer server.Close()
 
 	root := githubTestRepo(t)
+	for _, args := range [][]string{
+		{"-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--allow-empty", "-m", "initial"},
+		{"update-ref", "refs/remotes/origin/topic", "HEAD"},
+		{"config", "branch.topic.remote", "origin"},
+		{"config", "branch.topic.merge", "refs/heads/topic"},
+	} {
+		if out, err := exec.Command("git", append([]string{"-C", root}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, out)
+		}
+	}
 	credentials := &githubTestCredentials{token: "test-token"}
 	m, callbacks := githubTestModel(t, root, credentials)
 	m.github.client = testGitHubClient(server, credentials)
@@ -287,6 +297,49 @@ func TestGitHubConnectLoadsRepositoryAndFirstSearchPage(t *testing.T) {
 	if !strings.Contains(gotSearchQuery, "type:pr repo:acme/goidea") ||
 		!strings.Contains(gotSearchQuery, "is:open") {
 		t.Fatalf("search query = %q", gotSearchQuery)
+	}
+}
+
+func TestGitHubUntrackedBranchDoesNotDiscoverPullRequest(t *testing.T) {
+	var mu sync.Mutex
+	branchQueries := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/repos/acme/goidea/pulls" {
+			mu.Lock()
+			branchQueries++
+			mu.Unlock()
+			io.WriteString(w, `[]`)
+			return
+		}
+		var request struct {
+			Query string `json:"query"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		switch {
+		case strings.Contains(request.Query, "GoIDEARepository"):
+			io.WriteString(w, githubRepositoryResponse())
+		case strings.Contains(request.Query, "GoIDEASearchPullRequests"):
+			io.WriteString(w, githubSearchResponse())
+		default:
+			http.Error(w, "unexpected query", http.StatusBadRequest)
+		}
+	}))
+	defer server.Close()
+	credentials := &githubTestCredentials{token: "test-token"}
+	m, callbacks := githubTestModel(t, githubTestRepo(t), credentials)
+	m.github.client = testGitHubClient(server, credentials)
+	m.connectGitHub(true)
+	waitGitHubCallback(t, callbacks)
+	m.ToggleGitHubReviewMode()
+	mu.Lock()
+	queries := branchQueries
+	mu.Unlock()
+	if queries != 0 || m.github.review.branchNumber != 0 || m.github.review.enableAfterLookup ||
+		m.github.notice != "The current branch has no remote upstream" {
+		t.Fatalf("queries=%d review=%+v notice=%q", queries, m.github.review, m.github.notice)
 	}
 }
 

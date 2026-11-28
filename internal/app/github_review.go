@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -46,18 +47,24 @@ type githubTimelineCommentState struct {
 }
 
 type githubReviewState struct {
-	mode              string
-	enabled           bool
-	branch            string
-	branchNumber      int
-	branchTitle       string
-	branchURL         string
-	branchLoading     bool
-	branchErr         string
-	enableAfterLookup bool
-	branchSeq         uint64
-	actionSeq         uint64
-	refreshSeq        uint64
+	mode                 string
+	enabled              bool
+	branch               string
+	branchNumber         int
+	branchTitle          string
+	branchURL            string
+	branchLoading        bool
+	branchErr            string
+	branchTracked        bool
+	headOwner            string
+	headBranch           string
+	branchUpdateRequired bool
+	branchSyncLoading    bool
+	enableAfterLookup    bool
+	branchSeq            uint64
+	branchSyncSeq        uint64
+	actionSeq            uint64
+	refreshSeq           uint64
 
 	diffLoading     bool
 	diffLoaded      bool
@@ -72,6 +79,7 @@ type githubReviewState struct {
 	selectedThread  string
 	resolvingThread string
 	activeRow       int
+	selectionAnchor int
 
 	comment         githubReviewCommentDraft
 	submit          githubReviewSubmitState
@@ -81,7 +89,7 @@ type githubReviewState struct {
 
 func newGitHubReviewState() githubReviewState {
 	return githubReviewState{
-		mode: "review", selectedThread: "", activeRow: -1,
+		mode: "review", selectedThread: "", activeRow: -1, selectionAnchor: -1,
 		comment: githubReviewCommentDraft{startLine: -1, line: -1},
 	}
 }
@@ -103,10 +111,56 @@ func resetGitHubReviewData(state *githubReviewState) {
 	state.selectedThread = ""
 	state.resolvingThread = ""
 	state.activeRow = -1
+	state.selectionAnchor = -1
 	state.comment = githubReviewCommentDraft{startLine: -1, line: -1}
 	state.submit = githubReviewSubmitState{}
 	state.metadata = githubMetadataState{}
 	state.timelineComment = githubTimelineCommentState{}
+}
+
+func (m *Model) updateGitHubReviewBranchSync(
+	root string,
+	generation uint64,
+	number int,
+	headOID string,
+) {
+	m.github.review.branchSyncSeq++
+	if number <= 0 || strings.TrimSpace(headOID) == "" {
+		m.github.review.branchUpdateRequired = false
+		m.github.review.branchSyncLoading = false
+		return
+	}
+	seq := m.github.review.branchSyncSeq
+	repo := m.vcsRepositoryArgForPath(root)
+	m.github.review.branchSyncLoading = true
+	m.invalidate()
+	go func() {
+		ctx, cancel := context.WithTimeout(modelContext(m), 8*time.Second)
+		defer cancel()
+		raw, err := m.invoke(ctx, "vcs_merge_base", map[string]any{"repo": repo, "a": headOID, "b": "HEAD"})
+		var mergeBase string
+		inHistory := err == nil && json.Unmarshal(raw, &mergeBase) == nil && strings.EqualFold(mergeBase, headOID)
+		m.post(func() {
+			if !m.githubResultCurrent(root, generation) ||
+				m.github.review.branchSyncSeq != seq ||
+				m.github.review.branchNumber != number {
+				return
+			}
+			m.github.review.branchSyncLoading = false
+			m.github.review.branchUpdateRequired = !inHistory
+			if m.github.review.enableAfterLookup {
+				m.github.review.enableAfterLookup = false
+				if inHistory {
+					m.github.review.enabled = true
+					m.github.review.mode = "review"
+					m.showGitHubPullRequestNumber(number)
+				} else {
+					m.github.notice = fmt.Sprintf("Pull request #%d is not in the current branch history", number)
+				}
+			}
+			m.invalidate()
+		})
+	}()
 }
 
 func (m *Model) loadGitHubReviewBranch() {
@@ -123,6 +177,34 @@ func (m *Model) loadGitHubReviewBranch() {
 	client := m.githubClient()
 	coordinates := m.github.coordinates
 	branch := m.github.currentBranch
+	identity, identityErr := githubBranchIdentityForRoot(m.github.root)
+	if identityErr != nil || !identity.tracked {
+		m.github.review.branchSeq++
+		m.github.review.branchNumber = 0
+		m.github.review.branchTitle = ""
+		m.github.review.branchURL = ""
+		m.github.review.branchTracked = false
+		m.github.review.branchUpdateRequired = false
+		m.github.review.enableAfterLookup = false
+		m.github.notice = "The current branch has no remote upstream"
+		if identityErr != nil {
+			m.github.notice = identityErr.Error()
+		}
+		m.invalidate()
+		return
+	}
+	if identityErr == nil && identity.localBranch != "" {
+		branch = identity.localBranch
+	}
+	headOwner := m.github.coordinates.Owner
+	headBranch := branch
+	if identityErr == nil {
+		headOwner = identity.headOwner
+		headBranch = identity.headBranch
+	}
+	if headBranch == "" {
+		return
+	}
 	root := m.github.root
 	gen := m.github.generation
 	m.github.review.branchSeq++
@@ -133,13 +215,16 @@ func (m *Model) loadGitHubReviewBranch() {
 	go func() {
 		ctx, cancel := context.WithTimeout(modelContext(m), 45*time.Second)
 		defer cancel()
-		found, ok, err := client.OpenPullRequestForBranch(ctx, coordinates, branch)
+		found, ok, err := client.OpenPullRequestForHead(ctx, coordinates, headOwner, headBranch)
 		m.post(func() {
 			if !m.githubResultCurrent(root, gen) || m.github.review.branchSeq != seq {
 				return
 			}
 			m.github.review.branchLoading = false
 			m.github.review.branch = branch
+			m.github.review.branchTracked = identityErr == nil && identity.tracked
+			m.github.review.headOwner = headOwner
+			m.github.review.headBranch = headBranch
 			if err != nil {
 				m.github.review.branchErr = githubErrorMessage(err)
 			} else if ok {
@@ -151,13 +236,21 @@ func (m *Model) loadGitHubReviewBranch() {
 				m.github.review.branchTitle = ""
 				m.github.review.branchURL = ""
 			}
+			if ok {
+				m.updateGitHubReviewBranchSync(root, gen, found.Number, found.HeadOID)
+			} else {
+				m.github.review.branchUpdateRequired = false
+			}
 			if m.github.review.enableAfterLookup {
-				m.github.review.enableAfterLookup = false
 				if ok {
-					m.github.review.enabled = true
-					m.github.review.mode = "review"
-					m.ShowGitHubPullRequest(found.Number)
+					if found.HeadOID == "" {
+						m.github.review.enableAfterLookup = false
+						m.github.review.enabled = true
+						m.github.review.mode = "review"
+						m.ShowGitHubPullRequest(found.Number)
+					}
 				} else if err == nil {
+					m.github.review.enableAfterLookup = false
 					m.github.notice = "No open pull request uses the current branch"
 				}
 			}
@@ -172,6 +265,11 @@ func (m *Model) ToggleGitHubReviewMode() {
 	if m.github.review.enabled {
 		m.github.review.enabled = false
 		m.github.notice = "Review Mode is off"
+		m.invalidate()
+		return
+	}
+	if m.github.review.branchUpdateRequired {
+		m.github.notice = "Update the current branch before enabling Review Mode"
 		m.invalidate()
 		return
 	}
@@ -211,6 +309,7 @@ func (m *Model) SetGitHubDiffMode(mode string) {
 	case "normal", "review":
 		m.github.review.mode = strings.ToLower(strings.TrimSpace(mode))
 		m.github.review.activeRow = -1
+		m.github.review.selectionAnchor = -1
 		m.invalidate()
 	}
 }
@@ -253,6 +352,10 @@ func githubUnresolvedThreads(threads []ghub.ReviewThread) int {
 		}
 	}
 	return count
+}
+
+func githubReviewLoading(state *githubReviewState) bool {
+	return state.diffLoading || state.threadsLoading || state.pendingLoading
 }
 
 // refreshGitHubReviewData loads REST patches, GraphQL threads and the viewer's
@@ -340,20 +443,83 @@ func (m *Model) githubThreadSelected() bool {
 }
 
 func (m *Model) selectedGitHubDiffRow() (githubDiffRow, bool) {
+	_, _, row, ok := m.selectedGitHubDiffRange(false)
+	return row, ok
+}
+
+func (m *Model) selectedGitHubDiffRange(
+	multiline bool,
+) (start githubDiffRow, end githubDiffRow, single githubDiffRow, ok bool) {
 	if m.github.detail == nil || m.github.selectedFile < 0 ||
 		m.github.selectedFile >= len(m.github.detail.Files) {
-		return githubDiffRow{}, false
+		return githubDiffRow{}, githubDiffRow{}, githubDiffRow{}, false
 	}
 	rows := parseGitHubPatch(m.github.detail.Files[m.github.selectedFile].Patch)
-	if m.github.review.activeRow < 0 || m.github.review.activeRow >= len(rows) {
-		return githubDiffRow{}, false
+	startIndex, endIndex, ok := githubDiffRowRange(
+		rows,
+		m.github.review.selectionAnchor,
+		m.github.review.activeRow,
+		multiline,
+	)
+	if !ok {
+		return githubDiffRow{}, githubDiffRow{}, githubDiffRow{}, false
 	}
-	row := rows[m.github.review.activeRow]
-	return row, row.CommentLine > 0
+	return rows[startIndex], rows[endIndex], rows[endIndex], true
+}
+
+func githubDiffRowRange(
+	rows []githubDiffRow,
+	anchor int,
+	active int,
+	multiline bool,
+) (start int, end int, ok bool) {
+	if active < 0 || active >= len(rows) || rows[active].CommentLine <= 0 {
+		return 0, 0, false
+	}
+	if !multiline {
+		return active, active, true
+	}
+	if anchor < 0 || anchor >= len(rows) || anchor == active ||
+		rows[anchor].CommentLine <= 0 ||
+		rows[anchor].CommentSide != rows[active].CommentSide {
+		return 0, 0, false
+	}
+	start, end = anchor, active
+	if start > end {
+		start, end = end, start
+	}
+	side := rows[active].CommentSide
+	previousLine := rows[start].CommentLine
+	lines := 1
+	for index := start + 1; index <= end; index++ {
+		row := rows[index]
+		if row.Kind == "hunk" {
+			return 0, 0, false
+		}
+		if row.CommentSide != side || row.CommentLine <= 0 {
+			continue
+		}
+		if row.CommentLine != previousLine+1 {
+			return 0, 0, false
+		}
+		previousLine = row.CommentLine
+		lines++
+	}
+	return start, end, lines > 1
 }
 
 // SelectGitHubDiffRow selects a line for comment actions.
 func (m *Model) SelectGitHubDiffRow(index int) {
+	m.selectGitHubDiffRow(index, false)
+}
+
+// ExtendGitHubDiffSelection extends the comment range from the current anchor
+// to the clicked row. The diff's Shift-click uses it for multiline comments.
+func (m *Model) ExtendGitHubDiffSelection(index int) {
+	m.selectGitHubDiffRow(index, true)
+}
+
+func (m *Model) selectGitHubDiffRow(index int, extend bool) {
 	m.ensureGitHubState()
 	rows := []githubDiffRow(nil)
 	if m.github.detail != nil && m.github.selectedFile >= 0 &&
@@ -362,8 +528,12 @@ func (m *Model) SelectGitHubDiffRow(index int) {
 	}
 	if index < 0 || index >= len(rows) || rows[index].CommentLine <= 0 {
 		m.github.review.activeRow = -1
+		m.github.review.selectionAnchor = -1
 	} else {
 		m.github.review.activeRow = index
+		if !extend || m.github.review.selectionAnchor < 0 {
+			m.github.review.selectionAnchor = index
+		}
 	}
 	m.invalidate()
 }
@@ -371,26 +541,21 @@ func (m *Model) SelectGitHubDiffRow(index int) {
 // BeginGitHubReviewComment opens a comment editor at the selected diff line.
 func (m *Model) BeginGitHubReviewComment(multiline bool) {
 	m.ensureGitHubState()
-	row, ok := m.selectedGitHubDiffRow()
+	startRow, endRow, _, ok := m.selectedGitHubDiffRange(multiline)
 	if !ok || m.github.detail == nil || m.github.selectedFile < 0 {
-		m.github.actionErr = "Select a changed line before adding a review comment"
+		if multiline {
+			m.github.actionErr = "Shift-click two changed lines on the same side before adding a multiline review comment"
+		} else {
+			m.github.actionErr = "Select a changed line before adding a review comment"
+		}
 		m.invalidate()
 		return
 	}
 	file := m.github.detail.Files[m.github.selectedFile]
-	start := row.CommentLine
-	if multiline {
-		rows := parseGitHubPatch(file.Patch)
-		for index := m.github.review.activeRow - 1; index >= 0; index-- {
-			if rows[index].CommentSide == row.CommentSide && rows[index].CommentLine > 0 {
-				start = rows[index].CommentLine
-				break
-			}
-		}
-	}
 	m.github.review.comment = githubReviewCommentDraft{
-		open: true, path: file.Path, side: row.CommentSide,
-		startSide: row.CommentSide, startLine: start, line: row.CommentLine,
+		open: true, path: file.Path, side: endRow.CommentSide,
+		startSide: startRow.CommentSide, startLine: startRow.CommentLine,
+		line: endRow.CommentLine,
 	}
 	m.github.review.submit.open = false
 	m.github.review.metadata.editing = false
@@ -431,6 +596,12 @@ func (m *Model) SubmitGitHubReviewComment(single bool) {
 	if draft.path == "" || draft.line <= 0 || draft.startLine <= 0 ||
 		draft.line < draft.startLine {
 		m.github.review.comment.err = "Choose a valid single-line or multiline range"
+		m.invalidate()
+		return
+	}
+	if !m.githubReviewCommentAnchored(draft) {
+		m.github.review.comment.err =
+			"The selected lines no longer exist in this pull request diff"
 		m.invalidate()
 		return
 	}
@@ -489,6 +660,38 @@ func (m *Model) SubmitGitHubReviewComment(single bool) {
 	}()
 }
 
+func (m *Model) githubReviewCommentAnchored(draft githubReviewCommentDraft) bool {
+	if m.github.detail == nil {
+		return false
+	}
+	for _, file := range m.github.detail.Files {
+		if file.Path != draft.path {
+			continue
+		}
+		rows := parseGitHubPatch(file.Patch)
+		for start := range rows {
+			if rows[start].CommentSide != draft.startSide ||
+				rows[start].CommentLine != draft.startLine {
+				continue
+			}
+			for end := start; end < len(rows); end++ {
+				if rows[end].CommentSide != draft.side ||
+					rows[end].CommentLine != draft.line {
+					continue
+				}
+				_, _, ok := githubDiffRowRange(
+					rows,
+					start,
+					end,
+					draft.startLine != draft.line,
+				)
+				return ok
+			}
+		}
+	}
+	return false
+}
+
 func githubThreadOrder(files []ghub.FileChange, threads []ghub.ReviewThread) []int {
 	order := make(map[string]int, len(files))
 	for index, file := range files {
@@ -533,6 +736,7 @@ func (m *Model) SelectGitHubReviewThread(index int) {
 	m.github.review.mode = "review"
 	m.github.review.comment.open = false
 	m.github.review.activeRow = -1
+	m.github.review.selectionAnchor = -1
 	if m.github.detail != nil {
 		for fileIndex, file := range m.github.detail.Files {
 			if file.Path != thread.Path {
@@ -543,6 +747,7 @@ func (m *Model) SelectGitHubReviewThread(index int) {
 			for rowIndex, row := range rows {
 				if row.CommentSide == thread.DiffSide && row.CommentLine == thread.Line {
 					m.github.review.activeRow = rowIndex
+					m.github.review.selectionAnchor = rowIndex
 					break
 				}
 			}
